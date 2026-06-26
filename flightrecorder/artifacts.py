@@ -171,6 +171,8 @@ def compare_suites(
     paired_candidate_scores: list[int] = []
     paired_baseline_passed = 0
     paired_candidate_passed = 0
+    paired_baseline_scorecards: dict[str, dict[str, Any]] = {}
+    paired_candidate_scorecards: dict[str, dict[str, Any]] = {}
 
     for scenario_id in scenario_ids:
         before = baseline.get(scenario_id)
@@ -220,6 +222,8 @@ def compare_suites(
         paired_candidate_scores.append(_score(after["scorecard"]))
         paired_baseline_passed += 1 if before["scorecard"].get("passed") else 0
         paired_candidate_passed += 1 if after["scorecard"].get("passed") else 0
+        paired_baseline_scorecards[scenario_id] = before["scorecard"]
+        paired_candidate_scorecards[scenario_id] = after["scorecard"]
 
         status = "unchanged"
         if comparison["regressed"]:
@@ -258,6 +262,12 @@ def compare_suites(
         "total_score_delta": sum(paired_deltas),
         "baseline_pass_rate": _ratio(paired_baseline_passed, paired_count),
         "candidate_pass_rate": _ratio(paired_candidate_passed, paired_count),
+        "failed_rule_deltas": _failure_deltas(paired_baseline_scorecards, paired_candidate_scorecards, "failed_rules"),
+        "critical_failure_deltas": _failure_deltas(
+            paired_baseline_scorecards,
+            paired_candidate_scorecards,
+            "critical_failures",
+        ),
     }
     regressed = bool(regressions or missing_in_candidate)
     return {
@@ -346,6 +356,8 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
     cls = "fail" if comparison.get("regressed") else "pass"
     aggregate = comparison.get("aggregate", {})
     metadata = _suite_metadata_table(comparison.get("baseline", {}), comparison.get("candidate", {}))
+    failure_deltas = _failure_delta_table(aggregate.get("failed_rule_deltas"), "Failed Rule Deltas")
+    critical_deltas = _failure_delta_table(aggregate.get("critical_failure_deltas"), "Critical Failure Deltas")
     rows = []
     for change in comparison.get("scenario_changes", []):
         rows.append(
@@ -392,6 +404,8 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
     <div class="metric"><span>Regressions</span><strong>{len(comparison.get('regressions', []))}</strong></div>
     <div class="metric"><span>Missing Candidate</span><strong>{len(comparison.get('missing_in_candidate', []))}</strong></div>
   </section>
+  {failure_deltas}
+  {critical_deltas}
   <table>
     <thead><tr><th>Scenario</th><th>Status</th><th>Baseline</th><th>Candidate</th><th>Delta</th><th>Summary</th></tr></thead>
     <tbody>{''.join(rows)}</tbody>
@@ -469,6 +483,78 @@ def _suite_metadata_table(baseline: dict[str, Any], candidate: dict[str, Any]) -
         "<h2>Experiment Metadata</h2>"
         "<table>"
         "<thead><tr><th>Key</th><th>Baseline</th><th>Candidate</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _failure_deltas(
+    baseline: dict[str, dict[str, Any]],
+    candidate: dict[str, dict[str, Any]],
+    field_name: str,
+) -> list[dict[str, Any]]:
+    baseline_counts = _failure_scenarios(baseline, field_name)
+    candidate_counts = _failure_scenarios(candidate, field_name)
+    rows: list[dict[str, Any]] = []
+    for rule_id in sorted(set(baseline_counts) | set(candidate_counts)):
+        before = baseline_counts.get(rule_id, [])
+        after = candidate_counts.get(rule_id, [])
+        rows.append(
+            {
+                "id": rule_id,
+                "baseline_count": len(before),
+                "candidate_count": len(after),
+                "delta": len(after) - len(before),
+                "baseline_scenarios": before,
+                "candidate_scenarios": after,
+            }
+        )
+    return sorted(rows, key=lambda item: (-abs(int(item["delta"])), str(item["id"])))
+
+
+def _failure_scenarios(scorecards: dict[str, dict[str, Any]], field_name: str) -> dict[str, list[str]]:
+    buckets: dict[str, list[str]] = {}
+    for scenario_id, scorecard in scorecards.items():
+        if field_name == "failed_rules":
+            rule_ids = [
+                str(rule.get("id"))
+                for rule in scorecard.get("rules", [])
+                if isinstance(rule, dict) and rule.get("id") and not rule.get("passed")
+            ]
+        else:
+            rule_ids = scorecard.get(field_name, [])
+        for rule_id in rule_ids:
+            if isinstance(rule_id, str) and rule_id:
+                buckets.setdefault(rule_id, []).append(scenario_id)
+    return {rule_id: sorted(scenarios) for rule_id, scenarios in buckets.items()}
+
+
+def _failure_delta_table(value: Any, title: str) -> str:
+    rows_data = value if isinstance(value, list) else []
+    if not rows_data:
+        return ""
+    rows = []
+    for item in rows_data:
+        if not isinstance(item, dict):
+            continue
+        delta = int(item.get("delta", 0) or 0)
+        cls = "regressed" if delta > 0 else "improved" if delta < 0 else "unchanged"
+        rows.append(
+            "<tr>"
+            f"<td><code>{_esc(item.get('id'))}</code></td>"
+            f"<td>{_esc(item.get('baseline_count'))}</td>"
+            f"<td>{_esc(item.get('candidate_count'))}</td>"
+            f"<td class=\"{cls}\">{_esc(delta)}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        '<section class="failure-deltas">'
+        f"<h2>{_esc(title)}</h2>"
+        "<table>"
+        "<thead><tr><th>Rule</th><th>Baseline</th><th>Candidate</th><th>Delta</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody>"
         "</table>"
         "</section>"

@@ -56,7 +56,11 @@ assert summary["metadata"] == {
 }
 assert suite_compare["baseline"]["metadata"]["candidate"] == "offline-demo"
 assert suite_compare["candidate"]["metadata"]["candidate"] == "offline-demo"
+assert suite_compare["aggregate"]["failed_rule_deltas"]
+assert all(item["delta"] == 0 for item in suite_compare["aggregate"]["failed_rule_deltas"])
+assert all(item["delta"] == 0 for item in suite_compare["aggregate"]["critical_failure_deltas"])
 assert "Experiment Metadata" in suite_compare_html
+assert "Failed Rule Deltas" in suite_compare_html
 assert metrics["pass_rate"] == 0.4
 assert metrics["average_score"] == 69.0
 assert metrics["failed"] == 3

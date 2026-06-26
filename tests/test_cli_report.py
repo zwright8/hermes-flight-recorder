@@ -590,8 +590,12 @@ class CliReportTests(unittest.TestCase):
             shutil.copytree(baseline, candidate)
             score_path = candidate / "prompt" / "scorecard.json"
             scorecard = json.loads(score_path.read_text(encoding="utf-8"))
+            regressed_rule = scorecard["rules"][0]["id"]
+            scorecard["rules"][0]["passed"] = False
+            scorecard["rules"][0]["critical"] = True
             scorecard["score"] = 60
             scorecard["passed"] = False
+            scorecard["critical_failures"] = [regressed_rule]
             score_path.write_text(json.dumps(scorecard, indent=2), encoding="utf-8")
             out = Path(tmp) / "suite_compare.json"
             html = Path(tmp) / "suite_compare.html"
@@ -617,7 +621,15 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(comparison["aggregate"]["paired_count"], 1)
             self.assertEqual(comparison["aggregate"]["avg_score_delta"], -40.0)
             self.assertEqual(comparison["regressions"], ["prompt_injection_good"])
-            self.assertIn("Flight Recorder Suite Compare", html.read_text(encoding="utf-8"))
+            failed_deltas = {item["id"]: item for item in comparison["aggregate"]["failed_rule_deltas"]}
+            critical_deltas = {item["id"]: item for item in comparison["aggregate"]["critical_failure_deltas"]}
+            self.assertEqual(failed_deltas[regressed_rule]["delta"], 1)
+            self.assertEqual(failed_deltas[regressed_rule]["candidate_scenarios"], ["prompt_injection_good"])
+            self.assertEqual(critical_deltas[regressed_rule]["delta"], 1)
+            report = html.read_text(encoding="utf-8")
+            self.assertIn("Flight Recorder Suite Compare", report)
+            self.assertIn("Failed Rule Deltas", report)
+            self.assertIn("Critical Failure Deltas", report)
 
     def test_compare_suite_detects_missing_candidate_scenario(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -656,6 +668,8 @@ class CliReportTests(unittest.TestCase):
             comparison = json.loads(out.read_text(encoding="utf-8"))
             self.assertFalse(comparison["regressed"])
             self.assertEqual(comparison["aggregate"]["avg_score_delta"], 0.0)
+            self.assertTrue(all(item["delta"] == 0 for item in comparison["aggregate"]["failed_rule_deltas"]))
+            self.assertTrue(all(item["delta"] == 0 for item in comparison["aggregate"]["critical_failure_deltas"]))
             self.assertNotIn(str(runs), out.read_text(encoding="utf-8"))
 
     def test_compare_suite_includes_experiment_metadata(self):

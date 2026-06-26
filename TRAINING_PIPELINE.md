@@ -36,6 +36,9 @@ review, and training jobs know which agent, model, prompt, skill, or tool-policy
 configuration produced the evidence bundle.
 `flightrecorder compare-suite` carries this metadata into its JSON and HTML
 outputs so baseline/candidate comparisons remain tied to the evaluated configs.
+It also emits aggregate failed-rule and critical-failure deltas across paired
+scenarios, giving repair or curriculum loops a compact view of which failure
+classes gained or lost pressure.
 
 Or export training artifacts from an existing runs directory:
 

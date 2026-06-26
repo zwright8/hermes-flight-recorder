@@ -182,7 +182,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
 7. Compare the new scorecard against the old one with `flightrecorder compare`.
 8. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`, including suite metadata that identifies the
-   compared Hermes configs.
+   compared Hermes configs and aggregate failure-class deltas that identify
+   which behaviors got better or worse.
 9. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
 10. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
