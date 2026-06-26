@@ -109,6 +109,12 @@ flightrecorder draft-scenario \
   --prompt "Reply to email-123." \
   --out runs/draft_email_reply.scenario.json
 
+flightrecorder capture-state \
+  --file reply_artifact=runs/email_reply_completion_good/task_completion.json \
+  --set gmail.threads.email-123.sent_replies.0.status=sent \
+  --set gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001 \
+  --out runs/email_reply_completion_good.state.json
+
 flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --format auto \
@@ -558,6 +564,7 @@ flightrecorder gate-compare-export \
 - `Required Actions`: structured task-completion checks over trace events.
 - `Required Action Sequences`: ordered workflow checks, such as read before send.
 - `Required Event Counts`: cardinality checks, such as exactly one send per task.
+- `Required State`: post-run state snapshot checks for task side effects.
 - `Final Answer`: simple contains and not-contains assertions.
 
 Scores start at 100. Critical rule failures force the run to fail even if the
@@ -577,6 +584,23 @@ scenario only defines policy/final-answer checks and has no task-completion
 evidence contract. State snapshots are supplied evidence artifacts, not live
 connectors by themselves: a Gmail/GitHub/calendar collector can produce the
 snapshot, and Flight Recorder can then verify it deterministically offline.
+For local artifacts or connector wrappers that already know the observed facts,
+`capture-state` can build the JSON snapshot:
+
+```bash
+flightrecorder capture-state \
+  --file reply_artifact=runs/email_reply_completion_good/task_completion.json \
+  --json task=runs/email_reply_completion_good/task_completion.json \
+  --set observations_source=connector-wrapper \
+  --set gmail.threads.email-123.sent_replies.0.status=sent \
+  --out runs/email_reply_completion_good.state.json
+```
+
+Captured files are fingerprinted with SHA-256, directory entries are sorted,
+JSON sources are imported under `json.KEY`, and explicit observations are stored
+under `observations`. To assert a captured observation, point `required_state`
+at that generated path, for example
+`observations.gmail.threads.email-123.sent_replies.0.status`.
 
 To bootstrap a custom scenario from a known-good run, use `draft-scenario`:
 

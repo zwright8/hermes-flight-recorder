@@ -314,6 +314,9 @@ That gives the Hermes team a practical improvement loop:
   prove that work was completed from tool-result evidence, happened in the
   required order, did not under- or over-execute, and appears in a supplied
   post-run state snapshot,
+- connector wrappers or CI jobs can use `flightrecorder capture-state` to turn
+  local artifacts, connector JSON, and explicit observed facts into that
+  post-run snapshot without adding live API dependencies to the scorer,
 - deterministic scorecards can become terminal rewards, step-level reward
   attribution, preference pairs, failure taxonomies, and curriculum metadata,
 - artifact lineage can connect every scorecard and training episode back to the

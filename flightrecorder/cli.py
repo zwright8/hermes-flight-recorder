@@ -46,6 +46,7 @@ from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title
 from .scenario_quality import build_scenario_quality
 from .scorers import score_trace
 from .state import StateSnapshotError, load_state_snapshot, resolve_state_snapshot_path, sanitize_state_snapshot
+from .state_capture import StateCaptureError, capture_state_snapshot
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
@@ -69,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         AdapterError,
         ArtifactError,
         ScenarioError,
+        StateCaptureError,
         StateSnapshotError,
         SuiteGatePolicyError,
         ReviewExportError,
@@ -114,6 +116,23 @@ def cmd_report(args: argparse.Namespace) -> int:
     trace = _read_json(Path(args.trace))
     scorecard = _read_json(Path(args.score))
     write_report(scenario, trace, scorecard, args.out)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_capture_state(args: argparse.Namespace) -> int:
+    snapshot = capture_state_snapshot(
+        files=args.file,
+        directories=args.directory,
+        json_sources=args.json_source,
+        observations=args.observation,
+        include_file_text=args.include_file_text,
+        max_text_chars=args.max_text_chars,
+        max_dir_entries=args.max_dir_entries,
+        preserve_paths=args.preserve_paths,
+        secret_patterns=args.secret_pattern,
+    )
+    _write_json(Path(args.out), snapshot)
     print(f"wrote {args.out}")
     return 0
 
@@ -737,6 +756,63 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--out", required=True)
     report.set_defaults(func=cmd_report)
 
+    capture_state = subparsers.add_parser(
+        "capture-state",
+        help="Capture a JSON state snapshot from local evidence sources",
+    )
+    capture_state.add_argument("--out", required=True, help="State snapshot JSON output path")
+    capture_state.add_argument(
+        "--file",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="KEY=PATH",
+        help="Capture file existence, size, and sha256; may be repeated",
+    )
+    capture_state.add_argument(
+        "--dir",
+        dest="directory",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="KEY=PATH",
+        help="Capture a directory listing; may be repeated",
+    )
+    capture_state.add_argument(
+        "--json",
+        dest="json_source",
+        action="append",
+        default=[],
+        type=_key_path_arg,
+        metavar="KEY=PATH",
+        help="Import a JSON file under json.KEY; may be repeated",
+    )
+    capture_state.add_argument(
+        "--set",
+        dest="observation",
+        action="append",
+        default=[],
+        type=_state_set_arg,
+        metavar="PATH=VALUE",
+        help="Set an observed value under observations using a dot path; VALUE may be JSON",
+    )
+    capture_state.add_argument("--include-file-text", action="store_true", help="Include UTF-8 file text for --file sources")
+    capture_state.add_argument(
+        "--max-text-chars",
+        type=_non_negative_int_arg,
+        default=4096,
+        help="Maximum text characters captured per --file when --include-file-text is set",
+    )
+    capture_state.add_argument(
+        "--max-dir-entries",
+        type=_non_negative_int_arg,
+        default=200,
+        help="Maximum direct entries captured per --dir",
+    )
+    capture_state.add_argument("--secret-pattern", action="append", default=[], help="Regex pattern to redact from captured state")
+    capture_state.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in the snapshot")
+    capture_state.set_defaults(func=cmd_capture_state)
+
     run = subparsers.add_parser("run", help="Normalize, score, and report in one command")
     run.add_argument("--scenario", required=True)
     run.add_argument("--trace")
@@ -1227,6 +1303,34 @@ def _metadata_arg(value: str) -> tuple[str, str]:
     if any(char.isspace() for char in key):
         raise argparse.ArgumentTypeError("metadata key must not contain whitespace")
     return key, raw_value
+
+
+def _key_path_arg(value: str) -> tuple[str, str]:
+    key, separator, raw_path = value.partition("=")
+    if not separator:
+        raise argparse.ArgumentTypeError("must be KEY=PATH")
+    key = key.strip()
+    if not key:
+        raise argparse.ArgumentTypeError("key must be non-empty")
+    if any(char.isspace() for char in key):
+        raise argparse.ArgumentTypeError("key must not contain whitespace")
+    if not raw_path:
+        raise argparse.ArgumentTypeError("path must be non-empty")
+    return key, raw_path
+
+
+def _state_set_arg(value: str) -> tuple[str, Any]:
+    key, separator, raw_value = value.partition("=")
+    if not separator:
+        raise argparse.ArgumentTypeError("must be PATH=VALUE")
+    key = key.strip()
+    if not key:
+        raise argparse.ArgumentTypeError("path must be non-empty")
+    try:
+        parsed: Any = json.loads(raw_value)
+    except json.JSONDecodeError:
+        parsed = raw_value
+    return key, parsed
 
 
 def _metadata_options(items: list[tuple[str, str]]) -> dict[str, str]:

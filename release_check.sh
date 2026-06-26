@@ -53,10 +53,17 @@ python -m flightrecorder run \
   --scenario runs/draft_email_reply.scenario.json \
   --out runs/draft_email_reply \
   --fail-on-score >/dev/null
+python -m flightrecorder capture-state \
+  --file task_completion=runs/email_reply_completion_good/task_completion.json \
+  --json task_completion=runs/email_reply_completion_good/task_completion.json \
+  --set gmail.threads.email-123.sent_replies.0.status=sent \
+  --set gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001 \
+  --out runs/captured_state.json >/dev/null
 test -f runs/draft_email_reply.scenario.json
 test -f runs/draft_email_reply/scorecard.json
 test -f runs/draft_email_reply/task_completion.json
 test -f runs/draft_email_reply/artifact_lineage.json
+test -f runs/captured_state.json
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/email_reply_completion_good/state_snapshot.json
@@ -80,6 +87,7 @@ summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8")
 scenario_quality = json.loads(Path("runs/scenario_quality.json").read_text(encoding="utf-8"))
 evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(encoding="utf-8"))
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
+captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
 suite_compare = json.loads(Path("runs/suite_compare.json").read_text(encoding="utf-8"))
 suite_compare_html = Path("runs/suite_compare.html").read_text(encoding="utf-8")
 suite_trend = json.loads(Path("runs/suite_trend.json").read_text(encoding="utf-8"))
@@ -120,6 +128,10 @@ assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 89.17
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["failed_check_count"] == 0
+assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
+assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
+assert captured_state["json"]["task_completion"]["status"] == "complete"
+assert captured_state["observations"]["gmail"]["threads"]["email-123"]["sent_replies"][0]["status"] == "sent"
 assert metrics["pass_rate"] == 0.3333
 assert metrics["average_score"] == 57.5
 assert metrics["failed"] == 4
@@ -511,10 +523,17 @@ if ! "$VENV_DIR/bin/python" -c "import setuptools" >/dev/null 2>&1; then
   "$VENV_DIR/bin/python" -m pip install "setuptools>=68" >/dev/null
 fi
 "$VENV_DIR/bin/python" -m pip install . --no-deps --no-build-isolation >/dev/null
+"$VENV_DIR/bin/python" - <<'PY'
+import importlib.metadata
+import flightrecorder
+
+assert flightrecorder.__version__ == importlib.metadata.version("hermes-flight-recorder")
+PY
 "$VENV_DIR/bin/flightrecorder" --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --out "$INSTALL_DIR/normalized.json" >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null

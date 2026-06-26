@@ -241,6 +241,21 @@ post-run state snapshots. Exported episodes, rewards, preferences, SFT rows, DPO
 rows, reward-model rows, and baseline/candidate comparison rows carry that
 verdict so training jobs can filter for evidence-backed completion instead of
 relying on final-answer text.
+Use `flightrecorder capture-state` when the post-run state starts as local
+artifacts, connector JSON, or explicit observed facts:
+
+```bash
+flightrecorder capture-state \
+  --file completion=runs/email_reply_completion_good/task_completion.json \
+  --json completion=runs/email_reply_completion_good/task_completion.json \
+  --set gmail.threads.email-123.sent_replies.0.status=sent \
+  --out runs/email_reply_completion_good.state.json
+```
+
+Those snapshots can be supplied through scenario `state.path` or `run --state`.
+The resulting lineage records `source_state_snapshot`, and exported training
+rows keep the source fingerprint so future trainers can reject examples whose
+task-completion labels lack reproducible post-run state evidence.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward

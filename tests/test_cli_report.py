@@ -576,6 +576,69 @@ class CliReportTests(unittest.TestCase):
             self.assertFalse(state_rule["passed"])
             self.assertEqual(scorecard["task_completion"]["status"], "incomplete")
 
+    def test_capture_state_command_writes_snapshot_for_required_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "reply.txt"
+            artifact.write_text("reply sent", encoding="utf-8")
+            state_path = root / "state.json"
+
+            code = run_cli(
+                [
+                    "capture-state",
+                    "--file",
+                    f"reply={artifact}",
+                    "--set",
+                    "gmail.threads.email-123.sent_replies.0.status=sent",
+                    "--set",
+                    "gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001",
+                    "--out",
+                    str(state_path),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            snapshot = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(snapshot["schema_version"], "hfr.state_snapshot.v1")
+            self.assertTrue(snapshot["filesystem"]["files"]["reply"]["exists"])
+            self.assertEqual(
+                snapshot["observations"]["gmail"]["threads"]["email-123"]["sent_replies"][0]["status"],
+                "sent",
+            )
+
+    def test_captured_state_snapshot_can_satisfy_required_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_path = root / "state.json"
+            scenario_path = root / "scenario.json"
+            out = root / "run"
+            run_cli(
+                [
+                    "capture-state",
+                    "--set",
+                    "gmail.threads.email-123.sent_replies.0.status=sent",
+                    "--set",
+                    "gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001",
+                    "--out",
+                    str(state_path),
+                ]
+            )
+            scenario = json.loads((ROOT / "scenarios" / "email_reply_completion_good.json").read_text(encoding="utf-8"))
+            scenario["trace"]["path"] = str(ROOT / "fixtures" / "email_reply_completion_good.observer.jsonl")
+            scenario["state"]["path"] = str(state_path)
+            scenario["assertions"]["required_state"][0]["where"] = {
+                "observations.gmail.threads.email-123.sent_replies.0.message_id": {"matches": "^msg-email-123-"},
+                "observations.gmail.threads.email-123.sent_replies.0.status": "sent",
+            }
+            scenario_path.write_text(json.dumps(scenario), encoding="utf-8")
+
+            code = run_cli(["run", "--scenario", str(scenario_path), "--out", str(out), "--fail-on-score"])
+
+            self.assertEqual(code, 0)
+            task_completion = json.loads((out / "task_completion.json").read_text(encoding="utf-8"))
+            self.assertEqual(task_completion["status"], "complete")
+            self.assertEqual(task_completion["passed_check_count"], 5)
+
     def test_index_command_generates_report_index(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
