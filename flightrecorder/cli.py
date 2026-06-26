@@ -40,6 +40,7 @@ from .compare_gate import (
     evaluate_compare_gate,
     load_compare_gate_policy,
 )
+from .decision_gate import DecisionGateError, evaluate_decision_gate
 from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
@@ -98,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         TrainingExportError,
         TrainingGatePolicyError,
         CompareGatePolicyError,
+        DecisionGateError,
         EvidenceCoverageError,
         EvidenceBundleError,
         ReviewCalibrationError,
@@ -624,6 +626,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         evidence_bundle_paths=args.evidence_bundle,
         action_ledger_paths=args.action_ledger,
         action_ledger_gate_paths=args.action_ledger_gate,
+        decision_gate_paths=args.decision_gate,
         trainer_preflight_paths=args.trainer_preflight,
         trainer_launch_check_paths=args.trainer_launch_check,
         repair_queue_paths=args.repair_queue,
@@ -1007,6 +1010,25 @@ def cmd_gate_action_ledger(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_gate_decision(args: argparse.Namespace) -> int:
+    artifact = _read_json(Path(args.artifact))
+    result = evaluate_decision_gate(
+        artifact,
+        artifact_path=_display_path(Path(args.artifact), args.preserve_paths),
+        expect_recommendation=args.expect_recommendation,
+        expect_readiness=args.expect_readiness,
+        require_passed=args.require_passed,
+    )
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_trainer_preflight(args: argparse.Namespace) -> int:
     metadata = _metadata_options(args.metadata)
     preflight = build_trainer_preflight(
@@ -1344,6 +1366,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
+    validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
     validate.add_argument("--trainer-preflight", action="append", default=[], help="Validate one trainer_preflight.json; may be repeated")
     validate.add_argument(
         "--trainer-launch-check",
@@ -1492,6 +1515,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     gate_action_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute ledger paths in gate output")
     gate_action_ledger.set_defaults(func=cmd_gate_action_ledger)
+
+    gate_decision = subparsers.add_parser(
+        "gate-decision",
+        help="Gate a Flight Recorder decision recommendation for CI promotion",
+    )
+    gate_decision.add_argument("--artifact", required=True, help="Flight Recorder JSON artifact with a decision block")
+    gate_decision.add_argument("--expect-recommendation", required=True, help="Required decision.recommendation value")
+    gate_decision.add_argument("--expect-readiness", help="Optional required decision.readiness value")
+    gate_decision.add_argument("--require-passed", action="store_true", help="Also require the source artifact root passed field to be true")
+    gate_decision.add_argument("--out", help="Write decision gate JSON to this path")
+    gate_decision.add_argument("--preserve-paths", action="store_true", help="Allow absolute artifact paths in gate output")
+    gate_decision.set_defaults(func=cmd_gate_decision)
 
     draft = subparsers.add_parser("draft-scenario", help="Draft a scenario JSON file from an existing run or trace")
     draft_source = draft.add_mutually_exclusive_group(required=True)

@@ -783,6 +783,13 @@ if python -m flightrecorder gate-action-ledger \
   echo "gate-action-ledger did not fail a too-strict recurring action threshold" >&2
   exit 1
 fi
+python -m flightrecorder gate-decision \
+  --artifact runs/action_ledger_gate.json \
+  --expect-recommendation promote_iteration \
+  --expect-readiness ready \
+  --require-passed \
+  --out runs/promotion_decision.json >/dev/null
+test -f runs/promotion_decision.json
 python -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
@@ -811,6 +818,7 @@ python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle_full.json \
   --action-ledger runs/action_ledger.json \
   --action-ledger-gate runs/action_ledger_gate.json \
+  --decision-gate runs/promotion_decision.json \
   --trainer-preflight runs/trainer_preflight.json \
   --trainer-launch-check runs/trainer_launch_check.json \
   --repair-queue runs/repair_queue.json \
@@ -824,6 +832,7 @@ from pathlib import Path
 bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="utf-8"))
 action_ledger = json.loads(Path("runs/action_ledger.json").read_text(encoding="utf-8"))
 action_ledger_gate = json.loads(Path("runs/action_ledger_gate.json").read_text(encoding="utf-8"))
+promotion_decision = json.loads(Path("runs/promotion_decision.json").read_text(encoding="utf-8"))
 preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
@@ -868,6 +877,12 @@ assert action_ledger_gate["decision"]["key_metrics"]["recurring_action_count"] =
 assert action_ledger_gate["policy"]["schema_version"] == "hfr.action_ledger_gate.policy.v1"
 assert action_ledger_gate["policy"]["effective"]["max_recurring_actions"] == 6
 assert action_ledger_gate["metrics"]["recurring_action_count"] == action_ledger["metrics"]["recurring_action_count"]
+assert promotion_decision["schema_version"] == "hfr.decision_gate.v1"
+assert promotion_decision["passed"] is True
+assert promotion_decision["recommendation"] == "allow_promotion"
+assert promotion_decision["expected_recommendation"] == "promote_iteration"
+assert promotion_decision["source_decision"]["recommendation"] == "promote_iteration"
+assert promotion_decision["source_decision"]["key_metrics"]["recurring_action_count"] == action_ledger_gate["metrics"]["recurring_action_count"]
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
@@ -940,6 +955,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--trainer-launch-check"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger-gate"
+"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--decision-gate"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
@@ -954,6 +970,11 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help | grep -q -- "--bundle"
 "$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help | grep -q -- "--max-recurring-actions"
+"$VENV_DIR/bin/python" -m flightrecorder gate-decision --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-decision --help | grep -q -- "--expect-recommendation"
+test -f examples/github-actions/action-ledger-promotion-gate.yml
+grep -q "gate-decision" examples/github-actions/action-ledger-promotion-gate.yml
+grep -q "decision-gate" examples/github-actions/action-ledger-promotion-gate.yml
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null

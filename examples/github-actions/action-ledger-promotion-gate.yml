@@ -1,0 +1,74 @@
+name: Flight Recorder Promotion Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  promotion-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Flight Recorder
+        run: python -m pip install hermes-flight-recorder
+
+      - name: Build longitudinal action ledger
+        run: |
+          python -m flightrecorder action-ledger \
+            --bundle runs/previous/evidence_bundle.json \
+            --bundle runs/current/evidence_bundle.json \
+            --out runs/action_ledger.json
+
+      - name: Gate recurring repair pressure
+        run: |
+          python -m flightrecorder gate-action-ledger \
+            --action-ledger runs/action_ledger.json \
+            --policy examples/action_ledger_gate_policy.demo.json \
+            --out runs/action_ledger_gate.json
+
+          python -m flightrecorder validate \
+            --action-ledger runs/action_ledger.json \
+            --action-ledger-gate runs/action_ledger_gate.json \
+            --strict
+
+      - name: Require promotion recommendation
+        run: |
+          python -m flightrecorder gate-decision \
+            --artifact runs/action_ledger_gate.json \
+            --expect-recommendation promote_iteration \
+            --expect-readiness ready \
+            --require-passed \
+            --out runs/promotion_decision.json
+
+          python -m flightrecorder validate \
+            --decision-gate runs/promotion_decision.json \
+            --strict
+
+      - name: Write promotion summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("runs/promotion_decision.json")
+          if not path.exists():
+              raise SystemExit(0)
+          gate = json.loads(path.read_text(encoding="utf-8"))
+          source = gate.get("source_decision", {})
+          summary = [
+              "## Flight Recorder Promotion Gate",
+              "",
+              f"- Recommendation: `{gate.get('recommendation')}`",
+              f"- Source recommendation: `{source.get('recommendation')}`",
+              f"- Source readiness: `{source.get('readiness')}`",
+              f"- Failed checks: `{gate.get('failed_check_count')}`",
+          ]
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(summary) + "\n", encoding="utf-8")
+          PY

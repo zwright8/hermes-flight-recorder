@@ -648,6 +648,15 @@ flightrecorder gate-action-ledger \
   --out runs/action_ledger_gate.json
 
 flightrecorder validate --action-ledger-gate runs/action_ledger_gate.json --strict
+
+flightrecorder gate-decision \
+  --artifact runs/action_ledger_gate.json \
+  --expect-recommendation promote_iteration \
+  --expect-readiness ready \
+  --require-passed \
+  --out runs/promotion_decision.json
+
+flightrecorder validate --decision-gate runs/promotion_decision.json --strict
 ```
 
 The gate can enforce minimum bundle history, maximum open/new/recurring
@@ -656,7 +665,10 @@ action IDs, and required resolved action IDs. This turns the ledger into a
 deterministic convergence check while keeping repairs external and auditable.
 Automation should read `decision.recommendation` (`promote_iteration` or
 `block_iteration`) plus `decision.key_metrics` instead of scraping individual
-check summaries.
+check summaries. Use `flightrecorder gate-decision` when a generic CI job needs
+to turn that recommendation into a validatable `allow_promotion` or
+`block_promotion` artifact. A copyable GitHub Actions example lives at
+`examples/github-actions/action-ledger-promotion-gate.yml`.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum

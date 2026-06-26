@@ -14,6 +14,7 @@ from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
+from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
@@ -90,6 +91,7 @@ def validate_artifacts(
     evidence_bundle_paths: list[str | Path] | None = None,
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
+    decision_gate_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
@@ -125,6 +127,8 @@ def validate_artifacts(
         targets.append(validate_action_ledger(action_ledger_path))
     for action_ledger_gate_path in action_ledger_gate_paths or []:
         targets.append(validate_action_ledger_gate(action_ledger_gate_path))
+    for decision_gate_path in decision_gate_paths or []:
+        targets.append(validate_decision_gate(decision_gate_path))
     for trainer_preflight_path in trainer_preflight_paths or []:
         targets.append(validate_trainer_preflight(trainer_preflight_path))
     for trainer_launch_check_path in trainer_launch_check_paths or []:
@@ -481,6 +485,16 @@ def validate_action_ledger_gate(path: str | Path) -> ValidationTarget:
     gate = _read_object(gate_path, target, "action_ledger_gate.json")
     if gate is not None:
         _validate_action_ledger_gate(gate, target)
+    return target
+
+
+def validate_decision_gate(path: str | Path) -> ValidationTarget:
+    """Validate a decision-gate artifact."""
+    gate_path = Path(path)
+    target = ValidationTarget("decision_gate", str(gate_path))
+    gate = _read_object(gate_path, target, "decision_gate.json")
+    if gate is not None:
+        _validate_decision_gate(gate, target)
     return target
 
 
@@ -3881,6 +3895,63 @@ def _validate_action_ledger_gate_policy_summary(value: Any, target: ValidationTa
             target.errors.append(
                 f"action_ledger_gate.policy.effective.forbid_open_priorities has invalid priority value(s): {', '.join(unknown_priorities)}."
             )
+
+
+def _validate_decision_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(gate, "schema_version", DECISION_GATE_SCHEMA_VERSION, target)
+    if not isinstance(gate.get("artifact"), str) or not gate.get("artifact"):
+        target.errors.append("decision_gate.artifact must be a non-empty string.")
+    if not isinstance(gate.get("passed"), bool):
+        target.errors.append("decision_gate.passed must be a boolean.")
+    if not isinstance(gate.get("expected_recommendation"), str) or not gate.get("expected_recommendation"):
+        target.errors.append("decision_gate.expected_recommendation must be a non-empty string.")
+    if gate.get("expected_readiness") is not None and not isinstance(gate.get("expected_readiness"), str):
+        target.errors.append("decision_gate.expected_readiness must be a string or null.")
+    if not isinstance(gate.get("require_passed"), bool):
+        target.errors.append("decision_gate.require_passed must be a boolean.")
+    if not _is_string_list(gate.get("notes")):
+        target.errors.append("decision_gate.notes must be a list of strings.")
+
+    checks = gate.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("decision_gate.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "decision_gate.checks")
+    if gate.get("check_count") != len(checks):
+        target.errors.append(f"decision_gate.check_count expected {len(checks)}, got {gate.get('check_count')!r}.")
+    if gate.get("failed_check_count") != failed_checks:
+        target.errors.append(f"decision_gate.failed_check_count expected {failed_checks}, got {gate.get('failed_check_count')!r}.")
+    expected_passed = failed_checks == 0
+    if isinstance(gate.get("passed"), bool) and gate.get("passed") != expected_passed:
+        target.errors.append("decision_gate.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "allow_promotion" if expected_passed else "block_promotion"
+    if gate.get("readiness") != expected_readiness:
+        target.errors.append(f"decision_gate.readiness expected {expected_readiness!r}, got {gate.get('readiness')!r}.")
+    if gate.get("recommendation") != expected_recommendation:
+        target.errors.append(f"decision_gate.recommendation expected {expected_recommendation!r}, got {gate.get('recommendation')!r}.")
+
+    source = gate.get("source_decision")
+    if not isinstance(source, dict):
+        target.errors.append("decision_gate.source_decision must be an object.")
+        source = {}
+    for field_name in ("schema_version", "recommendation", "readiness", "summary"):
+        if not isinstance(source.get(field_name), str):
+            target.errors.append(f"decision_gate.source_decision.{field_name} must be a string.")
+    if source.get("passed") is not None and not isinstance(source.get("passed"), bool):
+        target.errors.append("decision_gate.source_decision.passed must be a boolean or null.")
+    if source.get("blocking_check_count") is not None and not _is_non_negative_int(source.get("blocking_check_count")):
+        target.errors.append("decision_gate.source_decision.blocking_check_count must be a non-negative integer or null.")
+    if not isinstance(source.get("key_metrics"), dict):
+        target.errors.append("decision_gate.source_decision.key_metrics must be an object.")
+    target.details.update(
+        {
+            "passed": gate.get("passed"),
+            "recommendation": gate.get("recommendation"),
+            "source_recommendation": source.get("recommendation"),
+            "failed_check_count": failed_checks,
+        }
+    )
 
 
 def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:
