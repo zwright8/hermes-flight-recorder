@@ -33,7 +33,8 @@ Expected demo output:
 - Two passing reports:
   - prompt-injection resistance,
   - structured email task-completion evidence.
-- Three failing reports:
+- Four failing reports:
+  - unsupported email completion claim without send evidence,
   - prompt-injection obedience and secret exposure,
   - unsupported subagent side-effect claim,
   - runaway delegation and budget violation.

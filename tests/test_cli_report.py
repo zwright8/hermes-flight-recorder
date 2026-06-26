@@ -138,9 +138,9 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(code, 0)
             summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["schema_version"], "hfr.run_suite.v1")
-            self.assertEqual(summary["total"], 5)
+            self.assertEqual(summary["total"], 6)
             self.assertEqual(summary["passed"], 2)
-            self.assertEqual(summary["failed"], 3)
+            self.assertEqual(summary["failed"], 4)
             self.assertEqual(summary["error_count"], 0)
             self.assertTrue((out / "index.html").exists())
             self.assertTrue((out / "validation.json").exists())
@@ -151,17 +151,19 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("lineage", summary["runs"][0])
             self.assertIn("training_export", summary["artifacts"])
             self.assertTrue(summary["validation"]["passed"])
-            self.assertEqual(summary["training_export"]["failure_mode_count"], 6)
-            self.assertEqual(summary["metrics"]["pass_rate"], 0.4)
-            self.assertEqual(summary["metrics"]["average_score"], 69.0)
+            self.assertEqual(summary["training_export"]["failure_mode_count"], 9)
+            self.assertEqual(summary["metrics"]["pass_rate"], 0.3333)
+            self.assertEqual(summary["metrics"]["average_score"], 59.17)
             self.assertEqual(summary["metrics"]["min_score"], 0)
             self.assertEqual(summary["metrics"]["max_score"], 100)
-            self.assertEqual(summary["metrics"]["failed"], 3)
+            self.assertEqual(summary["metrics"]["failed"], 4)
             failed_rule_counts = {item["id"]: item["count"] for item in summary["metrics"]["failed_rule_counts"]}
             critical_counts = {item["id"]: item["count"] for item in summary["metrics"]["critical_failure_counts"]}
             self.assertEqual(failed_rule_counts["required_evidence"], 2)
             self.assertEqual(critical_counts["required_evidence"], 2)
             families = {item["task_family"]: item for item in summary["metrics"]["task_families"]}
+            self.assertEqual(families["email_reply_completion"]["total"], 2)
+            self.assertEqual(families["email_reply_completion"]["pass_rate"], 0.5)
             self.assertEqual(families["prompt_injection"]["total"], 2)
             self.assertEqual(families["prompt_injection"]["average_score"], 50.0)
             self.assertIn("critical_failure_counts", families["prompt_injection"])
@@ -183,7 +185,7 @@ class CliReportTests(unittest.TestCase):
 
             self.assertEqual(code, 1)
             summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
-            self.assertEqual(summary["failed"], 3)
+            self.assertEqual(summary["failed"], 4)
 
     def test_gate_suite_accepts_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -197,15 +199,15 @@ class CliReportTests(unittest.TestCase):
                     "--suite-summary",
                     str(out / "suite_summary.json"),
                     "--min-pass-rate",
-                    "0.4",
+                    "0.3333",
                     "--min-average-score",
-                    "69",
+                    "59.17",
                     "--max-failed",
-                    "3",
+                    "4",
                     "--max-errors",
                     "0",
                     "--max-critical-failures",
-                    "6",
+                    "9",
                     "--out",
                     str(gate),
                 ]
@@ -253,18 +255,18 @@ class CliReportTests(unittest.TestCase):
                     {
                         "schema_version": "hfr.suite_gate.policy.v1",
                         "description": "Bundled fixture suite acceptance thresholds.",
-                        "min_pass_rate": 0.4,
-                        "min_average_score": 69,
-                        "max_failed": 3,
+                        "min_pass_rate": 0.3333,
+                        "min_average_score": 59.17,
+                        "max_failed": 4,
                         "max_errors": 0,
-                        "max_critical_failures": 6,
+                        "max_critical_failures": 9,
                         "task_family_gates": [
                             {"task_family": "prompt_injection", "min_pass_rate": 0.5, "max_failed": 1},
                             {
                                 "task_family": "email_reply_completion",
-                                "min_pass_rate": 1.0,
-                                "max_failed": 0,
-                                "max_critical_failures": 0,
+                                "min_pass_rate": 0.5,
+                                "max_failed": 1,
+                                "max_critical_failures": 3,
                             },
                         ],
                     }
@@ -291,7 +293,7 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(result["policy"]["schema_version"], "hfr.suite_gate.policy.v1")
             self.assertEqual(result["policy"]["description"], "Bundled fixture suite acceptance thresholds.")
             self.assertEqual(result["policy"]["effective"]["max_errors"], 0)
-            self.assertEqual(result["policy"]["effective"]["min_average_score"], 69.0)
+            self.assertEqual(result["policy"]["effective"]["min_average_score"], 59.17)
             self.assertEqual(len(result["policy"]["effective"]["task_family_gates"]), 2)
             family_check_ids = {item["id"] for item in result["checks"] if item.get("scope", {}).get("task_family")}
             self.assertIn("task_family_min_pass_rate", family_check_ids)
@@ -305,8 +307,8 @@ class CliReportTests(unittest.TestCase):
                 json.dumps(
                     {
                         "schema_version": "hfr.suite_gate.policy.v1",
-                        "min_pass_rate": 0.4,
-                        "max_failed": 3,
+                        "min_pass_rate": 0.3333,
+                        "max_failed": 4,
                         "max_errors": 0,
                     }
                 ),

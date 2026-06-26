@@ -62,6 +62,19 @@ class ScorerTests(unittest.TestCase):
         self.assertTrue(count_rule["passed"])
         self.assertEqual(count_rule["items"][0]["actual_count"], 1)
 
+    def test_required_actions_reject_final_answer_completion_claim_without_send_evidence(self):
+        scorecard = self._score("email_reply_completion_bad.json")
+
+        self.assertFalse(scorecard["passed"])
+        self.assertEqual(scorecard["score"], 10)
+        self.assertIn("required_actions", scorecard["critical_failures"])
+        self.assertIn("required_action_sequences", scorecard["critical_failures"])
+        self.assertIn("required_event_counts", scorecard["critical_failures"])
+        final_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "final_answer")
+        self.assertTrue(final_rule["passed"])
+        action_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_actions")
+        self.assertIn("missing required action", action_rule["evidence"][0])
+
     def test_required_actions_fail_when_observable_action_is_missing(self):
         scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")
         scenario["assertions"]["required_actions"][0]["where"]["result.thread_id"] = "email-999"

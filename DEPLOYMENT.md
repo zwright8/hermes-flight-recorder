@@ -25,7 +25,7 @@ python -m unittest discover
 ```
 
 The demo runs `flightrecorder run-suite` and generates `runs/index.html` with
-two passing reports, three failing adversarial reports, per-run
+two passing reports, four failing adversarial reports, per-run
 `artifact_lineage.json` provenance manifests, `runs/suite_summary.json`,
 single-run and suite compare reports, and `runs/training_export/` training
 artifacts. It also writes `runs/validation.json` to prove the generated

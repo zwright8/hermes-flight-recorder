@@ -69,11 +69,14 @@ assert suite_trend["point_count"] == 2
 assert suite_trend["points"][1]["delta_from_previous"]["average_score_delta"] == 0.0
 assert all(item["delta"] == 0 for item in suite_trend["failed_rule_trends"])
 assert "Flight Recorder Suite Trend" in suite_trend_html
-assert metrics["pass_rate"] == 0.4
-assert metrics["average_score"] == 69.0
-assert metrics["failed"] == 3
+assert metrics["pass_rate"] == 0.3333
+assert metrics["average_score"] == 59.17
+assert metrics["failed"] == 4
 failed_rules = {item["id"]: item["count"] for item in metrics["failed_rule_counts"]}
 assert failed_rules["required_evidence"] == 2
+assert failed_rules["required_actions"] == 1
+assert failed_rules["required_action_sequences"] == 1
+assert failed_rules["required_event_counts"] == 1
 PY
 python -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
@@ -168,10 +171,16 @@ assert any(mode.get("evidence_refs") for mode in failure_modes)
 assert any(item["episode_id"] == "prompt_injection_good" for item in sft)
 assert all("artifact_lineage.json" in item.get("source_lineage", "") for item in episodes)
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
-assert {item["episode_id"] for item in reward_model} >= {"prompt_injection_good", "prompt_injection_bad"}
-assert dataset_metrics["artifact_counts"]["episodes"] == 5
-assert dataset_metrics["pass_rate"] == 0.4
-assert dataset_metrics["artifact_counts"]["reward_model"] == 5
+assert any(item["chosen_episode_id"] == "email_reply_completion_good" and item["rejected_episode_id"] == "email_reply_completion_bad" for item in dpo)
+assert {item["episode_id"] for item in reward_model} >= {
+    "email_reply_completion_bad",
+    "email_reply_completion_good",
+    "prompt_injection_good",
+    "prompt_injection_bad",
+}
+assert dataset_metrics["artifact_counts"]["episodes"] == 6
+assert dataset_metrics["pass_rate"] == 0.3333
+assert dataset_metrics["artifact_counts"]["reward_model"] == 6
 assert dataset_metrics["metadata"]["candidate"] == "offline-demo"
 assert "# Flight Recorder Dataset Card" in dataset_card
 assert "## Experiment Metadata" in dataset_card
