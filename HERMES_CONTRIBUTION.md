@@ -59,6 +59,11 @@ python -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --strict
+python -m flightrecorder check-scenarios \
+  --scenarios scenarios \
+  --require-traces \
+  --strict \
+  --out runs/scenario_check.json
 ```
 
 `./demo.sh` uses `flightrecorder run-suite --scenarios scenarios --out runs`
@@ -110,6 +115,10 @@ The generated training export gives future model-improvement loops:
 The generated validation summary confirms the report/training artifacts satisfy
 their machine-readable contracts before being used as evidence.
 
+The generated scenario-check summary confirms the eval definitions themselves
+load cleanly, have unique IDs, compile their regexes, and resolve their fixture
+trace paths before they become benchmark inputs.
+
 The optional live smoke has also been run against a real local Hermes Agent
 checkout with an isolated temporary `HERMES_HOME` and local mock model endpoint:
 
@@ -132,18 +141,19 @@ Flight Recorder turns Hermes' experience into regression pressure.
 
 1. Record a Hermes run through trajectory JSONL, observer JSONL, ATOF, or ATIF.
 2. Score that run against a scenario policy.
-3. Run a full scenario directory with `flightrecorder run-suite` to produce a
+3. Validate the scenario definitions with `flightrecorder check-scenarios`.
+4. Run a full scenario directory with `flightrecorder run-suite` to produce a
    suite-level evidence bundle.
-4. If a scenario fails, save the generated `regression_scenario.json`.
-5. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
+5. If a scenario fails, save the generated `regression_scenario.json`.
+6. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.
-6. Compare the new scorecard against the old one with `flightrecorder compare`.
-7. Compare whole baseline/candidate run directories with
+7. Compare the new scorecard against the old one with `flightrecorder compare`.
+8. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`.
-8. Export episodes, rewards, preference pairs, failure modes, and curriculum
+9. Export episodes, rewards, preference pairs, failure modes, and curriculum
    metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-9. Validate the generated artifacts with `flightrecorder validate --strict`
+10. Validate the generated artifacts with `flightrecorder validate --strict`
    before publishing them or using them downstream.
 
 That gives the Hermes team a practical improvement loop:
@@ -220,6 +230,8 @@ Demo evidence:
   compare report.
 - `flightrecorder compare-suite` emits aggregate suite-level regression
   evidence.
+- `flightrecorder check-scenarios` emits machine-readable scenario contract
+  validation before scenarios are used as benchmark inputs.
 - `flightrecorder export-rl` emits episode, reward, preference, failure-mode,
   curriculum, and manifest artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
@@ -258,6 +270,11 @@ policy.
 For a broader change, I run `flightrecorder compare-suite`, which answers
 whether the candidate suite regressed overall, which scenarios changed, and
 whether any expected scenario disappeared.
+
+Before I trust a custom eval suite, I run `flightrecorder check-scenarios`.
+That catches malformed regexes, duplicate scenario IDs, missing traces, and
+under-specified scenario contracts before they create misleading benchmark
+evidence.
 
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards, chosen/rejected pairs, failure-mode rows, and curriculum

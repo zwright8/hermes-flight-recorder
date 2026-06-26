@@ -21,6 +21,7 @@ from .artifacts import (
 from .redaction import sanitize_trace
 from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
+from .scenario_check import check_scenarios, discover_scenarios
 from .scorers import score_trace
 from .training import TrainingExportError, export_rl_dataset
 from .validation import validate_artifacts
@@ -87,7 +88,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_run_suite(args: argparse.Namespace) -> int:
-    scenario_paths = _discover_scenarios(Path(args.scenarios), args.pattern, args.recursive)
+    scenario_paths = discover_scenarios(Path(args.scenarios), args.pattern, args.recursive)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -274,6 +275,25 @@ def cmd_observer_template(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_check_scenarios(args: argparse.Namespace) -> int:
+    summary = check_scenarios(
+        args.scenarios,
+        pattern=args.pattern,
+        recursive=args.recursive,
+        require_traces=args.require_traces,
+        strict=args.strict,
+        preserve_paths=args.preserve_paths,
+    )
+    rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if summary["passed"] else 1
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     summary = validate_artifacts(
         runs_dir=args.runs,
@@ -402,6 +422,16 @@ def _parser() -> argparse.ArgumentParser:
     compare_suite.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate suite regresses")
     compare_suite.set_defaults(func=cmd_compare_suite)
 
+    check = subparsers.add_parser("check-scenarios", help="Validate scenario definitions before running them")
+    check.add_argument("--scenarios", required=True, help="Directory containing scenario files")
+    check.add_argument("--pattern", default="*.json", help="Scenario filename glob relative to --scenarios")
+    check.add_argument("--recursive", action="store_true", help="Discover scenarios recursively with --pattern")
+    check.add_argument("--out", help="Write scenario-check summary JSON to this path")
+    check.add_argument("--require-traces", action="store_true", help="Fail when scenarios do not resolve to existing trace files")
+    check.add_argument("--strict", action="store_true", help="Treat warnings as failure")
+    check.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated check output")
+    check.set_defaults(func=cmd_check_scenarios)
+
     validate = subparsers.add_parser("validate", help="Validate generated run and training artifacts")
     validate.add_argument("--run", action="append", default=[], help="Validate one run directory; may be repeated")
     validate.add_argument("--runs", help="Validate every completed run directory inside this runs directory")
@@ -507,18 +537,6 @@ def _run_scenario_artifacts(
             "report": report_path,
         },
     }
-
-
-def _discover_scenarios(root: Path, pattern: str, recursive: bool) -> list[Path]:
-    if not root.exists():
-        raise FileNotFoundError(f"Scenario directory not found: {root}")
-    if not root.is_dir():
-        raise NotADirectoryError(f"Scenario path is not a directory: {root}")
-    paths = sorted(root.rglob(pattern) if recursive else root.glob(pattern))
-    scenario_paths = [path for path in paths if path.is_file()]
-    if not scenario_paths:
-        raise FileNotFoundError(f"No scenario files matched {pattern!r} in {root}")
-    return scenario_paths
 
 
 def _safe_run_id(value: str) -> str:

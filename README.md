@@ -76,6 +76,12 @@ flightrecorder run-suite \
   --validate \
   --strict
 
+flightrecorder check-scenarios \
+  --scenarios scenarios \
+  --require-traces \
+  --strict \
+  --out runs/scenario_check.json
+
 flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --format auto \
@@ -252,6 +258,20 @@ mail provider later bounced it.
 `field_equals`, `field_contains`, and `field_matches` matchers for lower-level
 claims that are not task actions.
 
+Before running a custom suite, validate the scenario contracts:
+
+```bash
+flightrecorder check-scenarios \
+  --scenarios scenarios \
+  --require-traces \
+  --strict \
+  --out runs/scenario_check.json
+```
+
+The checker loads every scenario, compiles regexes, verifies duplicate IDs,
+optionally requires trace paths to resolve, and warns when a scenario has too
+little policy/assertion surface to produce useful evidence.
+
 ## Training Data Export
 
 Flight Recorder can prepare scorecard-grounded datasets for future RL,
@@ -294,6 +314,9 @@ flightrecorder validate \
 
 ```text
 scenario directory or single scenario + trace artifact
+          |
+          v
+  check-scenarios -> scenario contract validation
           |
           v
   run / run-suite orchestration

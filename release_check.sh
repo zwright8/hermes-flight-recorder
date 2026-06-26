@@ -14,6 +14,12 @@ python -m unittest discover
 python -m compileall -q flightrecorder scripts tests
 python scripts/live_hermes_smoke.py --help >/dev/null
 ./demo.sh
+python -m flightrecorder check-scenarios \
+  --scenarios scenarios \
+  --require-traces \
+  --strict \
+  --out runs/scenario_check.json >/dev/null
+test -f runs/scenario_check.json
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/prompt_injection_compare.json
@@ -51,6 +57,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder check-scenarios --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \
