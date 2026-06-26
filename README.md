@@ -260,12 +260,37 @@ flightrecorder observer-template --out flight_recorder_plugin.py
 Then configure Hermes to load that wrapper and point
 `HERMES_FLIGHT_RECORDER_OUTPUT_DIR` at a restricted directory.
 
+## Live Hermes Smoke
+
+When you have a Hermes Agent source checkout available, run the live smoke to
+verify the optional observer collector inside a real Hermes runtime session:
+
+```bash
+python scripts/live_hermes_smoke.py \
+  --hermes-root ../upstream-hermes-agent \
+  --out live_smoke_artifacts/latest
+open live_smoke_artifacts/latest/report.html
+```
+
+The smoke starts a local OpenAI-compatible mock model server, creates an
+isolated temporary `HERMES_HOME`, installs a temporary wrapper around
+`flightrecorder.hermes_plugin`, runs `uv run hermes chat`, and then normalizes,
+scores, and reports the captured observer JSONL. It requires `uv` and a local
+Hermes checkout, but no external API key or network.
+
+Successful output includes:
+
+- `live_observer.jsonl`: hook events captured from the real Hermes plugin path.
+- `normalized_trace.json`: canonical `hfr.trace.v1` observer trace.
+- `scorecard.json`: deterministic pass/fail evidence for the live run.
+- `report.html`: static report suitable for a maintainer demo.
+
 ## Release Check
 
 ```bash
 ./release_check.sh
 ```
 
-This runs unit tests, bytecode compilation, the offline demo, report redaction
-checks through `flightrecorder audit`, CI failure-mode checks, and a package
-install smoke.
+This runs unit tests, bytecode compilation, the live-smoke script import/help
+check, the offline demo, report redaction checks through `flightrecorder audit`,
+CI failure-mode checks, and a package install smoke.

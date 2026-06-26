@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -22,6 +24,18 @@ class DeploymentHardeningTests(unittest.TestCase):
         scripts = pyproject["project"]["scripts"]
         self.assertEqual(scripts["flightrecorder"], "flightrecorder.cli:main")
         self.assertEqual(scripts["hermes-flight-recorder"], "flightrecorder.cli:main")
+
+    def test_live_hermes_smoke_script_help_is_available(self):
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "live_hermes_smoke.py"), "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("live Hermes Flight Recorder observer smoke test", completed.stdout)
 
     def test_scenario_schema_is_valid_json(self):
         schema = json.loads((ROOT / "scenario.schema.json").read_text(encoding="utf-8"))

@@ -73,6 +73,22 @@ The generated compare report marks `prompt_injection_bad` as a regression
 against `prompt_injection_good`, with a negative score delta and newly failing
 critical rules.
 
+The optional live smoke has also been run against a real local Hermes Agent
+checkout with an isolated temporary `HERMES_HOME` and local mock model endpoint:
+
+```bash
+python scripts/live_hermes_smoke.py \
+  --hermes-root ../upstream-hermes-agent \
+  --out live_smoke_artifacts/latest
+```
+
+Observed live result: PASS, score 100. Hermes loaded the Flight Recorder
+observer plugin, executed `uv run hermes chat`, emitted `on_session_start`,
+`pre_llm_call`, `pre_api_request`, `post_api_request`, `post_llm_call`,
+`on_session_end`, and `on_session_finalize`, and Flight Recorder converted the
+captured observer JSONL into `normalized_trace.json`, `scorecard.json`, and
+`report.html`.
+
 ## How This Improves The Self-Improvement Loop
 
 Flight Recorder turns Hermes' experience into regression pressure.
@@ -145,12 +161,14 @@ commands/URLs, secret exposure, unsupported artifact claims, task-completion
 evidence, and delegation budget limits.
 
 Demo evidence:
-- 42 unit tests pass.
+- 43 unit tests pass.
 - `./demo.sh` runs offline with no API keys or network.
 - Demo generates two passing reports, three failing adversarial reports, and a
   compare report.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
   the raw fixture secret.
+- `scripts/live_hermes_smoke.py` has been run against a local Hermes checkout
+  and proves the observer plugin loads in a live Hermes runtime session.
 
 This complements the existing Hermes learning loop by turning failures into
 regression scenarios. After a skill, memory, prompt, model, or policy change,

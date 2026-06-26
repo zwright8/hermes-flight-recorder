@@ -11,7 +11,8 @@ cleanup_local_artifacts() {
 trap cleanup_local_artifacts EXIT
 
 python -m unittest discover
-python -m compileall -q flightrecorder tests
+python -m compileall -q flightrecorder scripts tests
+python scripts/live_hermes_smoke.py --help >/dev/null
 ./demo.sh
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md

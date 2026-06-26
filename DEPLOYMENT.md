@@ -57,6 +57,22 @@ export HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS=20000
 The collector writes one JSONL file per session id. It never blocks tools,
 never rewrites requests, and fails open if writing is impossible.
 
+## Live Runtime Smoke
+
+Use the live smoke when a Hermes Agent source checkout is available:
+
+```bash
+python scripts/live_hermes_smoke.py \
+  --hermes-root ../upstream-hermes-agent \
+  --out live_smoke_artifacts/latest
+```
+
+The smoke runs a real `uv run hermes chat` session against a local mock model
+endpoint and an isolated temporary `HERMES_HOME`. It proves the optional
+observer plugin can be loaded by Hermes, receives observer hooks, and produces
+`live_observer.jsonl`, `normalized_trace.json`, `scorecard.json`, and
+`report.html` without external API keys or network.
+
 ## Operational Checklist
 
 - Store raw Hermes exports in a restricted directory.
@@ -72,6 +88,8 @@ never rewrites requests, and fails open if writing is impossible.
   before publishing generated artifacts.
 - Keep failing `regression_scenario.json` files with the test suite.
 - Run `python -m unittest discover` and `./demo.sh` in CI before release.
+- Run `python scripts/live_hermes_smoke.py --hermes-root <checkout>` before
+  deploying the optional observer plugin into a real Hermes environment.
 
 ## Rollback
 
