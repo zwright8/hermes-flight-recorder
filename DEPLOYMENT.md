@@ -98,8 +98,10 @@ network.
   rerun command. Use `flightrecorder replay` with
   `--lineage <run>/artifact_lineage.json --out <fresh-run>` to regenerate
   evidence from a self-contained lineage contract after input-hash verification.
+  Use `flightrecorder replay-bundle` before publishing or moving evidence
+  packages so scenario, trace, and state inputs travel with the lineage contract.
   Shared artifacts redact paths by default; use `--preserve-paths` only in
-  private CI when exact replay commands are required.
+  private CI when exact source paths are required.
 - Add `--junit`, `--markdown`, and `--export-rl` when CI should publish native
   test reports, job summaries, and downstream training/failure-mode artifacts.
 - Add repeated `--metadata key=value` flags to label the evaluated agent, model,

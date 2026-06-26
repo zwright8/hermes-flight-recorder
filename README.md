@@ -259,6 +259,9 @@ Each run directory contains:
   hashes, scorecard evidence refs, and a `replay` command contract for rerunning
   the same scenario/trace/state inputs. `replay.self_contained` is false when
   paths were redacted for sharing.
+- `replay_bundle.json`: emitted by `flightrecorder replay-bundle` alongside
+  copied scenario/trace/state inputs when a run needs to be replayable after the
+  evidence package moves to another machine or directory.
 - `regression_scenario.json`: emitted only for failing runs.
 
 `flightrecorder evidence-bundle` writes a top-level `evidence_bundle.json`
@@ -456,9 +459,13 @@ Each lineage manifest also includes `replay.argv`, `replay.command`,
 to rerun the recorded scenario, trace, and optional state snapshot after
 verifying their input fingerprints. `flightrecorder replay` refuses
 non-self-contained redacted contracts unless `--allow-non-self-contained` is
-passed. Use `--preserve-paths` only in private CI or local debugging when exact
-absolute rerun commands matter; shared artifacts keep paths redacted and mark
-replay as not self-contained.
+passed. Use `flightrecorder replay-bundle` with
+`--lineage <run>/artifact_lineage.json --out <bundle-dir>` to copy the source
+inputs into a portable directory and rewrite replay paths so
+`flightrecorder replay` still works against the bundled `artifact_lineage.json`
+after the directory is moved. Use `--preserve-paths` only in private CI or local
+debugging when exact absolute source paths matter; shared artifacts keep paths
+redacted.
 
 Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
 files over multiple iterations. The trend JSON and HTML report show pass-rate

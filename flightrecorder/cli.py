@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import re
 import shlex
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +61,7 @@ from .training_gate import (
 from .validation import validate_artifacts
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+REPLAY_BUNDLE_SCHEMA_VERSION = "hfr.replay_bundle.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 
 
@@ -163,7 +166,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
-    lineage = _read_json(Path(args.lineage))
+    lineage_path = Path(args.lineage)
+    lineage = _read_json(lineage_path)
     replay = lineage.get("replay")
     if not isinstance(replay, dict):
         raise ReplayError("artifact_lineage.replay is missing; rerun the original run to emit replay metadata")
@@ -173,7 +177,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
     if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
         raise ReplayError("artifact_lineage.replay.argv must be a list of strings")
 
-    base_dir = Path(args.base_dir) if args.base_dir else Path.cwd()
+    base_dir = Path(args.base_dir) if args.base_dir else _default_replay_base_dir(lineage_path, lineage)
     scenario_path = _replay_flag_path(argv, "--scenario", base_dir)
     trace_path = _replay_flag_path(argv, "--trace", base_dir)
     state_path = _replay_flag_path(argv, "--state", base_dir, required=False)
@@ -196,6 +200,65 @@ def cmd_replay(args: argparse.Namespace) -> int:
     scenario = result["scenario"]
     print(f"{'PASS' if scorecard['passed'] else 'FAIL'} replay {scenario['id']} score={scorecard['score']} out={args.out}")
     return 1 if args.fail_on_score and not scorecard["passed"] else 0
+
+
+def cmd_replay_bundle(args: argparse.Namespace) -> int:
+    lineage_path = Path(args.lineage)
+    lineage = _read_json(lineage_path)
+    replay = lineage.get("replay")
+    if not isinstance(replay, dict):
+        raise ReplayError("artifact_lineage.replay is missing; rerun the original run to emit replay metadata")
+    argv = replay.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+        raise ReplayError("artifact_lineage.replay.argv must be a list of strings")
+
+    base_dir = Path(args.base_dir) if args.base_dir else _default_replay_base_dir(lineage_path, lineage)
+    scenario_path = _replay_flag_path(argv, "--scenario", base_dir)
+    trace_path = _replay_flag_path(argv, "--trace", base_dir)
+    state_path = _replay_flag_path(argv, "--state", base_dir, required=False)
+    fingerprints = replay.get("input_fingerprints") if isinstance(replay.get("input_fingerprints"), dict) else {}
+    _verify_replay_input("scenario", scenario_path, fingerprints)
+    _verify_replay_input("source_trace", trace_path, fingerprints)
+    if state_path is not None:
+        _verify_replay_input("source_state_snapshot", state_path, fingerprints)
+
+    out_dir = Path(args.out)
+    if out_dir.exists() and not out_dir.is_dir():
+        raise ReplayError(f"replay bundle output is not a directory: {out_dir}")
+    if out_dir.exists() and any(out_dir.iterdir()) and not args.force:
+        raise ReplayError(f"replay bundle output is not empty: {out_dir}; pass --force to replace it")
+    if out_dir.exists() and args.force:
+        shutil.rmtree(out_dir)
+    inputs_dir = out_dir / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+
+    copied_inputs = {
+        "scenario": _copy_replay_input(scenario_path, inputs_dir / "scenario.json"),
+        "source_trace": _copy_replay_input(trace_path, inputs_dir / _trace_bundle_name(trace_path)),
+    }
+    if state_path is not None:
+        copied_inputs["source_state_snapshot"] = _copy_replay_input(state_path, inputs_dir / "source_state_snapshot.json")
+
+    bundle_lineage = _portable_replay_lineage(
+        lineage=lineage,
+        source_lineage_path=lineage_path,
+        copied_inputs=copied_inputs,
+        preserve_paths=args.preserve_paths,
+    )
+    bundle_lineage_path = out_dir / "artifact_lineage.json"
+    _write_json(bundle_lineage_path, bundle_lineage)
+
+    manifest = _replay_bundle_manifest(
+        bundle_lineage=bundle_lineage,
+        bundle_lineage_path=bundle_lineage_path,
+        source_lineage_path=lineage_path,
+        copied_inputs=copied_inputs,
+        preserve_paths=args.preserve_paths,
+    )
+    manifest_path = out_dir / "replay_bundle.json"
+    _write_json(manifest_path, manifest)
+    print(f"wrote replay bundle {out_dir}")
+    return 0
 
 
 def cmd_run_suite(args: argparse.Namespace) -> int:
@@ -888,6 +951,14 @@ def _parser() -> argparse.ArgumentParser:
     replay.add_argument("--allow-non-self-contained", action="store_true", help="Attempt replay even when replay.self_contained is false")
     replay.add_argument("--fail-on-score", action="store_true", help="Exit nonzero when the replayed score fails")
     replay.set_defaults(func=cmd_replay)
+
+    replay_bundle = subparsers.add_parser("replay-bundle", help="Create a portable replay bundle from artifact lineage")
+    replay_bundle.add_argument("--lineage", required=True, help="Path to source artifact_lineage.json")
+    replay_bundle.add_argument("--out", required=True, help="Output directory for the portable replay bundle")
+    replay_bundle.add_argument("--base-dir", help="Base directory for relative source replay paths; defaults to current directory")
+    replay_bundle.add_argument("--force", action="store_true", help="Replace an existing non-empty bundle directory")
+    replay_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated bundle metadata")
+    replay_bundle.set_defaults(func=cmd_replay_bundle)
 
     run_suite = subparsers.add_parser("run-suite", help="Run a directory of scenarios into a complete evidence bundle")
     run_suite.add_argument("--scenarios", required=True, help="Directory containing scenario JSON files")
@@ -1984,6 +2055,12 @@ def _lineage_input_hash(lineage: dict[str, Any], name: str) -> str | None:
     return None
 
 
+def _default_replay_base_dir(lineage_path: Path, lineage: dict[str, Any]) -> Path:
+    if isinstance(lineage.get("portable_replay_bundle"), dict):
+        return lineage_path.parent
+    return Path.cwd()
+
+
 def _replay_flag_path(argv: list[str], flag: str, base_dir: Path, *, required: bool = True) -> Path | None:
     if flag not in argv:
         if required:
@@ -2021,6 +2098,126 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _copy_replay_input(source: Path, destination: Path) -> dict[str, Any]:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return {
+        "path": destination,
+        "relative_path": f"inputs/{destination.name}",
+        "source_path": source,
+        "sha256": _sha256_file(destination),
+        "size_bytes": destination.stat().st_size,
+    }
+
+
+def _trace_bundle_name(trace_path: Path) -> str:
+    suffix = "".join(trace_path.suffixes)
+    return "source_trace" + (suffix if suffix else ".jsonl")
+
+
+def _portable_replay_lineage(
+    *,
+    lineage: dict[str, Any],
+    source_lineage_path: Path,
+    copied_inputs: dict[str, dict[str, Any]],
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    bundle_lineage = copy.deepcopy(lineage)
+    replay = bundle_lineage.get("replay")
+    if not isinstance(replay, dict):
+        replay = {}
+        bundle_lineage["replay"] = replay
+    argv = replay.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+        raise ReplayError("artifact_lineage.replay.argv must be a list of strings")
+    argv = list(argv)
+    _replace_replay_flag(argv, "--scenario", _bundle_relative_path(copied_inputs["scenario"]))
+    _replace_replay_flag(argv, "--trace", _bundle_relative_path(copied_inputs["source_trace"]))
+    _replace_replay_flag(argv, "--out", "replay")
+    if "source_state_snapshot" in copied_inputs:
+        _replace_replay_flag(argv, "--state", _bundle_relative_path(copied_inputs["source_state_snapshot"]), required=False)
+    replay["argv"] = argv
+    replay["command"] = " ".join(shlex.quote(arg) for arg in argv)
+    replay["self_contained"] = True
+    input_fingerprints = replay.get("input_fingerprints")
+    if not isinstance(input_fingerprints, dict):
+        input_fingerprints = {}
+        replay["input_fingerprints"] = input_fingerprints
+    for name, copied in copied_inputs.items():
+        record = input_fingerprints.get(name)
+        if not isinstance(record, dict):
+            record = {}
+            input_fingerprints[name] = record
+        record["path"] = _bundle_relative_path(copied)
+        record["sha256"] = copied["sha256"]
+        record["exists"] = True
+    summary = bundle_lineage.get("summary")
+    if isinstance(summary, dict):
+        summary["self_contained_replay"] = True
+    bundle_lineage["portable_replay_bundle"] = {
+        "schema_version": REPLAY_BUNDLE_SCHEMA_VERSION,
+        "source_lineage": _display_path(source_lineage_path, preserve_paths),
+        "input_count": len(copied_inputs),
+        "notes": [
+            "This lineage was rewritten for a portable replay bundle.",
+            "Replay input paths are relative to the directory containing artifact_lineage.json.",
+        ],
+    }
+    return bundle_lineage
+
+
+def _replace_replay_flag(argv: list[str], flag: str, value: str, *, required: bool = True) -> None:
+    if flag not in argv:
+        if required:
+            raise ReplayError(f"artifact_lineage.replay.argv missing {flag}")
+        argv.extend([flag, value])
+        return
+    index = argv.index(flag)
+    if index + 1 >= len(argv):
+        raise ReplayError(f"artifact_lineage.replay.argv missing value for {flag}")
+    argv[index + 1] = value
+
+
+def _replay_bundle_manifest(
+    *,
+    bundle_lineage: dict[str, Any],
+    bundle_lineage_path: Path,
+    source_lineage_path: Path,
+    copied_inputs: dict[str, dict[str, Any]],
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    replay = bundle_lineage.get("replay") if isinstance(bundle_lineage.get("replay"), dict) else {}
+    return {
+        "schema_version": REPLAY_BUNDLE_SCHEMA_VERSION,
+        "lineage": bundle_lineage_path.name,
+        "source_lineage": _display_path(source_lineage_path, preserve_paths),
+        "input_count": len(copied_inputs),
+        "inputs": [
+            {
+                "name": name,
+                "path": _bundle_relative_path(copied),
+                "sha256": copied["sha256"],
+                "size_bytes": copied["size_bytes"],
+                "source_path": _display_path(copied["source_path"], preserve_paths),
+            }
+            for name, copied in sorted(copied_inputs.items())
+        ],
+        "replay": {
+            "argv": replay.get("argv", []),
+            "command": replay.get("command", ""),
+            "self_contained": replay.get("self_contained") is True,
+        },
+        "notes": [
+            "Move this directory as a unit, then run flightrecorder replay --lineage artifact_lineage.json --out <fresh-run> from anywhere.",
+            "The replay command verifies copied input hashes before regenerating artifacts.",
+        ],
+    }
+
+
+def _bundle_relative_path(copied: dict[str, Any]) -> str:
+    return str(copied["relative_path"])
 
 
 def _int_score(value: Any) -> int:
