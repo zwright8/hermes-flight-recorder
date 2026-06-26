@@ -135,6 +135,11 @@ flightrecorder draft-scenario \
 Review the generated `draft.warnings`, tighten the required actions and
 evidence, then add the scenario to the suite. Training exports are only as
 strong as the scenario contracts that produce their scorecards.
+Use `flightrecorder scenario-quality --scenarios ...` to produce a
+machine-readable contract-strength report before treating those scorecards as
+training labels. It can gate on average/minimum contract score, observable
+assertion coverage, weak contracts, final-only contracts, missing traces, and
+required task families.
 
 Validate the generated dataset before sending it to downstream jobs:
 
@@ -144,6 +149,7 @@ flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --strict
@@ -435,3 +441,5 @@ This pipeline is useful only when scenarios are meaningful. Weak scenarios can
 produce weak rewards, and any learned policy can overfit or reward-hack shallow
 assertions. Keep expanding scenario suites, vary task families, and review
 reports alongside aggregate rewards.
+`scenario_quality.json` is a heuristic early-warning report for this risk; it
+does not replace human scenario review.

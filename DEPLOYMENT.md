@@ -27,8 +27,9 @@ python -m unittest discover
 The demo runs `flightrecorder run-suite` and generates `runs/index.html` with
 two passing reports, four failing adversarial reports, per-run
 `artifact_lineage.json` provenance manifests, `runs/suite_summary.json`,
-single-run and suite compare reports, `runs/evidence_coverage.json`, and
-`runs/training_export/` training artifacts. It also writes
+single-run and suite compare reports, `runs/scenario_quality.json`,
+`runs/evidence_coverage.json`, and `runs/training_export/` training artifacts.
+It also writes
 `runs/validation.json` to prove the generated contracts are internally
 consistent. No API keys or network are required.
 
@@ -84,6 +85,10 @@ network.
 - Store raw Hermes exports in a restricted directory.
 - Run `flightrecorder check-scenarios --scenarios <dir> --require-traces
   --strict` before publishing or running a custom scenario suite.
+- Run `flightrecorder scenario-quality --scenarios <dir> --require-traces
+  --min-average-score 80 --min-observable-rate 0.8 --max-weak-scenarios 0`
+  when CI should reject shallow scenario contracts before they become
+  benchmark or training signal.
 - Use `flightrecorder draft-scenario --trace <trace> --out <scenario.json>` to
   bootstrap a scenario from a known-good run, then review and tighten the
   generated assertions before adding it to a release suite.
@@ -140,9 +145,9 @@ network.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --review-export runs/review_queue --reviewed-export runs/reviewed_export
   --compare-export runs/compare_rl_export --evidence-coverage
-  runs/evidence_coverage.json --suite-summary runs/suite_summary.json
-  --suite-trend runs/suite_trend.json --strict` before publishing artifacts or
-  using them downstream.
+  runs/evidence_coverage.json --scenario-quality runs/scenario_quality.json
+  --suite-summary runs/suite_summary.json --suite-trend runs/suite_trend.json
+  --strict` before publishing artifacts or using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no

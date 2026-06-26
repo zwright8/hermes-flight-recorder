@@ -41,6 +41,7 @@ from .reviewed_gate import (
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
+from .scenario_quality import build_scenario_quality
 from .scorers import score_trace
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
@@ -349,6 +350,31 @@ def cmd_check_scenarios(args: argparse.Namespace) -> int:
     return 0 if summary["passed"] else 1
 
 
+def cmd_scenario_quality(args: argparse.Namespace) -> int:
+    summary = build_scenario_quality(
+        args.scenarios,
+        pattern=args.pattern,
+        recursive=args.recursive,
+        require_traces=args.require_traces,
+        preserve_paths=args.preserve_paths,
+        min_average_score=args.min_average_score,
+        min_scenario_score=args.min_scenario_score,
+        min_observable_rate=args.min_observable_rate,
+        max_weak_scenarios=args.max_weak_scenarios,
+        max_final_only_scenarios=args.max_final_only_scenarios,
+        max_missing_traces=args.max_missing_traces,
+        require_task_families=args.require_task_family,
+    )
+    rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if summary["passed"] else 1
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     summary = validate_artifacts(
         runs_dir=args.runs,
@@ -358,6 +384,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
+        scenario_quality_paths=args.scenario_quality,
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
         strict=args.strict,
@@ -739,6 +766,22 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated check output")
     check.set_defaults(func=cmd_check_scenarios)
 
+    quality = subparsers.add_parser("scenario-quality", help="Summarize and gate scenario contract quality")
+    quality.add_argument("--scenarios", required=True, help="Directory containing scenario files")
+    quality.add_argument("--pattern", default="*.json", help="Scenario filename glob relative to --scenarios")
+    quality.add_argument("--recursive", action="store_true", help="Discover scenarios recursively with --pattern")
+    quality.add_argument("--require-traces", action="store_true", help="Treat missing trace paths/files as scenario errors")
+    quality.add_argument("--out", help="Write scenario-quality summary JSON to this path")
+    quality.add_argument("--min-average-score", type=_score_arg, help="Minimum average scenario contract score")
+    quality.add_argument("--min-scenario-score", type=_score_arg, help="Minimum allowed score for the weakest valid scenario")
+    quality.add_argument("--min-observable-rate", type=_rate_arg, help="Minimum fraction of scenarios with observable assertions")
+    quality.add_argument("--max-weak-scenarios", type=_non_negative_int_arg, help="Maximum allowed weak scenario contracts")
+    quality.add_argument("--max-final-only-scenarios", type=_non_negative_int_arg, help="Maximum allowed final-answer-only contracts")
+    quality.add_argument("--max-missing-traces", type=_non_negative_int_arg, help="Maximum valid scenarios with missing trace files")
+    quality.add_argument("--require-task-family", action="append", default=[], help="Fail unless this derived task family is present")
+    quality.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated quality output")
+    quality.set_defaults(func=cmd_scenario_quality)
+
     validate = subparsers.add_parser("validate", help="Validate generated run and training artifacts")
     validate.add_argument("--run", action="append", default=[], help="Validate one run directory; may be repeated")
     validate.add_argument("--runs", help="Validate every completed run directory inside this runs directory")
@@ -747,6 +790,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--review-export", help="Validate an export-review output directory")
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
+    validate.add_argument("--scenario-quality", action="append", default=[], help="Validate one scenario_quality.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")

@@ -45,6 +45,9 @@ Expected demo output:
 - A suite summary in `runs/suite_summary.json` covering every generated
   scenario run, suite-level artifact, pass rate, average score, task-family
   rollups, and recurring failed rules.
+- A scenario-quality report in `runs/scenario_quality.json` measuring contract
+  strength, observable assertion coverage, weak contracts, final-only
+  contracts, missing traces, and task-family coverage.
 - A training export in `runs/training_export/` with episodes, terminal rewards,
   step-level reward attribution, preference pairs, trainer-ready SFT/DPO/reward
   model views, failure modes, curriculum metadata, dataset quality metrics, a
@@ -87,6 +90,14 @@ flightrecorder check-scenarios \
   --require-traces \
   --strict \
   --out runs/scenario_check.json
+
+flightrecorder scenario-quality \
+  --scenarios scenarios \
+  --require-traces \
+  --out runs/scenario_quality.json \
+  --min-average-score 80 \
+  --min-observable-rate 0.8 \
+  --max-weak-scenarios 0
 
 flightrecorder draft-scenario \
   --trace fixtures/email_reply_completion_good.observer.jsonl \
@@ -159,6 +170,7 @@ flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --strict
 
@@ -577,6 +589,27 @@ The checker loads every scenario, compiles regexes, verifies duplicate IDs,
 optionally requires trace paths to resolve, and warns when a scenario has too
 little policy/assertion surface to produce useful evidence.
 
+Then measure scenario contract quality before using the suite as benchmark or
+training signal:
+
+```bash
+flightrecorder scenario-quality \
+  --scenarios scenarios \
+  --require-traces \
+  --out runs/scenario_quality.json \
+  --min-average-score 80 \
+  --min-scenario-score 60 \
+  --min-observable-rate 0.8 \
+  --max-weak-scenarios 0 \
+  --max-final-only-scenarios 0
+```
+
+The quality score is a deterministic contract-strength heuristic. It rewards
+resolved trace fixtures, policy constraints, budgets, observable assertions,
+task-completion checks, event-count guards, final-answer assertions, and high
+pass thresholds. It does not prove the scenario is the right benchmark; humans
+still need to review whether the assertions capture the real task.
+
 ## Training Data Export
 
 Flight Recorder can prepare scorecard-grounded datasets for future RL,
@@ -652,6 +685,7 @@ flightrecorder validate \
   --reviewed-export runs/reviewed_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --out runs/validation.json \

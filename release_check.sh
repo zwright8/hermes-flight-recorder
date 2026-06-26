@@ -20,6 +20,28 @@ python -m flightrecorder check-scenarios \
   --strict \
   --out runs/scenario_check.json >/dev/null
 test -f runs/scenario_check.json
+python -m flightrecorder scenario-quality \
+  --scenarios scenarios \
+  --require-traces \
+  --out runs/scenario_quality_check.json \
+  --min-average-score 80 \
+  --min-scenario-score 60 \
+  --min-observable-rate 0.8 \
+  --max-weak-scenarios 0 \
+  --max-final-only-scenarios 0 \
+  --max-missing-traces 0 >/dev/null
+test -f runs/scenario_quality_check.json
+python -m flightrecorder validate \
+  --scenario-quality runs/scenario_quality.json \
+  --scenario-quality runs/scenario_quality_check.json \
+  --strict >/dev/null
+if python -m flightrecorder scenario-quality \
+  --scenarios scenarios \
+  --require-traces \
+  --min-scenario-score 90 >/dev/null; then
+  echo "scenario-quality did not fail a too-high minimum scenario score" >&2
+  exit 1
+fi
 python -m flightrecorder draft-scenario \
   --trace fixtures/email_reply_completion_good.observer.jsonl \
   --id draft_email_reply \
@@ -42,6 +64,7 @@ test -f runs/suite_compare.json
 test -f runs/suite_compare.html
 test -f runs/suite_trend.json
 test -f runs/suite_trend.html
+test -f runs/scenario_quality.json
 test -f runs/evidence_coverage.json
 test -f runs/suite_summary.json
 python - <<'PY'
@@ -49,6 +72,7 @@ import json
 from pathlib import Path
 
 summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
+scenario_quality = json.loads(Path("runs/scenario_quality.json").read_text(encoding="utf-8"))
 evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(encoding="utf-8"))
 suite_compare = json.loads(Path("runs/suite_compare.json").read_text(encoding="utf-8"))
 suite_compare_html = Path("runs/suite_compare.html").read_text(encoding="utf-8")
@@ -71,6 +95,11 @@ assert suite_trend["point_count"] == 2
 assert suite_trend["points"][1]["delta_from_previous"]["average_score_delta"] == 0.0
 assert all(item["delta"] == 0 for item in suite_trend["failed_rule_trends"])
 assert "Flight Recorder Suite Trend" in suite_trend_html
+assert scenario_quality["passed"] is True
+assert scenario_quality["metrics"]["average_contract_score"] == 89.17
+assert scenario_quality["metrics"]["min_contract_score"] == 65
+assert scenario_quality["metrics"]["observable_scenario_rate"] == 0.8333
+assert scenario_quality["metrics"]["weak_scenario_count"] == 0
 assert evidence_coverage["passed"] is True
 assert evidence_coverage["metrics"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["critical_failed_rule_evidence_rate"] == 1.0
@@ -264,6 +293,7 @@ python -m flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --strict >/dev/null
@@ -355,6 +385,7 @@ fi
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder check-scenarios --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder scenario-quality --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-coverage --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null

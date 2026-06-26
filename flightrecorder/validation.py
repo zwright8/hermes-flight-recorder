@@ -25,6 +25,7 @@ from .review import (
     REVIEWED_SFT_SCHEMA_VERSION,
 )
 from .scorers import SCORE_SCHEMA_VERSION
+from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
     RL_DATASET_METRICS_SCHEMA_VERSION,
@@ -75,6 +76,7 @@ def validate_artifacts(
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
+    scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
     strict: bool = False,
@@ -95,6 +97,8 @@ def validate_artifacts(
         targets.append(validate_reviewed_export(reviewed_export_dir))
     for evidence_coverage_path in evidence_coverage_paths or []:
         targets.append(validate_evidence_coverage(evidence_coverage_path))
+    for scenario_quality_path in scenario_quality_paths or []:
+        targets.append(validate_scenario_quality(scenario_quality_path))
     for suite_summary_path in suite_summary_paths or []:
         targets.append(validate_suite_summary(suite_summary_path))
     for suite_trend_path in suite_trend_paths or []:
@@ -387,6 +391,16 @@ def validate_evidence_coverage(path: str | Path) -> ValidationTarget:
     coverage = _read_object(coverage_path, target, "evidence_coverage.json")
     if coverage is not None:
         _validate_evidence_coverage(coverage, target)
+    return target
+
+
+def validate_scenario_quality(path: str | Path) -> ValidationTarget:
+    """Validate a scenario-quality artifact."""
+    quality_path = Path(path)
+    target = ValidationTarget("scenario_quality", str(quality_path))
+    quality = _read_object(quality_path, target, "scenario_quality.json")
+    if quality is not None:
+        _validate_scenario_quality(quality, target)
     return target
 
 
@@ -2232,6 +2246,143 @@ def _merge_count_rows(target_counts: dict[str, int], value: Any, target: Validat
 def _rate_value(numerator: int, denominator: int) -> float:
     if denominator <= 0:
         return 1.0
+    return round(numerator / denominator, 4)
+
+
+def _validate_scenario_quality(quality: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(quality, "schema_version", SCENARIO_QUALITY_SCHEMA_VERSION, target)
+    scenarios = quality.get("scenarios")
+    if not isinstance(scenarios, list):
+        target.errors.append("scenario_quality.scenarios must be a list.")
+        scenarios = []
+    metrics = quality.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("scenario_quality.metrics must be an object.")
+        metrics = {}
+    checks = quality.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("scenario_quality.checks must be a list.")
+        checks = []
+    if not isinstance(quality.get("passed"), bool):
+        target.errors.append("scenario_quality.passed must be a boolean.")
+
+    failed_checks = 0
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            target.errors.append(f"scenario_quality.checks[{index}] must be an object.")
+            continue
+        if not isinstance(check.get("id"), str) or not check.get("id"):
+            target.errors.append(f"scenario_quality.checks[{index}].id must be a non-empty string.")
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"scenario_quality.checks[{index}].passed must be a boolean.")
+        elif not check["passed"]:
+            failed_checks += 1
+    if quality.get("check_count") != len(checks):
+        target.errors.append(f"scenario_quality.check_count expected {len(checks)}, got {quality.get('check_count')!r}.")
+    if quality.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"scenario_quality.failed_check_count expected {failed_checks}, got {quality.get('failed_check_count')!r}."
+        )
+    if isinstance(quality.get("passed"), bool) and quality["passed"] != (failed_checks == 0):
+        target.errors.append("scenario_quality.passed must match failed_check_count.")
+
+    totals = _validate_scenario_quality_rows(scenarios, target)
+    _validate_scenario_quality_metrics(metrics, totals, target)
+    target.details.update(
+        {
+            "scenario_count": totals["scenario_count"],
+            "average_contract_score": metrics.get("average_contract_score"),
+            "observable_scenario_rate": metrics.get("observable_scenario_rate"),
+        }
+    )
+
+
+def _validate_scenario_quality_rows(scenarios: list[Any], target: ValidationTarget) -> dict[str, Any]:
+    totals: dict[str, Any] = {
+        "scenario_count": len(scenarios),
+        "valid_scenario_count": 0,
+        "invalid_scenario_count": 0,
+        "scores": [],
+        "task_families": set(),
+        "observable_scenario_count": 0,
+        "weak_scenario_count": 0,
+        "final_only_scenario_count": 0,
+        "missing_trace_count": 0,
+        "risk_counts": {},
+    }
+    for index, row in enumerate(scenarios):
+        label = f"scenario_quality.scenarios[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("path", "id", "title", "task_family", "quality"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if row.get("quality") not in {"strong", "moderate", "weak", "invalid"}:
+            target.errors.append(f"{label}.quality must be strong, moderate, weak, or invalid.")
+        if not _is_int_between(row.get("contract_score"), 0, 100):
+            target.errors.append(f"{label}.contract_score must be an integer from 0 to 100.")
+        errors = row.get("errors")
+        if not isinstance(errors, list) or not all(isinstance(item, str) for item in errors):
+            target.errors.append(f"{label}.errors must be a list of strings.")
+            errors = []
+        risks = row.get("risks")
+        if not isinstance(risks, list) or not all(isinstance(item, str) for item in risks):
+            target.errors.append(f"{label}.risks must be a list of strings.")
+            risks = []
+        if errors:
+            totals["invalid_scenario_count"] += 1
+            continue
+        totals["valid_scenario_count"] += 1
+        totals["scores"].append(row["contract_score"])
+        totals["task_families"].add(str(row.get("task_family") or "unknown"))
+        signals = row.get("signals")
+        if not isinstance(signals, dict):
+            target.errors.append(f"{label}.signals must be an object for valid scenarios.")
+            signals = {}
+        if _non_negative_int_value(signals.get("observable_assertion_count")) > 0:
+            totals["observable_scenario_count"] += 1
+        if row.get("quality") == "weak":
+            totals["weak_scenario_count"] += 1
+        if "final_only_contract" in risks:
+            totals["final_only_scenario_count"] += 1
+        trace = row.get("trace")
+        if isinstance(trace, dict) and trace.get("trace_exists") is not True:
+            totals["missing_trace_count"] += 1
+        for risk in risks:
+            totals["risk_counts"][risk] = totals["risk_counts"].get(risk, 0) + 1
+    return totals
+
+
+def _validate_scenario_quality_metrics(metrics: dict[str, Any], totals: dict[str, Any], target: ValidationTarget) -> None:
+    scores = totals["scores"]
+    expected = {
+        "scenario_count": totals["scenario_count"],
+        "valid_scenario_count": totals["valid_scenario_count"],
+        "invalid_scenario_count": totals["invalid_scenario_count"],
+        "task_family_count": len(totals["task_families"]),
+        "average_contract_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
+        "min_contract_score": min(scores) if scores else 0,
+        "max_contract_score": max(scores) if scores else 0,
+        "observable_scenario_count": totals["observable_scenario_count"],
+        "observable_scenario_rate": _rate_zero(totals["observable_scenario_count"], totals["valid_scenario_count"]),
+        "weak_scenario_count": totals["weak_scenario_count"],
+        "final_only_scenario_count": totals["final_only_scenario_count"],
+        "missing_trace_count": totals["missing_trace_count"],
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"scenario_quality.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+    task_families = metrics.get("task_families")
+    if task_families != sorted(totals["task_families"]):
+        target.errors.append("scenario_quality.metrics.task_families does not match scenarios.")
+    if _count_rows(metrics.get("risk_counts")) != totals["risk_counts"]:
+        target.errors.append("scenario_quality.metrics.risk_counts does not match scenarios.")
+
+
+def _rate_zero(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
     return round(numerator / denominator, 4)
 
 

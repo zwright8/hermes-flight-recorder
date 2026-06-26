@@ -33,6 +33,16 @@ python -m flightrecorder trend-suite \
   --suite-summary runs/suite_summary.json \
   --out runs/suite_trend.json \
   --html-out runs/suite_trend.html
+python -m flightrecorder scenario-quality \
+  --scenarios scenarios \
+  --require-traces \
+  --out runs/scenario_quality.json \
+  --min-average-score 80 \
+  --min-scenario-score 60 \
+  --min-observable-rate 0.8 \
+  --max-weak-scenarios 0 \
+  --max-final-only-scenarios 0 \
+  --max-missing-traces 0
 python -m flightrecorder evidence-coverage \
   --runs runs \
   --out runs/evidence_coverage.json \

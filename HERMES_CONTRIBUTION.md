@@ -81,6 +81,13 @@ python -m flightrecorder draft-scenario \
   --title "Email Reply Completion Draft" \
   --prompt "Reply to the assigned customer email." \
   --out runs/email_reply_completion_draft.scenario.json
+python -m flightrecorder scenario-quality \
+  --scenarios scenarios \
+  --require-traces \
+  --out runs/scenario_quality.json \
+  --min-average-score 80 \
+  --min-observable-rate 0.8 \
+  --max-weak-scenarios 0
 ```
 
 `./demo.sh` uses `flightrecorder run-suite --scenarios scenarios --out runs`
@@ -171,6 +178,12 @@ The generated scenario-check summary confirms the eval definitions themselves
 load cleanly, have unique IDs, compile their regexes, and resolve their fixture
 trace paths before they become benchmark inputs.
 
+The generated scenario-quality summary adds a contract-strength layer on top of
+syntax validation. It scores whether scenarios have resolved traces, policy
+constraints, budgets, observable assertions, task-completion evidence,
+event-count guards, and task-family coverage, so the Hermes loop can reject
+shallow eval packs before they create weak reward or preference labels.
+
 The optional live smoke has also been run against a real local Hermes Agent
 checkout with an isolated temporary `HERMES_HOME` and local mock model endpoint:
 
@@ -194,45 +207,46 @@ Flight Recorder turns Hermes' experience into regression pressure.
 1. Record a Hermes run through trajectory JSONL, observer JSONL, ATOF, or ATIF.
 2. Score that run against a scenario policy.
 3. Validate the scenario definitions with `flightrecorder check-scenarios`.
-4. Run a full scenario directory with `flightrecorder run-suite` to produce a
+4. Measure scenario contract strength with `flightrecorder scenario-quality`.
+5. Run a full scenario directory with `flightrecorder run-suite` to produce a
    suite-level evidence bundle, using `--metadata key=value` flags to identify
    the Hermes candidate, model, prompt, skill, memory, or tool-policy revision.
-5. If a scenario fails, save the generated `regression_scenario.json`.
-6. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
+6. If a scenario fails, save the generated `regression_scenario.json`.
+7. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.
-7. Compare the new scorecard against the old one with `flightrecorder compare`.
-8. Compare whole baseline/candidate run directories with
+8. Compare the new scorecard against the old one with `flightrecorder compare`.
+9. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`, including suite metadata that identifies the
    compared Hermes configs and aggregate failure-class deltas that identify
    which behaviors got better or worse.
-9. Export baseline/candidate preference rows with
+10. Export baseline/candidate preference rows with
    `flightrecorder export-compare-rl`, preserving whether the candidate
    improved or regressed and including tool-evidence behavior transcripts.
-10. Gate comparison-export readiness with `flightrecorder gate-compare-export`
+11. Gate comparison-export readiness with `flightrecorder gate-compare-export`
     so only evidence-backed candidate wins and policy-approved rule fixes move
     toward training or review.
-11. Trend multiple `suite_summary.json` files with `flightrecorder trend-suite`
+12. Trend multiple `suite_summary.json` files with `flightrecorder trend-suite`
    to show whether the improvement loop is moving pass rate, score, and failure
    pressure in the right direction, then validate the resulting
    `suite_trend.json` before treating it as release evidence.
-12. Measure failed-rule attribution coverage with
+13. Measure failed-rule attribution coverage with
    `flightrecorder evidence-coverage` before turning failures into review or
    training signal.
-13. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-14. Export a human review queue with `flightrecorder export-review` when
+14. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
+15. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
-15. Apply completed labels with `flightrecorder apply-review` to produce
+16. Apply completed labels with `flightrecorder apply-review` to produce
    human-reviewed SFT, reward-model, preference, and DPO views.
-16. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
+17. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
    human-curated labels become trainer input.
-17. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+18. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-18. Validate the generated artifacts and suite summary with
+19. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-19. Gate training-export readiness with `flightrecorder gate-export` before
+20. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:
@@ -242,6 +256,8 @@ That gives the Hermes team a practical improvement loop:
 - runaway delegation becomes a budget regression,
 - skill changes can be evaluated against the same scenario before and after,
 - model/skill/prompt changes can be evaluated across a full scenario suite,
+- scenario-quality gates can block shallow contracts before they become
+  benchmark, review, or training signal,
 - one command can produce a complete suite evidence bundle for local review,
   CI, or downstream training-data export,
 - evidence coverage can verify that failed-rule labels are grounded in
