@@ -56,9 +56,15 @@ python -m flightrecorder compare-suite \
 python -m flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
+python -m flightrecorder evidence-coverage \
+  --runs runs \
+  --out runs/evidence_coverage.json \
+  --min-failed-rule-evidence-rate 1.0 \
+  --max-failed-rules-without-evidence 0
 python -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --evidence-coverage runs/evidence_coverage.json \
   --suite-summary runs/suite_summary.json \
   --strict
 python -m flightrecorder gate-suite \
@@ -152,6 +158,11 @@ are treated as improvement signal.
 baseline/candidate run directories, exporting `runs/compare_rl_export`, and
 gating it with `examples/compare_gate_policy.demo.json`.
 
+The generated evidence coverage report proves that the current suite's failed
+rules are not free-floating labels: every failed and critical failed rule in
+the demo has structured evidence refs, giving review, regression, and future
+reward-attribution jobs concrete trace/final-answer/episode targets.
+
 The generated validation summary confirms the report/training artifacts satisfy
 their machine-readable contracts before being used as evidence, including
 suite-summary aggregate metrics.
@@ -204,21 +215,24 @@ Flight Recorder turns Hermes' experience into regression pressure.
    to show whether the improvement loop is moving pass rate, score, and failure
    pressure in the right direction, then validate the resulting
    `suite_trend.json` before treating it as release evidence.
-12. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-13. Export a human review queue with `flightrecorder export-review` when
+12. Measure failed-rule attribution coverage with
+   `flightrecorder evidence-coverage` before turning failures into review or
+   training signal.
+13. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
+14. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
-14. Apply completed labels with `flightrecorder apply-review` to produce
+15. Apply completed labels with `flightrecorder apply-review` to produce
    human-reviewed SFT, reward-model, preference, and DPO views.
-15. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
+16. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
    human-curated labels become trainer input.
-16. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+17. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-17. Validate the generated artifacts and suite summary with
+18. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-18. Gate training-export readiness with `flightrecorder gate-export` before
+19. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:
@@ -230,6 +244,8 @@ That gives the Hermes team a practical improvement loop:
 - model/skill/prompt changes can be evaluated across a full scenario suite,
 - one command can produce a complete suite evidence bundle for local review,
   CI, or downstream training-data export,
+- evidence coverage can verify that failed-rule labels are grounded in
+  structured trace/final-answer/episode refs before they become learning signal,
 - suite summaries expose aggregate pass rates, average scores, and recurring
   failure classes without opening every report,
 - suite gates can fail CI on absolute acceptance thresholds, not only

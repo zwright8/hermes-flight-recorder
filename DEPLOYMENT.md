@@ -27,9 +27,10 @@ python -m unittest discover
 The demo runs `flightrecorder run-suite` and generates `runs/index.html` with
 two passing reports, four failing adversarial reports, per-run
 `artifact_lineage.json` provenance manifests, `runs/suite_summary.json`,
-single-run and suite compare reports, and `runs/training_export/` training
-artifacts. It also writes `runs/validation.json` to prove the generated
-contracts are internally consistent. No API keys or network are required.
+single-run and suite compare reports, `runs/evidence_coverage.json`, and
+`runs/training_export/` training artifacts. It also writes
+`runs/validation.json` to prove the generated contracts are internally
+consistent. No API keys or network are required.
 
 ## Live Hermes Collection
 
@@ -107,6 +108,11 @@ network.
   need to review progress across an improvement run, not just one comparison.
   Validate the resulting trend with `flightrecorder validate --suite-trend
   <trend.json> --strict` before treating it as release evidence.
+- Use `flightrecorder evidence-coverage --runs runs --out
+  runs/evidence_coverage.json --min-failed-rule-evidence-rate 1.0
+  --max-failed-rules-without-evidence 0` when CI must prove failed scorecard
+  judgments have structured evidence refs before those failures feed review,
+  regression, or training loops.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or
@@ -133,7 +139,8 @@ network.
   labels into reviewed SFT, reward-model, preference, and DPO views.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --review-export runs/review_queue --reviewed-export runs/reviewed_export
-  --compare-export runs/compare_rl_export --suite-summary runs/suite_summary.json
+  --compare-export runs/compare_rl_export --evidence-coverage
+  runs/evidence_coverage.json --suite-summary runs/suite_summary.json
   --suite-trend runs/suite_trend.json --strict` before publishing artifacts or
   using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export

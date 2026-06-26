@@ -10,6 +10,7 @@ from typing import Any
 
 from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import SUITE_TREND_SCHEMA_VERSION
+from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION
 from .review import (
     REVIEW_ITEM_SCHEMA_VERSION,
@@ -73,6 +74,7 @@ def validate_artifacts(
     compare_export_dir: str | Path | None = None,
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
+    evidence_coverage_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
     strict: bool = False,
@@ -91,6 +93,8 @@ def validate_artifacts(
         targets.append(validate_review_export(review_export_dir))
     if reviewed_export_dir is not None:
         targets.append(validate_reviewed_export(reviewed_export_dir))
+    for evidence_coverage_path in evidence_coverage_paths or []:
+        targets.append(validate_evidence_coverage(evidence_coverage_path))
     for suite_summary_path in suite_summary_paths or []:
         targets.append(validate_suite_summary(suite_summary_path))
     for suite_trend_path in suite_trend_paths or []:
@@ -373,6 +377,16 @@ def validate_suite_summary(path: str | Path) -> ValidationTarget:
     if summary is None:
         return target
     _validate_suite_summary(summary, target)
+    return target
+
+
+def validate_evidence_coverage(path: str | Path) -> ValidationTarget:
+    """Validate an evidence-coverage artifact."""
+    coverage_path = Path(path)
+    target = ValidationTarget("evidence_coverage", str(coverage_path))
+    coverage = _read_object(coverage_path, target, "evidence_coverage.json")
+    if coverage is not None:
+        _validate_evidence_coverage(coverage, target)
     return target
 
 
@@ -2011,6 +2025,214 @@ def _validate_suite_family_metrics(value: Any, target: ValidationTarget, runs: l
     missing = sorted(set(expected_rows) - actual_families)
     if missing:
         target.errors.append(f"suite_summary.metrics.task_families missing families: {missing!r}.")
+
+
+def _validate_evidence_coverage(coverage: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(coverage, "schema_version", EVIDENCE_COVERAGE_SCHEMA_VERSION, target)
+    runs = coverage.get("runs")
+    if not isinstance(runs, list):
+        target.errors.append("evidence_coverage.runs must be a list.")
+        runs = []
+    metrics = coverage.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("evidence_coverage.metrics must be an object.")
+        metrics = {}
+    checks = coverage.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("evidence_coverage.checks must be a list.")
+        checks = []
+    if not isinstance(coverage.get("passed"), bool):
+        target.errors.append("evidence_coverage.passed must be a boolean.")
+
+    failed_checks = 0
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            target.errors.append(f"evidence_coverage.checks[{index}] must be an object.")
+            continue
+        if not isinstance(check.get("id"), str) or not check.get("id"):
+            target.errors.append(f"evidence_coverage.checks[{index}].id must be a non-empty string.")
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"evidence_coverage.checks[{index}].passed must be a boolean.")
+        elif not check["passed"]:
+            failed_checks += 1
+
+    if coverage.get("check_count") != len(checks):
+        target.errors.append(f"evidence_coverage.check_count expected {len(checks)}, got {coverage.get('check_count')!r}.")
+    if coverage.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"evidence_coverage.failed_check_count expected {failed_checks}, got {coverage.get('failed_check_count')!r}."
+        )
+    if isinstance(coverage.get("passed"), bool) and coverage["passed"] != (failed_checks == 0):
+        target.errors.append("evidence_coverage.passed must match failed_check_count.")
+
+    run_totals = _validate_evidence_coverage_runs(runs, target)
+    _validate_evidence_coverage_metrics(metrics, run_totals, target)
+
+    warnings = coverage.get("warnings")
+    if not isinstance(warnings, list) or not all(isinstance(item, str) for item in warnings):
+        target.errors.append("evidence_coverage.warnings must be a list of strings.")
+
+    target.details.update(
+        {
+            "run_count": run_totals["run_count"],
+            "failed_rule_count": run_totals["failed_rule_count"],
+            "failed_rule_evidence_rate": metrics.get("failed_rule_evidence_rate"),
+        }
+    )
+
+
+def _validate_evidence_coverage_runs(runs: list[Any], target: ValidationTarget) -> dict[str, Any]:
+    totals: dict[str, Any] = {
+        "run_count": len(runs),
+        "rule_count": 0,
+        "failed_rule_count": 0,
+        "critical_failed_rule_count": 0,
+        "evidence_ref_count": 0,
+        "failed_rule_evidence_ref_count": 0,
+        "critical_failed_rule_evidence_ref_count": 0,
+        "failed_rules_with_evidence": 0,
+        "failed_rules_without_evidence": 0,
+        "critical_failed_rules_with_evidence": 0,
+        "critical_failed_rules_without_evidence": 0,
+        "task_evidence_ref_count": 0,
+        "evidence_target_counts": {},
+        "failed_rule_evidence_target_counts": {},
+    }
+    for index, run in enumerate(runs):
+        label = f"evidence_coverage.runs[{index}]"
+        if not isinstance(run, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("scenario_id", "scenario_title", "run_dir"):
+            if not isinstance(run.get(field_name), str) or not run.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(run.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean.")
+        if not _is_int_between(run.get("score"), 0, 100):
+            target.errors.append(f"{label}.score must be an integer from 0 to 100.")
+        for field_name in (
+            "rule_count",
+            "failed_rule_count",
+            "critical_failed_rule_count",
+            "evidence_ref_count",
+            "failed_rule_evidence_ref_count",
+            "critical_failed_rule_evidence_ref_count",
+            "failed_rules_with_evidence",
+            "critical_failed_rules_with_evidence",
+            "task_evidence_ref_count",
+        ):
+            if not _is_non_negative_int(run.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+                continue
+            totals[field_name] += run[field_name]
+        for field_name in ("failed_rules_without_evidence", "critical_failed_rules_without_evidence"):
+            values = run.get(field_name)
+            if not _is_string_list(values):
+                target.errors.append(f"{label}.{field_name} must be a list of strings.")
+                continue
+            totals[field_name] += len(values)
+        event_count = run.get("event_count")
+        if event_count is not None and not _is_non_negative_int(event_count):
+            target.errors.append(f"{label}.event_count must be a non-negative integer or null.")
+        _merge_count_rows(totals["evidence_target_counts"], run.get("evidence_target_counts"), target, f"{label}.evidence_target_counts")
+        _merge_count_rows(
+            totals["failed_rule_evidence_target_counts"],
+            run.get("failed_rule_evidence_target_counts"),
+            target,
+            f"{label}.failed_rule_evidence_target_counts",
+        )
+        rules = run.get("rules")
+        if not isinstance(rules, list):
+            target.errors.append(f"{label}.rules must be a list.")
+        elif len(rules) != run.get("rule_count"):
+            target.errors.append(f"{label}.rule_count must match rules length.")
+    return totals
+
+
+def _validate_evidence_coverage_metrics(metrics: dict[str, Any], totals: dict[str, Any], target: ValidationTarget) -> None:
+    expected_int_fields = (
+        "run_count",
+        "rule_count",
+        "failed_rule_count",
+        "critical_failed_rule_count",
+        "evidence_ref_count",
+        "failed_rule_evidence_ref_count",
+        "critical_failed_rule_evidence_ref_count",
+        "failed_rules_with_evidence",
+        "failed_rules_without_evidence",
+        "critical_failed_rules_with_evidence",
+        "critical_failed_rules_without_evidence",
+        "task_evidence_ref_count",
+    )
+    for field_name in expected_int_fields:
+        if metrics.get(field_name) != totals[field_name]:
+            target.errors.append(f"evidence_coverage.metrics.{field_name} expected {totals[field_name]!r}, got {metrics.get(field_name)!r}.")
+
+    expected_failed_rate = _rate_value(totals["failed_rules_with_evidence"], totals["failed_rule_count"])
+    expected_critical_rate = _rate_value(totals["critical_failed_rules_with_evidence"], totals["critical_failed_rule_count"])
+    if metrics.get("failed_rule_evidence_rate") != expected_failed_rate:
+        target.errors.append(
+            f"evidence_coverage.metrics.failed_rule_evidence_rate expected {expected_failed_rate!r}, "
+            f"got {metrics.get('failed_rule_evidence_rate')!r}."
+        )
+    if metrics.get("critical_failed_rule_evidence_rate") != expected_critical_rate:
+        target.errors.append(
+            f"evidence_coverage.metrics.critical_failed_rule_evidence_rate expected {expected_critical_rate!r}, "
+            f"got {metrics.get('critical_failed_rule_evidence_rate')!r}."
+        )
+
+    evidence_counts = _count_rows(metrics.get("evidence_target_counts"))
+    failed_counts = _count_rows(metrics.get("failed_rule_evidence_target_counts"))
+    if evidence_counts != totals["evidence_target_counts"]:
+        target.errors.append("evidence_coverage.metrics.evidence_target_counts does not match runs.")
+    if failed_counts != totals["failed_rule_evidence_target_counts"]:
+        target.errors.append("evidence_coverage.metrics.failed_rule_evidence_target_counts does not match runs.")
+    if metrics.get("event_evidence_ref_count") != totals["evidence_target_counts"].get("event", 0):
+        target.errors.append("evidence_coverage.metrics.event_evidence_ref_count does not match evidence_target_counts.")
+    if metrics.get("final_answer_evidence_ref_count") != totals["evidence_target_counts"].get("final_answer", 0):
+        target.errors.append("evidence_coverage.metrics.final_answer_evidence_ref_count does not match evidence_target_counts.")
+    if metrics.get("episode_evidence_ref_count") != totals["evidence_target_counts"].get("episode", 0):
+        target.errors.append("evidence_coverage.metrics.episode_evidence_ref_count does not match evidence_target_counts.")
+
+    rule_coverage = metrics.get("rule_coverage")
+    if not isinstance(rule_coverage, list):
+        target.errors.append("evidence_coverage.metrics.rule_coverage must be a list.")
+        return
+    for index, row in enumerate(rule_coverage):
+        if not isinstance(row, dict):
+            target.errors.append(f"evidence_coverage.metrics.rule_coverage[{index}] must be an object.")
+            continue
+        if "target_counts" in row:
+            target.errors.append(f"evidence_coverage.metrics.rule_coverage[{index}].target_counts is internal and must not be present.")
+        if not isinstance(row.get("rule_id"), str) or not row.get("rule_id"):
+            target.errors.append(f"evidence_coverage.metrics.rule_coverage[{index}].rule_id must be a non-empty string.")
+        for field_name in (
+            "rule_count",
+            "passed",
+            "failed",
+            "critical_failed",
+            "evidence_ref_count",
+            "negative_evidence_ref_count",
+            "failed_with_evidence",
+            "failed_without_evidence",
+        ):
+            if not _is_non_negative_int(row.get(field_name)):
+                target.errors.append(f"evidence_coverage.metrics.rule_coverage[{index}].{field_name} must be a non-negative integer.")
+
+
+def _merge_count_rows(target_counts: dict[str, int], value: Any, target: ValidationTarget, label: str) -> None:
+    counts = _count_rows(value)
+    if counts is None:
+        target.errors.append(f"{label} must be count rows.")
+        return
+    for key, count in counts.items():
+        target_counts[key] = target_counts.get(key, 0) + count
+
+
+def _rate_value(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 1.0
+    return round(numerator / denominator, 4)
 
 
 def _validate_suite_trend(trend: dict[str, Any], target: ValidationTarget) -> None:

@@ -49,6 +49,9 @@ Expected demo output:
   step-level reward attribution, preference pairs, trainer-ready SFT/DPO/reward
   model views, failure modes, curriculum metadata, dataset quality metrics, a
   dataset card, and a manifest for future model-improvement loops.
+- An evidence coverage report in `runs/evidence_coverage.json` showing whether
+  failed-rule judgments are backed by structured event, final-answer, or
+  episode evidence refs.
 
 ## Install
 
@@ -132,6 +135,12 @@ flightrecorder trend-suite \
   --out runs/suite_trend.json \
   --html-out runs/suite_trend.html
 
+flightrecorder evidence-coverage \
+  --runs runs \
+  --out runs/evidence_coverage.json \
+  --min-failed-rule-evidence-rate 1.0 \
+  --max-failed-rules-without-evidence 0
+
 flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -149,6 +158,7 @@ flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
+  --evidence-coverage runs/evidence_coverage.json \
   --suite-summary runs/suite_summary.json \
   --strict
 
@@ -340,6 +350,20 @@ files over multiple iterations. The trend JSON and HTML report show pass-rate
 and score movement plus failed-rule and critical-failure trajectories. The
 generated `suite_trend.json` can be checked with
 `flightrecorder validate --suite-trend <path> --strict`.
+
+Use `flightrecorder evidence-coverage` to measure whether suite judgments are
+grounded in structured evidence refs. This is especially useful before
+training/review handoffs: failed rules should point to concrete trace events,
+final answers, or episode-level budget/missing-evidence facts.
+
+```bash
+flightrecorder evidence-coverage \
+  --runs runs \
+  --out runs/evidence_coverage.json \
+  --min-failed-rule-evidence-rate 1.0 \
+  --min-critical-failed-rule-evidence-rate 1.0 \
+  --max-failed-rules-without-evidence 0
+```
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
@@ -627,6 +651,7 @@ flightrecorder validate \
   --review-export runs/review_queue \
   --reviewed-export runs/reviewed_export \
   --compare-export runs/compare_rl_export \
+  --evidence-coverage runs/evidence_coverage.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --out runs/validation.json \

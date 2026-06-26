@@ -27,6 +27,7 @@ from .compare_gate import (
     evaluate_compare_gate,
     load_compare_gate_policy,
 )
+from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import write_run_lineage
 from .redaction import sanitize_trace
 from .report import write_index, write_report
@@ -70,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         TrainingExportError,
         TrainingGatePolicyError,
         CompareGatePolicyError,
+        EvidenceCoverageError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -355,6 +357,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         compare_export_dir=args.compare_export,
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
+        evidence_coverage_paths=args.evidence_coverage,
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
         strict=args.strict,
@@ -367,6 +370,27 @@ def cmd_validate(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0 if summary["passed"] else 1
+
+
+def cmd_evidence_coverage(args: argparse.Namespace) -> int:
+    coverage = build_evidence_coverage(
+        args.runs,
+        preserve_paths=args.preserve_paths,
+        min_failed_rule_evidence_rate=args.min_failed_rule_evidence_rate,
+        min_critical_failed_rule_evidence_rate=args.min_critical_failed_rule_evidence_rate,
+        min_event_evidence_refs=args.min_event_evidence_refs,
+        max_failed_rules_without_evidence=args.max_failed_rules_without_evidence,
+        max_critical_failed_rules_without_evidence=args.max_critical_failed_rules_without_evidence,
+        require_rule_evidence=args.require_rule_evidence,
+    )
+    rendered = json.dumps(coverage, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if coverage["passed"] else 1
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -722,11 +746,52 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--compare-export", help="Validate an export-compare-rl output directory")
     validate.add_argument("--review-export", help="Validate an export-review output directory")
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
+    validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
+
+    evidence_coverage = subparsers.add_parser(
+        "evidence-coverage",
+        help="Summarize structured evidence-ref coverage across completed runs",
+    )
+    evidence_coverage.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
+    evidence_coverage.add_argument("--out", help="Write evidence coverage JSON to this path")
+    evidence_coverage.add_argument(
+        "--min-failed-rule-evidence-rate",
+        type=_rate_arg,
+        help="Minimum fraction of failed rules that must have structured evidence refs",
+    )
+    evidence_coverage.add_argument(
+        "--min-critical-failed-rule-evidence-rate",
+        type=_rate_arg,
+        help="Minimum fraction of failed critical rules that must have structured evidence refs",
+    )
+    evidence_coverage.add_argument(
+        "--min-event-evidence-refs",
+        type=_non_negative_int_arg,
+        help="Minimum evidence refs pointing at trace events",
+    )
+    evidence_coverage.add_argument(
+        "--max-failed-rules-without-evidence",
+        type=_non_negative_int_arg,
+        help="Maximum failed rules allowed to have no structured evidence refs",
+    )
+    evidence_coverage.add_argument(
+        "--max-critical-failed-rules-without-evidence",
+        type=_non_negative_int_arg,
+        help="Maximum failed critical rules allowed to have no structured evidence refs",
+    )
+    evidence_coverage.add_argument(
+        "--require-rule-evidence",
+        action="append",
+        default=[],
+        help="Fail unless this rule id has at least one structured evidence ref across the suite",
+    )
+    evidence_coverage.add_argument("--preserve-paths", action="store_true", help="Allow absolute run paths in coverage output")
+    evidence_coverage.set_defaults(func=cmd_evidence_coverage)
 
     draft = subparsers.add_parser("draft-scenario", help="Draft a scenario JSON file from an existing run or trace")
     draft_source = draft.add_mutually_exclusive_group(required=True)

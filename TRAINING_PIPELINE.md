@@ -44,6 +44,12 @@ two iterations and want pass-rate, score, failed-rule, and critical-failure
 trajectories across the whole improvement run. Validate `suite_trend.json`
 before using a trend as improvement-loop evidence.
 
+Use `flightrecorder evidence-coverage --runs ...` before training or review
+handoffs when you need to prove that failed-rule pressure is attributable. The
+coverage report measures how many failed and critical failed rules have
+structured evidence refs, plus whether those refs point to trace events, final
+answers, or episode-level facts.
+
 Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate
 direction. Candidate wins become improvement examples; baseline wins become
@@ -137,6 +143,7 @@ flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
+  --evidence-coverage runs/evidence_coverage.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --strict
@@ -214,6 +221,10 @@ Failed rules include structured attribution when the scorecard exposes
 This gives future trainers a starting point for credit assignment, but it should
 not be mistaken for an online environment reward. Older scorecards that lack
 `evidence_refs` still fall back to parsing human-readable evidence strings.
+
+`evidence_coverage.json` is the suite-level check for that assumption. If
+failed rules lack structured refs, reward rows may still exist, but their credit
+assignment is weaker and should not be treated as high-quality training signal.
 
 ## Step Reward Records
 

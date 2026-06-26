@@ -33,5 +33,12 @@ python -m flightrecorder trend-suite \
   --suite-summary runs/suite_summary.json \
   --out runs/suite_trend.json \
   --html-out runs/suite_trend.html
+python -m flightrecorder evidence-coverage \
+  --runs runs \
+  --out runs/evidence_coverage.json \
+  --min-failed-rule-evidence-rate 1.0 \
+  --min-critical-failed-rule-evidence-rate 1.0 \
+  --max-failed-rules-without-evidence 0 \
+  --max-critical-failed-rules-without-evidence 0
 
 echo "Demo reports written to $ROOT/runs/index.html"

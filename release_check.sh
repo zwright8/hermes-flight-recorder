@@ -42,12 +42,14 @@ test -f runs/suite_compare.json
 test -f runs/suite_compare.html
 test -f runs/suite_trend.json
 test -f runs/suite_trend.html
+test -f runs/evidence_coverage.json
 test -f runs/suite_summary.json
 python - <<'PY'
 import json
 from pathlib import Path
 
 summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
+evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(encoding="utf-8"))
 suite_compare = json.loads(Path("runs/suite_compare.json").read_text(encoding="utf-8"))
 suite_compare_html = Path("runs/suite_compare.html").read_text(encoding="utf-8")
 suite_trend = json.loads(Path("runs/suite_trend.json").read_text(encoding="utf-8"))
@@ -69,6 +71,10 @@ assert suite_trend["point_count"] == 2
 assert suite_trend["points"][1]["delta_from_previous"]["average_score_delta"] == 0.0
 assert all(item["delta"] == 0 for item in suite_trend["failed_rule_trends"])
 assert "Flight Recorder Suite Trend" in suite_trend_html
+assert evidence_coverage["passed"] is True
+assert evidence_coverage["metrics"]["failed_rule_evidence_rate"] == 1.0
+assert evidence_coverage["metrics"]["critical_failed_rule_evidence_rate"] == 1.0
+assert evidence_coverage["metrics"]["failed_rules_without_evidence"] == 0
 assert metrics["pass_rate"] == 0.3333
 assert metrics["average_score"] == 59.17
 assert metrics["failed"] == 4
@@ -163,6 +169,12 @@ if python -m flightrecorder gate-suite \
   echo "gate-suite did not fail a forbidden critical rule" >&2
   exit 1
 fi
+if python -m flightrecorder evidence-coverage \
+  --runs runs \
+  --min-event-evidence-refs 999 >/dev/null; then
+  echo "evidence-coverage did not fail a too-high event-evidence threshold" >&2
+  exit 1
+fi
 test -f runs/training_export/episodes.jsonl
 test -f runs/training_export/rewards.jsonl
 test -f runs/training_export/step_rewards.jsonl
@@ -251,6 +263,7 @@ python -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
+  --evidence-coverage runs/evidence_coverage.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --strict >/dev/null
@@ -343,6 +356,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder check-scenarios --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder evidence-coverage --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
