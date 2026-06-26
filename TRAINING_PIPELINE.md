@@ -92,6 +92,11 @@ the included artifacts, such as repairing failed scenarios, resolving critical
 failures, grounding weak scenario contracts, improving trace capture, or
 reviewing training quality flags. Treat those actions as a repair queue for the
 next improvement iteration, not as a substitute for the gates themselves.
+For concrete rule-level repair work, use the generated `repair_queue.json` or
+regenerate it with `flightrecorder repair-queue --runs runs --out
+runs/repair_queue.json`. Each item points to a failed rule, evidence refs,
+source artifacts, and a replay command, which makes it better suited to repair
+agents or issue trackers than aggregate suite metrics.
 
 Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate
@@ -220,6 +225,7 @@ flightrecorder validate \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \

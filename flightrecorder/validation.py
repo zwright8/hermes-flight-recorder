@@ -14,6 +14,7 @@ from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
+from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
 from .review import (
     REVIEW_ITEM_SCHEMA_VERSION,
     REVIEW_LABEL_SCHEMA_VERSION,
@@ -82,6 +83,7 @@ def validate_artifacts(
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
+    repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
     review_calibration_paths: list[str | Path] | None = None,
@@ -109,6 +111,8 @@ def validate_artifacts(
         targets.append(validate_evidence_coverage(evidence_coverage_path))
     for evidence_bundle_path in evidence_bundle_paths or []:
         targets.append(validate_evidence_bundle(evidence_bundle_path))
+    for repair_queue_path in repair_queue_paths or []:
+        targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
         targets.append(validate_replay_bundle(replay_bundle_path))
     for trace_observability_path in trace_observability_paths or []:
@@ -436,6 +440,16 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     bundle = _read_object(bundle_path, target, "evidence_bundle.json")
     if bundle is not None:
         _validate_evidence_bundle(bundle, target)
+    return target
+
+
+def validate_repair_queue(path: str | Path) -> ValidationTarget:
+    """Validate a repair-queue artifact."""
+    queue_path = Path(path)
+    target = ValidationTarget("repair_queue", str(queue_path))
+    queue = _read_object(queue_path, target, "repair_queue.json")
+    if queue is not None:
+        _validate_repair_queue(queue, target)
     return target
 
 
@@ -3213,6 +3227,170 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
     )
 
 
+def _validate_repair_queue(queue: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(queue, "schema_version", REPAIR_QUEUE_SCHEMA_VERSION, target)
+    if not isinstance(queue.get("runs_dir"), str) or not queue.get("runs_dir"):
+        target.errors.append("repair_queue.runs_dir must be a non-empty string.")
+    if not isinstance(queue.get("passed"), bool):
+        target.errors.append("repair_queue.passed must be a boolean.")
+    if not isinstance(queue.get("only_critical"), bool):
+        target.errors.append("repair_queue.only_critical must be a boolean.")
+    items = queue.get("items")
+    if not isinstance(items, list):
+        target.errors.append("repair_queue.items must be a list.")
+        items = []
+    if queue.get("item_count") != len(items):
+        target.errors.append(f"repair_queue.item_count expected {len(items)}, got {queue.get('item_count')!r}.")
+
+    seen_ids: set[str] = set()
+    totals: dict[str, Any] = {
+        "critical_item_count": 0,
+        "scenario_ids": set(),
+        "task_families": set(),
+        "priority_counts": {},
+        "rule_counts": {},
+        "critical_rule_counts": {},
+        "task_completion_status_counts": {},
+    }
+    for index, item in enumerate(items):
+        _validate_repair_item(item, target, f"repair_queue.items[{index}]", seen_ids, totals)
+    _validate_repair_queue_metrics(queue.get("metrics"), target, totals, len(items))
+    if "notes" in queue and not _is_string_list(queue.get("notes")):
+        target.errors.append("repair_queue.notes must be a list of strings when present.")
+    target.details.update(
+        {
+            "item_count": len(items),
+            "critical_item_count": totals["critical_item_count"],
+            "scenario_count": len(totals["scenario_ids"]),
+        }
+    )
+
+
+def _validate_repair_item(
+    item: Any,
+    target: ValidationTarget,
+    label: str,
+    seen_ids: set[str],
+    totals: dict[str, Any],
+) -> None:
+    if not isinstance(item, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _require_equal(item, "schema_version", REPAIR_ITEM_SCHEMA_VERSION, target, prefix=f"{label}.")
+    for field_name in (
+        "repair_item_id",
+        "run_id",
+        "scenario_id",
+        "scenario_title",
+        "task_family",
+        "priority",
+        "rule_id",
+        "rule_name",
+        "summary",
+        "suggested_action",
+    ):
+        if not isinstance(item.get(field_name), str) or not item.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    item_id = item.get("repair_item_id")
+    if isinstance(item_id, str) and item_id:
+        if item_id in seen_ids:
+            target.errors.append(f"{label}.repair_item_id duplicates {item_id!r}.")
+        seen_ids.add(item_id)
+    if item.get("priority") not in {"critical", "high", "medium", "low"}:
+        target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
+    if not isinstance(item.get("critical"), bool):
+        target.errors.append(f"{label}.critical must be a boolean.")
+    if not _is_non_negative_int(item.get("penalty")):
+        target.errors.append(f"{label}.penalty must be a non-negative integer.")
+    if not _is_int_between(item.get("score"), 0, 100):
+        target.errors.append(f"{label}.score must be an integer from 0 to 100.")
+    if "pass_threshold" in item and item.get("pass_threshold") is not None and not _is_int_between(item.get("pass_threshold"), 0, 100):
+        target.errors.append(f"{label}.pass_threshold must be null or an integer from 0 to 100.")
+    if not isinstance(item.get("task_completion_passed"), bool):
+        target.errors.append(f"{label}.task_completion_passed must be a boolean.")
+    if not _is_string_list(item.get("evidence")):
+        target.errors.append(f"{label}.evidence must be a list of strings.")
+    _validate_evidence_refs(item.get("evidence_refs"), target, f"{label}.evidence_refs")
+    _validate_repair_source_artifacts(item.get("source_artifacts"), target, f"{label}.source_artifacts")
+    _validate_repair_replay(item.get("replay"), target, f"{label}.replay")
+
+    if item.get("critical") is True:
+        totals["critical_item_count"] += 1
+    _add_total(totals["scenario_ids"], item.get("scenario_id"))
+    _add_total(totals["task_families"], item.get("task_family"))
+    _increment_count(totals["priority_counts"], item.get("priority"))
+    _increment_count(totals["rule_counts"], item.get("rule_id"))
+    if item.get("critical") is True:
+        _increment_count(totals["critical_rule_counts"], item.get("rule_id"))
+    _increment_count(totals["task_completion_status_counts"], item.get("task_completion_status"))
+
+
+def _validate_repair_source_artifacts(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for artifact_name in ("run_dir", "normalized_trace", "scorecard", "report"):
+        if not isinstance(value.get(artifact_name), str) or not value.get(artifact_name):
+            target.errors.append(f"{label}.{artifact_name} must be a non-empty string.")
+    for artifact_name, artifact_path in value.items():
+        if not isinstance(artifact_name, str) or not artifact_name:
+            target.errors.append(f"{label} keys must be non-empty strings.")
+        if not isinstance(artifact_path, str) or not artifact_path:
+            target.errors.append(f"{label}.{artifact_name} must be a non-empty string.")
+
+
+def _validate_repair_replay(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(value.get("available"), bool):
+        target.errors.append(f"{label}.available must be a boolean.")
+    if value.get("self_contained") is not None and not isinstance(value.get("self_contained"), bool):
+        target.errors.append(f"{label}.self_contained must be a boolean or null.")
+    if not isinstance(value.get("command"), str):
+        target.errors.append(f"{label}.command must be a string.")
+    if not isinstance(value.get("argv"), list) or not all(isinstance(part, str) for part in value.get("argv", [])):
+        target.errors.append(f"{label}.argv must be a list of strings.")
+
+
+def _validate_repair_queue_metrics(metrics: Any, target: ValidationTarget, totals: dict[str, Any], item_count: int) -> None:
+    if not isinstance(metrics, dict):
+        target.errors.append("repair_queue.metrics must be an object.")
+        return
+    expected = {
+        "item_count": item_count,
+        "critical_item_count": totals["critical_item_count"],
+        "scenario_count": len(totals["scenario_ids"]),
+        "task_family_count": len(totals["task_families"]),
+        "scenarios": sorted(totals["scenario_ids"]),
+        "task_families": sorted(totals["task_families"]),
+        "priority_counts": totals["priority_counts"],
+        "rule_counts": totals["rule_counts"],
+        "critical_rule_counts": totals["critical_rule_counts"],
+        "task_completion_status_counts": totals["task_completion_status_counts"],
+    }
+    for field_name in ("item_count", "critical_item_count", "scenario_count", "task_family_count"):
+        if metrics.get(field_name) != expected[field_name]:
+            target.errors.append(f"repair_queue.metrics.{field_name} expected {expected[field_name]!r}, got {metrics.get(field_name)!r}.")
+    for field_name in ("scenarios", "task_families"):
+        if metrics.get(field_name) != expected[field_name]:
+            target.errors.append(f"repair_queue.metrics.{field_name} expected {expected[field_name]!r}, got {metrics.get(field_name)!r}.")
+    for field_name in ("priority_counts", "rule_counts", "critical_rule_counts", "task_completion_status_counts"):
+        actual_counts = _count_rows(metrics.get(field_name))
+        if actual_counts != expected[field_name]:
+            target.errors.append(f"repair_queue.metrics.{field_name} does not match repair items.")
+
+
+def _add_total(target_set: set[str], value: Any) -> None:
+    if isinstance(value, str) and value:
+        target_set.add(value)
+
+
+def _increment_count(target_counts: dict[str, int], value: Any) -> None:
+    if isinstance(value, str) and value:
+        target_counts[value] = target_counts.get(value, 0) + 1
+
+
 def _validate_replay_bundle(manifest: dict[str, Any], bundle_dir: Path, target: ValidationTarget) -> None:
     _require_equal(manifest, "schema_version", REPLAY_BUNDLE_SCHEMA_VERSION, target, prefix="replay_bundle.")
     lineage_name = manifest.get("lineage")
@@ -3549,6 +3727,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "scenario_quality",
         "evidence_coverage",
         "trace_observability",
+        "repair_queue",
         "validation",
         "training_export",
         "compare_export",

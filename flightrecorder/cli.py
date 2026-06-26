@@ -35,6 +35,7 @@ from .compare_gate import (
 from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
+from .repair import RepairQueueError, build_repair_queue
 from .report import write_index, write_report
 from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
 from .reviewed_gate import (
@@ -83,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         SuiteGatePolicyError,
         ReviewExportError,
         ReviewedGatePolicyError,
+        RepairQueueError,
         TrainingExportError,
         TrainingGatePolicyError,
         CompareGatePolicyError,
@@ -358,6 +360,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 "scenario_quality": out_dir / "scenario_quality.json",
                 "evidence_coverage": out_dir / "evidence_coverage.json",
                 "trace_observability": out_dir / "trace_observability.json",
+                "repair_queue": out_dir / "repair_queue.json",
                 "evidence_bundle": out_dir / "evidence_bundle.json",
             }
             scenario_quality = build_scenario_quality(
@@ -377,6 +380,10 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
             trace_observability = build_trace_observability(out_dir, preserve_paths=args.preserve_paths)
             _write_json(handoff_paths["trace_observability"], trace_observability)
             artifacts["trace_observability"] = _display_path(handoff_paths["trace_observability"], args.preserve_paths)
+
+            repair_queue = build_repair_queue(out_dir, preserve_paths=args.preserve_paths)
+            _write_json(handoff_paths["repair_queue"], repair_queue)
+            artifacts["repair_queue"] = _display_path(handoff_paths["repair_queue"], args.preserve_paths)
             artifacts["evidence_bundle"] = _display_path(handoff_paths["evidence_bundle"], args.preserve_paths)
         else:
             errors.append(
@@ -412,6 +419,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
             evidence_coverage_paths=[handoff_paths["evidence_coverage"]] if args.evidence_handoff and handoff_paths else None,
             trace_observability_paths=[handoff_paths["trace_observability"]] if args.evidence_handoff and handoff_paths else None,
             scenario_quality_paths=[handoff_paths["scenario_quality"]] if args.evidence_handoff and handoff_paths else None,
+            repair_queue_paths=[handoff_paths["repair_queue"]] if args.evidence_handoff and handoff_paths else None,
             suite_summary_paths=[summary_path],
             strict=args.strict,
         )
@@ -438,6 +446,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
             scenario_quality_path=handoff_paths["scenario_quality"],
             evidence_coverage_path=handoff_paths["evidence_coverage"],
             trace_observability_path=handoff_paths["trace_observability"],
+            repair_queue_path=handoff_paths["repair_queue"],
             validation_path=validation_path if args.validate else None,
             training_export_dir=training_out if args.export_rl else None,
             preserve_paths=args.preserve_paths,
@@ -600,6 +609,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
+        repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
         review_calibration_paths=args.review_calibration,
@@ -660,6 +670,22 @@ def cmd_trace_observability(args: argparse.Namespace) -> int:
     return 0 if observability["passed"] else 1
 
 
+def cmd_repair_queue(args: argparse.Namespace) -> int:
+    queue = build_repair_queue(
+        args.runs,
+        preserve_paths=args.preserve_paths,
+        only_critical=args.only_critical,
+    )
+    rendered = json.dumps(queue, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0
+
+
 def cmd_evidence_bundle(args: argparse.Namespace) -> int:
     bundle = build_evidence_bundle(
         out_path=args.out,
@@ -668,6 +694,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         scenario_quality_path=args.scenario_quality,
         evidence_coverage_path=args.evidence_coverage,
         trace_observability_path=args.trace_observability,
+        repair_queue_path=args.repair_queue,
         validation_path=args.validation,
         training_export_dir=args.training_export,
         compare_export_dir=args.compare_export,
@@ -1185,6 +1212,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
+    validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
     validate.add_argument("--review-calibration", action="append", default=[], help="Validate one review_calibration.json; may be repeated")
@@ -1250,6 +1278,16 @@ def _parser() -> argparse.ArgumentParser:
     trace_observability.add_argument("--preserve-paths", action="store_true", help="Allow absolute run paths in observability output")
     trace_observability.set_defaults(func=cmd_trace_observability)
 
+    repair_queue = subparsers.add_parser(
+        "repair-queue",
+        help="Export failed scorecard rules as deterministic repair tasks",
+    )
+    repair_queue.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
+    repair_queue.add_argument("--out", help="Write repair queue JSON to this path")
+    repair_queue.add_argument("--only-critical", action="store_true", help="Include only failed rules marked critical")
+    repair_queue.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in repair queue output")
+    repair_queue.set_defaults(func=cmd_repair_queue)
+
     evidence_bundle = subparsers.add_parser(
         "evidence-bundle",
         help="Summarize a complete evidence handoff bundle and readiness checks",
@@ -1260,6 +1298,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--scenario-quality", help="scenario_quality.json included in the handoff")
     evidence_bundle.add_argument("--evidence-coverage", help="evidence_coverage.json included in the handoff")
     evidence_bundle.add_argument("--trace-observability", help="trace_observability.json included in the handoff")
+    evidence_bundle.add_argument("--repair-queue", help="repair_queue.json included in the handoff")
     evidence_bundle.add_argument("--validation", help="validation.json included in the handoff")
     evidence_bundle.add_argument("--training-export", help="export-rl directory included in the handoff")
     evidence_bundle.add_argument("--compare-export", help="export-compare-rl directory included in the handoff")

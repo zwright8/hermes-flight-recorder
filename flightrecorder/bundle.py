@@ -22,6 +22,7 @@ def build_evidence_bundle(
     scenario_quality_path: str | Path | None = None,
     evidence_coverage_path: str | Path | None = None,
     trace_observability_path: str | Path | None = None,
+    repair_queue_path: str | Path | None = None,
     validation_path: str | Path | None = None,
     training_export_dir: str | Path | None = None,
     compare_export_dir: str | Path | None = None,
@@ -99,6 +100,25 @@ def build_evidence_bundle(
                 "tool_or_api_run_rate",
                 "empty_final_answer_count",
                 "risk_counts",
+            ),
+        )
+
+    if repair_queue_path is not None:
+        repair_queue = _read_json_artifact(Path(repair_queue_path), artifacts, "repair_queue", preserve_paths)
+        _summarize_boolean_artifact(
+            repair_queue,
+            metrics,
+            checks,
+            artifact_name="repair_queue",
+            metric_prefix="repair_queue",
+            metric_fields=(
+                "item_count",
+                "critical_item_count",
+                "scenario_count",
+                "task_family_count",
+                "priority_counts",
+                "rule_counts",
+                "critical_rule_counts",
             ),
         )
 
@@ -300,6 +320,7 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "tool_or_api_run_rate",
             "risk_counts",
         ),
+        "repair_queue": ("item_count", "critical_item_count", "scenario_count", "task_family_count", "priority_counts", "rule_counts"),
         "validation": ("target_count", "error_count", "warning_count"),
         "training_export": ("episode_count", "preference_count", "dpo_count", "pass_rate", "average_score", "quality_flag_count"),
         "compare_export": ("pair_count", "candidate_win_count", "baseline_win_count", "skipped_pair_count"),

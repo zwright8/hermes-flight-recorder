@@ -71,6 +71,7 @@ python -m flightrecorder evidence-bundle \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
+  --repair-queue runs/repair_queue.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --out runs/evidence_bundle.json
@@ -79,6 +80,7 @@ python -m flightrecorder validate \
   --training-export runs/training_export \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
   --suite-summary runs/suite_summary.json \
   --strict
 python -m flightrecorder gate-suite \
@@ -236,11 +238,13 @@ Flight Recorder turns Hermes' experience into regression pressure.
 4. Measure scenario contract strength with `flightrecorder scenario-quality`.
 5. Run a full scenario directory with `flightrecorder run-suite --evidence-handoff`
    to produce per-run reports, `suite_summary.json`, `scenario_quality.json`,
-   `evidence_coverage.json`, `trace_observability.json`, `validation.json`, and
-   `evidence_bundle.json`, using `--metadata key=value` flags to identify the
-   Hermes candidate, model, prompt, skill, memory, or tool-policy revision.
+   `evidence_coverage.json`, `trace_observability.json`, `repair_queue.json`,
+   `validation.json`, and `evidence_bundle.json`, using `--metadata key=value`
+   flags to identify the Hermes candidate, model, prompt, skill, memory, or
+   tool-policy revision.
    The bundle's `decision.next_actions` field turns the evidence into a
-   deterministic repair queue for the next Hermes improvement iteration.
+   deterministic summary of what the next Hermes improvement iteration should
+   do, while `repair_queue.json` gives the concrete failed-rule work items.
 6. If a scenario fails, save the generated `regression_scenario.json`.
 7. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.

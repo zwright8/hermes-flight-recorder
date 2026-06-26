@@ -106,6 +106,10 @@ flightrecorder scenario-quality \
   --min-observable-rate 0.8 \
   --max-weak-scenarios 0
 
+flightrecorder repair-queue \
+  --runs runs \
+  --out runs/repair_queue.json
+
 flightrecorder draft-scenario \
   --trace fixtures/email_reply_completion_good.observer.jsonl \
   --id draft_email_reply \
@@ -210,6 +214,7 @@ flightrecorder validate \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
   --replay-bundle replay_bundles/prompt_injection_good \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
@@ -286,6 +291,12 @@ file hashes, readiness checks, pass/fail state, summarized metrics, gate
 results, and a compact `decision` block so a reviewer, CI job, or future trainer
 can consume one compact artifact before deciding whether to trust the underlying
 evidence package.
+
+`flightrecorder repair-queue` writes `repair_queue.json`, a deterministic queue
+with one item per failed scorecard rule. Each repair item carries the failed
+rule id, priority, task family, evidence refs, report path, regression scenario,
+and lineage replay command when available. This is the artifact to hand to a
+repair agent, issue tracker, or curriculum builder.
 
 `flightrecorder export-rl` converts completed run directories into future
 training-loop artifacts:
@@ -452,11 +463,12 @@ flightrecorder run-suite \
 ```
 
 `--evidence-handoff` writes `scenario_quality.json`,
-`evidence_coverage.json`, `trace_observability.json`, and
+`evidence_coverage.json`, `trace_observability.json`, `repair_queue.json`, and
 `evidence_bundle.json` next to `suite_summary.json`. These default summaries
 package the evidence for review and automation; use the standalone
-`scenario-quality`, `evidence-coverage`, `trace-observability`, `gate-suite`,
-and `gate-export` commands when CI needs stricter policy thresholds.
+`scenario-quality`, `evidence-coverage`, `trace-observability`, `repair-queue`,
+`gate-suite`, and `gate-export` commands when CI needs stricter policy
+thresholds or a regenerated queue over historical runs.
 
 Use `flightrecorder validate --strict` to verify that generated run, training,
 suite-summary, suite-trend, and replay-bundle artifacts still satisfy the
@@ -531,6 +543,16 @@ flightrecorder trace-observability \
   --require-event-type assistant_message
 ```
 
+Use `flightrecorder repair-queue` when an improvement loop needs concrete work
+items instead of only aggregate failure counts. The queue is derived from
+failed scorecard rules and does not change pass/fail outcomes.
+
+```bash
+flightrecorder repair-queue \
+  --runs runs \
+  --out runs/repair_queue.json
+```
+
 Use `flightrecorder evidence-bundle` when a CI job, reviewer, or downstream
 trainer needs one compact manifest that says which evidence artifacts were
 included, whether their gates passed, and which high-level metrics describe the
@@ -544,6 +566,7 @@ flightrecorder evidence-bundle \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
+  --repair-queue runs/repair_queue.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --review-calibration runs/review_calibration.json \
@@ -948,6 +971,7 @@ flightrecorder validate \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \

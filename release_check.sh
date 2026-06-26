@@ -14,6 +14,7 @@ python -m unittest discover
 python -m compileall -q flightrecorder scripts tests
 python scripts/live_hermes_smoke.py --help >/dev/null
 python -m flightrecorder run-suite --help | grep -- --evidence-handoff >/dev/null
+python -m flightrecorder repair-queue --help >/dev/null
 ./demo.sh
 rm -rf replay_runs
 python -m flightrecorder replay-bundle \
@@ -59,6 +60,7 @@ python -m flightrecorder validate \
   --scenario-quality runs/scenario_quality.json \
   --scenario-quality runs/scenario_quality_check.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
   --trace-observability runs/trace_observability.json \
   --trace-observability runs/trace_observability_check.json \
   --strict >/dev/null
@@ -115,6 +117,7 @@ test -f runs/suite_trend.html
 test -f runs/scenario_quality.json
 test -f runs/evidence_coverage.json
 test -f runs/trace_observability.json
+test -f runs/repair_queue.json
 test -f runs/evidence_bundle.json
 test -f runs/suite_summary.json
 python - <<'PY'
@@ -125,6 +128,7 @@ summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8")
 scenario_quality = json.loads(Path("runs/scenario_quality.json").read_text(encoding="utf-8"))
 evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(encoding="utf-8"))
 trace_observability = json.loads(Path("runs/trace_observability.json").read_text(encoding="utf-8"))
+repair_queue = json.loads(Path("runs/repair_queue.json").read_text(encoding="utf-8"))
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
 captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
 replay_source_score = json.loads(Path("runs/prompt_injection_good/scorecard.json").read_text(encoding="utf-8"))
@@ -173,18 +177,24 @@ assert trace_observability["metrics"]["run_count"] == 6
 assert trace_observability["metrics"]["average_event_count"] == 5.67
 assert trace_observability["metrics"]["event_type_count"] == 6
 assert trace_observability["metrics"]["tool_or_api_run_rate"] == 0.8333
+assert repair_queue["passed"] is True
+assert repair_queue["item_count"] == 10
+assert repair_queue["metrics"]["critical_item_count"] == 10
+assert repair_queue["metrics"]["scenario_count"] == 4
 assert evidence_bundle["passed"] is True
 assert evidence_bundle["readiness"] == "ready"
 assert evidence_bundle["decision"]["recommendation"] == "promote_handoff"
 assert evidence_bundle["decision"]["blocking_check_count"] == 0
 assert evidence_bundle["decision"]["key_metrics"]["suite_summary"]["total"] == 6
 assert evidence_bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"] == 0.8333
+assert evidence_bundle["decision"]["key_metrics"]["repair_queue"]["item_count"] == 10
 assert evidence_bundle["decision"]["key_metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["suite_summary"]["total"] == 6
 assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 89.17
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["metrics"]["trace_observability"]["event_type_count"] == 6
+assert evidence_bundle["metrics"]["repair_queue"]["critical_item_count"] == 10
 assert evidence_bundle["failed_check_count"] == 0
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
@@ -463,6 +473,7 @@ python -m flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
   --replay-bundle replay_runs/moved_prompt_injection_good_bundle \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
@@ -597,6 +608,7 @@ python -m flightrecorder evidence-bundle \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
+  --repair-queue runs/repair_queue.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
@@ -612,6 +624,7 @@ test -f runs/evidence_bundle_full.json
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
+  --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --strict >/dev/null
 python - <<'PY'

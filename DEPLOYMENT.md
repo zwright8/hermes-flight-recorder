@@ -95,8 +95,8 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Run `flightrecorder run-suite --scenarios <dir> --out runs --validate
   --strict --evidence-handoff` as the default CI evidence-bundle command. It
   creates the suite summary, per-run artifacts, scenario-quality summary,
-  evidence-coverage summary, trace-observability summary, validation summary,
-  and top-level evidence bundle in one pass.
+  evidence-coverage summary, trace-observability summary, repair queue,
+  validation summary, and top-level evidence bundle in one pass.
 - Inspect `artifact_lineage.json.replay.self_contained` before relying on a
   rerun command. Use `flightrecorder replay` with
   `--lineage <run>/artifact_lineage.json --out <fresh-run>` to regenerate
@@ -151,8 +151,8 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
   runs/evidence_bundle.json` when CI should publish one readiness manifest over
   the generated evidence package. Route automation from
   `decision.recommendation`, route repair tickets or curricula from
-  `decision.next_actions`, and remember it summarizes the included gates
-  and does not replace policy review.
+  `decision.next_actions`, route rule-level work from `repair_queue.json`, and
+  remember it summarizes the included gates and does not replace policy review.
 - Use `flightrecorder validate --state-snapshot <snapshot.json> --strict` for
   `capture-state` outputs before they become required-state evidence or
   downstream training signal. The validator checks the captured schema and
