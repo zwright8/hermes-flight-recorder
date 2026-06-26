@@ -14,6 +14,13 @@ python -m unittest discover
 python -m compileall -q flightrecorder scripts tests
 python scripts/live_hermes_smoke.py --help >/dev/null
 ./demo.sh
+rm -rf replay_runs
+python -m flightrecorder replay \
+  --lineage runs/prompt_injection_good/artifact_lineage.json \
+  --out replay_runs/prompt_injection_good_replay >/dev/null
+python -m flightrecorder validate \
+  --run replay_runs/prompt_injection_good_replay \
+  --strict >/dev/null
 python -m flightrecorder check-scenarios \
   --scenarios scenarios \
   --require-traces \
@@ -72,6 +79,7 @@ test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/email_reply_completion_good/state_snapshot.json
 test -f runs/email_reply_completion_good/task_completion.json
 test -f runs/email_reply_completion_good/artifact_lineage.json
+test -f replay_runs/prompt_injection_good_replay/artifact_lineage.json
 test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
@@ -91,11 +99,15 @@ scenario_quality = json.loads(Path("runs/scenario_quality.json").read_text(encod
 evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(encoding="utf-8"))
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
 captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
+replay_source_score = json.loads(Path("runs/prompt_injection_good/scorecard.json").read_text(encoding="utf-8"))
+replay_score = json.loads(Path("replay_runs/prompt_injection_good_replay/scorecard.json").read_text(encoding="utf-8"))
 suite_compare = json.loads(Path("runs/suite_compare.json").read_text(encoding="utf-8"))
 suite_compare_html = Path("runs/suite_compare.html").read_text(encoding="utf-8")
 suite_trend = json.loads(Path("runs/suite_trend.json").read_text(encoding="utf-8"))
 suite_trend_html = Path("runs/suite_trend.html").read_text(encoding="utf-8")
 metrics = summary["metrics"]
+assert replay_score["score"] == replay_source_score["score"]
+assert replay_score["passed"] == replay_source_score["passed"]
 assert summary["metadata"] == {
     "agent": "hermes-fixture",
     "candidate": "offline-demo",
@@ -592,6 +604,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --out "$INSTALL_DIR/normalized.json" >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder replay --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--state-snapshot"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \

@@ -105,6 +105,82 @@ class CliReportTests(unittest.TestCase):
             self.assertTrue(lineage["summary"]["self_contained_replay"])
             self.assertEqual(lineage["replay"]["argv"][lineage["replay"]["argv"].index("--out") + 1], str(out))
 
+    def test_replay_command_reruns_self_contained_lineage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            replay = Path(tmp) / "replay"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(source),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+
+            code = run_cli(
+                [
+                    "replay",
+                    "--lineage",
+                    str(source / "artifact_lineage.json"),
+                    "--out",
+                    str(replay),
+                    "--preserve-paths",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            source_score = json.loads((source / "scorecard.json").read_text(encoding="utf-8"))
+            replay_score = json.loads((replay / "scorecard.json").read_text(encoding="utf-8"))
+            self.assertEqual(replay_score["score"], source_score["score"])
+            self.assertEqual(replay_score["passed"], source_score["passed"])
+            self.assertTrue((replay / "artifact_lineage.json").exists())
+            self.assertEqual(run_cli(["validate", "--run", str(replay), "--strict"]), 0)
+
+    def test_replay_command_refuses_redacted_replay_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            self.assertEqual(run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(source)]), 0)
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(["replay", "--lineage", str(source / "artifact_lineage.json"), "--out", str(Path(tmp) / "replay")])
+
+            self.assertEqual(raised.exception.code, 2)
+
+    def test_replay_command_rejects_stale_input_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            replay = Path(tmp) / "replay"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(source),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            lineage_path = source / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            lineage["replay"]["input_fingerprints"]["scenario"]["sha256"] = "0" * 64
+            lineage_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(["replay", "--lineage", str(lineage_path), "--out", str(replay), "--preserve-paths"])
+
+            self.assertEqual(raised.exception.code, 2)
+
     def test_failing_report_redacts_secret_values_and_writes_regression(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "run"

@@ -273,8 +273,12 @@ curriculum counts, trainer-ready view rows, dataset metrics, dataset-card
 sections, lineage hashes, and lineage evidence links are internally consistent.
 Run lineage also records `replay.argv`, `replay.command`, input fingerprints,
 and `replay.self_contained` so regression and training loops can tell whether a
-run can be reproduced from the published paths. Use `--preserve-paths` only for
-private runs when absolute replay commands are acceptable.
+run can be reproduced from the published paths. Use `flightrecorder replay`
+with `--lineage <run>/artifact_lineage.json --out <fresh-run>` to verify a
+lineage contract before adding its outputs to a training handoff. The replay
+command checks recorded scenario, trace, and state-snapshot hashes before
+regenerating artifacts. Use `--preserve-paths` only for private runs when
+absolute replay commands are acceptable.
 Derived reward, preference, SFT, DPO, and reward-model rows carry matching
 source fingerprint fields so trainer-ready views remain auditable after they are
 separated from `episodes.jsonl`.

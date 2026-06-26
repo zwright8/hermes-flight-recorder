@@ -452,9 +452,13 @@ the comparison.
 
 Each lineage manifest also includes `replay.argv`, `replay.command`,
 `replay.input_fingerprints`, and `replay.self_contained`. Use
-`--preserve-paths` only in private CI or local debugging when exact absolute
-rerun commands matter; shared artifacts keep paths redacted and mark replay as
-not self-contained.
+`flightrecorder replay --lineage <run>/artifact_lineage.json --out <fresh-run>`
+to rerun the recorded scenario, trace, and optional state snapshot after
+verifying their input fingerprints. `flightrecorder replay` refuses
+non-self-contained redacted contracts unless `--allow-non-self-contained` is
+passed. Use `--preserve-paths` only in private CI or local debugging when exact
+absolute rerun commands matter; shared artifacts keep paths redacted and mark
+replay as not self-contained.
 
 Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
 files over multiple iterations. The trend JSON and HTML report show pass-rate

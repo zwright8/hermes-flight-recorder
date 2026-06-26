@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -61,6 +62,10 @@ RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 
 
+class ReplayError(ValueError):
+    """Raised when a lineage replay contract cannot be safely rerun."""
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
@@ -81,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         EvidenceCoverageError,
         EvidenceBundleError,
         ReviewCalibrationError,
+        ReplayError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -153,6 +159,42 @@ def cmd_run(args: argparse.Namespace) -> int:
     scenario = result["scenario"]
     report_path = result["paths"]["report"]
     print(f"{'PASS' if scorecard['passed'] else 'FAIL'} {scenario['id']} score={scorecard['score']} report={report_path}")
+    return 1 if args.fail_on_score and not scorecard["passed"] else 0
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    lineage = _read_json(Path(args.lineage))
+    replay = lineage.get("replay")
+    if not isinstance(replay, dict):
+        raise ReplayError("artifact_lineage.replay is missing; rerun the original run to emit replay metadata")
+    if replay.get("self_contained") is not True and not args.allow_non_self_contained:
+        raise ReplayError("replay contract is not self-contained; restore paths or pass --allow-non-self-contained")
+    argv = replay.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+        raise ReplayError("artifact_lineage.replay.argv must be a list of strings")
+
+    base_dir = Path(args.base_dir) if args.base_dir else Path.cwd()
+    scenario_path = _replay_flag_path(argv, "--scenario", base_dir)
+    trace_path = _replay_flag_path(argv, "--trace", base_dir)
+    state_path = _replay_flag_path(argv, "--state", base_dir, required=False)
+    fingerprints = replay.get("input_fingerprints") if isinstance(replay.get("input_fingerprints"), dict) else {}
+    _verify_replay_input("scenario", scenario_path, fingerprints)
+    _verify_replay_input("source_trace", trace_path, fingerprints)
+    if state_path is not None:
+        _verify_replay_input("source_state_snapshot", state_path, fingerprints)
+
+    result = _run_scenario_artifacts(
+        scenario_path,
+        args.out,
+        trace_override=trace_path,
+        state_override=state_path,
+        trace_format=args.format,
+        write_sensitive_trace=args.write_sensitive_trace,
+        preserve_paths=args.preserve_paths,
+    )
+    scorecard = result["scorecard"]
+    scenario = result["scenario"]
+    print(f"{'PASS' if scorecard['passed'] else 'FAIL'} replay {scenario['id']} score={scorecard['score']} out={args.out}")
     return 1 if args.fail_on_score and not scorecard["passed"] else 0
 
 
@@ -835,6 +877,17 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--markdown-out", help="Also write a Markdown score summary")
     run.add_argument("--fail-on-score", action="store_true", help="Exit nonzero when the scenario score fails")
     run.set_defaults(func=cmd_run)
+
+    replay = subparsers.add_parser("replay", help="Rerun a scenario from artifact lineage replay metadata")
+    replay.add_argument("--lineage", required=True, help="Path to artifact_lineage.json with replay metadata")
+    replay.add_argument("--out", required=True, help="Output directory for replayed run artifacts")
+    replay.add_argument("--base-dir", help="Base directory for relative replay paths; defaults to current directory")
+    replay.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    replay.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json with unredacted evidence")
+    replay.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated replay artifacts")
+    replay.add_argument("--allow-non-self-contained", action="store_true", help="Attempt replay even when replay.self_contained is false")
+    replay.add_argument("--fail-on-score", action="store_true", help="Exit nonzero when the replayed score fails")
+    replay.set_defaults(func=cmd_replay)
 
     run_suite = subparsers.add_parser("run-suite", help="Run a directory of scenarios into a complete evidence bundle")
     run_suite.add_argument("--scenarios", required=True, help="Directory containing scenario JSON files")
@@ -1929,6 +1982,45 @@ def _lineage_input_hash(lineage: dict[str, Any], name: str) -> str | None:
         if isinstance(record, dict) and record.get("name") == name and isinstance(record.get("sha256"), str):
             return record["sha256"]
     return None
+
+
+def _replay_flag_path(argv: list[str], flag: str, base_dir: Path, *, required: bool = True) -> Path | None:
+    if flag not in argv:
+        if required:
+            raise ReplayError(f"artifact_lineage.replay.argv missing {flag}")
+        return None
+    index = argv.index(flag)
+    if index + 1 >= len(argv) or not argv[index + 1]:
+        raise ReplayError(f"artifact_lineage.replay.argv missing value for {flag}")
+    raw = argv[index + 1]
+    if raw.startswith("<redacted:") or raw.startswith("<missing-"):
+        raise ReplayError(f"artifact_lineage.replay.argv contains non-replayable path for {flag}: {raw}")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = base_dir / path
+    return path
+
+
+def _verify_replay_input(name: str, path: Path, fingerprints: dict[str, Any]) -> None:
+    record = fingerprints.get(name)
+    if not isinstance(record, dict):
+        raise ReplayError(f"artifact_lineage.replay.input_fingerprints missing {name}")
+    expected = record.get("sha256")
+    if not isinstance(expected, str) or len(expected) != 64:
+        raise ReplayError(f"artifact_lineage.replay.input_fingerprints.{name}.sha256 is missing")
+    if not path.exists() or not path.is_file():
+        raise ReplayError(f"replay input {name} not found: {path}")
+    actual = _sha256_file(path)
+    if actual != expected:
+        raise ReplayError(f"replay input {name} sha256 mismatch: {path}")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _int_score(value: Any) -> int:
