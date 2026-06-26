@@ -494,7 +494,7 @@ def validate_decision_gate(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("decision_gate", str(gate_path))
     gate = _read_object(gate_path, target, "decision_gate.json")
     if gate is not None:
-        _validate_decision_gate(gate, target)
+        _validate_decision_gate(gate, target, gate_path)
     return target
 
 
@@ -3897,10 +3897,17 @@ def _validate_action_ledger_gate_policy_summary(value: Any, target: ValidationTa
             )
 
 
-def _validate_decision_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_decision_gate(gate: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(gate, "schema_version", DECISION_GATE_SCHEMA_VERSION, target)
     if not isinstance(gate.get("artifact"), str) or not gate.get("artifact"):
         target.errors.append("decision_gate.artifact must be a non-empty string.")
+    source_artifact = gate.get("source_artifact")
+    if not isinstance(source_artifact, dict):
+        target.errors.append("decision_gate.source_artifact must be an object.")
+        source_artifact = {}
+    _validate_decision_gate_source_artifact(source_artifact, target, source_path)
+    if isinstance(gate.get("artifact"), str) and isinstance(source_artifact.get("path"), str) and gate.get("artifact") != source_artifact.get("path"):
+        target.errors.append("decision_gate.artifact must match decision_gate.source_artifact.path.")
     if not isinstance(gate.get("passed"), bool):
         target.errors.append("decision_gate.passed must be a boolean.")
     if not isinstance(gate.get("expected_recommendation"), str) or not gate.get("expected_recommendation"):
@@ -3949,9 +3956,20 @@ def _validate_decision_gate(gate: dict[str, Any], target: ValidationTarget) -> N
             "passed": gate.get("passed"),
             "recommendation": gate.get("recommendation"),
             "source_recommendation": source.get("recommendation"),
+            "source_sha256": source_artifact.get("sha256"),
             "failed_check_count": failed_checks,
         }
     )
+
+
+def _validate_decision_gate_source_artifact(record: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append("decision_gate.source_artifact.path must be a non-empty string.")
+    if record.get("kind") != "file":
+        target.errors.append("decision_gate.source_artifact.kind must be file.")
+    if not isinstance(record.get("exists"), bool):
+        target.errors.append("decision_gate.source_artifact.exists must be a boolean.")
+    _validate_preflight_file_hash(record, target, "decision_gate.source_artifact", source_path)
 
 
 def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:

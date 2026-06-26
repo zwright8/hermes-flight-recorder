@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -19,12 +20,14 @@ def evaluate_decision_gate(
     expect_recommendation: str,
     expect_readiness: str | None = None,
     require_passed: bool = False,
+    preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Evaluate a stable decision recommendation from another artifact."""
     if not isinstance(artifact, dict):
         raise DecisionGateError("Decision gate input must be a JSON object.")
     if not expect_recommendation:
         raise DecisionGateError("--expect-recommendation must be non-empty.")
+    source_artifact = _source_artifact_record(Path(artifact_path), preserve_paths)
     decision = artifact.get("decision") if isinstance(artifact.get("decision"), dict) else {}
     source_passed = artifact.get("passed") if isinstance(artifact.get("passed"), bool) else None
     source = {
@@ -72,7 +75,8 @@ def evaluate_decision_gate(
     passed = failed_check_count == 0
     return {
         "schema_version": DECISION_GATE_SCHEMA_VERSION,
-        "artifact": str(artifact_path),
+        "artifact": source_artifact["path"],
+        "source_artifact": source_artifact,
         "passed": passed,
         "readiness": "ready" if passed else "blocked",
         "recommendation": "allow_promotion" if passed else "block_promotion",
@@ -88,3 +92,29 @@ def evaluate_decision_gate(
             "They do not rerun evals, repair failures, train models, or mutate the source artifact.",
         ],
     }
+
+
+def _source_artifact_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "path": _display_path(path, preserve_paths),
+        "kind": "file",
+        "exists": path.exists(),
+    }
+    if path.exists() and path.is_file():
+        record["size_bytes"] = path.stat().st_size
+        record["sha256"] = _sha256(path)
+    return record
+
+
+def _display_path(path: Path, preserve_paths: bool) -> str:
+    if preserve_paths or not path.is_absolute():
+        return str(path)
+    return f"<redacted:{path.name}>"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

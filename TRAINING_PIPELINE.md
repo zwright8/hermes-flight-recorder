@@ -150,7 +150,9 @@ trainer-side readiness signal. External automation should use
 `decision.key_metrics` as the compact promotion contract. Use
 `flightrecorder gate-decision` to convert that source recommendation into a
 validatable `allow_promotion` or `block_promotion` artifact for CI or trainer
-handoff jobs.
+handoff jobs. The generated `decision_gate.json` carries
+`source_artifact.sha256`, tying the promotion decision to the exact source gate
+artifact it consumed.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

@@ -62,12 +62,14 @@ jobs:
               raise SystemExit(0)
           gate = json.loads(path.read_text(encoding="utf-8"))
           source = gate.get("source_decision", {})
+          source_artifact = gate.get("source_artifact", {})
           summary = [
               "## Flight Recorder Promotion Gate",
               "",
               f"- Recommendation: `{gate.get('recommendation')}`",
               f"- Source recommendation: `{source.get('recommendation')}`",
               f"- Source readiness: `{source.get('readiness')}`",
+              f"- Source SHA-256: `{source_artifact.get('sha256')}`",
               f"- Failed checks: `{gate.get('failed_check_count')}`",
           ]
           Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(summary) + "\n", encoding="utf-8")

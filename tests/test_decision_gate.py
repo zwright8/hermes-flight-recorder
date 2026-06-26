@@ -48,6 +48,7 @@ class DecisionGateTests(unittest.TestCase):
                     "--expect-readiness",
                     "ready",
                     "--require-passed",
+                    "--preserve-paths",
                     "--out",
                     str(decision_gate),
                 ]
@@ -58,9 +59,16 @@ class DecisionGateTests(unittest.TestCase):
             self.assertEqual(gate["schema_version"], "hfr.decision_gate.v1")
             self.assertTrue(gate["passed"])
             self.assertEqual(gate["recommendation"], "allow_promotion")
+            self.assertEqual(gate["artifact"], str(source))
+            self.assertEqual(gate["source_artifact"]["path"], str(source))
+            self.assertTrue(gate["source_artifact"]["exists"])
+            self.assertEqual(len(gate["source_artifact"]["sha256"]), 64)
             self.assertEqual(gate["source_decision"]["recommendation"], "promote_iteration")
             self.assertEqual(gate["source_decision"]["key_metrics"]["recurring_action_count"], 0)
             self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--strict"]), 0)
+
+            source.write_text(source.read_text(encoding="utf-8").replace("promote_iteration", "block_iteration"), encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate)]), 1)
 
     def test_gate_decision_blocks_unexpected_recommendation_but_validates(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,6 +113,7 @@ class DecisionGateTests(unittest.TestCase):
             gate = json.loads(decision_gate.read_text(encoding="utf-8"))
             self.assertFalse(gate["passed"])
             self.assertEqual(gate["recommendation"], "block_promotion")
+            self.assertEqual(len(gate["source_artifact"]["sha256"]), 64)
             self.assertEqual(gate["source_decision"]["recommendation"], "block_iteration")
             self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--strict"]), 0)
 

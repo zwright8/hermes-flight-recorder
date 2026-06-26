@@ -1014,10 +1014,11 @@ def cmd_gate_decision(args: argparse.Namespace) -> int:
     artifact = _read_json(Path(args.artifact))
     result = evaluate_decision_gate(
         artifact,
-        artifact_path=_display_path(Path(args.artifact), args.preserve_paths),
+        artifact_path=Path(args.artifact),
         expect_recommendation=args.expect_recommendation,
         expect_readiness=args.expect_readiness,
         require_passed=args.require_passed,
+        preserve_paths=args.preserve_paths,
     )
     rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     if args.out:

@@ -881,6 +881,9 @@ assert promotion_decision["schema_version"] == "hfr.decision_gate.v1"
 assert promotion_decision["passed"] is True
 assert promotion_decision["recommendation"] == "allow_promotion"
 assert promotion_decision["expected_recommendation"] == "promote_iteration"
+assert promotion_decision["source_artifact"]["path"] == "runs/action_ledger_gate.json"
+assert promotion_decision["source_artifact"]["exists"] is True
+assert len(promotion_decision["source_artifact"]["sha256"]) == 64
 assert promotion_decision["source_decision"]["recommendation"] == "promote_iteration"
 assert promotion_decision["source_decision"]["key_metrics"]["recurring_action_count"] == action_ledger_gate["metrics"]["recurring_action_count"]
 assert len(bundle["metrics"]["gates"]) == 4
