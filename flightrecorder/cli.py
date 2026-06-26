@@ -119,6 +119,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_run_suite(args: argparse.Namespace) -> int:
     scenario_paths = discover_scenarios(Path(args.scenarios), args.pattern, args.recursive)
     out_dir = Path(args.out)
+    metadata = _metadata_options(args.metadata)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     runs: list[dict[str, Any]] = []
@@ -188,6 +189,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 min_score_gap=args.min_score_gap,
                 max_pairs_per_family=args.max_pairs_per_family,
                 preserve_paths=args.preserve_paths,
+                metadata=metadata,
             )
             artifacts["training_export"] = _display_path(training_out, args.preserve_paths)
         else:
@@ -218,6 +220,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
         training_manifest=training_manifest,
         validation_summary=validation_summary,
+        metadata=metadata,
     )
     summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
     _write_json(summary_path, summary)
@@ -494,6 +497,7 @@ def cmd_gate_reviewed(args: argparse.Namespace) -> int:
 
 
 def cmd_export_rl(args: argparse.Namespace) -> int:
+    metadata = _metadata_options(args.metadata)
     manifest = export_rl_dataset(
         args.runs,
         args.out,
@@ -501,6 +505,7 @@ def cmd_export_rl(args: argparse.Namespace) -> int:
         min_score_gap=args.min_score_gap,
         max_pairs_per_family=args.max_pairs_per_family,
         preserve_paths=args.preserve_paths,
+        metadata=metadata,
     )
     print(
         "wrote RL export "
@@ -574,6 +579,14 @@ def _parser() -> argparse.ArgumentParser:
     run_suite.add_argument("--strict", action="store_true", help="Treat validation warnings as validation failure")
     run_suite.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json for each scenario")
     run_suite.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated artifacts")
+    run_suite.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach experiment metadata to suite and optional training-export artifacts; may be repeated",
+    )
     run_suite.add_argument("--fail-on-failed", action="store_true", help="Exit nonzero when any scenario score fails")
     run_suite.set_defaults(func=cmd_run_suite)
 
@@ -725,6 +738,14 @@ def _parser() -> argparse.ArgumentParser:
         help="Maximum preference pairs per task family; 0 means unlimited",
     )
     export_rl.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
+    export_rl.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach experiment metadata to manifest, dataset metrics, and dataset card; may be repeated",
+    )
     export_rl.set_defaults(func=cmd_export_rl)
 
     export_review = subparsers.add_parser("export-review", help="Export completed runs as a human review queue")
@@ -791,6 +812,25 @@ def _non_negative_int_arg(value: str) -> int:
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be a non-negative integer")
     return parsed
+
+
+def _metadata_arg(value: str) -> tuple[str, str]:
+    key, separator, raw_value = value.partition("=")
+    if not separator:
+        raise argparse.ArgumentTypeError("must be KEY=VALUE")
+    key = key.strip()
+    if not key:
+        raise argparse.ArgumentTypeError("metadata key must be non-empty")
+    if any(char.isspace() for char in key):
+        raise argparse.ArgumentTypeError("metadata key must not contain whitespace")
+    return key, raw_value
+
+
+def _metadata_options(items: list[tuple[str, str]]) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+    for key, value in items:
+        metadata[key] = value
+    return metadata
 
 
 def _write_score_outputs(scorecard: dict[str, Any], args: argparse.Namespace) -> None:
@@ -1053,6 +1093,7 @@ def _run_suite_summary(
     preserve_paths: bool,
     training_manifest: dict[str, Any] | None,
     validation_summary: dict[str, Any] | None,
+    metadata: dict[str, str] | None,
 ) -> dict[str, Any]:
     passed = sum(1 for run in runs if run["passed"])
     failed = len(runs) - passed
@@ -1069,6 +1110,8 @@ def _run_suite_summary(
         "runs": runs,
         "artifacts": artifacts,
     }
+    if metadata:
+        summary["metadata"] = dict(sorted(metadata.items()))
     if training_manifest is not None:
         summary["training_export"] = {
             "episode_count": training_manifest.get("episode_count"),

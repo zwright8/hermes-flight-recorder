@@ -90,6 +90,9 @@ network.
   --strict` as the default CI evidence-bundle command.
 - Add `--junit`, `--markdown`, and `--export-rl` when CI should publish native
   test reports, job summaries, and downstream training/failure-mode artifacts.
+- Add repeated `--metadata key=value` flags to label the evaluated agent, model,
+  prompt revision, skill revision, tool policy, or deployment candidate. The
+  values are written to `suite_summary.json` and training-export artifacts.
 - Add `--fail-on-failed` when any failed scenario should fail the CI job.
 - Use `flightrecorder run --fail-on-score` for targeted single-scenario gates.
 - Use `flightrecorder compare --fail-on-regression` to gate candidate runs

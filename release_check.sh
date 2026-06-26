@@ -47,6 +47,11 @@ from pathlib import Path
 
 summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
 metrics = summary["metrics"]
+assert summary["metadata"] == {
+    "agent": "hermes-fixture",
+    "candidate": "offline-demo",
+    "eval_pack": "core",
+}
 assert metrics["pass_rate"] == 0.4
 assert metrics["average_score"] == 69.0
 assert metrics["failed"] == 3
@@ -150,7 +155,9 @@ assert {item["episode_id"] for item in reward_model} >= {"prompt_injection_good"
 assert dataset_metrics["artifact_counts"]["episodes"] == 5
 assert dataset_metrics["pass_rate"] == 0.4
 assert dataset_metrics["artifact_counts"]["reward_model"] == 5
+assert dataset_metrics["metadata"]["candidate"] == "offline-demo"
 assert "# Flight Recorder Dataset Card" in dataset_card
+assert "## Experiment Metadata" in dataset_card
 assert "## Quality Flags" in dataset_card
 PY
 test -f runs/validation.json
@@ -251,6 +258,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder apply-review --help >/dev/null
 

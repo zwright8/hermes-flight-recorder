@@ -14,7 +14,10 @@ python -m flightrecorder run-suite \
   --markdown \
   --export-rl \
   --validate \
-  --strict
+  --strict \
+  --metadata agent=hermes-fixture \
+  --metadata candidate=offline-demo \
+  --metadata eval_pack=core
 python -m flightrecorder compare \
   --baseline runs/prompt_injection_good \
   --candidate runs/prompt_injection_bad \

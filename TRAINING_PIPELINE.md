@@ -25,8 +25,15 @@ flightrecorder run-suite \
   --out runs \
   --export-rl \
   --validate \
-  --strict
+  --strict \
+  --metadata agent=hermes \
+  --metadata candidate=skill-router-v2 \
+  --metadata model=Hermes-4
 ```
+
+Metadata is a simple string map for experiment identity. It lets later compare,
+review, and training jobs know which agent, model, prompt, skill, or tool-policy
+configuration produced the evidence bundle.
 
 Or export training artifacts from an existing runs directory:
 
@@ -131,7 +138,8 @@ The export directory contains:
   distribution, failure pressure, and quality flags.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
-- `manifest.json`: generation settings, counts, output paths, and caveats.
+- `manifest.json`: generation settings, counts, output paths, caveats, and
+  optional experiment metadata.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
 use the redacted evidence surface rather than raw sensitive traces. When a run
@@ -248,6 +256,8 @@ simple rows without losing the audit trail.
 first checkpoint before handing an export to an SFT, DPO, reward-model, or RL
 job. The card helps answer: "Do we have enough positive examples, negative
 pressure, task-family coverage, and attribution to learn anything meaningful?"
+When `--metadata` is provided, the card also shows an experiment metadata table
+so humans can tell which candidate/config the export represents.
 
 Use `gate-export` when CI should enforce that answer before downstream jobs
 start:

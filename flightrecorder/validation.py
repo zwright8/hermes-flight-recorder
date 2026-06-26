@@ -541,6 +541,10 @@ def _validate_training_manifest(
         target.warnings.append("manifest has no validated dataset_metrics.json companion.")
     if not has_dataset_card:
         target.warnings.append("manifest has no DATASET_CARD.md companion.")
+    if "metadata" in manifest:
+        _validate_metadata(manifest.get("metadata"), target, "manifest.metadata")
+    if dataset_metrics is not None and "metadata" in manifest and "metadata" in dataset_metrics and manifest.get("metadata") != dataset_metrics.get("metadata"):
+        target.errors.append("manifest.metadata does not match dataset_metrics.metadata.")
     if curriculum is not None and curriculum.get("failure_mode_count") != len(failure_modes):
         target.errors.append(
             f"curriculum.failure_mode_count expected {len(failure_modes)}, got {curriculum.get('failure_mode_count')!r}."
@@ -1295,6 +1299,8 @@ def _validate_dataset_metrics(
 
     _validate_dataset_family_metrics(metrics.get("task_families"), target, episodes, step_rewards, failure_modes, sft, dpo, reward_model)
     _validate_quality_flags(metrics.get("quality_flags"), target)
+    if "metadata" in metrics:
+        _validate_metadata(metrics.get("metadata"), target, "dataset_metrics.metadata")
     if not _is_string_list(metrics.get("recommended_checks")):
         target.errors.append("dataset_metrics.recommended_checks must be a list of strings.")
 
@@ -1587,6 +1593,8 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -
     artifacts = summary.get("artifacts")
     if artifacts is not None and not isinstance(artifacts, dict):
         target.errors.append("suite_summary.artifacts must be an object when present.")
+    if "metadata" in summary:
+        _validate_metadata(summary.get("metadata"), target, "suite_summary.metadata")
 
     target.details.update(
         {
@@ -1862,6 +1870,19 @@ def _require_equal(
 
 def _is_string_list(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _validate_metadata(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object when present.")
+        return
+    for key, raw_value in value.items():
+        if not isinstance(key, str) or not key:
+            target.errors.append(f"{label} keys must be non-empty strings.")
+        elif any(char.isspace() for char in key):
+            target.errors.append(f"{label}.{key!r} key must not contain whitespace.")
+        if not isinstance(raw_value, str):
+            target.errors.append(f"{label}.{key} must be a string.")
 
 
 def _is_int_between(value: Any, minimum: int, maximum: int) -> bool:

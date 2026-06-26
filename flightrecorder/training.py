@@ -47,6 +47,7 @@ def export_rl_dataset(
     min_score_gap: int = 1,
     max_pairs_per_family: int = 0,
     preserve_paths: bool = False,
+    metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Export completed run directories as RL-ready JSONL artifacts."""
     if reward_scale not in REWARD_SCALES:
@@ -58,6 +59,7 @@ def export_rl_dataset(
 
     source = Path(runs_dir)
     target = Path(out_dir)
+    export_metadata = _metadata(metadata)
     records = load_run_records(source)
     target.mkdir(parents=True, exist_ok=True)
 
@@ -80,6 +82,7 @@ def export_rl_dataset(
         dpo,
         reward_model,
         reward_scale,
+        export_metadata,
     )
 
     paths = {
@@ -139,6 +142,8 @@ def export_rl_dataset(
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
+    if export_metadata:
+        manifest["metadata"] = export_metadata
     _write_text(paths["dataset_card"], _dataset_card(manifest, dataset_metrics))
     _write_json(paths["manifest"], manifest)
     return manifest
@@ -573,6 +578,7 @@ def _dataset_metrics(
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     reward_scale: str,
+    metadata: dict[str, str],
 ) -> dict[str, Any]:
     scores = [_score_value(episode.get("outcome", {}).get("score")) for episode in episodes if isinstance(episode.get("outcome"), dict)]
     rewards_values = [_numeric_value(reward.get("reward")) for reward in rewards]
@@ -612,6 +618,8 @@ def _dataset_metrics(
             "Use validation output and the HTML reports alongside trainer-ready JSONL views.",
         ],
     }
+    if metadata:
+        metrics["metadata"] = metadata
     return metrics
 
 
@@ -711,11 +719,14 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
         f"- Average score: {metrics.get('average_score')}",
         f"- Average reward: {metrics.get('average_reward')}",
         "",
-        "## Artifact Counts",
-        "",
-        "| Artifact | Count |",
-        "| --- | ---: |",
     ]
+    metadata = metrics.get("metadata") if isinstance(metrics.get("metadata"), dict) else {}
+    if metadata:
+        rows.extend(["## Experiment Metadata", "", "| Key | Value |", "| --- | --- |"])
+        for key, value in sorted(metadata.items()):
+            rows.append(f"| `{_md_cell(str(key))}` | {_md_cell(str(value))} |")
+        rows.append("")
+    rows.extend(["## Artifact Counts", "", "| Artifact | Count |", "| --- | ---: |"])
     for name, count in sorted((metrics.get("artifact_counts") or {}).items()):
         rows.append(f"| `{_md_cell(name)}` | {count} |")
     rows.extend(
@@ -799,6 +810,12 @@ def _outcome_string_list(episode: dict[str, Any], field_name: str) -> list[str]:
 
 def _md_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _metadata(value: dict[str, str] | None) -> dict[str, str]:
+    if not value:
+        return {}
+    return {str(key): str(raw_value) for key, raw_value in sorted(value.items())}
 
 
 def _messages(prompt: str, response: str) -> list[dict[str, str]]:

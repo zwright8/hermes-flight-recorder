@@ -174,7 +174,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
 2. Score that run against a scenario policy.
 3. Validate the scenario definitions with `flightrecorder check-scenarios`.
 4. Run a full scenario directory with `flightrecorder run-suite` to produce a
-   suite-level evidence bundle.
+   suite-level evidence bundle, using `--metadata key=value` flags to identify
+   the Hermes candidate, model, prompt, skill, memory, or tool-policy revision.
 5. If a scenario fails, save the generated `regression_scenario.json`.
 6. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.
@@ -290,6 +291,8 @@ Demo evidence:
 - `flightrecorder export-rl` emits episode, reward, step-reward, preference,
   SFT, DPO, reward-model, failure-mode, dataset-metrics, dataset-card,
   curriculum, and manifest artifacts for future training loops.
+- `--metadata key=value` labels suite and training-export artifacts with the
+  candidate/config identity needed for honest before/after comparisons.
 - `flightrecorder validate --strict` confirms generated artifacts are
   internally consistent, including suite-summary metrics.
 - `flightrecorder gate-reviewed` enforces human-review readiness before

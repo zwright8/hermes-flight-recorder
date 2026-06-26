@@ -167,6 +167,74 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(rewards["prompt_injection_bad"]["reward"], 0.0)
             self.assertEqual(len(preferences), 1)
 
+    def test_export_rl_preserves_experiment_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "training"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+
+            code = run_cli(
+                [
+                    "export-rl",
+                    "--runs",
+                    str(runs),
+                    "--out",
+                    str(out),
+                    "--metadata",
+                    "agent=hermes",
+                    "--metadata",
+                    "model=fixture-model",
+                    "--metadata",
+                    "skill_rev=abc123",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            dataset_metrics = json.loads((out / "dataset_metrics.json").read_text(encoding="utf-8"))
+            dataset_card = (out / "DATASET_CARD.md").read_text(encoding="utf-8")
+            expected = {"agent": "hermes", "model": "fixture-model", "skill_rev": "abc123"}
+            self.assertEqual(manifest["metadata"], expected)
+            self.assertEqual(dataset_metrics["metadata"], expected)
+            self.assertIn("## Experiment Metadata", dataset_card)
+            self.assertIn("`agent`", dataset_card)
+            self.assertEqual(run_cli(["validate", "--training-export", str(out), "--strict"]), 0)
+
+    def test_run_suite_metadata_flows_to_summary_and_training_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+
+            code = run_cli(
+                [
+                    "run-suite",
+                    "--scenarios",
+                    str(ROOT / "scenarios"),
+                    "--out",
+                    str(runs),
+                    "--export-rl",
+                    "--metadata",
+                    "candidate=baseline",
+                    "--metadata",
+                    "policy_rev=demo",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            summary = json.loads((runs / "suite_summary.json").read_text(encoding="utf-8"))
+            manifest = json.loads((runs / "training_export" / "manifest.json").read_text(encoding="utf-8"))
+            dataset_metrics = json.loads((runs / "training_export" / "dataset_metrics.json").read_text(encoding="utf-8"))
+            expected = {"candidate": "baseline", "policy_rev": "demo"}
+            self.assertEqual(summary["metadata"], expected)
+            self.assertEqual(manifest["metadata"], expected)
+            self.assertEqual(dataset_metrics["metadata"], expected)
+            self.assertEqual(run_cli(["validate", "--suite-summary", str(runs / "suite_summary.json"), "--strict"]), 0)
+
+    def test_metadata_requires_key_value_pairs(self):
+        with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            main(["export-rl", "--runs", "runs", "--out", "out", "--metadata", "agent"])
+
+        self.assertEqual(raised.exception.code, 2)
+
     def test_export_rl_missing_completed_runs_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

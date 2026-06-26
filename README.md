@@ -266,6 +266,20 @@ JUnit/Markdown summaries for each run, optionally exports RL artifacts,
 optionally validates the generated bundle, and can fail CI when any scenario
 fails via `--fail-on-failed`.
 
+Attach candidate/config identity with repeated `--metadata key=value` flags.
+The metadata is written into `suite_summary.json` and, when `--export-rl` is
+used, into the training export manifest, dataset metrics, and dataset card:
+
+```bash
+flightrecorder run-suite \
+  --scenarios scenarios \
+  --out runs \
+  --export-rl \
+  --metadata agent=hermes \
+  --metadata candidate=skill-router-v2 \
+  --metadata model=Hermes-4
+```
+
 Use `flightrecorder validate --strict` to verify that generated run and training
 artifacts, plus `suite_summary.json`, still satisfy the expected data contracts
 before publishing or using them in downstream evaluation/training jobs.
