@@ -143,6 +143,15 @@ The generated training export gives future model-improvement loops:
 - structured evidence refs for event/final-answer/episode attribution,
 - one curriculum summary grouping failure pressure by task family and rule.
 
+The generated comparison export and gate give model-improvement loops a
+candidate-vs-baseline handoff check: it can require a concrete candidate win on
+email completion, specific rule fixes such as `required_actions`, zero
+baseline-win regressions, and no new critical failures before preference rows
+are treated as improvement signal.
+`release_check.sh` exercises this path by building paired email-completion
+baseline/candidate run directories, exporting `runs/compare_rl_export`, and
+gating it with `examples/compare_gate_policy.demo.json`.
+
 The generated validation summary confirms the report/training artifacts satisfy
 their machine-readable contracts before being used as evidence, including
 suite-summary aggregate metrics.
@@ -188,25 +197,28 @@ Flight Recorder turns Hermes' experience into regression pressure.
 9. Export baseline/candidate preference rows with
    `flightrecorder export-compare-rl`, preserving whether the candidate
    improved or regressed and including tool-evidence behavior transcripts.
-10. Trend multiple `suite_summary.json` files with `flightrecorder trend-suite`
+10. Gate comparison-export readiness with `flightrecorder gate-compare-export`
+    so only evidence-backed candidate wins and policy-approved rule fixes move
+    toward training or review.
+11. Trend multiple `suite_summary.json` files with `flightrecorder trend-suite`
    to show whether the improvement loop is moving pass rate, score, and failure
    pressure in the right direction, then validate the resulting
    `suite_trend.json` before treating it as release evidence.
-11. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-12. Export a human review queue with `flightrecorder export-review` when
+12. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
+13. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
-13. Apply completed labels with `flightrecorder apply-review` to produce
+14. Apply completed labels with `flightrecorder apply-review` to produce
    human-reviewed SFT, reward-model, preference, and DPO views.
-14. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
+15. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
    human-curated labels become trainer input.
-15. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+16. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-16. Validate the generated artifacts and suite summary with
+17. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-17. Gate training-export readiness with `flightrecorder gate-export` before
+18. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:

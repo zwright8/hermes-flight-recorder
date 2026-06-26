@@ -141,6 +141,10 @@ flightrecorder export-compare-rl \
   --candidate runs_candidate \
   --out runs/compare_rl_export
 
+flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --policy examples/compare_gate_policy.demo.json
+
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
@@ -235,6 +239,17 @@ directories into improvement-loop preference artifacts:
   output paths.
 - `IMPROVEMENT_CARD.md`: human-readable summary of candidate wins, baseline
   wins, and pair rationale.
+
+Use `flightrecorder gate-compare-export` after `export-compare-rl` when CI or a
+training handoff should require concrete candidate wins, expected scenario
+coverage, fixed rule IDs, zero baseline-win regressions, and no newly critical
+failure classes:
+
+```bash
+flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --policy examples/compare_gate_policy.demo.json
+```
 
 `flightrecorder export-review` converts completed run directories into a
 human-curation queue:
@@ -392,6 +407,17 @@ flightrecorder gate-reviewed \
 The reviewed gate is intentionally separate from `gate-export`: it checks human
 label completion and reviewed trainer views, while `gate-export` checks the
 deterministic raw training export.
+
+Use `flightrecorder gate-compare-export` for the baseline/candidate improvement
+path after `export-compare-rl`. It checks that comparison preference rows are
+not merely present, but actually encode enough candidate wins and expected rule
+fixes without regression examples sneaking into a training handoff:
+
+```bash
+flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --policy examples/compare_gate_policy.demo.json
+```
 
 ## Scoring Rules
 
@@ -564,12 +590,19 @@ flightrecorder export-compare-rl \
   --candidate runs_candidate \
   --out runs/compare_rl_export \
   --min-score-gap 1
+
+flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --policy examples/compare_gate_policy.demo.json
 ```
 
 This export preserves whether the candidate improved or regressed for each
 paired scenario and writes behavior-transcript preference rows, so a task can
 be preferred because it had the right tool evidence even when both final
 answers look similar.
+The comparison gate lets CI require those rows to contain enough candidate
+improvements, fixed rule classes, and zero forbidden regressions before a
+trainer or reviewer treats them as improvement signal.
 
 This is training data plumbing, not a trainer. It does not generate rollouts,
 update model weights, or make weak scenario policies strong. For the full data

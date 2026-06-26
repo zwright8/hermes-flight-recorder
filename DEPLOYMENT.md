@@ -121,6 +121,10 @@ network.
   <new-runs> --out runs/compare_rl_export` when downstream jobs need
   baseline/candidate preference rows that preserve improvement or regression
   direction.
+- Use `flightrecorder gate-compare-export --compare-export
+  runs/compare_rl_export --policy <policy.json>` when CI must block comparison
+  preference handoffs unless they contain enough candidate wins, required
+  scenario coverage, expected rule fixes, and no forbidden regression signal.
 - Use `flightrecorder export-review --runs runs --out runs/review_queue` when
   maintainers need a human-curation queue before deterministic score labels are
   trusted as training signal.

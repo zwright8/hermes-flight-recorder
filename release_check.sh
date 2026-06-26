@@ -114,6 +114,18 @@ test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
 python -m flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --strict >/dev/null
+python -m flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --policy examples/compare_gate_policy.demo.json \
+  --out runs/compare_gate.json >/dev/null
+test -f runs/compare_gate.json
+test -f examples/compare_gate_policy.demo.json
+if python -m flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --min-candidate-wins 999 >/dev/null; then
+  echo "gate-compare-export did not fail a too-high candidate-win threshold" >&2
+  exit 1
+fi
 python - <<'PY'
 import json
 from pathlib import Path
@@ -335,6 +347,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null

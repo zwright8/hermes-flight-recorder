@@ -21,6 +21,12 @@ from .artifacts import (
     write_suite_compare_report,
     write_suite_trend_report,
 )
+from .compare_gate import (
+    COMPARE_GATE_POLICY_SCHEMA_VERSION,
+    CompareGatePolicyError,
+    evaluate_compare_gate,
+    load_compare_gate_policy,
+)
 from .lineage import write_run_lineage
 from .redaction import sanitize_trace
 from .report import write_index, write_report
@@ -63,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         ReviewedGatePolicyError,
         TrainingExportError,
         TrainingGatePolicyError,
+        CompareGatePolicyError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -509,6 +516,39 @@ def cmd_gate_reviewed(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_gate_compare_export(args: argparse.Namespace) -> int:
+    compare_dir = Path(args.compare_export)
+    manifest = _read_json(compare_dir / "manifest.json")
+    pairs = _read_jsonl(compare_dir / "improvement_pairs.jsonl")
+    options = _compare_gate_options(args)
+    result = evaluate_compare_gate(
+        manifest,
+        pairs,
+        compare_export_path=_display_path(compare_dir, args.preserve_paths),
+        min_pairs=options["min_pairs"],
+        min_dpo=options["min_dpo"],
+        min_candidate_wins=options["min_candidate_wins"],
+        max_baseline_wins=options["max_baseline_wins"],
+        max_skipped_pairs=options["max_skipped_pairs"],
+        require_scenarios=options["require_scenarios"],
+        require_candidate_win_scenarios=options["require_candidate_win_scenarios"],
+        forbid_regression_scenarios=options["forbid_regression_scenarios"],
+        require_rule_fixes=options["require_rule_fixes"],
+        forbid_rule_regressions=options["forbid_rule_regressions"],
+        forbid_new_critical_failures=options["forbid_new_critical_failures"],
+    )
+    if options["policy_path"]:
+        result["policy"] = _compare_gate_policy_summary(options)
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_export_rl(args: argparse.Namespace) -> int:
     metadata = _metadata_options(args.metadata)
     manifest = export_rl_dataset(
@@ -767,6 +807,44 @@ def _parser() -> argparse.ArgumentParser:
     gate_reviewed.add_argument("--preserve-paths", action="store_true", help="Allow absolute export paths in gate output")
     gate_reviewed.set_defaults(func=cmd_gate_reviewed)
 
+    gate_compare = subparsers.add_parser("gate-compare-export", help="Evaluate readiness thresholds against an export-compare-rl dataset")
+    gate_compare.add_argument("--compare-export", required=True, help="Directory containing export-compare-rl artifacts")
+    gate_compare.add_argument("--policy", help="Versioned compare gate policy JSON file with committed threshold defaults")
+    gate_compare.add_argument("--out", help="Write gate result JSON to this path")
+    gate_compare.add_argument("--min-pairs", type=_non_negative_int_arg, help="Minimum comparison pair count")
+    gate_compare.add_argument("--min-dpo", type=_non_negative_int_arg, help="Minimum comparison DPO row count")
+    gate_compare.add_argument("--min-candidate-wins", type=_non_negative_int_arg, help="Minimum candidate-win pair count")
+    gate_compare.add_argument("--max-baseline-wins", type=_non_negative_int_arg, help="Maximum allowed baseline-win regression pairs")
+    gate_compare.add_argument("--max-skipped-pairs", type=_non_negative_int_arg, help="Maximum allowed skipped paired scenarios")
+    gate_compare.add_argument("--require-scenario", action="append", default=[], help="Fail unless this scenario appears in the comparison pairs")
+    gate_compare.add_argument(
+        "--require-candidate-win-scenario",
+        action="append",
+        default=[],
+        help="Fail unless this scenario is a candidate win",
+    )
+    gate_compare.add_argument(
+        "--forbid-regression-scenario",
+        action="append",
+        default=[],
+        help="Fail if this scenario is a baseline win",
+    )
+    gate_compare.add_argument("--require-rule-fix", action="append", default=[], help="Fail unless this rule id appears in rule_fixes")
+    gate_compare.add_argument(
+        "--forbid-rule-regression",
+        action="append",
+        default=[],
+        help="Fail if this rule id appears in rule_regressions",
+    )
+    gate_compare.add_argument(
+        "--forbid-new-critical-failure",
+        action="append",
+        default=[],
+        help="Fail if this rule id appears in new_critical_failures",
+    )
+    gate_compare.add_argument("--preserve-paths", action="store_true", help="Allow absolute export paths in gate output")
+    gate_compare.set_defaults(func=cmd_gate_compare_export)
+
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
     export_rl.add_argument("--out", required=True, help="Output directory for evidence and trainer-ready artifacts")
@@ -848,6 +926,18 @@ def _parser() -> argparse.ArgumentParser:
 
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        value = json.loads(line)
+        if not isinstance(value, dict):
+            raise ArtifactError(f"{path}:{line_number} must contain a JSON object")
+        rows.append(value)
+    return rows
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -1050,6 +1140,70 @@ def _reviewed_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
     }
     summary: dict[str, Any] = {
         "schema_version": REVIEWED_GATE_POLICY_SCHEMA_VERSION,
+        "path": options["policy_path"],
+        "effective": effective,
+    }
+    if options.get("policy_description"):
+        summary["description"] = options["policy_description"]
+    return summary
+
+
+def _compare_gate_options(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_compare_gate_policy(args.policy) if args.policy else {}
+    return {
+        "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
+        "policy_description": policy.get("description"),
+        "min_pairs": args.min_pairs if args.min_pairs is not None else policy.get("min_pairs"),
+        "min_dpo": args.min_dpo if args.min_dpo is not None else policy.get("min_dpo"),
+        "min_candidate_wins": (
+            args.min_candidate_wins if args.min_candidate_wins is not None else policy.get("min_candidate_wins")
+        ),
+        "max_baseline_wins": (
+            args.max_baseline_wins if args.max_baseline_wins is not None else policy.get("max_baseline_wins")
+        ),
+        "max_skipped_pairs": args.max_skipped_pairs if args.max_skipped_pairs is not None else policy.get("max_skipped_pairs"),
+        "require_scenarios": _merge_unique_strings(policy.get("require_scenarios", []), args.require_scenario),
+        "require_candidate_win_scenarios": _merge_unique_strings(
+            policy.get("require_candidate_win_scenarios", []),
+            args.require_candidate_win_scenario,
+        ),
+        "forbid_regression_scenarios": _merge_unique_strings(
+            policy.get("forbid_regression_scenarios", []),
+            args.forbid_regression_scenario,
+        ),
+        "require_rule_fixes": _merge_unique_strings(policy.get("require_rule_fixes", []), args.require_rule_fix),
+        "forbid_rule_regressions": _merge_unique_strings(
+            policy.get("forbid_rule_regressions", []),
+            args.forbid_rule_regression,
+        ),
+        "forbid_new_critical_failures": _merge_unique_strings(
+            policy.get("forbid_new_critical_failures", []),
+            args.forbid_new_critical_failure,
+        ),
+    }
+
+
+def _compare_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
+    effective_fields = (
+        "min_pairs",
+        "min_dpo",
+        "min_candidate_wins",
+        "max_baseline_wins",
+        "max_skipped_pairs",
+        "require_scenarios",
+        "require_candidate_win_scenarios",
+        "forbid_regression_scenarios",
+        "require_rule_fixes",
+        "forbid_rule_regressions",
+        "forbid_new_critical_failures",
+    )
+    effective = {
+        field: options[field]
+        for field in effective_fields
+        if options.get(field) is not None and options.get(field) != []
+    }
+    summary: dict[str, Any] = {
+        "schema_version": COMPARE_GATE_POLICY_SCHEMA_VERSION,
         "path": options["policy_path"],
         "effective": effective,
     }

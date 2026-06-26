@@ -48,6 +48,16 @@ Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate
 direction. Candidate wins become improvement examples; baseline wins become
 regression-avoidance examples.
+Gate the comparison export before using it downstream:
+
+```bash
+flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --policy examples/compare_gate_policy.demo.json
+```
+
+This can require enough candidate wins, specific scenario coverage, expected
+rule fixes, no baseline-win regressions, and no newly critical failure classes.
 
 Or export training artifacts from an existing runs directory:
 
@@ -268,6 +278,12 @@ This is important for autonomous agents because two runs can produce the same
 final answer while only one actually performed the required tool action. The
 comparison DPO view keeps the observable behavior in the row, so the preference
 can distinguish evidence-backed completion from unsupported claims.
+
+`gate-compare-export` is the readiness check for this path. It reads
+`manifest.json` plus `improvement_pairs.jsonl` and can block a training handoff
+unless the comparison export contains enough pairs and DPO rows, enough
+candidate wins, required fixed rules, zero forbidden baseline wins, zero
+forbidden rule regressions, and zero newly critical failure classes.
 
 ## Trainer-Ready Views
 
