@@ -46,12 +46,17 @@ import json
 from pathlib import Path
 
 summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
+suite_compare = json.loads(Path("runs/suite_compare.json").read_text(encoding="utf-8"))
+suite_compare_html = Path("runs/suite_compare.html").read_text(encoding="utf-8")
 metrics = summary["metrics"]
 assert summary["metadata"] == {
     "agent": "hermes-fixture",
     "candidate": "offline-demo",
     "eval_pack": "core",
 }
+assert suite_compare["baseline"]["metadata"]["candidate"] == "offline-demo"
+assert suite_compare["candidate"]["metadata"]["candidate"] == "offline-demo"
+assert "Experiment Metadata" in suite_compare_html
 assert metrics["pass_rate"] == 0.4
 assert metrics["average_score"] == 69.0
 assert metrics["failed"] == 3

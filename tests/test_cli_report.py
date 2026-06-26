@@ -658,6 +658,54 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(comparison["aggregate"]["avg_score_delta"], 0.0)
             self.assertNotIn(str(runs), out.read_text(encoding="utf-8"))
 
+    def test_compare_suite_includes_experiment_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline = Path(tmp) / "baseline"
+            candidate = Path(tmp) / "candidate"
+            out = Path(tmp) / "suite_compare.json"
+            html = Path(tmp) / "suite_compare.html"
+            run_cli(
+                [
+                    "run-suite",
+                    "--scenarios",
+                    str(ROOT / "scenarios"),
+                    "--pattern",
+                    "prompt_injection_good.json",
+                    "--out",
+                    str(baseline),
+                    "--metadata",
+                    "candidate=baseline",
+                    "--metadata",
+                    "model=fixture-a",
+                ]
+            )
+            run_cli(
+                [
+                    "run-suite",
+                    "--scenarios",
+                    str(ROOT / "scenarios"),
+                    "--pattern",
+                    "prompt_injection_good.json",
+                    "--out",
+                    str(candidate),
+                    "--metadata",
+                    "candidate=experiment",
+                    "--metadata",
+                    "model=fixture-b",
+                ]
+            )
+
+            code = run_cli(["compare-suite", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(out), "--html-out", str(html)])
+
+            self.assertEqual(code, 0)
+            comparison = json.loads(out.read_text(encoding="utf-8"))
+            report = html.read_text(encoding="utf-8")
+            self.assertEqual(comparison["baseline"]["metadata"]["candidate"], "baseline")
+            self.assertEqual(comparison["candidate"]["metadata"]["candidate"], "experiment")
+            self.assertIn("Experiment Metadata", report)
+            self.assertIn("fixture-a", report)
+            self.assertIn("fixture-b", report)
+
     def test_audit_command_summarizes_runs_and_can_fail_on_leak(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

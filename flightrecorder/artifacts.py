@@ -157,6 +157,8 @@ def compare_suites(
     candidate_root = Path(candidate_dir)
     baseline = _suite_scorecards(baseline_root)
     candidate = _suite_scorecards(candidate_root, allow_empty=True)
+    baseline_metadata = _suite_metadata(baseline_root)
+    candidate_metadata = _suite_metadata(candidate_root)
 
     scenario_ids = sorted(set(baseline) | set(candidate))
     scenario_changes: list[dict[str, Any]] = []
@@ -264,11 +266,13 @@ def compare_suites(
             "label": baseline_label or _display_path(baseline_root),
             "path": _display_path(baseline_root),
             "scenario_count": len(baseline),
+            "metadata": baseline_metadata,
         },
         "candidate": {
             "label": candidate_label or _display_path(candidate_root),
             "path": _display_path(candidate_root),
             "scenario_count": len(candidate),
+            "metadata": candidate_metadata,
         },
         "aggregate": aggregate,
         "scenario_changes": scenario_changes,
@@ -341,6 +345,7 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
     status = "REGRESSION" if comparison.get("regressed") else "NO REGRESSION"
     cls = "fail" if comparison.get("regressed") else "pass"
     aggregate = comparison.get("aggregate", {})
+    metadata = _suite_metadata_table(comparison.get("baseline", {}), comparison.get("candidate", {}))
     rows = []
     for change in comparison.get("scenario_changes", []):
         rows.append(
@@ -380,6 +385,7 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
   <p>{_esc(comparison.get('summary'))}</p>
   <p>Baseline: <code>{_esc(comparison.get('baseline', {}).get('label'))}</code></p>
   <p>Candidate: <code>{_esc(comparison.get('candidate', {}).get('label'))}</code></p>
+  {metadata}
   <section class="metrics">
     <div class="metric"><span>Paired Scenarios</span><strong>{aggregate.get('paired_count')}</strong></div>
     <div class="metric"><span>Avg Score Delta</span><strong>{aggregate.get('avg_score_delta')}</strong></div>
@@ -425,6 +431,48 @@ def _suite_scorecards(root: Path, *, allow_empty: bool = False) -> dict[str, dic
     if not scorecards and not allow_empty:
         raise ArtifactError(f"No scorecard.json files found in suite directory: {root}")
     return scorecards
+
+
+def _suite_metadata(root: Path) -> dict[str, str]:
+    summary_path = root / "suite_summary.json"
+    if not summary_path.exists():
+        return {}
+    try:
+        summary = _read_json(summary_path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    metadata = summary.get("metadata") if isinstance(summary.get("metadata"), dict) else {}
+    return {
+        str(key): str(value)
+        for key, value in sorted(metadata.items())
+        if isinstance(key, str) and key and isinstance(value, str)
+    }
+
+
+def _suite_metadata_table(baseline: dict[str, Any], candidate: dict[str, Any]) -> str:
+    baseline_metadata = baseline.get("metadata") if isinstance(baseline.get("metadata"), dict) else {}
+    candidate_metadata = candidate.get("metadata") if isinstance(candidate.get("metadata"), dict) else {}
+    keys = sorted(set(baseline_metadata) | set(candidate_metadata))
+    if not keys:
+        return ""
+    rows = []
+    for key in keys:
+        rows.append(
+            "<tr>"
+            f"<td><code>{_esc(key)}</code></td>"
+            f"<td>{_esc(baseline_metadata.get(key, ''))}</td>"
+            f"<td>{_esc(candidate_metadata.get(key, ''))}</td>"
+            "</tr>"
+        )
+    return (
+        '<section class="metadata">'
+        "<h2>Experiment Metadata</h2>"
+        "<table>"
+        "<thead><tr><th>Key</th><th>Baseline</th><th>Candidate</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any]:

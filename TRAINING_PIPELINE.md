@@ -34,6 +34,8 @@ flightrecorder run-suite \
 Metadata is a simple string map for experiment identity. It lets later compare,
 review, and training jobs know which agent, model, prompt, skill, or tool-policy
 configuration produced the evidence bundle.
+`flightrecorder compare-suite` carries this metadata into its JSON and HTML
+outputs so baseline/candidate comparisons remain tied to the evaluated configs.
 
 Or export training artifacts from an existing runs directory:
 

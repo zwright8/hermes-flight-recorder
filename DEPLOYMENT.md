@@ -98,7 +98,9 @@ network.
 - Use `flightrecorder compare --fail-on-regression` to gate candidate runs
   against a baseline scorecard.
 - Use `flightrecorder compare-suite --fail-on-regression` to gate an entire
-  candidate run directory against a baseline suite.
+  candidate run directory against a baseline suite. If both directories include
+  `suite_summary.json` metadata, the comparison JSON and HTML show the
+  baseline/candidate config identity side by side.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or

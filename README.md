@@ -286,6 +286,8 @@ before publishing or using them in downstream evaluation/training jobs.
 
 Use `flightrecorder compare-suite --fail-on-regression` to gate a candidate
 agent, model, skill, prompt, or policy change against a baseline run directory.
+When compared directories contain `suite_summary.json` metadata, the compare
+JSON and HTML report show the baseline and candidate metadata side by side.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
