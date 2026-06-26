@@ -23,6 +23,9 @@ python -m flightrecorder audit \
 INSTALL_DIR="$(mktemp -d)"
 VENV_DIR="$(mktemp -d)"
 python -m venv --system-site-packages "$VENV_DIR"
+if ! "$VENV_DIR/bin/python" -c "import setuptools" >/dev/null 2>&1; then
+  "$VENV_DIR/bin/python" -m pip install "setuptools>=68" >/dev/null
+fi
 "$VENV_DIR/bin/python" -m pip install . --no-deps --no-build-isolation >/dev/null
 "$VENV_DIR/bin/flightrecorder" --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder normalize \
