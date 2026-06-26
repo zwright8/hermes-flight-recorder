@@ -796,10 +796,16 @@ python -m flightrecorder promotion-ledger \
   --decision-gate runs/promotion_decision.json \
   --out runs/promotion_ledger.json >/dev/null
 test -f runs/promotion_ledger.json
+python -m flightrecorder gate-promotion-ledger \
+  --promotion-ledger runs/promotion_ledger.json \
+  --policy examples/promotion_ledger_gate_policy.demo.json \
+  --out runs/promotion_ledger_gate.json >/dev/null
+test -f runs/promotion_ledger_gate.json
 python -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
   --gate runs/reviewed_gate.json \
+  --gate runs/promotion_ledger_gate.json \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --reviewed-export runs/reviewed_export \
@@ -807,6 +813,7 @@ python -m flightrecorder trainer-preflight \
   --require-gate training_gate \
   --require-gate compare_gate \
   --require-gate reviewed_gate \
+  --require-gate promotion_ledger_gate \
   --trainer-command "python train.py --dry-run --dataset runs/training_export" \
   --metadata candidate=offline-demo \
   --out runs/trainer_preflight.json >/dev/null
@@ -816,6 +823,7 @@ python -m flightrecorder trainer-launch-check \
   --require-gate training_gate \
   --require-gate compare_gate \
   --require-gate reviewed_gate \
+  --require-gate promotion_ledger_gate \
   --require-metadata candidate=offline-demo \
   --out runs/trainer_launch_check.json >/dev/null
 test -f runs/trainer_launch_check.json
@@ -826,6 +834,7 @@ python -m flightrecorder validate \
   --action-ledger-gate runs/action_ledger_gate.json \
   --decision-gate runs/promotion_decision.json \
   --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --trainer-preflight runs/trainer_preflight.json \
   --trainer-launch-check runs/trainer_launch_check.json \
   --repair-queue runs/repair_queue.json \
@@ -841,6 +850,7 @@ action_ledger = json.loads(Path("runs/action_ledger.json").read_text(encoding="u
 action_ledger_gate = json.loads(Path("runs/action_ledger_gate.json").read_text(encoding="utf-8"))
 promotion_decision = json.loads(Path("runs/promotion_decision.json").read_text(encoding="utf-8"))
 promotion_ledger = json.loads(Path("runs/promotion_ledger.json").read_text(encoding="utf-8"))
+promotion_ledger_gate = json.loads(Path("runs/promotion_ledger_gate.json").read_text(encoding="utf-8"))
 preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
@@ -911,6 +921,23 @@ assert promotion_ledger["metrics"]["recommendation_counts"] == [{"count": 2, "id
 assert promotion_ledger["metrics"]["source_recommendation_counts"] == [{"count": 2, "id": "promote_iteration"}]
 assert all(len(record["sha256"]) == 64 for record in promotion_ledger["records"])
 assert all(len(record["source"]["artifact_sha256"]) == 64 for record in promotion_ledger["records"])
+assert promotion_ledger_gate["schema_version"] == "hfr.promotion_ledger_gate.v1"
+assert promotion_ledger_gate["passed"] is True
+assert promotion_ledger_gate["decision"]["readiness"] == "ready"
+assert promotion_ledger_gate["decision"]["recommendation"] == "promote_iteration"
+assert promotion_ledger_gate["failed_check_count"] == 0
+assert promotion_ledger_gate["metrics"]["decision_count"] == 2
+assert promotion_ledger_gate["metrics"]["allowed_count"] == 2
+assert promotion_ledger_gate["metrics"]["blocked_count"] == 0
+assert promotion_ledger_gate["metrics"]["blocked_rate"] == 0.0
+assert promotion_ledger_gate["metrics"]["latest_recommendation"] == "allow_promotion"
+assert promotion_ledger_gate["metrics"]["latest_passed"] is True
+assert promotion_ledger_gate["metrics"]["consecutive_allowed_count"] == 2
+assert promotion_ledger_gate["metrics"]["consecutive_blocked_count"] == 0
+assert promotion_ledger_gate["metrics"]["failed_decision_count"] == 0
+assert promotion_ledger_gate["policy"]["schema_version"] == "hfr.promotion_ledger_gate.policy.v1"
+assert promotion_ledger_gate["policy"]["effective"]["require_latest_recommendation"] == "allow_promotion"
+assert promotion_ledger_gate["policy"]["effective"]["require_latest_passed"] is True
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
@@ -930,8 +957,8 @@ assert bundle["metrics"]["review_calibration"]["disagreement_count"] == 0
 assert preflight["passed"] is True
 assert preflight["recommendation"] == "launch_allowed"
 assert preflight["metadata"]["candidate"] == "offline-demo"
-assert preflight["passed_gate_count"] == 3
-assert {gate["id"] for gate in preflight["gates"]} == {"training_gate", "compare_gate", "reviewed_gate"}
+assert preflight["passed_gate_count"] == 4
+assert {gate["id"] for gate in preflight["gates"]} == {"training_gate", "compare_gate", "reviewed_gate", "promotion_ledger_gate"}
 assert all(gate["passed"] is True for gate in preflight["gates"])
 assert preflight["trainer_command"]["argv"][:2] == ["python", "train.py"]
 assert len(preflight["artifacts"]["training_export_sft_jsonl"]["sha256"]) == 64
@@ -941,7 +968,7 @@ assert launch_check["recommendation"] == "launch_allowed"
 assert launch_check["validation"]["passed"] is True
 assert launch_check["approved_command"]["approved"] is True
 assert launch_check["approved_command"]["argv"][:2] == ["python", "train.py"]
-assert {gate["id"] for gate in launch_check["gates"]} == {"training_gate", "compare_gate", "reviewed_gate"}
+assert {gate["id"] for gate in launch_check["gates"]} == {"training_gate", "compare_gate", "reviewed_gate", "promotion_ledger_gate"}
 PY
 python -m flightrecorder compare-suite \
   --baseline runs \
@@ -985,6 +1012,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger-gate"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--decision-gate"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--promotion-ledger"
+"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--promotion-ledger-gate"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
@@ -1003,10 +1031,14 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder gate-decision --help | grep -q -- "--expect-recommendation"
 "$VENV_DIR/bin/python" -m flightrecorder promotion-ledger --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder promotion-ledger --help | grep -q -- "--decision-gate"
+"$VENV_DIR/bin/python" -m flightrecorder gate-promotion-ledger --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-promotion-ledger --help | grep -q -- "--max-blocked-rate"
+test -f examples/promotion_ledger_gate_policy.demo.json
 test -f examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "gate-decision" examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "decision-gate" examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "promotion-ledger" examples/github-actions/action-ledger-promotion-gate.yml
+grep -q "gate-promotion-ledger" examples/github-actions/action-ledger-promotion-gate.yml
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null

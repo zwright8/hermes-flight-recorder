@@ -1,0 +1,19 @@
+{
+  "schema_version": "hfr.promotion_ledger_gate.policy.v1",
+  "description": "Demo promotion-history policy: require the latest decision to be an allowed, passed promotion with no blocked tail.",
+  "min_decisions": 1,
+  "min_allowed_count": 1,
+  "max_blocked_count": 0,
+  "max_blocked_rate": 0.0,
+  "min_consecutive_allowed": 1,
+  "max_consecutive_blocked": 0,
+  "max_failed_decisions": 0,
+  "require_latest_recommendation": "allow_promotion",
+  "require_latest_passed": true,
+  "require_source_recommendations": [
+    "promote_iteration"
+  ],
+  "forbid_source_recommendations": [
+    "block_iteration"
+  ]
+}

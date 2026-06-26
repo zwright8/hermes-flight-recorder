@@ -45,6 +45,13 @@ from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
+from .promotion_gate import (
+    PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
+    PromotionLedgerGateError,
+    PromotionLedgerGatePolicyError,
+    evaluate_promotion_ledger_gate,
+    load_promotion_ledger_gate_policy,
+)
 from .promotion_ledger import PromotionLedgerError, build_promotion_ledger
 from .repair import RepairQueueError, build_repair_queue
 from .report import write_index, write_report
@@ -108,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         ActionLedgerError,
         ActionLedgerGateError,
         ActionLedgerGatePolicyError,
+        PromotionLedgerGateError,
+        PromotionLedgerGatePolicyError,
         PromotionLedgerError,
         ReplayError,
         OSError,
@@ -630,6 +639,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         action_ledger_gate_paths=args.action_ledger_gate,
         decision_gate_paths=args.decision_gate,
         promotion_ledger_paths=args.promotion_ledger,
+        promotion_ledger_gate_paths=args.promotion_ledger_gate,
         trainer_preflight_paths=args.trainer_preflight,
         trainer_launch_check_paths=args.trainer_launch_check,
         repair_queue_paths=args.repair_queue,
@@ -1029,6 +1039,36 @@ def cmd_gate_action_ledger(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_gate_promotion_ledger(args: argparse.Namespace) -> int:
+    ledger = _read_json(Path(args.promotion_ledger))
+    options = _promotion_ledger_gate_options(args)
+    result = evaluate_promotion_ledger_gate(
+        ledger,
+        promotion_ledger_path=_display_path(Path(args.promotion_ledger), args.preserve_paths),
+        min_decisions=options["min_decisions"],
+        min_allowed_count=options["min_allowed_count"],
+        max_blocked_count=options["max_blocked_count"],
+        max_blocked_rate=options["max_blocked_rate"],
+        min_consecutive_allowed=options["min_consecutive_allowed"],
+        max_consecutive_blocked=options["max_consecutive_blocked"],
+        max_failed_decisions=options["max_failed_decisions"],
+        require_latest_recommendation=options["require_latest_recommendation"],
+        require_latest_passed=options["require_latest_passed"],
+        require_source_recommendations=options["require_source_recommendations"],
+        forbid_source_recommendations=options["forbid_source_recommendations"],
+    )
+    if options["policy_path"]:
+        result["policy"] = _promotion_ledger_gate_policy_summary(options)
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_gate_decision(args: argparse.Namespace) -> int:
     artifact = _read_json(Path(args.artifact))
     result = evaluate_decision_gate(
@@ -1388,6 +1428,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
+    validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
     validate.add_argument("--trainer-preflight", action="append", default=[], help="Validate one trainer_preflight.json; may be repeated")
     validate.add_argument(
         "--trainer-launch-check",
@@ -1516,6 +1557,41 @@ def _parser() -> argparse.ArgumentParser:
     promotion_ledger.add_argument("--out", help="Write promotion ledger JSON to this path")
     promotion_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
     promotion_ledger.set_defaults(func=cmd_promotion_ledger)
+
+    gate_promotion_ledger = subparsers.add_parser(
+        "gate-promotion-ledger",
+        help="Evaluate promotion-history thresholds against a promotion ledger",
+    )
+    gate_promotion_ledger.add_argument("--promotion-ledger", required=True, help="Path to promotion_ledger.json")
+    gate_promotion_ledger.add_argument("--policy", help="Versioned promotion-ledger gate policy JSON file")
+    gate_promotion_ledger.add_argument("--out", help="Write promotion-ledger gate JSON to this path")
+    gate_promotion_ledger.add_argument("--min-decisions", type=_non_negative_int_arg, help="Minimum promotion decisions required")
+    gate_promotion_ledger.add_argument("--min-allowed-count", type=_non_negative_int_arg, help="Minimum allowed promotion decisions required")
+    gate_promotion_ledger.add_argument("--max-blocked-count", type=_non_negative_int_arg, help="Maximum blocked promotion decisions allowed")
+    gate_promotion_ledger.add_argument("--max-blocked-rate", type=_rate_arg, help="Maximum blocked promotion decision rate, from 0.0 to 1.0")
+    gate_promotion_ledger.add_argument("--min-consecutive-allowed", type=_non_negative_int_arg, help="Minimum consecutive allow decisions required at the ledger tail")
+    gate_promotion_ledger.add_argument("--max-consecutive-blocked", type=_non_negative_int_arg, help="Maximum consecutive block decisions allowed at the ledger tail")
+    gate_promotion_ledger.add_argument("--max-failed-decisions", type=_non_negative_int_arg, help="Maximum decision gates with failed checks")
+    gate_promotion_ledger.add_argument(
+        "--require-latest-recommendation",
+        choices=["allow_promotion", "block_promotion"],
+        help="Required latest promotion-ledger recommendation",
+    )
+    gate_promotion_ledger.add_argument("--require-latest-passed", action="store_true", help="Require the latest decision gate to have passed")
+    gate_promotion_ledger.add_argument(
+        "--require-source-recommendation",
+        action="append",
+        default=[],
+        help="Fail unless this source recommendation appears in the ledger history; may be repeated",
+    )
+    gate_promotion_ledger.add_argument(
+        "--forbid-source-recommendation",
+        action="append",
+        default=[],
+        help="Fail if this source recommendation appears in the ledger history; may be repeated",
+    )
+    gate_promotion_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute ledger paths in gate output")
+    gate_promotion_ledger.set_defaults(func=cmd_gate_promotion_ledger)
 
     gate_action_ledger = subparsers.add_parser(
         "gate-action-ledger",
@@ -2414,6 +2490,74 @@ def _action_ledger_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any
     }
     summary: dict[str, Any] = {
         "schema_version": ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
+        "path": options["policy_path"],
+        "effective": effective,
+    }
+    if options.get("policy_description"):
+        summary["description"] = options["policy_description"]
+    return summary
+
+
+def _promotion_ledger_gate_options(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_promotion_ledger_gate_policy(args.policy) if args.policy else {}
+    return {
+        "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
+        "policy_description": policy.get("description"),
+        "min_decisions": args.min_decisions if args.min_decisions is not None else policy.get("min_decisions"),
+        "min_allowed_count": args.min_allowed_count if args.min_allowed_count is not None else policy.get("min_allowed_count"),
+        "max_blocked_count": args.max_blocked_count if args.max_blocked_count is not None else policy.get("max_blocked_count"),
+        "max_blocked_rate": args.max_blocked_rate if args.max_blocked_rate is not None else policy.get("max_blocked_rate"),
+        "min_consecutive_allowed": (
+            args.min_consecutive_allowed
+            if args.min_consecutive_allowed is not None
+            else policy.get("min_consecutive_allowed")
+        ),
+        "max_consecutive_blocked": (
+            args.max_consecutive_blocked
+            if args.max_consecutive_blocked is not None
+            else policy.get("max_consecutive_blocked")
+        ),
+        "max_failed_decisions": (
+            args.max_failed_decisions if args.max_failed_decisions is not None else policy.get("max_failed_decisions")
+        ),
+        "require_latest_recommendation": (
+            args.require_latest_recommendation
+            if args.require_latest_recommendation is not None
+            else policy.get("require_latest_recommendation")
+        ),
+        "require_latest_passed": args.require_latest_passed or bool(policy.get("require_latest_passed")),
+        "require_source_recommendations": _merge_unique_strings(
+            policy.get("require_source_recommendations", []),
+            args.require_source_recommendation,
+        ),
+        "forbid_source_recommendations": _merge_unique_strings(
+            policy.get("forbid_source_recommendations", []),
+            args.forbid_source_recommendation,
+        ),
+    }
+
+
+def _promotion_ledger_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
+    effective_fields = (
+        "min_decisions",
+        "min_allowed_count",
+        "max_blocked_count",
+        "max_blocked_rate",
+        "min_consecutive_allowed",
+        "max_consecutive_blocked",
+        "max_failed_decisions",
+        "require_latest_recommendation",
+        "require_latest_passed",
+        "require_source_recommendations",
+        "forbid_source_recommendations",
+    )
+    effective = {
+        field: options[field]
+        for field in effective_fields
+        if options.get(field) is not None and options.get(field) != []
+    }
+    summary: dict[str, Any] = {
+        "schema_version": PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
         "path": options["policy_path"],
         "effective": effective,
     }

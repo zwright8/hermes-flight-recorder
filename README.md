@@ -62,8 +62,9 @@ Expected demo output:
   generated suite, quality, coverage, observability, validation, and
   training-export artifacts into one readiness/read-only handoff manifest.
 - Promotion evidence in `runs/action_ledger.json`, `runs/action_ledger_gate.json`,
-  `runs/promotion_decision.json`, and `runs/promotion_ledger.json`, showing how
-  repeated repair pressure becomes a validatable promotion history.
+  `runs/promotion_decision.json`, `runs/promotion_ledger.json`, and
+  `runs/promotion_ledger_gate.json`, showing how repeated repair pressure
+  becomes a validatable promotion history and policy decision.
 
 ## Install
 
@@ -204,6 +205,10 @@ flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --policy examples/compare_gate_policy.demo.json
 
+flightrecorder gate-promotion-ledger \
+  --promotion-ledger runs/promotion_ledger.json \
+  --policy examples/promotion_ledger_gate_policy.demo.json
+
 flightrecorder review-calibration \
   --reviewed-export runs/reviewed_export \
   --out runs/review_calibration.json \
@@ -219,6 +224,7 @@ flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --repair-queue runs/repair_queue.json \
   --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --replay-bundle replay_bundles/prompt_injection_good \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
@@ -668,6 +674,13 @@ flightrecorder promotion-ledger \
   --out runs/promotion_ledger.json
 
 flightrecorder validate --promotion-ledger runs/promotion_ledger.json --strict
+
+flightrecorder gate-promotion-ledger \
+  --promotion-ledger runs/promotion_ledger.json \
+  --policy examples/promotion_ledger_gate_policy.demo.json \
+  --out runs/promotion_ledger_gate.json
+
+flightrecorder validate --promotion-ledger-gate runs/promotion_ledger_gate.json --strict
 ```
 
 The gate can enforce minimum bundle history, maximum open/new/recurring
@@ -687,7 +700,11 @@ machine-readable promotion history with allowed/blocked counts, latest
 recommendation, consecutive allow/block streaks, source-artifact fingerprints,
 and stale-metric validation. This gives trainer launchers and CI systems a
 durable history of promotion pressure without letting Flight Recorder promote,
-train, or repair anything by itself. A copyable GitHub Actions example lives at
+train, or repair anything by itself. `flightrecorder gate-promotion-ledger`
+then turns that history into another deterministic decision artifact, allowing
+CI to require enough promotion history, a passed/latest allow decision, bounded
+blocked streaks, a maximum blocked rate, and required or forbidden source
+recommendations. A copyable GitHub Actions example lives at
 `examples/github-actions/action-ledger-promotion-gate.yml`.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over

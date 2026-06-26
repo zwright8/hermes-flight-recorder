@@ -19,6 +19,7 @@ from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
+from .promotion_gate import PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
 from .review import (
@@ -94,6 +95,7 @@ def validate_artifacts(
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
+    promotion_ledger_gate_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
@@ -133,6 +135,8 @@ def validate_artifacts(
         targets.append(validate_decision_gate(decision_gate_path))
     for promotion_ledger_path in promotion_ledger_paths or []:
         targets.append(validate_promotion_ledger(promotion_ledger_path))
+    for promotion_ledger_gate_path in promotion_ledger_gate_paths or []:
+        targets.append(validate_promotion_ledger_gate(promotion_ledger_gate_path))
     for trainer_preflight_path in trainer_preflight_paths or []:
         targets.append(validate_trainer_preflight(trainer_preflight_path))
     for trainer_launch_check_path in trainer_launch_check_paths or []:
@@ -509,6 +513,16 @@ def validate_promotion_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "promotion_ledger.json")
     if ledger is not None:
         _validate_promotion_ledger(ledger, target, ledger_path)
+    return target
+
+
+def validate_promotion_ledger_gate(path: str | Path) -> ValidationTarget:
+    """Validate a promotion-ledger gate artifact."""
+    gate_path = Path(path)
+    target = ValidationTarget("promotion_ledger_gate", str(gate_path))
+    gate = _read_object(gate_path, target, "promotion_ledger_gate.json")
+    if gate is not None:
+        _validate_promotion_ledger_gate(gate, target)
     return target
 
 
@@ -4266,6 +4280,195 @@ def _promotion_count_map(values: Any) -> dict[str, int]:
         key = str(value or "unknown")
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def _validate_promotion_ledger_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(gate, "schema_version", PROMOTION_LEDGER_GATE_SCHEMA_VERSION, target)
+    if not isinstance(gate.get("promotion_ledger"), str) or not gate.get("promotion_ledger"):
+        target.errors.append("promotion_ledger_gate.promotion_ledger must be a non-empty string.")
+    if not isinstance(gate.get("passed"), bool):
+        target.errors.append("promotion_ledger_gate.passed must be a boolean.")
+    checks = gate.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_ledger_gate.checks must be a list.")
+        checks = []
+    metrics = gate.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("promotion_ledger_gate.metrics must be an object.")
+        metrics = {}
+    if "policy" in gate:
+        _validate_promotion_ledger_gate_policy_summary(gate.get("policy"), target)
+
+    failed_checks = _validate_gate_like_checks(checks, target, "promotion_ledger_gate.checks")
+    if gate.get("check_count") != len(checks):
+        target.errors.append(f"promotion_ledger_gate.check_count expected {len(checks)}, got {gate.get('check_count')!r}.")
+    if gate.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_ledger_gate.failed_check_count expected {failed_checks}, got {gate.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(gate.get("passed"), bool) and gate.get("passed") != expected_passed:
+        target.errors.append("promotion_ledger_gate.passed must match failed_check_count.")
+    _validate_promotion_ledger_gate_metrics(metrics, target)
+    _validate_promotion_ledger_gate_decision(gate.get("decision"), expected_passed, failed_checks, metrics, target)
+    target.details.update(
+        {
+            "passed": gate.get("passed"),
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "decision_count": metrics.get("decision_count"),
+            "latest_recommendation": metrics.get("latest_recommendation"),
+        }
+    )
+
+
+def _validate_promotion_ledger_gate_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
+    count_fields = (
+        "decision_count",
+        "allowed_count",
+        "blocked_count",
+        "consecutive_allowed_count",
+        "consecutive_blocked_count",
+        "failed_decision_count",
+        "unique_source_artifact_count",
+    )
+    for field_name in count_fields:
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"promotion_ledger_gate.metrics.{field_name} must be a non-negative integer.")
+    if all(_is_non_negative_int(metrics.get(field_name)) for field_name in ("decision_count", "allowed_count", "blocked_count")):
+        if metrics["allowed_count"] + metrics["blocked_count"] != metrics["decision_count"]:
+            target.errors.append("promotion_ledger_gate.metrics.allowed_count + blocked_count must equal decision_count.")
+    if not _is_number_between(metrics.get("blocked_rate"), 0.0, 1.0):
+        target.errors.append("promotion_ledger_gate.metrics.blocked_rate must be a number from 0.0 to 1.0.")
+    elif _is_non_negative_int(metrics.get("decision_count")) and _is_non_negative_int(metrics.get("blocked_count")):
+        expected_rate = round(metrics["blocked_count"] / metrics["decision_count"], 4) if metrics["decision_count"] else 0.0
+        if metrics.get("blocked_rate") != expected_rate:
+            target.errors.append(f"promotion_ledger_gate.metrics.blocked_rate expected {expected_rate}, got {metrics.get('blocked_rate')!r}.")
+    for field_name in ("latest_recommendation", "latest_readiness"):
+        if not isinstance(metrics.get(field_name), str):
+            target.errors.append(f"promotion_ledger_gate.metrics.{field_name} must be a string.")
+    if metrics.get("latest_passed") is not None and not isinstance(metrics.get("latest_passed"), bool):
+        target.errors.append("promotion_ledger_gate.metrics.latest_passed must be a boolean or null.")
+    if _count_rows(metrics.get("source_recommendation_counts")) is None:
+        target.errors.append("promotion_ledger_gate.metrics.source_recommendation_counts must be a list of {id, count} objects.")
+
+
+def _validate_promotion_ledger_gate_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_ledger_gate.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "promote_iteration" if expected_passed else "block_iteration"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_ledger_gate.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "promotion_ledger_gate.decision.recommendation expected "
+            f"{expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("promotion_ledger_gate.decision.summary must be a non-empty string.")
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("promotion_ledger_gate.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_ledger_gate.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}."
+        )
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(
+            f"promotion_ledger_gate.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}."
+        )
+    for index, check in enumerate(blocking_checks):
+        label = f"promotion_ledger_gate.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    key_metrics = value.get("key_metrics")
+    if not isinstance(key_metrics, dict):
+        target.errors.append("promotion_ledger_gate.decision.key_metrics must be an object.")
+        return
+    for field_name in (
+        "decision_count",
+        "allowed_count",
+        "blocked_count",
+        "blocked_rate",
+        "latest_recommendation",
+        "latest_passed",
+        "consecutive_allowed_count",
+        "consecutive_blocked_count",
+        "failed_decision_count",
+        "source_recommendation_counts",
+    ):
+        if key_metrics.get(field_name) != metrics.get(field_name):
+            target.errors.append(
+                f"promotion_ledger_gate.decision.key_metrics.{field_name} must match promotion_ledger_gate.metrics.{field_name}."
+            )
+
+
+def _validate_promotion_ledger_gate_policy_summary(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_ledger_gate.policy must be an object when present.")
+        return
+    _require_equal(value, "schema_version", PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, target, prefix="promotion_ledger_gate.policy.")
+    if not isinstance(value.get("path"), str) or not value.get("path"):
+        target.errors.append("promotion_ledger_gate.policy.path must be a non-empty string.")
+    if "description" in value and not isinstance(value.get("description"), str):
+        target.errors.append("promotion_ledger_gate.policy.description must be a string when present.")
+    effective = value.get("effective")
+    if not isinstance(effective, dict):
+        target.errors.append("promotion_ledger_gate.policy.effective must be an object.")
+        return
+    allowed_fields = {
+        "min_decisions",
+        "min_allowed_count",
+        "max_blocked_count",
+        "max_blocked_rate",
+        "min_consecutive_allowed",
+        "max_consecutive_blocked",
+        "max_failed_decisions",
+        "require_latest_recommendation",
+        "require_latest_passed",
+        "require_source_recommendations",
+        "forbid_source_recommendations",
+    }
+    unknown = sorted(set(effective) - allowed_fields)
+    if unknown:
+        target.errors.append(f"promotion_ledger_gate.policy.effective has unknown field(s): {', '.join(unknown)}.")
+    for field_name in (
+        "min_decisions",
+        "min_allowed_count",
+        "max_blocked_count",
+        "min_consecutive_allowed",
+        "max_consecutive_blocked",
+        "max_failed_decisions",
+    ):
+        if field_name in effective and not _is_non_negative_int(effective.get(field_name)):
+            target.errors.append(f"promotion_ledger_gate.policy.effective.{field_name} must be a non-negative integer.")
+    if "max_blocked_rate" in effective and not _is_number_between(effective.get("max_blocked_rate"), 0.0, 1.0):
+        target.errors.append("promotion_ledger_gate.policy.effective.max_blocked_rate must be a number from 0.0 to 1.0.")
+    if "require_latest_recommendation" in effective and effective.get("require_latest_recommendation") not in {
+        "allow_promotion",
+        "block_promotion",
+    }:
+        target.errors.append("promotion_ledger_gate.policy.effective.require_latest_recommendation is invalid.")
+    if "require_latest_passed" in effective and not isinstance(effective.get("require_latest_passed"), bool):
+        target.errors.append("promotion_ledger_gate.policy.effective.require_latest_passed must be a boolean.")
+    for field_name in ("require_source_recommendations", "forbid_source_recommendations"):
+        if field_name in effective and not _is_string_list(effective.get(field_name)):
+            target.errors.append(f"promotion_ledger_gate.policy.effective.{field_name} must be a list of strings.")
 
 
 def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:

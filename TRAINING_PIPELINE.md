@@ -147,6 +147,13 @@ flightrecorder promotion-ledger \
   --out runs/promotion_ledger.json
 
 flightrecorder validate --promotion-ledger runs/promotion_ledger.json --strict
+
+flightrecorder gate-promotion-ledger \
+  --promotion-ledger runs/promotion_ledger.json \
+  --policy examples/promotion_ledger_gate_policy.demo.json \
+  --out runs/promotion_ledger_gate.json
+
+flightrecorder validate --promotion-ledger-gate runs/promotion_ledger_gate.json --strict
 ```
 
 Policies can cap open, new, or recurring actions, require a minimum number of
@@ -166,7 +173,10 @@ history of those allow/block artifacts across iterations. The promotion ledger
 records latest recommendation, allowed/blocked counts, consecutive block or
 allow streaks, and source-artifact fingerprints, giving an external trainer
 launcher a stable "how did we get here?" artifact before it consumes the final
-decision gate.
+decision gate. Use `flightrecorder gate-promotion-ledger` when trainer or CI
+automation needs a policy decision over that history, such as requiring a clean
+latest allow decision, capping blocked-rate or blocked streaks, and forbidding
+source `block_iteration` recommendations before launch.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

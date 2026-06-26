@@ -7,6 +7,8 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def run_cli(args):
     with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
@@ -141,6 +143,182 @@ class PromotionLedgerTests(unittest.TestCase):
             ledger["metrics"]["allowed_count"] = 99
             ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--promotion-ledger", str(ledger_path)]), 1)
+
+    def test_gate_promotion_ledger_allows_clean_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            gate_path = root / "promotion_ledger_gate.json"
+            source.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger_gate.v1",
+                        "passed": True,
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_iteration",
+                            "summary": "ok",
+                            "blocking_check_count": 0,
+                            "key_metrics": {"recurring_action_count": 0},
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--preserve-paths",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                ),
+                0,
+            )
+            run_cli(
+                [
+                    "promotion-ledger",
+                    "--decision-gate",
+                    str(decision_gate),
+                    "--preserve-paths",
+                    "--out",
+                    str(ledger_path),
+                ]
+            )
+
+            code = run_cli(
+                [
+                    "gate-promotion-ledger",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--policy",
+                    str(ROOT / "examples" / "promotion_ledger_gate_policy.demo.json"),
+                    "--out",
+                    str(gate_path),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            self.assertEqual(gate["schema_version"], "hfr.promotion_ledger_gate.v1")
+            self.assertTrue(gate["passed"])
+            self.assertEqual(gate["decision"]["recommendation"], "promote_iteration")
+            self.assertEqual(gate["decision"]["readiness"], "ready")
+            self.assertEqual(gate["metrics"]["blocked_rate"], 0.0)
+            self.assertEqual(gate["metrics"]["failed_decision_count"], 0)
+            self.assertEqual(gate["policy"]["schema_version"], "hfr.promotion_ledger_gate.policy.v1")
+            self.assertEqual(gate["policy"]["effective"]["require_latest_recommendation"], "allow_promotion")
+            self.assertTrue(gate["policy"]["effective"]["require_latest_passed"])
+            self.assertEqual(run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict"]), 0)
+
+            gate["metrics"]["blocked_rate"] = 1.0
+            gate_path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--promotion-ledger-gate", str(gate_path)]), 1)
+
+    def test_gate_promotion_ledger_blocks_bad_latest_decision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "blocked_action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            gate_path = root / "promotion_ledger_gate.json"
+            source.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger_gate.v1",
+                        "passed": False,
+                        "decision": {
+                            "readiness": "blocked",
+                            "recommendation": "block_iteration",
+                            "summary": "blocked",
+                            "blocking_check_count": 1,
+                            "key_metrics": {"recurring_action_count": 5},
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--preserve-paths",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                ),
+                1,
+            )
+            run_cli(
+                [
+                    "promotion-ledger",
+                    "--decision-gate",
+                    str(decision_gate),
+                    "--preserve-paths",
+                    "--out",
+                    str(ledger_path),
+                ]
+            )
+
+            code = run_cli(
+                [
+                    "gate-promotion-ledger",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--min-decisions",
+                    "1",
+                    "--require-latest-recommendation",
+                    "allow_promotion",
+                    "--require-latest-passed",
+                    "--max-blocked-count",
+                    "0",
+                    "--max-consecutive-blocked",
+                    "0",
+                    "--max-failed-decisions",
+                    "0",
+                    "--forbid-source-recommendation",
+                    "block_iteration",
+                    "--out",
+                    str(gate_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            self.assertFalse(gate["passed"])
+            self.assertEqual(gate["decision"]["recommendation"], "block_iteration")
+            self.assertEqual(gate["decision"]["readiness"], "blocked")
+            self.assertEqual(gate["metrics"]["blocked_rate"], 1.0)
+            self.assertEqual(gate["metrics"]["failed_decision_count"], 1)
+            failed_checks = {check["id"] for check in gate["checks"] if not check["passed"]}
+            self.assertIn("require_latest_recommendation", failed_checks)
+            self.assertIn("require_latest_passed", failed_checks)
+            self.assertIn("max_blocked_count", failed_checks)
+            self.assertIn("max_consecutive_blocked", failed_checks)
+            self.assertIn("max_failed_decisions", failed_checks)
+            self.assertIn("forbid_source_recommendation", failed_checks)
+            self.assertEqual(run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict"]), 0)
 
     def test_promotion_ledger_rejects_wrong_schema(self):
         with tempfile.TemporaryDirectory() as tmp:

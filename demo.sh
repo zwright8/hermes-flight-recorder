@@ -51,4 +51,8 @@ python -m flightrecorder gate-decision \
 python -m flightrecorder promotion-ledger \
   --decision-gate runs/promotion_decision.json \
   --out runs/promotion_ledger.json
+python -m flightrecorder gate-promotion-ledger \
+  --promotion-ledger runs/promotion_ledger.json \
+  --policy examples/promotion_ledger_gate_policy.demo.json \
+  --out runs/promotion_ledger_gate.json
 echo "Demo reports written to $ROOT/runs/index.html"
