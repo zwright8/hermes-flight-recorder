@@ -15,6 +15,7 @@ from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
+from .preflight import TRAINER_PREFLIGHT_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
 from .review import (
     REVIEW_ITEM_SCHEMA_VERSION,
@@ -85,6 +86,7 @@ def validate_artifacts(
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
+    trainer_preflight_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -114,6 +116,8 @@ def validate_artifacts(
         targets.append(validate_evidence_coverage(evidence_coverage_path))
     for evidence_bundle_path in evidence_bundle_paths or []:
         targets.append(validate_evidence_bundle(evidence_bundle_path))
+    for trainer_preflight_path in trainer_preflight_paths or []:
+        targets.append(validate_trainer_preflight(trainer_preflight_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -446,6 +450,16 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     bundle = _read_object(bundle_path, target, "evidence_bundle.json")
     if bundle is not None:
         _validate_evidence_bundle(bundle, target)
+    return target
+
+
+def validate_trainer_preflight(path: str | Path) -> ValidationTarget:
+    """Validate a trainer-preflight launch guard artifact."""
+    preflight_path = Path(path)
+    target = ValidationTarget("trainer_preflight", str(preflight_path))
+    preflight = _read_object(preflight_path, target, "trainer_preflight.json")
+    if preflight is not None:
+        _validate_trainer_preflight(preflight, target, preflight_path)
     return target
 
 
@@ -3554,6 +3568,196 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
             "artifact_count": len(artifacts),
         }
     )
+
+
+def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(preflight, "schema_version", TRAINER_PREFLIGHT_SCHEMA_VERSION, target)
+    if not isinstance(preflight.get("preflight_path"), str) or not preflight.get("preflight_path"):
+        target.errors.append("trainer_preflight.preflight_path must be a non-empty string.")
+    if not isinstance(preflight.get("passed"), bool):
+        target.errors.append("trainer_preflight.passed must be a boolean.")
+    checks = preflight.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("trainer_preflight.checks must be a list.")
+        checks = []
+    gates = preflight.get("gates")
+    if not isinstance(gates, list):
+        target.errors.append("trainer_preflight.gates must be a list.")
+        gates = []
+    artifacts = preflight.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("trainer_preflight.artifacts must be an object.")
+        artifacts = {}
+    if not artifacts:
+        target.errors.append("trainer_preflight.artifacts must not be empty.")
+    if not _is_string_list(preflight.get("required_gates")):
+        target.errors.append("trainer_preflight.required_gates must be a list of strings.")
+    if not _is_string_list(preflight.get("notes")):
+        target.errors.append("trainer_preflight.notes must be a list of strings.")
+    if "metadata" in preflight:
+        _validate_metadata(preflight.get("metadata"), target, "trainer_preflight.metadata")
+
+    failed_checks = _validate_handoff_checks(checks, target, "trainer_preflight.checks")
+    if preflight.get("check_count") != len(checks):
+        target.errors.append(f"trainer_preflight.check_count expected {len(checks)}, got {preflight.get('check_count')!r}.")
+    if preflight.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"trainer_preflight.failed_check_count expected {failed_checks}, got {preflight.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(preflight.get("passed"), bool) and preflight.get("passed") != expected_passed:
+        target.errors.append("trainer_preflight.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "launch_allowed" if expected_passed else "block_launch"
+    if preflight.get("readiness") != expected_readiness:
+        target.errors.append(f"trainer_preflight.readiness expected {expected_readiness!r}, got {preflight.get('readiness')!r}.")
+    if preflight.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"trainer_preflight.recommendation expected {expected_recommendation!r}, got {preflight.get('recommendation')!r}."
+        )
+
+    passed_gates = 0
+    for index, gate in enumerate(gates):
+        if _validate_trainer_preflight_gate(gate, target, f"trainer_preflight.gates[{index}]", source_path):
+            passed_gates += 1
+    if preflight.get("gate_count") != len(gates):
+        target.errors.append(f"trainer_preflight.gate_count expected {len(gates)}, got {preflight.get('gate_count')!r}.")
+    if preflight.get("passed_gate_count") != passed_gates:
+        target.errors.append(
+            f"trainer_preflight.passed_gate_count expected {passed_gates}, got {preflight.get('passed_gate_count')!r}."
+        )
+    for name, record in artifacts.items():
+        _validate_trainer_preflight_artifact_record(name, record, target, source_path)
+    _validate_trainer_command(preflight.get("trainer_command"), target)
+    target.details.update(
+        {
+            "readiness": preflight.get("readiness"),
+            "gate_count": len(gates),
+            "failed_check_count": failed_checks,
+            "artifact_count": len(artifacts),
+        }
+    )
+
+
+def _validate_handoff_checks(checks: list[Any], target: ValidationTarget, label: str) -> int:
+    failed = 0
+    for index, check in enumerate(checks):
+        check_label = f"{label}[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{check_label} must be an object.")
+            failed += 1
+            continue
+        if not isinstance(check.get("id"), str) or not check.get("id"):
+            target.errors.append(f"{check_label}.id must be a non-empty string.")
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"{check_label}.passed must be a boolean.")
+        elif check.get("passed") is False:
+            failed += 1
+        for field_name in ("actual", "expected", "scope"):
+            if not isinstance(check.get(field_name), dict):
+                target.errors.append(f"{check_label}.{field_name} must be an object.")
+        if not isinstance(check.get("summary"), str):
+            target.errors.append(f"{check_label}.summary must be a string.")
+    return failed
+
+
+def _validate_trainer_preflight_gate(gate: Any, target: ValidationTarget, label: str, source_path: Path) -> bool:
+    if not isinstance(gate, dict):
+        target.errors.append(f"{label} must be an object.")
+        return False
+    for field_name in ("id", "path", "schema_version"):
+        if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if not isinstance(gate.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if not isinstance(gate.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    _validate_preflight_file_hash(gate, target, label, source_path, require_kind=False)
+    validation = gate.get("validation")
+    if validation is not None:
+        if not isinstance(validation, dict):
+            target.errors.append(f"{label}.validation must be an object when present.")
+        else:
+            for field_name in ("available", "passed", "strict"):
+                if not isinstance(validation.get(field_name), bool):
+                    target.errors.append(f"{label}.validation.{field_name} must be a boolean.")
+            for field_name in ("error_count", "warning_count"):
+                if not _is_non_negative_int(validation.get(field_name)):
+                    target.errors.append(f"{label}.validation.{field_name} must be a non-negative integer.")
+    return gate.get("passed") is True
+
+
+def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(name, str) or not name:
+        target.errors.append("trainer_preflight.artifacts keys must be non-empty strings.")
+    label = f"trainer_preflight.artifacts.{name}"
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    if not isinstance(record.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if record.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be file or directory.")
+    if record.get("kind") == "file":
+        _validate_preflight_file_hash(record, target, label, source_path)
+    if record.get("kind") == "directory" and record.get("exists") is True and not _is_non_negative_int(record.get("entry_count")):
+        target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
+
+
+def _validate_preflight_file_hash(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+    *,
+    require_kind: bool = True,
+) -> None:
+    if require_kind and record.get("kind") != "file":
+        return
+    if record.get("exists") is not True:
+        return
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+    if not _is_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing files.")
+        return
+    file_path = _resolve_preflight_record_path(record.get("path"), source_path)
+    if file_path is None:
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to an existing file.")
+        return
+    if file_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _sha256(file_path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _resolve_preflight_record_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+        return None
+    raw = Path(value)
+    candidates = [raw] if raw.is_absolute() else [Path.cwd() / raw, source_path.parent / raw]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+def _validate_trainer_command(command: Any, target: ValidationTarget) -> None:
+    if not isinstance(command, dict):
+        target.errors.append("trainer_preflight.trainer_command must be an object.")
+        return
+    if not isinstance(command.get("provided"), bool):
+        target.errors.append("trainer_preflight.trainer_command.provided must be a boolean.")
+    if not isinstance(command.get("raw"), str):
+        target.errors.append("trainer_preflight.trainer_command.raw must be a string.")
+    if not isinstance(command.get("argv"), list) or not all(isinstance(item, str) for item in command.get("argv", [])):
+        target.errors.append("trainer_preflight.trainer_command.argv must be a list of strings.")
+    if "parseable" in command and not isinstance(command.get("parseable"), bool):
+        target.errors.append("trainer_preflight.trainer_command.parseable must be a boolean when present.")
 
 
 def _validate_repair_queue(queue: dict[str, Any], target: ValidationTarget) -> None:

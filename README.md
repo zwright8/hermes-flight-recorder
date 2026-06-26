@@ -232,6 +232,13 @@ flightrecorder gate-export \
   --max-unverified-source-fingerprints 0 \
   --min-trainer-view-source-fingerprint-rate 1.0 \
   --max-unverified-trainer-view-source-fingerprints 0
+
+flightrecorder trainer-preflight \
+  --gate runs/training_gate.json \
+  --training-export runs/training_export \
+  --require-gate training_gate \
+  --trainer-command "python train.py --dataset runs/training_export" \
+  --out runs/trainer_preflight.json
 ```
 
 For production suites, commit a stricter gate policy and point CI at it:
@@ -706,6 +713,27 @@ flightrecorder gate-compare-export \
   --policy examples/compare_gate_policy.demo.json \
   --max-contract-drifts 0 \
   --max-unverified-contracts 0
+```
+
+Use `flightrecorder trainer-preflight` as the final launch guard before an
+external SFT, DPO, reward-model, or RL job starts. It does not execute the
+trainer. It records the trainer command, fingerprints the trainer-facing
+exports, verifies required gates are present and passed, and blocks launch when
+training or comparison gates skipped embedded export validation:
+
+```bash
+flightrecorder trainer-preflight \
+  --gate runs/training_gate.json \
+  --gate runs/compare_gate.json \
+  --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
+  --evidence-bundle runs/evidence_bundle.json \
+  --require-gate training_gate \
+  --require-gate compare_gate \
+  --trainer-command "python train.py --dry-run --dataset runs/training_export" \
+  --out runs/trainer_preflight.json
+
+flightrecorder validate --trainer-preflight runs/trainer_preflight.json --strict
 ```
 
 ## Scoring Rules

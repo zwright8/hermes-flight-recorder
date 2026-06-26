@@ -759,9 +759,25 @@ python -m flightrecorder evidence-bundle \
   --gate runs/reviewed_gate.json \
   --out runs/evidence_bundle_full.json >/dev/null
 test -f runs/evidence_bundle_full.json
+python -m flightrecorder trainer-preflight \
+  --gate runs/training_gate.json \
+  --gate runs/compare_gate.json \
+  --gate runs/reviewed_gate.json \
+  --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
+  --reviewed-export runs/reviewed_export \
+  --evidence-bundle runs/evidence_bundle_full.json \
+  --require-gate training_gate \
+  --require-gate compare_gate \
+  --require-gate reviewed_gate \
+  --trainer-command "python train.py --dry-run --dataset runs/training_export" \
+  --metadata candidate=offline-demo \
+  --out runs/trainer_preflight.json >/dev/null
+test -f runs/trainer_preflight.json
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
+  --trainer-preflight runs/trainer_preflight.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
@@ -771,6 +787,7 @@ import json
 from pathlib import Path
 
 bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="utf-8"))
+preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
 assert bundle["readiness"] == "ready"
 assert bundle["decision"]["recommendation"] == "promote_handoff"
@@ -803,6 +820,15 @@ assert bundle["metrics"]["review_export"]["item_count"] >= 6
 assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]
 assert bundle["metrics"]["review_calibration"]["agreement_rate"] == 1.0
 assert bundle["metrics"]["review_calibration"]["disagreement_count"] == 0
+assert preflight["passed"] is True
+assert preflight["recommendation"] == "launch_allowed"
+assert preflight["metadata"]["candidate"] == "offline-demo"
+assert preflight["passed_gate_count"] == 3
+assert {gate["id"] for gate in preflight["gates"]} == {"training_gate", "compare_gate", "reviewed_gate"}
+assert all(gate["passed"] is True for gate in preflight["gates"])
+assert preflight["trainer_command"]["argv"][:2] == ["python", "train.py"]
+assert len(preflight["artifacts"]["training_export_sft_jsonl"]["sha256"]) == 64
+assert len(preflight["artifacts"]["compare_export_improvement_pairs_jsonl"]["sha256"]) == 64
 PY
 python -m flightrecorder compare-suite \
   --baseline runs \
@@ -864,6 +890,8 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--min-task-completion-improvements"
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--strict-validation"
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--skip-validation"
+"$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help | grep -q -- "--allow-unvalidated-gates"
 "$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null

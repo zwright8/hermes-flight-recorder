@@ -102,6 +102,32 @@ bundle fingerprints `manifest.json`, `dataset_metrics.json`, and
 scenario generation, or reward-review work. Treat those actions as routing
 guidance for the next improvement iteration, not as a substitute for the gates
 themselves.
+
+Use `flightrecorder trainer-preflight` as the final launch guard that an
+external trainer can consume. It records the trainer command, fingerprints the
+trainer-facing export files, verifies required gates are present and passed, and
+refuses training/compare gates that skipped embedded export validation unless
+`--allow-unvalidated-gates` is explicitly set:
+
+```bash
+flightrecorder trainer-preflight \
+  --gate runs/training_gate.json \
+  --gate runs/compare_gate.json \
+  --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
+  --evidence-bundle runs/evidence_bundle.json \
+  --require-gate training_gate \
+  --require-gate compare_gate \
+  --trainer-command "python train.py --dry-run --dataset runs/training_export" \
+  --out runs/trainer_preflight.json
+
+flightrecorder validate --trainer-preflight runs/trainer_preflight.json --strict
+```
+
+The preflight manifest is still evidence plumbing, not a trainer. It does not
+execute the command or update weights; it gives CI and trainer launchers a
+single pass/fail contract to enforce before they run.
+
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
 runs/repair_queue.json`. Each item points to a failed rule, evidence refs,
@@ -533,6 +559,11 @@ normalized event types, and maximum quality-flag counts. `gate-export` validates
 the export and manifest artifact fingerprints by default; set
 `strict_validation` in policy, or pass `--strict-validation`, when warnings
 should also block a training handoff.
+
+After `gate-export` and any comparison or reviewed gates pass, run
+`trainer-preflight` and require `recommendation: launch_allowed` before invoking
+an external trainer. This closes the handoff loop: the trainer consumes only
+exports that are tied to passed gates and current artifact hashes.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

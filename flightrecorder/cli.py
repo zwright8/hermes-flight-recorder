@@ -35,6 +35,7 @@ from .compare_gate import (
 from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
+from .preflight import TrainerPreflightError, build_trainer_preflight
 from .repair import RepairQueueError, build_repair_queue
 from .report import write_index, write_report
 from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
@@ -85,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
         ReviewExportError,
         ReviewedGatePolicyError,
         RepairQueueError,
+        TrainerPreflightError,
         TrainingExportError,
         TrainingGatePolicyError,
         CompareGatePolicyError,
@@ -609,6 +611,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
+        trainer_preflight_paths=args.trainer_preflight,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -947,6 +950,29 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_trainer_preflight(args: argparse.Namespace) -> int:
+    metadata = _metadata_options(args.metadata)
+    preflight = build_trainer_preflight(
+        out_path=args.out,
+        gate_paths=args.gate,
+        training_export_dir=args.training_export,
+        compare_export_dir=args.compare_export,
+        reviewed_export_dir=args.reviewed_export,
+        evidence_bundle_path=args.evidence_bundle,
+        require_gates=args.require_gate,
+        trainer_command=args.trainer_command,
+        allow_unvalidated_gates=args.allow_unvalidated_gates,
+        preserve_paths=args.preserve_paths,
+        metadata=metadata,
+    )
+    _write_json(Path(args.out), preflight)
+    print(
+        f"{'READY' if preflight['passed'] else 'BLOCKED'} trainer-preflight "
+        f"gates={preflight['passed_gate_count']}/{preflight['gate_count']} out={args.out}"
+    )
+    return 0 if preflight["passed"] else 1
+
+
 def cmd_export_rl(args: argparse.Namespace) -> int:
     metadata = _metadata_options(args.metadata)
     manifest = export_rl_dataset(
@@ -1230,6 +1256,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
+    validate.add_argument("--trainer-preflight", action="append", default=[], help="Validate one trainer_preflight.json; may be repeated")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -1540,6 +1567,34 @@ def _parser() -> argparse.ArgumentParser:
     )
     gate_compare.add_argument("--preserve-paths", action="store_true", help="Allow absolute export paths in gate output")
     gate_compare.set_defaults(func=cmd_gate_compare_export)
+
+    trainer_preflight = subparsers.add_parser(
+        "trainer-preflight",
+        help="Build a launch guard manifest over passed gates and trainer-facing artifacts",
+    )
+    trainer_preflight.add_argument("--gate", action="append", required=True, help="Gate JSON that must pass; may be repeated")
+    trainer_preflight.add_argument("--out", required=True, help="Write trainer preflight JSON to this path")
+    trainer_preflight.add_argument("--training-export", help="export-rl directory to fingerprint for the trainer handoff")
+    trainer_preflight.add_argument("--compare-export", help="export-compare-rl directory to fingerprint for the trainer handoff")
+    trainer_preflight.add_argument("--reviewed-export", help="apply-review directory to fingerprint for the trainer handoff")
+    trainer_preflight.add_argument("--evidence-bundle", help="evidence_bundle.json that must pass before launch")
+    trainer_preflight.add_argument("--require-gate", action="append", default=[], help="Require this gate id to be present")
+    trainer_preflight.add_argument("--trainer-command", help="Trainer command to record but not execute")
+    trainer_preflight.add_argument(
+        "--allow-unvalidated-gates",
+        action="store_true",
+        help="Allow training/compare gates that skipped embedded export validation",
+    )
+    trainer_preflight.add_argument("--preserve-paths", action="store_true", help="Allow absolute artifact paths in preflight output")
+    trainer_preflight.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach launch metadata to the preflight manifest; may be repeated",
+    )
+    trainer_preflight.set_defaults(func=cmd_trainer_preflight)
 
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
