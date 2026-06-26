@@ -265,8 +265,9 @@ The export directory contains:
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
 - `dataset_metrics.json`: machine-readable export coverage, source-fingerprint
-  coverage, task-completion coverage, trace-signal coverage, reward/score
-  distribution, failure pressure, and quality flags.
+  coverage, trainer-view source-fingerprint coverage, task-completion coverage,
+  trace-signal coverage, reward/score distribution, failure pressure, and
+  quality flags.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
 - `manifest.json`: generation settings, counts, output paths, caveats, and
@@ -505,6 +506,8 @@ flightrecorder gate-export \
   --policy examples/training_gate_policy.demo.json \
   --min-source-fingerprint-rate 1.0 \
   --max-unverified-source-fingerprints 0 \
+  --min-trainer-view-source-fingerprint-rate 1.0 \
+  --max-unverified-trainer-view-source-fingerprints 0 \
   --min-trace-average-events 5 \
   --min-trace-tool-or-api-rate 0.8 \
   --require-trace-event-type assistant_message
@@ -514,8 +517,9 @@ Production policies can require minimum episode counts, preference pairs,
 SFT/DPO/reward-model rows, step-reward rows, task-family coverage, minimum
 task-completion configured/complete counts, maximum incomplete task-completion
 examples, required-check pass rates, source-fingerprint coverage, maximum
-unverified source fingerprints, trace-signal thresholds, required normalized
-event types, and maximum quality-flag counts.
+unverified source fingerprints, trainer-view source-fingerprint coverage,
+maximum unverified trainer-ready rows, trace-signal thresholds, required
+normalized event types, and maximum quality-flag counts.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

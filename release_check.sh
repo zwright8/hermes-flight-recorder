@@ -502,6 +502,9 @@ from pathlib import Path
 gate = json.loads(Path("runs/training_gate.json").read_text(encoding="utf-8"))
 assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
 assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 10
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 10
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"] == 1.0
 assert gate["metrics"]["task_completion"]["complete_count"] == 2
 assert gate["metrics"]["task_completion"]["incomplete_count"] == 3
 assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5385
@@ -511,6 +514,8 @@ assert gate["metrics"]["trace_signal"]["tool_or_api_episode_rate"] == 0.8333
 assert gate["metrics"]["trace_signal"]["risk_count"] == 2
 assert gate["policy"]["effective"]["min_source_fingerprint_rate"] == 1.0
 assert gate["policy"]["effective"]["max_unverified_source_fingerprints"] == 0
+assert gate["policy"]["effective"]["min_trainer_view_source_fingerprint_rate"] == 1.0
+assert gate["policy"]["effective"]["max_unverified_trainer_view_source_fingerprints"] == 0
 assert gate["policy"]["effective"]["min_task_completion_complete"] == 2
 assert gate["policy"]["effective"]["max_task_completion_incomplete"] == 3
 assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5385
@@ -612,6 +617,27 @@ if python -m flightrecorder gate-export \
   echo "gate-export did not fail a too-high trace-event threshold" >&2
   exit 1
 fi
+rm -rf runs/training_export_probe
+cp -R runs/training_export runs/training_export_probe
+python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("runs/training_export_probe/dataset_metrics.json")
+metrics = json.loads(path.read_text(encoding="utf-8"))
+coverage = metrics["trainer_view_source_fingerprint_coverage"]
+coverage["fully_verified"] = 0
+coverage["unverified"] = coverage["rows"]
+coverage["fully_verified_rate"] = 0.0
+path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+if python -m flightrecorder gate-export \
+  --training-export runs/training_export_probe \
+  --min-trainer-view-source-fingerprint-rate 1.0 \
+  --max-unverified-trainer-view-source-fingerprints 0 >/dev/null; then
+  echo "gate-export did not fail a too-high trainer-view fingerprint threshold" >&2
+  exit 1
+fi
 python - <<'PY'
 import json
 from pathlib import Path
@@ -693,6 +719,7 @@ assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["passed"] is True
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["consistent"] is True
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["score"] == 100
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["missing_hook_count"] == 0
+assert bundle["decision"]["key_metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"] == 1.0
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["platform"] == "Linux-release-check"
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["hermes_git_commit"] == "abcdef123456"
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["flight_recorder_git_commit"] == "123456abcdef"
@@ -705,6 +732,7 @@ assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "reviewed_gate",
 }
 assert bundle["metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["unverified"] == 0
 assert bundle["metrics"]["live_smoke_summary"]["chat_completion_request_count"] == 1
 assert bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"] == str(Path.cwd())
 assert bundle["metrics"]["trace_observability"]["final_answer_rate"] == 1.0
@@ -765,6 +793,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-task-completion-complete"
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-trace-average-events"
+"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-trainer-view-source-fingerprint-rate"
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--min-task-completion-improvements"

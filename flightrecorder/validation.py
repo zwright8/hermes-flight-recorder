@@ -2266,6 +2266,71 @@ def _expected_source_fingerprint_coverage(episodes: list[dict[str, Any]]) -> dic
     }
 
 
+def _validate_trainer_view_source_fingerprint_coverage(
+    value: Any,
+    target: ValidationTarget,
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("dataset_metrics.trainer_view_source_fingerprint_coverage must be an object.")
+        return
+    expected = _expected_trainer_view_source_fingerprint_coverage(sft, dpo, reward_model)
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                "dataset_metrics.trainer_view_source_fingerprint_coverage."
+                f"{field_name} expected {expected_value!r}, got {value.get(field_name)!r}."
+            )
+
+
+def _expected_trainer_view_source_fingerprint_coverage(
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> dict[str, Any]:
+    sft_verified = sum(1 for row in sft if _row_source_fingerprints_verified(row))
+    dpo_verified = sum(1 for row in dpo if _dpo_source_fingerprints_verified(row))
+    reward_model_verified = sum(1 for row in reward_model if _row_source_fingerprints_verified(row))
+    row_count = len(sft) + len(dpo) + len(reward_model)
+    fully_verified = sft_verified + dpo_verified + reward_model_verified
+    return {
+        "rows": row_count,
+        "sft_rows": len(sft),
+        "dpo_rows": len(dpo),
+        "reward_model_rows": len(reward_model),
+        "fully_verified": fully_verified,
+        "unverified": row_count - fully_verified,
+        "fully_verified_rate": round(fully_verified / row_count, 4) if row_count else 0.0,
+    }
+
+
+def _row_source_fingerprints_verified(row: dict[str, Any]) -> bool:
+    fingerprints = row.get("source_fingerprints") if isinstance(row.get("source_fingerprints"), dict) else {}
+    return (
+        row.get("source_fingerprint_status") == "verified"
+        and _fingerprints_have_source_hashes(fingerprints)
+    )
+
+
+def _dpo_source_fingerprints_verified(row: dict[str, Any]) -> bool:
+    return _paired_source_fingerprints_verified(row, "chosen") and _paired_source_fingerprints_verified(row, "rejected")
+
+
+def _paired_source_fingerprints_verified(row: dict[str, Any], side: str) -> bool:
+    fingerprints_key = f"{side}_source_fingerprints"
+    status_key = f"{side}_source_fingerprint_status"
+    fingerprints = row.get(fingerprints_key) if isinstance(row.get(fingerprints_key), dict) else {}
+    return row.get(status_key) == "verified" and _fingerprints_have_source_hashes(fingerprints)
+
+
+def _fingerprints_have_source_hashes(fingerprints: dict[str, Any]) -> bool:
+    scenario = fingerprints.get("scenario") if isinstance(fingerprints.get("scenario"), dict) else {}
+    source_trace = fingerprints.get("source_trace") if isinstance(fingerprints.get("source_trace"), dict) else {}
+    return _is_sha256(scenario.get("sha256")) and _is_sha256(source_trace.get("sha256"))
+
+
 def _validate_messages(value: Any, target: ValidationTarget, label: str) -> None:
     if not isinstance(value, list) or len(value) != 2:
         target.errors.append(f"{label} must be a two-message user/assistant list.")
@@ -2347,6 +2412,18 @@ def _validate_dataset_metrics(
         _validate_source_fingerprint_coverage(metrics.get("source_fingerprint_coverage"), target, episodes)
     else:
         target.warnings.append("dataset_metrics.source_fingerprint_coverage is missing; rerun export-rl to refresh provenance metrics.")
+    if "trainer_view_source_fingerprint_coverage" in metrics:
+        _validate_trainer_view_source_fingerprint_coverage(
+            metrics.get("trainer_view_source_fingerprint_coverage"),
+            target,
+            sft,
+            dpo,
+            reward_model,
+        )
+    else:
+        target.warnings.append(
+            "dataset_metrics.trainer_view_source_fingerprint_coverage is missing; rerun export-rl to refresh trainer-view provenance metrics."
+        )
     if "task_completion" in metrics:
         expected_task_completion = _expected_task_completion_metrics(episodes)
         actual_task_completion = metrics.get("task_completion")

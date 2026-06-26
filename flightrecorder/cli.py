@@ -836,6 +836,8 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
         min_task_completion_check_pass_rate=options["min_task_completion_check_pass_rate"],
         min_source_fingerprint_rate=options["min_source_fingerprint_rate"],
         max_unverified_source_fingerprints=options["max_unverified_source_fingerprints"],
+        min_trainer_view_source_fingerprint_rate=options["min_trainer_view_source_fingerprint_rate"],
+        max_unverified_trainer_view_source_fingerprints=options["max_unverified_trainer_view_source_fingerprints"],
         min_trace_average_events=options["min_trace_average_events"],
         min_trace_event_type_count=options["min_trace_event_type_count"],
         min_trace_final_answer_rate=options["min_trace_final_answer_rate"],
@@ -1382,6 +1384,16 @@ def _parser() -> argparse.ArgumentParser:
         type=_non_negative_int_arg,
         help="Maximum episodes allowed to lack scenario or source-trace SHA-256 fingerprints",
     )
+    gate_export.add_argument(
+        "--min-trainer-view-source-fingerprint-rate",
+        type=_rate_arg,
+        help="Minimum fraction of SFT/DPO/reward-model rows with complete source fingerprints",
+    )
+    gate_export.add_argument(
+        "--max-unverified-trainer-view-source-fingerprints",
+        type=_non_negative_int_arg,
+        help="Maximum SFT/DPO/reward-model rows allowed to lack complete source fingerprints",
+    )
     gate_export.add_argument("--min-trace-average-events", type=_non_negative_float_arg, help="Minimum average normalized events per exported episode")
     gate_export.add_argument("--min-trace-event-type-count", type=_non_negative_int_arg, help="Minimum distinct normalized event types in the export")
     gate_export.add_argument("--min-trace-final-answer-rate", type=_rate_arg, help="Minimum fraction of episodes with final answers")
@@ -1796,6 +1808,16 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
             if args.max_unverified_source_fingerprints is not None
             else policy.get("max_unverified_source_fingerprints")
         ),
+        "min_trainer_view_source_fingerprint_rate": (
+            args.min_trainer_view_source_fingerprint_rate
+            if args.min_trainer_view_source_fingerprint_rate is not None
+            else policy.get("min_trainer_view_source_fingerprint_rate")
+        ),
+        "max_unverified_trainer_view_source_fingerprints": (
+            args.max_unverified_trainer_view_source_fingerprints
+            if args.max_unverified_trainer_view_source_fingerprints is not None
+            else policy.get("max_unverified_trainer_view_source_fingerprints")
+        ),
         "min_trace_average_events": (
             args.min_trace_average_events
             if args.min_trace_average_events is not None
@@ -1854,6 +1876,8 @@ def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_task_completion_check_pass_rate",
         "min_source_fingerprint_rate",
         "max_unverified_source_fingerprints",
+        "min_trainer_view_source_fingerprint_rate",
+        "max_unverified_trainer_view_source_fingerprints",
         "min_trace_average_events",
         "min_trace_event_type_count",
         "min_trace_final_answer_rate",

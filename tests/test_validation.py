@@ -381,6 +381,7 @@ class ValidationTests(unittest.TestCase):
             metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
             metrics["pass_rate"] = 1.0
             metrics["trace_signal"]["average_event_count"] = 999.0
+            metrics["trainer_view_source_fingerprint_coverage"]["fully_verified"] = 0
             metrics_path.write_text(json.dumps(metrics), encoding="utf-8")
 
             code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
@@ -390,6 +391,7 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("dataset_metrics.pass_rate", errors)
             self.assertIn("dataset_metrics.trace_signal.average_event_count", errors)
+            self.assertIn("dataset_metrics.trainer_view_source_fingerprint_coverage.fully_verified", errors)
 
     def test_validate_warns_on_legacy_training_export_without_trainer_views(self):
         with tempfile.TemporaryDirectory() as tmp:

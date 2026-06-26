@@ -15,6 +15,8 @@
   "min_task_completion_check_pass_rate": 0.5385,
   "min_source_fingerprint_rate": 1.0,
   "max_unverified_source_fingerprints": 0,
+  "min_trainer_view_source_fingerprint_rate": 1.0,
+  "max_unverified_trainer_view_source_fingerprints": 0,
   "min_trace_average_events": 5,
   "min_trace_event_type_count": 4,
   "min_trace_final_answer_rate": 1.0,

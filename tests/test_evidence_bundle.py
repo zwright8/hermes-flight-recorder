@@ -234,6 +234,10 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("risk_counts", bundle["decision"]["key_metrics"]["trace_observability"])
             self.assertEqual(bundle["decision"]["key_metrics"]["repair_queue"]["item_count"], 10)
             self.assertEqual(bundle["decision"]["key_metrics"]["training_export"]["episode_count"], 6)
+            self.assertEqual(
+                bundle["decision"]["key_metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"],
+                1.0,
+            )
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["passed"], True)
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["consistent"], True)
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["score"], 100)
@@ -259,6 +263,7 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["repair_queue"]["critical_item_count"], 10)
             self.assertEqual(bundle["metrics"]["training_export"]["episode_count"], 6)
             self.assertEqual(bundle["metrics"]["training_export"]["curriculum_failure_mode_count"], 10)
+            self.assertEqual(bundle["metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["unverified"], 0)
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hook_count"], 3)
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hermes_root"], "/tmp/hermes-agent")
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["flight_recorder_git_dirty"], True)

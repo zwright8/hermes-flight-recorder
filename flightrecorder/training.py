@@ -1020,6 +1020,7 @@ def _dataset_metrics(
         "min_reward": min(rewards_values) if rewards_values else None,
         "max_reward": max(rewards_values) if rewards_values else None,
         "source_fingerprint_coverage": _source_fingerprint_coverage(episodes),
+        "trainer_view_source_fingerprint_coverage": _trainer_view_source_fingerprint_coverage(sft, dpo, reward_model),
         "task_completion": _task_completion_metrics(episodes),
         "trace_signal": _trace_signal_metrics(episodes),
         "failed_rule_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "failed_rules")),
@@ -1204,6 +1205,15 @@ def _quality_flags(
                 "Some episodes are missing scenario or source-trace SHA-256 fingerprints.",
             )
         )
+    trainer_coverage = _trainer_view_source_fingerprint_coverage(sft, dpo, reward_model)
+    if trainer_coverage["rows"] and trainer_coverage["unverified"]:
+        flags.append(
+            _quality_flag(
+                "unverified_trainer_view_source_fingerprints",
+                "warning",
+                "Some trainer-ready SFT, DPO, or reward-model rows are missing complete source fingerprints.",
+            )
+        )
     if len(families) == 1:
         flags.append(_quality_flag("single_task_family", "info", "Only one task family is represented; broaden coverage before generalizing."))
     return flags
@@ -1236,6 +1246,11 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
             rows.append(f"| `{_md_cell(str(key))}` | {_md_cell(str(value))} |")
         rows.append("")
     coverage = metrics.get("source_fingerprint_coverage") if isinstance(metrics.get("source_fingerprint_coverage"), dict) else {}
+    trainer_coverage = (
+        metrics.get("trainer_view_source_fingerprint_coverage")
+        if isinstance(metrics.get("trainer_view_source_fingerprint_coverage"), dict)
+        else {}
+    )
     rows.extend(
         [
             "## Source Fingerprints",
@@ -1243,6 +1258,8 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
             f"- Fully verified episodes: {coverage.get('fully_verified', 0)} / {coverage.get('episodes', metrics.get('episode_count'))}",
             f"- Scenario fingerprints: {coverage.get('with_scenario_sha256', 0)}",
             f"- Source-trace fingerprints: {coverage.get('with_source_trace_sha256', 0)}",
+            f"- Fully verified trainer-view rows: {trainer_coverage.get('fully_verified', 0)} / {trainer_coverage.get('rows', 0)}",
+            f"- Unverified trainer-view rows: {trainer_coverage.get('unverified', 0)}",
             "",
         ]
     )
@@ -1404,6 +1421,51 @@ def _source_fingerprint_coverage(episodes: list[dict[str, Any]]) -> dict[str, in
         "fully_verified": fully_verified,
         "unverified": len(episodes) - fully_verified,
     }
+
+
+def _trainer_view_source_fingerprint_coverage(
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> dict[str, Any]:
+    sft_verified = sum(1 for row in sft if _row_source_fingerprints_verified(row))
+    dpo_verified = sum(1 for row in dpo if _dpo_source_fingerprints_verified(row))
+    reward_model_verified = sum(1 for row in reward_model if _row_source_fingerprints_verified(row))
+    row_count = len(sft) + len(dpo) + len(reward_model)
+    fully_verified = sft_verified + dpo_verified + reward_model_verified
+    return {
+        "rows": row_count,
+        "sft_rows": len(sft),
+        "dpo_rows": len(dpo),
+        "reward_model_rows": len(reward_model),
+        "fully_verified": fully_verified,
+        "unverified": row_count - fully_verified,
+        "fully_verified_rate": _rate(fully_verified, row_count),
+    }
+
+
+def _row_source_fingerprints_verified(row: dict[str, Any]) -> bool:
+    fingerprints = row.get("source_fingerprints") if isinstance(row.get("source_fingerprints"), dict) else {}
+    return (
+        row.get("source_fingerprint_status") == "verified"
+        and bool(_fingerprint_sha(fingerprints.get("scenario")))
+        and bool(_fingerprint_sha(fingerprints.get("source_trace")))
+    )
+
+
+def _dpo_source_fingerprints_verified(row: dict[str, Any]) -> bool:
+    return _paired_source_fingerprints_verified(row, "chosen") and _paired_source_fingerprints_verified(row, "rejected")
+
+
+def _paired_source_fingerprints_verified(row: dict[str, Any], side: str) -> bool:
+    fingerprints_key = f"{side}_source_fingerprints"
+    status_key = f"{side}_source_fingerprint_status"
+    fingerprints = row.get(fingerprints_key) if isinstance(row.get(fingerprints_key), dict) else {}
+    return (
+        row.get(status_key) == "verified"
+        and bool(_fingerprint_sha(fingerprints.get("scenario")))
+        and bool(_fingerprint_sha(fingerprints.get("source_trace")))
+    )
 
 
 def _source_fingerprints(record: RunRecord) -> dict[str, dict[str, Any]]:

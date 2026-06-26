@@ -21,6 +21,7 @@ _COUNT_POLICY_FIELDS = {
     "max_quality_flags",
     "max_task_completion_incomplete",
     "max_unverified_source_fingerprints",
+    "max_unverified_trainer_view_source_fingerprints",
     "min_trace_event_type_count",
     "max_trace_empty_final_answers",
     "max_trace_risk_count",
@@ -28,6 +29,7 @@ _COUNT_POLICY_FIELDS = {
 _RATE_POLICY_FIELDS = {
     "min_pass_rate",
     "min_source_fingerprint_rate",
+    "min_trainer_view_source_fingerprint_rate",
     "min_task_completion_check_pass_rate",
     "min_trace_final_answer_rate",
     "min_trace_tool_or_api_rate",
@@ -131,6 +133,8 @@ def evaluate_training_gate(
     min_task_completion_check_pass_rate: float | None = None,
     min_source_fingerprint_rate: float | None = None,
     max_unverified_source_fingerprints: int | None = None,
+    min_trainer_view_source_fingerprint_rate: float | None = None,
+    max_unverified_trainer_view_source_fingerprints: int | None = None,
     min_trace_average_events: float | None = None,
     min_trace_event_type_count: int | None = None,
     min_trace_final_answer_rate: float | None = None,
@@ -147,6 +151,7 @@ def evaluate_training_gate(
     """Evaluate readiness checks against dataset_metrics.json."""
     artifact_counts = dataset_metrics.get("artifact_counts") if isinstance(dataset_metrics.get("artifact_counts"), dict) else {}
     source_fingerprint_coverage = _source_fingerprint_coverage(dataset_metrics)
+    trainer_view_source_fingerprint_coverage = _trainer_view_source_fingerprint_coverage(dataset_metrics)
     task_completion = _task_completion_metrics(dataset_metrics)
     trace_signal = _trace_signal_metrics(dataset_metrics)
     checks: list[dict[str, Any]] = []
@@ -209,6 +214,20 @@ def evaluate_training_gate(
             _int_value(source_fingerprint_coverage.get("unverified")),
             max_unverified_source_fingerprints,
         )
+    if min_trainer_view_source_fingerprint_rate is not None:
+        _add_min_check(
+            checks,
+            "min_trainer_view_source_fingerprint_rate",
+            _number(trainer_view_source_fingerprint_coverage.get("fully_verified_rate")),
+            min_trainer_view_source_fingerprint_rate,
+        )
+    if max_unverified_trainer_view_source_fingerprints is not None:
+        _add_max_check(
+            checks,
+            "max_unverified_trainer_view_source_fingerprints",
+            _int_value(trainer_view_source_fingerprint_coverage.get("unverified")),
+            max_unverified_trainer_view_source_fingerprints,
+        )
     if min_trace_average_events is not None:
         _add_min_check(checks, "min_trace_average_events", _number(trace_signal.get("average_event_count")), min_trace_average_events)
     if min_trace_event_type_count is not None:
@@ -266,6 +285,7 @@ def evaluate_training_gate(
             "average_score": dataset_metrics.get("average_score"),
             "quality_flag_count": len(quality_flags),
             "source_fingerprint_coverage": source_fingerprint_coverage,
+            "trainer_view_source_fingerprint_coverage": trainer_view_source_fingerprint_coverage,
             "task_completion": task_completion,
             "trace_signal": trace_signal,
             "artifact_counts": artifact_counts,
@@ -413,6 +433,40 @@ def _source_fingerprint_coverage(dataset_metrics: dict[str, Any]) -> dict[str, A
         "with_scenario_sha256": _int_value(coverage.get("with_scenario_sha256")),
         "with_source_trace_sha256": _int_value(coverage.get("with_source_trace_sha256")),
         "rate": round(fully_verified / episodes, 4) if episodes else 0.0,
+    }
+
+
+def _trainer_view_source_fingerprint_coverage(dataset_metrics: dict[str, Any]) -> dict[str, Any]:
+    coverage = dataset_metrics.get("trainer_view_source_fingerprint_coverage")
+    if not isinstance(coverage, dict):
+        artifact_counts = dataset_metrics.get("artifact_counts") if isinstance(dataset_metrics.get("artifact_counts"), dict) else {}
+        sft_rows = _int_value(artifact_counts.get("sft"))
+        dpo_rows = _int_value(artifact_counts.get("dpo"))
+        reward_model_rows = _int_value(artifact_counts.get("reward_model"))
+        row_count = sft_rows + dpo_rows + reward_model_rows
+        return {
+            "rows": row_count,
+            "sft_rows": sft_rows,
+            "dpo_rows": dpo_rows,
+            "reward_model_rows": reward_model_rows,
+            "fully_verified": 0,
+            "unverified": row_count,
+            "fully_verified_rate": 0.0,
+        }
+    rows = _int_value(coverage.get("rows"))
+    fully_verified = _int_value(coverage.get("fully_verified"))
+    return {
+        "rows": rows,
+        "sft_rows": _int_value(coverage.get("sft_rows")),
+        "dpo_rows": _int_value(coverage.get("dpo_rows")),
+        "reward_model_rows": _int_value(coverage.get("reward_model_rows")),
+        "fully_verified": fully_verified,
+        "unverified": _int_value(coverage.get("unverified")),
+        "fully_verified_rate": _number(coverage.get("fully_verified_rate"))
+        if "fully_verified_rate" in coverage
+        else round(fully_verified / rows, 4)
+        if rows
+        else 0.0,
     }
 
 

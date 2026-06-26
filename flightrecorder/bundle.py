@@ -163,6 +163,9 @@ def build_evidence_bundle(
         if isinstance(dataset_metrics, dict):
             metrics.setdefault("training_export", {})["pass_rate"] = dataset_metrics.get("pass_rate")
             metrics.setdefault("training_export", {})["average_score"] = dataset_metrics.get("average_score")
+            metrics.setdefault("training_export", {})["trainer_view_source_fingerprint_coverage"] = dataset_metrics.get(
+                "trainer_view_source_fingerprint_coverage"
+            )
             metrics.setdefault("training_export", {})["quality_flags"] = dataset_metrics.get("quality_flags")
         if isinstance(curriculum, dict):
             metrics.setdefault("training_export", {})["curriculum_failure_mode_count"] = curriculum.get("failure_mode_count")
@@ -347,6 +350,7 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "pass_rate",
             "average_score",
             "quality_flag_count",
+            "trainer_view_source_fingerprint_coverage",
             "curriculum_failure_mode_count",
             "top_curriculum_priorities",
         ),

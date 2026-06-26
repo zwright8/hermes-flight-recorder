@@ -229,7 +229,9 @@ flightrecorder gate-export \
   --training-export runs/training_export \
   --policy examples/training_gate_policy.demo.json \
   --min-source-fingerprint-rate 1.0 \
-  --max-unverified-source-fingerprints 0
+  --max-unverified-source-fingerprints 0 \
+  --min-trainer-view-source-fingerprint-rate 1.0 \
+  --max-unverified-trainer-view-source-fingerprints 0
 ```
 
 For production suites, commit a stricter gate policy and point CI at it:
@@ -318,8 +320,9 @@ training-loop artifacts:
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
 - `dataset_metrics.json`: export-level coverage, source-fingerprint coverage,
-  task-completion coverage, trace-signal coverage, reward/score distribution,
-  failure pressure, and quality flags.
+  trainer-view source-fingerprint coverage, task-completion coverage,
+  trace-signal coverage, reward/score distribution, failure pressure, and
+  quality flags.
 - `DATASET_CARD.md`: human-readable summary of the generated dataset and its
   boundaries.
 - `manifest.json`: export settings, counts, and caveats.

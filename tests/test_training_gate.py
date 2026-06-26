@@ -42,6 +42,9 @@ class TrainingGateTests(unittest.TestCase):
             self.assertEqual(result["failed_check_count"], 0)
             self.assertEqual(result["policy"]["schema_version"], "hfr.training_gate.policy.v1")
             self.assertEqual(result["metrics"]["source_fingerprint_coverage"]["rate"], 1.0)
+            self.assertEqual(result["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"], 10)
+            self.assertEqual(result["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"], 10)
+            self.assertEqual(result["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"], 1.0)
             self.assertEqual(result["metrics"]["task_completion"]["complete_count"], 2)
             self.assertEqual(result["metrics"]["task_completion"]["check_pass_rate"], 0.5385)
             self.assertEqual(result["metrics"]["trace_signal"]["average_event_count"], 5.67)
@@ -49,6 +52,8 @@ class TrainingGateTests(unittest.TestCase):
             self.assertEqual(result["metrics"]["trace_signal"]["risk_count"], 2)
             self.assertEqual(result["policy"]["effective"]["min_source_fingerprint_rate"], 1.0)
             self.assertEqual(result["policy"]["effective"]["max_unverified_source_fingerprints"], 0)
+            self.assertEqual(result["policy"]["effective"]["min_trainer_view_source_fingerprint_rate"], 1.0)
+            self.assertEqual(result["policy"]["effective"]["max_unverified_trainer_view_source_fingerprints"], 0)
             self.assertEqual(result["policy"]["effective"]["min_task_completion_complete"], 2)
             self.assertEqual(result["policy"]["effective"]["max_task_completion_incomplete"], 3)
             self.assertEqual(result["policy"]["effective"]["min_task_completion_check_pass_rate"], 0.5385)
@@ -122,6 +127,43 @@ class TrainingGateTests(unittest.TestCase):
             failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
             self.assertIn("min_source_fingerprint_rate", failed_checks)
             self.assertIn("max_unverified_source_fingerprints", failed_checks)
+
+    def test_gate_export_fails_unverified_trainer_view_source_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            gate = Path(tmp) / "training_gate.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            metrics_path = export / "dataset_metrics.json"
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+            coverage = metrics["trainer_view_source_fingerprint_coverage"]
+            coverage["fully_verified"] = 0
+            coverage["unverified"] = coverage["rows"]
+            coverage["fully_verified_rate"] = 0.0
+            metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "gate-export",
+                    "--training-export",
+                    str(export),
+                    "--min-trainer-view-source-fingerprint-rate",
+                    "1.0",
+                    "--max-unverified-trainer-view-source-fingerprints",
+                    "0",
+                    "--out",
+                    str(gate),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertEqual(result["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"], 0.0)
+            failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
+            self.assertIn("min_trainer_view_source_fingerprint_rate", failed_checks)
+            self.assertIn("max_unverified_trainer_view_source_fingerprints", failed_checks)
 
     def test_gate_export_fails_task_completion_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:
