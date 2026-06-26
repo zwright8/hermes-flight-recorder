@@ -315,6 +315,14 @@ assert lineage["schema_version"] == "hfr.lineage.v1"
 assert any(item["name"] == "scorecard" and item.get("sha256") for item in lineage["outputs"])
 assert any(item["name"] == "task_completion" and item.get("sha256") for item in lineage["outputs"])
 assert lineage["summary"]["evidence_link_count"] == len(lineage["evidence_links"])
+assert lineage["replay"]["tool"] == "flightrecorder"
+assert lineage["replay"]["argv"][:4] == ["python", "-m", "flightrecorder", "run"]
+assert "--scenario" in lineage["replay"]["argv"]
+assert "--trace" in lineage["replay"]["argv"]
+assert "--out" in lineage["replay"]["argv"]
+assert lineage["replay"]["input_fingerprints"]["scenario"]["sha256"]
+assert lineage["replay"]["input_fingerprints"]["source_trace"]["sha256"]
+assert lineage["summary"]["self_contained_replay"] == lineage["replay"]["self_contained"]
 
 rewards = [
     json.loads(line)

@@ -271,6 +271,10 @@ use `--preserve-paths` only for private local debugging.
 links, step-reward event indexes, preference references, failure-mode links,
 curriculum counts, trainer-ready view rows, dataset metrics, dataset-card
 sections, lineage hashes, and lineage evidence links are internally consistent.
+Run lineage also records `replay.argv`, `replay.command`, input fingerprints,
+and `replay.self_contained` so regression and training loops can tell whether a
+run can be reproduced from the published paths. Use `--preserve-paths` only for
+private runs when absolute replay commands are acceptable.
 Derived reward, preference, SFT, DPO, and reward-model rows carry matching
 source fingerprint fields so trainer-ready views remain auditable after they are
 separated from `episodes.jsonl`.

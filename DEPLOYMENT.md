@@ -94,6 +94,9 @@ network.
   generated assertions before adding it to a release suite.
 - Run `flightrecorder run-suite --scenarios <dir> --out runs --validate
   --strict` as the default CI evidence-bundle command.
+- Inspect `artifact_lineage.json.replay.self_contained` before relying on a
+  rerun command. Shared artifacts redact paths by default; use `--preserve-paths`
+  only in private CI when exact replay commands are required.
 - Add `--junit`, `--markdown`, and `--export-rl` when CI should publish native
   test reports, job summaries, and downstream training/failure-mode artifacts.
 - Add repeated `--metadata key=value` flags to label the evaluated agent, model,

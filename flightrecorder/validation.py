@@ -816,6 +816,9 @@ def _validate_lineage(
         for field_name in ("score", "passed", "critical_failures"):
             if lineage_scorecard.get(field_name) != scorecard.get(field_name):
                 target.errors.append(f"artifact_lineage.scorecard.{field_name} must match scorecard.{field_name}.")
+    inputs = _lineage_records(lineage.get("inputs"), target, "artifact_lineage.inputs")
+    for name, record in inputs.items():
+        _validate_lineage_input_record(name, record, target, f"artifact_lineage.inputs.{name}")
     outputs = _lineage_records(lineage.get("outputs"), target, "artifact_lineage.outputs")
     for output_name in ("normalized_trace", "scorecard", "task_completion", "report"):
         if output_name not in outputs:
@@ -838,16 +841,27 @@ def _validate_lineage(
     graph = lineage.get("graph")
     if not isinstance(graph, list):
         target.errors.append("artifact_lineage.graph must be a list.")
+    replay = lineage.get("replay")
+    if isinstance(replay, dict):
+        _validate_lineage_replay(replay, inputs, target)
+    else:
+        target.warnings.append("artifact_lineage.replay is missing; rerun the run to emit replay instructions.")
     summary = lineage.get("summary")
     if not isinstance(summary, dict):
         target.errors.append("artifact_lineage.summary must be an object.")
     else:
+        inputs_raw = lineage.get("inputs")
+        expected_input_count = len(inputs_raw) if isinstance(inputs_raw, list) else None
+        if summary.get("input_count") != expected_input_count:
+            target.errors.append("artifact_lineage.summary.input_count must match inputs length.")
         outputs_raw = lineage.get("outputs")
         expected_output_count = len(outputs_raw) if isinstance(outputs_raw, list) else None
         if summary.get("output_count") != expected_output_count:
             target.errors.append("artifact_lineage.summary.output_count must match outputs length.")
         if summary.get("evidence_link_count") != len(evidence_links):
             target.errors.append("artifact_lineage.summary.evidence_link_count must match evidence_links length.")
+        if isinstance(replay, dict) and summary.get("self_contained_replay") != replay.get("self_contained"):
+            target.errors.append("artifact_lineage.summary.self_contained_replay must match replay.self_contained.")
 
 
 def _validate_training_manifest(
@@ -3630,6 +3644,78 @@ def _validate_lineage_file_record(record: dict[str, Any], run_dir: Path, target:
         target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
     elif _sha256(file_path) != expected_hash:
         target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _validate_lineage_input_record(name: str, record: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    if record.get("role") != "input":
+        target.errors.append(f"{label}.role must be input.")
+    path_label = record.get("path")
+    if path_label is not None and not isinstance(path_label, str):
+        target.errors.append(f"{label}.path must be a string or null.")
+    if not isinstance(record.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if record.get("exists") is True:
+        if not _is_non_negative_int(record.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing inputs.")
+        if not _is_sha256(record.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing inputs.")
+    if "sensitive" in record and not isinstance(record.get("sensitive"), bool):
+        target.errors.append(f"{label}.sensitive must be a boolean when present.")
+    if name in {"scenario", "source_trace", "source_state_snapshot"} and record.get("exists") is not True:
+        target.warnings.append(f"{label}.exists is not true; replay may require restoring this input.")
+
+
+def _validate_lineage_replay(replay: dict[str, Any], inputs: dict[str, dict[str, Any]], target: ValidationTarget) -> None:
+    if replay.get("tool") != "flightrecorder":
+        target.errors.append("artifact_lineage.replay.tool must be flightrecorder.")
+    argv = replay.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) and item for item in argv):
+        target.errors.append("artifact_lineage.replay.argv must be a list of non-empty strings.")
+        argv = []
+    else:
+        expected_prefix = ["python", "-m", "flightrecorder", "run"]
+        if argv[:4] != expected_prefix:
+            target.errors.append("artifact_lineage.replay.argv must start with python -m flightrecorder run.")
+        for required_flag in ("--scenario", "--trace", "--out"):
+            if required_flag not in argv:
+                target.errors.append(f"artifact_lineage.replay.argv missing {required_flag}.")
+    if not isinstance(replay.get("command"), str) or not replay.get("command"):
+        target.errors.append("artifact_lineage.replay.command must be a non-empty string.")
+    if not isinstance(replay.get("self_contained"), bool):
+        target.errors.append("artifact_lineage.replay.self_contained must be a boolean.")
+    notes = replay.get("notes")
+    if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
+        target.errors.append("artifact_lineage.replay.notes must be a list of strings.")
+    fingerprints = replay.get("input_fingerprints")
+    if not isinstance(fingerprints, dict):
+        target.errors.append("artifact_lineage.replay.input_fingerprints must be an object.")
+        return
+    for required_name in ("scenario", "source_trace"):
+        if required_name not in fingerprints:
+            target.errors.append(f"artifact_lineage.replay.input_fingerprints missing {required_name}.")
+    for name, fingerprint in fingerprints.items():
+        label = f"artifact_lineage.replay.input_fingerprints.{name}"
+        if not isinstance(name, str) or not name:
+            target.errors.append("artifact_lineage.replay.input_fingerprints keys must be non-empty strings.")
+            continue
+        if not isinstance(fingerprint, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if "path" not in fingerprint or "sha256" not in fingerprint or "exists" not in fingerprint:
+            target.errors.append(f"{label} must contain path, sha256, and exists.")
+        if fingerprint.get("path") is not None and not isinstance(fingerprint.get("path"), str):
+            target.errors.append(f"{label}.path must be a string or null.")
+        if fingerprint.get("sha256") is not None and not _is_sha256(fingerprint.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+        if fingerprint.get("exists") is not None and not isinstance(fingerprint.get("exists"), bool):
+            target.errors.append(f"{label}.exists must be a boolean or null.")
+        input_record = inputs.get(name)
+        if input_record is None:
+            target.errors.append(f"{label} does not match an artifact_lineage input record.")
+            continue
+        for field_name in ("path", "sha256", "exists"):
+            if fingerprint.get(field_name) != input_record.get(field_name):
+                target.errors.append(f"{label}.{field_name} must match artifact_lineage.inputs.{name}.{field_name}.")
 
 
 def _validate_lineage_evidence_link(link: Any, index: int, event_count: int, target: ValidationTarget) -> None:

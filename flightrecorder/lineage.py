@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,14 @@ def build_run_lineage(
         if path is not None
     ]
     evidence_links = _evidence_links(scorecard)
+    replay = _replay_contract(
+        inputs=inputs,
+        artifacts=artifacts,
+        scenario_path=scenario_path,
+        source_trace_path=source_trace_path,
+        source_state_snapshot_path=source_state_snapshot_path,
+        preserve_paths=preserve_paths,
+    )
     return {
         "schema_version": LINEAGE_SCHEMA_VERSION,
         "scenario": {
@@ -84,10 +93,12 @@ def build_run_lineage(
         "outputs": outputs,
         "graph": _artifact_graph(artifacts),
         "evidence_links": evidence_links,
+        "replay": replay,
         "summary": {
             "input_count": len(inputs),
             "output_count": len(outputs),
             "evidence_link_count": len(evidence_links),
+            "self_contained_replay": replay["self_contained"],
         },
     }
 
@@ -162,6 +173,69 @@ def _evidence_links(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
                     link["state_field"] = ref.get("field")
             links.append(link)
     return links
+
+
+def _replay_contract(
+    *,
+    inputs: list[dict[str, Any]],
+    artifacts: dict[str, str | Path | None],
+    scenario_path: str | Path | None,
+    source_trace_path: str | Path,
+    source_state_snapshot_path: str | Path | None,
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    out_dir = _run_dir_from_artifacts(artifacts)
+    argv = [
+        "python",
+        "-m",
+        "flightrecorder",
+        "run",
+        "--scenario",
+        _display_path(Path(scenario_path), preserve_paths) if scenario_path is not None else "<missing-scenario-path>",
+        "--trace",
+        _display_path(Path(source_trace_path), preserve_paths),
+        "--out",
+        _display_path(out_dir, preserve_paths) if out_dir is not None else "<missing-output-dir>",
+    ]
+    if source_state_snapshot_path is not None:
+        argv.extend(["--state", _display_path(Path(source_state_snapshot_path), preserve_paths)])
+    replay_paths = [arg for index, arg in enumerate(argv) if index > 0 and argv[index - 1] in {"--scenario", "--trace", "--state", "--out"}]
+    input_fingerprints = {
+        str(record.get("name")): {
+            "path": record.get("path"),
+            "sha256": record.get("sha256"),
+            "exists": record.get("exists"),
+        }
+        for record in inputs
+        if isinstance(record.get("name"), str)
+    }
+    required_inputs = ("scenario", "source_trace", *(() if source_state_snapshot_path is None else ("source_state_snapshot",)))
+    has_required_hashes = all(isinstance(input_fingerprints.get(name, {}).get("sha256"), str) for name in required_inputs)
+    has_required_paths = all(isinstance(input_fingerprints.get(name, {}).get("path"), str) for name in required_inputs)
+    paths_are_public = all(not _is_redacted_path(path) for path in replay_paths)
+    self_contained = has_required_hashes and has_required_paths and paths_are_public and out_dir is not None
+    return {
+        "tool": "flightrecorder",
+        "argv": argv,
+        "command": " ".join(shlex.quote(arg) for arg in argv),
+        "input_fingerprints": input_fingerprints,
+        "self_contained": self_contained,
+        "notes": [
+            "Replay reruns normalization, scoring, report generation, and lineage from the recorded scenario and trace inputs.",
+            "self_contained is false when paths were redacted or required input fingerprints are missing.",
+        ],
+    }
+
+
+def _run_dir_from_artifacts(artifacts: dict[str, str | Path | None]) -> Path | None:
+    for path_value in artifacts.values():
+        if path_value is not None:
+            return Path(path_value).parent
+    return None
+
+
+def _is_redacted_path(value: str) -> bool:
+    return value.startswith("<redacted:") or value.startswith("<missing-")
 
 
 def _file_record(

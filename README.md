@@ -256,7 +256,9 @@ Each run directory contains:
   every rule.
 - `report.html`: self-contained static flight-recorder report.
 - `artifact_lineage.json`: provenance graph linking inputs, outputs, file
-  hashes, and scorecard evidence refs.
+  hashes, scorecard evidence refs, and a `replay` command contract for rerunning
+  the same scenario/trace/state inputs. `replay.self_contained` is false when
+  paths were redacted for sharing.
 - `regression_scenario.json`: emitted only for failing runs.
 
 `flightrecorder evidence-bundle` writes a top-level `evidence_bundle.json`
@@ -447,6 +449,12 @@ for strict fixture replay where the source trace should also match. Add
 `--fail-on-contract-drift` to fail CI on drift under the chosen scope, and
 `--fail-on-unverified-contracts` to require lineage fingerprints before trusting
 the comparison.
+
+Each lineage manifest also includes `replay.argv`, `replay.command`,
+`replay.input_fingerprints`, and `replay.self_contained`. Use
+`--preserve-paths` only in private CI or local debugging when exact absolute
+rerun commands matter; shared artifacts keep paths redacted and mark replay as
+not self-contained.
 
 Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
 files over multiple iterations. The trend JSON and HTML report show pass-rate

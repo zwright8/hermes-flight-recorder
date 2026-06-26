@@ -66,6 +66,17 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("task_completion", {item["name"] for item in lineage["outputs"]})
             self.assertTrue(any(link["target"] == "event" for link in lineage["evidence_links"]))
             self.assertTrue(any(link["target"] == "state_snapshot" for link in lineage["evidence_links"]))
+            self.assertEqual(lineage["replay"]["tool"], "flightrecorder")
+            self.assertEqual(lineage["replay"]["argv"][:4], ["python", "-m", "flightrecorder", "run"])
+            self.assertIn("--scenario", lineage["replay"]["argv"])
+            self.assertIn("--trace", lineage["replay"]["argv"])
+            self.assertIn("--state", lineage["replay"]["argv"])
+            self.assertIn("--out", lineage["replay"]["argv"])
+            self.assertIn("python -m flightrecorder run", lineage["replay"]["command"])
+            self.assertIn("scenario", lineage["replay"]["input_fingerprints"])
+            self.assertIn("source_trace", lineage["replay"]["input_fingerprints"])
+            self.assertIn("source_state_snapshot", lineage["replay"]["input_fingerprints"])
+            self.assertEqual(lineage["summary"]["self_contained_replay"], lineage["replay"]["self_contained"])
             self.assertTrue((out / "state_snapshot.json").exists())
             report = (out / "report.html").read_text(encoding="utf-8")
             self.assertIn("Task Completion", report)
@@ -73,6 +84,26 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("Send a reply to assigned thread email-123", report)
             self.assertIn("Read assigned thread email-123 before sending the reply", report)
             self.assertIn("Send exactly one successful reply to assigned thread email-123", report)
+
+    def test_run_lineage_replay_is_self_contained_when_paths_are_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            code = run_cli(
+                [
+                    "run",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                    "--out",
+                    str(out),
+                    "--preserve-paths",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            lineage = json.loads((out / "artifact_lineage.json").read_text(encoding="utf-8"))
+            self.assertTrue(lineage["replay"]["self_contained"])
+            self.assertTrue(lineage["summary"]["self_contained_replay"])
+            self.assertEqual(lineage["replay"]["argv"][lineage["replay"]["argv"].index("--out") + 1], str(out))
 
     def test_failing_report_redacts_secret_values_and_writes_regression(self):
         with tempfile.TemporaryDirectory() as tmp:
