@@ -350,16 +350,72 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 }
             )
 
+    handoff_paths: dict[str, Path] = {}
+    handoff_bundle: dict[str, Any] | None = None
+    if args.evidence_handoff:
+        if runs:
+            handoff_paths = {
+                "scenario_quality": out_dir / "scenario_quality.json",
+                "evidence_coverage": out_dir / "evidence_coverage.json",
+                "trace_observability": out_dir / "trace_observability.json",
+                "evidence_bundle": out_dir / "evidence_bundle.json",
+            }
+            scenario_quality = build_scenario_quality(
+                Path(args.scenarios),
+                pattern=args.pattern,
+                recursive=args.recursive,
+                require_traces=True,
+                preserve_paths=args.preserve_paths,
+            )
+            _write_json(handoff_paths["scenario_quality"], scenario_quality)
+            artifacts["scenario_quality"] = _display_path(handoff_paths["scenario_quality"], args.preserve_paths)
+
+            evidence_coverage = build_evidence_coverage(out_dir, preserve_paths=args.preserve_paths)
+            _write_json(handoff_paths["evidence_coverage"], evidence_coverage)
+            artifacts["evidence_coverage"] = _display_path(handoff_paths["evidence_coverage"], args.preserve_paths)
+
+            trace_observability = build_trace_observability(out_dir, preserve_paths=args.preserve_paths)
+            _write_json(handoff_paths["trace_observability"], trace_observability)
+            artifacts["trace_observability"] = _display_path(handoff_paths["trace_observability"], args.preserve_paths)
+            artifacts["evidence_bundle"] = _display_path(handoff_paths["evidence_bundle"], args.preserve_paths)
+        else:
+            errors.append(
+                {
+                    "scenario_path": _display_path(Path(args.scenarios), args.preserve_paths),
+                    "error": "Cannot build evidence handoff because no scenario runs completed.",
+                }
+            )
+
     validation_summary: dict[str, Any] | None = None
     validation_path = Path(args.validation_out) if args.validation_out else out_dir / "validation.json"
+    if args.validate:
+        artifacts["validation"] = _display_path(validation_path, args.preserve_paths)
+
+    summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
+    summary = _run_suite_summary(
+        scenarios_dir=Path(args.scenarios),
+        out_dir=out_dir,
+        runs=runs,
+        errors=errors,
+        artifacts=artifacts,
+        preserve_paths=args.preserve_paths,
+        training_manifest=training_manifest,
+        validation_summary=None,
+        metadata=metadata,
+    )
+    _write_json(summary_path, summary)
+
     if args.validate:
         validation_summary = validate_artifacts(
             runs_dir=out_dir,
             training_export_dir=training_out if args.export_rl else None,
+            evidence_coverage_paths=[handoff_paths["evidence_coverage"]] if args.evidence_handoff and handoff_paths else None,
+            trace_observability_paths=[handoff_paths["trace_observability"]] if args.evidence_handoff and handoff_paths else None,
+            scenario_quality_paths=[handoff_paths["scenario_quality"]] if args.evidence_handoff and handoff_paths else None,
+            suite_summary_paths=[summary_path],
             strict=args.strict,
         )
         _write_json(validation_path, validation_summary)
-        artifacts["validation"] = _display_path(validation_path, args.preserve_paths)
 
     summary = _run_suite_summary(
         scenarios_dir=Path(args.scenarios),
@@ -372,8 +428,22 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
         validation_summary=validation_summary,
         metadata=metadata,
     )
-    summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
     _write_json(summary_path, summary)
+
+    if args.evidence_handoff and handoff_paths:
+        handoff_bundle = build_evidence_bundle(
+            out_path=handoff_paths["evidence_bundle"],
+            runs_dir=out_dir,
+            suite_summary_path=summary_path,
+            scenario_quality_path=handoff_paths["scenario_quality"],
+            evidence_coverage_path=handoff_paths["evidence_coverage"],
+            trace_observability_path=handoff_paths["trace_observability"],
+            validation_path=validation_path if args.validate else None,
+            training_export_dir=training_out if args.export_rl else None,
+            preserve_paths=args.preserve_paths,
+        )
+        _write_json(handoff_paths["evidence_bundle"], handoff_bundle)
+
     print(
         f"SUITE total={summary['total']} passed={summary['passed']} failed={summary['failed']} "
         f"errors={summary['error_count']} summary={summary_path}"
@@ -382,6 +452,8 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
     if errors:
         return 1
     if args.validate and validation_summary and not validation_summary["passed"]:
+        return 1
+    if args.evidence_handoff and handoff_bundle and not handoff_bundle["passed"]:
         return 1
     if args.fail_on_failed and summary["failed"] > 0:
         return 1
@@ -1010,6 +1082,11 @@ def _parser() -> argparse.ArgumentParser:
     run_suite.add_argument("--validate", action="store_true", help="Also validate generated run and optional training artifacts")
     run_suite.add_argument("--validation-out", help="Validation JSON output path; defaults to <out>/validation.json")
     run_suite.add_argument("--strict", action="store_true", help="Treat validation warnings as validation failure")
+    run_suite.add_argument(
+        "--evidence-handoff",
+        action="store_true",
+        help="Also write scenario quality, evidence coverage, trace observability, and evidence bundle artifacts",
+    )
     run_suite.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json for each scenario")
     run_suite.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated artifacts")
     run_suite.add_argument(

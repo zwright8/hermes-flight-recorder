@@ -13,6 +13,7 @@ trap cleanup_local_artifacts EXIT
 python -m unittest discover
 python -m compileall -q flightrecorder scripts tests
 python scripts/live_hermes_smoke.py --help >/dev/null
+python -m flightrecorder run-suite --help | grep -- --evidence-handoff >/dev/null
 ./demo.sh
 rm -rf replay_runs
 python -m flightrecorder replay-bundle \

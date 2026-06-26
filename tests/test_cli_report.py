@@ -320,11 +320,14 @@ class CliReportTests(unittest.TestCase):
                     "--export-rl",
                     "--validate",
                     "--strict",
+                    "--evidence-handoff",
                 ]
             )
 
             self.assertEqual(code, 0)
             summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
+            validation = json.loads((out / "validation.json").read_text(encoding="utf-8"))
+            evidence_bundle = json.loads((out / "evidence_bundle.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["schema_version"], "hfr.run_suite.v1")
             self.assertEqual(summary["total"], 6)
             self.assertEqual(summary["passed"], 2)
@@ -332,13 +335,31 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(summary["error_count"], 0)
             self.assertTrue((out / "index.html").exists())
             self.assertTrue((out / "validation.json").exists())
+            self.assertTrue((out / "scenario_quality.json").exists())
+            self.assertTrue((out / "evidence_coverage.json").exists())
+            self.assertTrue((out / "trace_observability.json").exists())
+            self.assertTrue((out / "evidence_bundle.json").exists())
             self.assertTrue((out / "training_export" / "episodes.jsonl").exists())
             self.assertTrue((out / "email_reply_completion_good" / "scorecard.junit.xml").exists())
             self.assertTrue((out / "email_reply_completion_good" / "scorecard.md").exists())
             self.assertTrue((out / "email_reply_completion_good" / "artifact_lineage.json").exists())
             self.assertIn("lineage", summary["runs"][0])
             self.assertIn("training_export", summary["artifacts"])
+            self.assertIn("scenario_quality", summary["artifacts"])
+            self.assertIn("evidence_coverage", summary["artifacts"])
+            self.assertIn("trace_observability", summary["artifacts"])
+            self.assertIn("evidence_bundle", summary["artifacts"])
             self.assertTrue(summary["validation"]["passed"])
+            self.assertTrue(validation["passed"])
+            self.assertTrue(evidence_bundle["passed"])
+            self.assertEqual(evidence_bundle["metrics"]["trace_observability"]["run_count"], 6)
+            self.assertEqual(evidence_bundle["metrics"]["training_export"]["episode_count"], 6)
+            self.assertEqual(evidence_bundle["decision"]["recommendation"], "promote_handoff")
+            target_types = {target["type"] for target in validation["targets"]}
+            self.assertIn("suite_summary", target_types)
+            self.assertIn("scenario_quality", target_types)
+            self.assertIn("evidence_coverage", target_types)
+            self.assertIn("trace_observability", target_types)
             self.assertEqual(summary["training_export"]["failure_mode_count"], 10)
             self.assertEqual(summary["metrics"]["pass_rate"], 0.3333)
             self.assertEqual(summary["metrics"]["average_score"], 57.5)

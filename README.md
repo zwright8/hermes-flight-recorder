@@ -89,7 +89,8 @@ flightrecorder run-suite \
   --markdown \
   --export-rl \
   --validate \
-  --strict
+  --strict \
+  --evidence-handoff
 
 flightrecorder check-scenarios \
   --scenarios scenarios \
@@ -430,7 +431,8 @@ Use `flightrecorder run-suite` when you want the normal eval-loop entry point:
 it discovers scenario JSON files, creates one run directory per scenario ID,
 writes `suite_summary.json` with aggregate metrics, optionally emits
 JUnit/Markdown summaries for each run, optionally exports RL artifacts,
-optionally validates the generated bundle, and can fail CI when any scenario
+optionally validates generated artifacts, optionally writes the full evidence
+handoff package with `--evidence-handoff`, and can fail CI when any scenario
 fails via `--fail-on-failed`.
 
 Attach candidate/config identity with repeated `--metadata key=value` flags.
@@ -442,10 +444,19 @@ flightrecorder run-suite \
   --scenarios scenarios \
   --out runs \
   --export-rl \
+  --validate \
+  --evidence-handoff \
   --metadata agent=hermes \
   --metadata candidate=skill-router-v2 \
   --metadata model=Hermes-4
 ```
+
+`--evidence-handoff` writes `scenario_quality.json`,
+`evidence_coverage.json`, `trace_observability.json`, and
+`evidence_bundle.json` next to `suite_summary.json`. These default summaries
+package the evidence for review and automation; use the standalone
+`scenario-quality`, `evidence-coverage`, `trace-observability`, `gate-suite`,
+and `gate-export` commands when CI needs stricter policy thresholds.
 
 Use `flightrecorder validate --strict` to verify that generated run, training,
 suite-summary, suite-trend, and replay-bundle artifacts still satisfy the

@@ -93,7 +93,10 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
   bootstrap a scenario from a known-good run, then review and tighten the
   generated assertions before adding it to a release suite.
 - Run `flightrecorder run-suite --scenarios <dir> --out runs --validate
-  --strict` as the default CI evidence-bundle command.
+  --strict --evidence-handoff` as the default CI evidence-bundle command. It
+  creates the suite summary, per-run artifacts, scenario-quality summary,
+  evidence-coverage summary, trace-observability summary, validation summary,
+  and top-level evidence bundle in one pass.
 - Inspect `artifact_lineage.json.replay.self_contained` before relying on a
   rerun command. Use `flightrecorder replay` with
   `--lineage <run>/artifact_lineage.json --out <fresh-run>` to regenerate

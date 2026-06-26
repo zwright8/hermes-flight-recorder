@@ -26,6 +26,7 @@ flightrecorder run-suite \
   --export-rl \
   --validate \
   --strict \
+  --evidence-handoff \
   --metadata agent=hermes \
   --metadata candidate=skill-router-v2 \
   --metadata model=Hermes-4
@@ -34,6 +35,10 @@ flightrecorder run-suite \
 Metadata is a simple string map for experiment identity. It lets later compare,
 review, and training jobs know which agent, model, prompt, skill, or tool-policy
 configuration produced the evidence bundle.
+`--evidence-handoff` also writes `scenario_quality.json`,
+`evidence_coverage.json`, `trace_observability.json`, and
+`evidence_bundle.json` during the suite run, so the default handoff is a single
+command before stricter policy gates are applied.
 `flightrecorder compare-suite` carries this metadata into its JSON and HTML
 outputs so baseline/candidate comparisons remain tied to the evaluated configs.
 It also emits aggregate failed-rule and critical-failure deltas across paired

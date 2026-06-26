@@ -104,7 +104,7 @@ python -m flightrecorder scenario-quality \
   --max-weak-scenarios 0
 ```
 
-`./demo.sh` uses `flightrecorder run-suite --scenarios scenarios --out runs`
+`./demo.sh` uses `flightrecorder run-suite --scenarios scenarios --out runs --evidence-handoff`
 with JUnit, Markdown, RL export, validation, and strict contract checks enabled.
 
 Observed results:
@@ -234,9 +234,11 @@ Flight Recorder turns Hermes' experience into regression pressure.
 2. Score that run against a scenario policy.
 3. Validate the scenario definitions with `flightrecorder check-scenarios`.
 4. Measure scenario contract strength with `flightrecorder scenario-quality`.
-5. Run a full scenario directory with `flightrecorder run-suite` to produce a
-   suite-level evidence bundle, using `--metadata key=value` flags to identify
-   the Hermes candidate, model, prompt, skill, memory, or tool-policy revision.
+5. Run a full scenario directory with `flightrecorder run-suite --evidence-handoff`
+   to produce per-run reports, `suite_summary.json`, `scenario_quality.json`,
+   `evidence_coverage.json`, `trace_observability.json`, `validation.json`, and
+   `evidence_bundle.json`, using `--metadata key=value` flags to identify the
+   Hermes candidate, model, prompt, skill, memory, or tool-policy revision.
 6. If a scenario fails, save the generated `regression_scenario.json`.
 7. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.
@@ -267,9 +269,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
 13. Measure failed-rule attribution coverage with
    `flightrecorder evidence-coverage` before turning failures into review or
    training signal.
-14. Build an `evidence_bundle.json` manifest with `flightrecorder
-   evidence-bundle` so CI or downstream jobs can consume one readiness summary
-   over the included artifacts and gates.
+14. Add stricter standalone `scenario-quality`, `evidence-coverage`,
+   `trace-observability`, and `evidence-bundle` commands when CI or downstream
+   jobs need custom readiness thresholds beyond the default handoff package.
 15. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
 16. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
