@@ -152,7 +152,9 @@ trainer-side readiness signal. External automation should use
 validatable `allow_promotion` or `block_promotion` artifact for CI or trainer
 handoff jobs. The generated `decision_gate.json` carries
 `source_artifact.sha256`, tying the promotion decision to the exact source gate
-artifact it consumed.
+artifact it consumed. When that source path is available, validation also
+checks that the embedded `source_decision` still matches the source artifact's
+current decision block.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

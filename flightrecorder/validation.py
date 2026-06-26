@@ -3951,6 +3951,7 @@ def _validate_decision_gate(gate: dict[str, Any], target: ValidationTarget, sour
         target.errors.append("decision_gate.source_decision.blocking_check_count must be a non-negative integer or null.")
     if not isinstance(source.get("key_metrics"), dict):
         target.errors.append("decision_gate.source_decision.key_metrics must be an object.")
+    _validate_decision_gate_source_decision_matches_artifact(source, source_artifact, target, source_path)
     target.details.update(
         {
             "passed": gate.get("passed"),
@@ -3970,6 +3971,40 @@ def _validate_decision_gate_source_artifact(record: dict[str, Any], target: Vali
     if not isinstance(record.get("exists"), bool):
         target.errors.append("decision_gate.source_artifact.exists must be a boolean.")
     _validate_preflight_file_hash(record, target, "decision_gate.source_artifact", source_path)
+
+
+def _validate_decision_gate_source_decision_matches_artifact(
+    source_decision: dict[str, Any],
+    source_artifact: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    file_path = _resolve_preflight_record_path(source_artifact.get("path"), source_path)
+    if file_path is None or not file_path.exists() or not file_path.is_file():
+        return
+    try:
+        artifact = json.loads(file_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"decision_gate.source_artifact contains invalid JSON: {exc}")
+        return
+    if not isinstance(artifact, dict):
+        target.errors.append("decision_gate.source_artifact must contain a JSON object.")
+        return
+    actual_decision = artifact.get("decision") if isinstance(artifact.get("decision"), dict) else {}
+    expected = {
+        "schema_version": str(artifact.get("schema_version") or ""),
+        "passed": artifact.get("passed") if isinstance(artifact.get("passed"), bool) else None,
+        "recommendation": str(actual_decision.get("recommendation") or ""),
+        "readiness": str(actual_decision.get("readiness") or ""),
+        "summary": str(actual_decision.get("summary") or ""),
+        "blocking_check_count": actual_decision.get("blocking_check_count")
+        if _is_non_negative_int(actual_decision.get("blocking_check_count"))
+        else None,
+        "key_metrics": actual_decision.get("key_metrics") if isinstance(actual_decision.get("key_metrics"), dict) else {},
+    }
+    for field_name, expected_value in expected.items():
+        if source_decision.get(field_name) != expected_value:
+            target.errors.append(f"decision_gate.source_decision.{field_name} must match current source artifact.")
 
 
 def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:

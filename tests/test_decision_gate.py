@@ -67,6 +67,14 @@ class DecisionGateTests(unittest.TestCase):
             self.assertEqual(gate["source_decision"]["key_metrics"]["recurring_action_count"], 0)
             self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--strict"]), 0)
 
+            tampered = json.loads(json.dumps(gate))
+            tampered["source_decision"]["recommendation"] = "block_iteration"
+            decision_gate.write_text(json.dumps(tampered, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate)]), 1)
+
+            decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate), "--strict"]), 0)
+
             source.write_text(source.read_text(encoding="utf-8").replace("promote_iteration", "block_iteration"), encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate)]), 1)
 

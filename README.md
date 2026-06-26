@@ -668,9 +668,10 @@ Automation should read `decision.recommendation` (`promote_iteration` or
 check summaries. Use `flightrecorder gate-decision` when a generic CI job needs
 to turn that recommendation into a validatable `allow_promotion` or
 `block_promotion` artifact. The generated `decision_gate.json` fingerprints the
-source artifact with `source_artifact.sha256`, so validation can catch source
-drift when the source path is available. A copyable GitHub Actions example
-lives at `examples/github-actions/action-ledger-promotion-gate.yml`.
+source artifact with `source_artifact.sha256`; when the source path is
+available, validation re-hashes the file and verifies the embedded
+`source_decision` still matches the source artifact. A copyable GitHub Actions
+example lives at `examples/github-actions/action-ledger-promotion-gate.yml`.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
