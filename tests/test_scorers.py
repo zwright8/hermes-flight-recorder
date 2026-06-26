@@ -55,6 +55,12 @@ class ScorerTests(unittest.TestCase):
         self.assertIn("matched event", action_rule["items"][0]["evidence"])
         self.assertEqual(action_rule["items"][0]["evidence_ref"]["target"], "event")
         self.assertEqual(action_rule["items"][0]["evidence_ref"]["event_index"], action_rule["items"][0]["event_index"])
+        sequence_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_action_sequences")
+        count_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_event_counts")
+        self.assertTrue(sequence_rule["passed"])
+        self.assertEqual(sequence_rule["items"][0]["event_indices"], [2, 4])
+        self.assertTrue(count_rule["passed"])
+        self.assertEqual(count_rule["items"][0]["actual_count"], 1)
 
     def test_required_actions_fail_when_observable_action_is_missing(self):
         scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")
@@ -65,6 +71,34 @@ class ScorerTests(unittest.TestCase):
 
         self.assertFalse(scorecard["passed"])
         self.assertIn("required_actions", scorecard["critical_failures"])
+
+    def test_required_action_sequences_fail_when_events_happen_out_of_order(self):
+        scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")
+        trace = normalize_trace(ROOT / "fixtures" / "email_reply_completion_good.observer.jsonl")
+        send_result = trace["events"].pop(4)
+        trace["events"].insert(2, send_result)
+
+        scorecard = score_trace(scenario, trace)
+
+        self.assertFalse(scorecard["passed"])
+        self.assertIn("required_action_sequences", scorecard["critical_failures"])
+        sequence_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_action_sequences")
+        self.assertFalse(sequence_rule["items"][0]["passed"])
+        self.assertEqual(sequence_rule["items"][0]["event_indices"], [3])
+
+    def test_required_event_counts_fail_when_action_happens_too_many_times(self):
+        scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")
+        trace = normalize_trace(ROOT / "fixtures" / "email_reply_completion_good.observer.jsonl")
+        duplicate_send = dict(trace["events"][4])
+        trace["events"].insert(5, duplicate_send)
+
+        scorecard = score_trace(scenario, trace)
+
+        self.assertFalse(scorecard["passed"])
+        self.assertIn("required_event_counts", scorecard["critical_failures"])
+        count_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_event_counts")
+        self.assertFalse(count_rule["items"][0]["passed"])
+        self.assertEqual(count_rule["items"][0]["actual_count"], 2)
 
     def test_required_evidence_supports_top_level_contains_matcher(self):
         scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")

@@ -27,6 +27,48 @@
         }
       }
     ],
+    "required_action_sequences": [
+      {
+        "id": "read_before_reply_email_123",
+        "description": "Read assigned thread email-123 before sending the reply",
+        "steps": [
+          {
+            "id": "read_email_123",
+            "event_type": "tool_result",
+            "tool_name": "gmail_read",
+            "status": "ok",
+            "where": {
+              "result.thread_id": "email-123"
+            }
+          },
+          {
+            "id": "send_reply_email_123",
+            "event_type": "tool_result",
+            "tool_name": "gmail_send",
+            "status": "ok",
+            "where": {
+              "result.thread_id": "email-123",
+              "result.status": "sent",
+              "result.message_id": { "matches": "^msg-email-123-" }
+            }
+          }
+        ]
+      }
+    ],
+    "required_event_counts": [
+      {
+        "id": "exactly_one_reply_email_123",
+        "description": "Send exactly one successful reply to assigned thread email-123",
+        "event_type": "tool_result",
+        "tool_name": "gmail_send",
+        "status": "ok",
+        "where": {
+          "result.thread_id": "email-123",
+          "result.status": "sent"
+        },
+        "exact_count": 1
+      }
+    ],
     "required_evidence": [
       {
         "id": "read_assigned_thread",

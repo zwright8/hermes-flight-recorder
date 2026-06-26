@@ -28,6 +28,8 @@ DEFAULT_ASSERTIONS: dict[str, Any] = {
     "final_not_contains": [],
     "required_evidence": [],
     "required_actions": [],
+    "required_action_sequences": [],
+    "required_event_counts": [],
 }
 
 DEFAULT_SCORING: dict[str, Any] = {"pass_threshold": 90}
@@ -131,22 +133,44 @@ def _validate_scenario(scenario: dict[str, Any]) -> None:
     if not isinstance(actions, list):
         raise ScenarioError("Assertions field required_actions must be a list")
     for item in actions:
-        if not isinstance(item, dict):
-            raise ScenarioError("Each required_actions item must be an object")
-        if "id" not in item:
-            raise ScenarioError("required_actions item missing field: id")
-        if not isinstance(item["id"], str) or not item["id"].strip():
-            raise ScenarioError("required_actions item id must be a non-empty string")
-        if "description" in item and not isinstance(item["description"], str):
-            raise ScenarioError(f"required_actions item {item['id']} description must be a string")
-        for field in ("event_type", "tool_name", "status"):
-            if field in item and not isinstance(item[field], str):
-                raise ScenarioError(f"required_actions item {item['id']} {field} must be a string")
-        has_selector = any(field in item for field in ("event_type", "tool_name", "status"))
-        has_matcher = _has_matcher(item)
-        if not has_selector and not has_matcher:
-            raise ScenarioError(f"required_actions item {item['id']} must define an event selector or field matcher")
-        _validate_matchers(item, f"required_actions.{item['id']}", require_matcher=False)
+        _validate_event_assertion(item, "required_actions", require_id=True)
+
+    sequences = assertions.get("required_action_sequences", [])
+    if not isinstance(sequences, list):
+        raise ScenarioError("Assertions field required_action_sequences must be a list")
+    for sequence in sequences:
+        if not isinstance(sequence, dict):
+            raise ScenarioError("Each required_action_sequences item must be an object")
+        if "id" not in sequence:
+            raise ScenarioError("required_action_sequences item missing field: id")
+        if not isinstance(sequence["id"], str) or not sequence["id"].strip():
+            raise ScenarioError("required_action_sequences item id must be a non-empty string")
+        if "description" in sequence and not isinstance(sequence["description"], str):
+            raise ScenarioError(f"required_action_sequences item {sequence['id']} description must be a string")
+        steps = sequence.get("steps")
+        if not isinstance(steps, list) or not steps:
+            raise ScenarioError(f"required_action_sequences item {sequence['id']} steps must be a non-empty list")
+        for index, step in enumerate(steps):
+            _validate_event_assertion(step, f"required_action_sequences.{sequence['id']}.steps[{index}]", require_id=False)
+
+    counts = assertions.get("required_event_counts", [])
+    if not isinstance(counts, list):
+        raise ScenarioError("Assertions field required_event_counts must be a list")
+    for item in counts:
+        _validate_event_assertion(item, "required_event_counts", require_id=True)
+        count_fields = [field for field in ("exact_count", "min_count", "max_count") if field in item]
+        if not count_fields:
+            raise ScenarioError(f"required_event_counts item {item['id']} must define exact_count, min_count, or max_count")
+        for field in count_fields:
+            if not isinstance(item[field], int) or isinstance(item[field], bool) or item[field] < 0:
+                raise ScenarioError(f"required_event_counts item {item['id']} {field} must be a non-negative integer")
+        if "min_count" in item and "max_count" in item and item["min_count"] > item["max_count"]:
+            raise ScenarioError(f"required_event_counts item {item['id']} min_count cannot exceed max_count")
+        if "exact_count" in item and (
+            ("min_count" in item and item["exact_count"] < item["min_count"])
+            or ("max_count" in item and item["exact_count"] > item["max_count"])
+        ):
+            raise ScenarioError(f"required_event_counts item {item['id']} exact_count conflicts with min_count/max_count")
 
     threshold = scoring.get("pass_threshold")
     if not isinstance(threshold, int) or not 0 <= threshold <= 100:
@@ -203,6 +227,29 @@ def _validate_matchers(item: dict[str, Any], label: str, *, require_matcher: boo
                     _compile_regex(expected, f"{label}.{field}.{path}")
                 elif isinstance(expected, (dict, list)):
                     raise ScenarioError(f"{label}.{field}.{path} must be a scalar value")
+
+
+def _validate_event_assertion(item: Any, label: str, *, require_id: bool) -> None:
+    if not isinstance(item, dict):
+        raise ScenarioError(f"Each {label} item must be an object")
+    if require_id:
+        if "id" not in item:
+            raise ScenarioError(f"{label} item missing field: id")
+        if not isinstance(item["id"], str) or not item["id"].strip():
+            raise ScenarioError(f"{label} item id must be a non-empty string")
+    elif "id" in item and (not isinstance(item["id"], str) or not item["id"].strip()):
+        raise ScenarioError(f"{label} item id must be a non-empty string")
+    item_id = item.get("id", label)
+    if "description" in item and not isinstance(item["description"], str):
+        raise ScenarioError(f"{label} item {item_id} description must be a string")
+    for field in ("event_type", "tool_name", "status"):
+        if field in item and not isinstance(item[field], str):
+            raise ScenarioError(f"{label} item {item_id} {field} must be a string")
+    has_selector = any(field in item for field in ("event_type", "tool_name", "status"))
+    has_matcher = _has_matcher(item)
+    if not has_selector and not has_matcher:
+        raise ScenarioError(f"{label} item {item_id} must define an event selector or field matcher")
+    _validate_matchers(item, f"{label}.{item_id}", require_matcher=False)
 
 
 def _validate_final_matcher(item: dict[str, Any], label: str) -> None:

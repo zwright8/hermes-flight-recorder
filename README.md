@@ -306,6 +306,8 @@ views, step attribution, task-family coverage, and zero quality flags:
 - `Budget And Delegation`: tool-call, API-call, subagent, and depth limits.
 - `Required Evidence`: checks that claims have matching event evidence.
 - `Required Actions`: structured task-completion checks over trace events.
+- `Required Action Sequences`: ordered workflow checks, such as read before send.
+- `Required Event Counts`: cardinality checks, such as exactly one send per task.
 - `Final Answer`: simple contains and not-contains assertions.
 
 Scores start at 100. Critical rule failures force the run to fail even if the
@@ -330,10 +332,11 @@ flightrecorder draft-scenario \
 ```
 
 The draft is intentionally conservative: it derives budgets, creates structured
-required actions from successful tool-result events, avoids long body/content
-fields and secret-like values, and adds review warnings under `draft.warnings`.
-Treat it as a starting point, then tighten task-specific assertions before using
-it as a benchmark or training signal.
+required actions from successful tool-result events, records the observed order
+as a required action sequence when there are multiple successful tool results,
+avoids long body/content fields and secret-like values, and adds review warnings
+under `draft.warnings`. Treat it as a starting point, then tighten task-specific
+assertions before using it as a benchmark or training signal.
 
 For example, an email automation scenario can require one successful send event
 per assigned email thread. The matcher is structured, so users do not need to
@@ -363,14 +366,54 @@ write brittle whole-event regexes:
         }
       }
     ],
+    "required_action_sequences": [
+      {
+        "id": "read_before_reply_email_123",
+        "description": "Read the assigned thread before sending the reply",
+        "steps": [
+          {
+            "id": "read_thread",
+            "event_type": "tool_result",
+            "tool_name": "gmail_read",
+            "status": "ok",
+            "where": { "result.thread_id": "email-123" }
+          },
+          {
+            "id": "send_reply",
+            "event_type": "tool_result",
+            "tool_name": "gmail_send",
+            "status": "ok",
+            "where": {
+              "result.thread_id": "email-123",
+              "result.status": "sent"
+            }
+          }
+        ]
+      }
+    ],
+    "required_event_counts": [
+      {
+        "id": "exactly_one_reply_email_123",
+        "description": "Send exactly one successful reply to email-123",
+        "event_type": "tool_result",
+        "tool_name": "gmail_send",
+        "status": "ok",
+        "where": {
+          "result.thread_id": "email-123",
+          "result.status": "sent"
+        },
+        "exact_count": 1
+      }
+    ],
     "final_not_contains": ["I think", "probably", "should be sent"]
   }
 }
 ```
 
-That can prove the trace contains a successful send event. It cannot prove
-facts outside the trace, such as whether a remote recipient read the email or a
-mail provider later bounced it.
+That can prove the trace contains a successful send event, that the assigned
+thread was read first, and that the agent did not send duplicate replies. It
+cannot prove facts outside the trace, such as whether a remote recipient read
+the email or a mail provider later bounced it.
 
 `required_evidence` also supports the same structured `where`,
 `field_equals`, `field_contains`, and `field_matches` matchers for lower-level

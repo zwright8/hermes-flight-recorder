@@ -151,19 +151,25 @@ def _render_violation(rule: dict[str, Any]) -> str:
 
 
 def _render_action_checklist(scorecard: dict[str, Any]) -> str:
-    action_rule = next((rule for rule in scorecard.get("rules", []) if rule.get("id") == "required_actions"), None)
-    if not action_rule or not action_rule.get("items"):
+    evidence_rules = [
+        rule
+        for rule in scorecard.get("rules", [])
+        if rule.get("id") in {"required_actions", "required_action_sequences", "required_event_counts"} and rule.get("items")
+    ]
+    if not evidence_rules:
         return ""
     rows = []
-    for item in action_rule.get("items", []):
-        passed = bool(item.get("passed"))
-        status = "PASS" if passed else "FAIL"
-        cls = "" if passed else " fail"
-        rows.append(
-            f"<article class=\"check{cls}\"><strong><span>{_esc(item.get('description') or item.get('id'))}</span>"
-            f"<span>{status}</span></strong><p class=\"muted\">{_esc(item.get('evidence', ''))}</p></article>"
-        )
-    return f"<section class=\"panel\"><h2>Task Checklist</h2><div class=\"checklist\">{''.join(rows)}</div></section>"
+    for rule in evidence_rules:
+        for item in rule.get("items", []):
+            passed = bool(item.get("passed"))
+            status = "PASS" if passed else "FAIL"
+            cls = "" if passed else " fail"
+            rows.append(
+                f"<article class=\"check{cls}\"><strong><span>{_esc(item.get('description') or item.get('id'))}</span>"
+                f"<span>{status}</span></strong><p class=\"muted\">{_esc(rule.get('name', 'Evidence'))}: "
+                f"{_esc(item.get('evidence', ''))}</p></article>"
+            )
+    return f"<section class=\"panel\"><h2>Task Evidence Checklist</h2><div class=\"checklist\">{''.join(rows)}</div></section>"
 
 
 def _render_event(index: int, event: dict[str, Any], secret_patterns: list[str]) -> str:

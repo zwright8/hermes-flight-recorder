@@ -16,6 +16,20 @@ DEFAULT_FINAL_NOT_CONTAINS = ["probably", "should be", "I think"]
 _SENSITIVE_KEY_RE = re.compile(r"(?i)(api[_-]?key|secret|token|password|authorization|bearer)")
 _TEXTY_KEY_RE = re.compile(r"(?i)^(body|content|contents|description|html|message|messages|summary|text)$")
 _PREFERRED_KEY_RE = re.compile(r"(?i)(^id$|_id$|^status$|^state$|^path$|^url$|^name$|^file(name)?$)")
+_SEQUENCE_STEP_FIELDS = {
+    "event_type",
+    "tool_name",
+    "status",
+    "where",
+    "field_equals",
+    "field_contains",
+    "field_matches",
+    "field",
+    "equals",
+    "contains",
+    "matches",
+    "pattern",
+}
 
 
 def draft_scenario(
@@ -37,6 +51,7 @@ def draft_scenario(
         "Only observable trace evidence can be checked; external side effects still need tool or observer evidence.",
     ]
     required_actions, action_warnings = _required_actions(events, max_actions)
+    required_action_sequences = _required_action_sequences(required_actions)
     warnings.extend(action_warnings)
 
     required_evidence: list[dict[str, Any]] = []
@@ -57,6 +72,7 @@ def draft_scenario(
         },
         "assertions": {
             "required_actions": required_actions,
+            "required_action_sequences": required_action_sequences,
             "required_evidence": required_evidence,
             "final_not_contains": DEFAULT_FINAL_NOT_CONTAINS,
         },
@@ -131,6 +147,28 @@ def _required_actions(events: list[Any], max_actions: int) -> tuple[list[dict[st
     if not actions:
         warnings.append("No tool-result events were available for required_actions; add task-specific evidence manually.")
     return actions, warnings
+
+
+def _required_action_sequences(required_actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if len(required_actions) < 2:
+        return []
+    steps: list[dict[str, Any]] = []
+    for index, action in enumerate(required_actions, start=1):
+        step = {
+            key: value
+            for key, value in action.items()
+            if key in _SEQUENCE_STEP_FIELDS
+        }
+        step["id"] = f"step_{index}_{safe_scenario_id(str(action.get('tool_name') or action.get('id') or 'event'))}"
+        step["description"] = str(action.get("description") or step["id"])
+        steps.append(step)
+    return [
+        {
+            "id": "observed_successful_tool_result_order",
+            "description": "Successful tool-result events occurred in the observed source-trace order",
+            "steps": steps,
+        }
+    ]
 
 
 def _safe_where_matchers(event: dict[str, Any]) -> dict[str, Any]:

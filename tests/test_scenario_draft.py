@@ -43,8 +43,11 @@ class ScenarioDraftTests(unittest.TestCase):
             self.assertEqual(code, 0)
             scenario = load_scenario(draft_path)
             actions = scenario["assertions"]["required_actions"]
+            sequences = scenario["assertions"]["required_action_sequences"]
             self.assertEqual([action["tool_name"] for action in actions], ["gmail_read", "gmail_send"])
             self.assertEqual(actions[1]["where"]["result.thread_id"], "email-123")
+            self.assertEqual(sequences[0]["id"], "observed_successful_tool_result_order")
+            self.assertEqual([step["tool_name"] for step in sequences[0]["steps"]], ["gmail_read", "gmail_send"])
             rendered = draft_path.read_text(encoding="utf-8")
             self.assertNotIn("Can you confirm the invoice total", rendered)
             self.assertNotIn("Thanks for checking", rendered)
@@ -124,6 +127,7 @@ class ScenarioDraftTests(unittest.TestCase):
         actions = scenario["assertions"]["required_actions"]
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0]["tool_name"], "email_read")
+        self.assertEqual(scenario["assertions"]["required_action_sequences"], [])
 
 
 if __name__ == "__main__":

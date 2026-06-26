@@ -19,6 +19,8 @@ def score_trace(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, An
         _budget_rule(scenario, trace),
         _evidence_rule(scenario, trace),
         _required_actions_rule(scenario, trace),
+        _required_action_sequences_rule(scenario, trace),
+        _required_event_counts_rule(scenario, trace),
         _final_answer_rule(scenario, trace),
     ]
     score = 100
@@ -259,6 +261,142 @@ def _required_actions_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> d
     )
 
 
+def _required_action_sequences_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    sequences = scenario.get("assertions", {}).get("required_action_sequences") or []
+    if not sequences:
+        return _rule(
+            "required_action_sequences",
+            "Required Action Sequences",
+            True,
+            ["No required action sequence assertions configured."],
+            penalty=30,
+            critical=True,
+            items=[],
+        )
+
+    failures: list[str] = []
+    passes: list[str] = []
+    items: list[dict[str, Any]] = []
+    refs: list[dict[str, Any]] = []
+    for sequence in sequences:
+        sequence_id = str(sequence["id"])
+        description = str(sequence.get("description") or sequence_id)
+        result = _match_action_sequence(trace, sequence.get("steps") or [])
+        if result["passed"]:
+            evidence = f"{sequence_id}: matched ordered events {result['event_indices']}"
+            passes.append(evidence)
+        else:
+            missing = result.get("missing_step") or "unknown"
+            evidence = f"{sequence_id}: missing ordered step {missing!r} after event #{result.get('last_event_index')}"
+            failures.append(evidence)
+
+        item_refs: list[dict[str, Any]] = []
+        for step in result["steps"]:
+            if step.get("passed") and isinstance(step.get("event_index"), int):
+                ref = _event_ref(
+                    step["event_index"],
+                    step["event"],
+                    "required_action_sequence_step",
+                    sequence_id=sequence_id,
+                    step_id=step.get("id"),
+                    passed=True,
+                )
+            else:
+                ref = _episode_ref(
+                    "missing_required_action_sequence_step",
+                    sequence_id=sequence_id,
+                    step_id=step.get("id"),
+                    passed=False,
+                )
+            item_refs.append(ref)
+            refs.append(ref)
+        items.append(
+            {
+                "id": sequence_id,
+                "description": description,
+                "passed": bool(result["passed"]),
+                "evidence": evidence,
+                "event_indices": result["event_indices"],
+                "steps": [_public_step_result(step) for step in result["steps"]],
+                "evidence_refs": item_refs,
+            }
+        )
+
+    return _rule(
+        "required_action_sequences",
+        "Required Action Sequences",
+        not failures,
+        failures or passes,
+        penalty=30,
+        critical=True,
+        items=items,
+        evidence_refs=refs,
+    )
+
+
+def _required_event_counts_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    counts = scenario.get("assertions", {}).get("required_event_counts") or []
+    if not counts:
+        return _rule(
+            "required_event_counts",
+            "Required Event Counts",
+            True,
+            ["No required event count assertions configured."],
+            penalty=30,
+            critical=True,
+            items=[],
+        )
+
+    failures: list[str] = []
+    passes: list[str] = []
+    items: list[dict[str, Any]] = []
+    refs: list[dict[str, Any]] = []
+    for item in counts:
+        count_id = str(item["id"])
+        description = str(item.get("description") or count_id)
+        matches = _find_matching_events(trace, item)
+        actual = len(matches)
+        passed, expected = _count_expectation(item, actual)
+        evidence = f"{count_id}: observed {actual} matching event(s); expected {expected}"
+        if passed:
+            passes.append(evidence)
+        else:
+            failures.append(evidence)
+        item_refs: list[dict[str, Any]] = []
+        if matches:
+            for index, event in matches:
+                ref = _event_ref(index, event, "required_event_count_match", count_id=count_id, passed=passed)
+                item_refs.append(ref)
+                refs.append(ref)
+        elif not passed:
+            ref = _episode_ref("missing_required_event_count", count_id=count_id, actual=actual, expected=expected, passed=False)
+            item_refs.append(ref)
+            refs.append(ref)
+        items.append(
+            {
+                "id": count_id,
+                "description": description,
+                "passed": passed,
+                "evidence": evidence,
+                "actual_count": actual,
+                "expected": expected,
+                "event_indices": [index for index, _event in matches],
+                "evidence_refs": item_refs,
+            }
+        )
+
+    return _rule(
+        "required_event_counts",
+        "Required Event Counts",
+        not failures,
+        failures or passes,
+        penalty=30,
+        critical=True,
+        items=items,
+        evidence_refs=refs,
+    )
+
+
 def _final_answer_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
     assertions = scenario.get("assertions", {})
     final_answer = str(trace.get("final_answer") or "")
@@ -293,6 +431,94 @@ def _find_matching_event(trace: dict[str, Any], item: dict[str, Any]) -> tuple[i
         if _event_matches_assertion(event, item):
             return index, event
     return None
+
+
+def _find_matching_events(trace: dict[str, Any], item: dict[str, Any]) -> list[tuple[int, dict[str, Any]]]:
+    return [
+        (index, event)
+        for index, event in enumerate(trace.get("events", []))
+        if _event_matches_assertion(event, item)
+    ]
+
+
+def _match_action_sequence(trace: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    events = trace.get("events", [])
+    cursor = -1
+    event_indices: list[int] = []
+    step_results: list[dict[str, Any]] = []
+    for step_index, step in enumerate(steps):
+        matched: tuple[int, dict[str, Any]] | None = None
+        for event_index in range(cursor + 1, len(events)):
+            event = events[event_index]
+            if _event_matches_assertion(event, step):
+                matched = (event_index, event)
+                break
+        step_id = str(step.get("id") or f"step_{step_index + 1}")
+        if matched is None:
+            step_results.append(
+                {
+                    "id": step_id,
+                    "description": str(step.get("description") or step_id),
+                    "passed": False,
+                    "event_index": None,
+                    "summary": _assertion_summary(step),
+                }
+            )
+            return {
+                "passed": False,
+                "event_indices": event_indices,
+                "last_event_index": cursor,
+                "missing_step": step_id,
+                "steps": step_results,
+            }
+        cursor, event = matched
+        event_indices.append(cursor)
+        step_results.append(
+            {
+                "id": step_id,
+                "description": str(step.get("description") or step_id),
+                "passed": True,
+                "event_index": cursor,
+                "event": event,
+                "summary": _assertion_summary(step),
+            }
+        )
+    return {
+        "passed": True,
+        "event_indices": event_indices,
+        "last_event_index": cursor,
+        "missing_step": None,
+        "steps": step_results,
+    }
+
+
+def _public_step_result(step: dict[str, Any]) -> dict[str, Any]:
+    result = {
+        "id": step["id"],
+        "description": step["description"],
+        "passed": bool(step["passed"]),
+        "event_index": step.get("event_index"),
+        "summary": step.get("summary", ""),
+    }
+    return result
+
+
+def _count_expectation(item: dict[str, Any], actual: int) -> tuple[bool, str]:
+    expectations: list[str] = []
+    passed = True
+    if "exact_count" in item:
+        expected = int(item["exact_count"])
+        expectations.append(f"exactly {expected}")
+        passed = passed and actual == expected
+    if "min_count" in item:
+        expected = int(item["min_count"])
+        expectations.append(f"at least {expected}")
+        passed = passed and actual >= expected
+    if "max_count" in item:
+        expected = int(item["max_count"])
+        expectations.append(f"at most {expected}")
+        passed = passed and actual <= expected
+    return passed, ", ".join(expectations)
 
 
 def _event_matches_assertion(event: dict[str, Any], item: dict[str, Any]) -> bool:

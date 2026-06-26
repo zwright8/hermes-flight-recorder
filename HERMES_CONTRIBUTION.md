@@ -205,8 +205,10 @@ That gives the Hermes team a practical improvement loop:
   failure classes without opening every report,
 - suite gates can fail CI on absolute acceptance thresholds, not only
   before/after regressions,
-- arbitrary task-completion loops can use `required_actions` to prove work was
-  completed from tool-result evidence,
+- arbitrary task-completion loops can use `required_actions`,
+  `required_action_sequences`, and `required_event_counts` to prove that work
+  was completed from tool-result evidence, happened in the required order, and
+  did not under- or over-execute,
 - deterministic scorecards can become terminal rewards, step-level reward
   attribution, preference pairs, failure taxonomies, and curriculum metadata,
 - generated artifacts can be contract-validated before they become evidence,
@@ -261,7 +263,8 @@ The goal is accountability, not containment. Flight Recorder does not mutate
 Hermes runtime behavior and is not a sandbox. It gives maintainers a repeatable
 way to see whether a run violated explicit scenario policies such as forbidden
 commands/URLs, secret exposure, unsupported artifact claims, task-completion
-evidence, and delegation budget limits.
+evidence, ordered workflow evidence, cardinality evidence, and delegation
+budget limits.
 
 Demo evidence:
 - The release check passes across the generated demo, validation, audit, and

@@ -24,6 +24,10 @@ class ScenarioSchemaTests(unittest.TestCase):
         action = scenario["assertions"]["required_actions"][0]
         self.assertEqual(action["id"], "reply_email_123")
         self.assertEqual(action["where"]["result.thread_id"], "email-123")
+        sequence = scenario["assertions"]["required_action_sequences"][0]
+        count = scenario["assertions"]["required_event_counts"][0]
+        self.assertEqual(sequence["steps"][0]["tool_name"], "gmail_read")
+        self.assertEqual(count["exact_count"], 1)
 
     def test_missing_required_field_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,6 +117,50 @@ class ScenarioSchemaTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ScenarioError, "must define an event selector or field matcher"):
+                load_scenario(path)
+
+    def test_required_action_sequences_reject_empty_steps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_action_sequences": [
+                                {"id": "empty_sequence", "steps": []}
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "steps must be a non-empty list"):
+                load_scenario(path)
+
+    def test_required_event_counts_require_a_count_constraint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_event_counts": [
+                                {"id": "unbounded_count", "event_type": "tool_result"}
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "must define exact_count"):
                 load_scenario(path)
 
     def test_structured_evidence_rejects_bad_regex(self):

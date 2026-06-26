@@ -55,8 +55,10 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("<testsuite", junit.read_text(encoding="utf-8"))
             self.assertIn("Flight Recorder Scorecard", markdown.read_text(encoding="utf-8"))
             report = (out / "report.html").read_text(encoding="utf-8")
-            self.assertIn("Task Checklist", report)
+            self.assertIn("Task Evidence Checklist", report)
             self.assertIn("Send a reply to assigned thread email-123", report)
+            self.assertIn("Read assigned thread email-123 before sending the reply", report)
+            self.assertIn("Send exactly one successful reply to assigned thread email-123", report)
 
     def test_failing_report_redacts_secret_values_and_writes_regression(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -129,7 +129,14 @@ def _check_useful_constraints(entry: dict[str, Any], scenario: dict[str, Any]) -
     )
     has_assertions = any(
         assertions.get(field)
-        for field in ("final_contains", "final_not_contains", "required_evidence", "required_actions")
+        for field in (
+            "final_contains",
+            "final_not_contains",
+            "required_evidence",
+            "required_actions",
+            "required_action_sequences",
+            "required_event_counts",
+        )
     )
     if not has_policy and not has_assertions:
         entry["warnings"].append("scenario has no policy constraints or assertions; scoring evidence may be uninformative.")
@@ -154,6 +161,8 @@ def _assertion_summary(assertions: dict[str, Any]) -> dict[str, int]:
         "final_not_contains": len(assertions.get("final_not_contains", [])),
         "required_evidence": len(assertions.get("required_evidence", [])),
         "required_actions": len(assertions.get("required_actions", [])),
+        "required_action_sequences": len(assertions.get("required_action_sequences", [])),
+        "required_event_counts": len(assertions.get("required_event_counts", [])),
     }
 
 
