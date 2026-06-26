@@ -88,7 +88,9 @@ flightrecorder gate-compare-export \
 ```
 
 This can require enough candidate wins, specific scenario coverage, expected
-rule fixes, no baseline-win regressions, and no newly critical failure classes.
+rule fixes, no baseline-win regressions, no newly critical failure classes, and
+zero drifted or unverified comparison contracts when you add
+`--max-contract-drifts 0 --max-unverified-contracts 0`.
 
 Or export training artifacts from an existing runs directory:
 
@@ -214,8 +216,8 @@ The export directory contains:
   rows.
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
-- `dataset_metrics.json`: machine-readable export coverage, reward/score
-  distribution, failure pressure, and quality flags.
+- `dataset_metrics.json`: machine-readable export coverage, source-fingerprint
+  coverage, reward/score distribution, failure pressure, and quality flags.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
 - `manifest.json`: generation settings, counts, output paths, caveats, and
@@ -224,14 +226,18 @@ The export directory contains:
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
 use the redacted evidence surface rather than raw sensitive traces. When a run
 contains `artifact_lineage.json`, each episode also includes `source_lineage`
-so downstream training rows can be traced back to the provenance graph that
-connected source trace, scorecard, report, and evidence refs.
+and `source_fingerprints` so downstream training rows can be traced back to the
+provenance graph and filtered by the scenario/source-trace hashes that produced
+the label.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
 links, step-reward event indexes, preference references, failure-mode links,
 curriculum counts, trainer-ready view rows, dataset metrics, dataset-card
 sections, lineage hashes, and lineage evidence links are internally consistent.
+Derived reward, preference, SFT, DPO, and reward-model rows carry matching
+source fingerprint fields so trainer-ready views remain auditable after they are
+separated from `episodes.jsonl`.
 
 ## Episode Records
 
@@ -327,8 +333,8 @@ The export contains:
   sides, score deltas, rule fixes, rule regressions, and rationale.
 - `improvement_dpo.jsonl`: DPO-shaped rows whose `chosen` and `rejected` fields
   are compact behavior transcripts with tool-call/tool-result evidence.
-- `manifest.json`: counts, metadata, skipped pairs, source directories, and
-  output paths.
+- `manifest.json`: counts, metadata, skipped pairs, contract-drift counts,
+  source directories, and output paths.
 - `IMPROVEMENT_CARD.md`: a human-readable summary of candidate wins and
   baseline wins.
 
@@ -341,7 +347,9 @@ can distinguish evidence-backed completion from unsupported claims.
 `manifest.json` plus `improvement_pairs.jsonl` and can block a training handoff
 unless the comparison export contains enough pairs and DPO rows, enough
 candidate wins, required fixed rules, zero forbidden baseline wins, zero
-forbidden rule regressions, and zero newly critical failure classes.
+forbidden rule regressions, zero newly critical failure classes, and no drifted
+or unverified contracts when configured with `--max-contract-drifts 0
+--max-unverified-contracts 0`.
 
 ## Trainer-Ready Views
 

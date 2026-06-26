@@ -634,6 +634,8 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
         min_candidate_wins=options["min_candidate_wins"],
         max_baseline_wins=options["max_baseline_wins"],
         max_skipped_pairs=options["max_skipped_pairs"],
+        max_contract_drifts=options["max_contract_drifts"],
+        max_unverified_contracts=options["max_unverified_contracts"],
         require_scenarios=options["require_scenarios"],
         require_candidate_win_scenarios=options["require_candidate_win_scenarios"],
         forbid_regression_scenarios=options["forbid_regression_scenarios"],
@@ -1001,6 +1003,12 @@ def _parser() -> argparse.ArgumentParser:
     gate_compare.add_argument("--min-candidate-wins", type=_non_negative_int_arg, help="Minimum candidate-win pair count")
     gate_compare.add_argument("--max-baseline-wins", type=_non_negative_int_arg, help="Maximum allowed baseline-win regression pairs")
     gate_compare.add_argument("--max-skipped-pairs", type=_non_negative_int_arg, help="Maximum allowed skipped paired scenarios")
+    gate_compare.add_argument("--max-contract-drifts", type=_non_negative_int_arg, help="Maximum allowed drifted comparison contract fingerprints")
+    gate_compare.add_argument(
+        "--max-unverified-contracts",
+        type=_non_negative_int_arg,
+        help="Maximum allowed comparison pairs missing scenario or source-trace fingerprints",
+    )
     gate_compare.add_argument("--require-scenario", action="append", default=[], help="Fail unless this scenario appears in the comparison pairs")
     gate_compare.add_argument(
         "--require-candidate-win-scenario",
@@ -1361,6 +1369,14 @@ def _compare_gate_options(args: argparse.Namespace) -> dict[str, Any]:
             args.max_baseline_wins if args.max_baseline_wins is not None else policy.get("max_baseline_wins")
         ),
         "max_skipped_pairs": args.max_skipped_pairs if args.max_skipped_pairs is not None else policy.get("max_skipped_pairs"),
+        "max_contract_drifts": (
+            args.max_contract_drifts if args.max_contract_drifts is not None else policy.get("max_contract_drifts")
+        ),
+        "max_unverified_contracts": (
+            args.max_unverified_contracts
+            if args.max_unverified_contracts is not None
+            else policy.get("max_unverified_contracts")
+        ),
         "require_scenarios": _merge_unique_strings(policy.get("require_scenarios", []), args.require_scenario),
         "require_candidate_win_scenarios": _merge_unique_strings(
             policy.get("require_candidate_win_scenarios", []),
@@ -1389,6 +1405,8 @@ def _compare_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_candidate_wins",
         "max_baseline_wins",
         "max_skipped_pairs",
+        "max_contract_drifts",
+        "max_unverified_contracts",
         "require_scenarios",
         "require_candidate_win_scenarios",
         "forbid_regression_scenarios",

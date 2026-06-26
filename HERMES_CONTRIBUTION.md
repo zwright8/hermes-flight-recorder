@@ -248,10 +248,11 @@ Flight Recorder turns Hermes' experience into regression pressure.
    same-named paired scenarios used the same scenario contract and trace fixture.
 10. Export baseline/candidate preference rows with
    `flightrecorder export-compare-rl`, preserving whether the candidate
-   improved or regressed and including tool-evidence behavior transcripts.
+   improved or regressed, including tool-evidence behavior transcripts, and
+   carrying source fingerprints into trainer-ready rows.
 11. Gate comparison-export readiness with `flightrecorder gate-compare-export`
-    so only evidence-backed candidate wins and policy-approved rule fixes move
-    toward training or review.
+    so only evidence-backed candidate wins, policy-approved rule fixes, and
+    contract-clean comparison pairs move toward training or review.
 12. Trend multiple `suite_summary.json` files with `flightrecorder trend-suite`
    to show whether the improvement loop is moving pass rate, score, and failure
    pressure in the right direction, then validate the resulting

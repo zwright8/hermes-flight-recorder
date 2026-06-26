@@ -174,6 +174,12 @@ if python -m flightrecorder gate-compare-export \
   echo "gate-compare-export did not fail a too-high candidate-win threshold" >&2
   exit 1
 fi
+if python -m flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
+  --max-contract-drifts 0 >/dev/null; then
+  echo "gate-compare-export did not fail a zero contract-drift threshold" >&2
+  exit 1
+fi
 python - <<'PY'
 import json
 from pathlib import Path
@@ -184,9 +190,14 @@ dpo = json.loads(Path("runs/compare_rl_export/improvement_dpo.jsonl").read_text(
 card = Path("runs/compare_rl_export/IMPROVEMENT_CARD.md").read_text(encoding="utf-8")
 assert manifest["pair_count"] == 1
 assert manifest["candidate_win_count"] == 1
+assert manifest["contract_drift_count"] == 1
+assert manifest["unverified_contract_count"] == 0
 assert manifest["metadata"]["candidate"] == "email-evidence-fix"
 assert pair["chosen_side"] == "candidate"
 assert pair["candidate_score_delta"] == 90
+assert pair["contract_fingerprint_status"] == "drifted"
+assert "scenario_sha256_changed" in pair["contract_fingerprint_reasons"]
+assert dpo["contract_fingerprint_status"] == "drifted"
 assert "required_actions" in pair["rule_fixes"]
 assert "tool_result gmail_send ok" in dpo["chosen"]
 assert "tool_result gmail_send ok" not in dpo["rejected"]
@@ -284,6 +295,9 @@ assert any(item.get("target") == "event" and isinstance(item.get("event_index"),
 assert any(mode.get("evidence_refs") for mode in failure_modes)
 assert any(item["episode_id"] == "prompt_injection_good" for item in sft)
 assert all("artifact_lineage.json" in item.get("source_lineage", "") for item in episodes)
+assert all(item["source_fingerprint_status"] == "verified" for item in episodes)
+assert all(len(item["source_fingerprints"]["scenario"]["sha256"]) == 64 for item in episodes)
+assert all(len(item["source_fingerprints"]["source_trace"]["sha256"]) == 64 for item in episodes)
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
 assert any(item["chosen_episode_id"] == "email_reply_completion_good" and item["rejected_episode_id"] == "email_reply_completion_bad" for item in dpo)
 assert {item["episode_id"] for item in reward_model} >= {
@@ -295,9 +309,12 @@ assert {item["episode_id"] for item in reward_model} >= {
 assert dataset_metrics["artifact_counts"]["episodes"] == 6
 assert dataset_metrics["pass_rate"] == 0.3333
 assert dataset_metrics["artifact_counts"]["reward_model"] == 6
+assert dataset_metrics["source_fingerprint_coverage"]["fully_verified"] == 6
+assert dataset_metrics["source_fingerprint_coverage"]["unverified"] == 0
 assert dataset_metrics["metadata"]["candidate"] == "offline-demo"
 assert "# Flight Recorder Dataset Card" in dataset_card
 assert "## Experiment Metadata" in dataset_card
+assert "## Source Fingerprints" in dataset_card
 assert "## Quality Flags" in dataset_card
 PY
 test -f runs/validation.json

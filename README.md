@@ -268,8 +268,8 @@ training-loop artifacts:
   rows.
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
-- `dataset_metrics.json`: export-level coverage, reward/score distribution,
-  failure pressure, and quality flags.
+- `dataset_metrics.json`: export-level coverage, source-fingerprint coverage,
+  reward/score distribution, failure pressure, and quality flags.
 - `DATASET_CARD.md`: human-readable summary of the generated dataset and its
   boundaries.
 - `manifest.json`: export settings, counts, and caveats.
@@ -283,20 +283,22 @@ directories into improvement-loop preference artifacts:
 - `improvement_dpo.jsonl`: behavior-transcript DPO rows derived from
   `improvement_pairs.jsonl`, including tool-call/tool-result evidence instead
   of final-answer text alone.
-- `manifest.json`: counts, source directories, metadata, skipped pairs, and
-  output paths.
+- `manifest.json`: counts, source directories, metadata, skipped pairs,
+  contract-drift counts, and output paths.
 - `IMPROVEMENT_CARD.md`: human-readable summary of candidate wins, baseline
-  wins, and pair rationale.
+  wins, contract status, and pair rationale.
 
 Use `flightrecorder gate-compare-export` after `export-compare-rl` when CI or a
 training handoff should require concrete candidate wins, expected scenario
-coverage, fixed rule IDs, zero baseline-win regressions, and no newly critical
-failure classes:
+coverage, fixed rule IDs, zero baseline-win regressions, no newly critical
+failure classes, and optionally zero drifted or unverified comparison contracts:
 
 ```bash
 flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
-  --policy examples/compare_gate_policy.demo.json
+  --policy examples/compare_gate_policy.demo.json \
+  --max-contract-drifts 0 \
+  --max-unverified-contracts 0
 ```
 
 `flightrecorder export-review` converts completed run directories into a
@@ -520,12 +522,15 @@ deterministic raw training export.
 Use `flightrecorder gate-compare-export` for the baseline/candidate improvement
 path after `export-compare-rl`. It checks that comparison preference rows are
 not merely present, but actually encode enough candidate wins and expected rule
-fixes without regression examples sneaking into a training handoff:
+fixes without regression examples or contract-drifted pairs sneaking into a
+training handoff:
 
 ```bash
 flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
-  --policy examples/compare_gate_policy.demo.json
+  --policy examples/compare_gate_policy.demo.json \
+  --max-contract-drifts 0 \
+  --max-unverified-contracts 0
 ```
 
 ## Scoring Rules
@@ -727,7 +732,8 @@ flightrecorder gate-compare-export \
 ```
 
 This export preserves whether the candidate improved or regressed for each
-paired scenario and writes behavior-transcript preference rows, so a task can
+paired scenario, records whether the paired source fingerprints matched,
+drifted, or were unverified, and writes behavior-transcript preference rows, so a task can
 be preferred because it had the right tool evidence even when both final
 answers look similar.
 The comparison gate lets CI require those rows to contain enough candidate

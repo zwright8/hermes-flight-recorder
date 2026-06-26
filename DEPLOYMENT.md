@@ -135,7 +135,8 @@ network.
 - Use `flightrecorder export-rl --runs runs --out runs/training_export` when
   downstream SFT, preference, reward-model, curriculum, or RL jobs need
   deterministic episode/reward/step-reward/preference/trainer-view/failure-mode
-  artifacts plus dataset-level quality metrics and a dataset card.
+  artifacts plus dataset-level quality metrics, source-fingerprint coverage, and
+  a dataset card.
 - Use `flightrecorder export-compare-rl --baseline <old-runs> --candidate
   <new-runs> --out runs/compare_rl_export` when downstream jobs need
   baseline/candidate preference rows that preserve improvement or regression
@@ -143,7 +144,9 @@ network.
 - Use `flightrecorder gate-compare-export --compare-export
   runs/compare_rl_export --policy <policy.json>` when CI must block comparison
   preference handoffs unless they contain enough candidate wins, required
-  scenario coverage, expected rule fixes, and no forbidden regression signal.
+  scenario coverage, expected rule fixes, no forbidden regression signal, and
+  optionally no drifted or unverified comparison contracts via
+  `--max-contract-drifts 0 --max-unverified-contracts 0`.
 - Use `flightrecorder export-review --runs runs --out runs/review_queue` when
   maintainers need a human-curation queue before deterministic score labels are
   trusted as training signal.

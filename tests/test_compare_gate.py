@@ -83,6 +83,34 @@ class CompareGateTests(unittest.TestCase):
             self.assertIn("min_candidate_wins", failed_ids)
             self.assertIn("require_rule_fix", failed_ids)
 
+    def test_gate_compare_export_can_block_contract_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            compare_export = Path(tmp) / "compare_rl"
+            gate_path = Path(tmp) / "gate.json"
+            run_cli(["export-compare-rl", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(compare_export)])
+
+            code = run_cli(
+                [
+                    "gate-compare-export",
+                    "--compare-export",
+                    str(compare_export),
+                    "--max-contract-drifts",
+                    "0",
+                    "--max-unverified-contracts",
+                    "0",
+                    "--out",
+                    str(gate_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            self.assertEqual(gate["metrics"]["contract_drift_count"], 1)
+            self.assertEqual(gate["metrics"]["unverified_contract_count"], 0)
+            failed_ids = [check["id"] for check in gate["checks"] if not check["passed"]]
+            self.assertIn("max_contract_drifts", failed_ids)
+
     def test_gate_compare_export_rejects_malformed_policy(self):
         with tempfile.TemporaryDirectory() as tmp:
             baseline, candidate = self._paired_email_dirs(Path(tmp))

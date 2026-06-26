@@ -42,6 +42,7 @@ class RunRecord:
     trace: dict[str, Any]
     scorecard: dict[str, Any]
     lineage_path: Path | None = None
+    lineage: dict[str, Any] | None = None
 
 
 def export_rl_dataset(
@@ -133,6 +134,7 @@ def export_rl_dataset(
         "dpo_count": len(dpo),
         "reward_model_count": len(reward_model),
         "quality_flag_count": len(dataset_metrics.get("quality_flags", [])),
+        "source_fingerprint_coverage": dataset_metrics.get("source_fingerprint_coverage"),
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "notes": [
@@ -143,7 +145,7 @@ def export_rl_dataset(
             "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
             "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
             "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
-            "episodes.jsonl includes source_lineage when the originating run emitted artifact_lineage.json.",
+            "episodes.jsonl includes source_lineage and source_fingerprints when the originating run emitted artifact_lineage.json.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
@@ -187,6 +189,7 @@ def export_compare_rl_dataset(
         candidate_record = candidate[scenario_id]
         baseline_episode = _comparison_episode_record(baseline_record, "baseline", reward_scale, preserve_paths)
         candidate_episode = _comparison_episode_record(candidate_record, "candidate", reward_scale, preserve_paths)
+        contract = _episode_contract_comparison(baseline_episode, candidate_episode)
         baseline_score = _score(baseline_record.scorecard)
         candidate_score = _score(candidate_record.scorecard)
         score_delta = candidate_score - baseline_score
@@ -197,6 +200,8 @@ def export_compare_rl_dataset(
                     "reason": f"score gap {abs(score_delta)} is below min_score_gap {min_score_gap}",
                     "baseline_score": baseline_score,
                     "candidate_score": candidate_score,
+                    "contract_fingerprint_status": contract["status"],
+                    "contract_fingerprint_reasons": contract["reasons"],
                 }
             )
             continue
@@ -220,6 +225,7 @@ def export_compare_rl_dataset(
                 comparison,
                 chosen_side,
                 rejected_side,
+                contract,
             )
         )
 
@@ -232,6 +238,8 @@ def export_compare_rl_dataset(
     }
     candidate_win_count = sum(1 for pair in pairs if pair.get("chosen_side") == "candidate")
     baseline_win_count = sum(1 for pair in pairs if pair.get("chosen_side") == "baseline")
+    contract_drift_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "drifted")
+    unverified_contract_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "unverified")
     manifest: dict[str, Any] = {
         "schema_version": COMPARE_RL_MANIFEST_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -247,6 +255,8 @@ def export_compare_rl_dataset(
         "dpo_count": len(dpo),
         "candidate_win_count": candidate_win_count,
         "baseline_win_count": baseline_win_count,
+        "contract_drift_count": contract_drift_count,
+        "unverified_contract_count": unverified_contract_count,
         "skipped_pair_count": len(skipped),
         "missing_in_candidate": missing_in_candidate,
         "new_in_candidate": new_in_candidate,
@@ -256,6 +266,7 @@ def export_compare_rl_dataset(
             "Comparison exports are built from paired baseline/candidate normalized_trace.json and scorecard.json files.",
             "The chosen side is whichever paired run has the higher deterministic scorecard score.",
             "Candidate wins describe measurable improvements; baseline wins describe regressions to avoid.",
+            "Pairs include contract_fingerprint_status so trainer handoffs can reject drifted or unverified comparisons.",
             "Use these artifacts as preference/eval data, not as a complete trainer.",
         ],
     }
@@ -287,6 +298,11 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
         scorecard = _read_json(score_path)
         if not isinstance(trace, dict) or not isinstance(scorecard, dict):
             raise TrainingExportError(f"Run {run_dir} must contain JSON objects")
+        lineage: dict[str, Any] | None = None
+        if lineage_path.exists():
+            raw_lineage = _read_json(lineage_path)
+            if isinstance(raw_lineage, dict):
+                lineage = raw_lineage
         records.append(
             RunRecord(
                 run_id=run_dir.name,
@@ -294,6 +310,7 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
                 trace=trace,
                 scorecard=scorecard,
                 lineage_path=lineage_path if lineage_path.exists() else None,
+                lineage=lineage,
             )
         )
 
@@ -311,6 +328,8 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     scenario_title = str(scorecard.get("scenario_title") or scenario_id)
     events = [_event_record(index, event) for index, event in enumerate(trace.get("events", []))]
     failed_rules = _failed_rule_ids(scorecard)
+    source_fingerprints = _source_fingerprints(record)
+    source_fingerprint_status = _source_fingerprint_status(source_fingerprints)
     episode = {
         "schema_version": RL_EPISODE_SCHEMA_VERSION,
         "episode_id": record.run_id,
@@ -323,6 +342,8 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
         "model": trace.get("session", {}).get("model", "unknown"),
         "events": events,
         "final_answer": str(trace.get("final_answer") or ""),
+        "source_fingerprint_status": source_fingerprint_status,
+        "source_fingerprints": source_fingerprints,
         "outcome": {
             "passed": passed,
             "score": score,
@@ -342,11 +363,14 @@ def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
     scorecard = record.scorecard
     scenario_id = str(scorecard.get("scenario_id") or record.run_id)
     rule_rewards = [_rule_reward(rule) for rule in scorecard.get("rules", []) if isinstance(rule, dict)]
+    source_fingerprints = _source_fingerprints(record)
     return {
         "schema_version": RL_REWARD_SCHEMA_VERSION,
         "episode_id": record.run_id,
         "scenario_id": scenario_id,
         "task_family": _task_family(scenario_id),
+        "source_fingerprint_status": _source_fingerprint_status(source_fingerprints),
+        "source_fingerprints": source_fingerprints,
         "reward_scale": reward_scale,
         "reward": _reward_value(scorecard, reward_scale),
         "score": _score(scorecard),
@@ -364,6 +388,8 @@ def _step_reward_records(records: list[RunRecord], reward_scale: str) -> list[di
         scorecard = record.scorecard
         scenario_id = str(scorecard.get("scenario_id") or record.run_id)
         task_family = _task_family(scenario_id)
+        source_fingerprints = _source_fingerprints(record)
+        source_fingerprint_status = _source_fingerprint_status(source_fingerprints)
         rules_by_id = {
             str(rule.get("id")): rule
             for rule in _failed_rules(scorecard)
@@ -398,6 +424,8 @@ def _step_reward_records(records: list[RunRecord], reward_scale: str) -> list[di
                 "scenario_id": scenario_id,
                 "scenario_title": str(scorecard.get("scenario_title") or scenario_id),
                 "task_family": task_family,
+                "source_fingerprint_status": source_fingerprint_status,
+                "source_fingerprints": source_fingerprints,
                 "target": target,
                 "rule_id": rule_id,
                 "rule_name": str(rule.get("name") or rule_id),
@@ -485,6 +513,8 @@ def _preference_view(episode: dict[str, Any]) -> dict[str, Any]:
         "score": episode["outcome"]["score"],
         "reward": episode["outcome"]["reward"],
         "failed_rules": episode["outcome"]["failed_rules"],
+        "source_fingerprint_status": episode.get("source_fingerprint_status", "unverified"),
+        "source_fingerprints": episode.get("source_fingerprints", {}),
         "events": episode["events"],
         "final_answer": episode["final_answer"],
     }
@@ -495,6 +525,7 @@ def _failure_mode_record(record: RunRecord, rule: dict[str, Any], reward_scale: 
     scenario_id = str(scorecard.get("scenario_id") or record.run_id)
     rule_id = str(rule.get("id") or "unknown_rule")
     attribution = [item for item in _reward_attribution(scorecard) if item.get("rule_id") == rule_id]
+    source_fingerprints = _source_fingerprints(record)
     return {
         "schema_version": RL_FAILURE_MODE_SCHEMA_VERSION,
         "failure_id": f"{record.run_id}:{rule_id}",
@@ -502,6 +533,8 @@ def _failure_mode_record(record: RunRecord, rule: dict[str, Any], reward_scale: 
         "scenario_id": scenario_id,
         "scenario_title": str(scorecard.get("scenario_title") or scenario_id),
         "task_family": _task_family(scenario_id),
+        "source_fingerprint_status": _source_fingerprint_status(source_fingerprints),
+        "source_fingerprints": source_fingerprints,
         "rule_id": rule_id,
         "rule_name": str(rule.get("name") or rule_id),
         "critical": bool(rule.get("critical")),
@@ -622,6 +655,8 @@ def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "score": _score_value(outcome.get("score")),
                 "reward": _numeric_value(outcome.get("reward")),
                 "quality_gate": "passed_scorecard",
+                "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
+                "source_fingerprints": episode.get("source_fingerprints", {}),
                 "source_artifact": "episodes.jsonl",
             }
         )
@@ -654,6 +689,10 @@ def _dpo_records(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "rejected_score": _score_value(preference.get("rejected_score")),
                 "score_gap": _score_value(preference.get("score_gap")),
                 "reason": str(preference.get("reason") or ""),
+                "chosen_source_fingerprint_status": str(chosen_view.get("source_fingerprint_status") or "unverified"),
+                "rejected_source_fingerprint_status": str(rejected_view.get("source_fingerprint_status") or "unverified"),
+                "chosen_source_fingerprints": chosen_view.get("source_fingerprints", {}),
+                "rejected_source_fingerprints": rejected_view.get("source_fingerprints", {}),
                 "source_artifact": "preferences.jsonl",
             }
         )
@@ -684,6 +723,7 @@ def _comparison_pair_record(
     comparison: dict[str, Any],
     chosen_side: str,
     rejected_side: str,
+    contract: dict[str, Any],
 ) -> dict[str, Any]:
     chosen = candidate_episode if chosen_side == "candidate" else baseline_episode
     rejected = baseline_episode if rejected_side == "baseline" else candidate_episode
@@ -719,6 +759,9 @@ def _comparison_pair_record(
         "rule_fixes": comparison.get("fixes", []),
         "rule_regressions": comparison.get("regressions", []),
         "new_critical_failures": comparison.get("new_critical_failures", []),
+        "contract_fingerprint_status": contract["status"],
+        "contract_fingerprint_reasons": contract["reasons"],
+        "contract_fingerprints": contract["fingerprints"],
         "reason": reason,
         "baseline": _preference_view(baseline_episode),
         "candidate": _preference_view(candidate_episode),
@@ -757,6 +800,9 @@ def _comparison_dpo_records(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "chosen_score": _score_value(pair.get("chosen_score")),
                 "rejected_score": _score_value(pair.get("rejected_score")),
                 "score_gap": _score_value(pair.get("score_gap")),
+                "contract_fingerprint_status": str(pair.get("contract_fingerprint_status") or "unverified"),
+                "contract_fingerprint_reasons": _string_list(pair.get("contract_fingerprint_reasons")),
+                "contract_fingerprints": pair.get("contract_fingerprints") if isinstance(pair.get("contract_fingerprints"), dict) else {},
                 "reason": str(pair.get("reason") or ""),
                 "source_artifact": "improvement_pairs.jsonl",
             }
@@ -820,6 +866,8 @@ def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]
                 "passed": bool(outcome.get("passed")),
                 "failed_rules": _string_list(outcome.get("failed_rules")),
                 "critical_failures": _string_list(outcome.get("critical_failures")),
+                "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
+                "source_fingerprints": episode.get("source_fingerprints", {}),
                 "source_artifact": "episodes.jsonl",
             }
         )
@@ -866,6 +914,7 @@ def _dataset_metrics(
         "average_reward": _average(rewards_values),
         "min_reward": min(rewards_values) if rewards_values else None,
         "max_reward": max(rewards_values) if rewards_values else None,
+        "source_fingerprint_coverage": _source_fingerprint_coverage(episodes),
         "failed_rule_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "failed_rules")),
         "critical_failure_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "critical_failures")),
         "task_families": _dataset_family_metrics(episodes, step_rewards, failure_modes, sft, dpo, reward_model),
@@ -953,6 +1002,15 @@ def _quality_flags(
         flags.append(_quality_flag("reward_model_coverage", "error", "Reward-model rows do not cover every episode."))
     if not step_rewards and failed:
         flags.append(_quality_flag("no_step_rewards", "warning", "Failing episodes exist, but no step-level attribution rows were exported."))
+    coverage = _source_fingerprint_coverage(episodes)
+    if episodes and coverage["fully_verified"] < len(episodes):
+        flags.append(
+            _quality_flag(
+                "unverified_source_fingerprints",
+                "warning",
+                "Some episodes are missing scenario or source-trace SHA-256 fingerprints.",
+            )
+        )
     if len(families) == 1:
         flags.append(_quality_flag("single_task_family", "info", "Only one task family is represented; broaden coverage before generalizing."))
     return flags
@@ -984,6 +1042,17 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
         for key, value in sorted(metadata.items()):
             rows.append(f"| `{_md_cell(str(key))}` | {_md_cell(str(value))} |")
         rows.append("")
+    coverage = metrics.get("source_fingerprint_coverage") if isinstance(metrics.get("source_fingerprint_coverage"), dict) else {}
+    rows.extend(
+        [
+            "## Source Fingerprints",
+            "",
+            f"- Fully verified episodes: {coverage.get('fully_verified', 0)} / {coverage.get('episodes', metrics.get('episode_count'))}",
+            f"- Scenario fingerprints: {coverage.get('with_scenario_sha256', 0)}",
+            f"- Source-trace fingerprints: {coverage.get('with_source_trace_sha256', 0)}",
+            "",
+        ]
+    )
     rows.extend(["## Artifact Counts", "", "| Artifact | Count |", "| --- | ---: |"])
     for name, count in sorted((metrics.get("artifact_counts") or {}).items()):
         rows.append(f"| `{_md_cell(name)}` | {count} |")
@@ -1056,6 +1125,8 @@ def _improvement_card(manifest: dict[str, Any], pairs: list[dict[str, Any]]) -> 
         f"- Pair count: {manifest.get('pair_count')}",
         f"- Candidate wins: {manifest.get('candidate_win_count')}",
         f"- Baseline wins: {manifest.get('baseline_win_count')}",
+        f"- Contract drift: {manifest.get('contract_drift_count', 0)}",
+        f"- Unverified contracts: {manifest.get('unverified_contract_count', 0)}",
         f"- Skipped pairs: {manifest.get('skipped_pair_count')}",
         "",
     ]
@@ -1069,8 +1140,8 @@ def _improvement_card(manifest: dict[str, Any], pairs: list[dict[str, Any]]) -> 
         [
             "## Pairs",
             "",
-            "| Scenario | Candidate Outcome | Delta | Chosen | Rejected | Reason |",
-            "| --- | --- | ---: | --- | --- | --- |",
+            "| Scenario | Candidate Outcome | Contract | Delta | Chosen | Rejected | Reason |",
+            "| --- | --- | --- | ---: | --- | --- | --- |",
         ]
     )
     if pairs:
@@ -1081,6 +1152,7 @@ def _improvement_card(manifest: dict[str, Any], pairs: list[dict[str, Any]]) -> 
                     [
                         f"`{_md_cell(str(pair.get('scenario_id') or 'unknown'))}`",
                         _md_cell(str(pair.get("candidate_outcome") or "unknown")),
+                        _md_cell(str(pair.get("contract_fingerprint_status") or "unverified")),
                         str(pair.get("candidate_score_delta")),
                         _md_cell(str(pair.get("chosen_side") or "")),
                         _md_cell(str(pair.get("rejected_side") or "")),
@@ -1090,7 +1162,7 @@ def _improvement_card(manifest: dict[str, Any], pairs: list[dict[str, Any]]) -> 
                 + " |"
             )
     else:
-        rows.append("| None | n/a | 0 | n/a | n/a | No pairs exceeded the score-gap threshold. |")
+        rows.append("| None | n/a | n/a | 0 | n/a | n/a | No pairs exceeded the score-gap threshold. |")
     rows.extend(
         [
             "",
@@ -1103,6 +1175,95 @@ def _improvement_card(manifest: dict[str, Any], pairs: list[dict[str, Any]]) -> 
         ]
     )
     return "\n".join(rows)
+
+
+def _source_fingerprint_coverage(episodes: list[dict[str, Any]]) -> dict[str, int]:
+    with_scenario = 0
+    with_trace = 0
+    fully_verified = 0
+    for episode in episodes:
+        fingerprints = episode.get("source_fingerprints") if isinstance(episode.get("source_fingerprints"), dict) else {}
+        scenario_hash = _fingerprint_sha(fingerprints.get("scenario"))
+        trace_hash = _fingerprint_sha(fingerprints.get("source_trace"))
+        if scenario_hash:
+            with_scenario += 1
+        if trace_hash:
+            with_trace += 1
+        if scenario_hash and trace_hash:
+            fully_verified += 1
+    return {
+        "episodes": len(episodes),
+        "with_scenario_sha256": with_scenario,
+        "with_source_trace_sha256": with_trace,
+        "fully_verified": fully_verified,
+        "unverified": len(episodes) - fully_verified,
+    }
+
+
+def _source_fingerprints(record: RunRecord) -> dict[str, dict[str, Any]]:
+    fingerprints = {
+        "scenario": {"path": None, "sha256": None, "exists": None},
+        "source_trace": {"path": None, "sha256": None, "exists": None},
+    }
+    lineage = record.lineage if isinstance(record.lineage, dict) else {}
+    inputs = lineage.get("inputs") if isinstance(lineage.get("inputs"), list) else []
+    for item in inputs:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if name not in fingerprints:
+            continue
+        fingerprints[str(name)] = {
+            "path": item.get("path") if isinstance(item.get("path"), str) else None,
+            "sha256": item.get("sha256") if isinstance(item.get("sha256"), str) else None,
+            "exists": item.get("exists") if isinstance(item.get("exists"), bool) else None,
+        }
+    return fingerprints
+
+
+def _source_fingerprint_status(fingerprints: dict[str, Any]) -> str:
+    return "verified" if _fingerprint_sha(fingerprints.get("scenario")) and _fingerprint_sha(fingerprints.get("source_trace")) else "unverified"
+
+
+def _fingerprint_sha(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    sha = value.get("sha256")
+    return sha if isinstance(sha, str) and sha else None
+
+
+def _episode_contract_comparison(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    baseline_inputs = baseline.get("source_fingerprints") if isinstance(baseline.get("source_fingerprints"), dict) else {}
+    candidate_inputs = candidate.get("source_fingerprints") if isinstance(candidate.get("source_fingerprints"), dict) else {}
+    reasons: list[str] = []
+    unknowns: list[str] = []
+    for name in ("scenario", "source_trace"):
+        baseline_hash = _fingerprint_sha(baseline_inputs.get(name))
+        candidate_hash = _fingerprint_sha(candidate_inputs.get(name))
+        if baseline_hash and candidate_hash:
+            if baseline_hash != candidate_hash:
+                reasons.append(f"{name}_sha256_changed")
+        else:
+            unknowns.append(f"{name}_sha256_unverified")
+    status = "drifted" if reasons else "unverified" if unknowns else "matched"
+    return {
+        "status": status,
+        "reasons": reasons or unknowns,
+        "fingerprints": {
+            "baseline": _contract_fingerprint_inputs(baseline_inputs),
+            "candidate": _contract_fingerprint_inputs(candidate_inputs),
+        },
+    }
+
+
+def _contract_fingerprint_inputs(inputs: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        name: {
+            "path": inputs.get(name, {}).get("path") if isinstance(inputs.get(name), dict) else None,
+            "sha256": _fingerprint_sha(inputs.get(name)),
+        }
+        for name in ("scenario", "source_trace")
+    }
 
 
 def _average(values: list[int] | list[float]) -> float:

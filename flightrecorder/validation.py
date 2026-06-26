@@ -687,6 +687,17 @@ def _validate_compare_manifest(
     for field_name in ("baseline_run_count", "candidate_run_count", "paired_scenario_count", "skipped_pair_count", "min_score_gap"):
         if not _is_non_negative_int(manifest.get(field_name)):
             target.errors.append(f"compare_manifest.{field_name} must be a non-negative integer.")
+    expected_contract_drift_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "drifted")
+    expected_unverified_contract_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "unverified")
+    if "contract_drift_count" in manifest and manifest.get("contract_drift_count") != expected_contract_drift_count:
+        target.errors.append(
+            f"compare_manifest.contract_drift_count expected {expected_contract_drift_count}, got {manifest.get('contract_drift_count')!r}."
+        )
+    if "unverified_contract_count" in manifest and manifest.get("unverified_contract_count") != expected_unverified_contract_count:
+        target.errors.append(
+            "compare_manifest.unverified_contract_count "
+            f"expected {expected_unverified_contract_count}, got {manifest.get('unverified_contract_count')!r}."
+        )
     if not isinstance(manifest.get("outputs"), dict):
         target.errors.append("compare_manifest.outputs must be an object.")
     else:
@@ -749,6 +760,8 @@ def _validate_compare_pairs(pairs: list[dict[str, Any]], target: ValidationTarge
         for field_name in ("rule_fixes", "rule_regressions", "new_critical_failures"):
             if not _is_string_list(pair.get(field_name)):
                 target.errors.append(f"{label}.{field_name} must be a list of strings.")
+        if "contract_fingerprint_status" in pair:
+            _validate_contract_fingerprint_status(pair, target, label)
         baseline = _validate_compare_view(pair.get("baseline"), target, f"{label}.baseline")
         candidate = _validate_compare_view(pair.get("candidate"), target, f"{label}.candidate")
         chosen = _validate_compare_view(pair.get("chosen"), target, f"{label}.chosen")
@@ -802,6 +815,7 @@ def _validate_compare_view(value: Any, target: ValidationTarget, label: str) -> 
         target.errors.append(f"{label}.events must be a list.")
     if not isinstance(value.get("final_answer"), str):
         target.errors.append(f"{label}.final_answer must be a string.")
+    _validate_source_fingerprint_fields(value, target, label, warn_if_missing=False)
     return value
 
 
@@ -846,6 +860,8 @@ def _validate_compare_dpo(dpo: list[dict[str, Any]], target: ValidationTarget, p
                 target.errors.append(f"{label}.{field_name} must be an integer from 0 to 100.")
         if not _is_plain_int(row.get("candidate_score_delta")):
             target.errors.append(f"{label}.candidate_score_delta must be an integer.")
+        if "contract_fingerprint_status" in row:
+            _validate_contract_fingerprint_status(row, target, label)
         _validate_messages(row.get("chosen_messages"), target, f"{label}.chosen_messages")
         _validate_messages(row.get("rejected_messages"), target, f"{label}.rejected_messages")
         _compare_improvement_dpo_to_pair(row, pair, target, label)
@@ -872,6 +888,9 @@ def _compare_improvement_dpo_to_pair(row: dict[str, Any], pair: dict[str, Any], 
         "chosen_score": pair.get("chosen_score"),
         "rejected_score": pair.get("rejected_score"),
         "score_gap": pair.get("score_gap"),
+        "contract_fingerprint_status": pair.get("contract_fingerprint_status"),
+        "contract_fingerprint_reasons": pair.get("contract_fingerprint_reasons"),
+        "contract_fingerprints": pair.get("contract_fingerprints"),
         "reason": pair.get("reason"),
     }
     for field_name, expected_value in expected.items():
@@ -1244,6 +1263,7 @@ def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget)
             target.warnings.append(f"episodes[{index}].source_run is absolute; prefer redacted or relative exports for sharing.")
         if "source_lineage" in episode and _looks_absolute(str(episode.get("source_lineage", ""))):
             target.warnings.append(f"episodes[{index}].source_lineage is absolute; prefer redacted or relative exports for sharing.")
+        _validate_source_fingerprint_fields(episode, target, f"episodes[{index}]", warn_if_missing=True)
         if not isinstance(episode.get("events"), list):
             target.errors.append(f"episodes[{index}].events must be a list.")
         outcome = episode.get("outcome")
@@ -1280,6 +1300,8 @@ def _validate_rewards(rewards: list[dict[str, Any]], target: ValidationTarget, e
                     target.errors.append(
                         f"rewards[{index}].{field_name} does not match episode {episode_id!r} outcome."
                     )
+            _validate_matching_source_fingerprints(reward, episode, target, f"rewards[{index}]")
+        _validate_source_fingerprint_fields(reward, target, f"rewards[{index}]", warn_if_missing=False)
         if not isinstance(reward.get("rule_rewards"), list):
             target.errors.append(f"rewards[{index}].rule_rewards must be a list.")
         else:
@@ -1322,6 +1344,9 @@ def _validate_step_rewards(
             episode = episode_by_id.get(episode_id)
             if episode is None:
                 target.errors.append(f"step_rewards[{index}].episode_id {episode_id!r} does not reference an episode.")
+            else:
+                _validate_matching_source_fingerprints(step_reward, episode, target, f"step_rewards[{index}]")
+        _validate_source_fingerprint_fields(step_reward, target, f"step_rewards[{index}]", warn_if_missing=False)
 
         rule_id = step_reward.get("rule_id")
         for field_name in ("scenario_id", "task_family", "rule_id", "rule_name", "evidence"):
@@ -1556,6 +1581,7 @@ def _validate_training_view_common(
         target.errors.append(f"{label}.reward must be numeric.")
     _validate_messages(sample.get("messages"), target, f"{label}.messages")
     if isinstance(episode, dict):
+        _validate_matching_source_fingerprints(sample, episode, target, label)
         outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
         expected = {
             "scenario_id": episode.get("scenario_id"),
@@ -1591,9 +1617,157 @@ def _compare_dpo_to_preference(
     rejected = preference.get("rejected") if isinstance(preference.get("rejected"), dict) else {}
     expected["chosen"] = chosen.get("final_answer")
     expected["rejected"] = rejected.get("final_answer")
+    expected["chosen_source_fingerprint_status"] = chosen.get("source_fingerprint_status")
+    expected["rejected_source_fingerprint_status"] = rejected.get("source_fingerprint_status")
+    expected["chosen_source_fingerprints"] = chosen.get("source_fingerprints")
+    expected["rejected_source_fingerprints"] = rejected.get("source_fingerprints")
     for field_name, expected_value in expected.items():
         if pair.get(field_name) != expected_value:
             target.errors.append(f"dpo[{index}].{field_name} does not match preference {preference.get('preference_id')!r}.")
+
+
+def _validate_source_fingerprint_fields(
+    row: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    *,
+    warn_if_missing: bool,
+) -> None:
+    has_status = "source_fingerprint_status" in row
+    has_fingerprints = "source_fingerprints" in row
+    if not has_status and not has_fingerprints:
+        if warn_if_missing:
+            target.warnings.append(f"{label}.source_fingerprints is missing; rerun export-rl to refresh provenance fields.")
+        return
+    status = row.get("source_fingerprint_status")
+    if status not in {"verified", "unverified"}:
+        target.errors.append(f"{label}.source_fingerprint_status must be verified or unverified.")
+    fingerprints = row.get("source_fingerprints")
+    if not isinstance(fingerprints, dict):
+        target.errors.append(f"{label}.source_fingerprints must be an object.")
+        return
+    scenario_sha = _validate_source_fingerprint_record(fingerprints.get("scenario"), target, f"{label}.source_fingerprints.scenario")
+    trace_sha = _validate_source_fingerprint_record(
+        fingerprints.get("source_trace"),
+        target,
+        f"{label}.source_fingerprints.source_trace",
+    )
+    if status == "verified" and not (scenario_sha and trace_sha):
+        target.errors.append(f"{label}.source_fingerprint_status verified requires scenario and source_trace SHA-256 values.")
+    if status == "unverified" and scenario_sha and trace_sha:
+        target.errors.append(f"{label}.source_fingerprint_status should be verified when both source hashes are present.")
+
+
+def _validate_source_fingerprint_record(value: Any, target: ValidationTarget, label: str) -> str | None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    path = value.get("path")
+    if path is not None and not isinstance(path, str):
+        target.errors.append(f"{label}.path must be a string or null.")
+    sha = value.get("sha256")
+    if sha is not None and not _is_sha256(sha):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+        sha = None
+    exists = value.get("exists")
+    if exists is not None and not isinstance(exists, bool):
+        target.errors.append(f"{label}.exists must be a boolean or null.")
+    return sha if isinstance(sha, str) else None
+
+
+def _validate_matching_source_fingerprints(
+    row: dict[str, Any],
+    episode: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    row_has = "source_fingerprint_status" in row or "source_fingerprints" in row
+    episode_has = "source_fingerprint_status" in episode or "source_fingerprints" in episode
+    if episode_has and not row_has:
+        target.errors.append(f"{label}.source_fingerprints missing while referenced episode has source fingerprints.")
+        return
+    if not row_has:
+        return
+    _validate_source_fingerprint_fields(row, target, label, warn_if_missing=False)
+    if row.get("source_fingerprint_status") != episode.get("source_fingerprint_status"):
+        target.errors.append(f"{label}.source_fingerprint_status does not match episode {episode.get('episode_id')!r}.")
+    if row.get("source_fingerprints") != episode.get("source_fingerprints"):
+        target.errors.append(f"{label}.source_fingerprints does not match episode {episode.get('episode_id')!r}.")
+
+
+def _validate_contract_fingerprint_status(row: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    status = row.get("contract_fingerprint_status")
+    if status not in {"matched", "drifted", "unverified"}:
+        target.errors.append(f"{label}.contract_fingerprint_status must be matched, drifted, or unverified.")
+    reasons = row.get("contract_fingerprint_reasons")
+    if not _is_string_list(reasons):
+        target.errors.append(f"{label}.contract_fingerprint_reasons must be a list of strings.")
+        reasons = []
+    if status in {"drifted", "unverified"} and not reasons:
+        target.errors.append(f"{label}.contract_fingerprint_reasons must explain non-matched contract status.")
+    if status == "matched" and reasons:
+        target.errors.append(f"{label}.contract_fingerprint_reasons must be empty when status is matched.")
+    fingerprints = row.get("contract_fingerprints")
+    if not isinstance(fingerprints, dict):
+        target.errors.append(f"{label}.contract_fingerprints must be an object.")
+        return
+    for side in ("baseline", "candidate"):
+        value = fingerprints.get(side)
+        if not isinstance(value, dict):
+            target.errors.append(f"{label}.contract_fingerprints.{side} must be an object.")
+            continue
+        _validate_contract_fingerprint_inputs(value, target, f"{label}.contract_fingerprints.{side}")
+
+
+def _validate_contract_fingerprint_inputs(value: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for name in ("scenario", "source_trace"):
+        record = value.get(name)
+        if not isinstance(record, dict):
+            target.errors.append(f"{label}.{name} must be an object.")
+            continue
+        path = record.get("path")
+        if path is not None and not isinstance(path, str):
+            target.errors.append(f"{label}.{name}.path must be a string or null.")
+        sha = record.get("sha256")
+        if sha is not None and not _is_sha256(sha):
+            target.errors.append(f"{label}.{name}.sha256 must be a SHA-256 hex string or null.")
+
+
+def _validate_source_fingerprint_coverage(value: Any, target: ValidationTarget, episodes: list[dict[str, Any]]) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("dataset_metrics.source_fingerprint_coverage must be an object.")
+        return
+    expected = _expected_source_fingerprint_coverage(episodes)
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                f"dataset_metrics.source_fingerprint_coverage.{field_name} expected {expected_value}, got {value.get(field_name)!r}."
+            )
+
+
+def _expected_source_fingerprint_coverage(episodes: list[dict[str, Any]]) -> dict[str, int]:
+    with_scenario = 0
+    with_trace = 0
+    fully_verified = 0
+    for episode in episodes:
+        fingerprints = episode.get("source_fingerprints") if isinstance(episode.get("source_fingerprints"), dict) else {}
+        scenario = fingerprints.get("scenario") if isinstance(fingerprints.get("scenario"), dict) else {}
+        source_trace = fingerprints.get("source_trace") if isinstance(fingerprints.get("source_trace"), dict) else {}
+        scenario_sha = scenario.get("sha256")
+        trace_sha = source_trace.get("sha256")
+        if _is_sha256(scenario_sha):
+            with_scenario += 1
+        if _is_sha256(trace_sha):
+            with_trace += 1
+        if _is_sha256(scenario_sha) and _is_sha256(trace_sha):
+            fully_verified += 1
+    return {
+        "episodes": len(episodes),
+        "with_scenario_sha256": with_scenario,
+        "with_source_trace_sha256": with_trace,
+        "fully_verified": fully_verified,
+        "unverified": len(episodes) - fully_verified,
+    }
 
 
 def _validate_messages(value: Any, target: ValidationTarget, label: str) -> None:
@@ -1673,6 +1847,10 @@ def _validate_dataset_metrics(
     if _count_rows(metrics.get("critical_failure_counts")) != expected_critical:
         target.errors.append("dataset_metrics.critical_failure_counts does not match episode critical_failures.")
 
+    if "source_fingerprint_coverage" in metrics:
+        _validate_source_fingerprint_coverage(metrics.get("source_fingerprint_coverage"), target, episodes)
+    else:
+        target.warnings.append("dataset_metrics.source_fingerprint_coverage is missing; rerun export-rl to refresh provenance metrics.")
     _validate_dataset_family_metrics(metrics.get("task_families"), target, episodes, step_rewards, failure_modes, sft, dpo, reward_model)
     _validate_quality_flags(metrics.get("quality_flags"), target)
     if "metadata" in metrics:
@@ -1791,6 +1969,7 @@ def _validate_dataset_card(path: Path, target: ValidationTarget) -> None:
     required = [
         "# Flight Recorder Dataset Card",
         "## Summary",
+        "## Source Fingerprints",
         "## Artifact Counts",
         "## Task Families",
         "## Quality Flags",
@@ -1870,6 +2049,10 @@ def _validate_failure_modes(
             _validate_evidence_refs(failure.get("evidence_refs"), target, f"failure_modes[{index}].evidence_refs")
         if not isinstance(failure.get("attribution"), list):
             target.errors.append(f"failure_modes[{index}].attribution must be a list.")
+        episode = next((episode for episode in episodes if episode.get("episode_id") == episode_id), None)
+        if isinstance(episode, dict):
+            _validate_matching_source_fingerprints(failure, episode, target, f"failure_modes[{index}]")
+        _validate_source_fingerprint_fields(failure, target, f"failure_modes[{index}]", warn_if_missing=False)
 
 
 def _validate_curriculum(
