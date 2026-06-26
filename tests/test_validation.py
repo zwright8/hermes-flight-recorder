@@ -159,6 +159,70 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("step_rewards for episode", errors)
             self.assertIn("expected", errors)
 
+    def test_validate_rejects_reward_model_view_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            reward_model_path = export / "reward_model.jsonl"
+            sample = json.loads(reward_model_path.read_text(encoding="utf-8").splitlines()[0])
+            sample["response"] = "drifted response"
+            reward_model_path.write_text(json.dumps(sample) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("reward_model[0].response does not match episode", errors)
+
+    def test_validate_rejects_missing_dpo_view_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            (export / "dpo.jsonl").write_text("", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("manifest.dpo_count", errors)
+            self.assertIn("dpo.jsonl missing preference pairs", errors)
+
+    def test_validate_warns_on_legacy_training_export_without_trainer_views(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            for name in ("sft", "dpo", "reward_model"):
+                (export / f"{name}.jsonl").unlink()
+            manifest_path = export / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for name in ("sft", "dpo", "reward_model"):
+                manifest["outputs"].pop(name, None)
+            for name in ("sft_count", "dpo_count", "reward_model_count"):
+                manifest.pop(name, None)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            non_strict = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+            strict = run_cli(["validate", "--training-export", str(export), "--strict"])
+
+            self.assertEqual(non_strict, 0)
+            self.assertEqual(strict, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("sft.jsonl is missing", warnings)
+            self.assertIn("manifest.sft_count is missing", warnings)
+
     def test_validate_accepts_suite_summary_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

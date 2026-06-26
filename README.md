@@ -45,8 +45,9 @@ Expected demo output:
   scenario run, suite-level artifact, pass rate, average score, task-family
   rollups, and recurring failed rules.
 - A training export in `runs/training_export/` with episodes, terminal rewards,
-  step-level reward attribution, preference pairs, failure modes, curriculum
-  metadata, and a manifest for future model-improvement loops.
+  step-level reward attribution, preference pairs, trainer-ready SFT/DPO/reward
+  model views, failure modes, curriculum metadata, and a manifest for future
+  model-improvement loops.
 
 ## Install
 
@@ -190,6 +191,12 @@ training-loop artifacts:
   attribution.
 - `curriculum.json`: task-family rollups for prioritizing regression and
   training curricula.
+- `sft.jsonl`: passing episode responses formatted as supervised fine-tuning
+  candidates.
+- `dpo.jsonl`: preference pairs reshaped as `prompt`, `chosen`, and `rejected`
+  rows.
+- `reward_model.jsonl`: one prompt/response label per episode with deterministic
+  score and reward fields.
 - `manifest.json`: export settings, counts, and caveats.
 
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
@@ -374,8 +381,9 @@ completed run directory. It derives scalar rewards from deterministic scores,
 adds failed-rule attribution where the scorecard points to an event or final
 answer, carries structured `evidence_refs` into rewards, step rewards, and
 failure modes, creates preference pairs when one run clearly beats another in
-the same task family, emits failure-mode records for every failed rule, and writes a
-curriculum summary that groups failure pressure by task family and rule.
+the same task family, emits trainer-ready SFT/DPO/reward-model views, emits
+failure-mode records for every failed rule, and writes a curriculum summary
+that groups failure pressure by task family and rule.
 
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.
@@ -429,7 +437,7 @@ scenario directory or single scenario + trace artifact
 	  compare-suite baseline/candidate directories -> suite regression delta
 	          |
 	          v
-	  export-rl -> episodes/rewards/step rewards/preferences/failure modes/curriculum
+	  export-rl -> evidence artifacts + trainer-ready views
 	          |
 	          v
 	  validate -> machine-checkable artifact contract

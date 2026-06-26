@@ -11,11 +11,14 @@ from .adapters import TRACE_SCHEMA_VERSION
 from .scorers import SCORE_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
+    RL_DPO_SCHEMA_VERSION,
     RL_EPISODE_SCHEMA_VERSION,
     RL_FAILURE_MODE_SCHEMA_VERSION,
     RL_MANIFEST_SCHEMA_VERSION,
     RL_PREFERENCE_SCHEMA_VERSION,
     RL_REWARD_SCHEMA_VERSION,
+    RL_REWARD_MODEL_SCHEMA_VERSION,
+    RL_SFT_SCHEMA_VERSION,
     RL_STEP_REWARD_SCHEMA_VERSION,
     REWARD_SCALES,
 )
@@ -152,8 +155,31 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     preferences = _read_jsonl_objects(export_dir / "preferences.jsonl", target, "preferences.jsonl")
     failure_modes = _read_jsonl_objects(export_dir / "failure_modes.jsonl", target, "failure_modes.jsonl")
     curriculum = _read_object(export_dir / "curriculum.json", target, "curriculum.json")
+    sft_path = export_dir / "sft.jsonl"
+    dpo_path = export_dir / "dpo.jsonl"
+    reward_model_path = export_dir / "reward_model.jsonl"
+    sft = _read_jsonl_objects_optional(sft_path, target, "sft.jsonl", "rerun export-rl to emit trainer-ready SFT rows")
+    dpo = _read_jsonl_objects_optional(dpo_path, target, "dpo.jsonl", "rerun export-rl to emit trainer-ready DPO rows")
+    reward_model = _read_jsonl_objects_optional(
+        reward_model_path,
+        target,
+        "reward_model.jsonl",
+        "rerun export-rl to emit trainer-ready reward-model rows",
+    )
     if manifest is not None:
-        _validate_training_manifest(manifest, target, episodes, rewards, step_rewards, preferences, failure_modes, curriculum)
+        _validate_training_manifest(
+            manifest,
+            target,
+            episodes,
+            rewards,
+            step_rewards,
+            preferences,
+            failure_modes,
+            curriculum,
+            sft,
+            dpo,
+            reward_model,
+        )
     _validate_episodes(episodes, target)
     _validate_rewards(rewards, target, episodes)
     _validate_step_rewards(step_rewards, target, episodes, rewards)
@@ -161,6 +187,12 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     _validate_failure_modes(failure_modes, target, episodes)
     if curriculum is not None:
         _validate_curriculum(curriculum, target, episodes, failure_modes)
+    if sft_path.exists():
+        _validate_sft_records(sft, target, episodes)
+    if dpo_path.exists():
+        _validate_dpo_records(dpo, target, preferences, episodes)
+    if reward_model_path.exists():
+        _validate_reward_model_records(reward_model, target, episodes)
     target.details.update(
         {
             "episode_count": len(episodes),
@@ -168,6 +200,9 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             "step_reward_count": len(step_rewards),
             "preference_count": len(preferences),
             "failure_mode_count": len(failure_modes),
+            "sft_count": len(sft),
+            "dpo_count": len(dpo),
+            "reward_model_count": len(reward_model),
         }
     )
     return target
@@ -279,6 +314,9 @@ def _validate_training_manifest(
     preferences: list[dict[str, Any]],
     failure_modes: list[dict[str, Any]],
     curriculum: dict[str, Any] | None,
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
 ) -> None:
     _require_equal(manifest, "schema_version", RL_MANIFEST_SCHEMA_VERSION, target)
     expected_counts = {
@@ -291,6 +329,16 @@ def _validate_training_manifest(
         expected_counts["step_reward_count"] = len(step_rewards)
     else:
         target.warnings.append("manifest.step_reward_count is missing; rerun export-rl to refresh training artifacts.")
+    trainer_view_counts = {
+        "sft_count": len(sft),
+        "dpo_count": len(dpo),
+        "reward_model_count": len(reward_model),
+    }
+    for field_name, expected in trainer_view_counts.items():
+        if field_name in manifest:
+            expected_counts[field_name] = expected
+        else:
+            target.warnings.append(f"manifest.{field_name} is missing; rerun export-rl to refresh trainer-ready views.")
     for field_name, expected in expected_counts.items():
         if manifest.get(field_name) != expected:
             target.errors.append(f"manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
@@ -302,6 +350,9 @@ def _validate_training_manifest(
                 target.errors.append(f"manifest.outputs.{output_name} is missing.")
         if "step_rewards" not in manifest["outputs"]:
             target.warnings.append("manifest.outputs.step_rewards is missing; rerun export-rl to refresh training artifacts.")
+        for output_name in ("sft", "dpo", "reward_model"):
+            if output_name not in manifest["outputs"]:
+                target.warnings.append(f"manifest.outputs.{output_name} is missing; rerun export-rl to refresh trainer-ready views.")
     if curriculum is not None and curriculum.get("failure_mode_count") != len(failure_modes):
         target.errors.append(
             f"curriculum.failure_mode_count expected {len(failure_modes)}, got {curriculum.get('failure_mode_count')!r}."
@@ -499,6 +550,200 @@ def _rule_reward_deltas_by_key(rewards: list[dict[str, Any]]) -> dict[tuple[str,
             if isinstance(rule_id, str) and isinstance(reward_delta, (int, float)) and not isinstance(reward_delta, bool):
                 deltas[(episode_id, rule_id)] = round(float(reward_delta), 6)
     return deltas
+
+
+def _validate_sft_records(
+    sft: list[dict[str, Any]],
+    target: ValidationTarget,
+    episodes: list[dict[str, Any]],
+) -> None:
+    episode_by_id = {episode.get("episode_id"): episode for episode in episodes if isinstance(episode.get("episode_id"), str)}
+    expected_ids = {
+        str(episode.get("episode_id"))
+        for episode in episodes
+        if isinstance(episode.get("episode_id"), str)
+        and isinstance(episode.get("outcome"), dict)
+        and episode["outcome"].get("passed") is True
+        and isinstance(episode.get("final_answer"), str)
+        and bool(episode.get("final_answer"))
+    }
+    seen: set[str] = set()
+    for index, sample in enumerate(sft):
+        _require_equal(sample, "schema_version", RL_SFT_SCHEMA_VERSION, target, prefix=f"sft[{index}].")
+        episode_id = _validate_training_view_common(sample, target, f"sft[{index}]", episode_by_id)
+        if episode_id:
+            if episode_id in seen:
+                target.errors.append(f"sft[{index}].episode_id duplicates {episode_id!r}.")
+            seen.add(episode_id)
+            episode = episode_by_id.get(episode_id)
+            outcome = episode.get("outcome") if isinstance(episode, dict) and isinstance(episode.get("outcome"), dict) else {}
+            if outcome.get("passed") is not True:
+                target.errors.append(f"sft[{index}].episode_id {episode_id!r} does not reference a passing episode.")
+            if sample.get("quality_gate") != "passed_scorecard":
+                target.errors.append(f"sft[{index}].quality_gate must be 'passed_scorecard'.")
+    missing = sorted(expected_ids - seen)
+    if missing:
+        target.errors.append(f"sft.jsonl missing passing episode samples: {missing!r}.")
+
+
+def _validate_dpo_records(
+    dpo: list[dict[str, Any]],
+    target: ValidationTarget,
+    preferences: list[dict[str, Any]],
+    episodes: list[dict[str, Any]],
+) -> None:
+    preference_by_id = {
+        preference.get("preference_id"): preference
+        for preference in preferences
+        if isinstance(preference.get("preference_id"), str)
+    }
+    episode_by_id = {episode.get("episode_id"): episode for episode in episodes if isinstance(episode.get("episode_id"), str)}
+    seen: set[str] = set()
+    for index, pair in enumerate(dpo):
+        _require_equal(pair, "schema_version", RL_DPO_SCHEMA_VERSION, target, prefix=f"dpo[{index}].")
+        pair_id = pair.get("pair_id")
+        preference_id = pair.get("preference_id")
+        if not isinstance(pair_id, str) or not pair_id:
+            target.errors.append(f"dpo[{index}].pair_id must be a non-empty string.")
+        elif pair_id in seen:
+            target.errors.append(f"dpo[{index}].pair_id duplicates {pair_id!r}.")
+        else:
+            seen.add(pair_id)
+        if preference_id != pair_id:
+            target.errors.append(f"dpo[{index}].preference_id must match pair_id.")
+        preference = preference_by_id.get(preference_id)
+        if preference is None:
+            target.errors.append(f"dpo[{index}].preference_id {preference_id!r} does not reference a preference.")
+            continue
+        for field_name in ("task_family", "prompt", "chosen", "rejected", "reason", "source_artifact"):
+            if not isinstance(pair.get(field_name), str):
+                target.errors.append(f"dpo[{index}].{field_name} must be a string.")
+        if pair.get("source_artifact") != "preferences.jsonl":
+            target.errors.append(f"dpo[{index}].source_artifact must be 'preferences.jsonl'.")
+        for field_name in ("chosen_score", "rejected_score", "score_gap"):
+            if not _is_int_between(pair.get(field_name), 0, 100):
+                target.errors.append(f"dpo[{index}].{field_name} must be an integer from 0 to 100.")
+        _validate_messages(pair.get("chosen_messages"), target, f"dpo[{index}].chosen_messages")
+        _validate_messages(pair.get("rejected_messages"), target, f"dpo[{index}].rejected_messages")
+        for field_name in ("chosen_episode_id", "rejected_episode_id"):
+            episode_id = pair.get(field_name)
+            if not isinstance(episode_id, str) or not episode_id:
+                target.errors.append(f"dpo[{index}].{field_name} must be a non-empty string.")
+            elif episode_id not in episode_by_id:
+                target.errors.append(f"dpo[{index}].{field_name} {episode_id!r} does not reference an episode.")
+        _compare_dpo_to_preference(pair, preference, target, index)
+    missing = sorted(set(preference_by_id) - seen)
+    if missing:
+        target.errors.append(f"dpo.jsonl missing preference pairs: {missing!r}.")
+
+
+def _validate_reward_model_records(
+    reward_model: list[dict[str, Any]],
+    target: ValidationTarget,
+    episodes: list[dict[str, Any]],
+) -> None:
+    episode_by_id = {episode.get("episode_id"): episode for episode in episodes if isinstance(episode.get("episode_id"), str)}
+    seen: set[str] = set()
+    for index, sample in enumerate(reward_model):
+        _require_equal(sample, "schema_version", RL_REWARD_MODEL_SCHEMA_VERSION, target, prefix=f"reward_model[{index}].")
+        episode_id = _validate_training_view_common(sample, target, f"reward_model[{index}]", episode_by_id)
+        if episode_id:
+            if episode_id in seen:
+                target.errors.append(f"reward_model[{index}].episode_id duplicates {episode_id!r}.")
+            seen.add(episode_id)
+        if not isinstance(sample.get("passed"), bool):
+            target.errors.append(f"reward_model[{index}].passed must be a boolean.")
+        for field_name in ("failed_rules", "critical_failures"):
+            if not _is_string_list(sample.get(field_name)):
+                target.errors.append(f"reward_model[{index}].{field_name} must be a list of strings.")
+    missing = sorted(set(episode_by_id) - seen)
+    if missing:
+        target.errors.append(f"reward_model.jsonl missing episode samples: {missing!r}.")
+
+
+def _validate_training_view_common(
+    sample: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    episode_by_id: dict[Any, dict[str, Any]],
+) -> str | None:
+    sample_id = sample.get("sample_id")
+    episode_id = sample.get("episode_id")
+    if not isinstance(sample_id, str) or not sample_id:
+        target.errors.append(f"{label}.sample_id must be a non-empty string.")
+    if not isinstance(episode_id, str) or not episode_id:
+        target.errors.append(f"{label}.episode_id must be a non-empty string.")
+        episode = None
+    else:
+        episode = episode_by_id.get(episode_id)
+        if episode is None:
+            target.errors.append(f"{label}.episode_id {episode_id!r} does not reference an episode.")
+    if isinstance(sample_id, str) and isinstance(episode_id, str) and sample_id != episode_id:
+        target.errors.append(f"{label}.sample_id must match episode_id.")
+    for field_name in ("scenario_id", "task_family", "prompt", "response", "source_artifact"):
+        if not isinstance(sample.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if sample.get("source_artifact") != "episodes.jsonl":
+        target.errors.append(f"{label}.source_artifact must be 'episodes.jsonl'.")
+    if not _is_int_between(sample.get("score"), 0, 100):
+        target.errors.append(f"{label}.score must be an integer from 0 to 100.")
+    if not isinstance(sample.get("reward"), (int, float)) or isinstance(sample.get("reward"), bool):
+        target.errors.append(f"{label}.reward must be numeric.")
+    _validate_messages(sample.get("messages"), target, f"{label}.messages")
+    if isinstance(episode, dict):
+        outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+        expected = {
+            "scenario_id": episode.get("scenario_id"),
+            "task_family": episode.get("task_family"),
+            "prompt": episode.get("prompt"),
+            "response": episode.get("final_answer"),
+            "score": outcome.get("score"),
+            "reward": outcome.get("reward"),
+        }
+        for field_name, expected_value in expected.items():
+            if sample.get(field_name) != expected_value:
+                target.errors.append(f"{label}.{field_name} does not match episode {episode_id!r}.")
+    return episode_id if isinstance(episode_id, str) and episode_id else None
+
+
+def _compare_dpo_to_preference(
+    pair: dict[str, Any],
+    preference: dict[str, Any],
+    target: ValidationTarget,
+    index: int,
+) -> None:
+    expected = {
+        "task_family": preference.get("task_family"),
+        "prompt": preference.get("prompt"),
+        "chosen_episode_id": preference.get("chosen_episode_id"),
+        "rejected_episode_id": preference.get("rejected_episode_id"),
+        "chosen_score": preference.get("chosen_score"),
+        "rejected_score": preference.get("rejected_score"),
+        "score_gap": preference.get("score_gap"),
+        "reason": preference.get("reason"),
+    }
+    chosen = preference.get("chosen") if isinstance(preference.get("chosen"), dict) else {}
+    rejected = preference.get("rejected") if isinstance(preference.get("rejected"), dict) else {}
+    expected["chosen"] = chosen.get("final_answer")
+    expected["rejected"] = rejected.get("final_answer")
+    for field_name, expected_value in expected.items():
+        if pair.get(field_name) != expected_value:
+            target.errors.append(f"dpo[{index}].{field_name} does not match preference {preference.get('preference_id')!r}.")
+
+
+def _validate_messages(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, list) or len(value) != 2:
+        target.errors.append(f"{label} must be a two-message user/assistant list.")
+        return
+    expected_roles = ["user", "assistant"]
+    for index, message in enumerate(value):
+        if not isinstance(message, dict):
+            target.errors.append(f"{label}[{index}] must be an object.")
+            continue
+        if message.get("role") != expected_roles[index]:
+            target.errors.append(f"{label}[{index}].role must be {expected_roles[index]!r}.")
+        if not isinstance(message.get("content"), str):
+            target.errors.append(f"{label}[{index}].content must be a string.")
 
 
 def _validate_preferences(preferences: list[dict[str, Any]], target: ValidationTarget, episodes: list[dict[str, Any]]) -> None:
@@ -824,9 +1069,14 @@ def _read_jsonl_objects(path: Path, target: ValidationTarget, label: str) -> lis
     return rows
 
 
-def _read_jsonl_objects_optional(path: Path, target: ValidationTarget, label: str) -> list[dict[str, Any]]:
+def _read_jsonl_objects_optional(
+    path: Path,
+    target: ValidationTarget,
+    label: str,
+    refresh_message: str = "rerun export-rl to emit step-level reward attribution",
+) -> list[dict[str, Any]]:
     if not path.exists():
-        target.warnings.append(f"{label} is missing; rerun export-rl to emit step-level reward attribution.")
+        target.warnings.append(f"{label} is missing; {refresh_message}.")
         return []
     return _read_jsonl_objects(path, target, label)
 

@@ -135,6 +135,7 @@ The generated training export gives future model-improvement loops:
 - step-level reward rows that point to event, final-answer, or episode targets,
 - one prompt-injection preference pair choosing the passing trace over the
   failing trace,
+- trainer-ready SFT, DPO, and reward-model views over the canonical evidence,
 - six failed-rule failure-mode records across the three failing traces,
 - structured evidence refs for event/final-answer/episode attribution,
 - one curriculum summary grouping failure pressure by task family and rule.
@@ -179,9 +180,10 @@ Flight Recorder turns Hermes' experience into regression pressure.
 8. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`.
 9. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-10. Export episodes, rewards, step rewards, preference pairs, failure modes,
-   and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
-   reward-modeling, or RL pipelines.
+10. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+   SFT/DPO/reward-model views, failure modes, and curriculum metadata with
+   `flightrecorder export-rl` for future SFT, DPO, reward-modeling, or RL
+   pipelines.
 11. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
@@ -258,7 +260,8 @@ commands/URLs, secret exposure, unsupported artifact claims, task-completion
 evidence, and delegation budget limits.
 
 Demo evidence:
-- 55 unit tests pass.
+- The release check passes across the generated demo, validation, audit, and
+  install smoke flow.
 - `./demo.sh` runs offline with no API keys or network.
 - Demo generates two passing reports, three failing adversarial reports, and a
   compare report.
@@ -267,7 +270,8 @@ Demo evidence:
 - `flightrecorder check-scenarios` emits machine-readable scenario contract
   validation before scenarios are used as benchmark inputs.
 - `flightrecorder export-rl` emits episode, reward, step-reward, preference,
-  failure-mode, curriculum, and manifest artifacts for future training loops.
+  SFT, DPO, reward-model, failure-mode, curriculum, and manifest artifacts for
+  future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
   internally consistent, including suite-summary metrics.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
@@ -288,8 +292,8 @@ can we prove whether a specific autonomous run behaved within policy?
 
 I run `./demo.sh`. It produces five reports offline: two passing traces, three
 failing adversarial traces, a before/after compare report, a suite compare
-report, and a training export with episodes, rewards, a preference pair,
-failure modes, and curriculum metadata.
+report, and a training export with evidence artifacts plus SFT, DPO, and
+reward-model views.
 
 The passing traces show prompt-injection resistance and structured task
 completion evidence for an email reply. The failing traces show the three
@@ -321,8 +325,9 @@ evidence.
 
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards, step-level attribution rows, chosen/rejected pairs,
-failure-mode rows, and curriculum metadata, so training code can consume the
-evidence without scraping HTML reports.
+trainer-ready SFT/DPO/reward-model rows, failure-mode rows, and curriculum
+metadata, so training code can consume the evidence without scraping HTML
+reports.
 
 Then I run `flightrecorder validate --strict`, which checks the data contracts:
 scorecards match their rules, rewards link back to episodes, step rewards point

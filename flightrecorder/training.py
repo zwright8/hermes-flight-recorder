@@ -16,6 +16,9 @@ RL_STEP_REWARD_SCHEMA_VERSION = "hfr.rl.step_reward.v1"
 RL_PREFERENCE_SCHEMA_VERSION = "hfr.rl.preference.v1"
 RL_FAILURE_MODE_SCHEMA_VERSION = "hfr.rl.failure_mode.v1"
 RL_CURRICULUM_SCHEMA_VERSION = "hfr.rl.curriculum.v1"
+RL_SFT_SCHEMA_VERSION = "hfr.rl.sft.v1"
+RL_DPO_SCHEMA_VERSION = "hfr.rl.dpo.v1"
+RL_REWARD_MODEL_SCHEMA_VERSION = "hfr.rl.reward_model.v1"
 
 REWARD_SCALES = {"score", "binary", "signed"}
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
@@ -62,6 +65,9 @@ def export_rl_dataset(
     preferences = _preference_records(episodes, min_score_gap=min_score_gap, max_pairs_per_family=max_pairs_per_family)
     failure_modes = [_failure_mode_record(record, rule, reward_scale) for record in records for rule in _failed_rules(record.scorecard)]
     curriculum = _curriculum_record(episodes, failure_modes)
+    sft = _sft_records(episodes)
+    dpo = _dpo_records(preferences)
+    reward_model = _reward_model_records(episodes)
 
     paths = {
         "episodes": target / "episodes.jsonl",
@@ -70,6 +76,9 @@ def export_rl_dataset(
         "preferences": target / "preferences.jsonl",
         "failure_modes": target / "failure_modes.jsonl",
         "curriculum": target / "curriculum.json",
+        "sft": target / "sft.jsonl",
+        "dpo": target / "dpo.jsonl",
+        "reward_model": target / "reward_model.jsonl",
         "manifest": target / "manifest.json",
     }
     _write_jsonl(paths["episodes"], episodes)
@@ -78,6 +87,9 @@ def export_rl_dataset(
     _write_jsonl(paths["preferences"], preferences)
     _write_jsonl(paths["failure_modes"], failure_modes)
     _write_json(paths["curriculum"], curriculum)
+    _write_jsonl(paths["sft"], sft)
+    _write_jsonl(paths["dpo"], dpo)
+    _write_jsonl(paths["reward_model"], reward_model)
 
     manifest = {
         "schema_version": RL_MANIFEST_SCHEMA_VERSION,
@@ -93,6 +105,9 @@ def export_rl_dataset(
         "step_reward_count": len(step_rewards),
         "preference_count": len(preferences),
         "failure_mode_count": len(failure_modes),
+        "sft_count": len(sft),
+        "dpo_count": len(dpo),
+        "reward_model_count": len(reward_model),
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "notes": [
@@ -101,6 +116,7 @@ def export_rl_dataset(
             "failure_modes.jsonl exposes one failed-rule record per episode for curriculum construction.",
             "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
             "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
+            "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
@@ -429,6 +445,99 @@ def _curriculum_record(episodes: list[dict[str, Any]], failure_modes: list[dict[
     }
 
 
+def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for episode in episodes:
+        outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+        response = str(episode.get("final_answer") or "")
+        if outcome.get("passed") is not True or not response:
+            continue
+        prompt = str(episode.get("prompt") or "")
+        rows.append(
+            {
+                "schema_version": RL_SFT_SCHEMA_VERSION,
+                "sample_id": str(episode.get("episode_id") or ""),
+                "episode_id": str(episode.get("episode_id") or ""),
+                "scenario_id": str(episode.get("scenario_id") or ""),
+                "task_family": str(episode.get("task_family") or "unknown"),
+                "prompt": prompt,
+                "response": response,
+                "messages": _messages(prompt, response),
+                "score": _score_value(outcome.get("score")),
+                "reward": _numeric_value(outcome.get("reward")),
+                "quality_gate": "passed_scorecard",
+                "source_artifact": "episodes.jsonl",
+            }
+        )
+    return rows
+
+
+def _dpo_records(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for preference in preferences:
+        prompt = str(preference.get("prompt") or "")
+        chosen_view = preference.get("chosen") if isinstance(preference.get("chosen"), dict) else {}
+        rejected_view = preference.get("rejected") if isinstance(preference.get("rejected"), dict) else {}
+        chosen = str(chosen_view.get("final_answer") or "")
+        rejected = str(rejected_view.get("final_answer") or "")
+        preference_id = str(preference.get("preference_id") or "")
+        rows.append(
+            {
+                "schema_version": RL_DPO_SCHEMA_VERSION,
+                "pair_id": preference_id,
+                "preference_id": preference_id,
+                "task_family": str(preference.get("task_family") or "unknown"),
+                "prompt": prompt,
+                "chosen": chosen,
+                "rejected": rejected,
+                "chosen_messages": _messages(prompt, chosen),
+                "rejected_messages": _messages(prompt, rejected),
+                "chosen_episode_id": str(preference.get("chosen_episode_id") or ""),
+                "rejected_episode_id": str(preference.get("rejected_episode_id") or ""),
+                "chosen_score": _score_value(preference.get("chosen_score")),
+                "rejected_score": _score_value(preference.get("rejected_score")),
+                "score_gap": _score_value(preference.get("score_gap")),
+                "reason": str(preference.get("reason") or ""),
+                "source_artifact": "preferences.jsonl",
+            }
+        )
+    return rows
+
+
+def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for episode in episodes:
+        outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+        prompt = str(episode.get("prompt") or "")
+        response = str(episode.get("final_answer") or "")
+        rows.append(
+            {
+                "schema_version": RL_REWARD_MODEL_SCHEMA_VERSION,
+                "sample_id": str(episode.get("episode_id") or ""),
+                "episode_id": str(episode.get("episode_id") or ""),
+                "scenario_id": str(episode.get("scenario_id") or ""),
+                "task_family": str(episode.get("task_family") or "unknown"),
+                "prompt": prompt,
+                "response": response,
+                "messages": _messages(prompt, response),
+                "score": _score_value(outcome.get("score")),
+                "reward": _numeric_value(outcome.get("reward")),
+                "passed": bool(outcome.get("passed")),
+                "failed_rules": _string_list(outcome.get("failed_rules")),
+                "critical_failures": _string_list(outcome.get("critical_failures")),
+                "source_artifact": "episodes.jsonl",
+            }
+        )
+    return rows
+
+
+def _messages(prompt: str, response: str) -> list[dict[str, str]]:
+    return [
+        {"role": "user", "content": prompt},
+        {"role": "assistant", "content": response},
+    ]
+
+
 def _event_record(index: int, event: Any) -> dict[str, Any]:
     if not isinstance(event, dict):
         return {"index": index, "type": "unknown", "text": str(event)}
@@ -564,6 +673,28 @@ def _score(scorecard: dict[str, Any]) -> int:
         return max(0, min(100, int(raw)))
     except (TypeError, ValueError):
         return 0
+
+
+def _score_value(value: Any) -> int:
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _numeric_value(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
 
 
 def _display_path(path: Path, preserve_paths: bool) -> str:

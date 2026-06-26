@@ -76,6 +76,11 @@ The export directory contains:
   attribution.
 - `curriculum.json`: task-family and rule-level rollups for prioritizing
   regression work and future training curricula.
+- `sft.jsonl`: passing episode responses as supervised fine-tuning candidates.
+- `dpo.jsonl`: preference pairs reshaped as `prompt`, `chosen`, and `rejected`
+  rows.
+- `reward_model.jsonl`: one prompt/response label per episode with deterministic
+  score and reward fields.
 - `manifest.json`: generation settings, counts, output paths, and caveats.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
@@ -84,7 +89,7 @@ Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
 links, step-reward event indexes, preference references, failure-mode links,
-and curriculum counts are internally consistent.
+curriculum counts, and trainer-ready view rows are internally consistent.
 
 ## Episode Records
 
@@ -156,6 +161,23 @@ flightrecorder export-rl \
 Preference records are suitable as a starting point for DPO-style datasets or
 reward-model comparisons.
 
+## Trainer-Ready Views
+
+The canonical files above keep full provenance. The trainer-ready views are
+smaller reshapes for common downstream jobs:
+
+- `sft.jsonl` includes only passing episodes with non-empty final answers. Each
+  row has `prompt`, `response`, and a two-message user/assistant `messages`
+  list.
+- `dpo.jsonl` mirrors `preferences.jsonl` as `prompt`, `chosen`, and `rejected`
+  strings plus chosen/rejected message lists.
+- `reward_model.jsonl` includes every episode with `prompt`, `response`,
+  `score`, `reward`, `passed`, failed rules, and critical failures.
+
+These files are convenience views, not new labels. Validation checks them back
+against `episodes.jsonl` and `preferences.jsonl` so downstream jobs can consume
+simple rows without losing the audit trail.
+
 ## Failure Modes And Curriculum
 
 `failure_modes.jsonl` makes the negative signal explicit. Each row links a
@@ -194,6 +216,18 @@ preferences = [
     json.loads(line)
     for line in Path("runs/training_export/preferences.jsonl").read_text().splitlines()
 ]
+sft = [
+    json.loads(line)
+    for line in Path("runs/training_export/sft.jsonl").read_text().splitlines()
+]
+dpo = [
+    json.loads(line)
+    for line in Path("runs/training_export/dpo.jsonl").read_text().splitlines()
+]
+reward_model = [
+    json.loads(line)
+    for line in Path("runs/training_export/reward_model.jsonl").read_text().splitlines()
+]
 failure_modes = [
     json.loads(line)
     for line in Path("runs/training_export/failure_modes.jsonl").read_text().splitlines()
@@ -205,6 +239,7 @@ Recommended first uses:
 
 - filter passing episodes into SFT candidates,
 - convert preference records into chosen/rejected pairs,
+- feed the trainer-ready SFT/DPO/reward-model views to downstream pipelines,
 - consume step rewards for event/final-answer credit-assignment experiments,
 - train a small reward model on scorecard-derived labels,
 - build failure-mode dashboards or curricula from explicit failed-rule rows,

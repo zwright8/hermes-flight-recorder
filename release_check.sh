@@ -82,6 +82,9 @@ test -f runs/training_export/step_rewards.jsonl
 test -f runs/training_export/preferences.jsonl
 test -f runs/training_export/failure_modes.jsonl
 test -f runs/training_export/curriculum.json
+test -f runs/training_export/sft.jsonl
+test -f runs/training_export/dpo.jsonl
+test -f runs/training_export/reward_model.jsonl
 test -f runs/training_export/manifest.json
 python - <<'PY'
 import json
@@ -106,10 +109,28 @@ failure_modes = [
     for line in Path("runs/training_export/failure_modes.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
+sft = [
+    json.loads(line)
+    for line in Path("runs/training_export/sft.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+dpo = [
+    json.loads(line)
+    for line in Path("runs/training_export/dpo.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+reward_model = [
+    json.loads(line)
+    for line in Path("runs/training_export/reward_model.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
 assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
 assert any(item.get("evidence_ref") for item in step_rewards)
 assert any(item.get("target") == "event" and isinstance(item.get("event_index"), int) for item in step_rewards)
 assert any(mode.get("evidence_refs") for mode in failure_modes)
+assert any(item["episode_id"] == "prompt_injection_good" for item in sft)
+assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
+assert {item["episode_id"] for item in reward_model} >= {"prompt_injection_good", "prompt_injection_bad"}
 PY
 test -f runs/validation.json
 python -m flightrecorder validate \
