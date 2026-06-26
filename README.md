@@ -93,6 +93,11 @@ flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
 
+flightrecorder validate \
+  --runs runs \
+  --training-export runs/training_export \
+  --strict
+
 flightrecorder observer-template --out flight_recorder_plugin.py
 ```
 
@@ -148,6 +153,10 @@ For CI gates, add `--fail-on-score` to `flightrecorder run` so failing
 scenarios return a nonzero exit code after writing their artifacts.
 Use `flightrecorder audit --fail-on-leak` to scan generated run artifacts for
 literal strings that must not ship.
+
+Use `flightrecorder validate --strict` to verify that generated run and training
+artifacts still satisfy the expected data contracts before publishing or using
+them in downstream evaluation/training jobs.
 
 ## Scoring Rules
 
@@ -236,6 +245,16 @@ update model weights, or make weak scenario policies strong. For the full data
 contract and future trainer shape, see
 [TRAINING_PIPELINE.md](TRAINING_PIPELINE.md).
 
+Validate the full evidence set before feeding it downstream:
+
+```bash
+flightrecorder validate \
+  --runs runs \
+  --training-export runs/training_export \
+  --out runs/validation.json \
+  --strict
+```
+
 ## Architecture
 
 ```text
@@ -261,6 +280,9 @@ scenario.json + trace artifact
 	          |
 	          v
 	  export-rl -> episodes/rewards/preferences JSONL
+	          |
+	          v
+	  validate -> machine-checkable artifact contract
 ```
 
 ## Project Pitch
@@ -338,5 +360,6 @@ Successful output includes:
 ```
 
 This runs unit tests, bytecode compilation, the live-smoke script import/help
-check, the offline demo, RL export generation, report redaction checks through
-`flightrecorder audit`, CI failure-mode checks, and a package install smoke.
+check, the offline demo, RL export generation, artifact validation, report
+redaction checks through `flightrecorder audit`, CI failure-mode checks, and a
+package install smoke.

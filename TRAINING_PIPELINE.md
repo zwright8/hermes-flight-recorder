@@ -26,6 +26,15 @@ flightrecorder export-rl \
 
 `demo.sh` already runs this export for the included scenarios.
 
+Validate the generated dataset before sending it to downstream jobs:
+
+```bash
+flightrecorder validate \
+  --runs runs \
+  --training-export runs/training_export \
+  --strict
+```
+
 ## Artifacts
 
 The export directory contains:
@@ -39,6 +48,8 @@ All exports are built from `normalized_trace.json` and `scorecard.json`, so they
 use the redacted evidence surface rather than raw sensitive traces.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
+`flightrecorder validate --strict` checks that counts, episode ids, reward links,
+and preference references are internally consistent.
 
 ## Episode Records
 

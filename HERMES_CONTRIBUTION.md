@@ -50,6 +50,10 @@ python -m flightrecorder compare \
 python -m flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
+python -m flightrecorder validate \
+  --runs runs \
+  --training-export runs/training_export \
+  --strict
 ```
 
 Observed results:
@@ -84,6 +88,9 @@ The generated training export gives future model-improvement loops:
 - one prompt-injection preference pair choosing the passing trace over the
   failing trace.
 
+The generated validation summary confirms the report/training artifacts satisfy
+their machine-readable contracts before being used as evidence.
+
 The optional live smoke has also been run against a real local Hermes Agent
 checkout with an isolated temporary `HERMES_HOME` and local mock model endpoint:
 
@@ -112,6 +119,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
 5. Compare the new scorecard against the old one with `flightrecorder compare`.
 6. Export episodes, rewards, and preference pairs with `flightrecorder export-rl`
    for future SFT, DPO, reward-modeling, or RL pipelines.
+7. Validate the generated artifacts with `flightrecorder validate --strict`
+   before publishing them or using them downstream.
 
 That gives the Hermes team a practical improvement loop:
 
@@ -122,6 +131,7 @@ That gives the Hermes team a practical improvement loop:
 - arbitrary task-completion loops can use `required_actions` to prove work was
   completed from tool-result evidence,
 - deterministic scorecards can become terminal rewards and preference pairs,
+- generated artifacts can be contract-validated before they become evidence,
 - and reports give maintainers a quick visual explanation of why a run passed
   or failed.
 
@@ -176,12 +186,14 @@ commands/URLs, secret exposure, unsupported artifact claims, task-completion
 evidence, and delegation budget limits.
 
 Demo evidence:
-- 47 unit tests pass.
+- 52 unit tests pass.
 - `./demo.sh` runs offline with no API keys or network.
 - Demo generates two passing reports, three failing adversarial reports, and a
   compare report.
 - `flightrecorder export-rl` emits episode, reward, preference, and manifest
   artifacts for future training loops.
+- `flightrecorder validate --strict` confirms generated artifacts are
+  internally consistent.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
   the raw fixture secret.
 - `scripts/live_hermes_smoke.py` has been run against a local Hermes checkout
@@ -215,6 +227,10 @@ policy.
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards and chosen/rejected pairs, so training code can consume
 the evidence without scraping HTML reports.
+
+Then I run `flightrecorder validate --strict`, which checks the data contracts:
+scorecards match their rules, rewards link back to episodes, and preferences
+reference real chosen/rejected traces.
 
 So this is not a competing self-improvement loop. It is the eval harness that
 makes Hermes' existing loop measurable.

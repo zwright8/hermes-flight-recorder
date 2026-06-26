@@ -26,7 +26,8 @@ python -m unittest discover
 
 The demo generates `runs/index.html` with two passing reports, three failing
 adversarial reports, a compare report, and `runs/training_export/` training
-artifacts. No API keys or network are required.
+artifacts. It also writes `runs/validation.json` to prove the generated
+contracts are internally consistent. No API keys or network are required.
 
 ## Live Hermes Collection
 
@@ -87,6 +88,8 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Use `flightrecorder export-rl --runs runs --out runs/training_export` when
   downstream SFT, preference, reward-model, or RL jobs need deterministic
   episode/reward/preference JSONL.
+- Use `flightrecorder validate --runs runs --training-export runs/training_export
+  --strict` before publishing artifacts or using them downstream.
 - Publish `report.html` and `scorecard.json`; avoid publishing raw traces.
 - Run `flightrecorder audit --runs runs --fail-on-leak --forbid-text <secret>`
   before publishing generated artifacts.

@@ -15,6 +15,7 @@ from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scorers import score_trace
 from .training import TrainingExportError, export_rl_dataset
+from .validation import validate_artifacts
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -146,6 +147,23 @@ def cmd_observer_template(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate(args: argparse.Namespace) -> int:
+    summary = validate_artifacts(
+        runs_dir=args.runs,
+        run_dirs=args.run,
+        training_export_dir=args.training_export,
+        strict=args.strict,
+    )
+    rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if summary["passed"] else 1
+
+
 def cmd_export_rl(args: argparse.Namespace) -> int:
     manifest = export_rl_dataset(
         args.runs,
@@ -222,6 +240,14 @@ def _parser() -> argparse.ArgumentParser:
     compare.add_argument("--html-out", help="Optional static HTML comparison report")
     compare.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate regresses")
     compare.set_defaults(func=cmd_compare)
+
+    validate = subparsers.add_parser("validate", help="Validate generated run and training artifacts")
+    validate.add_argument("--run", action="append", default=[], help="Validate one run directory; may be repeated")
+    validate.add_argument("--runs", help="Validate every completed run directory inside this runs directory")
+    validate.add_argument("--training-export", help="Validate an export-rl output directory")
+    validate.add_argument("--out", help="Write validation summary JSON to this path")
+    validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
+    validate.set_defaults(func=cmd_validate)
 
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")

@@ -22,6 +22,11 @@ python -m flightrecorder compare \
   --out runs/prompt_injection_compare.json \
   --html-out runs/prompt_injection_compare.html
 python -m flightrecorder export-rl --runs runs --out runs/training_export
+python -m flightrecorder validate \
+  --runs runs \
+  --training-export runs/training_export \
+  --out runs/validation.json \
+  --strict
 python -m flightrecorder index --runs runs --out runs/index.html
 
 echo "Demo reports written to $ROOT/runs/index.html"
