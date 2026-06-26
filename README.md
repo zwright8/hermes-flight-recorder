@@ -219,6 +219,16 @@ human-curation queue:
 - `REVIEW_INSTRUCTIONS.md`: short reviewer guidance.
 - `manifest.json`: review export counts, label options, and output paths.
 
+After reviewers fill a labels JSONL file, `flightrecorder apply-review` converts
+completed human labels into reviewed training views:
+
+- `reviewed_labels.jsonl`: joined review item + completed human label rows.
+- `reviewed_sft.jsonl`: accepted responses for supervised fine-tuning.
+- `reviewed_reward_model.jsonl`: human-labeled prompt/response reward rows.
+- `reviewed_preferences.jsonl`: accepted-vs-rejected pairs inside task families.
+- `reviewed_dpo.jsonl`: DPO-shaped rows derived from reviewed preferences.
+- `manifest.json`: reviewed export counts and provenance.
+
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
 artifacts:
 
@@ -485,10 +495,16 @@ flightrecorder export-review \
   --runs runs \
   --out runs/review_queue
 
+flightrecorder apply-review \
+  --review-export runs/review_queue \
+  --labels runs/review_queue/completed_labels.jsonl \
+  --out runs/reviewed_export
+
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --review-export runs/review_queue \
+  --reviewed-export runs/reviewed_export \
   --suite-summary runs/suite_summary.json \
   --out runs/validation.json \
   --strict
@@ -531,6 +547,9 @@ scenario directory or single scenario + trace artifact
 	          |
 	          v
 	  export-review -> review queue + label templates
+	          |
+	          v
+	  apply-review -> human-reviewed trainer-ready views
 	          |
 	          v
 	  export-rl -> evidence artifacts + trainer-ready views

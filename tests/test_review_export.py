@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -18,6 +18,16 @@ def run_cli(args):
 
 def read_jsonl(path: Path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def write_completed_labels(review_dir: Path, labels_path: Path) -> None:
+    rows = read_jsonl(review_dir / "label_template.jsonl")
+    for row in rows:
+        row["human_label"] = row["suggested_human_label"]
+        row["reviewer"] = "test-reviewer"
+        row["reviewed_at"] = "2026-06-26T00:00:00Z"
+        row["notes"] = "Accepted suggested label for fixture coverage."
+    labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 
 
 class ReviewExportTests(unittest.TestCase):
@@ -91,6 +101,56 @@ class ReviewExportTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("does not reference a review item", errors)
+
+    def test_apply_review_writes_reviewed_training_views(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+
+            code = run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+
+            self.assertEqual(code, 0)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            reviewed_labels = read_jsonl(out / "reviewed_labels.jsonl")
+            sft = read_jsonl(out / "reviewed_sft.jsonl")
+            reward_model = read_jsonl(out / "reviewed_reward_model.jsonl")
+            preferences = read_jsonl(out / "reviewed_preferences.jsonl")
+            dpo = read_jsonl(out / "reviewed_dpo.jsonl")
+            self.assertEqual(manifest["schema_version"], "hfr.reviewed.manifest.v1")
+            self.assertEqual(manifest["reviewed_label_count"], 2)
+            self.assertEqual(manifest["sft_count"], 1)
+            self.assertEqual(manifest["reward_model_count"], 2)
+            self.assertEqual(manifest["preference_count"], 1)
+            self.assertEqual(manifest["dpo_count"], 1)
+            self.assertEqual({row["schema_version"] for row in reviewed_labels}, {"hfr.reviewed.label.v1"})
+            self.assertEqual({row["schema_version"] for row in sft}, {"hfr.reviewed.sft.v1"})
+            self.assertEqual({row["schema_version"] for row in reward_model}, {"hfr.reviewed.reward_model.v1"})
+            self.assertEqual({row["schema_version"] for row in preferences}, {"hfr.reviewed.preference.v1"})
+            self.assertEqual({row["schema_version"] for row in dpo}, {"hfr.reviewed.dpo.v1"})
+            self.assertEqual(sft[0]["episode_id"], "prompt_injection_good")
+            self.assertEqual(preferences[0]["chosen_episode_id"], "prompt_injection_good")
+            self.assertEqual(preferences[0]["rejected_episode_id"], "prompt_injection_bad")
+            self.assertEqual(dpo[0]["chosen"], sft[0]["response"])
+            self.assertEqual(run_cli(["validate", "--reviewed-export", str(out), "--strict"]), 0)
+
+    def test_apply_review_rejects_unlabeled_templates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            out = Path(tmp) / "reviewed"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                main(["apply-review", "--review-export", str(review), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
 
 
 if __name__ == "__main__":

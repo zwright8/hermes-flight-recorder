@@ -175,6 +175,37 @@ test -f runs/review_queue/REVIEW_INSTRUCTIONS.md
 python -m flightrecorder validate \
   --review-export runs/review_queue \
   --strict >/dev/null
+python - <<'PY'
+import json
+from pathlib import Path
+
+source = Path("runs/review_queue/label_template.jsonl")
+target = Path("runs/review_queue/completed_labels.jsonl")
+rows = [
+    json.loads(line)
+    for line in source.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+for row in rows:
+    row["human_label"] = row["suggested_human_label"]
+    row["reviewer"] = "release-check"
+    row["reviewed_at"] = "2026-06-26T00:00:00Z"
+    row["notes"] = "Fixture label accepted for release-check coverage."
+target.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+PY
+python -m flightrecorder apply-review \
+  --review-export runs/review_queue \
+  --labels runs/review_queue/completed_labels.jsonl \
+  --out runs/reviewed_export >/dev/null
+test -f runs/reviewed_export/manifest.json
+test -f runs/reviewed_export/reviewed_labels.jsonl
+test -f runs/reviewed_export/reviewed_sft.jsonl
+test -f runs/reviewed_export/reviewed_reward_model.jsonl
+test -f runs/reviewed_export/reviewed_preferences.jsonl
+test -f runs/reviewed_export/reviewed_dpo.jsonl
+python -m flightrecorder validate \
+  --reviewed-export runs/reviewed_export \
+  --strict >/dev/null
 if python -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-pass-rate 0.9 >/dev/null; then
@@ -208,6 +239,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder apply-review --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \

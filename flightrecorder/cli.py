@@ -22,7 +22,7 @@ from .artifacts import (
 from .lineage import write_run_lineage
 from .redaction import sanitize_trace
 from .report import write_index, write_report
-from .review import ReviewExportError, export_review_queue
+from .review import ReviewExportError, apply_review_labels, export_review_queue
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
@@ -325,6 +325,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         run_dirs=args.run,
         training_export_dir=args.training_export,
         review_export_dir=args.review_export,
+        reviewed_export_dir=args.reviewed_export,
         suite_summary_paths=args.suite_summary,
         strict=args.strict,
     )
@@ -346,6 +347,18 @@ def cmd_export_review(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
     )
     print(f"wrote review queue {args.out} items={manifest['item_count']}")
+    return 0
+
+
+def cmd_apply_review(args: argparse.Namespace) -> int:
+    manifest = apply_review_labels(
+        args.review_export,
+        args.out,
+        labels_path=args.labels,
+        max_pairs_per_family=args.max_pairs_per_family,
+        preserve_paths=args.preserve_paths,
+    )
+    print(f"wrote reviewed export {args.out} labels={manifest['reviewed_label_count']}")
     return 0
 
 
@@ -573,6 +586,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--runs", help="Validate every completed run directory inside this runs directory")
     validate.add_argument("--training-export", help="Validate an export-rl output directory")
     validate.add_argument("--review-export", help="Validate an export-review output directory")
+    validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
@@ -655,6 +669,19 @@ def _parser() -> argparse.ArgumentParser:
     export_review.add_argument("--only-failed", action="store_true", help="Include only failed runs in the review queue")
     export_review.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
     export_review.set_defaults(func=cmd_export_review)
+
+    apply_review = subparsers.add_parser("apply-review", help="Apply completed human labels to a review queue")
+    apply_review.add_argument("--review-export", required=True, help="Directory containing export-review artifacts")
+    apply_review.add_argument("--out", required=True, help="Output directory for reviewed label/trainer artifacts")
+    apply_review.add_argument("--labels", help="Completed labels JSONL; defaults to <review-export>/label_template.jsonl")
+    apply_review.add_argument(
+        "--max-pairs-per-family",
+        type=_non_negative_int_arg,
+        default=0,
+        help="Maximum reviewed preference pairs per task family; 0 means unlimited",
+    )
+    apply_review.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
+    apply_review.set_defaults(func=cmd_apply_review)
 
     observer = subparsers.add_parser("observer-template", help="Print or write a read-only Hermes observer plugin template")
     observer.add_argument("--out", help="Write the template to this path instead of stdout")

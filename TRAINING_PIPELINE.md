@@ -54,8 +54,26 @@ report path, and lineage pointer for each run. `label_template.jsonl` is an
 editable starting point for human labels such as `accept`, `reject`,
 `needs_review`, `unsafe`, and `incomplete`.
 
+After review, apply the completed labels:
+
+```bash
+flightrecorder apply-review \
+  --review-export runs/review_queue \
+  --labels runs/review_queue/completed_labels.jsonl \
+  --out runs/reviewed_export
+
+flightrecorder validate \
+  --reviewed-export runs/reviewed_export \
+  --strict
+```
+
+The reviewed export writes `reviewed_labels.jsonl`, `reviewed_sft.jsonl`,
+`reviewed_reward_model.jsonl`, `reviewed_preferences.jsonl`,
+`reviewed_dpo.jsonl`, and a manifest. Labels marked `needs_review` remain in
+`reviewed_labels.jsonl` but are excluded from trainer-ready views.
+
 `demo.sh` already runs the training export for the included scenarios, and
-`release_check.sh` also exercises the review export path.
+`release_check.sh` also exercises review export plus reviewed-label ingestion.
 
 When you have a new known-good trace but no scenario yet, bootstrap one first:
 

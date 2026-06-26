@@ -109,9 +109,13 @@ network.
 - Use `flightrecorder export-review --runs runs --out runs/review_queue` when
   maintainers need a human-curation queue before deterministic score labels are
   trusted as training signal.
+- Use `flightrecorder apply-review --review-export runs/review_queue --labels
+  <completed-labels.jsonl> --out runs/reviewed_export` to turn completed human
+  labels into reviewed SFT, reward-model, preference, and DPO views.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
-  --review-export runs/review_queue --suite-summary runs/suite_summary.json
-  --strict` before publishing artifacts or using them downstream.
+  --review-export runs/review_queue --reviewed-export runs/reviewed_export
+  --suite-summary runs/suite_summary.json --strict` before publishing artifacts
+  or using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no

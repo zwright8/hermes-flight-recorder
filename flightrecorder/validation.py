@@ -10,7 +10,18 @@ from typing import Any
 
 from .adapters import TRACE_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION
-from .review import REVIEW_ITEM_SCHEMA_VERSION, REVIEW_LABEL_SCHEMA_VERSION, REVIEW_LABELS, REVIEW_MANIFEST_SCHEMA_VERSION
+from .review import (
+    REVIEW_ITEM_SCHEMA_VERSION,
+    REVIEW_LABEL_SCHEMA_VERSION,
+    REVIEW_LABELS,
+    REVIEW_MANIFEST_SCHEMA_VERSION,
+    REVIEWED_DPO_SCHEMA_VERSION,
+    REVIEWED_LABEL_SCHEMA_VERSION,
+    REVIEWED_MANIFEST_SCHEMA_VERSION,
+    REVIEWED_PREFERENCE_SCHEMA_VERSION,
+    REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
+    REVIEWED_SFT_SCHEMA_VERSION,
+)
 from .scorers import SCORE_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
@@ -56,6 +67,7 @@ def validate_artifacts(
     run_dirs: list[str | Path] | None = None,
     training_export_dir: str | Path | None = None,
     review_export_dir: str | Path | None = None,
+    reviewed_export_dir: str | Path | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
@@ -69,6 +81,8 @@ def validate_artifacts(
         targets.append(validate_training_export(training_export_dir))
     if review_export_dir is not None:
         targets.append(validate_review_export(review_export_dir))
+    if reviewed_export_dir is not None:
+        targets.append(validate_reviewed_export(reviewed_export_dir))
     for suite_summary_path in suite_summary_paths or []:
         targets.append(validate_suite_summary(suite_summary_path))
     if not targets:
@@ -268,6 +282,42 @@ def validate_review_export(path: str | Path) -> ValidationTarget:
     _validate_review_items(items, target)
     _validate_review_labels(labels, target, items)
     target.details.update({"item_count": len(items), "label_count": len(labels)})
+    return target
+
+
+def validate_reviewed_export(path: str | Path) -> ValidationTarget:
+    """Validate an apply-review output directory."""
+    export_dir = Path(path)
+    target = ValidationTarget("reviewed_export", str(export_dir))
+    if not export_dir.exists():
+        target.errors.append(f"Reviewed export directory not found: {export_dir}")
+        return target
+    if not export_dir.is_dir():
+        target.errors.append(f"Reviewed export path is not a directory: {export_dir}")
+        return target
+
+    manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
+    labels = _read_jsonl_objects(export_dir / "reviewed_labels.jsonl", target, "reviewed_labels.jsonl")
+    sft = _read_jsonl_objects(export_dir / "reviewed_sft.jsonl", target, "reviewed_sft.jsonl")
+    reward_model = _read_jsonl_objects(export_dir / "reviewed_reward_model.jsonl", target, "reviewed_reward_model.jsonl")
+    preferences = _read_jsonl_objects(export_dir / "reviewed_preferences.jsonl", target, "reviewed_preferences.jsonl")
+    dpo = _read_jsonl_objects(export_dir / "reviewed_dpo.jsonl", target, "reviewed_dpo.jsonl")
+    if manifest is not None:
+        _validate_reviewed_manifest(manifest, target, labels, sft, reward_model, preferences, dpo)
+    _validate_reviewed_labels(labels, target)
+    _validate_reviewed_sft(sft, target, labels)
+    _validate_reviewed_reward_model(reward_model, target, labels)
+    _validate_reviewed_preferences(preferences, target, labels)
+    _validate_reviewed_dpo(dpo, target, preferences)
+    target.details.update(
+        {
+            "reviewed_label_count": len(labels),
+            "sft_count": len(sft),
+            "reward_model_count": len(reward_model),
+            "preference_count": len(preferences),
+            "dpo_count": len(dpo),
+        }
+    )
     return target
 
 
@@ -616,6 +666,184 @@ def _review_item_passed(item: dict[str, Any]) -> bool | None:
     if isinstance(scorecard, dict) and isinstance(scorecard.get("passed"), bool):
         return scorecard["passed"]
     return None
+
+
+def _validate_reviewed_manifest(
+    manifest: dict[str, Any],
+    target: ValidationTarget,
+    labels: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+    preferences: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+) -> None:
+    _require_equal(manifest, "schema_version", REVIEWED_MANIFEST_SCHEMA_VERSION, target)
+    expected_counts = {
+        "reviewed_label_count": len(labels),
+        "sft_count": len(sft),
+        "reward_model_count": len(reward_model),
+        "preference_count": len(preferences),
+        "dpo_count": len(dpo),
+    }
+    for field_name, expected in expected_counts.items():
+        if manifest.get(field_name) != expected:
+            target.errors.append(f"manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
+    expected_label_counts = _reviewed_label_counts(labels)
+    if manifest.get("label_counts") != expected_label_counts:
+        target.errors.append(f"manifest.label_counts expected {expected_label_counts!r}, got {manifest.get('label_counts')!r}.")
+    outputs = manifest.get("outputs")
+    if not isinstance(outputs, dict):
+        target.errors.append("manifest.outputs must be an object.")
+    else:
+        for output_name in ("reviewed_labels", "reviewed_sft", "reviewed_reward_model", "reviewed_preferences", "reviewed_dpo", "manifest"):
+            if output_name not in outputs:
+                target.errors.append(f"manifest.outputs.{output_name} is missing.")
+    if _looks_absolute(str(manifest.get("source_review_export", ""))):
+        target.warnings.append("manifest.source_review_export is absolute; prefer redacted or relative exports for sharing.")
+    if _looks_absolute(str(manifest.get("labels_path", ""))):
+        target.warnings.append("manifest.labels_path is absolute; prefer redacted or relative exports for sharing.")
+    if _looks_absolute(str(manifest.get("output_dir", ""))):
+        target.warnings.append("manifest.output_dir is absolute; prefer redacted or relative exports for sharing.")
+
+
+def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTarget) -> None:
+    seen: set[str] = set()
+    for index, row in enumerate(labels):
+        _require_equal(row, "schema_version", REVIEWED_LABEL_SCHEMA_VERSION, target, prefix=f"reviewed_labels[{index}].")
+        item_id = row.get("review_item_id")
+        if not isinstance(item_id, str) or not item_id:
+            target.errors.append(f"reviewed_labels[{index}].review_item_id must be a non-empty string.")
+            continue
+        if item_id in seen:
+            target.errors.append(f"reviewed_labels[{index}].review_item_id duplicates {item_id!r}.")
+        seen.add(item_id)
+        for field_name in ("episode_id", "scenario_id", "task_family", "prompt", "response", "human_label", "source_label_file"):
+            if not isinstance(row.get(field_name), str):
+                target.errors.append(f"reviewed_labels[{index}].{field_name} must be a string.")
+        if row.get("human_label") not in REVIEW_LABELS:
+            target.errors.append(f"reviewed_labels[{index}].human_label must be one of {list(REVIEW_LABELS)!r}.")
+        if row.get("suggested_human_label") is not None and row.get("suggested_human_label") not in REVIEW_LABELS:
+            target.errors.append(f"reviewed_labels[{index}].suggested_human_label must be null or one of {list(REVIEW_LABELS)!r}.")
+        if not _is_int_between(row.get("score"), 0, 100):
+            target.errors.append(f"reviewed_labels[{index}].score must be an integer from 0 to 100.")
+        if not isinstance(row.get("reward"), (int, float)):
+            target.errors.append(f"reviewed_labels[{index}].reward must be numeric.")
+        if not isinstance(row.get("accepted_evidence_refs"), list):
+            target.errors.append(f"reviewed_labels[{index}].accepted_evidence_refs must be a list.")
+        if not isinstance(row.get("rejected_evidence_refs"), list):
+            target.errors.append(f"reviewed_labels[{index}].rejected_evidence_refs must be a list.")
+        if not isinstance(row.get("source_artifacts"), dict):
+            target.errors.append(f"reviewed_labels[{index}].source_artifacts must be an object.")
+        if not isinstance(row.get("scorecard"), dict):
+            target.errors.append(f"reviewed_labels[{index}].scorecard must be an object.")
+
+
+def _validate_reviewed_sft(sft: list[dict[str, Any]], target: ValidationTarget, labels: list[dict[str, Any]]) -> None:
+    label_map = _reviewed_label_map(labels)
+    for index, row in enumerate(sft):
+        _require_equal(row, "schema_version", REVIEWED_SFT_SCHEMA_VERSION, target, prefix=f"reviewed_sft[{index}].")
+        item = _reviewed_source_label(row, label_map, target, f"reviewed_sft[{index}]")
+        if item is not None and item.get("human_label") != "accept":
+            target.errors.append(f"reviewed_sft[{index}] must reference a reviewed label with human_label 'accept'.")
+        for field_name in ("prompt", "response", "source_artifact"):
+            if not isinstance(row.get(field_name), str):
+                target.errors.append(f"reviewed_sft[{index}].{field_name} must be a string.")
+        if row.get("source_artifact") != "reviewed_labels.jsonl":
+            target.errors.append(f"reviewed_sft[{index}].source_artifact must be 'reviewed_labels.jsonl'.")
+
+
+def _validate_reviewed_reward_model(rows: list[dict[str, Any]], target: ValidationTarget, labels: list[dict[str, Any]]) -> None:
+    label_map = _reviewed_label_map(labels)
+    for index, row in enumerate(rows):
+        _require_equal(row, "schema_version", REVIEWED_REWARD_MODEL_SCHEMA_VERSION, target, prefix=f"reviewed_reward_model[{index}].")
+        item = _reviewed_source_label(row, label_map, target, f"reviewed_reward_model[{index}]")
+        if item is not None and item.get("human_label") == "needs_review":
+            target.errors.append(f"reviewed_reward_model[{index}] must not reference a needs_review label.")
+        for field_name in ("prompt", "response", "human_label", "source_artifact"):
+            if not isinstance(row.get(field_name), str):
+                target.errors.append(f"reviewed_reward_model[{index}].{field_name} must be a string.")
+        if not _is_int_between(row.get("score"), 0, 100):
+            target.errors.append(f"reviewed_reward_model[{index}].score must be an integer from 0 to 100.")
+        if not isinstance(row.get("reward"), (int, float)):
+            target.errors.append(f"reviewed_reward_model[{index}].reward must be numeric.")
+        if row.get("source_artifact") != "reviewed_labels.jsonl":
+            target.errors.append(f"reviewed_reward_model[{index}].source_artifact must be 'reviewed_labels.jsonl'.")
+
+
+def _validate_reviewed_preferences(preferences: list[dict[str, Any]], target: ValidationTarget, labels: list[dict[str, Any]]) -> None:
+    label_by_episode = _reviewed_label_by_episode(labels)
+    seen: set[str] = set()
+    for index, row in enumerate(preferences):
+        _require_equal(row, "schema_version", REVIEWED_PREFERENCE_SCHEMA_VERSION, target, prefix=f"reviewed_preferences[{index}].")
+        preference_id = row.get("preference_id")
+        if not isinstance(preference_id, str) or not preference_id:
+            target.errors.append(f"reviewed_preferences[{index}].preference_id must be a non-empty string.")
+        elif preference_id in seen:
+            target.errors.append(f"reviewed_preferences[{index}].preference_id duplicates {preference_id!r}.")
+        else:
+            seen.add(preference_id)
+        chosen = label_by_episode.get(row.get("chosen_episode_id"))
+        rejected = label_by_episode.get(row.get("rejected_episode_id"))
+        if chosen is None:
+            target.errors.append(f"reviewed_preferences[{index}].chosen_episode_id does not reference a reviewed label.")
+        elif chosen.get("human_label") != "accept":
+            target.errors.append(f"reviewed_preferences[{index}].chosen_episode_id must reference an accepted label.")
+        if rejected is None:
+            target.errors.append(f"reviewed_preferences[{index}].rejected_episode_id does not reference a reviewed label.")
+        elif rejected.get("human_label") not in {"reject", "unsafe", "incomplete"}:
+            target.errors.append(f"reviewed_preferences[{index}].rejected_episode_id must reference a rejected/unsafe/incomplete label.")
+        if row.get("source_artifact") != "reviewed_labels.jsonl":
+            target.errors.append(f"reviewed_preferences[{index}].source_artifact must be 'reviewed_labels.jsonl'.")
+
+
+def _validate_reviewed_dpo(dpo: list[dict[str, Any]], target: ValidationTarget, preferences: list[dict[str, Any]]) -> None:
+    preference_ids = {row.get("preference_id") for row in preferences if isinstance(row.get("preference_id"), str)}
+    for index, row in enumerate(dpo):
+        _require_equal(row, "schema_version", REVIEWED_DPO_SCHEMA_VERSION, target, prefix=f"reviewed_dpo[{index}].")
+        if row.get("preference_id") not in preference_ids:
+            target.errors.append(f"reviewed_dpo[{index}].preference_id does not reference a reviewed preference.")
+        for field_name in ("prompt", "chosen", "rejected", "source_artifact"):
+            if not isinstance(row.get(field_name), str):
+                target.errors.append(f"reviewed_dpo[{index}].{field_name} must be a string.")
+        if row.get("source_artifact") != "reviewed_preferences.jsonl":
+            target.errors.append(f"reviewed_dpo[{index}].source_artifact must be 'reviewed_preferences.jsonl'.")
+
+
+def _reviewed_source_label(
+    row: dict[str, Any],
+    label_map: dict[str, dict[str, Any]],
+    target: ValidationTarget,
+    label: str,
+) -> dict[str, Any] | None:
+    item_id = row.get("review_item_id")
+    if not isinstance(item_id, str) or not item_id:
+        target.errors.append(f"{label}.review_item_id must be a non-empty string.")
+        return None
+    item = label_map.get(item_id)
+    if item is None:
+        target.errors.append(f"{label}.review_item_id does not reference a reviewed label.")
+    return item
+
+
+def _reviewed_label_map(labels: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        str(row["review_item_id"]): row
+        for row in labels
+        if isinstance(row.get("review_item_id"), str)
+    }
+
+
+def _reviewed_label_by_episode(labels: list[dict[str, Any]]) -> dict[Any, dict[str, Any]]:
+    return {row.get("episode_id"): row for row in labels if row.get("episode_id") is not None}
+
+
+def _reviewed_label_counts(labels: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in labels:
+        label = row.get("human_label")
+        if isinstance(label, str):
+            counts[label] = counts.get(label, 0) + 1
+    return counts
 
 
 def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget) -> None:
