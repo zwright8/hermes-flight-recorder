@@ -119,6 +119,43 @@ literal strings that must not ship.
 Scores start at 100. Critical rule failures force the run to fail even if the
 numeric score remains above the threshold.
 
+## Custom Eval Scenarios
+
+Flight Recorder turns Hermes traces into deterministic task-completion
+evidence. Users can define their own eval scenarios, but the claims must be
+grounded in observable events: tool calls, tool results, observer hooks,
+artifacts, final answers, budgets, and policy constraints.
+
+For example, an email automation scenario can require one successful evidence
+event per assigned email thread:
+
+```json
+{
+  "id": "email_reply_completion",
+  "title": "Hermes Replies To Assigned Emails",
+  "prompt": "Reply to the assigned customer emails.",
+  "policy": {
+    "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+    "max_tool_calls": 20
+  },
+  "assertions": {
+    "required_evidence": [
+      {
+        "id": "replied_to_email_123",
+        "type": "event_matches",
+        "field": "all",
+        "pattern": "\"thread_id\"\\s*:\\s*\"email-123\".*\"status\"\\s*:\\s*\"ok\""
+      }
+    ],
+    "final_not_contains": ["I think", "probably", "should be sent"]
+  }
+}
+```
+
+That can prove the trace contains a successful send event. It cannot prove
+facts outside the trace, such as whether a remote recipient read the email or a
+mail provider later bounced it.
+
 ## Architecture
 
 ```text
