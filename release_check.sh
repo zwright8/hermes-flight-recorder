@@ -59,6 +59,9 @@ python -m flightrecorder capture-state \
   --set gmail.threads.email-123.sent_replies.0.status=sent \
   --set gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001 \
   --out runs/captured_state.json >/dev/null
+python -m flightrecorder validate \
+  --state-snapshot runs/captured_state.json \
+  --strict >/dev/null
 test -f runs/draft_email_reply.scenario.json
 test -f runs/draft_email_reply/scorecard.json
 test -f runs/draft_email_reply/task_completion.json
@@ -534,6 +537,7 @@ PY
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --out "$INSTALL_DIR/normalized.json" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--state-snapshot"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null

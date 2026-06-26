@@ -601,6 +601,13 @@ JSON sources are imported under `json.KEY`, and explicit observations are stored
 under `observations`. To assert a captured observation, point `required_state`
 at that generated path, for example
 `observations.gmail.threads.email-123.sent_replies.0.status`.
+Validate captured snapshots before using them as task-completion evidence:
+
+```bash
+flightrecorder validate \
+  --state-snapshot runs/email_reply_completion_good.state.json \
+  --strict
+```
 
 To bootstrap a custom scenario from a known-good run, use `draft-scenario`:
 

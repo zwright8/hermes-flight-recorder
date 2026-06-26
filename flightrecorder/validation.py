@@ -29,6 +29,7 @@ from .review import (
 )
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
+from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
     RL_DATASET_METRICS_SCHEMA_VERSION,
@@ -84,6 +85,7 @@ def validate_artifacts(
     scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
+    state_snapshot_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -112,6 +114,8 @@ def validate_artifacts(
         targets.append(validate_suite_summary(suite_summary_path))
     for suite_trend_path in suite_trend_paths or []:
         targets.append(validate_suite_trend(suite_trend_path))
+    for state_snapshot_path in state_snapshot_paths or []:
+        targets.append(validate_state_snapshot(state_snapshot_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -163,6 +167,7 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     trace_path = run_dir / "normalized_trace.json"
     score_path = run_dir / "scorecard.json"
     task_completion_path = run_dir / "task_completion.json"
+    state_snapshot_path = run_dir / "state_snapshot.json"
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     trace = _read_object(trace_path, target, "normalized_trace.json")
@@ -174,6 +179,7 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
         "rerun the run to emit the standalone task-completion verdict",
     )
     lineage = _read_object_optional(lineage_path, target, "artifact_lineage.json", "rerun the run to emit provenance metadata")
+    state_snapshot = _read_object(state_snapshot_path, target, "state_snapshot.json") if state_snapshot_path.exists() else None
     if trace is not None:
         _validate_trace(trace, target)
     if scorecard is not None:
@@ -184,6 +190,8 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
             target.errors.append("task_completion.json must match scorecard.task_completion.")
     if lineage is not None:
         _validate_lineage(lineage, target, run_dir, trace, scorecard)
+    if isinstance(state_snapshot, dict) and state_snapshot.get("schema_version") == STATE_SNAPSHOT_SCHEMA_VERSION:
+        _validate_state_snapshot(state_snapshot, target, "state_snapshot")
     if trace is not None and scorecard is not None:
         target.details.update(
             {
@@ -424,6 +432,16 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_state_snapshot(path: str | Path) -> ValidationTarget:
+    """Validate a captured state snapshot artifact."""
+    snapshot_path = Path(path)
+    target = ValidationTarget("state_snapshot", str(snapshot_path))
+    snapshot = _read_object(snapshot_path, target, "state_snapshot.json")
+    if snapshot is not None:
+        _validate_state_snapshot(snapshot, target, "state_snapshot", source_path=snapshot_path)
+    return target
+
+
 def validate_review_calibration(path: str | Path) -> ValidationTarget:
     """Validate a review-calibration report."""
     calibration_path = Path(path)
@@ -453,6 +471,161 @@ def validate_suite_trend(path: str | Path) -> ValidationTarget:
         return target
     _validate_suite_trend(trend, target)
     return target
+
+
+def _validate_state_snapshot(
+    snapshot: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    *,
+    source_path: Path | None = None,
+) -> None:
+    _require_equal(snapshot, "schema_version", STATE_SNAPSHOT_SCHEMA_VERSION, target, prefix=f"{label}.")
+    filesystem = snapshot.get("filesystem")
+    if not isinstance(filesystem, dict):
+        target.errors.append(f"{label}.filesystem must be an object.")
+        filesystem = {}
+    files = filesystem.get("files")
+    if not isinstance(files, dict):
+        target.errors.append(f"{label}.filesystem.files must be an object.")
+        files = {}
+    directories = filesystem.get("directories")
+    if not isinstance(directories, dict):
+        target.errors.append(f"{label}.filesystem.directories must be an object.")
+        directories = {}
+    for key, record in files.items():
+        if not isinstance(key, str) or not key:
+            target.errors.append(f"{label}.filesystem.files contains an empty source key.")
+            continue
+        _validate_snapshot_file_record(record, target, f"{label}.filesystem.files.{key}", source_path)
+    for key, record in directories.items():
+        if not isinstance(key, str) or not key:
+            target.errors.append(f"{label}.filesystem.directories contains an empty source key.")
+            continue
+        _validate_snapshot_directory_record(record, target, f"{label}.filesystem.directories.{key}")
+
+    json_sources = snapshot.get("json_sources")
+    if not isinstance(json_sources, dict):
+        target.errors.append(f"{label}.json_sources must be an object.")
+        json_sources = {}
+    json_payloads = snapshot.get("json")
+    if not isinstance(json_payloads, dict):
+        target.errors.append(f"{label}.json must be an object.")
+        json_payloads = {}
+    for key, record in json_sources.items():
+        if not isinstance(key, str) or not key:
+            target.errors.append(f"{label}.json_sources contains an empty source key.")
+            continue
+        _validate_snapshot_file_record(record, target, f"{label}.json_sources.{key}", source_path)
+        if isinstance(record, dict) and record.get("exists") is True and record.get("kind") == "file" and key not in json_payloads:
+            target.errors.append(f"{label}.json.{key} must contain imported JSON for an existing JSON source.")
+    observations = snapshot.get("observations")
+    if not isinstance(observations, dict):
+        target.errors.append(f"{label}.observations must be an object.")
+
+
+def _validate_snapshot_file_record(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    path_label = record.get("path")
+    if not isinstance(path_label, str) or not path_label:
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    exists = record.get("exists")
+    if not isinstance(exists, bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    kind = record.get("kind")
+    if kind not in {"missing", "file", "directory", "other"}:
+        target.errors.append(f"{label}.kind must be missing, file, directory, or other.")
+    if exists is False and kind != "missing":
+        target.errors.append(f"{label}.kind must be missing when exists is false.")
+    if exists is True and kind == "missing":
+        target.errors.append(f"{label}.kind must not be missing when exists is true.")
+    if kind == "file":
+        if not _is_non_negative_int(record.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for files.")
+        if not _is_sha256(record.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a 64-character hex digest for files.")
+        if "text" in record and not isinstance(record.get("text"), str):
+            target.errors.append(f"{label}.text must be a string when present.")
+        if "text_truncated" in record and not isinstance(record.get("text_truncated"), bool):
+            target.errors.append(f"{label}.text_truncated must be a boolean when present.")
+        _validate_snapshot_record_hash(record, target, label, source_path)
+
+
+def _validate_snapshot_directory_record(record: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    path_label = record.get("path")
+    if not isinstance(path_label, str) or not path_label:
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    exists = record.get("exists")
+    if not isinstance(exists, bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    kind = record.get("kind")
+    if kind not in {"missing", "directory", "not_directory"}:
+        target.errors.append(f"{label}.kind must be missing, directory, or not_directory.")
+    if kind == "directory":
+        entry_count = record.get("entry_count")
+        if not _is_non_negative_int(entry_count):
+            target.errors.append(f"{label}.entry_count must be a non-negative integer.")
+            entry_count = None
+        if not isinstance(record.get("entries_truncated"), bool):
+            target.errors.append(f"{label}.entries_truncated must be a boolean.")
+        entries = record.get("entries")
+        if not isinstance(entries, list):
+            target.errors.append(f"{label}.entries must be a list.")
+            entries = []
+        if isinstance(entry_count, int) and len(entries) > entry_count:
+            target.errors.append(f"{label}.entries length must not exceed entry_count.")
+        for index, entry in enumerate(entries):
+            _validate_snapshot_directory_entry(entry, target, f"{label}.entries[{index}]")
+
+
+def _validate_snapshot_directory_entry(entry: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(entry, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(entry.get("name"), str) or not entry.get("name"):
+        target.errors.append(f"{label}.name must be a non-empty string.")
+    kind = entry.get("kind")
+    if kind not in {"file", "directory", "other", "missing"}:
+        target.errors.append(f"{label}.kind must be file, directory, other, or missing.")
+    if kind == "file":
+        if not _is_non_negative_int(entry.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for files.")
+        if not _is_sha256(entry.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a 64-character hex digest for files.")
+
+
+def _validate_snapshot_record_hash(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+) -> None:
+    path_label = record.get("path")
+    if not isinstance(path_label, str) or path_label.startswith("<redacted:"):
+        return
+    path = Path(path_label)
+    if not path.is_absolute():
+        candidates = [path.resolve()]
+        if source_path is not None:
+            candidates.append((source_path.parent / path).resolve())
+        path = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+    if not path.exists() or not path.is_file():
+        return
+    expected = record.get("sha256")
+    if _is_sha256(expected):
+        actual = _sha256(path)
+        if actual != expected:
+            target.errors.append(f"{label}.sha256 does not match current file contents.")
 
 
 def _validate_trace(trace: dict[str, Any], target: ValidationTarget) -> None:

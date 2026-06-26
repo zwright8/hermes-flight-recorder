@@ -137,6 +137,10 @@ network.
   runs/validation.json --training-export runs/training_export --out
   runs/evidence_bundle.json` when CI should publish one readiness manifest over
   the generated evidence package.
+- Use `flightrecorder validate --state-snapshot <snapshot.json> --strict` for
+  `capture-state` outputs before they become required-state evidence or
+  downstream training signal. The validator checks the captured schema and
+  recomputes file hashes when source paths are still available.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or

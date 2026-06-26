@@ -256,6 +256,9 @@ Those snapshots can be supplied through scenario `state.path` or `run --state`.
 The resulting lineage records `source_state_snapshot`, and exported training
 rows keep the source fingerprint so future trainers can reject examples whose
 task-completion labels lack reproducible post-run state evidence.
+Validate captured snapshots with `flightrecorder validate --state-snapshot
+<snapshot.json> --strict`; the validator checks the captured schema and
+recomputes file hashes when the captured paths are still available.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward

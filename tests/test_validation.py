@@ -94,6 +94,102 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("task_completion.json must match scorecard.task_completion", errors)
 
+    def test_validate_accepts_captured_state_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "artifact.json"
+            artifact.write_text(json.dumps({"status": "complete"}), encoding="utf-8")
+            snapshot = root / "state.json"
+            summary_path = root / "validation.json"
+            run_cli(
+                [
+                    "capture-state",
+                    "--file",
+                    f"artifact={artifact}",
+                    "--json",
+                    f"artifact={artifact}",
+                    "--set",
+                    "task.status=complete",
+                    "--preserve-paths",
+                    "--out",
+                    str(snapshot),
+                ]
+            )
+
+            code = run_cli(["validate", "--state-snapshot", str(snapshot), "--out", str(summary_path), "--strict"])
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertTrue(summary["passed"])
+            self.assertEqual(summary["targets"][0]["type"], "state_snapshot")
+
+    def test_validate_rejects_stale_captured_state_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "artifact.txt"
+            artifact.write_text("first", encoding="utf-8")
+            snapshot = root / "state.json"
+            summary_path = root / "validation.json"
+            run_cli(
+                [
+                    "capture-state",
+                    "--file",
+                    f"artifact={artifact}",
+                    "--preserve-paths",
+                    "--out",
+                    str(snapshot),
+                ]
+            )
+            artifact.write_text("changed", encoding="utf-8")
+
+            code = run_cli(["validate", "--state-snapshot", str(snapshot), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("state_snapshot.filesystem.files.artifact.sha256", errors)
+
+    def test_validate_run_dir_rejects_stale_captured_state_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "artifact.txt"
+            artifact.write_text("first", encoding="utf-8")
+            state_path = root / "state.json"
+            scenario_path = root / "scenario.json"
+            run_dir = root / "run"
+            summary_path = root / "validation.json"
+            run_cli(
+                [
+                    "capture-state",
+                    "--file",
+                    f"artifact={artifact}",
+                    "--set",
+                    "gmail.threads.email-123.sent_replies.0.status=sent",
+                    "--set",
+                    "gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001",
+                    "--preserve-paths",
+                    "--out",
+                    str(state_path),
+                ]
+            )
+            scenario = json.loads((ROOT / "scenarios" / "email_reply_completion_good.json").read_text(encoding="utf-8"))
+            scenario["trace"]["path"] = str(ROOT / "fixtures" / "email_reply_completion_good.observer.jsonl")
+            scenario["state"]["path"] = str(state_path)
+            scenario["assertions"]["required_state"][0]["where"] = {
+                "observations.gmail.threads.email-123.sent_replies.0.message_id": {"matches": "^msg-email-123-"},
+                "observations.gmail.threads.email-123.sent_replies.0.status": "sent",
+            }
+            scenario_path.write_text(json.dumps(scenario), encoding="utf-8")
+            run_cli(["run", "--scenario", str(scenario_path), "--out", str(run_dir), "--fail-on-score"])
+            artifact.write_text("changed", encoding="utf-8")
+
+            code = run_cli(["validate", "--run", str(run_dir), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("state_snapshot.filesystem.files.artifact.sha256", errors)
+
     def test_validate_rejects_stale_lineage_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"
