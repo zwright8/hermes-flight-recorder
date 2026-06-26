@@ -20,6 +20,7 @@ test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
 test -f runs/suite_compare.html
+test -f runs/suite_summary.json
 test -f runs/training_export/episodes.jsonl
 test -f runs/training_export/rewards.jsonl
 test -f runs/training_export/preferences.jsonl
@@ -47,6 +48,7 @@ fi
   --out "$INSTALL_DIR/normalized.json" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \

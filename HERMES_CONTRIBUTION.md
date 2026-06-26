@@ -61,6 +61,9 @@ python -m flightrecorder validate \
   --strict
 ```
 
+`./demo.sh` uses `flightrecorder run-suite --scenarios scenarios --out runs`
+with JUnit, Markdown, RL export, validation, and strict contract checks enabled.
+
 Observed results:
 
 | Scenario | Result | What Flight Recorder Proves |
@@ -89,6 +92,11 @@ critical rules.
 The generated suite compare report gives maintainers the same regression gate
 at scenario-suite level: paired scenario count, average score delta, pass-rate
 delta, missing scenarios, and per-scenario regressions/fixes.
+
+The generated suite summary gives maintainers a single machine-readable view
+of the whole evidence bundle: every scenario path, run directory, report,
+scorecard, pass/fail result, critical failure list, validation result, and
+training-export counts.
 
 The generated training export gives future model-improvement loops:
 
@@ -122,15 +130,17 @@ Flight Recorder turns Hermes' experience into regression pressure.
 
 1. Record a Hermes run through trajectory JSONL, observer JSONL, ATOF, or ATIF.
 2. Score that run against a scenario policy.
-3. If it fails, save the generated `regression_scenario.json`.
-4. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
+3. Run a full scenario directory with `flightrecorder run-suite` to produce a
+   suite-level evidence bundle.
+4. If a scenario fails, save the generated `regression_scenario.json`.
+5. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.
-5. Compare the new scorecard against the old one with `flightrecorder compare`.
-6. Compare whole baseline/candidate run directories with
+6. Compare the new scorecard against the old one with `flightrecorder compare`.
+7. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`.
-7. Export episodes, rewards, and preference pairs with `flightrecorder export-rl`
+8. Export episodes, rewards, and preference pairs with `flightrecorder export-rl`
    for future SFT, DPO, reward-modeling, or RL pipelines.
-8. Validate the generated artifacts with `flightrecorder validate --strict`
+9. Validate the generated artifacts with `flightrecorder validate --strict`
    before publishing them or using them downstream.
 
 That gives the Hermes team a practical improvement loop:
@@ -140,6 +150,8 @@ That gives the Hermes team a practical improvement loop:
 - runaway delegation becomes a budget regression,
 - skill changes can be evaluated against the same scenario before and after,
 - model/skill/prompt changes can be evaluated across a full scenario suite,
+- one command can produce a complete suite evidence bundle for local review,
+  CI, or downstream training-data export,
 - arbitrary task-completion loops can use `required_actions` to prove work was
   completed from tool-result evidence,
 - deterministic scorecards can become terminal rewards and preference pairs,

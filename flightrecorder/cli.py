@@ -25,6 +25,8 @@ from .scorers import score_trace
 from .training import TrainingExportError, export_rl_dataset
 from .validation import validate_artifacts
 
+RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
@@ -67,38 +69,137 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    scenario = load_scenario(args.scenario)
-    trace_path = resolve_trace_path(scenario, args.trace)
+    result = _run_scenario_artifacts(
+        args.scenario,
+        args.out,
+        trace_override=args.trace,
+        trace_format=args.format,
+        write_sensitive_trace=args.write_sensitive_trace,
+        preserve_paths=args.preserve_paths,
+        junit_out=args.junit_out,
+        markdown_out=args.markdown_out,
+    )
+    scorecard = result["scorecard"]
+    scenario = result["scenario"]
+    report_path = result["paths"]["report"]
+    print(f"{'PASS' if scorecard['passed'] else 'FAIL'} {scenario['id']} score={scorecard['score']} report={report_path}")
+    return 1 if args.fail_on_score and not scorecard["passed"] else 0
+
+
+def cmd_run_suite(args: argparse.Namespace) -> int:
+    scenario_paths = _discover_scenarios(Path(args.scenarios), args.pattern, args.recursive)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    raw_trace = normalize_trace(trace_path, args.format)
-    trace_label = _display_path(trace_path, args.preserve_paths)
-    scenario.setdefault("trace", {})["path"] = trace_label
-    scorecard = score_trace(scenario, raw_trace)
-    secret_patterns = scenario.get("policy", {}).get("secret_patterns") or []
-    trace = sanitize_trace(raw_trace, secret_patterns)
+    runs: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    seen_run_ids: dict[str, Path] = {}
+    for scenario_path in scenario_paths:
+        try:
+            scenario = load_scenario(scenario_path)
+            run_id = _safe_run_id(str(scenario["id"]))
+            if run_id in seen_run_ids:
+                raise ScenarioError(
+                    f"Duplicate scenario id/run directory {scenario['id']!r}: "
+                    f"{scenario_path} conflicts with {seen_run_ids[run_id]}"
+                )
+            seen_run_ids[run_id] = scenario_path
+            run_dir = out_dir / run_id
+            result = _run_scenario_artifacts(
+                scenario_path,
+                run_dir,
+                trace_format=args.format,
+                write_sensitive_trace=args.write_sensitive_trace,
+                preserve_paths=args.preserve_paths,
+                junit_out=run_dir / "scorecard.junit.xml" if args.junit else None,
+                markdown_out=run_dir / "scorecard.md" if args.markdown else None,
+            )
+            scorecard = result["scorecard"]
+            runs.append(
+                {
+                    "scenario_id": result["scenario"]["id"],
+                    "scenario_title": result["scenario"].get("title", result["scenario"]["id"]),
+                    "scenario_path": _display_path(scenario_path, args.preserve_paths),
+                    "trace_path": _display_path(result["trace_path"], args.preserve_paths),
+                    "run_dir": _display_path(run_dir, args.preserve_paths),
+                    "report": _display_path(result["paths"]["report"], args.preserve_paths),
+                    "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
+                    "passed": bool(scorecard["passed"]),
+                    "score": scorecard["score"],
+                    "critical_failures": scorecard.get("critical_failures", []),
+                }
+            )
+            print(
+                f"{'PASS' if scorecard['passed'] else 'FAIL'} "
+                f"{result['scenario']['id']} score={scorecard['score']} report={result['paths']['report']}"
+            )
+        except (AdapterError, ScenarioError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
+            errors.append({"scenario_path": _display_path(scenario_path, args.preserve_paths), "error": str(exc)})
+            print(f"ERROR {scenario_path}: {exc}")
 
-    normalized_path = out_dir / "normalized_trace.json"
-    score_path = out_dir / "scorecard.json"
-    report_path = out_dir / "report.html"
-    _write_json(normalized_path, trace)
-    _write_json(score_path, scorecard)
-    if args.write_sensitive_trace:
-        _write_json(out_dir / "raw_trace.sensitive.json", raw_trace)
+    artifacts: dict[str, str] = {}
+    index_path = Path(args.index_out) if args.index_out else out_dir / "index.html"
+    if not args.no_index:
+        completed_run_dirs = [out_dir / _safe_run_id(str(run["scenario_id"])) for run in runs]
+        write_index(completed_run_dirs, index_path)
+        artifacts["index"] = _display_path(index_path, args.preserve_paths)
 
-    regression_path = None
-    regression_display = None
-    if not scorecard["passed"]:
-        regression_path = out_dir / "regression_scenario.json"
-        regression_display = _display_path(regression_path, args.preserve_paths)
-        regression = _regression_scenario(scenario, trace_path, regression_path, args.preserve_paths)
-        _write_json(regression_path, regression)
+    training_manifest: dict[str, Any] | None = None
+    training_out = Path(args.training_export_out) if args.training_export_out else out_dir / "training_export"
+    if args.export_rl:
+        if runs:
+            training_manifest = export_rl_dataset(
+                out_dir,
+                training_out,
+                reward_scale=args.reward_scale,
+                min_score_gap=args.min_score_gap,
+                max_pairs_per_family=args.max_pairs_per_family,
+                preserve_paths=args.preserve_paths,
+            )
+            artifacts["training_export"] = _display_path(training_out, args.preserve_paths)
+        else:
+            errors.append(
+                {
+                    "scenario_path": _display_path(Path(args.scenarios), args.preserve_paths),
+                    "error": "Cannot export RL artifacts because no scenario runs completed.",
+                }
+            )
 
-    _write_score_outputs(scorecard, args)
-    write_report(scenario, trace, scorecard, report_path, regression_display)
-    print(f"{'PASS' if scorecard['passed'] else 'FAIL'} {scenario['id']} score={scorecard['score']} report={report_path}")
-    return 1 if args.fail_on_score and not scorecard["passed"] else 0
+    validation_summary: dict[str, Any] | None = None
+    validation_path = Path(args.validation_out) if args.validation_out else out_dir / "validation.json"
+    if args.validate:
+        validation_summary = validate_artifacts(
+            runs_dir=out_dir,
+            training_export_dir=training_out if args.export_rl else None,
+            strict=args.strict,
+        )
+        _write_json(validation_path, validation_summary)
+        artifacts["validation"] = _display_path(validation_path, args.preserve_paths)
+
+    summary = _run_suite_summary(
+        scenarios_dir=Path(args.scenarios),
+        out_dir=out_dir,
+        runs=runs,
+        errors=errors,
+        artifacts=artifacts,
+        preserve_paths=args.preserve_paths,
+        training_manifest=training_manifest,
+        validation_summary=validation_summary,
+    )
+    summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
+    _write_json(summary_path, summary)
+    print(
+        f"SUITE total={summary['total']} passed={summary['passed']} failed={summary['failed']} "
+        f"errors={summary['error_count']} summary={summary_path}"
+    )
+
+    if errors:
+        return 1
+    if args.validate and validation_summary and not validation_summary["passed"]:
+        return 1
+    if args.fail_on_failed and summary["failed"] > 0:
+        return 1
+    return 0
 
 
 def cmd_index(args: argparse.Namespace) -> int:
@@ -246,6 +347,30 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--fail-on-score", action="store_true", help="Exit nonzero when the scenario score fails")
     run.set_defaults(func=cmd_run)
 
+    run_suite = subparsers.add_parser("run-suite", help="Run a directory of scenarios into a complete evidence bundle")
+    run_suite.add_argument("--scenarios", required=True, help="Directory containing scenario JSON files")
+    run_suite.add_argument("--out", required=True, help="Output directory for per-scenario run directories and suite artifacts")
+    run_suite.add_argument("--pattern", default="*.json", help="Scenario filename glob relative to --scenarios")
+    run_suite.add_argument("--recursive", action="store_true", help="Discover scenarios recursively with --pattern")
+    run_suite.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    run_suite.add_argument("--summary-out", help="Suite summary JSON output path; defaults to <out>/suite_summary.json")
+    run_suite.add_argument("--index-out", help="Report index output path; defaults to <out>/index.html")
+    run_suite.add_argument("--no-index", action="store_true", help="Skip writing the report index")
+    run_suite.add_argument("--junit", action="store_true", help="Write scorecard.junit.xml inside each run directory")
+    run_suite.add_argument("--markdown", action="store_true", help="Write scorecard.md inside each run directory")
+    run_suite.add_argument("--export-rl", action="store_true", help="Also export episodes/rewards/preferences for the completed suite")
+    run_suite.add_argument("--training-export-out", help="RL export directory; defaults to <out>/training_export")
+    run_suite.add_argument("--reward-scale", default="score", choices=["score", "binary", "signed"])
+    run_suite.add_argument("--min-score-gap", type=int, default=1)
+    run_suite.add_argument("--max-pairs-per-family", type=int, default=0)
+    run_suite.add_argument("--validate", action="store_true", help="Also validate generated run and optional training artifacts")
+    run_suite.add_argument("--validation-out", help="Validation JSON output path; defaults to <out>/validation.json")
+    run_suite.add_argument("--strict", action="store_true", help="Treat validation warnings as validation failure")
+    run_suite.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json for each scenario")
+    run_suite.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated artifacts")
+    run_suite.add_argument("--fail-on-failed", action="store_true", help="Exit nonzero when any scenario score fails")
+    run_suite.set_defaults(func=cmd_run_suite)
+
     index = subparsers.add_parser("index", help="Build an index for generated run reports")
     index.add_argument("--runs", required=True)
     index.add_argument("--out", required=True)
@@ -325,6 +450,121 @@ def _write_score_outputs(scorecard: dict[str, Any], args: argparse.Namespace) ->
         write_junit(scorecard, args.junit_out)
     if getattr(args, "markdown_out", None):
         write_markdown_summary(scorecard, args.markdown_out)
+
+
+def _run_scenario_artifacts(
+    scenario_path: str | Path,
+    out_dir: str | Path,
+    *,
+    trace_override: str | Path | None = None,
+    trace_format: str = "auto",
+    write_sensitive_trace: bool = False,
+    preserve_paths: bool = False,
+    junit_out: str | Path | None = None,
+    markdown_out: str | Path | None = None,
+) -> dict[str, Any]:
+    scenario = load_scenario(scenario_path)
+    trace_path = resolve_trace_path(scenario, trace_override)
+    run_dir = Path(out_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_trace = normalize_trace(trace_path, trace_format)
+    trace_label = _display_path(trace_path, preserve_paths)
+    scenario.setdefault("trace", {})["path"] = trace_label
+    scorecard = score_trace(scenario, raw_trace)
+    secret_patterns = scenario.get("policy", {}).get("secret_patterns") or []
+    trace = sanitize_trace(raw_trace, secret_patterns)
+
+    normalized_path = run_dir / "normalized_trace.json"
+    score_path = run_dir / "scorecard.json"
+    report_path = run_dir / "report.html"
+    _write_json(normalized_path, trace)
+    _write_json(score_path, scorecard)
+    if write_sensitive_trace:
+        _write_json(run_dir / "raw_trace.sensitive.json", raw_trace)
+
+    regression_display = None
+    if not scorecard["passed"]:
+        regression_path = run_dir / "regression_scenario.json"
+        regression_display = _display_path(regression_path, preserve_paths)
+        regression = _regression_scenario(scenario, trace_path, regression_path, preserve_paths)
+        _write_json(regression_path, regression)
+
+    if junit_out:
+        write_junit(scorecard, junit_out)
+    if markdown_out:
+        write_markdown_summary(scorecard, markdown_out)
+    write_report(scenario, trace, scorecard, report_path, regression_display)
+
+    return {
+        "scenario": scenario,
+        "trace_path": trace_path,
+        "scorecard": scorecard,
+        "paths": {
+            "run_dir": run_dir,
+            "normalized_trace": normalized_path,
+            "scorecard": score_path,
+            "report": report_path,
+        },
+    }
+
+
+def _discover_scenarios(root: Path, pattern: str, recursive: bool) -> list[Path]:
+    if not root.exists():
+        raise FileNotFoundError(f"Scenario directory not found: {root}")
+    if not root.is_dir():
+        raise NotADirectoryError(f"Scenario path is not a directory: {root}")
+    paths = sorted(root.rglob(pattern) if recursive else root.glob(pattern))
+    scenario_paths = [path for path in paths if path.is_file()]
+    if not scenario_paths:
+        raise FileNotFoundError(f"No scenario files matched {pattern!r} in {root}")
+    return scenario_paths
+
+
+def _safe_run_id(value: str) -> str:
+    cleaned = "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-")
+    return cleaned or "scenario"
+
+
+def _run_suite_summary(
+    *,
+    scenarios_dir: Path,
+    out_dir: Path,
+    runs: list[dict[str, Any]],
+    errors: list[dict[str, str]],
+    artifacts: dict[str, str],
+    preserve_paths: bool,
+    training_manifest: dict[str, Any] | None,
+    validation_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    passed = sum(1 for run in runs if run["passed"])
+    failed = len(runs) - passed
+    summary: dict[str, Any] = {
+        "schema_version": RUN_SUITE_SCHEMA_VERSION,
+        "scenarios_dir": _display_path(scenarios_dir, preserve_paths),
+        "out_dir": _display_path(out_dir, preserve_paths),
+        "total": len(runs),
+        "passed": passed,
+        "failed": failed,
+        "error_count": len(errors),
+        "errors": errors,
+        "runs": runs,
+        "artifacts": artifacts,
+    }
+    if training_manifest is not None:
+        summary["training_export"] = {
+            "episode_count": training_manifest.get("episode_count"),
+            "reward_count": training_manifest.get("reward_count"),
+            "preference_count": training_manifest.get("preference_count"),
+        }
+    if validation_summary is not None:
+        summary["validation"] = {
+            "passed": validation_summary.get("passed"),
+            "target_count": validation_summary.get("target_count"),
+            "error_count": validation_summary.get("error_count"),
+            "warning_count": validation_summary.get("warning_count"),
+        }
+    return summary
 
 
 def _regression_scenario(scenario: dict[str, Any], trace_path: Path, regression_path: Path, preserve_paths: bool) -> dict[str, Any]:

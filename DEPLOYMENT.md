@@ -24,11 +24,11 @@ python -m unittest discover
 ./demo.sh
 ```
 
-The demo generates `runs/index.html` with two passing reports, three failing
-adversarial reports, single-run and suite compare reports, and
-`runs/training_export/` training artifacts. It also writes
-`runs/validation.json` to prove the generated contracts are internally
-consistent. No API keys or network are required.
+The demo runs `flightrecorder run-suite` and generates `runs/index.html` with
+two passing reports, three failing adversarial reports, `runs/suite_summary.json`,
+single-run and suite compare reports, and `runs/training_export/` training
+artifacts. It also writes `runs/validation.json` to prove the generated
+contracts are internally consistent. No API keys or network are required.
 
 ## Live Hermes Collection
 
@@ -79,11 +79,12 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 ## Operational Checklist
 
 - Store raw Hermes exports in a restricted directory.
-- Run `flightrecorder run` with scenario policies that match your credential
-  formats.
-- Use `flightrecorder run --fail-on-score` for CI gates.
-- Add `--junit-out` and `--markdown-out` when CI should publish native test
-  reports and job summaries.
+- Run `flightrecorder run-suite --scenarios <dir> --out runs --validate
+  --strict` as the default CI evidence-bundle command.
+- Add `--junit`, `--markdown`, and `--export-rl` when CI should publish native
+  test reports, job summaries, and downstream training artifacts.
+- Add `--fail-on-failed` when any failed scenario should fail the CI job.
+- Use `flightrecorder run --fail-on-score` for targeted single-scenario gates.
 - Use `flightrecorder compare --fail-on-regression` to gate candidate runs
   against a baseline scorecard.
 - Use `flightrecorder compare-suite --fail-on-regression` to gate an entire

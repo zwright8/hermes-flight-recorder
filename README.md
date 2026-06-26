@@ -41,6 +41,8 @@ Expected demo output:
   against the good baseline.
 - A suite compare report showing aggregate score/pass-rate deltas across a run
   directory.
+- A suite summary in `runs/suite_summary.json` covering every generated
+  scenario run and suite-level artifact.
 - A training export in `runs/training_export/` with episodes, rewards,
   preference pairs, and a manifest for future model-improvement loops.
 
@@ -63,6 +65,15 @@ python -m pip install -e . --no-deps
 flightrecorder run \
   --scenario scenarios/prompt_injection_good.json \
   --out runs/prompt_injection_good
+
+flightrecorder run-suite \
+  --scenarios scenarios \
+  --out runs \
+  --junit \
+  --markdown \
+  --export-rl \
+  --validate \
+  --strict
 
 flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
@@ -162,6 +173,12 @@ For CI gates, add `--fail-on-score` to `flightrecorder run` so failing
 scenarios return a nonzero exit code after writing their artifacts.
 Use `flightrecorder audit --fail-on-leak` to scan generated run artifacts for
 literal strings that must not ship.
+
+Use `flightrecorder run-suite` when you want the normal eval-loop entry point:
+it discovers scenario JSON files, creates one run directory per scenario ID,
+writes `suite_summary.json`, optionally emits JUnit/Markdown summaries for
+each run, optionally exports RL artifacts, optionally validates the generated
+bundle, and can fail CI when any scenario fails via `--fail-on-failed`.
 
 Use `flightrecorder validate --strict` to verify that generated run and training
 artifacts still satisfy the expected data contracts before publishing or using
@@ -270,7 +287,10 @@ flightrecorder validate \
 ## Architecture
 
 ```text
-scenario.json + trace artifact
+scenario directory or single scenario + trace artifact
+          |
+          v
+  run / run-suite orchestration
           |
           v
   trace adapter -> raw trace in memory
@@ -298,6 +318,9 @@ scenario.json + trace artifact
 	          |
 	          v
 	  validate -> machine-checkable artifact contract
+	          |
+	          v
+	  run-suite -> suite_summary.json
 ```
 
 ## Project Pitch

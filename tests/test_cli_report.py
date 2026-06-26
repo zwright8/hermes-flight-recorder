@@ -108,6 +108,94 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertTrue((out / "report.html").exists())
 
+    def test_run_suite_generates_complete_evidence_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "runs"
+
+            code = run_cli(
+                [
+                    "run-suite",
+                    "--scenarios",
+                    str(ROOT / "scenarios"),
+                    "--out",
+                    str(out),
+                    "--junit",
+                    "--markdown",
+                    "--export-rl",
+                    "--validate",
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["schema_version"], "hfr.run_suite.v1")
+            self.assertEqual(summary["total"], 5)
+            self.assertEqual(summary["passed"], 2)
+            self.assertEqual(summary["failed"], 3)
+            self.assertEqual(summary["error_count"], 0)
+            self.assertTrue((out / "index.html").exists())
+            self.assertTrue((out / "validation.json").exists())
+            self.assertTrue((out / "training_export" / "episodes.jsonl").exists())
+            self.assertTrue((out / "email_reply_completion_good" / "scorecard.junit.xml").exists())
+            self.assertTrue((out / "email_reply_completion_good" / "scorecard.md").exists())
+            self.assertIn("training_export", summary["artifacts"])
+            self.assertTrue(summary["validation"]["passed"])
+
+    def test_run_suite_can_fail_nonzero_for_ci_failures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "runs"
+
+            code = run_cli(
+                [
+                    "run-suite",
+                    "--scenarios",
+                    str(ROOT / "scenarios"),
+                    "--out",
+                    str(out),
+                    "--fail-on-failed",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["failed"], 3)
+
+    def test_run_suite_rejects_duplicate_scenario_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scenarios = Path(tmp) / "scenarios"
+            scenarios.mkdir()
+            shutil.copy(ROOT / "scenarios" / "prompt_injection_good.json", scenarios / "a.json")
+            shutil.copy(ROOT / "scenarios" / "prompt_injection_good.json", scenarios / "b.json")
+            for path in (scenarios / "a.json", scenarios / "b.json"):
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload["trace"]["path"] = str(ROOT / "fixtures" / "prompt_injection_good.trajectory.jsonl")
+                path.write_text(json.dumps(payload), encoding="utf-8")
+            out = Path(tmp) / "runs"
+
+            code = run_cli(["run-suite", "--scenarios", str(scenarios), "--out", str(out)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["total"], 1)
+            self.assertEqual(summary["error_count"], 1)
+            self.assertIn("Duplicate scenario id", summary["errors"][0]["error"])
+
+    def test_run_suite_writes_summary_when_export_has_no_completed_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scenarios = Path(tmp) / "scenarios"
+            scenarios.mkdir()
+            (scenarios / "invalid.json").write_text(json.dumps({"id": "invalid"}), encoding="utf-8")
+            out = Path(tmp) / "runs"
+
+            code = run_cli(["run-suite", "--scenarios", str(scenarios), "--out", str(out), "--export-rl"])
+
+            self.assertEqual(code, 1)
+            summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["total"], 0)
+            self.assertGreaterEqual(summary["error_count"], 1)
+            self.assertTrue(any("Cannot export RL artifacts" in item["error"] for item in summary["errors"]))
+
     def test_report_command_creates_parent_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp) / "run"

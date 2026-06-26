@@ -16,7 +16,19 @@ Generate normal Flight Recorder runs first:
 ./demo.sh
 ```
 
-Then export training artifacts:
+For your own scenario directory, the suite runner can generate runs, validation,
+and training artifacts in one command:
+
+```bash
+flightrecorder run-suite \
+  --scenarios scenarios \
+  --out runs \
+  --export-rl \
+  --validate \
+  --strict
+```
+
+Or export training artifacts from an existing runs directory:
 
 ```bash
 flightrecorder export-rl \
