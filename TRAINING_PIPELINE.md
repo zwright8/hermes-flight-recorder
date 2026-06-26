@@ -87,6 +87,11 @@ metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
 useful for provenance and job routing, but it should not be read as permission
 to train unless the included scenario, evidence-coverage, validation, review,
 and gate policies are also appropriate for the target job.
+The same `decision` block includes deterministic `next_actions` derived from
+the included artifacts, such as repairing failed scenarios, resolving critical
+failures, grounding weak scenario contracts, improving trace capture, or
+reviewing training quality flags. Treat those actions as a repair queue for the
+next improvement iteration, not as a substitute for the gates themselves.
 
 Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate

@@ -3478,6 +3478,27 @@ def _validate_evidence_bundle_decision(
             for field_name in ("id", "path"):
                 if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
                     target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    next_actions = decision.get("next_actions")
+    if not isinstance(next_actions, list):
+        target.errors.append("evidence_bundle.decision.next_actions must be a list.")
+        next_actions = []
+    else:
+        for index, action in enumerate(next_actions):
+            label = f"evidence_bundle.decision.next_actions[{index}]"
+            if not isinstance(action, dict):
+                target.errors.append(f"{label} must be an object.")
+                continue
+            for field_name in ("id", "priority", "artifact", "summary"):
+                if not isinstance(action.get(field_name), str) or not action.get(field_name):
+                    target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+            if action.get("priority") not in {"critical", "high", "medium", "low"}:
+                target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
+            if not isinstance(action.get("evidence"), dict):
+                target.errors.append(f"{label}.evidence must be an object.")
+    if decision.get("next_action_count") != len(next_actions):
+        target.errors.append(
+            f"evidence_bundle.decision.next_action_count expected {len(next_actions)}, got {decision.get('next_action_count')!r}."
+        )
     evidence_artifacts = decision.get("evidence_artifacts")
     if not isinstance(evidence_artifacts, list) or not all(isinstance(item, str) and item for item in evidence_artifacts):
         target.errors.append("evidence_bundle.decision.evidence_artifacts must be a list of non-empty strings.")

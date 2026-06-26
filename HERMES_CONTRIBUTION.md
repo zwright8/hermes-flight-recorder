@@ -239,6 +239,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
    `evidence_coverage.json`, `trace_observability.json`, `validation.json`, and
    `evidence_bundle.json`, using `--metadata key=value` flags to identify the
    Hermes candidate, model, prompt, skill, memory, or tool-policy revision.
+   The bundle's `decision.next_actions` field turns the evidence into a
+   deterministic repair queue for the next Hermes improvement iteration.
 6. If a scenario fails, save the generated `regression_scenario.json`.
 7. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.

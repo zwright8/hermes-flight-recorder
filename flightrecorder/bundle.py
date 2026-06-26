@@ -54,7 +54,16 @@ def build_evidence_bundle(
             checks,
             artifact_name="scenario_quality",
             metric_prefix="scenario_quality",
-            metric_fields=("average_contract_score", "min_contract_score", "observable_scenario_rate", "weak_scenario_count"),
+            metric_fields=(
+                "average_contract_score",
+                "min_contract_score",
+                "observable_scenario_rate",
+                "weak_scenario_count",
+                "final_only_scenario_count",
+                "missing_trace_count",
+                "missing_state_count",
+                "risk_counts",
+            ),
         )
 
     if evidence_coverage_path is not None:
@@ -69,6 +78,7 @@ def build_evidence_bundle(
                 "failed_rule_evidence_rate",
                 "critical_failed_rule_evidence_rate",
                 "failed_rules_without_evidence",
+                "critical_failed_rules_without_evidence",
                 "event_evidence_ref_count",
             ),
         )
@@ -88,6 +98,7 @@ def build_evidence_bundle(
                 "final_answer_rate",
                 "tool_or_api_run_rate",
                 "empty_final_answer_count",
+                "risk_counts",
             ),
         )
 
@@ -121,6 +132,7 @@ def build_evidence_bundle(
         if isinstance(dataset_metrics, dict):
             metrics.setdefault("training_export", {})["pass_rate"] = dataset_metrics.get("pass_rate")
             metrics.setdefault("training_export", {})["average_score"] = dataset_metrics.get("average_score")
+            metrics.setdefault("training_export", {})["quality_flags"] = dataset_metrics.get("quality_flags")
 
     if compare_export_dir is not None:
         compare_dir = Path(compare_export_dir)
@@ -238,6 +250,7 @@ def _decision_summary(
     ]
     passed_gate_count = sum(1 for gate in gates if isinstance(gate, dict) and gate.get("passed") is True)
     recommendation = "promote_handoff" if readiness == "ready" else "block_handoff"
+    next_actions = _next_actions(blocking_checks, blocking_gates, metrics)
     return {
         "readiness": readiness,
         "recommendation": recommendation,
@@ -245,6 +258,8 @@ def _decision_summary(
         "blocking_check_count": len(blocking_checks),
         "blocking_checks": blocking_checks,
         "blocking_gates": blocking_gates,
+        "next_action_count": len(next_actions),
+        "next_actions": next_actions,
         "evidence_artifacts": sorted(artifacts),
         "gate_count": len(gates),
         "passed_gate_count": passed_gate_count,
@@ -264,11 +279,29 @@ def _decision_text(readiness: str, blocking_checks: list[dict[str, Any]]) -> str
 def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     keys: dict[str, tuple[str, ...]] = {
         "suite_summary": ("total", "passed", "failed", "pass_rate", "average_score"),
-        "scenario_quality": ("average_contract_score", "min_contract_score", "observable_scenario_rate", "weak_scenario_count"),
-        "evidence_coverage": ("failed_rule_evidence_rate", "critical_failed_rule_evidence_rate", "failed_rules_without_evidence"),
-        "trace_observability": ("run_count", "average_event_count", "event_type_count", "final_answer_rate", "tool_or_api_run_rate"),
+        "scenario_quality": (
+            "average_contract_score",
+            "min_contract_score",
+            "observable_scenario_rate",
+            "weak_scenario_count",
+            "risk_counts",
+        ),
+        "evidence_coverage": (
+            "failed_rule_evidence_rate",
+            "critical_failed_rule_evidence_rate",
+            "failed_rules_without_evidence",
+            "critical_failed_rules_without_evidence",
+        ),
+        "trace_observability": (
+            "run_count",
+            "average_event_count",
+            "event_type_count",
+            "final_answer_rate",
+            "tool_or_api_run_rate",
+            "risk_counts",
+        ),
         "validation": ("target_count", "error_count", "warning_count"),
-        "training_export": ("episode_count", "preference_count", "dpo_count", "pass_rate", "average_score"),
+        "training_export": ("episode_count", "preference_count", "dpo_count", "pass_rate", "average_score", "quality_flag_count"),
         "compare_export": ("pair_count", "candidate_win_count", "baseline_win_count", "skipped_pair_count"),
         "review_export": ("item_count", "failed_count", "passed_count"),
         "reviewed_export": ("reviewed_label_count", "sft_count", "dpo_count", "reward_model_count"),
@@ -290,6 +323,201 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "failed": sum(1 for gate in gates if isinstance(gate, dict) and gate.get("passed") is False),
         }
     return summary
+
+
+def _next_actions(
+    blocking_checks: list[dict[str, Any]],
+    blocking_gates: list[dict[str, str]],
+    metrics: dict[str, Any],
+) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    if blocking_checks:
+        actions.append(
+            _action(
+                "resolve_blocking_checks",
+                "critical",
+                "evidence_bundle",
+                f"Resolve {len(blocking_checks)} blocking bundle check(s) before relying on this handoff.",
+                {"blocking_check_count": len(blocking_checks), "first_blocking_check": blocking_checks[0]},
+            )
+        )
+    if blocking_gates:
+        actions.append(
+            _action(
+                "fix_failed_gates",
+                "critical",
+                "gates",
+                f"Fix {len(blocking_gates)} failed gate(s) before promoting this evidence package.",
+                {"blocking_gates": blocking_gates},
+            )
+        )
+
+    suite = metrics.get("suite_summary") if isinstance(metrics.get("suite_summary"), dict) else {}
+    failed = _non_negative_int(suite.get("failed"))
+    if failed:
+        actions.append(
+            _action(
+                "repair_failed_scenarios",
+                "high",
+                "suite_summary",
+                f"Repair or intentionally rebaseline {failed} failing scenario(s).",
+                {
+                    "failed": failed,
+                    "failed_rule_counts": suite.get("failed_rule_counts") if isinstance(suite.get("failed_rule_counts"), list) else [],
+                },
+            )
+        )
+    critical_total = _count_total(suite.get("critical_failure_counts"))
+    if critical_total:
+        actions.append(
+            _action(
+                "repair_critical_failures",
+                "high",
+                "suite_summary",
+                f"Resolve {critical_total} critical failure occurrence(s) before treating the candidate as improved.",
+                {"critical_failure_counts": suite.get("critical_failure_counts") if isinstance(suite.get("critical_failure_counts"), list) else []},
+            )
+        )
+
+    scenario_quality = metrics.get("scenario_quality") if isinstance(metrics.get("scenario_quality"), dict) else {}
+    weak_scenarios = _non_negative_int(scenario_quality.get("weak_scenario_count"))
+    if weak_scenarios:
+        actions.append(
+            _action(
+                "strengthen_weak_scenarios",
+                "medium",
+                "scenario_quality",
+                f"Strengthen {weak_scenarios} weak scenario contract(s) before using them as durable improvement signal.",
+                {"weak_scenario_count": weak_scenarios, "risk_counts": _count_rows(scenario_quality.get("risk_counts"))},
+            )
+        )
+    scenario_risks = _count_rows(scenario_quality.get("risk_counts"))
+    contract_risk_count = sum(
+        scenario_risks.get(risk, 0)
+        for risk in (
+            "final_only_contract",
+            "no_observable_assertions",
+            "missing_trace_file",
+            "missing_trace_path",
+            "required_state_without_snapshot_path",
+            "missing_state_file",
+        )
+    )
+    if contract_risk_count:
+        actions.append(
+            _action(
+                "ground_scenario_contracts",
+                "medium",
+                "scenario_quality",
+                f"Ground {contract_risk_count} scenario contract risk(s) in observable trace or state evidence.",
+                {"risk_counts": scenario_risks},
+            )
+        )
+
+    evidence = metrics.get("evidence_coverage") if isinstance(metrics.get("evidence_coverage"), dict) else {}
+    missing_failed_refs = _non_negative_int(evidence.get("failed_rules_without_evidence"))
+    missing_critical_refs = _non_negative_int(evidence.get("critical_failed_rules_without_evidence"))
+    if missing_failed_refs or missing_critical_refs:
+        actions.append(
+            _action(
+                "add_structured_evidence_refs",
+                "high" if missing_critical_refs else "medium",
+                "evidence_coverage",
+                "Add structured evidence refs for failed rules before feeding them to review or training loops.",
+                {
+                    "failed_rules_without_evidence": missing_failed_refs,
+                    "critical_failed_rules_without_evidence": missing_critical_refs,
+                    "failed_rule_evidence_rate": evidence.get("failed_rule_evidence_rate"),
+                },
+            )
+        )
+
+    observability = metrics.get("trace_observability") if isinstance(metrics.get("trace_observability"), dict) else {}
+    trace_risks = _count_rows(observability.get("risk_counts"))
+    trace_risk_count = sum(trace_risks.values())
+    if trace_risk_count:
+        actions.append(
+            _action(
+                "improve_trace_observability",
+                "medium",
+                "trace_observability",
+                f"Improve trace capture for {trace_risk_count} trace observability risk occurrence(s).",
+                {"risk_counts": trace_risks},
+            )
+        )
+
+    validation = metrics.get("validation") if isinstance(metrics.get("validation"), dict) else {}
+    validation_errors = _non_negative_int(validation.get("error_count"))
+    validation_warnings = _non_negative_int(validation.get("warning_count"))
+    if validation_errors or validation_warnings:
+        actions.append(
+            _action(
+                "fix_validation_findings",
+                "critical" if validation_errors else "medium",
+                "validation",
+                f"Resolve validation findings before publishing this handoff: {validation_errors} error(s), {validation_warnings} warning(s).",
+                {"error_count": validation_errors, "warning_count": validation_warnings},
+            )
+        )
+
+    training = metrics.get("training_export") if isinstance(metrics.get("training_export"), dict) else {}
+    quality_flags = [flag for flag in training.get("quality_flags", []) if isinstance(flag, dict)]
+    if quality_flags:
+        actions.append(
+            _action(
+                "review_training_quality_flags",
+                "high" if any(flag.get("severity") == "error" for flag in quality_flags) else "medium",
+                "training_export",
+                f"Review {len(quality_flags)} training-export quality flag(s) before using rows for model updates.",
+                {
+                    "quality_flags": [
+                        {
+                            "id": str(flag.get("id") or "unknown"),
+                            "severity": str(flag.get("severity") or "unknown"),
+                            "message": str(flag.get("message") or ""),
+                        }
+                        for flag in quality_flags
+                    ]
+                },
+            )
+        )
+    return actions
+
+
+def _action(action_id: str, priority: str, artifact: str, summary: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": action_id,
+        "priority": priority,
+        "artifact": artifact,
+        "summary": summary,
+        "evidence": evidence,
+    }
+
+
+def _count_rows(value: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    if not isinstance(value, list):
+        return counts
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        row_id = row.get("id")
+        count = row.get("count")
+        if isinstance(row_id, str) and row_id and isinstance(count, int) and not isinstance(count, bool) and count >= 0:
+            counts[row_id] = count
+    return counts
+
+
+def _count_total(value: Any) -> int:
+    return sum(_count_rows(value).values())
+
+
+def _non_negative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int) and value >= 0:
+        return value
+    return 0
 
 
 def _summarize_suite_summary(suite_summary: dict[str, Any], metrics: dict[str, Any], checks: list[dict[str, Any]]) -> None:
