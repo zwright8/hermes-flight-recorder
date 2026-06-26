@@ -70,10 +70,11 @@ flightrecorder evidence-bundle \
   --out runs/evidence_bundle.json
 ```
 
-The bundle records artifact hashes, readiness checks, gate results, and compact
-metrics. It is useful for provenance and job routing, but it should not be read
-as permission to train unless the included scenario, evidence-coverage,
-validation, review, and gate policies are also appropriate for the target job.
+The bundle records artifact hashes, readiness checks, gate results, compact
+metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
+useful for provenance and job routing, but it should not be read as permission
+to train unless the included scenario, evidence-coverage, validation, review,
+and gate policies are also appropriate for the target job.
 
 Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate

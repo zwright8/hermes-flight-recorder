@@ -261,9 +261,10 @@ Each run directory contains:
 
 `flightrecorder evidence-bundle` writes a top-level `evidence_bundle.json`
 handoff manifest over existing suite artifacts. It records included paths,
-file hashes, readiness checks, pass/fail state, summarized metrics, and gate
-results so a reviewer, CI job, or future trainer can consume one compact
-artifact before deciding whether to trust the underlying evidence package.
+file hashes, readiness checks, pass/fail state, summarized metrics, gate
+results, and a compact `decision` block so a reviewer, CI job, or future trainer
+can consume one compact artifact before deciding whether to trust the underlying
+evidence package.
 
 `flightrecorder export-rl` converts completed run directories into future
 training-loop artifacts:
@@ -489,7 +490,10 @@ flightrecorder evidence-bundle \
 
 The bundle returns exit code 0 only when every included check passes. Validate it
 before publishing with `flightrecorder validate --evidence-bundle
-runs/evidence_bundle.json --strict`.
+runs/evidence_bundle.json --strict`. The generated `decision` block carries the
+handoff recommendation (`promote_handoff` or `block_handoff`), blocking checks,
+blocking gates, included evidence artifact names, and key metrics for automation
+that should not scrape the full check list.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum

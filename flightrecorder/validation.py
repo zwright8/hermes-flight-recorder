@@ -2856,6 +2856,8 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
     expected_readiness = "ready" if expected_passed else "blocked"
     if bundle.get("readiness") != expected_readiness:
         target.errors.append(f"evidence_bundle.readiness expected {expected_readiness!r}, got {bundle.get('readiness')!r}.")
+    if "decision" in bundle:
+        _validate_evidence_bundle_decision(bundle.get("decision"), expected_readiness, failed_checks, artifacts, metrics, target)
     if not artifacts:
         target.errors.append("evidence_bundle.artifacts must not be empty.")
     for name, record in artifacts.items():
@@ -2890,6 +2892,81 @@ def _validate_evidence_bundle_checks(checks: list[Any], target: ValidationTarget
         if not isinstance(check.get("summary"), str) or not check.get("summary"):
             target.errors.append(f"{label}.summary must be a non-empty string.")
     return failed_checks
+
+
+def _validate_evidence_bundle_decision(
+    decision: Any,
+    expected_readiness: str,
+    failed_checks: int,
+    artifacts: dict[str, Any],
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(decision, dict):
+        target.errors.append("evidence_bundle.decision must be an object when present.")
+        return
+    if decision.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"evidence_bundle.decision.readiness expected {expected_readiness!r}, got {decision.get('readiness')!r}."
+        )
+    expected_recommendation = "promote_handoff" if expected_readiness == "ready" else "block_handoff"
+    if decision.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "evidence_bundle.decision.recommendation expected "
+            f"{expected_recommendation!r}, got {decision.get('recommendation')!r}."
+        )
+    if not isinstance(decision.get("summary"), str) or not decision.get("summary"):
+        target.errors.append("evidence_bundle.decision.summary must be a non-empty string.")
+    if decision.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            f"evidence_bundle.decision.blocking_check_count expected {failed_checks}, got {decision.get('blocking_check_count')!r}."
+        )
+    blocking_checks = decision.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("evidence_bundle.decision.blocking_checks must be a list.")
+    else:
+        if len(blocking_checks) != failed_checks:
+            target.errors.append(
+                f"evidence_bundle.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}."
+            )
+        for index, check in enumerate(blocking_checks):
+            label = f"evidence_bundle.decision.blocking_checks[{index}]"
+            if not isinstance(check, dict):
+                target.errors.append(f"{label} must be an object.")
+                continue
+            if not isinstance(check.get("id"), str) or not check.get("id"):
+                target.errors.append(f"{label}.id must be a non-empty string.")
+            if not isinstance(check.get("summary"), str):
+                target.errors.append(f"{label}.summary must be a string.")
+            if not isinstance(check.get("scope"), dict):
+                target.errors.append(f"{label}.scope must be an object.")
+    blocking_gates = decision.get("blocking_gates")
+    if not isinstance(blocking_gates, list):
+        target.errors.append("evidence_bundle.decision.blocking_gates must be a list.")
+    else:
+        for index, gate in enumerate(blocking_gates):
+            label = f"evidence_bundle.decision.blocking_gates[{index}]"
+            if not isinstance(gate, dict):
+                target.errors.append(f"{label} must be an object.")
+                continue
+            for field_name in ("id", "path"):
+                if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
+                    target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    evidence_artifacts = decision.get("evidence_artifacts")
+    if not isinstance(evidence_artifacts, list) or not all(isinstance(item, str) and item for item in evidence_artifacts):
+        target.errors.append("evidence_bundle.decision.evidence_artifacts must be a list of non-empty strings.")
+    elif sorted(evidence_artifacts) != sorted(artifacts):
+        target.errors.append("evidence_bundle.decision.evidence_artifacts must match evidence_bundle.artifacts keys.")
+    gates = metrics.get("gates") if isinstance(metrics.get("gates"), list) else []
+    if decision.get("gate_count") != len(gates):
+        target.errors.append(f"evidence_bundle.decision.gate_count expected {len(gates)}, got {decision.get('gate_count')!r}.")
+    expected_passed_gates = sum(1 for gate in gates if isinstance(gate, dict) and gate.get("passed") is True)
+    if decision.get("passed_gate_count") != expected_passed_gates:
+        target.errors.append(
+            f"evidence_bundle.decision.passed_gate_count expected {expected_passed_gates}, got {decision.get('passed_gate_count')!r}."
+        )
+    if not isinstance(decision.get("key_metrics"), dict):
+        target.errors.append("evidence_bundle.decision.key_metrics must be an object.")
 
 
 def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: ValidationTarget) -> None:

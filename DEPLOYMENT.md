@@ -136,7 +136,9 @@ network.
   --evidence-coverage runs/evidence_coverage.json --validation
   runs/validation.json --training-export runs/training_export --out
   runs/evidence_bundle.json` when CI should publish one readiness manifest over
-  the generated evidence package.
+  the generated evidence package. Route automation from
+  `decision.recommendation`, while remembering it summarizes the included gates
+  and does not replace policy review.
 - Use `flightrecorder validate --state-snapshot <snapshot.json> --strict` for
   `capture-state` outputs before they become required-state evidence or
   downstream training signal. The validator checks the captured schema and

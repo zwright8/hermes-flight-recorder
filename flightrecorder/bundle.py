@@ -175,11 +175,14 @@ def build_evidence_bundle(
         raise EvidenceBundleError("At least one evidence artifact or directory must be provided.")
 
     failed_checks = sum(1 for check in checks if not check["passed"])
+    passed = failed_checks == 0
+    readiness = "ready" if passed else "blocked"
     bundle = {
         "schema_version": EVIDENCE_BUNDLE_SCHEMA_VERSION,
         "bundle_path": _display_path(Path(out_path), preserve_paths),
-        "passed": failed_checks == 0,
-        "readiness": "ready" if failed_checks == 0 else "blocked",
+        "passed": passed,
+        "readiness": readiness,
+        "decision": _decision_summary(readiness, checks, artifacts, metrics),
         "check_count": len(checks),
         "failed_check_count": failed_checks,
         "checks": checks,
@@ -191,6 +194,82 @@ def build_evidence_bundle(
         ],
     }
     return bundle
+
+
+def _decision_summary(
+    readiness: str,
+    checks: list[dict[str, Any]],
+    artifacts: dict[str, Any],
+    metrics: dict[str, Any],
+) -> dict[str, Any]:
+    blocking_checks = [
+        {
+            "id": str(check.get("id") or "unknown"),
+            "summary": str(check.get("summary") or ""),
+            "scope": check.get("scope") if isinstance(check.get("scope"), dict) else {},
+        }
+        for check in checks
+        if check.get("passed") is False
+    ]
+    gates = metrics.get("gates") if isinstance(metrics.get("gates"), list) else []
+    blocking_gates = [
+        {"id": str(gate.get("id") or "unknown"), "path": str(gate.get("path") or "")}
+        for gate in gates
+        if isinstance(gate, dict) and gate.get("passed") is False
+    ]
+    passed_gate_count = sum(1 for gate in gates if isinstance(gate, dict) and gate.get("passed") is True)
+    recommendation = "promote_handoff" if readiness == "ready" else "block_handoff"
+    return {
+        "readiness": readiness,
+        "recommendation": recommendation,
+        "summary": _decision_text(readiness, blocking_checks),
+        "blocking_check_count": len(blocking_checks),
+        "blocking_checks": blocking_checks,
+        "blocking_gates": blocking_gates,
+        "evidence_artifacts": sorted(artifacts),
+        "gate_count": len(gates),
+        "passed_gate_count": passed_gate_count,
+        "key_metrics": _decision_key_metrics(metrics),
+    }
+
+
+def _decision_text(readiness: str, blocking_checks: list[dict[str, Any]]) -> str:
+    if readiness == "ready":
+        return "Evidence handoff is ready: all included bundle checks and gates passed."
+    if not blocking_checks:
+        return "Evidence handoff is blocked."
+    first = blocking_checks[0]
+    return f"Evidence handoff is blocked by {len(blocking_checks)} check(s); first failure: {first['summary']}"
+
+
+def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    keys: dict[str, tuple[str, ...]] = {
+        "suite_summary": ("total", "passed", "failed", "pass_rate", "average_score"),
+        "scenario_quality": ("average_contract_score", "min_contract_score", "observable_scenario_rate", "weak_scenario_count"),
+        "evidence_coverage": ("failed_rule_evidence_rate", "critical_failed_rule_evidence_rate", "failed_rules_without_evidence"),
+        "validation": ("target_count", "error_count", "warning_count"),
+        "training_export": ("episode_count", "preference_count", "dpo_count", "pass_rate", "average_score"),
+        "compare_export": ("pair_count", "candidate_win_count", "baseline_win_count", "skipped_pair_count"),
+        "review_export": ("item_count", "failed_count", "passed_count"),
+        "reviewed_export": ("reviewed_label_count", "sft_count", "dpo_count", "reward_model_count"),
+        "review_calibration": ("reviewed_label_count", "comparable_label_count", "agreement_rate", "disagreement_count"),
+    }
+    summary: dict[str, Any] = {}
+    for section, fields in keys.items():
+        value = metrics.get(section)
+        if not isinstance(value, dict):
+            continue
+        section_metrics = {field: value.get(field) for field in fields if field in value}
+        if section_metrics:
+            summary[section] = section_metrics
+    gates = metrics.get("gates")
+    if isinstance(gates, list):
+        summary["gates"] = {
+            "total": len(gates),
+            "passed": sum(1 for gate in gates if isinstance(gate, dict) and gate.get("passed") is True),
+            "failed": sum(1 for gate in gates if isinstance(gate, dict) and gate.get("passed") is False),
+        }
+    return summary
 
 
 def _summarize_suite_summary(suite_summary: dict[str, Any], metrics: dict[str, Any], checks: list[dict[str, Any]]) -> None:

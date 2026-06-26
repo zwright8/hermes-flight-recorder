@@ -126,6 +126,10 @@ assert evidence_coverage["metrics"]["critical_failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["failed_rules_without_evidence"] == 0
 assert evidence_bundle["passed"] is True
 assert evidence_bundle["readiness"] == "ready"
+assert evidence_bundle["decision"]["recommendation"] == "promote_handoff"
+assert evidence_bundle["decision"]["blocking_check_count"] == 0
+assert evidence_bundle["decision"]["key_metrics"]["suite_summary"]["total"] == 6
+assert evidence_bundle["decision"]["key_metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["suite_summary"]["total"] == 6
 assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 89.17
@@ -531,6 +535,11 @@ from pathlib import Path
 bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
 assert bundle["readiness"] == "ready"
+assert bundle["decision"]["recommendation"] == "promote_handoff"
+assert bundle["decision"]["gate_count"] == 4
+assert bundle["decision"]["passed_gate_count"] == 4
+assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
+assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_count"] == 1
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
