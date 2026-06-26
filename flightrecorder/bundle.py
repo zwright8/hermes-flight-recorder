@@ -604,13 +604,27 @@ def _next_actions(
 
 
 def _action(action_id: str, priority: str, artifact: str, summary: str, evidence: dict[str, Any]) -> dict[str, Any]:
+    fingerprint = _action_fingerprint(action_id, priority, artifact, evidence)
     return {
         "id": action_id,
         "priority": priority,
         "artifact": artifact,
         "summary": summary,
+        "routing_key": f"{artifact}:{action_id}:{fingerprint[:12]}",
+        "action_fingerprint": fingerprint,
         "evidence": evidence,
     }
+
+
+def _action_fingerprint(action_id: str, priority: str, artifact: str, evidence: dict[str, Any]) -> str:
+    payload = {
+        "id": action_id,
+        "priority": priority,
+        "artifact": artifact,
+        "evidence": evidence,
+    }
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _count_rows(value: Any) -> dict[str, int]:

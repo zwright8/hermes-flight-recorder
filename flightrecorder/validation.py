@@ -4367,6 +4367,16 @@ def _validate_evidence_bundle_decision(
                 target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
             if not isinstance(action.get("evidence"), dict):
                 target.errors.append(f"{label}.evidence must be an object.")
+            expected_fingerprint = _evidence_bundle_action_fingerprint(action)
+            if not _is_sha256(action.get("action_fingerprint")):
+                target.errors.append(f"{label}.action_fingerprint must be a SHA-256 hex string.")
+            elif action.get("action_fingerprint") != expected_fingerprint:
+                target.errors.append(f"{label}.action_fingerprint does not match the action payload.")
+            expected_routing_key = f"{action.get('artifact')}:{action.get('id')}:{expected_fingerprint[:12]}"
+            if not isinstance(action.get("routing_key"), str) or not action.get("routing_key"):
+                target.errors.append(f"{label}.routing_key must be a non-empty string.")
+            elif action.get("routing_key") != expected_routing_key:
+                target.errors.append(f"{label}.routing_key expected {expected_routing_key!r}, got {action.get('routing_key')!r}.")
     if decision.get("next_action_count") != len(next_actions):
         target.errors.append(
             f"evidence_bundle.decision.next_action_count expected {len(next_actions)}, got {decision.get('next_action_count')!r}."
@@ -4413,6 +4423,18 @@ def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: Va
         target.errors.append(f"{label}.schema_version must be a string or null.")
     if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
         target.errors.append(f"{label}.passed must be a boolean or null.")
+
+
+def _evidence_bundle_action_fingerprint(action: dict[str, Any]) -> str:
+    evidence = action.get("evidence") if isinstance(action.get("evidence"), dict) else {}
+    payload = {
+        "id": action.get("id"),
+        "priority": action.get("priority"),
+        "artifact": action.get("artifact"),
+        "evidence": evidence,
+    }
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:

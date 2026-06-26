@@ -209,7 +209,12 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["gate_count"], 1)
             self.assertEqual(bundle["decision"]["passed_gate_count"], 1)
             action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
+            routing_keys = [action["routing_key"] for action in bundle["decision"]["next_actions"]]
             self.assertEqual(bundle["decision"]["next_action_count"], len(bundle["decision"]["next_actions"]))
+            self.assertEqual(len(routing_keys), len(set(routing_keys)))
+            for action in bundle["decision"]["next_actions"]:
+                self.assertEqual(len(action["action_fingerprint"]), 64)
+                self.assertEqual(action["routing_key"], f"{action['artifact']}:{action['id']}:{action['action_fingerprint'][:12]}")
             self.assertIn("repair_failed_scenarios", action_ids)
             self.assertIn("repair_critical_failures", action_ids)
             self.assertIn("dispatch_repair_queue", action_ids)
@@ -317,6 +322,12 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["blocking_checks"][0]["id"], "gate_passed")
             self.assertEqual(bundle["decision"]["blocking_gates"][0]["id"], "test_gate")
             self.assertIn("fix_failed_gates", {action["id"] for action in bundle["decision"]["next_actions"]})
+            fix_gate_action = next(action for action in bundle["decision"]["next_actions"] if action["id"] == "fix_failed_gates")
+            self.assertEqual(len(fix_gate_action["action_fingerprint"]), 64)
+            self.assertEqual(
+                fix_gate_action["routing_key"],
+                f"gates:fix_failed_gates:{fix_gate_action['action_fingerprint'][:12]}",
+            )
             self.assertEqual(bundle["decision"]["gate_count"], 1)
             self.assertEqual(bundle["decision"]["passed_gate_count"], 0)
             self.assertEqual(bundle["decision"]["key_metrics"]["gates"]["failed"], 1)
@@ -350,6 +361,30 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.decision.recommendation", errors)
             self.assertIn("evidence_bundle.decision.next_action_count", errors)
+
+    def test_validate_rejects_stale_bundle_action_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "failed_gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            gate_path.write_text(
+                json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate_path), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["decision"]["next_actions"][0]["evidence"]["tampered"] = True
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_fingerprint does not match", errors)
 
 
 if __name__ == "__main__":

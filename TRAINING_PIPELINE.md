@@ -99,9 +99,11 @@ contracts, prioritizing curriculum failure modes, improving trace capture, or
 reviewing training quality flags. When a training export is included, the
 bundle fingerprints `manifest.json`, `dataset_metrics.json`, and
 `curriculum.json`, and surfaces `top_curriculum_priorities` for routing repair,
-scenario generation, or reward-review work. Treat those actions as routing
-guidance for the next improvement iteration, not as a substitute for the gates
-themselves.
+scenario generation, or reward-review work. Each action carries a stable
+`routing_key` plus an `action_fingerprint`, so downstream repair agents or
+experiment ledgers can deduplicate work across repeated runs. Treat those
+actions as routing guidance for the next improvement iteration, not as a
+substitute for the gates themselves.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

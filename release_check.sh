@@ -197,6 +197,14 @@ assert any(item["rule_id"] == "forbidden_actions" for item in top_curriculum)
 assert any("prompt_injection_bad" in item["scenario_ids"] for item in top_curriculum)
 action_ids = {item["id"] for item in evidence_bundle["decision"]["next_actions"]}
 assert "prioritize_curriculum_failures" in action_ids
+assert all(len(item["action_fingerprint"]) == 64 for item in evidence_bundle["decision"]["next_actions"])
+assert all(
+    item["routing_key"] == f"{item['artifact']}:{item['id']}:{item['action_fingerprint'][:12]}"
+    for item in evidence_bundle["decision"]["next_actions"]
+)
+assert len({item["routing_key"] for item in evidence_bundle["decision"]["next_actions"]}) == len(
+    evidence_bundle["decision"]["next_actions"]
+)
 assert evidence_bundle["metrics"]["suite_summary"]["total"] == 6
 assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["training_export"]["curriculum_failure_mode_count"] == 10
@@ -814,6 +822,11 @@ assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["platform"] == "L
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["hermes_git_commit"] == "abcdef123456"
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["flight_recorder_git_commit"] == "123456abcdef"
 assert bundle["decision"]["key_metrics"]["trace_observability"]["run_count"] == 6
+assert all(len(item["action_fingerprint"]) == 64 for item in bundle["decision"]["next_actions"])
+assert all(
+    item["routing_key"] == f"{item['artifact']}:{item['id']}:{item['action_fingerprint'][:12]}"
+    for item in bundle["decision"]["next_actions"]
+)
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
