@@ -22,6 +22,7 @@ from .artifacts import (
 from .lineage import write_run_lineage
 from .redaction import sanitize_trace
 from .report import write_index, write_report
+from .review import ReviewExportError, export_review_queue
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         ArtifactError,
         ScenarioError,
         SuiteGatePolicyError,
+        ReviewExportError,
         TrainingExportError,
         TrainingGatePolicyError,
         OSError,
@@ -322,6 +324,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         runs_dir=args.runs,
         run_dirs=args.run,
         training_export_dir=args.training_export,
+        review_export_dir=args.review_export,
         suite_summary_paths=args.suite_summary,
         strict=args.strict,
     )
@@ -333,6 +336,17 @@ def cmd_validate(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0 if summary["passed"] else 1
+
+
+def cmd_export_review(args: argparse.Namespace) -> int:
+    manifest = export_review_queue(
+        args.runs,
+        args.out,
+        only_failed=args.only_failed,
+        preserve_paths=args.preserve_paths,
+    )
+    print(f"wrote review queue {args.out} items={manifest['item_count']}")
+    return 0
 
 
 def cmd_draft_scenario(args: argparse.Namespace) -> int:
@@ -558,6 +572,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--run", action="append", default=[], help="Validate one run directory; may be repeated")
     validate.add_argument("--runs", help="Validate every completed run directory inside this runs directory")
     validate.add_argument("--training-export", help="Validate an export-rl output directory")
+    validate.add_argument("--review-export", help="Validate an export-review output directory")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
@@ -633,6 +648,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     export_rl.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
     export_rl.set_defaults(func=cmd_export_rl)
+
+    export_review = subparsers.add_parser("export-review", help="Export completed runs as a human review queue")
+    export_review.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
+    export_review.add_argument("--out", required=True, help="Output directory for review queue artifacts")
+    export_review.add_argument("--only-failed", action="store_true", help="Include only failed runs in the review queue")
+    export_review.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
+    export_review.set_defaults(func=cmd_export_review)
 
     observer = subparsers.add_parser("observer-template", help="Print or write a read-only Hermes observer plugin template")
     observer.add_argument("--out", help="Write the template to this path instead of stdout")

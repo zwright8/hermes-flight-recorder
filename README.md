@@ -209,6 +209,16 @@ training-loop artifacts:
   boundaries.
 - `manifest.json`: export settings, counts, and caveats.
 
+`flightrecorder export-review` converts completed run directories into a
+human-curation queue:
+
+- `review_items.jsonl`: one review item per run with scorecard summary, task
+  evidence, source report, and lineage pointers.
+- `label_template.jsonl`: editable label rows with `human_label`, reviewer,
+  notes, and accepted/rejected evidence-ref fields.
+- `REVIEW_INSTRUCTIONS.md`: short reviewer guidance.
+- `manifest.json`: review export counts, label options, and output paths.
+
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
 artifacts:
 
@@ -471,9 +481,14 @@ contract and future trainer shape, see
 Validate the full evidence set before feeding it downstream:
 
 ```bash
+flightrecorder export-review \
+  --runs runs \
+  --out runs/review_queue
+
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --review-export runs/review_queue \
   --suite-summary runs/suite_summary.json \
   --out runs/validation.json \
   --strict
@@ -513,6 +528,9 @@ scenario directory or single scenario + trace artifact
 	          |
 	          v
 	  compare-suite baseline/candidate directories -> suite regression delta
+	          |
+	          v
+	  export-review -> review queue + label templates
 	          |
 	          v
 	  export-rl -> evidence artifacts + trainer-ready views

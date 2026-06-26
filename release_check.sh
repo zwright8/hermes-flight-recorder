@@ -165,6 +165,16 @@ python -m flightrecorder gate-export \
   --out runs/training_gate.json >/dev/null
 test -f runs/training_gate.json
 test -f examples/training_gate_policy.demo.json
+python -m flightrecorder export-review \
+  --runs runs \
+  --out runs/review_queue >/dev/null
+test -f runs/review_queue/manifest.json
+test -f runs/review_queue/review_items.jsonl
+test -f runs/review_queue/label_template.jsonl
+test -f runs/review_queue/REVIEW_INSTRUCTIONS.md
+python -m flightrecorder validate \
+  --review-export runs/review_queue \
+  --strict >/dev/null
 if python -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-pass-rate 0.9 >/dev/null; then
@@ -197,6 +207,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \

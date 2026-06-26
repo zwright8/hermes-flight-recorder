@@ -182,14 +182,16 @@ Flight Recorder turns Hermes' experience into regression pressure.
 8. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`.
 9. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-10. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+10. Export a human review queue with `flightrecorder export-review` when
+   maintainers want to curate deterministic score labels before training.
+11. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-11. Validate the generated artifacts and suite summary with
+12. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-12. Gate training-export readiness with `flightrecorder gate-export` before
+13. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:
@@ -213,6 +215,8 @@ That gives the Hermes team a practical improvement loop:
   attribution, preference pairs, failure taxonomies, and curriculum metadata,
 - artifact lineage can connect every scorecard and training episode back to the
   source trace, generated files, hashes, and structured evidence refs,
+- review queues can turn deterministic scorecard evidence into human-curated
+  labels before rows are trusted as training signal,
 - generated artifacts can be contract-validated before they become evidence,
 - and reports give maintainers a quick visual explanation of why a run passed
   or failed.

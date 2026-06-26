@@ -10,6 +10,7 @@ from typing import Any
 
 from .adapters import TRACE_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION
+from .review import REVIEW_ITEM_SCHEMA_VERSION, REVIEW_LABEL_SCHEMA_VERSION, REVIEW_LABELS, REVIEW_MANIFEST_SCHEMA_VERSION
 from .scorers import SCORE_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
@@ -54,6 +55,7 @@ def validate_artifacts(
     runs_dir: str | Path | None = None,
     run_dirs: list[str | Path] | None = None,
     training_export_dir: str | Path | None = None,
+    review_export_dir: str | Path | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
@@ -65,6 +67,8 @@ def validate_artifacts(
         targets.extend(validate_runs_dir(runs_dir))
     if training_export_dir is not None:
         targets.append(validate_training_export(training_export_dir))
+    if review_export_dir is not None:
+        targets.append(validate_review_export(review_export_dir))
     for suite_summary_path in suite_summary_paths or []:
         targets.append(validate_suite_summary(suite_summary_path))
     if not targets:
@@ -240,6 +244,30 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             "quality_flag_count": len(dataset_metrics.get("quality_flags", [])) if isinstance(dataset_metrics, dict) else None,
         }
     )
+    return target
+
+
+def validate_review_export(path: str | Path) -> ValidationTarget:
+    """Validate a human-review export directory."""
+    export_dir = Path(path)
+    target = ValidationTarget("review_export", str(export_dir))
+    if not export_dir.exists():
+        target.errors.append(f"Review export directory not found: {export_dir}")
+        return target
+    if not export_dir.is_dir():
+        target.errors.append(f"Review export path is not a directory: {export_dir}")
+        return target
+
+    manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
+    items = _read_jsonl_objects(export_dir / "review_items.jsonl", target, "review_items.jsonl")
+    labels = _read_jsonl_objects(export_dir / "label_template.jsonl", target, "label_template.jsonl")
+    if not (export_dir / "REVIEW_INSTRUCTIONS.md").exists():
+        target.warnings.append("REVIEW_INSTRUCTIONS.md is missing; review workflow is less self-documenting.")
+    if manifest is not None:
+        _validate_review_manifest(manifest, target, items, labels)
+    _validate_review_items(items, target)
+    _validate_review_labels(labels, target, items)
+    target.details.update({"item_count": len(items), "label_count": len(labels)})
     return target
 
 
@@ -471,6 +499,123 @@ def _validate_training_manifest(
         target.warnings.append("manifest.source_runs_dir is absolute; prefer redacted or relative exports for sharing.")
     if _looks_absolute(str(manifest.get("output_dir", ""))):
         target.warnings.append("manifest.output_dir is absolute; prefer redacted or relative exports for sharing.")
+
+
+def _validate_review_manifest(
+    manifest: dict[str, Any],
+    target: ValidationTarget,
+    items: list[dict[str, Any]],
+    labels: list[dict[str, Any]],
+) -> None:
+    _require_equal(manifest, "schema_version", REVIEW_MANIFEST_SCHEMA_VERSION, target)
+    if manifest.get("item_count") != len(items):
+        target.errors.append(f"manifest.item_count expected {len(items)}, got {manifest.get('item_count')!r}.")
+    passed_count = sum(1 for item in items if _review_item_passed(item) is True)
+    failed_count = sum(1 for item in items if _review_item_passed(item) is False)
+    if manifest.get("passed_count") != passed_count:
+        target.errors.append(f"manifest.passed_count expected {passed_count}, got {manifest.get('passed_count')!r}.")
+    if manifest.get("failed_count") != failed_count:
+        target.errors.append(f"manifest.failed_count expected {failed_count}, got {manifest.get('failed_count')!r}.")
+    if len(labels) != len(items):
+        target.errors.append(f"label_template row count expected {len(items)}, got {len(labels)}.")
+    if manifest.get("label_options") != list(REVIEW_LABELS):
+        target.errors.append(f"manifest.label_options must be {list(REVIEW_LABELS)!r}.")
+    outputs = manifest.get("outputs")
+    if not isinstance(outputs, dict):
+        target.errors.append("manifest.outputs must be an object.")
+    else:
+        for output_name in ("review_items", "label_template", "instructions", "manifest"):
+            if output_name not in outputs:
+                target.errors.append(f"manifest.outputs.{output_name} is missing.")
+    if _looks_absolute(str(manifest.get("source_runs_dir", ""))):
+        target.warnings.append("manifest.source_runs_dir is absolute; prefer redacted or relative exports for sharing.")
+    if _looks_absolute(str(manifest.get("output_dir", ""))):
+        target.warnings.append("manifest.output_dir is absolute; prefer redacted or relative exports for sharing.")
+
+
+def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget) -> None:
+    seen: set[str] = set()
+    for index, item in enumerate(items):
+        _require_equal(item, "schema_version", REVIEW_ITEM_SCHEMA_VERSION, target, prefix=f"review_items[{index}].")
+        item_id = item.get("review_item_id")
+        if not isinstance(item_id, str) or not item_id:
+            target.errors.append(f"review_items[{index}].review_item_id must be a non-empty string.")
+            continue
+        if item_id in seen:
+            target.errors.append(f"review_items[{index}].review_item_id duplicates {item_id!r}.")
+        seen.add(item_id)
+        for field_name in ("episode_id", "scenario_id", "scenario_title", "task_family", "prompt", "final_answer", "suggested_human_label"):
+            if not isinstance(item.get(field_name), str):
+                target.errors.append(f"review_items[{index}].{field_name} must be a string.")
+        if item.get("suggested_human_label") not in REVIEW_LABELS:
+            target.errors.append(f"review_items[{index}].suggested_human_label must be one of {list(REVIEW_LABELS)!r}.")
+        if item.get("label_options") != list(REVIEW_LABELS):
+            target.errors.append(f"review_items[{index}].label_options must be {list(REVIEW_LABELS)!r}.")
+        if not isinstance(item.get("event_count"), int) or isinstance(item.get("event_count"), bool) or item.get("event_count") < 0:
+            target.errors.append(f"review_items[{index}].event_count must be a non-negative integer.")
+        source_artifacts = item.get("source_artifacts")
+        if not isinstance(source_artifacts, dict):
+            target.errors.append(f"review_items[{index}].source_artifacts must be an object.")
+        else:
+            for artifact_name in ("run_dir", "normalized_trace", "scorecard", "report"):
+                if not isinstance(source_artifacts.get(artifact_name), str) or not source_artifacts.get(artifact_name):
+                    target.errors.append(f"review_items[{index}].source_artifacts.{artifact_name} must be a non-empty string.")
+        scorecard = item.get("scorecard")
+        if not isinstance(scorecard, dict):
+            target.errors.append(f"review_items[{index}].scorecard must be an object.")
+        else:
+            if not isinstance(scorecard.get("passed"), bool):
+                target.errors.append(f"review_items[{index}].scorecard.passed must be a boolean.")
+            if not _is_int_between(scorecard.get("score"), 0, 100):
+                target.errors.append(f"review_items[{index}].scorecard.score must be an integer from 0 to 100.")
+            if not _is_string_list(scorecard.get("failed_rules")):
+                target.errors.append(f"review_items[{index}].scorecard.failed_rules must be a list of strings.")
+            if not _is_string_list(scorecard.get("critical_failures")):
+                target.errors.append(f"review_items[{index}].scorecard.critical_failures must be a list of strings.")
+        if not isinstance(item.get("rule_summaries"), list):
+            target.errors.append(f"review_items[{index}].rule_summaries must be a list.")
+        if not isinstance(item.get("task_evidence"), list):
+            target.errors.append(f"review_items[{index}].task_evidence must be a list.")
+        if not isinstance(item.get("evidence_target_counts"), dict):
+            target.errors.append(f"review_items[{index}].evidence_target_counts must be an object.")
+
+
+def _validate_review_labels(labels: list[dict[str, Any]], target: ValidationTarget, items: list[dict[str, Any]]) -> None:
+    item_ids = {item.get("review_item_id") for item in items if isinstance(item.get("review_item_id"), str)}
+    seen: set[str] = set()
+    for index, label in enumerate(labels):
+        _require_equal(label, "schema_version", REVIEW_LABEL_SCHEMA_VERSION, target, prefix=f"label_template[{index}].")
+        item_id = label.get("review_item_id")
+        if not isinstance(item_id, str) or not item_id:
+            target.errors.append(f"label_template[{index}].review_item_id must be a non-empty string.")
+            continue
+        if item_id in seen:
+            target.errors.append(f"label_template[{index}].review_item_id duplicates {item_id!r}.")
+        seen.add(item_id)
+        if item_id not in item_ids:
+            target.errors.append(f"label_template[{index}].review_item_id does not reference a review item.")
+        suggested = label.get("suggested_human_label")
+        if suggested not in REVIEW_LABELS:
+            target.errors.append(f"label_template[{index}].suggested_human_label must be one of {list(REVIEW_LABELS)!r}.")
+        human_label = label.get("human_label")
+        if human_label is not None and human_label not in REVIEW_LABELS:
+            target.errors.append(f"label_template[{index}].human_label must be null or one of {list(REVIEW_LABELS)!r}.")
+        corrected_score = label.get("corrected_score")
+        if corrected_score is not None and not _is_int_between(corrected_score, 0, 100):
+            target.errors.append(f"label_template[{index}].corrected_score must be null or an integer from 0 to 100.")
+        for field_name in ("accepted_evidence_refs", "rejected_evidence_refs"):
+            if not isinstance(label.get(field_name), list):
+                target.errors.append(f"label_template[{index}].{field_name} must be a list.")
+    missing = sorted(item_ids - seen)
+    if missing:
+        target.errors.append(f"label_template missing review_item_id values: {missing!r}.")
+
+
+def _review_item_passed(item: dict[str, Any]) -> bool | None:
+    scorecard = item.get("scorecard")
+    if isinstance(scorecard, dict) and isinstance(scorecard.get("passed"), bool):
+        return scorecard["passed"]
+    return None
 
 
 def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget) -> None:

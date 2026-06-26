@@ -36,7 +36,26 @@ flightrecorder export-rl \
   --out runs/training_export
 ```
 
-`demo.sh` already runs this export for the included scenarios.
+Before using those deterministic labels for model updates, export a human
+review queue:
+
+```bash
+flightrecorder export-review \
+  --runs runs \
+  --out runs/review_queue
+
+flightrecorder validate \
+  --review-export runs/review_queue \
+  --strict
+```
+
+`review_items.jsonl` gives reviewers the scorecard summary, task evidence,
+report path, and lineage pointer for each run. `label_template.jsonl` is an
+editable starting point for human labels such as `accept`, `reject`,
+`needs_review`, `unsafe`, and `incomplete`.
+
+`demo.sh` already runs the training export for the included scenarios, and
+`release_check.sh` also exercises the review export path.
 
 When you have a new known-good trace but no scenario yet, bootstrap one first:
 
