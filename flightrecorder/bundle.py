@@ -136,10 +136,20 @@ def build_evidence_bundle(
 
     if training_export_dir is not None:
         training_dir = Path(training_export_dir)
+        manifest_path = training_dir / "manifest.json"
+        dataset_metrics_path = training_dir / "dataset_metrics.json"
+        curriculum_path = training_dir / "curriculum.json"
         artifacts["training_export"] = _dir_record(training_dir, preserve_paths)
-        manifest = _read_optional_json(training_dir / "manifest.json")
-        dataset_metrics = _read_optional_json(training_dir / "dataset_metrics.json")
+        artifacts["training_export_manifest"] = _file_record(manifest_path, preserve_paths)
+        artifacts["training_export_dataset_metrics"] = _file_record(dataset_metrics_path, preserve_paths)
+        artifacts["training_export_curriculum"] = _file_record(curriculum_path, preserve_paths)
+        manifest = _read_optional_json(manifest_path)
+        dataset_metrics = _read_optional_json(dataset_metrics_path)
+        curriculum = _read_optional_json(curriculum_path)
         _add_presence_check(checks, "training_export_exists", training_dir.exists() and training_dir.is_dir(), {"artifact": "training_export"})
+        _add_presence_check(checks, "training_export_manifest_exists", manifest_path.exists() and manifest_path.is_file(), {"artifact": "training_export", "file": "manifest.json"})
+        _add_presence_check(checks, "training_export_dataset_metrics_exists", dataset_metrics_path.exists() and dataset_metrics_path.is_file(), {"artifact": "training_export", "file": "dataset_metrics.json"})
+        _add_presence_check(checks, "training_export_curriculum_exists", curriculum_path.exists() and curriculum_path.is_file(), {"artifact": "training_export", "file": "curriculum.json"})
         if isinstance(manifest, dict):
             metrics["training_export"] = {
                 "episode_count": manifest.get("episode_count"),
@@ -153,6 +163,9 @@ def build_evidence_bundle(
             metrics.setdefault("training_export", {})["pass_rate"] = dataset_metrics.get("pass_rate")
             metrics.setdefault("training_export", {})["average_score"] = dataset_metrics.get("average_score")
             metrics.setdefault("training_export", {})["quality_flags"] = dataset_metrics.get("quality_flags")
+        if isinstance(curriculum, dict):
+            metrics.setdefault("training_export", {})["curriculum_failure_mode_count"] = curriculum.get("failure_mode_count")
+            metrics.setdefault("training_export", {})["top_curriculum_priorities"] = _top_curriculum_priorities(curriculum)
 
     if compare_export_dir is not None:
         compare_dir = Path(compare_export_dir)
@@ -322,7 +335,16 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         ),
         "repair_queue": ("item_count", "critical_item_count", "scenario_count", "task_family_count", "priority_counts", "rule_counts"),
         "validation": ("target_count", "error_count", "warning_count"),
-        "training_export": ("episode_count", "preference_count", "dpo_count", "pass_rate", "average_score", "quality_flag_count"),
+        "training_export": (
+            "episode_count",
+            "preference_count",
+            "dpo_count",
+            "pass_rate",
+            "average_score",
+            "quality_flag_count",
+            "curriculum_failure_mode_count",
+            "top_curriculum_priorities",
+        ),
         "compare_export": ("pair_count", "candidate_win_count", "baseline_win_count", "skipped_pair_count"),
         "review_export": ("item_count", "failed_count", "passed_count"),
         "reviewed_export": ("reviewed_label_count", "sft_count", "dpo_count", "reward_model_count"),
@@ -524,6 +546,20 @@ def _next_actions(
                 },
             )
         )
+    top_curriculum = [item for item in training.get("top_curriculum_priorities", []) if isinstance(item, dict)]
+    if top_curriculum:
+        actions.append(
+            _action(
+                "prioritize_curriculum_failures",
+                _curriculum_action_priority(top_curriculum),
+                "training_export",
+                f"Use {len(top_curriculum)} prioritized curriculum failure mode(s) to plan repair, scenario, or data-generation work.",
+                {
+                    "curriculum_failure_mode_count": _non_negative_int(training.get("curriculum_failure_mode_count")),
+                    "top_curriculum_priorities": top_curriculum,
+                },
+            )
+        )
     return actions
 
 
@@ -553,6 +589,59 @@ def _count_rows(value: Any) -> dict[str, int]:
 
 def _count_total(value: Any) -> int:
     return sum(_count_rows(value).values())
+
+
+def _top_curriculum_priorities(curriculum: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    families = curriculum.get("task_families") if isinstance(curriculum.get("task_families"), list) else []
+    for family in families:
+        if not isinstance(family, dict):
+            continue
+        task_family = str(family.get("task_family") or "unknown")
+        modes = family.get("failure_modes") if isinstance(family.get("failure_modes"), list) else []
+        for mode in modes:
+            if not isinstance(mode, dict):
+                continue
+            rows.append(
+                {
+                    "task_family": task_family,
+                    "rule_id": str(mode.get("rule_id") or "unknown_rule"),
+                    "rule_name": str(mode.get("rule_name") or mode.get("rule_id") or "unknown_rule"),
+                    "priority_score": _non_negative_int(mode.get("priority_score")),
+                    "priority_band": str(mode.get("priority_band") or "unknown"),
+                    "count": _non_negative_int(mode.get("count")),
+                    "critical_count": _non_negative_int(mode.get("critical_count")),
+                    "max_penalty": _non_negative_int(mode.get("max_penalty")),
+                    "scenario_ids": _bounded_string_list(mode.get("scenario_ids"), 5),
+                    "failure_ids": _bounded_string_list(mode.get("failure_ids"), 5),
+                    "example_evidence_refs": _bounded_dict_list(mode.get("example_evidence_refs"), 2),
+                }
+            )
+    rows.sort(key=lambda item: (-item["priority_score"], -item["count"], item["task_family"], item["rule_id"]))
+    return rows[:limit]
+
+
+def _curriculum_action_priority(top_curriculum: list[dict[str, Any]]) -> str:
+    bands = {str(item.get("priority_band") or "") for item in top_curriculum}
+    if "critical" in bands:
+        return "critical"
+    if "high" in bands:
+        return "high"
+    if "medium" in bands:
+        return "medium"
+    return "low"
+
+
+def _bounded_string_list(value: Any, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item][:limit]
+
+
+def _bounded_dict_list(value: Any, limit: int) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)][:limit]
 
 
 def _non_negative_int(value: Any) -> int:

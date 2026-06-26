@@ -191,7 +191,7 @@ The generated evidence bundle gives the self-improvement loop one compact
 handoff manifest over suite summary, scenario quality, evidence coverage,
 validation, training export, and optional gate outputs. That makes it easier to
 route only ready evidence packages into review or training jobs while preserving
-artifact hashes and readiness notes for audit.
+artifact hashes, top curriculum priorities, and readiness notes for audit.
 
 The generated review-calibration report gives maintainers a direct
 human-vs-scorecard agreement signal after labels are applied. It identifies

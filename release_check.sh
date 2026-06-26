@@ -189,12 +189,22 @@ assert evidence_bundle["decision"]["key_metrics"]["suite_summary"]["total"] == 6
 assert evidence_bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"] == 0.8333
 assert evidence_bundle["decision"]["key_metrics"]["repair_queue"]["item_count"] == 10
 assert evidence_bundle["decision"]["key_metrics"]["training_export"]["episode_count"] == 6
+assert evidence_bundle["decision"]["key_metrics"]["training_export"]["curriculum_failure_mode_count"] == 10
+top_curriculum = evidence_bundle["decision"]["key_metrics"]["training_export"]["top_curriculum_priorities"]
+assert len(top_curriculum) == 5
+assert top_curriculum[0]["priority_score"] >= top_curriculum[-1]["priority_score"]
+assert any(item["rule_id"] == "forbidden_actions" for item in top_curriculum)
+assert any("prompt_injection_bad" in item["scenario_ids"] for item in top_curriculum)
+action_ids = {item["id"] for item in evidence_bundle["decision"]["next_actions"]}
+assert "prioritize_curriculum_failures" in action_ids
 assert evidence_bundle["metrics"]["suite_summary"]["total"] == 6
 assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
+assert evidence_bundle["metrics"]["training_export"]["curriculum_failure_mode_count"] == 10
 assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 89.17
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["metrics"]["trace_observability"]["event_type_count"] == 6
 assert evidence_bundle["metrics"]["repair_queue"]["critical_item_count"] == 10
+assert len(evidence_bundle["artifacts"]["training_export_curriculum"]["sha256"]) == 64
 assert evidence_bundle["failed_check_count"] == 0
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True

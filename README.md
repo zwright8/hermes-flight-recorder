@@ -587,8 +587,11 @@ and key metrics for automation that should not scrape the full check list.
 `next_actions` is advisory repair guidance for improvement loops: a bundle can
 be ready to hand off while still recommending that the agent repair failing
 scenarios, dispatch the concrete `repair_queue.json` work items, strengthen
-weak contracts, improve trace capture, or review training quality flags before
-a later promotion or model-update gate.
+weak contracts, prioritize `curriculum.json` failure modes, improve trace
+capture, or review training quality flags before a later promotion or
+model-update gate. When `--training-export` is included, the bundle fingerprints
+`manifest.json`, `dataset_metrics.json`, and `curriculum.json`, and carries the
+top curriculum priorities in `decision.key_metrics.training_export`.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum

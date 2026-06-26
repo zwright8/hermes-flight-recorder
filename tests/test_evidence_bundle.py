@@ -175,6 +175,7 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("repair_failed_scenarios", action_ids)
             self.assertIn("repair_critical_failures", action_ids)
             self.assertIn("dispatch_repair_queue", action_ids)
+            self.assertIn("prioritize_curriculum_failures", action_ids)
             self.assertIn("ground_scenario_contracts", action_ids)
             self.assertIn("improve_trace_observability", action_ids)
             repair_action = next(action for action in bundle["decision"]["next_actions"] if action["id"] == "dispatch_repair_queue")
@@ -185,11 +186,24 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(repair_action["evidence"]["scenario_count"], 4)
             self.assertEqual(repair_action["evidence"]["priority_counts"], {"critical": 10})
             self.assertEqual(repair_action["evidence"]["rule_counts"]["required_evidence"], 2)
+            curriculum_action = next(action for action in bundle["decision"]["next_actions"] if action["id"] == "prioritize_curriculum_failures")
+            self.assertEqual(curriculum_action["priority"], "high")
+            self.assertEqual(curriculum_action["artifact"], "training_export")
+            self.assertEqual(curriculum_action["evidence"]["curriculum_failure_mode_count"], 10)
+            self.assertEqual(len(curriculum_action["evidence"]["top_curriculum_priorities"]), 5)
             self.assertEqual(bundle["decision"]["key_metrics"]["suite_summary"]["total"], 6)
             self.assertEqual(bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"], 0.8333)
             self.assertIn("risk_counts", bundle["decision"]["key_metrics"]["trace_observability"])
             self.assertEqual(bundle["decision"]["key_metrics"]["repair_queue"]["item_count"], 10)
             self.assertEqual(bundle["decision"]["key_metrics"]["training_export"]["episode_count"], 6)
+            top_priorities = bundle["decision"]["key_metrics"]["training_export"]["top_curriculum_priorities"]
+            self.assertEqual(len(top_priorities), 5)
+            self.assertEqual(
+                [item["priority_score"] for item in top_priorities],
+                sorted((item["priority_score"] for item in top_priorities), reverse=True),
+            )
+            self.assertTrue(any(item["rule_id"] == "forbidden_actions" for item in top_priorities))
+            self.assertTrue(any("prompt_injection_bad" in item["scenario_ids"] for item in top_priorities))
             self.assertEqual(bundle["metrics"]["suite_summary"]["total"], 6)
             self.assertEqual(bundle["metrics"]["scenario_quality"]["average_contract_score"], 89.17)
             self.assertIn("risk_counts", bundle["metrics"]["scenario_quality"])
@@ -199,12 +213,19 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("risk_counts", bundle["metrics"]["trace_observability"])
             self.assertEqual(bundle["metrics"]["repair_queue"]["critical_item_count"], 10)
             self.assertEqual(bundle["metrics"]["training_export"]["episode_count"], 6)
+            self.assertEqual(bundle["metrics"]["training_export"]["curriculum_failure_mode_count"], 10)
             self.assertEqual(bundle["metrics"]["gates"][0]["id"], "suite_gate")
             self.assertTrue(bundle["metrics"]["gates"][0]["passed"])
             self.assertEqual(bundle["artifacts"]["suite_summary"]["kind"], "file")
+            self.assertEqual(bundle["artifacts"]["training_export_curriculum"]["kind"], "file")
+            self.assertEqual(bundle["artifacts"]["training_export_curriculum"]["exists"], True)
+            self.assertEqual(len(bundle["artifacts"]["training_export_curriculum"]["sha256"]), 64)
             self.assertEqual(len(bundle["artifacts"]["suite_summary"]["sha256"]), 64)
 
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+            bundle["metrics"]["training_export"]["top_curriculum_priorities"][0]["priority_band"] = "urgent"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
 
     def test_evidence_bundle_blocks_failed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:

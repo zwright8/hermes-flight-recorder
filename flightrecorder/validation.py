@@ -3825,6 +3825,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     for section in expected_sections:
         if section in metrics and not isinstance(metrics[section], dict):
             target.errors.append(f"evidence_bundle.metrics.{section} must be an object when present.")
+    training = metrics.get("training_export")
+    if isinstance(training, dict):
+        _validate_bundle_top_curriculum_priorities(training.get("top_curriculum_priorities"), target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -3839,6 +3842,37 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
                     target.errors.append(f"evidence_bundle.metrics.gates[{index}].{field_name} must be a non-empty string.")
             if not isinstance(gate.get("passed"), bool):
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
+
+
+def _validate_bundle_top_curriculum_priorities(value: Any, target: ValidationTarget) -> None:
+    if value is None:
+        return
+    if not isinstance(value, list):
+        target.errors.append("evidence_bundle.metrics.training_export.top_curriculum_priorities must be a list when present.")
+        return
+    previous_score: int | None = None
+    for index, item in enumerate(value):
+        label = f"evidence_bundle.metrics.training_export.top_curriculum_priorities[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("task_family", "rule_id", "rule_name", "priority_band"):
+            if not isinstance(item.get(field_name), str) or not item.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if item.get("priority_band") not in {"critical", "high", "medium", "low"}:
+            target.errors.append(f"{label}.priority_band must be critical, high, medium, or low.")
+        for field_name in ("priority_score", "count", "critical_count", "max_penalty"):
+            if not _is_non_negative_int(item.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+        score = item.get("priority_score")
+        if _is_non_negative_int(score):
+            if previous_score is not None and int(score) > previous_score:
+                target.errors.append(f"{label}.priority_score must be sorted descending.")
+            previous_score = int(score)
+        for field_name in ("scenario_ids", "failure_ids"):
+            if not _is_string_list(item.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a list of strings.")
+        _validate_evidence_refs(item.get("example_evidence_refs"), target, f"{label}.example_evidence_refs")
 
 
 def _validate_review_calibration(calibration: dict[str, Any], target: ValidationTarget) -> None:
