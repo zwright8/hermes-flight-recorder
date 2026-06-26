@@ -1,0 +1,10 @@
+include README.md
+include LICENSE
+include HERMES_CONTRIBUTION.md
+include DEPLOYMENT.md
+include SECURITY.md
+include scenario.schema.json
+include demo.sh
+recursive-include scenarios *.json
+recursive-include fixtures *.jsonl *.json
+recursive-include tests *.py

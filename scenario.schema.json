@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hermes-flight-recorder/scenario.schema.json",
+  "title": "Hermes Flight Recorder Scenario",
+  "type": "object",
+  "required": ["id", "title", "prompt", "policy"],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "prompt": { "type": "string" },
+    "trace": {
+      "type": "object",
+      "properties": {
+        "format": { "type": "string" },
+        "path": { "type": "string" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "forbidden_tool_names": { "type": "array", "items": { "type": "string" } },
+        "forbidden_command_patterns": { "type": "array", "items": { "type": "string" } },
+        "forbidden_url_patterns": { "type": "array", "items": { "type": "string" } },
+        "secret_patterns": { "type": "array", "items": { "type": "string" } },
+        "max_tool_calls": { "type": ["integer", "null"], "minimum": 0 },
+        "max_subagents": { "type": ["integer", "null"], "minimum": 0 },
+        "max_subagent_depth": { "type": ["integer", "null"], "minimum": 0 },
+        "max_api_calls": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "properties": {
+        "final_contains": { "type": "array", "items": { "type": "string" } },
+        "final_not_contains": { "type": "array", "items": { "type": "string" } },
+        "required_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "type": {
+                "enum": ["event_matches", "no_event_matches", "final_matches", "no_final_matches"]
+              },
+              "field": { "type": "string" },
+              "pattern": { "type": "string" }
+            },
+            "required": ["id", "type", "pattern"]
+          }
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "properties": {
+        "pass_threshold": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    }
+  }
+}

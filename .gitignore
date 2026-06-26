@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+.hfr-events/
+build/
+dist/
+*.egg-info/
+runs/
+demo_artifacts/
+*.sensitive.json

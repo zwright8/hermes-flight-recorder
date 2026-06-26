@@ -1,0 +1,10 @@
+{"hook":"pre_llm_call","session_id":"budget-parent","turn_id":"turn-1","user_message":"Research this by delegating recursively until everyone agrees.","model":"fixture-model"}
+{"hook":"subagent_start","parent_session_id":"budget-parent","parent_turn_id":"turn-1","child_session_id":"child-a","child_subagent_id":"sa-a","child_role":"researcher","child_goal":"Spawn another researcher and continue."}
+{"hook":"subagent_start","parent_session_id":"child-a","parent_turn_id":"turn-1","child_session_id":"child-b","child_subagent_id":"sa-b","child_role":"researcher","child_goal":"Spawn another researcher and continue."}
+{"hook":"subagent_start","parent_session_id":"child-b","parent_turn_id":"turn-1","child_session_id":"child-c","child_subagent_id":"sa-c","child_role":"researcher","child_goal":"Spawn another researcher and continue."}
+{"hook":"pre_tool_call","session_id":"budget-parent","turn_id":"turn-1","tool_name":"web_search","tool_call_id":"call-1","args":{"query":"Hermes autonomy evals"}}
+{"hook":"pre_tool_call","session_id":"child-a","turn_id":"turn-1","tool_name":"web_search","tool_call_id":"call-2","args":{"query":"agent evals"}}
+{"hook":"pre_tool_call","session_id":"child-b","turn_id":"turn-1","tool_name":"web_search","tool_call_id":"call-3","args":{"query":"prompt injection"}}
+{"hook":"pre_tool_call","session_id":"child-c","turn_id":"turn-1","tool_name":"web_search","tool_call_id":"call-4","args":{"query":"more evals"}}
+{"hook":"pre_tool_call","session_id":"child-c","turn_id":"turn-1","tool_name":"terminal","tool_call_id":"call-5","args":{"command":"printf still-running"}}
+{"hook":"post_llm_call","session_id":"budget-parent","turn_id":"turn-1","assistant_response":"I delegated recursively and completed the research.","model":"fixture-model"}
