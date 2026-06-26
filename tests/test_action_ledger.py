@@ -65,6 +65,7 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertTrue(gate_result["passed"])
             self.assertEqual(gate_result["policy"]["schema_version"], "hfr.action_ledger_gate.policy.v1")
             self.assertEqual(gate_result["policy"]["effective"]["max_recurring_actions"], 6)
+            self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict"]), 0)
 
             strict_gate_path = root / "strict_action_ledger_gate.json"
             self.assertEqual(
@@ -87,6 +88,11 @@ class ActionLedgerTests(unittest.TestCase):
             failed_checks = {check["id"] for check in strict_gate["checks"] if not check["passed"]}
             self.assertIn("max_recurring_actions", failed_checks)
             self.assertIn("forbid_open_priority", failed_checks)
+            self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(strict_gate_path), "--strict"]), 0)
+
+            strict_gate["failed_check_count"] = 0
+            strict_gate_path.write_text(json.dumps(strict_gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(strict_gate_path)]), 1)
 
     def test_gate_action_ledger_rejects_wrong_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -155,6 +161,7 @@ class ActionLedgerTests(unittest.TestCase):
             gate_result = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertTrue(gate_result["passed"])
             self.assertEqual(gate_result["metrics"]["resolved_action_count"], ledger["metrics"]["resolved_action_count"])
+            self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict"]), 0)
 
     def test_validate_rejects_stale_action_ledger_counts(self):
         with tempfile.TemporaryDirectory() as tmp:

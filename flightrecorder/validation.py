@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .action_gate import ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, ACTION_LEDGER_GATE_SCHEMA_VERSION
 from .action_ledger import ACTION_LEDGER_SCHEMA_VERSION
 from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
@@ -88,6 +89,7 @@ def validate_artifacts(
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
     action_ledger_paths: list[str | Path] | None = None,
+    action_ledger_gate_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
@@ -121,6 +123,8 @@ def validate_artifacts(
         targets.append(validate_evidence_bundle(evidence_bundle_path))
     for action_ledger_path in action_ledger_paths or []:
         targets.append(validate_action_ledger(action_ledger_path))
+    for action_ledger_gate_path in action_ledger_gate_paths or []:
+        targets.append(validate_action_ledger_gate(action_ledger_gate_path))
     for trainer_preflight_path in trainer_preflight_paths or []:
         targets.append(validate_trainer_preflight(trainer_preflight_path))
     for trainer_launch_check_path in trainer_launch_check_paths or []:
@@ -467,6 +471,16 @@ def validate_action_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "action_ledger.json")
     if ledger is not None:
         _validate_action_ledger(ledger, target)
+    return target
+
+
+def validate_action_ledger_gate(path: str | Path) -> ValidationTarget:
+    """Validate an action-ledger gate artifact."""
+    gate_path = Path(path)
+    target = ValidationTarget("action_ledger_gate", str(gate_path))
+    gate = _read_object(gate_path, target, "action_ledger_gate.json")
+    if gate is not None:
+        _validate_action_ledger_gate(gate, target)
     return target
 
 
@@ -3689,6 +3703,123 @@ def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget) ->
             "resolved_action_count": resolved_count,
         }
     )
+
+
+def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(gate, "schema_version", ACTION_LEDGER_GATE_SCHEMA_VERSION, target)
+    if not isinstance(gate.get("action_ledger"), str) or not gate.get("action_ledger"):
+        target.errors.append("action_ledger_gate.action_ledger must be a non-empty string.")
+    if not isinstance(gate.get("passed"), bool):
+        target.errors.append("action_ledger_gate.passed must be a boolean.")
+    checks = gate.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("action_ledger_gate.checks must be a list.")
+        checks = []
+    metrics = gate.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("action_ledger_gate.metrics must be an object.")
+        metrics = {}
+    if "policy" in gate:
+        _validate_action_ledger_gate_policy_summary(gate.get("policy"), target)
+
+    failed_checks = _validate_gate_like_checks(checks, target, "action_ledger_gate.checks")
+    if gate.get("check_count") != len(checks):
+        target.errors.append(f"action_ledger_gate.check_count expected {len(checks)}, got {gate.get('check_count')!r}.")
+    if gate.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"action_ledger_gate.failed_check_count expected {failed_checks}, got {gate.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(gate.get("passed"), bool) and gate.get("passed") != expected_passed:
+        target.errors.append("action_ledger_gate.passed must match failed_check_count.")
+    _validate_action_ledger_gate_metrics(metrics, target)
+    target.details.update(
+        {
+            "passed": gate.get("passed"),
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "open_action_count": metrics.get("open_action_count"),
+            "recurring_action_count": metrics.get("recurring_action_count"),
+        }
+    )
+
+
+def _validate_action_ledger_gate_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
+    count_fields = (
+        "bundle_count",
+        "unique_action_count",
+        "open_action_count",
+        "new_action_count",
+        "recurring_action_count",
+        "resolved_action_count",
+    )
+    for field_name in count_fields:
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"action_ledger_gate.metrics.{field_name} must be a non-negative integer.")
+    if all(_is_non_negative_int(metrics.get(field_name)) for field_name in count_fields):
+        if metrics["unique_action_count"] != metrics["open_action_count"] + metrics["resolved_action_count"]:
+            target.errors.append("action_ledger_gate.metrics.unique_action_count must equal open_action_count + resolved_action_count.")
+        if metrics["open_action_count"] < metrics["new_action_count"] + metrics["recurring_action_count"]:
+            target.errors.append("action_ledger_gate.metrics.open_action_count must be at least new_action_count + recurring_action_count.")
+        if metrics["bundle_count"] == 0 and metrics["unique_action_count"] > 0:
+            target.errors.append("action_ledger_gate.metrics.bundle_count must be positive when actions are present.")
+
+    priority_counts = _count_rows(metrics.get("open_priority_counts"))
+    if priority_counts is None:
+        target.errors.append("action_ledger_gate.metrics.open_priority_counts must be a list of {id, count} objects.")
+    else:
+        unknown = sorted(set(priority_counts) - {"critical", "high", "medium", "low"})
+        if unknown:
+            target.errors.append(f"action_ledger_gate.metrics.open_priority_counts has invalid priority value(s): {', '.join(unknown)}.")
+        if _is_non_negative_int(metrics.get("open_action_count")) and sum(priority_counts.values()) > metrics["open_action_count"]:
+            target.errors.append("action_ledger_gate.metrics.open_priority_counts total must not exceed open_action_count.")
+
+
+def _validate_action_ledger_gate_policy_summary(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("action_ledger_gate.policy must be an object when present.")
+        return
+    _require_equal(value, "schema_version", ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, target, prefix="action_ledger_gate.policy.")
+    if not isinstance(value.get("path"), str) or not value.get("path"):
+        target.errors.append("action_ledger_gate.policy.path must be a non-empty string.")
+    if "description" in value and not isinstance(value.get("description"), str):
+        target.errors.append("action_ledger_gate.policy.description must be a string when present.")
+    effective = value.get("effective")
+    if not isinstance(effective, dict):
+        target.errors.append("action_ledger_gate.policy.effective must be an object.")
+        return
+    allowed_fields = {
+        "min_bundles",
+        "max_open_actions",
+        "max_new_actions",
+        "max_recurring_actions",
+        "min_resolved_actions",
+        "forbid_open_priorities",
+        "forbid_open_actions",
+        "require_resolved_actions",
+    }
+    unknown = sorted(set(effective) - allowed_fields)
+    if unknown:
+        target.errors.append(f"action_ledger_gate.policy.effective has unknown field(s): {', '.join(unknown)}.")
+    for field_name in (
+        "min_bundles",
+        "max_open_actions",
+        "max_new_actions",
+        "max_recurring_actions",
+        "min_resolved_actions",
+    ):
+        if field_name in effective and not _is_non_negative_int(effective.get(field_name)):
+            target.errors.append(f"action_ledger_gate.policy.effective.{field_name} must be a non-negative integer.")
+    for field_name in ("forbid_open_priorities", "forbid_open_actions", "require_resolved_actions"):
+        if field_name in effective and not _is_string_list(effective.get(field_name)):
+            target.errors.append(f"action_ledger_gate.policy.effective.{field_name} must be a list of strings.")
+    priorities = effective.get("forbid_open_priorities")
+    if isinstance(priorities, list):
+        unknown_priorities = sorted({item for item in priorities if isinstance(item, str)} - {"critical", "high", "medium", "low"})
+        if unknown_priorities:
+            target.errors.append(
+                f"action_ledger_gate.policy.effective.forbid_open_priorities has invalid priority value(s): {', '.join(unknown_priorities)}."
+            )
 
 
 def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:

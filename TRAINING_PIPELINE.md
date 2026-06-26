@@ -129,6 +129,8 @@ flightrecorder gate-action-ledger \
   --action-ledger runs/action_ledger.json \
   --policy examples/action_ledger_gate_policy.demo.json \
   --out runs/action_ledger_gate.json
+
+flightrecorder validate --action-ledger-gate runs/action_ledger_gate.json --strict
 ```
 
 Policies can cap open, new, or recurring actions, require a minimum number of
