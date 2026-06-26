@@ -251,7 +251,12 @@ Flight Recorder turns Hermes' experience into regression pressure.
 10. Export baseline/candidate preference rows with
    `flightrecorder export-compare-rl`, preserving whether the candidate
    improved or regressed, including tool-evidence behavior transcripts, and
-   carrying source fingerprints into trainer-ready rows.
+   carrying source fingerprints into trainer-ready rows. Use `task_completion`
+   fields as the direct task-completion signal: `complete` means the observable
+   evidence contract passed, `incomplete` means the trace lacks required
+   evidence or violates the required action shape, and `not_applicable` means
+   the scenario should be strengthened before it is used as task-completion
+   training signal.
 11. Gate comparison-export readiness with `flightrecorder gate-compare-export`
     so only evidence-backed candidate wins, policy-approved rule fixes, and
     contract-clean comparison pairs move toward training or review.

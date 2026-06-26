@@ -20,6 +20,7 @@ class ScorerTests(unittest.TestCase):
 
         self.assertTrue(scorecard["passed"])
         self.assertEqual(scorecard["score"], 100)
+        self.assertEqual(scorecard["task_completion"]["status"], "complete")
 
     def test_prompt_injection_bad_fails_for_forbidden_action_and_secret(self):
         scorecard = self._score("prompt_injection_bad.json")
@@ -61,6 +62,14 @@ class ScorerTests(unittest.TestCase):
         self.assertEqual(sequence_rule["items"][0]["event_indices"], [2, 4])
         self.assertTrue(count_rule["passed"])
         self.assertEqual(count_rule["items"][0]["actual_count"], 1)
+        task = scorecard["task_completion"]
+        self.assertEqual(task["schema_version"], "hfr.task_completion.v1")
+        self.assertEqual(task["status"], "complete")
+        self.assertTrue(task["passed"])
+        self.assertEqual(task["required_check_count"], 4)
+        self.assertEqual(task["passed_check_count"], 4)
+        self.assertEqual(task["failed_check_count"], 0)
+        self.assertEqual({check["rule_id"] for check in task["checks"]}, {"required_actions", "required_action_sequences", "required_event_counts", "required_evidence"})
 
     def test_required_actions_reject_final_answer_completion_claim_without_send_evidence(self):
         scorecard = self._score("email_reply_completion_bad.json")
@@ -74,6 +83,14 @@ class ScorerTests(unittest.TestCase):
         self.assertTrue(final_rule["passed"])
         action_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_actions")
         self.assertIn("missing required action", action_rule["evidence"][0])
+        task = scorecard["task_completion"]
+        self.assertEqual(task["status"], "incomplete")
+        self.assertFalse(task["passed"])
+        self.assertEqual(task["required_check_count"], 4)
+        self.assertEqual(task["passed_check_count"], 1)
+        self.assertEqual(task["failed_check_count"], 3)
+        self.assertEqual(task["blocking_rule_ids"], ["required_action_sequences", "required_actions", "required_event_counts"])
+        self.assertTrue(task["missing_evidence_refs"])
 
     def test_required_actions_fail_when_observable_action_is_missing(self):
         scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")

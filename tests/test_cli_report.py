@@ -27,9 +27,12 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue((out / "normalized_trace.json").exists())
             self.assertTrue((out / "scorecard.json").exists())
+            self.assertTrue((out / "task_completion.json").exists())
             self.assertTrue((out / "report.html").exists())
             scorecard = json.loads((out / "scorecard.json").read_text(encoding="utf-8"))
+            task_completion = json.loads((out / "task_completion.json").read_text(encoding="utf-8"))
             self.assertTrue(scorecard["passed"])
+            self.assertEqual(scorecard["task_completion"], task_completion)
 
     def test_run_command_writes_ci_outputs_and_task_checklist(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -59,9 +62,11 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(lineage["scenario"]["id"], "email_reply_completion_good")
             self.assertIn("normalized_trace", {item["name"] for item in lineage["outputs"]})
             self.assertIn("scorecard", {item["name"] for item in lineage["outputs"]})
+            self.assertIn("task_completion", {item["name"] for item in lineage["outputs"]})
             self.assertTrue(any(link["target"] == "event" for link in lineage["evidence_links"]))
             report = (out / "report.html").read_text(encoding="utf-8")
-            self.assertIn("Task Evidence Checklist", report)
+            self.assertIn("Task Completion", report)
+            self.assertIn("Task completion complete: 4/4 evidence checks passed.", report)
             self.assertIn("Send a reply to assigned thread email-123", report)
             self.assertIn("Read assigned thread email-123 before sending the reply", report)
             self.assertIn("Send exactly one successful reply to assigned thread email-123", report)

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import CONTRACT_SCOPES, compare_scorecards
+from .scorers import TASK_COMPLETION_SCHEMA_VERSION
 
 RL_MANIFEST_SCHEMA_VERSION = "hfr.rl.manifest.v1"
 RL_EPISODE_SCHEMA_VERSION = "hfr.rl.episode.v1"
@@ -334,6 +335,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     failed_rules = _failed_rule_ids(scorecard)
     source_fingerprints = _source_fingerprints(record)
     source_fingerprint_status = _source_fingerprint_status(source_fingerprints)
+    task_completion = _task_completion(scorecard)
     episode = {
         "schema_version": RL_EPISODE_SCHEMA_VERSION,
         "episode_id": record.run_id,
@@ -348,6 +350,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
         "final_answer": str(trace.get("final_answer") or ""),
         "source_fingerprint_status": source_fingerprint_status,
         "source_fingerprints": source_fingerprints,
+        "task_completion": task_completion,
         "outcome": {
             "passed": passed,
             "score": score,
@@ -355,6 +358,8 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
             "reward": _reward_value(scorecard, reward_scale),
             "critical_failures": scorecard.get("critical_failures", []),
             "failed_rules": failed_rules,
+            "task_completion_status": task_completion["status"],
+            "task_completion_passed": task_completion["passed"],
             "summary": scorecard.get("summary", ""),
         },
     }
@@ -363,11 +368,36 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     return episode
 
 
+def _task_completion(scorecard: dict[str, Any]) -> dict[str, Any]:
+    value = scorecard.get("task_completion")
+    if isinstance(value, dict):
+        return value
+    return _default_task_completion()
+
+
+def _default_task_completion() -> dict[str, Any]:
+    return {
+        "schema_version": TASK_COMPLETION_SCHEMA_VERSION,
+        "status": "not_applicable",
+        "passed": True,
+        "task_evidence_configured": False,
+        "required_check_count": 0,
+        "passed_check_count": 0,
+        "failed_check_count": 0,
+        "blocking_rule_ids": [],
+        "summary": "No task-completion evidence assertions were configured.",
+        "checks": [],
+        "evidence_refs": [],
+        "missing_evidence_refs": [],
+    }
+
+
 def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
     scorecard = record.scorecard
     scenario_id = str(scorecard.get("scenario_id") or record.run_id)
     rule_rewards = [_rule_reward(rule) for rule in scorecard.get("rules", []) if isinstance(rule, dict)]
     source_fingerprints = _source_fingerprints(record)
+    task_completion = _task_completion(scorecard)
     return {
         "schema_version": RL_REWARD_SCHEMA_VERSION,
         "episode_id": record.run_id,
@@ -379,6 +409,8 @@ def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
         "reward": _reward_value(scorecard, reward_scale),
         "score": _score(scorecard),
         "passed": bool(scorecard.get("passed")),
+        "task_completion_status": task_completion["status"],
+        "task_completion_passed": task_completion["passed"],
         "terminal": True,
         "critical_failures": scorecard.get("critical_failures", []),
         "rule_rewards": rule_rewards,
@@ -517,6 +549,7 @@ def _preference_view(episode: dict[str, Any]) -> dict[str, Any]:
         "score": episode["outcome"]["score"],
         "reward": episode["outcome"]["reward"],
         "failed_rules": episode["outcome"]["failed_rules"],
+        "task_completion": episode.get("task_completion", _default_task_completion()),
         "source_fingerprint_status": episode.get("source_fingerprint_status", "unverified"),
         "source_fingerprints": episode.get("source_fingerprints", {}),
         "events": episode["events"],
@@ -659,6 +692,8 @@ def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "score": _score_value(outcome.get("score")),
                 "reward": _numeric_value(outcome.get("reward")),
                 "quality_gate": "passed_scorecard",
+                "task_completion_status": str((episode.get("task_completion") or {}).get("status") or "not_applicable"),
+                "task_completion_passed": bool((episode.get("task_completion") or {}).get("passed", True)),
                 "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
                 "source_fingerprints": episode.get("source_fingerprints", {}),
                 "source_artifact": "episodes.jsonl",
@@ -805,6 +840,10 @@ def _comparison_dpo_records(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "chosen_score": _score_value(pair.get("chosen_score")),
                 "rejected_score": _score_value(pair.get("rejected_score")),
                 "score_gap": _score_value(pair.get("score_gap")),
+                "chosen_task_completion_status": str((chosen_view.get("task_completion") or {}).get("status") or "not_applicable"),
+                "rejected_task_completion_status": str((rejected_view.get("task_completion") or {}).get("status") or "not_applicable"),
+                "chosen_task_completion_passed": bool((chosen_view.get("task_completion") or {}).get("passed", True)),
+                "rejected_task_completion_passed": bool((rejected_view.get("task_completion") or {}).get("passed", True)),
                 "contract_fingerprint_status": str(pair.get("contract_fingerprint_status") or "unverified"),
                 "contract_fingerprint_scope": str(pair.get("contract_fingerprint_scope") or "scenario"),
                 "contract_fingerprint_reasons": _string_list(pair.get("contract_fingerprint_reasons")),
@@ -818,6 +857,18 @@ def _comparison_dpo_records(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 def _comparison_response_text(view: dict[str, Any]) -> str:
     lines = ["Observed behavior:"]
+    task = view.get("task_completion") if isinstance(view.get("task_completion"), dict) else {}
+    if task:
+        lines.append(
+            "- "
+            + " ".join(
+                [
+                    "task_completion",
+                    str(task.get("status") or "unknown"),
+                    f"checks={task.get('passed_check_count', 0)}/{task.get('required_check_count', 0)}",
+                ]
+            )
+        )
     events = view.get("events") if isinstance(view.get("events"), list) else []
     for event in events:
         if not isinstance(event, dict):
@@ -870,6 +921,8 @@ def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]
                 "score": _score_value(outcome.get("score")),
                 "reward": _numeric_value(outcome.get("reward")),
                 "passed": bool(outcome.get("passed")),
+                "task_completion_status": str((episode.get("task_completion") or {}).get("status") or "not_applicable"),
+                "task_completion_passed": bool((episode.get("task_completion") or {}).get("passed", True)),
                 "failed_rules": _string_list(outcome.get("failed_rules")),
                 "critical_failures": _string_list(outcome.get("critical_failures")),
                 "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
@@ -921,6 +974,7 @@ def _dataset_metrics(
         "min_reward": min(rewards_values) if rewards_values else None,
         "max_reward": max(rewards_values) if rewards_values else None,
         "source_fingerprint_coverage": _source_fingerprint_coverage(episodes),
+        "task_completion": _task_completion_metrics(episodes),
         "failed_rule_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "failed_rules")),
         "critical_failure_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "critical_failures")),
         "task_families": _dataset_family_metrics(episodes, step_rewards, failure_modes, sft, dpo, reward_model),
@@ -962,6 +1016,7 @@ def _dataset_family_metrics(
         ]
         passed = sum(1 for episode in family_episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
         failed = len(family_episodes) - passed
+        task_metrics = _task_completion_metrics(family_episodes)
         rows.append(
             {
                 "task_family": family,
@@ -969,6 +1024,9 @@ def _dataset_family_metrics(
                 "passed": passed,
                 "failed": failed,
                 "pass_rate": round(passed / len(family_episodes), 4) if family_episodes else 0.0,
+                "task_completion_configured": task_metrics["configured_count"],
+                "task_completion_complete": task_metrics["complete_count"],
+                "task_completion_incomplete": task_metrics["incomplete_count"],
                 "average_score": _average(scores),
                 "step_reward_count": _count_family(step_rewards, family),
                 "failure_mode_count": _count_family(failure_modes, family),
@@ -978,6 +1036,36 @@ def _dataset_family_metrics(
             }
         )
     return rows
+
+
+def _task_completion_metrics(episodes: list[dict[str, Any]]) -> dict[str, Any]:
+    statuses = {"complete": 0, "incomplete": 0, "not_applicable": 0, "unknown": 0}
+    configured = 0
+    total_required_checks = 0
+    total_passed_checks = 0
+    for episode in episodes:
+        task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+        status = str(task.get("status") or "unknown")
+        if status not in statuses:
+            status = "unknown"
+        statuses[status] += 1
+        if task.get("task_evidence_configured") is True:
+            configured += 1
+        if isinstance(task.get("required_check_count"), int) and not isinstance(task.get("required_check_count"), bool):
+            total_required_checks += int(task["required_check_count"])
+        if isinstance(task.get("passed_check_count"), int) and not isinstance(task.get("passed_check_count"), bool):
+            total_passed_checks += int(task["passed_check_count"])
+    return {
+        "episode_count": len(episodes),
+        "configured_count": configured,
+        "complete_count": statuses["complete"],
+        "incomplete_count": statuses["incomplete"],
+        "not_applicable_count": statuses["not_applicable"],
+        "unknown_count": statuses["unknown"],
+        "required_check_count": total_required_checks,
+        "passed_check_count": total_passed_checks,
+        "check_pass_rate": round(total_passed_checks / total_required_checks, 4) if total_required_checks else 0.0,
+    }
 
 
 def _quality_flags(

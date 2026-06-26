@@ -76,6 +76,24 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_refs[0].event_index", errors)
 
+    def test_validate_rejects_stale_task_completion_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "email_reply_completion_good.json"), "--out", str(run_dir)])
+            task_path = run_dir / "task_completion.json"
+            task = json.loads(task_path.read_text(encoding="utf-8"))
+            task["status"] = "incomplete"
+            task["passed"] = False
+            task_path.write_text(json.dumps(task), encoding="utf-8")
+
+            code = run_cli(["validate", "--run", str(run_dir), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("task_completion.json must match scorecard.task_completion", errors)
+
     def test_validate_rejects_stale_lineage_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"

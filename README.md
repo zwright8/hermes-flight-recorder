@@ -241,6 +241,10 @@ Each run directory contains:
 
 - `normalized_trace.json`: canonical `hfr.trace.v1` trace, redacted by default.
 - `scorecard.json`: deterministic pass/fail rule results.
+- `task_completion.json`: standalone task-completion verdict derived from
+  required evidence, required actions, ordered action sequences, and event
+  counts. This file answers "did the assigned task complete with observable
+  evidence?" without requiring a downstream script to parse every rule.
 - `report.html`: self-contained static flight-recorder report.
 - `artifact_lineage.json`: provenance graph linking inputs, outputs, file
   hashes, and scorecard evidence refs.
@@ -271,7 +275,8 @@ training-loop artifacts:
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
 - `dataset_metrics.json`: export-level coverage, source-fingerprint coverage,
-  reward/score distribution, failure pressure, and quality flags.
+  task-completion coverage, reward/score distribution, failure pressure, and
+  quality flags.
 - `DATASET_CARD.md`: human-readable summary of the generated dataset and its
   boundaries.
 - `manifest.json`: export settings, counts, and caveats.
@@ -561,6 +566,11 @@ Flight Recorder turns Hermes traces into deterministic task-completion
 evidence. Users can define their own eval scenarios, but the claims must be
 grounded in observable events: tool calls, tool results, observer hooks,
 artifacts, final answers, budgets, and policy constraints.
+Every scored run also emits `task_completion.json`, a compact verdict over the
+task evidence contract. It is `complete` when all configured required evidence,
+required action, action-sequence, and event-count checks pass; `incomplete` when
+any of those checks fail; and `not_applicable` when the scenario only defines
+policy/final-answer checks and has no task-completion evidence contract.
 
 To bootstrap a custom scenario from a known-good run, use `draft-scenario`:
 
@@ -716,10 +726,12 @@ emitted provenance metadata. It derives scalar rewards from deterministic
 scores, adds failed-rule attribution where the scorecard points to an event or
 final answer, carries structured `evidence_refs` into rewards, step rewards, and
 failure modes, creates preference pairs when one run clearly beats another in
-the same task family, emits trainer-ready SFT/DPO/reward-model views, emits
-failure-mode records for every failed rule, and writes a curriculum summary,
-dataset metrics file, and dataset card that group failure pressure, coverage,
-and training-readiness signals.
+the same task family, carries `task_completion` status into episodes, rewards,
+preferences, SFT rows, DPO rows, reward-model rows, and comparison exports,
+emits trainer-ready SFT/DPO/reward-model views, emits failure-mode records for
+every failed rule, and writes a curriculum summary, dataset metrics file, and
+dataset card that group failure pressure, task-completion coverage, provenance
+coverage, and training-readiness signals.
 
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.

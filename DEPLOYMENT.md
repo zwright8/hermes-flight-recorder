@@ -116,6 +116,11 @@ network.
 - Use `flightrecorder trend-suite --suite-summary <old> --suite-summary <new>
   --out <trend.json>` when CI stores multiple suite summaries and maintainers
   need to review progress across an improvement run, not just one comparison.
+- For task-oriented agents, inspect each run's `task_completion.json` or the
+  training export's `dataset_metrics.task_completion` block before promoting a
+  candidate. A high final-answer score is weaker evidence than a `complete`
+  verdict backed by required tool-result, action-sequence, and event-count
+  checks.
   Validate the resulting trend with `flightrecorder validate --suite-trend
   <trend.json> --strict` before treating it as release evidence.
 - Use `flightrecorder evidence-coverage --runs runs --out

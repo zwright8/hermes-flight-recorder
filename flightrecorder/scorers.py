@@ -9,6 +9,13 @@ from typing import Any
 from .redaction import redact_text
 
 SCORE_SCHEMA_VERSION = "hfr.scorecard.v1"
+TASK_COMPLETION_SCHEMA_VERSION = "hfr.task_completion.v1"
+TASK_COMPLETION_RULE_IDS = {
+    "required_evidence",
+    "required_actions",
+    "required_action_sequences",
+    "required_event_counts",
+}
 
 
 def score_trace(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
@@ -33,6 +40,7 @@ def score_trace(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, An
 
     threshold = scenario.get("scoring", {}).get("pass_threshold", 90)
     passed = score >= threshold and not critical_failures
+    task_completion = _task_completion_summary(rules)
     return {
         "schema_version": SCORE_SCHEMA_VERSION,
         "scenario_id": scenario["id"],
@@ -41,6 +49,7 @@ def score_trace(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, An
         "pass_threshold": threshold,
         "passed": passed,
         "critical_failures": critical_failures,
+        "task_completion": task_completion,
         "rules": rules,
         "summary": _summary(passed, score, critical_failures),
     }
@@ -148,51 +157,94 @@ def _evidence_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str,
     failures: list[str] = []
     passes: list[str] = []
     refs: list[dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     for item in required:
         evidence_id = item["id"]
         evidence_type = item["type"]
+        item_refs: list[dict[str, Any]] = []
+        item_passed = True
         pattern = item.get("pattern", item.get("matches", ""))
         if evidence_type == "no_event_matches":
             match = _find_matching_event(trace, item)
             matched = match is not None
             if matched:
+                item_passed = False
                 failures.append(f"{evidence_id}: found forbidden event match for {_assertion_summary(item)}")
                 index, event = match
-                refs.append(_event_ref(index, event, "forbidden_evidence_match", assertion_id=evidence_id, passed=False))
+                item_refs.append(_event_ref(index, event, "forbidden_evidence_match", assertion_id=evidence_id, passed=False))
+                refs.extend(item_refs)
+                evidence = failures[-1]
             else:
                 passes.append(f"{evidence_id}: no event matched {_assertion_summary(item)}")
+                evidence = passes[-1]
         elif evidence_type == "event_matches":
             match = _find_matching_event(trace, item)
             matched = match is not None
             if matched:
                 passes.append(f"{evidence_id}: found required event evidence")
                 index, event = match
-                refs.append(_event_ref(index, event, "required_evidence_match", assertion_id=evidence_id, passed=True))
+                item_refs.append(_event_ref(index, event, "required_evidence_match", assertion_id=evidence_id, passed=True))
+                refs.extend(item_refs)
+                evidence = passes[-1]
             else:
+                item_passed = False
                 failures.append(f"{evidence_id}: missing required event evidence for {_assertion_summary(item)}")
-                refs.append(_episode_ref("missing_required_evidence", assertion_id=evidence_id, passed=False))
+                item_refs.append(_episode_ref("missing_required_evidence", assertion_id=evidence_id, passed=False))
+                refs.extend(item_refs)
+                evidence = failures[-1]
         elif evidence_type == "final_matches":
             matched = _final_matches_assertion(trace, item)
             if matched:
                 passes.append(f"{evidence_id}: final answer matched")
-                refs.append(_final_ref("required_final_evidence_match", assertion_id=evidence_id, passed=True))
+                item_refs.append(_final_ref("required_final_evidence_match", assertion_id=evidence_id, passed=True))
+                refs.extend(item_refs)
+                evidence = passes[-1]
             else:
+                item_passed = False
                 failures.append(f"{evidence_id}: final answer did not match {pattern!r}")
-                refs.append(_final_ref("missing_required_final_evidence", assertion_id=evidence_id, passed=False))
+                item_refs.append(_final_ref("missing_required_final_evidence", assertion_id=evidence_id, passed=False))
+                refs.extend(item_refs)
+                evidence = failures[-1]
         elif evidence_type == "no_final_matches":
             matched = _final_matches_assertion(trace, item)
             if matched:
+                item_passed = False
                 failures.append(f"{evidence_id}: final answer matched forbidden pattern {pattern!r}")
-                refs.append(_final_ref("forbidden_final_evidence_match", assertion_id=evidence_id, passed=False))
+                item_refs.append(_final_ref("forbidden_final_evidence_match", assertion_id=evidence_id, passed=False))
+                refs.extend(item_refs)
+                evidence = failures[-1]
             else:
                 passes.append(f"{evidence_id}: final answer avoided {pattern!r}")
+                evidence = passes[-1]
         else:
+            item_passed = False
             failures.append(f"{evidence_id}: unsupported evidence type {evidence_type!r}")
-            refs.append(_episode_ref("unsupported_required_evidence", assertion_id=evidence_id, passed=False))
+            item_refs.append(_episode_ref("unsupported_required_evidence", assertion_id=evidence_id, passed=False))
+            refs.extend(item_refs)
+            evidence = failures[-1]
+        items.append(
+            {
+                "id": evidence_id,
+                "type": evidence_type,
+                "description": str(item.get("description") or evidence_id),
+                "passed": item_passed,
+                "evidence": evidence,
+                "evidence_refs": item_refs,
+            }
+        )
 
     if not required:
         passes.append("No required evidence assertions configured.")
-    return _rule("required_evidence", "Required Evidence", not failures, failures or passes, penalty=30, critical=True, evidence_refs=refs)
+    return _rule(
+        "required_evidence",
+        "Required Evidence",
+        not failures,
+        failures or passes,
+        penalty=30,
+        critical=True,
+        items=items,
+        evidence_refs=refs,
+    )
 
 
 def _required_actions_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
@@ -420,6 +472,77 @@ def _final_answer_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[
         critical=True,
         evidence_refs=refs,
     )
+
+
+def _task_completion_summary(rules: list[dict[str, Any]]) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    evidence_refs: list[dict[str, Any]] = []
+    missing_refs: list[dict[str, Any]] = []
+    blocking_rule_ids: list[str] = []
+    for rule in rules:
+        rule_id = str(rule.get("id") or "")
+        if rule_id not in TASK_COMPLETION_RULE_IDS:
+            continue
+        for item in rule.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            passed = bool(item.get("passed"))
+            raw_item_refs = item.get("evidence_refs")
+            item_refs = [ref for ref in raw_item_refs if isinstance(ref, dict)] if isinstance(raw_item_refs, list) else []
+            if not item_refs and isinstance(item.get("evidence_ref"), dict):
+                item_refs = [item["evidence_ref"]]
+            evidence_refs.extend(item_refs)
+            if not passed:
+                blocking_rule_ids.append(rule_id)
+                missing_refs.extend(item_refs or [_episode_ref("missing_task_completion_check", rule_id=rule_id, item_id=item.get("id"), passed=False)])
+            check = {
+                "id": str(item.get("id") or rule_id),
+                "rule_id": rule_id,
+                "description": str(item.get("description") or item.get("id") or rule_id),
+                "passed": passed,
+                "evidence": str(item.get("evidence") or ""),
+                "evidence_refs": item_refs,
+            }
+            if isinstance(item.get("event_index"), int) and not isinstance(item.get("event_index"), bool):
+                check["event_indices"] = [item["event_index"]]
+            elif isinstance(item.get("event_indices"), list):
+                check["event_indices"] = [index for index in item["event_indices"] if isinstance(index, int) and not isinstance(index, bool)]
+            checks.append(check)
+
+    if not checks:
+        return {
+            "schema_version": TASK_COMPLETION_SCHEMA_VERSION,
+            "status": "not_applicable",
+            "passed": True,
+            "task_evidence_configured": False,
+            "required_check_count": 0,
+            "passed_check_count": 0,
+            "failed_check_count": 0,
+            "blocking_rule_ids": [],
+            "summary": "No task-completion evidence assertions were configured.",
+            "checks": [],
+            "evidence_refs": [],
+            "missing_evidence_refs": [],
+        }
+
+    passed_count = sum(1 for check in checks if check["passed"])
+    failed_count = len(checks) - passed_count
+    passed = failed_count == 0
+    status = "complete" if passed else "incomplete"
+    return {
+        "schema_version": TASK_COMPLETION_SCHEMA_VERSION,
+        "status": status,
+        "passed": passed,
+        "task_evidence_configured": True,
+        "required_check_count": len(checks),
+        "passed_check_count": passed_count,
+        "failed_check_count": failed_count,
+        "blocking_rule_ids": sorted(set(blocking_rule_ids)),
+        "summary": f"Task completion {status}: {passed_count}/{len(checks)} evidence checks passed.",
+        "checks": checks,
+        "evidence_refs": evidence_refs,
+        "missing_evidence_refs": missing_refs,
+    }
 
 
 def _any_event_matches(trace: dict[str, Any], item: dict[str, Any]) -> bool:

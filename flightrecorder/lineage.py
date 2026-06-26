@@ -92,6 +92,7 @@ def _artifact_graph(artifacts: dict[str, str | Path | None]) -> list[dict[str, A
     edges = [
         _edge(["scenario", "source_trace"], "normalized_trace", "normalize"),
         _edge(["scenario", "normalized_trace"], "scorecard", "score"),
+        _edge(["scorecard"], "task_completion", "summarize_task_completion"),
         _edge(["scenario", "normalized_trace", "scorecard"], "report", "render"),
     ]
     if "junit" in present:

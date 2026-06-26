@@ -1504,10 +1504,12 @@ def _run_scenario_artifacts(
 
     normalized_path = run_dir / "normalized_trace.json"
     score_path = run_dir / "scorecard.json"
+    task_completion_path = run_dir / "task_completion.json"
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     _write_json(normalized_path, trace)
     _write_json(score_path, scorecard)
+    _write_json(task_completion_path, scorecard["task_completion"])
     raw_trace_path = None
     if write_sensitive_trace:
         raw_trace_path = run_dir / "raw_trace.sensitive.json"
@@ -1534,6 +1536,7 @@ def _run_scenario_artifacts(
         artifacts={
             "normalized_trace": normalized_path,
             "scorecard": score_path,
+            "task_completion": task_completion_path,
             "report": report_path,
             "regression_scenario": regression_path,
             "junit": junit_out,
@@ -1552,6 +1555,7 @@ def _run_scenario_artifacts(
             "run_dir": run_dir,
             "normalized_trace": normalized_path,
             "scorecard": score_path,
+            "task_completion": task_completion_path,
             "report": report_path,
             "lineage": lineage_path,
         },

@@ -32,7 +32,8 @@ def render_report(
     status = "PASS" if scorecard.get("passed") else "FAIL"
     status_class = "pass" if scorecard.get("passed") else "fail"
     rules = "\n".join(_render_rule(rule) for rule in scorecard.get("rules", []))
-    action_checklist = _render_action_checklist(scorecard)
+    task_completion = _render_task_completion(scorecard)
+    action_checklist = "" if task_completion else _render_action_checklist(scorecard)
     timeline = "\n".join(_render_event(i, event, secret_patterns) for i, event in enumerate(trace.get("events", [])))
     violations = "\n".join(_render_violation(rule) for rule in scorecard.get("rules", []) if not rule.get("passed"))
     if not violations:
@@ -103,6 +104,7 @@ def render_report(
       <div class="panel"><h2>Source Trace</h2><p><code>{source_trace}</code></p><p class="muted">Format: {_esc(trace.get('session', {}).get('source_format', 'unknown'))}</p></div>
 	    </section>
 	    <section class="panel"><h2>Summary</h2><p>{_esc(scorecard['summary'])}</p></section>
+	    {task_completion}
 	    {action_checklist}
 	    <section class="panel"><h2>Final Answer</h2><pre>{final_answer}</pre></section>
     <section class="panel"><h2>Scorecard</h2>{rules}</section>
@@ -148,6 +150,32 @@ def _render_rule(rule: dict[str, Any]) -> str:
 
 def _render_violation(rule: dict[str, Any]) -> str:
     return _render_rule(rule)
+
+
+def _render_task_completion(scorecard: dict[str, Any]) -> str:
+    task = scorecard.get("task_completion")
+    if not isinstance(task, dict):
+        return ""
+    status = str(task.get("status") or "unknown")
+    passed = bool(task.get("passed"))
+    cls = "" if passed else " fail"
+    rows = []
+    for check in task.get("checks", []):
+        if not isinstance(check, dict):
+            continue
+        check_status = "PASS" if check.get("passed") else "FAIL"
+        check_cls = "" if check.get("passed") else " fail"
+        rows.append(
+            f"<article class=\"check{check_cls}\"><strong><span>{_esc(check.get('description') or check.get('id'))}</span>"
+            f"<span>{check_status}</span></strong><p class=\"muted\">{_esc(check.get('evidence', ''))}</p></article>"
+        )
+    body = "".join(rows) if rows else "<p class=\"muted\">No task-completion evidence assertions configured.</p>"
+    return (
+        f"<section class=\"panel\"><h2>Task Completion</h2>"
+        f"<article class=\"rule{cls}\"><h3><span>{_esc(status.replace('_', ' ').title())}</span>"
+        f"<span>{'PASS' if passed else 'FAIL'}</span></h3><p>{_esc(task.get('summary', ''))}</p></article>"
+        f"<div class=\"checklist\">{body}</div></section>"
+    )
 
 
 def _render_action_checklist(scorecard: dict[str, Any]) -> str:

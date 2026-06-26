@@ -222,7 +222,8 @@ The export directory contains:
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
 - `dataset_metrics.json`: machine-readable export coverage, source-fingerprint
-  coverage, reward/score distribution, failure pressure, and quality flags.
+  coverage, task-completion coverage, reward/score distribution, failure
+  pressure, and quality flags.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
 - `manifest.json`: generation settings, counts, output paths, caveats, and
@@ -234,6 +235,11 @@ contains `artifact_lineage.json`, each episode also includes `source_lineage`
 and `source_fingerprints` so downstream training rows can be traced back to the
 provenance graph and filtered by the scenario/source-trace hashes that produced
 the label.
+New scorecards also emit `task_completion`, a compact verdict over required
+evidence, required actions, ordered action sequences, and event counts. Exported
+episodes, rewards, preferences, SFT rows, DPO rows, reward-model rows, and
+baseline/candidate comparison rows carry that verdict so training jobs can
+filter for evidence-backed completion instead of relying on final-answer text.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
@@ -254,7 +260,10 @@ Each episode includes:
 - prompt recovered from the first user-message event,
 - normalized events,
 - final answer,
-- outcome: pass/fail, score, threshold, reward, failed rules, and summary.
+- `task_completion`: `complete`, `incomplete`, or `not_applicable` plus the
+  evidence checks behind that verdict,
+- outcome: pass/fail, score, threshold, reward, failed rules,
+  task-completion status, and summary.
 
 This is the right shape for supervised fine-tuning filters, offline RL dataset
 construction, replay inspection, and task-family analytics.
@@ -368,11 +377,13 @@ smaller reshapes for common downstream jobs:
 
 - `sft.jsonl` includes only passing episodes with non-empty final answers. Each
   row has `prompt`, `response`, and a two-message user/assistant `messages`
-  list.
+  list, plus task-completion status.
 - `dpo.jsonl` mirrors `preferences.jsonl` as `prompt`, `chosen`, and `rejected`
-  strings plus chosen/rejected message lists.
+  strings plus chosen/rejected message lists. Comparison DPO rows include
+  behavior transcripts with task-completion status before the tool-event list.
 - `reward_model.jsonl` includes every episode with `prompt`, `response`,
-  `score`, `reward`, `passed`, failed rules, and critical failures.
+  `score`, `reward`, `passed`, task-completion status, failed rules, and
+  critical failures.
 
 These files are convenience views, not new labels. Validation checks them back
 against `episodes.jsonl` and `preferences.jsonl` so downstream jobs can consume
@@ -384,6 +395,8 @@ simple rows without losing the audit trail.
 
 - artifact counts for every generated JSONL/JSON view,
 - pass/fail balance, score distribution, reward distribution, and pass rate,
+- task-completion configured/complete/incomplete/not-applicable counts and
+  evidence-check pass rate,
 - failed-rule and critical-failure counts,
 - task-family coverage with SFT/DPO/reward-model/step-reward counts,
 - quality flags such as missing positives, missing negatives, missing
@@ -506,6 +519,7 @@ curriculum = json.loads(Path("runs/training_export/curriculum.json").read_text()
 Recommended first uses:
 
 - filter passing episodes into SFT candidates,
+- filter or weight examples by `task_completion.status` before training,
 - convert preference records into chosen/rejected pairs,
 - feed the trainer-ready SFT/DPO/reward-model views to downstream pipelines,
 - review `dataset_metrics.json` and `DATASET_CARD.md` before launching training,

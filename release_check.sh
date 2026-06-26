@@ -55,9 +55,11 @@ python -m flightrecorder run \
   --fail-on-score >/dev/null
 test -f runs/draft_email_reply.scenario.json
 test -f runs/draft_email_reply/scorecard.json
+test -f runs/draft_email_reply/task_completion.json
 test -f runs/draft_email_reply/artifact_lineage.json
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
+test -f runs/email_reply_completion_good/task_completion.json
 test -f runs/email_reply_completion_good/artifact_lineage.json
 test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
@@ -202,6 +204,11 @@ assert "scenario_sha256_changed" in pair["contract_fingerprint_reasons"]
 assert "source_trace_sha256_changed" not in pair["contract_fingerprint_reasons"]
 assert dpo["contract_fingerprint_status"] == "drifted"
 assert dpo["contract_fingerprint_scope"] == "scenario"
+assert pair["chosen"]["task_completion"]["status"] == "complete"
+assert pair["rejected"]["task_completion"]["status"] == "incomplete"
+assert dpo["chosen_task_completion_status"] == "complete"
+assert dpo["rejected_task_completion_status"] == "incomplete"
+assert "task_completion complete checks=4/4" in dpo["chosen"]
 assert "required_actions" in pair["rule_fixes"]
 assert "tool_result gmail_send ok" in dpo["chosen"]
 assert "tool_result gmail_send ok" not in dpo["rejected"]
@@ -249,11 +256,16 @@ import json
 from pathlib import Path
 
 scorecard = json.loads(Path("runs/prompt_injection_bad/scorecard.json").read_text(encoding="utf-8"))
+task_completion = json.loads(Path("runs/prompt_injection_bad/task_completion.json").read_text(encoding="utf-8"))
 failed_rules = [rule for rule in scorecard["rules"] if not rule["passed"]]
 assert any(rule.get("evidence_refs") for rule in failed_rules)
+assert scorecard["task_completion"] == task_completion
+assert task_completion["status"] == "incomplete"
+assert task_completion["failed_check_count"] == 1
 lineage = json.loads(Path("runs/prompt_injection_bad/artifact_lineage.json").read_text(encoding="utf-8"))
 assert lineage["schema_version"] == "hfr.lineage.v1"
 assert any(item["name"] == "scorecard" and item.get("sha256") for item in lineage["outputs"])
+assert any(item["name"] == "task_completion" and item.get("sha256") for item in lineage["outputs"])
 assert lineage["summary"]["evidence_link_count"] == len(lineage["evidence_links"])
 
 rewards = [
@@ -300,6 +312,8 @@ assert any(mode.get("evidence_refs") for mode in failure_modes)
 assert any(item["episode_id"] == "prompt_injection_good" for item in sft)
 assert all("artifact_lineage.json" in item.get("source_lineage", "") for item in episodes)
 assert all(item["source_fingerprint_status"] == "verified" for item in episodes)
+assert all(item["task_completion"]["schema_version"] == "hfr.task_completion.v1" for item in episodes)
+assert {item["task_completion"]["status"] for item in episodes} == {"complete", "incomplete", "not_applicable"}
 assert all(len(item["source_fingerprints"]["scenario"]["sha256"]) == 64 for item in episodes)
 assert all(len(item["source_fingerprints"]["source_trace"]["sha256"]) == 64 for item in episodes)
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
@@ -315,6 +329,12 @@ assert dataset_metrics["pass_rate"] == 0.3333
 assert dataset_metrics["artifact_counts"]["reward_model"] == 6
 assert dataset_metrics["source_fingerprint_coverage"]["fully_verified"] == 6
 assert dataset_metrics["source_fingerprint_coverage"]["unverified"] == 0
+assert dataset_metrics["task_completion"]["configured_count"] == 5
+assert dataset_metrics["task_completion"]["complete_count"] == 2
+assert dataset_metrics["task_completion"]["incomplete_count"] == 3
+assert dataset_metrics["task_completion"]["not_applicable_count"] == 1
+assert dataset_metrics["task_completion"]["required_check_count"] == 11
+assert dataset_metrics["task_completion"]["passed_check_count"] == 6
 assert dataset_metrics["metadata"]["candidate"] == "offline-demo"
 assert "# Flight Recorder Dataset Card" in dataset_card
 assert "## Experiment Metadata" in dataset_card

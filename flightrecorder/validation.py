@@ -27,7 +27,7 @@ from .review import (
     REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
     REVIEWED_SFT_SCHEMA_VERSION,
 )
-from .scorers import SCORE_SCHEMA_VERSION
+from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
@@ -162,15 +162,26 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
 
     trace_path = run_dir / "normalized_trace.json"
     score_path = run_dir / "scorecard.json"
+    task_completion_path = run_dir / "task_completion.json"
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     trace = _read_object(trace_path, target, "normalized_trace.json")
     scorecard = _read_object(score_path, target, "scorecard.json")
+    task_completion = _read_object_optional(
+        task_completion_path,
+        target,
+        "task_completion.json",
+        "rerun the run to emit the standalone task-completion verdict",
+    )
     lineage = _read_object_optional(lineage_path, target, "artifact_lineage.json", "rerun the run to emit provenance metadata")
     if trace is not None:
         _validate_trace(trace, target)
     if scorecard is not None:
         _validate_scorecard(scorecard, target)
+    if task_completion is not None:
+        _validate_task_completion(task_completion, target, "task_completion")
+        if isinstance(scorecard, dict) and scorecard.get("task_completion") != task_completion:
+            target.errors.append("task_completion.json must match scorecard.task_completion.")
     if lineage is not None:
         _validate_lineage(lineage, target, run_dir, trace, scorecard)
     if trace is not None and scorecard is not None:
@@ -528,6 +539,79 @@ def _validate_scorecard(scorecard: dict[str, Any], target: ValidationTarget) -> 
             target.errors.append(
                 f"scorecard.passed inconsistent with score/threshold/critical failures: expected {expected_passed!r}."
             )
+    if "task_completion" in scorecard:
+        _validate_task_completion(scorecard.get("task_completion"), target, "scorecard.task_completion")
+    else:
+        target.warnings.append("scorecard.task_completion is missing; rerun scoring to emit task-completion evidence.")
+
+
+def _validate_task_completion(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _require_equal(value, "schema_version", TASK_COMPLETION_SCHEMA_VERSION, target, prefix=f"{label}.")
+    status = value.get("status")
+    if status not in {"complete", "incomplete", "not_applicable"}:
+        target.errors.append(f"{label}.status must be complete, incomplete, or not_applicable.")
+    passed = value.get("passed")
+    if not isinstance(passed, bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    elif status == "complete" and passed is not True:
+        target.errors.append(f"{label}.passed must be true when status is complete.")
+    elif status == "incomplete" and passed is not False:
+        target.errors.append(f"{label}.passed must be false when status is incomplete.")
+    elif status == "not_applicable" and passed is not True:
+        target.errors.append(f"{label}.passed must be true when status is not_applicable.")
+    configured = value.get("task_evidence_configured")
+    if not isinstance(configured, bool):
+        target.errors.append(f"{label}.task_evidence_configured must be a boolean.")
+    elif configured is False and status != "not_applicable":
+        target.errors.append(f"{label}.status must be not_applicable when no task evidence is configured.")
+    elif configured is True and status == "not_applicable":
+        target.errors.append(f"{label}.status must not be not_applicable when task evidence is configured.")
+    counts: dict[str, int] = {}
+    for field_name in ("required_check_count", "passed_check_count", "failed_check_count"):
+        raw_count = value.get(field_name)
+        if not _is_non_negative_int(raw_count):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+            continue
+        counts[field_name] = int(raw_count)
+    if len(counts) == 3:
+        if counts["passed_check_count"] + counts["failed_check_count"] != counts["required_check_count"]:
+            target.errors.append(f"{label}.passed_check_count + failed_check_count must equal required_check_count.")
+        if counts["failed_check_count"] == 0 and status == "incomplete":
+            target.errors.append(f"{label}.status must not be incomplete when failed_check_count is 0.")
+        if counts["failed_check_count"] > 0 and status == "complete":
+            target.errors.append(f"{label}.status must not be complete when failed_check_count is greater than 0.")
+    if not _is_string_list(value.get("blocking_rule_ids")):
+        target.errors.append(f"{label}.blocking_rule_ids must be a list of strings.")
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append(f"{label}.summary must be a non-empty string.")
+    checks = value.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append(f"{label}.checks must be a list.")
+        checks = []
+    if "required_check_count" in counts and len(checks) != counts["required_check_count"]:
+        target.errors.append(f"{label}.checks length must match required_check_count.")
+    observed_failed = 0
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            target.errors.append(f"{label}.checks[{index}] must be an object.")
+            continue
+        for field_name in ("id", "rule_id", "description", "evidence"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.checks[{index}].{field_name} must be a non-empty string.")
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"{label}.checks[{index}].passed must be a boolean.")
+        elif check.get("passed") is False:
+            observed_failed += 1
+        if "event_indices" in check and not all(isinstance(item, int) and not isinstance(item, bool) and item >= 0 for item in check.get("event_indices", [])):
+            target.errors.append(f"{label}.checks[{index}].event_indices must be a list of non-negative integers.")
+        _validate_evidence_refs(check.get("evidence_refs"), target, f"{label}.checks[{index}].evidence_refs")
+    if "failed_check_count" in counts and observed_failed != counts["failed_check_count"]:
+        target.errors.append(f"{label}.failed_check_count must match failed checks.")
+    _validate_evidence_refs(value.get("evidence_refs"), target, f"{label}.evidence_refs")
+    _validate_evidence_refs(value.get("missing_evidence_refs"), target, f"{label}.missing_evidence_refs")
 
 
 def _validate_lineage(
@@ -560,7 +644,7 @@ def _validate_lineage(
             if lineage_scorecard.get(field_name) != scorecard.get(field_name):
                 target.errors.append(f"artifact_lineage.scorecard.{field_name} must match scorecard.{field_name}.")
     outputs = _lineage_records(lineage.get("outputs"), target, "artifact_lineage.outputs")
-    for output_name in ("normalized_trace", "scorecard", "report"):
+    for output_name in ("normalized_trace", "scorecard", "task_completion", "report"):
         if output_name not in outputs:
             target.errors.append(f"artifact_lineage.outputs missing {output_name!r}.")
             continue
@@ -823,6 +907,8 @@ def _validate_compare_view(value: Any, target: ValidationTarget, label: str) -> 
         target.errors.append(f"{label}.events must be a list.")
     if not isinstance(value.get("final_answer"), str):
         target.errors.append(f"{label}.final_answer must be a string.")
+    if "task_completion" in value:
+        _validate_task_completion(value.get("task_completion"), target, f"{label}.task_completion")
     _validate_source_fingerprint_fields(value, target, label, warn_if_missing=False)
     return value
 
@@ -866,6 +952,12 @@ def _validate_compare_dpo(dpo: list[dict[str, Any]], target: ValidationTarget, p
         for field_name in ("chosen_score", "rejected_score", "score_gap"):
             if not _is_int_between(row.get(field_name), 0, 100):
                 target.errors.append(f"{label}.{field_name} must be an integer from 0 to 100.")
+        for field_name in ("chosen_task_completion_status", "rejected_task_completion_status"):
+            if row.get(field_name) not in {"complete", "incomplete", "not_applicable"}:
+                target.errors.append(f"{label}.{field_name} must be complete, incomplete, or not_applicable.")
+        for field_name in ("chosen_task_completion_passed", "rejected_task_completion_passed"):
+            if not isinstance(row.get(field_name), bool):
+                target.errors.append(f"{label}.{field_name} must be a boolean.")
         if not _is_plain_int(row.get("candidate_score_delta")):
             target.errors.append(f"{label}.candidate_score_delta must be an integer.")
         if "contract_fingerprint_status" in row:
@@ -896,6 +988,10 @@ def _compare_improvement_dpo_to_pair(row: dict[str, Any], pair: dict[str, Any], 
         "chosen_score": pair.get("chosen_score"),
         "rejected_score": pair.get("rejected_score"),
         "score_gap": pair.get("score_gap"),
+        "chosen_task_completion_status": str((chosen.get("task_completion") or {}).get("status") or "not_applicable"),
+        "rejected_task_completion_status": str((rejected.get("task_completion") or {}).get("status") or "not_applicable"),
+        "chosen_task_completion_passed": bool((chosen.get("task_completion") or {}).get("passed", True)),
+        "rejected_task_completion_passed": bool((rejected.get("task_completion") or {}).get("passed", True)),
         "contract_fingerprint_status": pair.get("contract_fingerprint_status"),
         "contract_fingerprint_scope": pair.get("contract_fingerprint_scope"),
         "contract_fingerprint_reasons": pair.get("contract_fingerprint_reasons"),
@@ -909,6 +1005,18 @@ def _compare_improvement_dpo_to_pair(row: dict[str, Any], pair: dict[str, Any], 
 
 def _compare_response_text(view: dict[str, Any]) -> str:
     lines = ["Observed behavior:"]
+    task = view.get("task_completion") if isinstance(view.get("task_completion"), dict) else {}
+    if task:
+        lines.append(
+            "- "
+            + " ".join(
+                [
+                    "task_completion",
+                    str(task.get("status") or "unknown"),
+                    f"checks={task.get('passed_check_count', 0)}/{task.get('required_check_count', 0)}",
+                ]
+            )
+        )
     events = view.get("events") if isinstance(view.get("events"), list) else []
     for event in events:
         if not isinstance(event, dict):
@@ -1275,6 +1383,10 @@ def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget)
         _validate_source_fingerprint_fields(episode, target, f"episodes[{index}]", warn_if_missing=True)
         if not isinstance(episode.get("events"), list):
             target.errors.append(f"episodes[{index}].events must be a list.")
+        if "task_completion" in episode:
+            _validate_task_completion(episode.get("task_completion"), target, f"episodes[{index}].task_completion")
+        else:
+            target.warnings.append(f"episodes[{index}].task_completion is missing; rerun export-rl to refresh task evidence fields.")
         outcome = episode.get("outcome")
         if not isinstance(outcome, dict):
             target.errors.append(f"episodes[{index}].outcome must be an object.")
@@ -1285,6 +1397,11 @@ def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget)
             target.errors.append(f"episodes[{index}].outcome.passed must be a boolean.")
         if not isinstance(outcome.get("reward"), (int, float)):
             target.errors.append(f"episodes[{index}].outcome.reward must be numeric.")
+        if isinstance(episode.get("task_completion"), dict):
+            if outcome.get("task_completion_status") != episode["task_completion"].get("status"):
+                target.errors.append(f"episodes[{index}].outcome.task_completion_status must match task_completion.status.")
+            if outcome.get("task_completion_passed") != episode["task_completion"].get("passed"):
+                target.errors.append(f"episodes[{index}].outcome.task_completion_passed must match task_completion.passed.")
 
 
 def _validate_rewards(rewards: list[dict[str, Any]], target: ValidationTarget, episodes: list[dict[str, Any]]) -> None:
@@ -1309,6 +1426,10 @@ def _validate_rewards(rewards: list[dict[str, Any]], target: ValidationTarget, e
                     target.errors.append(
                         f"rewards[{index}].{field_name} does not match episode {episode_id!r} outcome."
                     )
+            if "task_completion_status" in reward and reward.get("task_completion_status") != outcome.get("task_completion_status"):
+                target.errors.append(f"rewards[{index}].task_completion_status does not match episode {episode_id!r} outcome.")
+            if "task_completion_passed" in reward and reward.get("task_completion_passed") != outcome.get("task_completion_passed"):
+                target.errors.append(f"rewards[{index}].task_completion_passed does not match episode {episode_id!r} outcome.")
             _validate_matching_source_fingerprints(reward, episode, target, f"rewards[{index}]")
         _validate_source_fingerprint_fields(reward, target, f"rewards[{index}]", warn_if_missing=False)
         if not isinstance(reward.get("rule_rewards"), list):
@@ -1480,6 +1601,7 @@ def _validate_sft_records(
                 target.errors.append(f"sft[{index}].episode_id {episode_id!r} does not reference a passing episode.")
             if sample.get("quality_gate") != "passed_scorecard":
                 target.errors.append(f"sft[{index}].quality_gate must be 'passed_scorecard'.")
+            _validate_training_view_task_completion(sample, episode, target, f"sft[{index}]")
     missing = sorted(expected_ids - seen)
     if missing:
         target.errors.append(f"sft.jsonl missing passing episode samples: {missing!r}.")
@@ -1552,6 +1674,9 @@ def _validate_reward_model_records(
             seen.add(episode_id)
         if not isinstance(sample.get("passed"), bool):
             target.errors.append(f"reward_model[{index}].passed must be a boolean.")
+        episode = episode_by_id.get(episode_id) if episode_id else None
+        if isinstance(episode, dict):
+            _validate_training_view_task_completion(sample, episode, target, f"reward_model[{index}]")
         for field_name in ("failed_rules", "critical_failures"):
             if not _is_string_list(sample.get(field_name)):
                 target.errors.append(f"reward_model[{index}].{field_name} must be a list of strings.")
@@ -1604,6 +1729,19 @@ def _validate_training_view_common(
             if sample.get(field_name) != expected_value:
                 target.errors.append(f"{label}.{field_name} does not match episode {episode_id!r}.")
     return episode_id if isinstance(episode_id, str) and episode_id else None
+
+
+def _validate_training_view_task_completion(
+    sample: dict[str, Any],
+    episode: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+    if "task_completion_status" in sample and sample.get("task_completion_status") != task.get("status"):
+        target.errors.append(f"{label}.task_completion_status does not match episode task_completion.status.")
+    if "task_completion_passed" in sample and sample.get("task_completion_passed") != task.get("passed"):
+        target.errors.append(f"{label}.task_completion_passed does not match episode task_completion.passed.")
 
 
 def _compare_dpo_to_preference(
@@ -1862,6 +2000,19 @@ def _validate_dataset_metrics(
         _validate_source_fingerprint_coverage(metrics.get("source_fingerprint_coverage"), target, episodes)
     else:
         target.warnings.append("dataset_metrics.source_fingerprint_coverage is missing; rerun export-rl to refresh provenance metrics.")
+    if "task_completion" in metrics:
+        expected_task_completion = _expected_task_completion_metrics(episodes)
+        actual_task_completion = metrics.get("task_completion")
+        if not isinstance(actual_task_completion, dict):
+            target.errors.append("dataset_metrics.task_completion must be an object.")
+        else:
+            for field_name, expected in expected_task_completion.items():
+                if actual_task_completion.get(field_name) != expected:
+                    target.errors.append(
+                        f"dataset_metrics.task_completion.{field_name} expected {expected!r}, got {actual_task_completion.get(field_name)!r}."
+                    )
+    else:
+        target.warnings.append("dataset_metrics.task_completion is missing; rerun export-rl to refresh task-completion metrics.")
     _validate_dataset_family_metrics(metrics.get("task_families"), target, episodes, step_rewards, failure_modes, sft, dpo, reward_model)
     _validate_quality_flags(metrics.get("quality_flags"), target)
     if "metadata" in metrics:
@@ -1933,12 +2084,16 @@ def _expected_dataset_family_metrics(
             if isinstance(episode.get("outcome"), dict)
         ]
         passed = sum(1 for episode in family_episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+        task_metrics = _expected_task_completion_metrics(family_episodes)
         expected[family] = {
             "task_family": family,
             "episode_count": len(family_episodes),
             "passed": passed,
             "failed": len(family_episodes) - passed,
             "pass_rate": round(passed / len(family_episodes), 4) if family_episodes else 0.0,
+            "task_completion_configured": task_metrics["configured_count"],
+            "task_completion_complete": task_metrics["complete_count"],
+            "task_completion_incomplete": task_metrics["incomplete_count"],
             "average_score": _average_number(scores),
             "step_reward_count": _count_family(step_rewards, family),
             "failure_mode_count": _count_family(failure_modes, family),
@@ -1947,6 +2102,36 @@ def _expected_dataset_family_metrics(
             "reward_model_count": _count_family(reward_model, family),
         }
     return expected
+
+
+def _expected_task_completion_metrics(episodes: list[dict[str, Any]]) -> dict[str, Any]:
+    statuses = {"complete": 0, "incomplete": 0, "not_applicable": 0, "unknown": 0}
+    configured = 0
+    required_checks = 0
+    passed_checks = 0
+    for episode in episodes:
+        task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
+        status = str(task.get("status") or "unknown")
+        if status not in statuses:
+            status = "unknown"
+        statuses[status] += 1
+        if task.get("task_evidence_configured") is True:
+            configured += 1
+        if _is_non_negative_int(task.get("required_check_count")):
+            required_checks += int(task["required_check_count"])
+        if _is_non_negative_int(task.get("passed_check_count")):
+            passed_checks += int(task["passed_check_count"])
+    return {
+        "episode_count": len(episodes),
+        "configured_count": configured,
+        "complete_count": statuses["complete"],
+        "incomplete_count": statuses["incomplete"],
+        "not_applicable_count": statuses["not_applicable"],
+        "unknown_count": statuses["unknown"],
+        "required_check_count": required_checks,
+        "passed_check_count": passed_checks,
+        "check_pass_rate": round(passed_checks / required_checks, 4) if required_checks else 0.0,
+    }
 
 
 def _validate_quality_flags(value: Any, target: ValidationTarget) -> None:

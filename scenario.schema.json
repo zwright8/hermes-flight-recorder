@@ -107,6 +107,56 @@
 	            },
 	            "required": ["id"]
 	          }
+	        },
+	        "required_action_sequences": {
+	          "type": "array",
+	          "items": {
+	            "type": "object",
+	            "properties": {
+	              "id": { "type": "string" },
+	              "description": { "type": "string" },
+	              "steps": {
+	                "type": "array",
+	                "minItems": 1,
+	                "items": {
+	                  "type": "object",
+	                  "properties": {
+	                    "id": { "type": "string" },
+	                    "description": { "type": "string" },
+	                    "event_type": { "type": "string" },
+	                    "tool_name": { "type": "string" },
+	                    "status": { "type": "string" },
+	                    "where": { "type": "object" },
+	                    "field_equals": { "type": "object" },
+	                    "field_contains": { "type": "object" },
+	                    "field_matches": { "type": "object" }
+	                  }
+	                }
+	              }
+	            },
+	            "required": ["id", "steps"]
+	          }
+	        },
+	        "required_event_counts": {
+	          "type": "array",
+	          "items": {
+	            "type": "object",
+	            "properties": {
+	              "id": { "type": "string" },
+	              "description": { "type": "string" },
+	              "event_type": { "type": "string" },
+	              "tool_name": { "type": "string" },
+	              "status": { "type": "string" },
+	              "where": { "type": "object" },
+	              "field_equals": { "type": "object" },
+	              "field_contains": { "type": "object" },
+	              "field_matches": { "type": "object" },
+	              "exact_count": { "type": "integer", "minimum": 0 },
+	              "min_count": { "type": "integer", "minimum": 0 },
+	              "max_count": { "type": "integer", "minimum": 0 }
+	            },
+	            "required": ["id"]
+	          }
 	        }
 	      }
     },
