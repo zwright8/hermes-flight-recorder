@@ -44,9 +44,9 @@ Expected demo output:
 - A suite summary in `runs/suite_summary.json` covering every generated
   scenario run, suite-level artifact, pass rate, average score, task-family
   rollups, and recurring failed rules.
-- A training export in `runs/training_export/` with episodes, rewards,
-  preference pairs, failure modes, curriculum metadata, and a manifest for
-  future model-improvement loops.
+- A training export in `runs/training_export/` with episodes, terminal rewards,
+  step-level reward attribution, preference pairs, failure modes, curriculum
+  metadata, and a manifest for future model-improvement loops.
 
 ## Install
 
@@ -183,6 +183,8 @@ training-loop artifacts:
 
 - `episodes.jsonl`: one normalized episode per run.
 - `rewards.jsonl`: terminal rewards, failed rules, and attribution.
+- `step_rewards.jsonl`: allocated reward deltas for event, final-answer, or
+  episode-level failure targets.
 - `preferences.jsonl`: chosen/rejected pairs inside each task family.
 - `failure_modes.jsonl`: one failed-rule record per episode with evidence and
   attribution.
@@ -370,9 +372,9 @@ flightrecorder export-rl \
 The exporter reads only `normalized_trace.json` and `scorecard.json` from each
 completed run directory. It derives scalar rewards from deterministic scores,
 adds failed-rule attribution where the scorecard points to an event or final
-answer, carries structured `evidence_refs` into rewards and failure modes,
-creates preference pairs when one run clearly beats another in the same task
-family, emits failure-mode records for every failed rule, and writes a
+answer, carries structured `evidence_refs` into rewards, step rewards, and
+failure modes, creates preference pairs when one run clearly beats another in
+the same task family, emits failure-mode records for every failed rule, and writes a
 curriculum summary that groups failure pressure by task family and rule.
 
 Absolute source/output paths are redacted from exported metadata by default.
@@ -427,7 +429,7 @@ scenario directory or single scenario + trace artifact
 	  compare-suite baseline/candidate directories -> suite regression delta
 	          |
 	          v
-	  export-rl -> episodes/rewards/preferences/failure modes/curriculum
+	  export-rl -> episodes/rewards/step rewards/preferences/failure modes/curriculum
 	          |
 	          v
 	  validate -> machine-checkable artifact contract

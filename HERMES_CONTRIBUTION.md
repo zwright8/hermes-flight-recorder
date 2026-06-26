@@ -23,7 +23,8 @@ artifacts and turns them into maintainable eval evidence:
 - a static HTML report,
 - a regression scenario for every failing run,
 - and CI/compare artifacts for before/after eval loops.
-- RL-ready episode, reward, and preference exports for future training loops.
+- RL-ready episode, terminal reward, step-reward, and preference exports for
+  future training loops.
 
 That makes Hermes' self-improvement loop auditable. Instead of only learning
 from successful work or user corrections, Hermes can accumulate reproducible
@@ -131,6 +132,7 @@ The generated training export gives future model-improvement loops:
 
 - five episode records,
 - five deterministic terminal reward records,
+- step-level reward rows that point to event, final-answer, or episode targets,
 - one prompt-injection preference pair choosing the passing trace over the
   failing trace,
 - six failed-rule failure-mode records across the three failing traces,
@@ -177,8 +179,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
 8. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`.
 9. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-10. Export episodes, rewards, preference pairs, failure modes, and curriculum
-   metadata with `flightrecorder export-rl` for future SFT, DPO,
+10. Export episodes, rewards, step rewards, preference pairs, failure modes,
+   and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
 11. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
@@ -199,8 +201,8 @@ That gives the Hermes team a practical improvement loop:
   before/after regressions,
 - arbitrary task-completion loops can use `required_actions` to prove work was
   completed from tool-result evidence,
-- deterministic scorecards can become terminal rewards, preference pairs,
-  failure taxonomies, and curriculum metadata,
+- deterministic scorecards can become terminal rewards, step-level reward
+  attribution, preference pairs, failure taxonomies, and curriculum metadata,
 - generated artifacts can be contract-validated before they become evidence,
 - and reports give maintainers a quick visual explanation of why a run passed
   or failed.
@@ -264,8 +266,8 @@ Demo evidence:
   evidence.
 - `flightrecorder check-scenarios` emits machine-readable scenario contract
   validation before scenarios are used as benchmark inputs.
-- `flightrecorder export-rl` emits episode, reward, preference, failure-mode,
-  curriculum, and manifest artifacts for future training loops.
+- `flightrecorder export-rl` emits episode, reward, step-reward, preference,
+  failure-mode, curriculum, and manifest artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
   internally consistent, including suite-summary metrics.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
@@ -318,14 +320,15 @@ under-specified scenario contracts before they create misleading benchmark
 evidence.
 
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
-into terminal rewards, chosen/rejected pairs, failure-mode rows, and curriculum
-metadata, so training code can consume the evidence without scraping HTML
-reports.
+into terminal rewards, step-level attribution rows, chosen/rejected pairs,
+failure-mode rows, and curriculum metadata, so training code can consume the
+evidence without scraping HTML reports.
 
 Then I run `flightrecorder validate --strict`, which checks the data contracts:
-scorecards match their rules, rewards link back to episodes, preferences
-reference real chosen/rejected traces, and failure modes reference real
-episodes. It also recomputes suite-summary metrics so pass rates and failure
+scorecards match their rules, rewards link back to episodes, step rewards point
+to real events when they claim event-level attribution, preferences reference
+real chosen/rejected traces, and failure modes reference real episodes. It also
+recomputes suite-summary metrics so pass rates and failure
 counts cannot silently drift from the underlying runs.
 
 So this is not a competing self-improvement loop. It is the eval harness that

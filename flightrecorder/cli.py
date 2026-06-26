@@ -390,6 +390,7 @@ def cmd_export_rl(args: argparse.Namespace) -> int:
     print(
         "wrote RL export "
         f"episodes={manifest['episode_count']} rewards={manifest['reward_count']} "
+        f"step_rewards={manifest['step_reward_count']} "
         f"preferences={manifest['preference_count']} failure_modes={manifest['failure_mode_count']} out={args.out}"
     )
     return 0
@@ -751,6 +752,7 @@ def _run_suite_summary(
         summary["training_export"] = {
             "episode_count": training_manifest.get("episode_count"),
             "reward_count": training_manifest.get("reward_count"),
+            "step_reward_count": training_manifest.get("step_reward_count"),
             "preference_count": training_manifest.get("preference_count"),
             "failure_mode_count": training_manifest.get("failure_mode_count"),
         }

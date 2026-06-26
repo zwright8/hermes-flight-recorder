@@ -78,6 +78,7 @@ if python -m flightrecorder gate-suite \
 fi
 test -f runs/training_export/episodes.jsonl
 test -f runs/training_export/rewards.jsonl
+test -f runs/training_export/step_rewards.jsonl
 test -f runs/training_export/preferences.jsonl
 test -f runs/training_export/failure_modes.jsonl
 test -f runs/training_export/curriculum.json
@@ -95,12 +96,19 @@ rewards = [
     for line in Path("runs/training_export/rewards.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
+step_rewards = [
+    json.loads(line)
+    for line in Path("runs/training_export/step_rewards.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
 failure_modes = [
     json.loads(line)
     for line in Path("runs/training_export/failure_modes.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
 assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
+assert any(item.get("evidence_ref") for item in step_rewards)
+assert any(item.get("target") == "event" and isinstance(item.get("event_index"), int) for item in step_rewards)
 assert any(mode.get("evidence_refs") for mode in failure_modes)
 PY
 test -f runs/validation.json

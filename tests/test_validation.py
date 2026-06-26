@@ -116,6 +116,49 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("failure_modes[0].episode_id", errors)
             self.assertIn("does not reference an episode", errors)
 
+    def test_validate_rejects_broken_step_reward_event_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            step_reward_path = export / "step_rewards.jsonl"
+            rows = step_reward_path.read_text(encoding="utf-8").splitlines()
+            step_reward = json.loads(rows[0])
+            step_reward["target"] = "event"
+            step_reward["event_index"] = 999
+            rows[0] = json.dumps(step_reward)
+            step_reward_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("step_rewards[0].event_index", errors)
+            self.assertIn("outside episode", errors)
+
+    def test_validate_rejects_step_reward_delta_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            step_reward_path = export / "step_rewards.jsonl"
+            rows = [json.loads(line) for line in step_reward_path.read_text(encoding="utf-8").splitlines()]
+            rows[0]["reward_delta"] = 0.0
+            step_reward_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("step_rewards for episode", errors)
+            self.assertIn("expected", errors)
+
     def test_validate_accepts_suite_summary_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

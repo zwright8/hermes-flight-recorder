@@ -69,6 +69,8 @@ The export directory contains:
 
 - `episodes.jsonl`: one trace episode per completed run.
 - `rewards.jsonl`: scalar terminal rewards, failed rules, and attribution.
+- `step_rewards.jsonl`: one row per attributed reward delta, pointing to an
+  event, final answer, or episode-level target.
 - `preferences.jsonl`: chosen/rejected pairs within the same task family.
 - `failure_modes.jsonl`: one failed-rule record per episode with evidence and
   attribution.
@@ -81,8 +83,8 @@ use the redacted evidence surface rather than raw sensitive traces.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
-links, preference references, failure-mode links, and curriculum counts are
-internally consistent.
+links, step-reward event indexes, preference references, failure-mode links,
+and curriculum counts are internally consistent.
 
 ## Episode Records
 
@@ -116,8 +118,22 @@ Failed rules include structured attribution when the scorecard exposes
 - `episode` when only run-level attribution is available.
 
 This gives future trainers a starting point for credit assignment, but it should
-not be mistaken for a full environment-level step reward. Older scorecards that
-lack `evidence_refs` still fall back to parsing human-readable evidence strings.
+not be mistaken for an online environment reward. Older scorecards that lack
+`evidence_refs` still fall back to parsing human-readable evidence strings.
+
+## Step Reward Records
+
+`step_rewards.jsonl` flattens terminal reward attribution into one row per
+failed-rule target. Each row links an episode, scenario, task family, rule,
+allocated reward delta, full rule reward delta, score, criticality, and
+evidence string. When the scorecard has a structured `evidence_ref`, the row
+also carries the referenced event index, final-answer target, or episode-level
+claim. Rows for the same failed rule are allocated so their `reward_delta`
+values sum back to that rule's terminal `rule_reward_delta`.
+
+This is the most direct artifact for future credit-assignment experiments. It
+lets a trainer or analysis job ask, "which observed step received the negative
+signal?" without unpacking nested terminal reward records.
 
 ## Preference Records
 
@@ -170,6 +186,10 @@ rewards = [
     json.loads(line)
     for line in Path("runs/training_export/rewards.jsonl").read_text().splitlines()
 ]
+step_rewards = [
+    json.loads(line)
+    for line in Path("runs/training_export/step_rewards.jsonl").read_text().splitlines()
+]
 preferences = [
     json.loads(line)
     for line in Path("runs/training_export/preferences.jsonl").read_text().splitlines()
@@ -185,6 +205,7 @@ Recommended first uses:
 
 - filter passing episodes into SFT candidates,
 - convert preference records into chosen/rejected pairs,
+- consume step rewards for event/final-answer credit-assignment experiments,
 - train a small reward model on scorecard-derived labels,
 - build failure-mode dashboards or curricula from explicit failed-rule rows,
 - gate Hermes skill/model changes by re-exporting and comparing rewards.

@@ -12,6 +12,7 @@ from typing import Any
 RL_MANIFEST_SCHEMA_VERSION = "hfr.rl.manifest.v1"
 RL_EPISODE_SCHEMA_VERSION = "hfr.rl.episode.v1"
 RL_REWARD_SCHEMA_VERSION = "hfr.rl.reward.v1"
+RL_STEP_REWARD_SCHEMA_VERSION = "hfr.rl.step_reward.v1"
 RL_PREFERENCE_SCHEMA_VERSION = "hfr.rl.preference.v1"
 RL_FAILURE_MODE_SCHEMA_VERSION = "hfr.rl.failure_mode.v1"
 RL_CURRICULUM_SCHEMA_VERSION = "hfr.rl.curriculum.v1"
@@ -57,6 +58,7 @@ def export_rl_dataset(
 
     episodes = [_episode_record(record, reward_scale, preserve_paths) for record in records]
     rewards = [_reward_record(record, reward_scale) for record in records]
+    step_rewards = _step_reward_records(records, reward_scale)
     preferences = _preference_records(episodes, min_score_gap=min_score_gap, max_pairs_per_family=max_pairs_per_family)
     failure_modes = [_failure_mode_record(record, rule, reward_scale) for record in records for rule in _failed_rules(record.scorecard)]
     curriculum = _curriculum_record(episodes, failure_modes)
@@ -64,6 +66,7 @@ def export_rl_dataset(
     paths = {
         "episodes": target / "episodes.jsonl",
         "rewards": target / "rewards.jsonl",
+        "step_rewards": target / "step_rewards.jsonl",
         "preferences": target / "preferences.jsonl",
         "failure_modes": target / "failure_modes.jsonl",
         "curriculum": target / "curriculum.json",
@@ -71,6 +74,7 @@ def export_rl_dataset(
     }
     _write_jsonl(paths["episodes"], episodes)
     _write_jsonl(paths["rewards"], rewards)
+    _write_jsonl(paths["step_rewards"], step_rewards)
     _write_jsonl(paths["preferences"], preferences)
     _write_jsonl(paths["failure_modes"], failure_modes)
     _write_json(paths["curriculum"], curriculum)
@@ -86,6 +90,7 @@ def export_rl_dataset(
         "run_count": len(records),
         "episode_count": len(episodes),
         "reward_count": len(rewards),
+        "step_reward_count": len(step_rewards),
         "preference_count": len(preferences),
         "failure_mode_count": len(failure_modes),
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
@@ -95,6 +100,7 @@ def export_rl_dataset(
             "Use these artifacts as reward/eval data, not as a complete trainer.",
             "failure_modes.jsonl exposes one failed-rule record per episode for curriculum construction.",
             "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
+            "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
@@ -178,6 +184,70 @@ def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
         "rule_rewards": rule_rewards,
         "attribution": _reward_attribution(scorecard),
     }
+
+
+def _step_reward_records(records: list[RunRecord], reward_scale: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for record in records:
+        scorecard = record.scorecard
+        scenario_id = str(scorecard.get("scenario_id") or record.run_id)
+        task_family = _task_family(scenario_id)
+        rules_by_id = {
+            str(rule.get("id")): rule
+            for rule in _failed_rules(scorecard)
+            if rule.get("id")
+        }
+        attributions = _reward_attribution(scorecard)
+        attribution_counts: dict[str, int] = {}
+        attribution_indexes: dict[str, int] = {}
+        allocated_by_rule: dict[str, float] = {}
+        for attribution in attributions:
+            rule_id = str(attribution.get("rule_id") or "unknown_rule")
+            attribution_counts[rule_id] = attribution_counts.get(rule_id, 0) + 1
+
+        for index, attribution in enumerate(attributions):
+            rule_id = str(attribution.get("rule_id") or "unknown_rule")
+            rule = rules_by_id.get(rule_id, {})
+            target = attribution.get("target") if attribution.get("target") in {"event", "final_answer", "episode"} else "episode"
+            attribution_count = attribution_counts.get(rule_id, 1)
+            allocation_index = attribution_indexes.get(rule_id, 0)
+            attribution_indexes[rule_id] = allocation_index + 1
+            rule_reward_delta = float(attribution.get("reward_delta", 0.0) or 0.0)
+            if allocation_index == attribution_count - 1:
+                reward_delta = round(rule_reward_delta - allocated_by_rule.get(rule_id, 0.0), 6)
+            else:
+                reward_delta = round(rule_reward_delta / attribution_count, 6)
+                allocated_by_rule[rule_id] = round(allocated_by_rule.get(rule_id, 0.0) + reward_delta, 6)
+            allocation_weight = round(reward_delta / rule_reward_delta, 6) if rule_reward_delta else 0.0
+            row = {
+                "schema_version": RL_STEP_REWARD_SCHEMA_VERSION,
+                "step_reward_id": f"{record.run_id}:{rule_id}:{index}",
+                "episode_id": record.run_id,
+                "scenario_id": scenario_id,
+                "scenario_title": str(scorecard.get("scenario_title") or scenario_id),
+                "task_family": task_family,
+                "target": target,
+                "rule_id": rule_id,
+                "rule_name": str(rule.get("name") or rule_id),
+                "critical": bool(rule.get("critical")),
+                "penalty": int(rule.get("penalty", 0) or 0),
+                "score": _score(scorecard),
+                "episode_reward": _reward_value(scorecard, reward_scale),
+                "reward_scale": reward_scale,
+                "reward_delta": reward_delta,
+                "rule_reward_delta": rule_reward_delta,
+                "allocation_weight": allocation_weight,
+                "allocation_index": allocation_index,
+                "attribution_count": attribution_count,
+                "passed": bool(scorecard.get("passed")),
+                "evidence": str(attribution.get("evidence") or ""),
+            }
+            if target == "event" and isinstance(attribution.get("event_index"), int) and not isinstance(attribution.get("event_index"), bool):
+                row["event_index"] = attribution["event_index"]
+            if isinstance(attribution.get("evidence_ref"), dict):
+                row["evidence_ref"] = attribution["evidence_ref"]
+            rows.append(row)
+    return rows
 
 
 def _preference_records(

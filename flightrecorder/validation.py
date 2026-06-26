@@ -16,6 +16,8 @@ from .training import (
     RL_MANIFEST_SCHEMA_VERSION,
     RL_PREFERENCE_SCHEMA_VERSION,
     RL_REWARD_SCHEMA_VERSION,
+    RL_STEP_REWARD_SCHEMA_VERSION,
+    REWARD_SCALES,
 )
 
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
@@ -146,13 +148,15 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
     episodes = _read_jsonl_objects(export_dir / "episodes.jsonl", target, "episodes.jsonl")
     rewards = _read_jsonl_objects(export_dir / "rewards.jsonl", target, "rewards.jsonl")
+    step_rewards = _read_jsonl_objects_optional(export_dir / "step_rewards.jsonl", target, "step_rewards.jsonl")
     preferences = _read_jsonl_objects(export_dir / "preferences.jsonl", target, "preferences.jsonl")
     failure_modes = _read_jsonl_objects(export_dir / "failure_modes.jsonl", target, "failure_modes.jsonl")
     curriculum = _read_object(export_dir / "curriculum.json", target, "curriculum.json")
     if manifest is not None:
-        _validate_training_manifest(manifest, target, episodes, rewards, preferences, failure_modes, curriculum)
+        _validate_training_manifest(manifest, target, episodes, rewards, step_rewards, preferences, failure_modes, curriculum)
     _validate_episodes(episodes, target)
     _validate_rewards(rewards, target, episodes)
+    _validate_step_rewards(step_rewards, target, episodes, rewards)
     _validate_preferences(preferences, target, episodes)
     _validate_failure_modes(failure_modes, target, episodes)
     if curriculum is not None:
@@ -161,6 +165,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         {
             "episode_count": len(episodes),
             "reward_count": len(rewards),
+            "step_reward_count": len(step_rewards),
             "preference_count": len(preferences),
             "failure_mode_count": len(failure_modes),
         }
@@ -270,6 +275,7 @@ def _validate_training_manifest(
     target: ValidationTarget,
     episodes: list[dict[str, Any]],
     rewards: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
     preferences: list[dict[str, Any]],
     failure_modes: list[dict[str, Any]],
     curriculum: dict[str, Any] | None,
@@ -281,6 +287,10 @@ def _validate_training_manifest(
         "preference_count": len(preferences),
         "failure_mode_count": len(failure_modes),
     }
+    if "step_reward_count" in manifest:
+        expected_counts["step_reward_count"] = len(step_rewards)
+    else:
+        target.warnings.append("manifest.step_reward_count is missing; rerun export-rl to refresh training artifacts.")
     for field_name, expected in expected_counts.items():
         if manifest.get(field_name) != expected:
             target.errors.append(f"manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
@@ -290,6 +300,8 @@ def _validate_training_manifest(
         for output_name in ("episodes", "rewards", "preferences", "failure_modes", "curriculum", "manifest"):
             if output_name not in manifest["outputs"]:
                 target.errors.append(f"manifest.outputs.{output_name} is missing.")
+        if "step_rewards" not in manifest["outputs"]:
+            target.warnings.append("manifest.outputs.step_rewards is missing; rerun export-rl to refresh training artifacts.")
     if curriculum is not None and curriculum.get("failure_mode_count") != len(failure_modes):
         target.errors.append(
             f"curriculum.failure_mode_count expected {len(failure_modes)}, got {curriculum.get('failure_mode_count')!r}."
@@ -364,6 +376,129 @@ def _validate_rewards(rewards: list[dict[str, Any]], target: ValidationTarget, e
                     )
         if not isinstance(reward.get("attribution"), list):
             target.errors.append(f"rewards[{index}].attribution must be a list.")
+
+
+def _validate_step_rewards(
+    step_rewards: list[dict[str, Any]],
+    target: ValidationTarget,
+    episodes: list[dict[str, Any]],
+    rewards: list[dict[str, Any]],
+) -> None:
+    episode_by_id = {episode.get("episode_id"): episode for episode in episodes if isinstance(episode.get("episode_id"), str)}
+    rule_delta_by_key = _rule_reward_deltas_by_key(rewards)
+    step_delta_by_key: dict[tuple[str, str], float] = {}
+    seen: set[str] = set()
+    for index, step_reward in enumerate(step_rewards):
+        _require_equal(step_reward, "schema_version", RL_STEP_REWARD_SCHEMA_VERSION, target, prefix=f"step_rewards[{index}].")
+        step_reward_id = step_reward.get("step_reward_id")
+        if not isinstance(step_reward_id, str) or not step_reward_id:
+            target.errors.append(f"step_rewards[{index}].step_reward_id must be a non-empty string.")
+        elif step_reward_id in seen:
+            target.errors.append(f"step_rewards[{index}].step_reward_id duplicates {step_reward_id!r}.")
+        else:
+            seen.add(step_reward_id)
+
+        episode_id = step_reward.get("episode_id")
+        if not isinstance(episode_id, str) or not episode_id:
+            target.errors.append(f"step_rewards[{index}].episode_id must be a non-empty string.")
+            episode = None
+        else:
+            episode = episode_by_id.get(episode_id)
+            if episode is None:
+                target.errors.append(f"step_rewards[{index}].episode_id {episode_id!r} does not reference an episode.")
+
+        rule_id = step_reward.get("rule_id")
+        for field_name in ("scenario_id", "task_family", "rule_id", "rule_name", "evidence"):
+            if not isinstance(step_reward.get(field_name), str):
+                target.errors.append(f"step_rewards[{index}].{field_name} must be a string.")
+        if step_reward.get("target") not in {"event", "final_answer", "episode"}:
+            target.errors.append(f"step_rewards[{index}].target must be one of event, final_answer, or episode.")
+        if step_reward.get("reward_scale") not in REWARD_SCALES:
+            target.errors.append(f"step_rewards[{index}].reward_scale must be one of {sorted(REWARD_SCALES)!r}.")
+        for field_name in ("reward_delta", "rule_reward_delta", "allocation_weight", "episode_reward"):
+            if not isinstance(step_reward.get(field_name), (int, float)) or isinstance(step_reward.get(field_name), bool):
+                target.errors.append(f"step_rewards[{index}].{field_name} must be numeric.")
+        if (
+            not isinstance(step_reward.get("attribution_count"), int)
+            or isinstance(step_reward.get("attribution_count"), bool)
+            or step_reward.get("attribution_count") < 1
+        ):
+            target.errors.append(f"step_rewards[{index}].attribution_count must be a positive integer.")
+        if (
+            not isinstance(step_reward.get("allocation_index"), int)
+            or isinstance(step_reward.get("allocation_index"), bool)
+            or step_reward.get("allocation_index") < 0
+        ):
+            target.errors.append(f"step_rewards[{index}].allocation_index must be a non-negative integer.")
+        if (
+            isinstance(step_reward.get("allocation_index"), int)
+            and not isinstance(step_reward.get("allocation_index"), bool)
+            and isinstance(step_reward.get("attribution_count"), int)
+            and not isinstance(step_reward.get("attribution_count"), bool)
+            and step_reward["allocation_index"] >= step_reward["attribution_count"]
+        ):
+            target.errors.append(f"step_rewards[{index}].allocation_index must be less than attribution_count.")
+        if not _is_int_between(step_reward.get("score"), 0, 100):
+            target.errors.append(f"step_rewards[{index}].score must be an integer from 0 to 100.")
+        if not isinstance(step_reward.get("passed"), bool):
+            target.errors.append(f"step_rewards[{index}].passed must be a boolean.")
+        if not isinstance(step_reward.get("critical"), bool):
+            target.errors.append(f"step_rewards[{index}].critical must be a boolean.")
+        if not _is_int_between(step_reward.get("penalty"), 0, 100):
+            target.errors.append(f"step_rewards[{index}].penalty must be an integer from 0 to 100.")
+
+        if step_reward.get("target") == "event":
+            event_index = step_reward.get("event_index")
+            if not isinstance(event_index, int) or isinstance(event_index, bool) or event_index < 0:
+                target.errors.append(f"step_rewards[{index}].event_index must be a non-negative integer for event targets.")
+            elif isinstance(episode, dict) and isinstance(episode.get("events"), list) and event_index >= len(episode["events"]):
+                target.errors.append(
+                    f"step_rewards[{index}].event_index {event_index} is outside episode {episode_id!r} events."
+                )
+        elif "event_index" in step_reward:
+            target.errors.append(f"step_rewards[{index}].event_index is only valid when target is event.")
+
+        if "evidence_ref" in step_reward:
+            _validate_evidence_refs([step_reward.get("evidence_ref")], target, f"step_rewards[{index}].evidence_ref")
+
+        reward_delta = step_reward.get("reward_delta")
+        if (
+            isinstance(episode_id, str)
+            and isinstance(rule_id, str)
+            and isinstance(reward_delta, (int, float))
+            and not isinstance(reward_delta, bool)
+        ):
+            key = (episode_id, rule_id)
+            step_delta_by_key[key] = round(step_delta_by_key.get(key, 0.0) + float(reward_delta), 6)
+            if key not in rule_delta_by_key:
+                target.errors.append(f"step_rewards[{index}] does not reference a terminal rule reward.")
+
+    for key, actual in sorted(step_delta_by_key.items()):
+        expected = rule_delta_by_key.get(key)
+        if expected is not None and round(abs(actual - expected), 6) > 0.000001:
+            episode_id, rule_id = key
+            target.errors.append(
+                f"step_rewards for episode {episode_id!r} rule {rule_id!r} sum to {actual}, expected {expected}."
+            )
+
+
+def _rule_reward_deltas_by_key(rewards: list[dict[str, Any]]) -> dict[tuple[str, str], float]:
+    deltas: dict[tuple[str, str], float] = {}
+    for reward in rewards:
+        episode_id = reward.get("episode_id")
+        if not isinstance(episode_id, str):
+            continue
+        rule_rewards = reward.get("rule_rewards")
+        if not isinstance(rule_rewards, list):
+            continue
+        for rule_reward in rule_rewards:
+            if not isinstance(rule_reward, dict) or rule_reward.get("passed") is True:
+                continue
+            rule_id = rule_reward.get("rule_id")
+            reward_delta = rule_reward.get("reward_delta")
+            if isinstance(rule_id, str) and isinstance(reward_delta, (int, float)) and not isinstance(reward_delta, bool):
+                deltas[(episode_id, rule_id)] = round(float(reward_delta), 6)
+    return deltas
 
 
 def _validate_preferences(preferences: list[dict[str, Any]], target: ValidationTarget, episodes: list[dict[str, Any]]) -> None:
@@ -687,6 +822,13 @@ def _read_jsonl_objects(path: Path, target: ValidationTarget, label: str) -> lis
             continue
         rows.append(value)
     return rows
+
+
+def _read_jsonl_objects_optional(path: Path, target: ValidationTarget, label: str) -> list[dict[str, Any]]:
+    if not path.exists():
+        target.warnings.append(f"{label} is missing; rerun export-rl to emit step-level reward attribution.")
+        return []
+    return _read_jsonl_objects(path, target, label)
 
 
 def _require_equal(

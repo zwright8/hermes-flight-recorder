@@ -36,6 +36,7 @@ class TrainingExportTests(unittest.TestCase):
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             episodes = read_jsonl(out / "episodes.jsonl")
             rewards = read_jsonl(out / "rewards.jsonl")
+            step_rewards = read_jsonl(out / "step_rewards.jsonl")
             preferences = read_jsonl(out / "preferences.jsonl")
             failure_modes = read_jsonl(out / "failure_modes.jsonl")
             curriculum = json.loads((out / "curriculum.json").read_text(encoding="utf-8"))
@@ -43,14 +44,17 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(manifest["schema_version"], "hfr.rl.manifest.v1")
             self.assertEqual(manifest["episode_count"], 2)
             self.assertEqual(manifest["reward_count"], 2)
+            self.assertEqual(manifest["step_reward_count"], len(step_rewards))
             self.assertEqual(manifest["preference_count"], 1)
             self.assertEqual(manifest["failure_mode_count"], len(failure_modes))
+            self.assertIn("step_rewards", manifest["outputs"])
             self.assertIn("failure_modes", manifest["outputs"])
             self.assertIn("curriculum", manifest["outputs"])
             self.assertNotIn(str(Path(tmp)), (out / "manifest.json").read_text(encoding="utf-8"))
             self.assertTrue(all(str(Path(tmp)) not in json.dumps(episode) for episode in episodes))
             self.assertEqual({episode["schema_version"] for episode in episodes}, {"hfr.rl.episode.v1"})
             self.assertEqual({reward["schema_version"] for reward in rewards}, {"hfr.rl.reward.v1"})
+            self.assertEqual({step_reward["schema_version"] for step_reward in step_rewards}, {"hfr.rl.step_reward.v1"})
             self.assertEqual(preferences[0]["schema_version"], "hfr.rl.preference.v1")
             self.assertEqual({failure["schema_version"] for failure in failure_modes}, {"hfr.rl.failure_mode.v1"})
             self.assertEqual(curriculum["schema_version"], "hfr.rl.curriculum.v1")
@@ -72,6 +76,7 @@ class TrainingExportTests(unittest.TestCase):
 
             self.assertEqual(code, 0)
             reward = read_jsonl(out / "rewards.jsonl")[0]
+            step_rewards = read_jsonl(out / "step_rewards.jsonl")
             failure_modes = read_jsonl(out / "failure_modes.jsonl")
             curriculum = json.loads((out / "curriculum.json").read_text(encoding="utf-8"))
             failed_rules = {item["rule_id"] for item in reward["rule_rewards"] if not item["passed"]}
@@ -90,6 +95,14 @@ class TrainingExportTests(unittest.TestCase):
             self.assertTrue(any(item["target"] == "event" for item in attribution))
             self.assertTrue(any(item["target"] == "final_answer" for item in attribution))
             self.assertTrue(any("evidence_ref" in item for item in attribution))
+            self.assertTrue(any(item["target"] == "event" and "event_index" in item for item in step_rewards))
+            self.assertTrue(any(item["target"] == "final_answer" for item in step_rewards))
+            self.assertTrue(any(item.get("evidence_ref") for item in step_rewards))
+            self.assertTrue(all(item["episode_id"] == "prompt_injection_bad" for item in step_rewards))
+            for rule_id in failed_rules:
+                rule_reward = next(item for item in reward["rule_rewards"] if item["rule_id"] == rule_id)
+                step_delta = sum(item["reward_delta"] for item in step_rewards if item["rule_id"] == rule_id)
+                self.assertAlmostEqual(step_delta, rule_reward["reward_delta"], places=6)
             self.assertTrue(forbidden_failure["evidence_refs"])
             self.assertTrue(any(ref["target"] == "event" for ref in forbidden_failure["evidence_refs"]))
 
