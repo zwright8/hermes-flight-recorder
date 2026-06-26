@@ -47,6 +47,11 @@ python -m flightrecorder compare \
   --candidate runs/prompt_injection_bad \
   --out runs/prompt_injection_compare.json \
   --html-out runs/prompt_injection_compare.html
+python -m flightrecorder compare-suite \
+  --baseline runs \
+  --candidate runs \
+  --out runs/suite_compare.json \
+  --html-out runs/suite_compare.html
 python -m flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -80,6 +85,10 @@ The generated audit summary confirms the demo artifacts are safe to show:
 The generated compare report marks `prompt_injection_bad` as a regression
 against `prompt_injection_good`, with a negative score delta and newly failing
 critical rules.
+
+The generated suite compare report gives maintainers the same regression gate
+at scenario-suite level: paired scenario count, average score delta, pass-rate
+delta, missing scenarios, and per-scenario regressions/fixes.
 
 The generated training export gives future model-improvement loops:
 
@@ -117,9 +126,11 @@ Flight Recorder turns Hermes' experience into regression pressure.
 4. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.
 5. Compare the new scorecard against the old one with `flightrecorder compare`.
-6. Export episodes, rewards, and preference pairs with `flightrecorder export-rl`
+6. Compare whole baseline/candidate run directories with
+   `flightrecorder compare-suite`.
+7. Export episodes, rewards, and preference pairs with `flightrecorder export-rl`
    for future SFT, DPO, reward-modeling, or RL pipelines.
-7. Validate the generated artifacts with `flightrecorder validate --strict`
+8. Validate the generated artifacts with `flightrecorder validate --strict`
    before publishing them or using them downstream.
 
 That gives the Hermes team a practical improvement loop:
@@ -128,6 +139,7 @@ That gives the Hermes team a practical improvement loop:
 - unsupported side-effect claims become evidence requirements,
 - runaway delegation becomes a budget regression,
 - skill changes can be evaluated against the same scenario before and after,
+- model/skill/prompt changes can be evaluated across a full scenario suite,
 - arbitrary task-completion loops can use `required_actions` to prove work was
   completed from tool-result evidence,
 - deterministic scorecards can become terminal rewards and preference pairs,
@@ -186,10 +198,12 @@ commands/URLs, secret exposure, unsupported artifact claims, task-completion
 evidence, and delegation budget limits.
 
 Demo evidence:
-- 52 unit tests pass.
+- 55 unit tests pass.
 - `./demo.sh` runs offline with no API keys or network.
 - Demo generates two passing reports, three failing adversarial reports, and a
   compare report.
+- `flightrecorder compare-suite` emits aggregate suite-level regression
+  evidence.
 - `flightrecorder export-rl` emits episode, reward, preference, and manifest
   artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
@@ -211,8 +225,8 @@ Hermes already learns from experience. The question Flight Recorder answers is:
 can we prove whether a specific autonomous run behaved within policy?
 
 I run `./demo.sh`. It produces five reports offline: two passing traces, three
-failing adversarial traces, a before/after compare report, and a training export
-with episodes, rewards, and a preference pair.
+failing adversarial traces, a before/after compare report, a suite compare
+report, and a training export with episodes, rewards, and a preference pair.
 
 The passing traces show prompt-injection resistance and structured task
 completion evidence for an email reply. The failing traces show the three
@@ -223,6 +237,10 @@ Each report has the scenario, score, exact failed rules, evidence snippets, and
 timeline. When a run fails, Flight Recorder emits a regression scenario so the
 same failure can be rerun after Hermes improves a skill, memory, model, or
 policy.
+
+For a broader change, I run `flightrecorder compare-suite`, which answers
+whether the candidate suite regressed overall, which scenarios changed, and
+whether any expected scenario disappeared.
 
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards and chosen/rejected pairs, so training code can consume

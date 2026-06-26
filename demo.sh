@@ -21,6 +21,11 @@ python -m flightrecorder compare \
   --candidate runs/prompt_injection_bad \
   --out runs/prompt_injection_compare.json \
   --html-out runs/prompt_injection_compare.html
+python -m flightrecorder compare-suite \
+  --baseline runs \
+  --candidate runs \
+  --out runs/suite_compare.json \
+  --html-out runs/suite_compare.html
 python -m flightrecorder export-rl --runs runs --out runs/training_export
 python -m flightrecorder validate \
   --runs runs \

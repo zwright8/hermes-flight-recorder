@@ -9,7 +9,15 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import AdapterError, normalize_trace
-from .artifacts import compare_scorecards, write_compare_report, write_junit, write_markdown_summary
+from .artifacts import (
+    ArtifactError,
+    compare_scorecards,
+    compare_suites,
+    write_compare_report,
+    write_junit,
+    write_markdown_summary,
+    write_suite_compare_report,
+)
 from .redaction import sanitize_trace
 from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
@@ -23,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (AdapterError, ScenarioError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
+    except (AdapterError, ArtifactError, ScenarioError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
         parser.exit(2, f"flightrecorder: error: {exc}\n")
     except KeyboardInterrupt:
         parser.exit(130, "flightrecorder: interrupted\n")
@@ -130,6 +138,24 @@ def cmd_compare(args: argparse.Namespace) -> int:
     if args.html_out:
         write_compare_report(comparison, args.html_out)
     print(f"{'REGRESSION' if comparison['regressed'] else 'NO REGRESSION'} score_delta={comparison['score_delta']} wrote {args.out}")
+    return 1 if args.fail_on_regression and comparison["regressed"] else 0
+
+
+def cmd_compare_suite(args: argparse.Namespace) -> int:
+    comparison = compare_suites(
+        args.baseline,
+        args.candidate,
+        baseline_label=args.baseline_label,
+        candidate_label=args.candidate_label,
+    )
+    _write_json(Path(args.out), comparison)
+    if args.html_out:
+        write_suite_compare_report(comparison, args.html_out)
+    aggregate = comparison["aggregate"]
+    print(
+        f"{'REGRESSION' if comparison['regressed'] else 'NO REGRESSION'} "
+        f"paired={aggregate['paired_count']} avg_score_delta={aggregate['avg_score_delta']} wrote {args.out}"
+    )
     return 1 if args.fail_on_regression and comparison["regressed"] else 0
 
 
@@ -240,6 +266,16 @@ def _parser() -> argparse.ArgumentParser:
     compare.add_argument("--html-out", help="Optional static HTML comparison report")
     compare.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate regresses")
     compare.set_defaults(func=cmd_compare)
+
+    compare_suite = subparsers.add_parser("compare-suite", help="Compare two directories of run scorecards")
+    compare_suite.add_argument("--baseline", required=True, help="Baseline runs directory")
+    compare_suite.add_argument("--candidate", required=True, help="Candidate runs directory")
+    compare_suite.add_argument("--out", required=True, help="Suite comparison JSON output path")
+    compare_suite.add_argument("--html-out", help="Optional static HTML suite comparison report")
+    compare_suite.add_argument("--baseline-label", help="Human-readable baseline label")
+    compare_suite.add_argument("--candidate-label", help="Human-readable candidate label")
+    compare_suite.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate suite regresses")
+    compare_suite.set_defaults(func=cmd_compare_suite)
 
     validate = subparsers.add_parser("validate", help="Validate generated run and training artifacts")
     validate.add_argument("--run", action="append", default=[], help="Validate one run directory; may be repeated")

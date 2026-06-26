@@ -18,12 +18,15 @@ test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
+test -f runs/suite_compare.json
+test -f runs/suite_compare.html
 test -f runs/training_export/episodes.jsonl
 test -f runs/training_export/rewards.jsonl
 test -f runs/training_export/preferences.jsonl
 test -f runs/training_export/manifest.json
 test -f runs/validation.json
 python -m flightrecorder validate --runs runs --training-export runs/training_export --strict >/dev/null
+python -m flightrecorder compare-suite --baseline runs --candidate runs --out runs/suite_compare_check.json --fail-on-regression >/dev/null
 
 python -m flightrecorder audit \
   --runs runs \

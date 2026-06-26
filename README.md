@@ -39,6 +39,8 @@ Expected demo output:
   - runaway delegation and budget violation.
 - A before/after compare report showing the bad prompt-injection run regressed
   against the good baseline.
+- A suite compare report showing aggregate score/pass-rate deltas across a run
+  directory.
 - A training export in `runs/training_export/` with episodes, rewards,
   preference pairs, and a manifest for future model-improvement loops.
 
@@ -88,6 +90,13 @@ flightrecorder compare \
   --candidate runs/prompt_injection_bad \
   --out runs/prompt_compare.json \
   --html-out runs/prompt_compare.html
+
+flightrecorder compare-suite \
+  --baseline runs_baseline \
+  --candidate runs_candidate \
+  --out runs/suite_compare.json \
+  --html-out runs/suite_compare.html \
+  --fail-on-regression
 
 flightrecorder export-rl \
   --runs runs \
@@ -157,6 +166,9 @@ literal strings that must not ship.
 Use `flightrecorder validate --strict` to verify that generated run and training
 artifacts still satisfy the expected data contracts before publishing or using
 them in downstream evaluation/training jobs.
+
+Use `flightrecorder compare-suite --fail-on-regression` to gate a candidate
+agent, model, skill, prompt, or policy change against a baseline run directory.
 
 ## Scoring Rules
 
@@ -279,6 +291,9 @@ scenario.json + trace artifact
 	  compare old/new scorecards -> regression delta
 	          |
 	          v
+	  compare-suite baseline/candidate directories -> suite regression delta
+	          |
+	          v
 	  export-rl -> episodes/rewards/preferences JSONL
 	          |
 	          v
@@ -360,6 +375,6 @@ Successful output includes:
 ```
 
 This runs unit tests, bytecode compilation, the live-smoke script import/help
-check, the offline demo, RL export generation, artifact validation, report
-redaction checks through `flightrecorder audit`, CI failure-mode checks, and a
-package install smoke.
+check, the offline demo, single-run and suite comparison, RL export generation,
+artifact validation, report redaction checks through `flightrecorder audit`, CI
+failure-mode checks, and a package install smoke.

@@ -1,4 +1,5 @@
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -201,6 +202,82 @@ class CliReportTests(unittest.TestCase):
             self.assertTrue(comparison["regressed"])
             self.assertLess(comparison["score_delta"], 0)
             self.assertIn("Flight Recorder Compare", html.read_text(encoding="utf-8"))
+
+    def test_compare_suite_detects_degraded_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline = Path(tmp) / "baseline"
+            candidate = Path(tmp) / "candidate"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(baseline / "prompt")])
+            shutil.copytree(baseline, candidate)
+            score_path = candidate / "prompt" / "scorecard.json"
+            scorecard = json.loads(score_path.read_text(encoding="utf-8"))
+            scorecard["score"] = 60
+            scorecard["passed"] = False
+            score_path.write_text(json.dumps(scorecard, indent=2), encoding="utf-8")
+            out = Path(tmp) / "suite_compare.json"
+            html = Path(tmp) / "suite_compare.html"
+
+            code = run_cli(
+                [
+                    "compare-suite",
+                    "--baseline",
+                    str(baseline),
+                    "--candidate",
+                    str(candidate),
+                    "--out",
+                    str(out),
+                    "--html-out",
+                    str(html),
+                    "--fail-on-regression",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            comparison = json.loads(out.read_text(encoding="utf-8"))
+            self.assertTrue(comparison["regressed"])
+            self.assertEqual(comparison["aggregate"]["paired_count"], 1)
+            self.assertEqual(comparison["aggregate"]["avg_score_delta"], -40.0)
+            self.assertEqual(comparison["regressions"], ["prompt_injection_good"])
+            self.assertIn("Flight Recorder Suite Compare", html.read_text(encoding="utf-8"))
+
+    def test_compare_suite_detects_missing_candidate_scenario(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline = Path(tmp) / "baseline"
+            candidate = Path(tmp) / "candidate"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(baseline / "prompt")])
+            candidate.mkdir()
+            out = Path(tmp) / "suite_compare.json"
+
+            code = run_cli(
+                [
+                    "compare-suite",
+                    "--baseline",
+                    str(baseline),
+                    "--candidate",
+                    str(candidate),
+                    "--out",
+                    str(out),
+                    "--fail-on-regression",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            comparison = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(comparison["missing_in_candidate"], ["prompt_injection_good"])
+
+    def test_compare_suite_self_compare_has_no_regression(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt")])
+            out = Path(tmp) / "suite_compare.json"
+
+            code = run_cli(["compare-suite", "--baseline", str(runs), "--candidate", str(runs), "--out", str(out)])
+
+            self.assertEqual(code, 0)
+            comparison = json.loads(out.read_text(encoding="utf-8"))
+            self.assertFalse(comparison["regressed"])
+            self.assertEqual(comparison["aggregate"]["avg_score_delta"], 0.0)
+            self.assertNotIn(str(runs), out.read_text(encoding="utf-8"))
 
     def test_audit_command_summarizes_runs_and_can_fail_on_leak(self):
         with tempfile.TemporaryDirectory() as tmp:
