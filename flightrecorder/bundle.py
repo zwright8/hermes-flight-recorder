@@ -21,6 +21,7 @@ def build_evidence_bundle(
     suite_summary_path: str | Path | None = None,
     scenario_quality_path: str | Path | None = None,
     evidence_coverage_path: str | Path | None = None,
+    trace_observability_path: str | Path | None = None,
     validation_path: str | Path | None = None,
     training_export_dir: str | Path | None = None,
     compare_export_dir: str | Path | None = None,
@@ -69,6 +70,24 @@ def build_evidence_bundle(
                 "critical_failed_rule_evidence_rate",
                 "failed_rules_without_evidence",
                 "event_evidence_ref_count",
+            ),
+        )
+
+    if trace_observability_path is not None:
+        trace_observability = _read_json_artifact(Path(trace_observability_path), artifacts, "trace_observability", preserve_paths)
+        _summarize_boolean_artifact(
+            trace_observability,
+            metrics,
+            checks,
+            artifact_name="trace_observability",
+            metric_prefix="trace_observability",
+            metric_fields=(
+                "run_count",
+                "average_event_count",
+                "event_type_count",
+                "final_answer_rate",
+                "tool_or_api_run_rate",
+                "empty_final_answer_count",
             ),
         )
 
@@ -247,6 +266,7 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "suite_summary": ("total", "passed", "failed", "pass_rate", "average_score"),
         "scenario_quality": ("average_contract_score", "min_contract_score", "observable_scenario_rate", "weak_scenario_count"),
         "evidence_coverage": ("failed_rule_evidence_rate", "critical_failed_rule_evidence_rate", "failed_rules_without_evidence"),
+        "trace_observability": ("run_count", "average_event_count", "event_type_count", "final_answer_rate", "tool_or_api_run_rate"),
         "validation": ("target_count", "error_count", "warning_count"),
         "training_export": ("episode_count", "preference_count", "dpo_count", "pass_rate", "average_score"),
         "compare_export": ("pair_count", "candidate_win_count", "baseline_win_count", "skipped_pair_count"),

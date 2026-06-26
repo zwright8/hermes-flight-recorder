@@ -86,6 +86,26 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(
                 run_cli(
                     [
+                        "trace-observability",
+                        "--runs",
+                        str(runs),
+                        "--out",
+                        str(runs / "trace_observability.json"),
+                        "--min-average-events",
+                        "2",
+                        "--min-event-type-count",
+                        "2",
+                        "--min-tool-or-api-run-rate",
+                        "0.5",
+                        "--max-empty-final-answers",
+                        "0",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
                         "gate-suite",
                         "--suite-summary",
                         str(runs / "suite_summary.json"),
@@ -109,6 +129,8 @@ class EvidenceBundleTests(unittest.TestCase):
                     str(runs / "scenario_quality.json"),
                     "--evidence-coverage",
                     str(runs / "evidence_coverage.json"),
+                    "--trace-observability",
+                    str(runs / "trace_observability.json"),
                     "--validation",
                     str(runs / "validation.json"),
                     "--training-export",
@@ -135,10 +157,13 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["gate_count"], 1)
             self.assertEqual(bundle["decision"]["passed_gate_count"], 1)
             self.assertEqual(bundle["decision"]["key_metrics"]["suite_summary"]["total"], 6)
+            self.assertEqual(bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"], 0.8333)
             self.assertEqual(bundle["decision"]["key_metrics"]["training_export"]["episode_count"], 6)
             self.assertEqual(bundle["metrics"]["suite_summary"]["total"], 6)
             self.assertEqual(bundle["metrics"]["scenario_quality"]["average_contract_score"], 89.17)
             self.assertEqual(bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"], 1.0)
+            self.assertEqual(bundle["metrics"]["trace_observability"]["run_count"], 6)
+            self.assertEqual(bundle["metrics"]["trace_observability"]["event_type_count"], 6)
             self.assertEqual(bundle["metrics"]["training_export"]["episode_count"], 6)
             self.assertEqual(bundle["metrics"]["gates"][0]["id"], "suite_gate")
             self.assertTrue(bundle["metrics"]["gates"][0]["passed"])

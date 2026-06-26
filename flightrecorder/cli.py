@@ -51,6 +51,7 @@ from .scorers import score_trace
 from .state import StateSnapshotError, load_state_snapshot, resolve_state_snapshot_path, sanitize_state_snapshot
 from .state_capture import StateCaptureError, capture_state_snapshot
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
+from .trace_observability import TraceObservabilityError, build_trace_observability
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
     TRAINING_GATE_POLICY_SCHEMA_VERSION,
@@ -88,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         EvidenceCoverageError,
         EvidenceBundleError,
         ReviewCalibrationError,
+        TraceObservabilityError,
         ReplayError,
         OSError,
         json.JSONDecodeError,
@@ -527,6 +529,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
         replay_bundle_paths=args.replay_bundle,
+        trace_observability_paths=args.trace_observability,
         review_calibration_paths=args.review_calibration,
         scenario_quality_paths=args.scenario_quality,
         suite_summary_paths=args.suite_summary,
@@ -565,6 +568,26 @@ def cmd_evidence_coverage(args: argparse.Namespace) -> int:
     return 0 if coverage["passed"] else 1
 
 
+def cmd_trace_observability(args: argparse.Namespace) -> int:
+    observability = build_trace_observability(
+        args.runs,
+        preserve_paths=args.preserve_paths,
+        min_average_events=args.min_average_events,
+        min_event_type_count=args.min_event_type_count,
+        min_tool_or_api_run_rate=args.min_tool_or_api_run_rate,
+        max_empty_final_answers=args.max_empty_final_answers,
+        require_event_types=args.require_event_type,
+    )
+    rendered = json.dumps(observability, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if observability["passed"] else 1
+
+
 def cmd_evidence_bundle(args: argparse.Namespace) -> int:
     bundle = build_evidence_bundle(
         out_path=args.out,
@@ -572,6 +595,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         suite_summary_path=args.suite_summary,
         scenario_quality_path=args.scenario_quality,
         evidence_coverage_path=args.evidence_coverage,
+        trace_observability_path=args.trace_observability,
         validation_path=args.validation,
         training_export_dir=args.training_export,
         compare_export_dir=args.compare_export,
@@ -1078,6 +1102,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
+    validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
     validate.add_argument("--review-calibration", action="append", default=[], help="Validate one review_calibration.json; may be repeated")
     validate.add_argument("--scenario-quality", action="append", default=[], help="Validate one scenario_quality.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
@@ -1127,6 +1152,20 @@ def _parser() -> argparse.ArgumentParser:
     evidence_coverage.add_argument("--preserve-paths", action="store_true", help="Allow absolute run paths in coverage output")
     evidence_coverage.set_defaults(func=cmd_evidence_coverage)
 
+    trace_observability = subparsers.add_parser(
+        "trace-observability",
+        help="Summarize whether completed runs contain enough trace signal",
+    )
+    trace_observability.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
+    trace_observability.add_argument("--out", help="Write trace observability JSON to this path")
+    trace_observability.add_argument("--min-average-events", type=_non_negative_float_arg, help="Minimum average normalized trace events per run")
+    trace_observability.add_argument("--min-event-type-count", type=_non_negative_int_arg, help="Minimum distinct event types across the suite")
+    trace_observability.add_argument("--min-tool-or-api-run-rate", type=_rate_arg, help="Minimum fraction of runs with tool or API events")
+    trace_observability.add_argument("--max-empty-final-answers", type=_non_negative_int_arg, help="Maximum runs allowed to have empty final answers")
+    trace_observability.add_argument("--require-event-type", action="append", default=[], help="Fail unless this normalized event type appears")
+    trace_observability.add_argument("--preserve-paths", action="store_true", help="Allow absolute run paths in observability output")
+    trace_observability.set_defaults(func=cmd_trace_observability)
+
     evidence_bundle = subparsers.add_parser(
         "evidence-bundle",
         help="Summarize a complete evidence handoff bundle and readiness checks",
@@ -1136,6 +1175,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--suite-summary", help="run-suite suite_summary.json included in the handoff")
     evidence_bundle.add_argument("--scenario-quality", help="scenario_quality.json included in the handoff")
     evidence_bundle.add_argument("--evidence-coverage", help="evidence_coverage.json included in the handoff")
+    evidence_bundle.add_argument("--trace-observability", help="trace_observability.json included in the handoff")
     evidence_bundle.add_argument("--validation", help="validation.json included in the handoff")
     evidence_bundle.add_argument("--training-export", help="export-rl directory included in the handoff")
     evidence_bundle.add_argument("--compare-export", help="export-compare-rl directory included in the handoff")
@@ -1468,6 +1508,16 @@ def _non_negative_int_arg(value: str) -> int:
         raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
+def _non_negative_float_arg(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative number") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative number")
     return parsed
 
 

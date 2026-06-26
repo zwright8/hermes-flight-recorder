@@ -53,6 +53,12 @@ coverage report measures how many failed and critical failed rules have
 structured evidence refs, plus whether those refs point to trace events, final
 answers, or episode-level facts.
 
+Use `flightrecorder trace-observability --runs ...` before training or review
+handoffs when you need to prove that traces are rich enough to learn from. The
+observability report measures event volume, event-type diversity, final-answer
+coverage, and tool/API visibility so low-signal traces can be blocked before
+they become reward, preference, or review data.
+
 Use `flightrecorder evidence-bundle` at the handoff boundary when a downstream
 trainer, reviewer, or CI job needs one manifest over the generated evidence:
 
@@ -62,6 +68,7 @@ flightrecorder evidence-bundle \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --review-calibration runs/review_calibration.json \
@@ -201,6 +208,7 @@ flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
@@ -331,6 +339,10 @@ not be mistaken for an online environment reward. Older scorecards that lack
 `evidence_coverage.json` is the suite-level check for that assumption. If
 failed rules lack structured refs, reward rows may still exist, but their credit
 assignment is weaker and should not be treated as high-quality training signal.
+`trace_observability.json` is the companion suite-level check for raw signal
+richness. If event volume, final-answer coverage, or tool/API visibility is too
+low, the exported rows may be valid JSON but still too thin for reliable RL
+credit assignment.
 
 ## Step Reward Records
 

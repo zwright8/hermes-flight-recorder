@@ -55,9 +55,12 @@ Expected demo output:
 - An evidence coverage report in `runs/evidence_coverage.json` showing whether
   failed-rule judgments are backed by structured event, final-answer, or
   episode evidence refs.
+- A trace observability report in `runs/trace_observability.json` showing
+  whether completed runs contain enough event volume, event-type diversity,
+  final-answer coverage, and tool/API visibility to be useful learning signal.
 - An evidence bundle summary in `runs/evidence_bundle.json` that turns the
-  generated suite, quality, coverage, validation, and training-export artifacts
-  into one readiness/read-only handoff manifest.
+  generated suite, quality, coverage, observability, validation, and
+  training-export artifacts into one readiness/read-only handoff manifest.
 
 ## Install
 
@@ -161,11 +164,21 @@ flightrecorder evidence-coverage \
   --min-failed-rule-evidence-rate 1.0 \
   --max-failed-rules-without-evidence 0
 
+flightrecorder trace-observability \
+  --runs runs \
+  --out runs/trace_observability.json \
+  --min-average-events 2 \
+  --min-event-type-count 2 \
+  --min-tool-or-api-run-rate 0.5 \
+  --max-empty-final-answers 0 \
+  --require-event-type assistant_message
+
 flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --out runs/evidence_bundle.json
@@ -194,6 +207,7 @@ flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
   --replay-bundle replay_bundles/prompt_injection_good \
   --review-calibration runs/review_calibration.json \
@@ -489,6 +503,23 @@ flightrecorder evidence-coverage \
   --max-failed-rules-without-evidence 0
 ```
 
+Use `flightrecorder trace-observability` before treating a suite as benchmark,
+review, or training signal. It measures raw normalized-trace richness across
+completed runs: event count, event-type diversity, final-answer coverage, and
+whether runs contain tool/API events. This catches low-signal suites where a
+scorecard may exist but the trace is too thin for reliable credit assignment.
+
+```bash
+flightrecorder trace-observability \
+  --runs runs \
+  --out runs/trace_observability.json \
+  --min-average-events 2 \
+  --min-event-type-count 2 \
+  --min-tool-or-api-run-rate 0.5 \
+  --max-empty-final-answers 0 \
+  --require-event-type assistant_message
+```
+
 Use `flightrecorder evidence-bundle` when a CI job, reviewer, or downstream
 trainer needs one compact manifest that says which evidence artifacts were
 included, whether their gates passed, and which high-level metrics describe the
@@ -501,6 +532,7 @@ flightrecorder evidence-bundle \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --review-calibration runs/review_calibration.json \
@@ -889,6 +921,7 @@ flightrecorder validate \
   --reviewed-export runs/reviewed_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
@@ -947,6 +980,9 @@ scenario directory or single scenario + trace artifact
 	          |
 	          v
 	  export-rl -> evidence artifacts + trainer-ready views
+	          |
+	          v
+	  trace-observability -> trace richness and visibility summary
 	          |
 	          v
 	  validate -> machine-checkable artifact contract

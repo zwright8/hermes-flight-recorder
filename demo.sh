@@ -50,11 +50,20 @@ python -m flightrecorder evidence-coverage \
   --min-critical-failed-rule-evidence-rate 1.0 \
   --max-failed-rules-without-evidence 0 \
   --max-critical-failed-rules-without-evidence 0
+python -m flightrecorder trace-observability \
+  --runs runs \
+  --out runs/trace_observability.json \
+  --min-average-events 2 \
+  --min-event-type-count 2 \
+  --min-tool-or-api-run-rate 0.5 \
+  --max-empty-final-answers 0 \
+  --require-event-type assistant_message
 python -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --out runs/evidence_bundle.json

@@ -30,6 +30,7 @@ from .review import (
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
+from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
     RL_DATASET_METRICS_SCHEMA_VERSION,
@@ -82,6 +83,7 @@ def validate_artifacts(
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
+    trace_observability_paths: list[str | Path] | None = None,
     review_calibration_paths: list[str | Path] | None = None,
     scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
@@ -109,6 +111,8 @@ def validate_artifacts(
         targets.append(validate_evidence_bundle(evidence_bundle_path))
     for replay_bundle_path in replay_bundle_paths or []:
         targets.append(validate_replay_bundle(replay_bundle_path))
+    for trace_observability_path in trace_observability_paths or []:
+        targets.append(validate_trace_observability(trace_observability_path))
     for review_calibration_path in review_calibration_paths or []:
         targets.append(validate_review_calibration(review_calibration_path))
     for scenario_quality_path in scenario_quality_paths or []:
@@ -444,6 +448,16 @@ def validate_replay_bundle(path: str | Path) -> ValidationTarget:
     manifest = _read_object(manifest_path, target, "replay_bundle.json")
     if manifest is not None:
         _validate_replay_bundle(manifest, bundle_dir, target)
+    return target
+
+
+def validate_trace_observability(path: str | Path) -> ValidationTarget:
+    """Validate a trace-observability summary artifact."""
+    observability_path = Path(path)
+    target = ValidationTarget("trace_observability", str(observability_path))
+    observability = _read_object(observability_path, target, "trace_observability.json")
+    if observability is not None:
+        _validate_trace_observability(observability, target)
     return target
 
 
@@ -2849,6 +2863,172 @@ def _validate_evidence_coverage_metrics(metrics: dict[str, Any], totals: dict[st
                 target.errors.append(f"evidence_coverage.metrics.rule_coverage[{index}].{field_name} must be a non-negative integer.")
 
 
+def _validate_trace_observability(observability: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(observability, "schema_version", TRACE_OBSERVABILITY_SCHEMA_VERSION, target)
+    runs = observability.get("runs")
+    if not isinstance(runs, list):
+        target.errors.append("trace_observability.runs must be a list.")
+        runs = []
+    metrics = observability.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("trace_observability.metrics must be an object.")
+        metrics = {}
+    checks = observability.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("trace_observability.checks must be a list.")
+        checks = []
+    if not isinstance(observability.get("passed"), bool):
+        target.errors.append("trace_observability.passed must be a boolean.")
+
+    failed_checks = 0
+    for index, check in enumerate(checks):
+        if not isinstance(check, dict):
+            target.errors.append(f"trace_observability.checks[{index}] must be an object.")
+            continue
+        if not isinstance(check.get("id"), str) or not check.get("id"):
+            target.errors.append(f"trace_observability.checks[{index}].id must be a non-empty string.")
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"trace_observability.checks[{index}].passed must be a boolean.")
+        elif not check["passed"]:
+            failed_checks += 1
+    if observability.get("check_count") != len(checks):
+        target.errors.append(f"trace_observability.check_count expected {len(checks)}, got {observability.get('check_count')!r}.")
+    if observability.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"trace_observability.failed_check_count expected {failed_checks}, got {observability.get('failed_check_count')!r}."
+        )
+    if isinstance(observability.get("passed"), bool) and observability["passed"] != (failed_checks == 0):
+        target.errors.append("trace_observability.passed must match failed_check_count.")
+
+    run_totals = _validate_trace_observability_runs(runs, target)
+    _validate_trace_observability_metrics(metrics, run_totals, target)
+    warnings = observability.get("warnings")
+    if not isinstance(warnings, list) or not all(isinstance(item, str) for item in warnings):
+        target.errors.append("trace_observability.warnings must be a list of strings.")
+    target.details.update(
+        {
+            "run_count": run_totals["run_count"],
+            "average_event_count": metrics.get("average_event_count"),
+            "event_type_count": metrics.get("event_type_count"),
+            "tool_or_api_run_rate": metrics.get("tool_or_api_run_rate"),
+        }
+    )
+
+
+def _validate_trace_observability_runs(runs: list[Any], target: ValidationTarget) -> dict[str, Any]:
+    totals: dict[str, Any] = {
+        "run_count": len(runs),
+        "total_event_count": 0,
+        "runs_with_final_answer": 0,
+        "empty_final_answer_count": 0,
+        "runs_with_tool_or_api_events": 0,
+        "tool_call_count": 0,
+        "tool_result_count": 0,
+        "api_call_count": 0,
+        "subagent_event_count": 0,
+        "approval_event_count": 0,
+        "event_type_counts": {},
+        "source_format_counts": {},
+        "model_counts": {},
+        "risk_counts": {},
+        "event_counts": [],
+    }
+    for index, run in enumerate(runs):
+        label = f"trace_observability.runs[{index}]"
+        if not isinstance(run, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("run_dir", "scenario_id", "source_format", "model"):
+            if not isinstance(run.get(field_name), str) or not run.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if run.get("passed") is not None and not isinstance(run.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean or null.")
+        if run.get("score") is not None and not _is_int_between(run.get("score"), 0, 100):
+            target.errors.append(f"{label}.score must be an integer from 0 to 100 or null.")
+        for field_name in (
+            "event_count",
+            "event_type_count",
+            "final_answer_chars",
+            "tool_call_count",
+            "tool_result_count",
+            "api_call_count",
+            "subagent_event_count",
+            "approval_event_count",
+        ):
+            if not _is_non_negative_int(run.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+        event_count = _non_negative_int_value(run.get("event_count"))
+        totals["event_counts"].append(event_count)
+        totals["total_event_count"] += event_count
+        for field_name in ("tool_call_count", "tool_result_count", "api_call_count", "subagent_event_count", "approval_event_count"):
+            totals[field_name] += _non_negative_int_value(run.get(field_name))
+        if not isinstance(run.get("has_final_answer"), bool):
+            target.errors.append(f"{label}.has_final_answer must be a boolean.")
+        elif run["has_final_answer"]:
+            totals["runs_with_final_answer"] += 1
+        else:
+            totals["empty_final_answer_count"] += 1
+        if not isinstance(run.get("has_tool_or_api_events"), bool):
+            target.errors.append(f"{label}.has_tool_or_api_events must be a boolean.")
+        elif run["has_tool_or_api_events"]:
+            totals["runs_with_tool_or_api_events"] += 1
+        _merge_count_rows(totals["event_type_counts"], run.get("event_types"), target, f"{label}.event_types")
+        event_types = _count_rows(run.get("event_types"))
+        if event_types is not None and run.get("event_type_count") != len(event_types):
+            target.errors.append(f"{label}.event_type_count must match event_types length.")
+        source_format = str(run.get("source_format") or "unknown")
+        model = str(run.get("model") or "unknown")
+        totals["source_format_counts"][source_format] = totals["source_format_counts"].get(source_format, 0) + 1
+        totals["model_counts"][model] = totals["model_counts"].get(model, 0) + 1
+        risks = run.get("risks")
+        if not _is_string_list(risks):
+            target.errors.append(f"{label}.risks must be a list of strings.")
+        else:
+            for risk in risks:
+                totals["risk_counts"][risk] = totals["risk_counts"].get(risk, 0) + 1
+    return totals
+
+
+def _validate_trace_observability_metrics(metrics: dict[str, Any], totals: dict[str, Any], target: ValidationTarget) -> None:
+    event_counts = totals["event_counts"]
+    expected = {
+        "run_count": totals["run_count"],
+        "total_event_count": totals["total_event_count"],
+        "min_event_count": min(event_counts) if event_counts else 0,
+        "max_event_count": max(event_counts) if event_counts else 0,
+        "event_type_count": len(totals["event_type_counts"]),
+        "runs_with_final_answer": totals["runs_with_final_answer"],
+        "empty_final_answer_count": totals["empty_final_answer_count"],
+        "runs_with_tool_or_api_events": totals["runs_with_tool_or_api_events"],
+        "tool_call_count": totals["tool_call_count"],
+        "tool_result_count": totals["tool_result_count"],
+        "api_call_count": totals["api_call_count"],
+        "subagent_event_count": totals["subagent_event_count"],
+        "approval_event_count": totals["approval_event_count"],
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"trace_observability.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+    average = round(totals["total_event_count"] / totals["run_count"], 2) if totals["run_count"] else 0.0
+    if metrics.get("average_event_count") != average:
+        target.errors.append(f"trace_observability.metrics.average_event_count expected {average!r}, got {metrics.get('average_event_count')!r}.")
+    final_answer_rate = _rate_value(totals["runs_with_final_answer"], totals["run_count"])
+    if metrics.get("final_answer_rate") != final_answer_rate:
+        target.errors.append(f"trace_observability.metrics.final_answer_rate expected {final_answer_rate!r}, got {metrics.get('final_answer_rate')!r}.")
+    tool_or_api_rate = _rate_value(totals["runs_with_tool_or_api_events"], totals["run_count"])
+    if metrics.get("tool_or_api_run_rate") != tool_or_api_rate:
+        target.errors.append(f"trace_observability.metrics.tool_or_api_run_rate expected {tool_or_api_rate!r}, got {metrics.get('tool_or_api_run_rate')!r}.")
+    for field_name, expected_counts in (
+        ("event_type_counts", totals["event_type_counts"]),
+        ("source_format_counts", totals["source_format_counts"]),
+        ("model_counts", totals["model_counts"]),
+        ("risk_counts", totals["risk_counts"]),
+    ):
+        counts = _count_rows(metrics.get(field_name))
+        if counts != expected_counts:
+            target.errors.append(f"trace_observability.metrics.{field_name} does not match runs.")
+
+
 def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) -> None:
     _require_equal(bundle, "schema_version", EVIDENCE_BUNDLE_SCHEMA_VERSION, target)
     if not isinstance(bundle.get("bundle_path"), str) or not bundle.get("bundle_path"):
@@ -3216,6 +3396,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "suite_summary",
         "scenario_quality",
         "evidence_coverage",
+        "trace_observability",
         "validation",
         "training_export",
         "compare_export",

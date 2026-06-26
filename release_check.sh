@@ -45,16 +45,33 @@ python -m flightrecorder scenario-quality \
   --max-final-only-scenarios 0 \
   --max-missing-traces 0 >/dev/null
 test -f runs/scenario_quality_check.json
+python -m flightrecorder trace-observability \
+  --runs runs \
+  --out runs/trace_observability_check.json \
+  --min-average-events 2 \
+  --min-event-type-count 2 \
+  --min-tool-or-api-run-rate 0.5 \
+  --max-empty-final-answers 0 \
+  --require-event-type assistant_message >/dev/null
+test -f runs/trace_observability_check.json
 python -m flightrecorder validate \
   --scenario-quality runs/scenario_quality.json \
   --scenario-quality runs/scenario_quality_check.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --trace-observability runs/trace_observability.json \
+  --trace-observability runs/trace_observability_check.json \
   --strict >/dev/null
 if python -m flightrecorder scenario-quality \
   --scenarios scenarios \
   --require-traces \
   --min-scenario-score 90 >/dev/null; then
   echo "scenario-quality did not fail a too-high minimum scenario score" >&2
+  exit 1
+fi
+if python -m flightrecorder trace-observability \
+  --runs runs \
+  --min-average-events 999 >/dev/null; then
+  echo "trace-observability did not fail a too-high average event threshold" >&2
   exit 1
 fi
 python -m flightrecorder draft-scenario \
@@ -96,6 +113,7 @@ test -f runs/suite_trend.json
 test -f runs/suite_trend.html
 test -f runs/scenario_quality.json
 test -f runs/evidence_coverage.json
+test -f runs/trace_observability.json
 test -f runs/evidence_bundle.json
 test -f runs/suite_summary.json
 python - <<'PY'
@@ -105,6 +123,7 @@ from pathlib import Path
 summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
 scenario_quality = json.loads(Path("runs/scenario_quality.json").read_text(encoding="utf-8"))
 evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(encoding="utf-8"))
+trace_observability = json.loads(Path("runs/trace_observability.json").read_text(encoding="utf-8"))
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
 captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
 replay_source_score = json.loads(Path("runs/prompt_injection_good/scorecard.json").read_text(encoding="utf-8"))
@@ -148,16 +167,23 @@ assert evidence_coverage["passed"] is True
 assert evidence_coverage["metrics"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["critical_failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["failed_rules_without_evidence"] == 0
+assert trace_observability["passed"] is True
+assert trace_observability["metrics"]["run_count"] == 6
+assert trace_observability["metrics"]["average_event_count"] == 5.67
+assert trace_observability["metrics"]["event_type_count"] == 6
+assert trace_observability["metrics"]["tool_or_api_run_rate"] == 0.8333
 assert evidence_bundle["passed"] is True
 assert evidence_bundle["readiness"] == "ready"
 assert evidence_bundle["decision"]["recommendation"] == "promote_handoff"
 assert evidence_bundle["decision"]["blocking_check_count"] == 0
 assert evidence_bundle["decision"]["key_metrics"]["suite_summary"]["total"] == 6
+assert evidence_bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"] == 0.8333
 assert evidence_bundle["decision"]["key_metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["suite_summary"]["total"] == 6
 assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
 assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 89.17
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
+assert evidence_bundle["metrics"]["trace_observability"]["event_type_count"] == 6
 assert evidence_bundle["failed_check_count"] == 0
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
@@ -544,6 +570,7 @@ python -m flightrecorder evidence-bundle \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
@@ -573,6 +600,7 @@ assert bundle["decision"]["gate_count"] == 4
 assert bundle["decision"]["passed_gate_count"] == 4
 assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["decision"]["key_metrics"]["trace_observability"]["run_count"] == 6
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
@@ -581,6 +609,7 @@ assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "reviewed_gate",
 }
 assert bundle["metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["metrics"]["trace_observability"]["final_answer_rate"] == 1.0
 assert bundle["metrics"]["review_export"]["item_count"] >= 6
 assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]
 assert bundle["metrics"]["review_calibration"]["agreement_rate"] == 1.0
@@ -629,6 +658,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder scenario-quality --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-coverage --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder trace-observability --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
