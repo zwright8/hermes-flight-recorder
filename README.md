@@ -124,6 +124,7 @@ flightrecorder export-rl \
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --suite-summary runs/suite_summary.json \
   --strict
 
 flightrecorder observer-template --out flight_recorder_plugin.py
@@ -194,8 +195,8 @@ optionally validates the generated bundle, and can fail CI when any scenario
 fails via `--fail-on-failed`.
 
 Use `flightrecorder validate --strict` to verify that generated run and training
-artifacts still satisfy the expected data contracts before publishing or using
-them in downstream evaluation/training jobs.
+artifacts, plus `suite_summary.json`, still satisfy the expected data contracts
+before publishing or using them in downstream evaluation/training jobs.
 
 Use `flightrecorder compare-suite --fail-on-regression` to gate a candidate
 agent, model, skill, prompt, or policy change against a baseline run directory.
@@ -308,6 +309,7 @@ Validate the full evidence set before feeding it downstream:
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --suite-summary runs/suite_summary.json \
   --out runs/validation.json \
   --strict
 ```

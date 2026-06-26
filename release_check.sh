@@ -46,7 +46,11 @@ test -f runs/training_export/failure_modes.jsonl
 test -f runs/training_export/curriculum.json
 test -f runs/training_export/manifest.json
 test -f runs/validation.json
-python -m flightrecorder validate --runs runs --training-export runs/training_export --strict >/dev/null
+python -m flightrecorder validate \
+  --runs runs \
+  --training-export runs/training_export \
+  --suite-summary runs/suite_summary.json \
+  --strict >/dev/null
 python -m flightrecorder compare-suite --baseline runs --candidate runs --out runs/suite_compare_check.json --fail-on-regression >/dev/null
 
 python -m flightrecorder audit \

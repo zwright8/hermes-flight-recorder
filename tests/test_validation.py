@@ -99,6 +99,54 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("failure_modes[0].episode_id", errors)
             self.assertIn("does not reference an episode", errors)
 
+    def test_validate_accepts_suite_summary_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)])
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(runs / "suite_summary.json"),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertTrue(summary["passed"])
+            self.assertEqual(summary["target_count"], 1)
+            self.assertEqual(summary["targets"][0]["type"], "suite_summary")
+
+    def test_validate_rejects_broken_suite_summary_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)])
+            suite_path = runs / "suite_summary.json"
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            suite["metrics"]["pass_rate"] = 1.0
+            suite_path.write_text(json.dumps(suite), encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(suite_path),
+                    "--out",
+                    str(summary_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("suite_summary.metrics.pass_rate", errors)
+
     def test_validate_strict_fails_on_warnings(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"

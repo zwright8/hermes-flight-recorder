@@ -19,6 +19,7 @@ from .training import (
 )
 
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
+RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 
 
 @dataclass
@@ -45,6 +46,7 @@ def validate_artifacts(
     runs_dir: str | Path | None = None,
     run_dirs: list[str | Path] | None = None,
     training_export_dir: str | Path | None = None,
+    suite_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -55,6 +57,8 @@ def validate_artifacts(
         targets.extend(validate_runs_dir(runs_dir))
     if training_export_dir is not None:
         targets.append(validate_training_export(training_export_dir))
+    for suite_summary_path in suite_summary_paths or []:
+        targets.append(validate_suite_summary(suite_summary_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -161,6 +165,17 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             "failure_mode_count": len(failure_modes),
         }
     )
+    return target
+
+
+def validate_suite_summary(path: str | Path) -> ValidationTarget:
+    """Validate one run-suite summary artifact."""
+    summary_path = Path(path)
+    target = ValidationTarget("suite_summary", str(summary_path))
+    summary = _read_object(summary_path, target, "suite_summary.json")
+    if summary is None:
+        return target
+    _validate_suite_summary(summary, target)
     return target
 
 
@@ -460,6 +475,145 @@ def _validate_curriculum(
                 )
 
 
+def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(summary, "schema_version", RUN_SUITE_SCHEMA_VERSION, target)
+    runs = summary.get("runs")
+    if not isinstance(runs, list):
+        target.errors.append("suite_summary.runs must be a list.")
+        runs = []
+    errors = summary.get("errors")
+    if not isinstance(errors, list):
+        target.errors.append("suite_summary.errors must be a list.")
+        errors = []
+
+    if summary.get("total") != len(runs):
+        target.errors.append(f"suite_summary.total expected {len(runs)}, got {summary.get('total')!r}.")
+    passed = sum(1 for run in runs if isinstance(run, dict) and run.get("passed") is True)
+    failed = len(runs) - passed
+    if summary.get("passed") != passed:
+        target.errors.append(f"suite_summary.passed expected {passed}, got {summary.get('passed')!r}.")
+    if summary.get("failed") != failed:
+        target.errors.append(f"suite_summary.failed expected {failed}, got {summary.get('failed')!r}.")
+    if summary.get("error_count") != len(errors):
+        target.errors.append(f"suite_summary.error_count expected {len(errors)}, got {summary.get('error_count')!r}.")
+
+    for index, run in enumerate(runs):
+        if not isinstance(run, dict):
+            target.errors.append(f"suite_summary.runs[{index}] must be an object.")
+            continue
+        for field_name in ("scenario_id", "scenario_title", "task_family", "scenario_path", "trace_path", "run_dir", "report", "scorecard"):
+            if not isinstance(run.get(field_name), str) or not run.get(field_name):
+                target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a non-empty string.")
+        if not isinstance(run.get("passed"), bool):
+            target.errors.append(f"suite_summary.runs[{index}].passed must be a boolean.")
+        if not _is_int_between(run.get("score"), 0, 100):
+            target.errors.append(f"suite_summary.runs[{index}].score must be an integer from 0 to 100.")
+        if not _is_string_list(run.get("failed_rules")):
+            target.errors.append(f"suite_summary.runs[{index}].failed_rules must be a list of strings.")
+        if not _is_string_list(run.get("critical_failures")):
+            target.errors.append(f"suite_summary.runs[{index}].critical_failures must be a list of strings.")
+
+    metrics = summary.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("suite_summary.metrics must be an object.")
+    else:
+        _validate_suite_metrics(metrics, target, [run for run in runs if isinstance(run, dict)])
+
+    artifacts = summary.get("artifacts")
+    if artifacts is not None and not isinstance(artifacts, dict):
+        target.errors.append("suite_summary.artifacts must be an object when present.")
+
+    target.details.update(
+        {
+            "total": len(runs),
+            "passed": passed,
+            "failed": failed,
+            "error_count": len(errors),
+        }
+    )
+
+
+def _validate_suite_metrics(metrics: dict[str, Any], target: ValidationTarget, runs: list[dict[str, Any]]) -> None:
+    scores = [_score_value(run.get("score")) for run in runs]
+    passed = sum(1 for run in runs if run.get("passed") is True)
+    failed = len(runs) - passed
+    expected_pass_rate = round(passed / len(runs), 4) if runs else 0.0
+    expected_average = round(sum(scores) / len(scores), 2) if scores else 0.0
+    expected_min = min(scores) if scores else None
+    expected_max = max(scores) if scores else None
+    expected_failed_rules = _count_strings(rule for run in runs for rule in run.get("failed_rules", []))
+    expected_critical = _count_strings(rule for run in runs for rule in run.get("critical_failures", []))
+
+    expected_values = {
+        "pass_rate": expected_pass_rate,
+        "average_score": expected_average,
+        "min_score": expected_min,
+        "max_score": expected_max,
+        "passed": passed,
+        "failed": failed,
+    }
+    for field_name, expected in expected_values.items():
+        if metrics.get(field_name) != expected:
+            target.errors.append(f"suite_summary.metrics.{field_name} expected {expected!r}, got {metrics.get(field_name)!r}.")
+
+    if _count_rows(metrics.get("failed_rule_counts")) != expected_failed_rules:
+        target.errors.append("suite_summary.metrics.failed_rule_counts does not match run failed_rules.")
+    if _count_rows(metrics.get("critical_failure_counts")) != expected_critical:
+        target.errors.append("suite_summary.metrics.critical_failure_counts does not match run critical_failures.")
+    _validate_suite_family_metrics(metrics.get("task_families"), target, runs)
+
+
+def _validate_suite_family_metrics(value: Any, target: ValidationTarget, runs: list[dict[str, Any]]) -> None:
+    if not isinstance(value, list):
+        target.errors.append("suite_summary.metrics.task_families must be a list.")
+        return
+
+    expected: dict[str, dict[str, Any]] = {}
+    for run in runs:
+        family = str(run.get("task_family") or "unknown")
+        bucket = expected.setdefault(family, {"runs": []})
+        bucket["runs"].append(run)
+    expected_rows: dict[str, dict[str, Any]] = {}
+    for family, bucket in expected.items():
+        family_runs = bucket["runs"]
+        scores = [_score_value(run.get("score")) for run in family_runs]
+        passed = sum(1 for run in family_runs if run.get("passed") is True)
+        expected_rows[family] = {
+            "total": len(family_runs),
+            "passed": passed,
+            "failed": len(family_runs) - passed,
+            "pass_rate": round(passed / len(family_runs), 4) if family_runs else 0.0,
+            "average_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
+            "failed_rule_counts": _count_strings(rule for run in family_runs for rule in run.get("failed_rules", [])),
+        }
+
+    actual_families: set[str] = set()
+    for index, row in enumerate(value):
+        if not isinstance(row, dict):
+            target.errors.append(f"suite_summary.metrics.task_families[{index}] must be an object.")
+            continue
+        family = row.get("task_family")
+        if not isinstance(family, str) or not family:
+            target.errors.append(f"suite_summary.metrics.task_families[{index}].task_family must be a non-empty string.")
+            continue
+        actual_families.add(family)
+        expected_row = expected_rows.get(family)
+        if expected_row is None:
+            target.errors.append(f"suite_summary.metrics.task_families[{index}] has unknown task_family {family!r}.")
+            continue
+        for field_name in ("total", "passed", "failed", "pass_rate", "average_score"):
+            if row.get(field_name) != expected_row[field_name]:
+                target.errors.append(
+                    f"suite_summary.metrics.task_families[{index}].{field_name} "
+                    f"expected {expected_row[field_name]!r}, got {row.get(field_name)!r}."
+                )
+        if _count_rows(row.get("failed_rule_counts")) != expected_row["failed_rule_counts"]:
+            target.errors.append(f"suite_summary.metrics.task_families[{index}].failed_rule_counts does not match runs.")
+    missing = sorted(set(expected_rows) - actual_families)
+    if missing:
+        target.errors.append(f"suite_summary.metrics.task_families missing families: {missing!r}.")
+
+
 def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, Any] | None:
     if not path.exists():
         target.errors.append(f"{label} is missing.")
@@ -517,6 +671,37 @@ def _is_int_between(value: Any, minimum: int, maximum: int) -> bool:
 
 def _looks_absolute(value: str) -> bool:
     return value.startswith("/") or _is_windows_absolute(value)
+
+
+def _score_value(value: Any) -> int:
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _count_strings(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        if not isinstance(value, str) or not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _count_rows(value: Any) -> dict[str, int] | None:
+    if not isinstance(value, list):
+        return None
+    counts: dict[str, int] = {}
+    for row in value:
+        if not isinstance(row, dict):
+            return None
+        row_id = row.get("id")
+        count = row.get("count")
+        if not isinstance(row_id, str) or not isinstance(count, int) or isinstance(count, bool):
+            return None
+        counts[row_id] = count
+    return counts
 
 
 def _is_windows_absolute(value: str) -> bool:

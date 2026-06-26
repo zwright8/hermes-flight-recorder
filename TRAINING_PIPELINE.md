@@ -44,6 +44,7 @@ Validate the generated dataset before sending it to downstream jobs:
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --suite-summary runs/suite_summary.json \
   --strict
 ```
 

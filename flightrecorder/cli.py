@@ -303,6 +303,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         runs_dir=args.runs,
         run_dirs=args.run,
         training_export_dir=args.training_export,
+        suite_summary_paths=args.suite_summary,
         strict=args.strict,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -440,6 +441,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--run", action="append", default=[], help="Validate one run directory; may be repeated")
     validate.add_argument("--runs", help="Validate every completed run directory inside this runs directory")
     validate.add_argument("--training-export", help="Validate an export-rl output directory")
+    validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)

@@ -58,6 +58,7 @@ python -m flightrecorder export-rl \
 python -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --suite-summary runs/suite_summary.json \
   --strict
 python -m flightrecorder check-scenarios \
   --scenarios scenarios \
@@ -115,7 +116,8 @@ The generated training export gives future model-improvement loops:
 - one curriculum summary grouping failure pressure by task family and rule.
 
 The generated validation summary confirms the report/training artifacts satisfy
-their machine-readable contracts before being used as evidence.
+their machine-readable contracts before being used as evidence, including
+suite-summary aggregate metrics.
 
 The generated scenario-check summary confirms the eval definitions themselves
 load cleanly, have unique IDs, compile their regexes, and resolve their fixture
@@ -155,8 +157,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
 9. Export episodes, rewards, preference pairs, failure modes, and curriculum
    metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-10. Validate the generated artifacts with `flightrecorder validate --strict`
-   before publishing them or using them downstream.
+10. Validate the generated artifacts and suite summary with
+   `flightrecorder validate --strict` before publishing them or using them
+   downstream.
 
 That gives the Hermes team a practical improvement loop:
 
@@ -239,7 +242,7 @@ Demo evidence:
 - `flightrecorder export-rl` emits episode, reward, preference, failure-mode,
   curriculum, and manifest artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
-  internally consistent.
+  internally consistent, including suite-summary metrics.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
   the raw fixture secret.
 - `scripts/live_hermes_smoke.py` has been run against a local Hermes checkout
@@ -292,7 +295,8 @@ reports.
 Then I run `flightrecorder validate --strict`, which checks the data contracts:
 scorecards match their rules, rewards link back to episodes, preferences
 reference real chosen/rejected traces, and failure modes reference real
-episodes.
+episodes. It also recomputes suite-summary metrics so pass rates and failure
+counts cannot silently drift from the underlying runs.
 
 So this is not a competing self-improvement loop. It is the eval harness that
 makes Hermes' existing loop measurable.
