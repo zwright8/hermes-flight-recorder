@@ -861,6 +861,10 @@ assert all(
 assert action_ledger_gate["schema_version"] == "hfr.action_ledger_gate.v1"
 assert action_ledger_gate["passed"] is True
 assert action_ledger_gate["failed_check_count"] == 0
+assert action_ledger_gate["decision"]["readiness"] == "ready"
+assert action_ledger_gate["decision"]["recommendation"] == "promote_iteration"
+assert action_ledger_gate["decision"]["blocking_check_count"] == 0
+assert action_ledger_gate["decision"]["key_metrics"]["recurring_action_count"] == action_ledger_gate["metrics"]["recurring_action_count"]
 assert action_ledger_gate["policy"]["schema_version"] == "hfr.action_ledger_gate.policy.v1"
 assert action_ledger_gate["policy"]["effective"]["max_recurring_actions"] == 6
 assert action_ledger_gate["metrics"]["recurring_action_count"] == action_ledger["metrics"]["recurring_action_count"]

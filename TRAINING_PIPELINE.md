@@ -136,7 +136,9 @@ flightrecorder validate --action-ledger-gate runs/action_ledger_gate.json --stri
 Policies can cap open, new, or recurring actions, require a minimum number of
 resolved actions, forbid open priority levels, and require specific routing keys
 to be resolved. That makes repeated eval evidence usable as an explicit
-trainer-side readiness signal.
+trainer-side readiness signal. External automation should use
+`decision.recommendation` (`promote_iteration` or `block_iteration`) and
+`decision.key_metrics` as the compact promotion contract.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

@@ -63,6 +63,10 @@ class ActionLedgerTests(unittest.TestCase):
             gate_result = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertEqual(gate_result["schema_version"], "hfr.action_ledger_gate.v1")
             self.assertTrue(gate_result["passed"])
+            self.assertEqual(gate_result["decision"]["readiness"], "ready")
+            self.assertEqual(gate_result["decision"]["recommendation"], "promote_iteration")
+            self.assertEqual(gate_result["decision"]["blocking_check_count"], 0)
+            self.assertEqual(gate_result["decision"]["key_metrics"]["recurring_action_count"], gate_result["metrics"]["recurring_action_count"])
             self.assertEqual(gate_result["policy"]["schema_version"], "hfr.action_ledger_gate.policy.v1")
             self.assertEqual(gate_result["policy"]["effective"]["max_recurring_actions"], 6)
             self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict"]), 0)
@@ -85,6 +89,9 @@ class ActionLedgerTests(unittest.TestCase):
                 1,
             )
             strict_gate = json.loads(strict_gate_path.read_text(encoding="utf-8"))
+            self.assertEqual(strict_gate["decision"]["readiness"], "blocked")
+            self.assertEqual(strict_gate["decision"]["recommendation"], "block_iteration")
+            self.assertEqual(strict_gate["decision"]["blocking_check_count"], strict_gate["failed_check_count"])
             failed_checks = {check["id"] for check in strict_gate["checks"] if not check["passed"]}
             self.assertIn("max_recurring_actions", failed_checks)
             self.assertIn("forbid_open_priority", failed_checks)
@@ -160,6 +167,7 @@ class ActionLedgerTests(unittest.TestCase):
             )
             gate_result = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertTrue(gate_result["passed"])
+            self.assertEqual(gate_result["decision"]["recommendation"], "promote_iteration")
             self.assertEqual(gate_result["metrics"]["resolved_action_count"], ledger["metrics"]["resolved_action_count"])
             self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict"]), 0)
 

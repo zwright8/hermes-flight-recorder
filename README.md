@@ -654,6 +654,9 @@ The gate can enforce minimum bundle history, maximum open/new/recurring
 actions, minimum resolved actions, forbidden open priorities, forbidden open
 action IDs, and required resolved action IDs. This turns the ledger into a
 deterministic convergence check while keeping repairs external and auditable.
+Automation should read `decision.recommendation` (`promote_iteration` or
+`block_iteration`) plus `decision.key_metrics` instead of scraping individual
+check summaries.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum

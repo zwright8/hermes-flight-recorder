@@ -129,22 +129,24 @@ def evaluate_action_ledger_gate(
         _add_presence_check(checks, "require_resolved_action", action, resolved_matchers.get(action, 0), {"action": action})
 
     passed = all(check["passed"] for check in checks)
+    gate_metrics = {
+        "bundle_count": ledger.get("bundle_count"),
+        "unique_action_count": ledger.get("unique_action_count"),
+        "open_action_count": metrics.get("open_action_count"),
+        "new_action_count": metrics.get("new_action_count"),
+        "recurring_action_count": metrics.get("recurring_action_count"),
+        "resolved_action_count": metrics.get("resolved_action_count"),
+        "open_priority_counts": [{"id": key, "count": open_priority_counts[key]} for key in sorted(open_priority_counts)],
+    }
     return {
         "schema_version": ACTION_LEDGER_GATE_SCHEMA_VERSION,
         "action_ledger": str(action_ledger_path),
         "passed": passed,
+        "decision": _decision_summary(passed, checks, gate_metrics),
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "checks": checks,
-        "metrics": {
-            "bundle_count": ledger.get("bundle_count"),
-            "unique_action_count": ledger.get("unique_action_count"),
-            "open_action_count": metrics.get("open_action_count"),
-            "new_action_count": metrics.get("new_action_count"),
-            "recurring_action_count": metrics.get("recurring_action_count"),
-            "resolved_action_count": metrics.get("resolved_action_count"),
-            "open_priority_counts": [{"id": key, "count": open_priority_counts[key]} for key in sorted(open_priority_counts)],
-        },
+        "metrics": gate_metrics,
     }
 
 
@@ -196,6 +198,49 @@ def _add_presence_check(checks: list[dict[str, Any]], check_id: str, item: str, 
             "summary": f"{check_id}: id={item}, count={count}",
         }
     )
+
+
+def _decision_summary(passed: bool, checks: list[dict[str, Any]], metrics: dict[str, Any]) -> dict[str, Any]:
+    blocking_checks = [
+        {
+            "id": str(check.get("id") or "unknown"),
+            "summary": str(check.get("summary") or ""),
+            "scope": check.get("scope") if isinstance(check.get("scope"), dict) else {},
+        }
+        for check in checks
+        if check.get("passed") is False
+    ]
+    readiness = "ready" if passed else "blocked"
+    return {
+        "readiness": readiness,
+        "recommendation": "promote_iteration" if passed else "block_iteration",
+        "summary": _decision_text(readiness, blocking_checks),
+        "blocking_check_count": len(blocking_checks),
+        "blocking_checks": blocking_checks,
+        "key_metrics": _decision_key_metrics(metrics),
+    }
+
+
+def _decision_text(readiness: str, blocking_checks: list[dict[str, Any]]) -> str:
+    if readiness == "ready":
+        return "Action-ledger gate is ready: improvement-loop pressure is within policy."
+    if not blocking_checks:
+        return "Action-ledger gate is blocked."
+    first = blocking_checks[0]
+    return f"Action-ledger gate is blocked by {len(blocking_checks)} check(s); first failure: {first['summary']}"
+
+
+def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    fields = (
+        "bundle_count",
+        "unique_action_count",
+        "open_action_count",
+        "new_action_count",
+        "recurring_action_count",
+        "resolved_action_count",
+        "open_priority_counts",
+    )
+    return {field: metrics.get(field) for field in fields if field in metrics}
 
 
 def _entry_counts(entries: list[dict[str, Any]], field_name: str) -> dict[str, int]:

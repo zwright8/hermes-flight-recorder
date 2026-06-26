@@ -3733,6 +3733,7 @@ def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget)
     if isinstance(gate.get("passed"), bool) and gate.get("passed") != expected_passed:
         target.errors.append("action_ledger_gate.passed must match failed_check_count.")
     _validate_action_ledger_gate_metrics(metrics, target)
+    _validate_action_ledger_gate_decision(gate.get("decision"), expected_passed, failed_checks, metrics, target)
     target.details.update(
         {
             "passed": gate.get("passed"),
@@ -3742,6 +3743,66 @@ def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget)
             "recurring_action_count": metrics.get("recurring_action_count"),
         }
     )
+
+
+def _validate_action_ledger_gate_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("action_ledger_gate.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "promote_iteration" if expected_passed else "block_iteration"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(f"action_ledger_gate.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "action_ledger_gate.decision.recommendation expected "
+            f"{expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("action_ledger_gate.decision.summary must be a non-empty string.")
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("action_ledger_gate.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            f"action_ledger_gate.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}."
+        )
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(f"action_ledger_gate.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}.")
+    for index, check in enumerate(blocking_checks):
+        label = f"action_ledger_gate.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    key_metrics = value.get("key_metrics")
+    if not isinstance(key_metrics, dict):
+        target.errors.append("action_ledger_gate.decision.key_metrics must be an object.")
+        return
+    for field_name in (
+        "bundle_count",
+        "unique_action_count",
+        "open_action_count",
+        "new_action_count",
+        "recurring_action_count",
+        "resolved_action_count",
+        "open_priority_counts",
+    ):
+        if key_metrics.get(field_name) != metrics.get(field_name):
+            target.errors.append(
+                f"action_ledger_gate.decision.key_metrics.{field_name} must match action_ledger_gate.metrics.{field_name}."
+            )
 
 
 def _validate_action_ledger_gate_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
