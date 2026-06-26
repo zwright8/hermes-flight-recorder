@@ -348,6 +348,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
         suite_summary_paths=args.suite_summary,
+        suite_trend_paths=args.suite_trend,
         strict=args.strict,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -660,6 +661,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--review-export", help="Validate an export-review output directory")
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
+    validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)

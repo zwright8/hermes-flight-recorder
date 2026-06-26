@@ -105,6 +105,8 @@ network.
 - Use `flightrecorder trend-suite --suite-summary <old> --suite-summary <new>
   --out <trend.json>` when CI stores multiple suite summaries and maintainers
   need to review progress across an improvement run, not just one comparison.
+  Validate the resulting trend with `flightrecorder validate --suite-trend
+  <trend.json> --strict` before treating it as release evidence.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or
@@ -123,8 +125,8 @@ network.
   labels into reviewed SFT, reward-model, preference, and DPO views.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --review-export runs/review_queue --reviewed-export runs/reviewed_export
-  --suite-summary runs/suite_summary.json --strict` before publishing artifacts
-  or using them downstream.
+  --suite-summary runs/suite_summary.json --suite-trend runs/suite_trend.json
+  --strict` before publishing artifacts or using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no

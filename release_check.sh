@@ -182,6 +182,7 @@ python -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --suite-summary runs/suite_summary.json \
+  --suite-trend runs/suite_trend.json \
   --strict >/dev/null
 python -m flightrecorder gate-export \
   --training-export runs/training_export \

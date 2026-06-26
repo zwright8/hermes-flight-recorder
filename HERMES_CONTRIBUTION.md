@@ -186,7 +186,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
    which behaviors got better or worse.
 9. Trend multiple `suite_summary.json` files with `flightrecorder trend-suite`
    to show whether the improvement loop is moving pass rate, score, and failure
-   pressure in the right direction.
+   pressure in the right direction, then validate the resulting
+   `suite_trend.json` before treating it as release evidence.
 10. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
 11. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
@@ -291,6 +292,8 @@ Demo evidence:
   compare report.
 - `flightrecorder compare-suite` emits aggregate suite-level regression
   evidence.
+- `flightrecorder validate --suite-trend` checks longitudinal trend artifacts
+  before they are used to describe improvement-loop progress.
 - `flightrecorder check-scenarios` emits machine-readable scenario contract
   validation before scenarios are used as benchmark inputs.
 - `flightrecorder export-rl` emits episode, reward, step-reward, preference,

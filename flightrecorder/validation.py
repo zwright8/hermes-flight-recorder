@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import TRACE_SCHEMA_VERSION
+from .artifacts import SUITE_TREND_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION
 from .review import (
     REVIEW_ITEM_SCHEMA_VERSION,
@@ -69,6 +70,7 @@ def validate_artifacts(
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
     suite_summary_paths: list[str | Path] | None = None,
+    suite_trend_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -85,6 +87,8 @@ def validate_artifacts(
         targets.append(validate_reviewed_export(reviewed_export_dir))
     for suite_summary_path in suite_summary_paths or []:
         targets.append(validate_suite_summary(suite_summary_path))
+    for suite_trend_path in suite_trend_paths or []:
+        targets.append(validate_suite_trend(suite_trend_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -329,6 +333,17 @@ def validate_suite_summary(path: str | Path) -> ValidationTarget:
     if summary is None:
         return target
     _validate_suite_summary(summary, target)
+    return target
+
+
+def validate_suite_trend(path: str | Path) -> ValidationTarget:
+    """Validate one trend-suite artifact."""
+    trend_path = Path(path)
+    target = ValidationTarget("suite_trend", str(trend_path))
+    trend = _read_object(trend_path, target, "suite_trend.json")
+    if trend is None:
+        return target
+    _validate_suite_trend(trend, target)
     return target
 
 
@@ -1694,6 +1709,197 @@ def _validate_suite_family_metrics(value: Any, target: ValidationTarget, runs: l
         target.errors.append(f"suite_summary.metrics.task_families missing families: {missing!r}.")
 
 
+def _validate_suite_trend(trend: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(trend, "schema_version", SUITE_TREND_SCHEMA_VERSION, target)
+    points = trend.get("points")
+    if not isinstance(points, list):
+        target.errors.append("suite_trend.points must be a list.")
+        points = []
+    if trend.get("point_count") != len(points):
+        target.errors.append(f"suite_trend.point_count expected {len(points)}, got {trend.get('point_count')!r}.")
+
+    point_labels: list[str] = []
+    failed_counts_by_point: list[dict[str, int]] = []
+    critical_counts_by_point: list[dict[str, int]] = []
+    previous_point: dict[str, Any] | None = None
+    for index, point in enumerate(points):
+        if not isinstance(point, dict):
+            target.errors.append(f"suite_trend.points[{index}] must be an object.")
+            point_labels.append("")
+            failed_counts_by_point.append({})
+            critical_counts_by_point.append({})
+            continue
+        failed_counts, critical_counts = _validate_suite_trend_point(point, target, index, previous_point)
+        point_labels.append(str(point.get("label") or ""))
+        failed_counts_by_point.append(failed_counts)
+        critical_counts_by_point.append(critical_counts)
+        previous_point = point
+
+    _validate_suite_trend_count_rows(
+        trend.get("failed_rule_trends"),
+        target,
+        "suite_trend.failed_rule_trends",
+        points,
+        point_labels,
+        failed_counts_by_point,
+    )
+    _validate_suite_trend_count_rows(
+        trend.get("critical_failure_trends"),
+        target,
+        "suite_trend.critical_failure_trends",
+        points,
+        point_labels,
+        critical_counts_by_point,
+    )
+
+    summary = trend.get("summary")
+    if not isinstance(summary, str) or not summary:
+        target.errors.append("suite_trend.summary must be a non-empty string.")
+    else:
+        expected_summary = _expected_suite_trend_summary([point for point in points if isinstance(point, dict)])
+        if summary != expected_summary:
+            target.errors.append(f"suite_trend.summary expected {expected_summary!r}, got {summary!r}.")
+
+    target.details.update(
+        {
+            "point_count": len(points),
+            "failed_rule_trend_count": len(trend.get("failed_rule_trends", []))
+            if isinstance(trend.get("failed_rule_trends"), list)
+            else None,
+            "critical_failure_trend_count": len(trend.get("critical_failure_trends", []))
+            if isinstance(trend.get("critical_failure_trends"), list)
+            else None,
+        }
+    )
+
+
+def _validate_suite_trend_point(
+    point: dict[str, Any],
+    target: ValidationTarget,
+    index: int,
+    previous_point: dict[str, Any] | None,
+) -> tuple[dict[str, int], dict[str, int]]:
+    label = f"suite_trend.points[{index}]"
+    if point.get("index") != index:
+        target.errors.append(f"{label}.index expected {index}, got {point.get('index')!r}.")
+    for field_name in ("label", "path"):
+        if not isinstance(point.get(field_name), str) or not point.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if isinstance(point.get("path"), str) and _looks_absolute(point["path"]):
+        target.warnings.append(f"{label}.path is absolute; prefer redacted or relative trend artifacts for sharing.")
+    if "metadata" in point:
+        _validate_metadata(point.get("metadata"), target, f"{label}.metadata")
+
+    for field_name in ("total", "passed", "failed", "error_count", "failed_rule_count", "critical_failure_count"):
+        if not _is_non_negative_int(point.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    if _is_non_negative_int(point.get("total")) and _is_non_negative_int(point.get("passed")) and _is_non_negative_int(point.get("failed")):
+        expected_total = point["passed"] + point["failed"]
+        if point["total"] != expected_total:
+            target.errors.append(f"{label}.total expected passed + failed ({expected_total}), got {point['total']!r}.")
+
+    if not _is_number_between(point.get("pass_rate"), 0.0, 1.0):
+        target.errors.append(f"{label}.pass_rate must be numeric from 0.0 to 1.0.")
+    if not _is_number_between(point.get("average_score"), 0.0, 100.0):
+        target.errors.append(f"{label}.average_score must be numeric from 0.0 to 100.0.")
+
+    failed_counts = _validate_count_map_object(point.get("failed_rule_counts"), target, f"{label}.failed_rule_counts")
+    critical_counts = _validate_count_map_object(point.get("critical_failure_counts"), target, f"{label}.critical_failure_counts")
+    if _is_non_negative_int(point.get("failed_rule_count")) and point["failed_rule_count"] != sum(failed_counts.values()):
+        target.errors.append(
+            f"{label}.failed_rule_count expected sum of failed_rule_counts ({sum(failed_counts.values())}), got {point['failed_rule_count']!r}."
+        )
+    if _is_non_negative_int(point.get("critical_failure_count")) and point["critical_failure_count"] != sum(critical_counts.values()):
+        target.errors.append(
+            f"{label}.critical_failure_count expected sum of critical_failure_counts ({sum(critical_counts.values())}), "
+            f"got {point['critical_failure_count']!r}."
+        )
+
+    delta = point.get("delta_from_previous")
+    if index == 0:
+        if delta is not None:
+            target.errors.append(f"{label}.delta_from_previous must be null for the first point.")
+    elif not isinstance(delta, dict):
+        target.errors.append(f"{label}.delta_from_previous must be an object.")
+    elif previous_point is not None:
+        expected_delta = _expected_suite_trend_delta(previous_point, point)
+        for field_name, expected in expected_delta.items():
+            if delta.get(field_name) != expected:
+                target.errors.append(f"{label}.delta_from_previous.{field_name} expected {expected!r}, got {delta.get(field_name)!r}.")
+    return failed_counts, critical_counts
+
+
+def _validate_suite_trend_count_rows(
+    rows: Any,
+    target: ValidationTarget,
+    label: str,
+    points: list[Any],
+    point_labels: list[str],
+    counts_by_point: list[dict[str, int]],
+) -> None:
+    if not isinstance(rows, list):
+        target.errors.append(f"{label} must be a list.")
+        return
+    expected_ids = sorted({rule_id for counts in counts_by_point for rule_id in counts})
+    actual_ids: set[str] = set()
+    for row_index, row in enumerate(rows):
+        row_label = f"{label}[{row_index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        rule_id = row.get("id")
+        if not isinstance(rule_id, str) or not rule_id:
+            target.errors.append(f"{row_label}.id must be a non-empty string.")
+            continue
+        actual_ids.add(rule_id)
+        counts = row.get("counts")
+        if not isinstance(counts, list):
+            target.errors.append(f"{row_label}.counts must be a list.")
+            counts = []
+        if len(counts) != len(points):
+            target.errors.append(f"{row_label}.counts expected {len(points)} rows, got {len(counts)}.")
+
+        observed_counts: list[int] = []
+        for point_index, count_row in enumerate(counts):
+            count_label = f"{row_label}.counts[{point_index}]"
+            if not isinstance(count_row, dict):
+                target.errors.append(f"{count_label} must be an object.")
+                observed_counts.append(0)
+                continue
+            expected_count = counts_by_point[point_index].get(rule_id, 0) if point_index < len(counts_by_point) else 0
+            count = count_row.get("count")
+            if count_row.get("index") != point_index:
+                target.errors.append(f"{count_label}.index expected {point_index}, got {count_row.get('index')!r}.")
+            expected_label = point_labels[point_index] if point_index < len(point_labels) else ""
+            if count_row.get("label") != expected_label:
+                target.errors.append(f"{count_label}.label expected {expected_label!r}, got {count_row.get('label')!r}.")
+            if not _is_non_negative_int(count):
+                target.errors.append(f"{count_label}.count must be a non-negative integer.")
+                observed_counts.append(0)
+            else:
+                observed_counts.append(count)
+                if count != expected_count:
+                    target.errors.append(f"{count_label}.count expected {expected_count}, got {count!r}.")
+
+        expected_first = observed_counts[0] if observed_counts else 0
+        expected_last = observed_counts[-1] if observed_counts else 0
+        expected_delta = expected_last - expected_first
+        for field_name, expected in (
+            ("first_count", expected_first),
+            ("last_count", expected_last),
+            ("delta", expected_delta),
+        ):
+            if row.get(field_name) != expected:
+                target.errors.append(f"{row_label}.{field_name} expected {expected!r}, got {row.get(field_name)!r}.")
+
+    missing = sorted(set(expected_ids) - actual_ids)
+    unexpected = sorted(actual_ids - set(expected_ids))
+    if missing:
+        target.errors.append(f"{label} missing rule IDs: {missing!r}.")
+    if unexpected:
+        target.errors.append(f"{label} has unexpected rule IDs: {unexpected!r}.")
+
+
 def _validate_evidence_refs(value: Any, target: ValidationTarget, label: str) -> None:
     if not isinstance(value, list):
         target.errors.append(f"{label} must be a list when present.")
@@ -1889,6 +2095,14 @@ def _is_int_between(value: Any, minimum: int, maximum: int) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= maximum
 
 
+def _is_non_negative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _is_number_between(value: Any, minimum: float, maximum: float) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and minimum <= float(value) <= maximum
+
+
 def _looks_absolute(value: str) -> bool:
     return value.startswith("/") or _is_windows_absolute(value)
 
@@ -1906,6 +2120,18 @@ def _score_value(value: Any) -> int:
         return max(0, min(100, int(value)))
     except (TypeError, ValueError):
         return 0
+
+
+def _number_value(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0
+
+
+def _number_delta(before: Any, after: Any) -> float:
+    return round(_number_value(after) - _number_value(before), 4)
 
 
 def _average_number(values: list[int] | list[float]) -> float:
@@ -1929,6 +2155,61 @@ def _count_strings(values: Any) -> dict[str, int]:
             continue
         counts[value] = counts.get(value, 0) + 1
     return counts
+
+
+def _validate_count_map_object(value: Any, target: ValidationTarget, label: str) -> dict[str, int]:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return {}
+    counts: dict[str, int] = {}
+    for key, count in value.items():
+        if not isinstance(key, str) or not key:
+            target.errors.append(f"{label} keys must be non-empty strings.")
+            continue
+        if not _is_non_negative_int(count):
+            target.errors.append(f"{label}.{key} must be a non-negative integer.")
+            continue
+        counts[key] = count
+    return counts
+
+
+def _expected_suite_trend_delta(previous_point: dict[str, Any], point: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "pass_rate_delta": _number_delta(previous_point.get("pass_rate"), point.get("pass_rate")),
+        "average_score_delta": _number_delta(previous_point.get("average_score"), point.get("average_score")),
+        "failed_rule_count_delta": _non_negative_int_value(point.get("failed_rule_count"))
+        - _non_negative_int_value(previous_point.get("failed_rule_count")),
+        "critical_failure_count_delta": _non_negative_int_value(point.get("critical_failure_count"))
+        - _non_negative_int_value(previous_point.get("critical_failure_count")),
+    }
+
+
+def _expected_suite_trend_summary(points: list[dict[str, Any]]) -> str:
+    if not points:
+        return "TREND: no suite summaries."
+    if len(points) == 1:
+        point = points[0]
+        return (
+            f"TREND: one point; pass rate {point.get('pass_rate')}; "
+            f"average score {point.get('average_score')}."
+        )
+    first = points[0]
+    last = points[-1]
+    pass_delta = _number_delta(first.get("pass_rate"), last.get("pass_rate"))
+    score_delta = _number_delta(first.get("average_score"), last.get("average_score"))
+    failed_delta = _non_negative_int_value(last.get("failed_rule_count")) - _non_negative_int_value(first.get("failed_rule_count"))
+    critical_delta = _non_negative_int_value(last.get("critical_failure_count")) - _non_negative_int_value(
+        first.get("critical_failure_count")
+    )
+    return (
+        f"TREND: {len(points)} points; pass_rate_delta={pass_delta}; "
+        f"average_score_delta={score_delta}; failed_rule_delta={failed_delta}; "
+        f"critical_failure_delta={critical_delta}."
+    )
+
+
+def _non_negative_int_value(value: Any) -> int:
+    return value if _is_non_negative_int(value) else 0
 
 
 def _count_rows(value: Any) -> dict[str, int] | None:

@@ -41,7 +41,8 @@ scenarios, giving repair or curriculum loops a compact view of which failure
 classes gained or lost pressure.
 Use `flightrecorder trend-suite --suite-summary ...` when you have more than
 two iterations and want pass-rate, score, failed-rule, and critical-failure
-trajectories across the whole improvement run.
+trajectories across the whole improvement run. Validate `suite_trend.json`
+before using a trend as improvement-loop evidence.
 
 Or export training artifacts from an existing runs directory:
 
@@ -121,6 +122,7 @@ flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --suite-summary runs/suite_summary.json \
+  --suite-trend runs/suite_trend.json \
   --strict
 ```
 

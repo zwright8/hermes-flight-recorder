@@ -286,9 +286,10 @@ flightrecorder run-suite \
   --metadata model=Hermes-4
 ```
 
-Use `flightrecorder validate --strict` to verify that generated run and training
-artifacts, plus `suite_summary.json`, still satisfy the expected data contracts
-before publishing or using them in downstream evaluation/training jobs.
+Use `flightrecorder validate --strict` to verify that generated run, training,
+suite-summary, and suite-trend artifacts still satisfy the expected data
+contracts before publishing or using them in downstream evaluation/training
+jobs.
 
 Use `flightrecorder compare-suite --fail-on-regression` to gate a candidate
 agent, model, skill, prompt, or policy change against a baseline run directory.
@@ -300,7 +301,9 @@ flat across paired scenarios.
 
 Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
 files over multiple iterations. The trend JSON and HTML report show pass-rate
-and score movement plus failed-rule and critical-failure trajectories.
+and score movement plus failed-rule and critical-failure trajectories. The
+generated `suite_trend.json` can be checked with
+`flightrecorder validate --suite-trend <path> --strict`.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
@@ -554,6 +557,7 @@ flightrecorder validate \
   --review-export runs/review_queue \
   --reviewed-export runs/reviewed_export \
   --suite-summary runs/suite_summary.json \
+  --suite-trend runs/suite_trend.json \
   --out runs/validation.json \
   --strict
 ```

@@ -339,6 +339,61 @@ class ValidationTests(unittest.TestCase):
             warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
             self.assertIn("critical_failure_counts is missing", warnings)
 
+    def test_validate_accepts_suite_trend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            trend_path = Path(tmp) / "suite_trend.json"
+            validation_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)])
+            run_cli(
+                [
+                    "trend-suite",
+                    "--suite-summary",
+                    str(runs / "suite_summary.json"),
+                    "--suite-summary",
+                    str(runs / "suite_summary.json"),
+                    "--out",
+                    str(trend_path),
+                ]
+            )
+
+            code = run_cli(["validate", "--suite-trend", str(trend_path), "--out", str(validation_path), "--strict"])
+
+            self.assertEqual(code, 0)
+            summary = json.loads(validation_path.read_text(encoding="utf-8"))
+            self.assertTrue(summary["passed"])
+            self.assertEqual(summary["target_count"], 1)
+            self.assertEqual(summary["targets"][0]["type"], "suite_trend")
+            self.assertEqual(summary["targets"][0]["details"]["point_count"], 2)
+
+    def test_validate_rejects_broken_suite_trend_delta(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            trend_path = Path(tmp) / "suite_trend.json"
+            validation_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)])
+            run_cli(
+                [
+                    "trend-suite",
+                    "--suite-summary",
+                    str(runs / "suite_summary.json"),
+                    "--suite-summary",
+                    str(runs / "suite_summary.json"),
+                    "--out",
+                    str(trend_path),
+                ]
+            )
+            trend = json.loads(trend_path.read_text(encoding="utf-8"))
+            trend["points"][1]["delta_from_previous"]["average_score_delta"] = 99.0
+            trend_path.write_text(json.dumps(trend), encoding="utf-8")
+
+            code = run_cli(["validate", "--suite-trend", str(trend_path), "--out", str(validation_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("suite_trend.points[1].delta_from_previous.average_score_delta", errors)
+
     def test_validate_strict_fails_on_warnings(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"
