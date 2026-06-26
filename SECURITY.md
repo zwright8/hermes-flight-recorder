@@ -26,5 +26,5 @@ Do not publish raw traces from production systems without a separate review.
 
 ## Reporting Issues
 
-For this hackathon project, report security issues privately to the project
-owner before sharing live traces or credentials in public tickets.
+Report security issues privately to the project owner before sharing live
+traces or credentials in public tickets.

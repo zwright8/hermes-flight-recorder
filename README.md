@@ -177,7 +177,7 @@ scenario.json + trace artifact
   failed run -> regression_scenario.json
 ```
 
-## Hackathon Pitch
+## Project Pitch
 
 Hermes can already act. This project helps Hermes prove. The Flight Recorder
 turns autonomous runs into inspectable, scoreable, rerunnable evidence so users
