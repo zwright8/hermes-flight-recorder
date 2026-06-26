@@ -361,10 +361,29 @@ python -m flightrecorder gate-reviewed \
   --out runs/reviewed_gate.json >/dev/null
 test -f runs/reviewed_gate.json
 test -f examples/reviewed_gate_policy.demo.json
+python -m flightrecorder review-calibration \
+  --reviewed-export runs/reviewed_export \
+  --out runs/review_calibration.json \
+  --min-comparable-labels 6 \
+  --min-agreement-rate 1.0 \
+  --max-disagreements 0 \
+  --max-false-positives 0 \
+  --max-false-negatives 0 >/dev/null
+test -f runs/review_calibration.json
+python -m flightrecorder validate \
+  --review-calibration runs/review_calibration.json \
+  --strict >/dev/null
 if python -m flightrecorder gate-reviewed \
   --reviewed-export runs/reviewed_export \
   --min-reviewed-labels 999 >/dev/null; then
   echo "gate-reviewed did not fail a too-high reviewed-label threshold" >&2
+  exit 1
+fi
+if python -m flightrecorder review-calibration \
+  --reviewed-export runs/reviewed_export \
+  --out runs/review_calibration_impossible.json \
+  --min-comparable-labels 999 >/dev/null; then
+  echo "review-calibration did not fail a too-high comparable-label threshold" >&2
   exit 1
 fi
 if python -m flightrecorder gate-export \
@@ -383,6 +402,7 @@ python -m flightrecorder evidence-bundle \
   --compare-export runs/compare_rl_export \
   --review-export runs/review_queue \
   --reviewed-export runs/reviewed_export \
+  --review-calibration runs/review_calibration.json \
   --gate runs/suite_gate.json \
   --gate runs/compare_gate.json \
   --gate runs/training_gate.json \
@@ -392,6 +412,7 @@ test -f runs/evidence_bundle_full.json
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
+  --review-calibration runs/review_calibration.json \
   --strict >/dev/null
 python - <<'PY'
 import json
@@ -410,6 +431,8 @@ assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
 assert bundle["metrics"]["compare_export"]["candidate_win_count"] == 1
 assert bundle["metrics"]["review_export"]["item_count"] >= 6
 assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]
+assert bundle["metrics"]["review_calibration"]["agreement_rate"] == 1.0
+assert bundle["metrics"]["review_calibration"]["disagreement_count"] == 0
 PY
 python -m flightrecorder compare-suite --baseline runs --candidate runs --out runs/suite_compare_check.json --fail-on-regression >/dev/null
 
@@ -447,6 +470,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder apply-review --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder review-calibration --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \

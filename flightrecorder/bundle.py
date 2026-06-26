@@ -26,6 +26,7 @@ def build_evidence_bundle(
     compare_export_dir: str | Path | None = None,
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
+    review_calibration_path: str | Path | None = None,
     gate_paths: list[str | Path] | None = None,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
@@ -140,6 +141,24 @@ def build_evidence_bundle(
                 "dpo_count": manifest.get("dpo_count"),
                 "reward_model_count": manifest.get("reward_model_count"),
             }
+
+    if review_calibration_path is not None:
+        review_calibration = _read_json_artifact(Path(review_calibration_path), artifacts, "review_calibration", preserve_paths)
+        _summarize_boolean_artifact(
+            review_calibration,
+            metrics,
+            checks,
+            artifact_name="review_calibration",
+            metric_prefix="review_calibration",
+            metric_fields=(
+                "reviewed_label_count",
+                "comparable_label_count",
+                "agreement_rate",
+                "disagreement_count",
+                "false_positive_count",
+                "false_negative_count",
+            ),
+        )
 
     gate_rows: list[dict[str, Any]] = []
     for index, gate_path in enumerate(gate_paths or []):

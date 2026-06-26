@@ -61,6 +61,7 @@ flightrecorder evidence-bundle \
   --evidence-coverage runs/evidence_coverage.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
+  --review-calibration runs/review_calibration.json \
   --gate runs/suite_gate.json \
   --gate runs/training_gate.json \
   --out runs/evidence_bundle.json
@@ -127,6 +128,12 @@ flightrecorder validate \
 flightrecorder gate-reviewed \
   --reviewed-export runs/reviewed_export \
   --policy examples/reviewed_gate_policy.demo.json
+
+flightrecorder review-calibration \
+  --reviewed-export runs/reviewed_export \
+  --out runs/review_calibration.json \
+  --min-agreement-rate 0.9 \
+  --max-false-positives 0
 ```
 
 The reviewed export writes `reviewed_labels.jsonl`, `reviewed_sft.jsonl`,
@@ -139,8 +146,16 @@ require completed labels, enough accepted and negative examples, reviewed
 SFT/reward-model/preference/DPO views, task-family coverage, and no unresolved
 review labels before a trainer consumes `runs/reviewed_export`.
 
+`review-calibration` is the agreement check between deterministic scorecards and
+human labels. It reports agreement rate, false positives, false negatives,
+skipped `needs_review` rows, and concrete disagreement rows with source report
+and lineage pointers. Use this before model updates when deterministic labels
+need human calibration; a disagreement should trigger scenario-policy or label
+review rather than automatic training.
+
 `demo.sh` already runs the training export for the included scenarios, and
-`release_check.sh` also exercises review export plus reviewed-label ingestion.
+`release_check.sh` also exercises review export, reviewed-label ingestion, and
+review calibration.
 
 When you have a new known-good trace but no scenario yet, bootstrap one first:
 
@@ -171,6 +186,7 @@ flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
@@ -386,6 +402,23 @@ negative examples, SFT/reward-model/preference/DPO rows, task families, and a
 maximum number of unresolved `needs_review` labels. Keep this gate separate from
 `gate-export`: the reviewed gate proves curation readiness; the export gate
 proves deterministic dataset readiness.
+
+Use `review-calibration` alongside `gate-reviewed` when humans have labeled the
+same runs. Calibration proves whether deterministic pass/fail labels and human
+accept/reject labels agree enough for the target handoff:
+
+```bash
+flightrecorder review-calibration \
+  --reviewed-export runs/reviewed_export \
+  --out runs/review_calibration.json \
+  --min-comparable-labels 100 \
+  --min-agreement-rate 0.9 \
+  --max-disagreements 5
+```
+
+False positives mean the scorecard passed a run that humans rejected. False
+negatives mean the scorecard failed a run that humans accepted. Both are useful
+signals for scenario repair, evaluator calibration, or reviewer adjudication.
 
 ## Failure Modes And Curriculum
 

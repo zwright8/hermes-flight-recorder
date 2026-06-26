@@ -148,13 +148,18 @@ network.
 - Use `flightrecorder apply-review --review-export runs/review_queue --labels
   <completed-labels.jsonl> --out runs/reviewed_export` to turn completed human
   labels into reviewed SFT, reward-model, preference, and DPO views.
+- Use `flightrecorder review-calibration --reviewed-export
+  runs/reviewed_export --out runs/review_calibration.json
+  --min-agreement-rate 0.9 --max-false-positives 0` when CI should measure
+  scorecard/human agreement before labels feed training or release decisions.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --review-export runs/review_queue --reviewed-export runs/reviewed_export
   --compare-export runs/compare_rl_export --evidence-coverage
   runs/evidence_coverage.json --evidence-bundle runs/evidence_bundle.json
-  --scenario-quality runs/scenario_quality.json --suite-summary
-  runs/suite_summary.json --suite-trend runs/suite_trend.json --strict` before
-  publishing artifacts or using them downstream.
+  --review-calibration runs/review_calibration.json --scenario-quality
+  runs/scenario_quality.json --suite-summary runs/suite_summary.json
+  --suite-trend runs/suite_trend.json --strict` before publishing artifacts or
+  using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no

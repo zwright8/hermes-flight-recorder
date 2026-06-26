@@ -177,12 +177,19 @@ flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --policy examples/compare_gate_policy.demo.json
 
+flightrecorder review-calibration \
+  --reviewed-export runs/reviewed_export \
+  --out runs/review_calibration.json \
+  --min-agreement-rate 0.9 \
+  --max-disagreements 0
+
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --strict
@@ -318,6 +325,24 @@ trainer jobs until human-reviewed labels meet policy. It reads
 accepted rows, negative rows, SFT/reward-model/preference/DPO views, task-family
 coverage, and zero unresolved `needs_review` labels.
 
+Use `flightrecorder review-calibration` after `apply-review` when maintainers
+need to measure whether deterministic scorecards agree with human labels before
+those labels become training or benchmark signal:
+
+```bash
+flightrecorder review-calibration \
+  --reviewed-export runs/reviewed_export \
+  --out runs/review_calibration.json \
+  --min-comparable-labels 100 \
+  --min-agreement-rate 0.9 \
+  --max-false-positives 0
+```
+
+The report tracks agreement rate, false positives, false negatives, skipped
+`needs_review` rows, and concrete disagreement rows with source report and
+lineage pointers. Disagreements are prompts for scenario or label review; they
+do not automatically prove that the scorecard or the reviewer is right.
+
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
 artifacts:
 
@@ -410,6 +435,7 @@ flightrecorder evidence-bundle \
   --evidence-coverage runs/evidence_coverage.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
+  --review-calibration runs/review_calibration.json \
   --gate runs/suite_gate.json \
   --gate runs/training_gate.json \
   --out runs/evidence_bundle.json
@@ -728,6 +754,7 @@ flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
@@ -778,6 +805,9 @@ scenario directory or single scenario + trace artifact
 	          |
 	          v
 	  apply-review -> human-reviewed trainer-ready views
+	          |
+	          v
+	  review-calibration -> human/scorecard agreement report
 	          |
 	          v
 	  export-rl -> evidence artifacts + trainer-ready views

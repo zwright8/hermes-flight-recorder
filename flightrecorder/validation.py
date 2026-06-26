@@ -11,6 +11,7 @@ from typing import Any
 from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
+from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION
 from .review import (
@@ -18,6 +19,7 @@ from .review import (
     REVIEW_LABEL_SCHEMA_VERSION,
     REVIEW_LABELS,
     REVIEW_MANIFEST_SCHEMA_VERSION,
+    TRAINING_NEGATIVE_LABELS,
     REVIEWED_DPO_SCHEMA_VERSION,
     REVIEWED_LABEL_SCHEMA_VERSION,
     REVIEWED_MANIFEST_SCHEMA_VERSION,
@@ -78,6 +80,7 @@ def validate_artifacts(
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
+    review_calibration_paths: list[str | Path] | None = None,
     scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
@@ -101,6 +104,8 @@ def validate_artifacts(
         targets.append(validate_evidence_coverage(evidence_coverage_path))
     for evidence_bundle_path in evidence_bundle_paths or []:
         targets.append(validate_evidence_bundle(evidence_bundle_path))
+    for review_calibration_path in review_calibration_paths or []:
+        targets.append(validate_review_calibration(review_calibration_path))
     for scenario_quality_path in scenario_quality_paths or []:
         targets.append(validate_scenario_quality(scenario_quality_path))
     for suite_summary_path in suite_summary_paths or []:
@@ -405,6 +410,16 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     bundle = _read_object(bundle_path, target, "evidence_bundle.json")
     if bundle is not None:
         _validate_evidence_bundle(bundle, target)
+    return target
+
+
+def validate_review_calibration(path: str | Path) -> ValidationTarget:
+    """Validate a review-calibration report."""
+    calibration_path = Path(path)
+    target = ValidationTarget("review_calibration", str(calibration_path))
+    calibration = _read_object(calibration_path, target, "review_calibration.json")
+    if calibration is not None:
+        _validate_review_calibration(calibration, target)
     return target
 
 
@@ -2357,6 +2372,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "compare_export",
         "review_export",
         "reviewed_export",
+        "review_calibration",
     )
     for section in expected_sections:
         if section in metrics and not isinstance(metrics[section], dict):
@@ -2375,6 +2391,201 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
                     target.errors.append(f"evidence_bundle.metrics.gates[{index}].{field_name} must be a non-empty string.")
             if not isinstance(gate.get("passed"), bool):
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
+
+
+def _validate_review_calibration(calibration: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(calibration, "schema_version", REVIEW_CALIBRATION_SCHEMA_VERSION, target)
+    if not isinstance(calibration.get("reviewed_export"), str) or not calibration.get("reviewed_export"):
+        target.errors.append("review_calibration.reviewed_export must be a non-empty string.")
+    source = calibration.get("source")
+    if not isinstance(source, dict):
+        target.errors.append("review_calibration.source must be an object.")
+    elif not isinstance(source.get("reviewed_labels"), str) or not source.get("reviewed_labels"):
+        target.errors.append("review_calibration.source.reviewed_labels must be a non-empty string.")
+    if not isinstance(calibration.get("passed"), bool):
+        target.errors.append("review_calibration.passed must be a boolean.")
+
+    checks = calibration.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("review_calibration.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "review_calibration.checks")
+    if calibration.get("check_count") != len(checks):
+        target.errors.append(f"review_calibration.check_count expected {len(checks)}, got {calibration.get('check_count')!r}.")
+    if calibration.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"review_calibration.failed_check_count expected {failed_checks}, got {calibration.get('failed_check_count')!r}."
+        )
+    if isinstance(calibration.get("passed"), bool) and calibration["passed"] != (failed_checks == 0):
+        target.errors.append("review_calibration.passed must match failed_check_count.")
+
+    metrics = calibration.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("review_calibration.metrics must be an object.")
+        metrics = {}
+    disagreements = calibration.get("disagreements")
+    if not isinstance(disagreements, list):
+        target.errors.append("review_calibration.disagreements must be a list.")
+        disagreements = []
+    disagreement_counts = _validate_review_calibration_disagreements(disagreements, target)
+    _validate_review_calibration_metrics(metrics, disagreement_counts, target)
+    notes = calibration.get("notes")
+    if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
+        target.errors.append("review_calibration.notes must be a list of strings.")
+    target.details.update(
+        {
+            "reviewed_label_count": metrics.get("reviewed_label_count"),
+            "agreement_rate": metrics.get("agreement_rate"),
+            "disagreement_count": metrics.get("disagreement_count"),
+        }
+    )
+
+
+def _validate_gate_like_checks(checks: list[Any], target: ValidationTarget, label: str) -> int:
+    failed_checks = 0
+    for index, check in enumerate(checks):
+        item_label = f"{label}[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{item_label} must be an object.")
+            continue
+        if not isinstance(check.get("id"), str) or not check.get("id"):
+            target.errors.append(f"{item_label}.id must be a non-empty string.")
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"{item_label}.passed must be a boolean.")
+        elif not check["passed"]:
+            failed_checks += 1
+        if "actual" not in check:
+            target.errors.append(f"{item_label}.actual is missing.")
+        if not isinstance(check.get("expected"), dict):
+            target.errors.append(f"{item_label}.expected must be an object.")
+        if not isinstance(check.get("summary"), str) or not check.get("summary"):
+            target.errors.append(f"{item_label}.summary must be a non-empty string.")
+    return failed_checks
+
+
+def _validate_review_calibration_disagreements(disagreements: list[Any], target: ValidationTarget) -> dict[str, int]:
+    counts = {"false_positive_count": 0, "false_negative_count": 0}
+    for index, row in enumerate(disagreements):
+        label = f"review_calibration.disagreements[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("review_item_id", "episode_id", "scenario_id", "task_family", "human_label", "disagreement_type"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(row.get("scorecard_passed"), bool):
+            target.errors.append(f"{label}.scorecard_passed must be a boolean.")
+        if not _is_int_between(row.get("scorecard_score"), 0, 100):
+            target.errors.append(f"{label}.scorecard_score must be an integer from 0 to 100.")
+        if not _is_string_list(row.get("failed_rules")):
+            target.errors.append(f"{label}.failed_rules must be a list of strings.")
+        if not _is_string_list(row.get("critical_failures")):
+            target.errors.append(f"{label}.critical_failures must be a list of strings.")
+        if row.get("source_report") is not None and not isinstance(row.get("source_report"), str):
+            target.errors.append(f"{label}.source_report must be a string or null.")
+        if row.get("source_lineage") is not None and not isinstance(row.get("source_lineage"), str):
+            target.errors.append(f"{label}.source_lineage must be a string or null.")
+        if row.get("disagreement_type") == "scorecard_passed_human_rejected":
+            counts["false_positive_count"] += 1
+            if row.get("scorecard_passed") is not True:
+                target.errors.append(f"{label}.scorecard_passed must be true for scorecard_passed_human_rejected.")
+            if row.get("human_label") not in TRAINING_NEGATIVE_LABELS:
+                target.errors.append(f"{label}.human_label must be a negative label for scorecard_passed_human_rejected.")
+        elif row.get("disagreement_type") == "scorecard_failed_human_accepted":
+            counts["false_negative_count"] += 1
+            if row.get("scorecard_passed") is not False:
+                target.errors.append(f"{label}.scorecard_passed must be false for scorecard_failed_human_accepted.")
+            if row.get("human_label") != "accept":
+                target.errors.append(f"{label}.human_label must be accept for scorecard_failed_human_accepted.")
+        else:
+            target.errors.append(
+                f"{label}.disagreement_type must be scorecard_passed_human_rejected or scorecard_failed_human_accepted."
+            )
+    counts["disagreement_count"] = len(disagreements)
+    return counts
+
+
+def _validate_review_calibration_metrics(metrics: dict[str, Any], disagreement_counts: dict[str, int], target: ValidationTarget) -> None:
+    label_counts = _label_count_rows(metrics.get("label_counts"), target)
+    comparable_count = label_counts.get("accept", 0) + sum(label_counts.get(label, 0) for label in TRAINING_NEGATIVE_LABELS)
+    expected = {
+        "reviewed_label_count": sum(label_counts.values()),
+        "comparable_label_count": comparable_count,
+        "needs_review_count": label_counts.get("needs_review", 0),
+        "human_positive_count": label_counts.get("accept", 0),
+        "human_negative_count": sum(label_counts.get(label, 0) for label in TRAINING_NEGATIVE_LABELS),
+        "disagreement_count": disagreement_counts["disagreement_count"],
+        "false_positive_count": disagreement_counts["false_positive_count"],
+        "false_negative_count": disagreement_counts["false_negative_count"],
+    }
+    expected["agreement_count"] = comparable_count - disagreement_counts["disagreement_count"]
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"review_calibration.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+    if metrics.get("agreement_rate") != _rate_value(expected["agreement_count"], comparable_count):
+        target.errors.append("review_calibration.metrics.agreement_rate does not match agreement/comparable counts.")
+    for field_name in ("scorecard_positive_count", "scorecard_negative_count"):
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"review_calibration.metrics.{field_name} must be a non-negative integer.")
+    if _is_non_negative_int(metrics.get("scorecard_positive_count")) and _is_non_negative_int(metrics.get("scorecard_negative_count")):
+        actual_comparable = metrics["scorecard_positive_count"] + metrics["scorecard_negative_count"]
+        if actual_comparable != comparable_count:
+            target.errors.append("review_calibration.metrics scorecard positive/negative counts must sum to comparable_label_count.")
+    if not _is_string_list(metrics.get("task_families")):
+        target.errors.append("review_calibration.metrics.task_families must be a list of strings.")
+    _validate_mean_score_by_human_label(metrics.get("mean_score_by_human_label"), label_counts, target)
+
+
+def _label_count_rows(value: Any, target: ValidationTarget) -> dict[str, int]:
+    labels = set(REVIEW_LABELS)
+    counts = {label: 0 for label in REVIEW_LABELS}
+    if not isinstance(value, list):
+        target.errors.append("review_calibration.metrics.label_counts must be a list.")
+        return counts
+    seen: set[str] = set()
+    for index, row in enumerate(value):
+        label = f"review_calibration.metrics.label_counts[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        row_label = row.get("label")
+        count = row.get("count")
+        if not isinstance(row_label, str) or row_label not in labels:
+            target.errors.append(f"{label}.label must be one of {list(REVIEW_LABELS)!r}.")
+            continue
+        if row_label in seen:
+            target.errors.append(f"{label}.label duplicates {row_label!r}.")
+        seen.add(row_label)
+        if not _is_non_negative_int(count):
+            target.errors.append(f"{label}.count must be a non-negative integer.")
+            continue
+        counts[row_label] = count
+    return counts
+
+
+def _validate_mean_score_by_human_label(value: Any, label_counts: dict[str, int], target: ValidationTarget) -> None:
+    if not isinstance(value, list):
+        target.errors.append("review_calibration.metrics.mean_score_by_human_label must be a list.")
+        return
+    seen: set[str] = set()
+    for index, row in enumerate(value):
+        label = f"review_calibration.metrics.mean_score_by_human_label[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        row_label = row.get("label")
+        if not isinstance(row_label, str) or not row_label:
+            target.errors.append(f"{label}.label must be a non-empty string.")
+            continue
+        if row_label in seen:
+            target.errors.append(f"{label}.label duplicates {row_label!r}.")
+        seen.add(row_label)
+        if row_label in label_counts and row.get("count") != label_counts[row_label]:
+            target.errors.append(f"{label}.count must match label_counts for {row_label!r}.")
+        elif not _is_non_negative_int(row.get("count")):
+            target.errors.append(f"{label}.count must be a non-negative integer.")
+        if not _is_number_between(row.get("average_score"), 0.0, 100.0):
+            target.errors.append(f"{label}.average_score must be a number from 0 to 100.")
 
 
 def _merge_count_rows(target_counts: dict[str, int], value: Any, target: ValidationTarget, label: str) -> None:

@@ -22,6 +22,7 @@ from .artifacts import (
     write_suite_trend_report,
 )
 from .bundle import EvidenceBundleError, build_evidence_bundle
+from .calibration import ReviewCalibrationError, build_review_calibration
 from .compare_gate import (
     COMPARE_GATE_POLICY_SCHEMA_VERSION,
     CompareGatePolicyError,
@@ -75,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         CompareGatePolicyError,
         EvidenceCoverageError,
         EvidenceBundleError,
+        ReviewCalibrationError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -387,6 +389,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
+        review_calibration_paths=args.review_calibration,
         scenario_quality_paths=args.scenario_quality,
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
@@ -435,6 +438,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         compare_export_dir=args.compare_export,
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
+        review_calibration_path=args.review_calibration,
         gate_paths=args.gate,
         preserve_paths=args.preserve_paths,
     )
@@ -464,6 +468,26 @@ def cmd_apply_review(args: argparse.Namespace) -> int:
     )
     print(f"wrote reviewed export {args.out} labels={manifest['reviewed_label_count']}")
     return 0
+
+
+def cmd_review_calibration(args: argparse.Namespace) -> int:
+    calibration = build_review_calibration(
+        args.reviewed_export,
+        min_agreement_rate=args.min_agreement_rate,
+        max_disagreements=args.max_disagreements,
+        max_false_positives=args.max_false_positives,
+        max_false_negatives=args.max_false_negatives,
+        min_comparable_labels=args.min_comparable_labels,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), calibration)
+    metrics = calibration["metrics"]
+    print(
+        "wrote review calibration "
+        f"agreement_rate={metrics['agreement_rate']} "
+        f"disagreements={metrics['disagreement_count']} out={args.out}"
+    )
+    return 0 if calibration["passed"] else 1
 
 
 def cmd_draft_scenario(args: argparse.Namespace) -> int:
@@ -814,6 +838,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
+    validate.add_argument("--review-calibration", action="append", default=[], help="Validate one review_calibration.json; may be repeated")
     validate.add_argument("--scenario-quality", action="append", default=[], help="Validate one scenario_quality.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
@@ -875,6 +900,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--compare-export", help="export-compare-rl directory included in the handoff")
     evidence_bundle.add_argument("--review-export", help="export-review directory included in the handoff")
     evidence_bundle.add_argument("--reviewed-export", help="apply-review directory included in the handoff")
+    evidence_bundle.add_argument("--review-calibration", help="review_calibration.json included in the handoff")
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)
@@ -1067,6 +1093,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     apply_review.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
     apply_review.set_defaults(func=cmd_apply_review)
+
+    review_calibration = subparsers.add_parser(
+        "review-calibration",
+        help="Compare deterministic scorecards with human-reviewed labels",
+    )
+    review_calibration.add_argument("--reviewed-export", required=True, help="Directory containing apply-review artifacts")
+    review_calibration.add_argument("--out", required=True, help="Write calibration report JSON to this path")
+    review_calibration.add_argument("--min-agreement-rate", type=_rate_arg, help="Minimum human/scorecard agreement rate")
+    review_calibration.add_argument("--max-disagreements", type=_non_negative_int_arg, help="Maximum allowed comparable disagreements")
+    review_calibration.add_argument("--max-false-positives", type=_non_negative_int_arg, help="Maximum scorecard-pass/human-negative rows")
+    review_calibration.add_argument("--max-false-negatives", type=_non_negative_int_arg, help="Maximum scorecard-fail/human-accept rows")
+    review_calibration.add_argument("--min-comparable-labels", type=_non_negative_int_arg, help="Minimum labels excluding needs_review")
+    review_calibration.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in calibration output")
+    review_calibration.set_defaults(func=cmd_review_calibration)
 
     observer = subparsers.add_parser("observer-template", help="Print or write a read-only Hermes observer plugin template")
     observer.add_argument("--out", help="Write the template to this path instead of stdout")

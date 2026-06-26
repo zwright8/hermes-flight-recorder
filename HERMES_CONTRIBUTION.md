@@ -28,6 +28,8 @@ artifacts and turns them into maintainable eval evidence:
 - a compact evidence-bundle manifest that tells CI, reviewers, or future
   trainers which artifacts and gates were included in a handoff and whether the
   package is ready to consume.
+- a review-calibration report that measures whether deterministic scorecards
+  agree with human labels before those labels become training signal.
 
 That makes Hermes' self-improvement loop auditable. Instead of only learning
 from successful work or user corrections, Hermes can accumulate reproducible
@@ -188,6 +190,12 @@ validation, training export, and optional gate outputs. That makes it easier to
 route only ready evidence packages into review or training jobs while preserving
 artifact hashes and readiness notes for audit.
 
+The generated review-calibration report gives maintainers a direct
+human-vs-scorecard agreement signal after labels are applied. It identifies
+false positives, false negatives, skipped `needs_review` rows, and concrete
+disagreement rows with source report and lineage pointers, so weak scenarios or
+label disputes can be repaired before training.
+
 The generated validation summary confirms the report/training artifacts satisfy
 their machine-readable contracts before being used as evidence, including
 suite-summary aggregate metrics.
@@ -260,14 +268,17 @@ Flight Recorder turns Hermes' experience into regression pressure.
    human-reviewed SFT, reward-model, preference, and DPO views.
 18. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
    human-curated labels become trainer input.
-19. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+19. Compare deterministic scorecards with human labels using
+   `flightrecorder review-calibration` before trusting reviewed labels as model
+   improvement signal.
+20. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-20. Validate the generated artifacts and suite summary with
+21. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-21. Gate training-export readiness with `flightrecorder gate-export` before
+22. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:
