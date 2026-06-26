@@ -1,0 +1,9 @@
+{
+  "schema_version": "hfr.suite_gate.policy.v1",
+  "description": "Demo thresholds for the bundled offline scenario suite. Tighten these for production agent releases.",
+  "min_pass_rate": 0.4,
+  "min_average_score": 69,
+  "max_failed": 3,
+  "max_errors": 0,
+  "max_critical_failures": 6
+}

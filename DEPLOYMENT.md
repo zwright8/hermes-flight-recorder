@@ -91,9 +91,10 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
   against a baseline scorecard.
 - Use `flightrecorder compare-suite --fail-on-regression` to gate an entire
   candidate run directory against a baseline suite.
-- Use `flightrecorder gate-suite --suite-summary runs/suite_summary.json` with
-  minimum pass-rate/score thresholds and forbidden failure classes for absolute
-  CI acceptance gates.
+- Commit a suite gate policy JSON file and use `flightrecorder gate-suite
+  --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
+  CI acceptance gates. CLI threshold flags can tighten scalar policy values or
+  add forbidden failure classes per job.
 - Use `flightrecorder export-rl --runs runs --out runs/training_export` when
   downstream SFT, preference, reward-model, curriculum, or RL jobs need
   deterministic episode/reward/preference/failure-mode artifacts.

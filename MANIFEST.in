@@ -10,4 +10,5 @@ include release_check.sh
 include scripts/live_hermes_smoke.py
 recursive-include scenarios *.json
 recursive-include fixtures *.jsonl *.json
+recursive-include examples *.json
 recursive-include tests *.py

@@ -41,13 +41,10 @@ assert failed_rules["required_evidence"] == 2
 PY
 python -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
-  --min-pass-rate 0.4 \
-  --min-average-score 69 \
-  --max-failed 3 \
-  --max-errors 0 \
-  --max-critical-failures 6 \
+  --policy examples/suite_gate_policy.demo.json \
   --out runs/suite_gate.json >/dev/null
 test -f runs/suite_gate.json
+test -f examples/suite_gate_policy.demo.json
 if python -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
   --forbid-critical-rule secret_exposure >/dev/null; then

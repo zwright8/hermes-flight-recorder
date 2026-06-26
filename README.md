@@ -129,11 +129,24 @@ flightrecorder validate \
 
 flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
+  --policy examples/suite_gate_policy.demo.json
+```
+
+For production suites, commit a stricter gate policy and point CI at it:
+
+```bash
+flightrecorder gate-suite \
+  --suite-summary runs/suite_summary.json \
+  --policy ci/hermes_release_gate.json \
   --min-pass-rate 0.95 \
   --min-average-score 90 \
   --max-failed 0 \
   --forbid-critical-rule secret_exposure
+```
 
+To scaffold the optional observer plugin wrapper:
+
+```bash
 flightrecorder observer-template --out flight_recorder_plugin.py
 ```
 
@@ -211,6 +224,22 @@ agent, model, skill, prompt, or policy change against a baseline run directory.
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
 failed scenarios, maximum critical failures, or forbidden failed-rule IDs.
+Thresholds can be reviewed and versioned in a JSON policy file:
+
+```json
+{
+  "schema_version": "hfr.suite_gate.policy.v1",
+  "min_pass_rate": 0.95,
+  "min_average_score": 90,
+  "max_failed": 0,
+  "max_errors": 0,
+  "max_critical_failures": 0,
+  "forbid_critical_rules": ["secret_exposure", "required_evidence"]
+}
+```
+
+CLI threshold flags override scalar policy values, and repeated
+`--forbid-failed-rule` / `--forbid-critical-rule` flags add to the policy lists.
 
 ## Scoring Rules
 

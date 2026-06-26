@@ -24,7 +24,7 @@ from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import check_scenarios, discover_scenarios
 from .scorers import score_trace
-from .suite_gate import evaluate_suite_gate
+from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .training import TrainingExportError, export_rl_dataset
 from .validation import validate_artifacts
 
@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (AdapterError, ArtifactError, ScenarioError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
+    except (AdapterError, ArtifactError, ScenarioError, SuiteGatePolicyError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
         parser.exit(2, f"flightrecorder: error: {exc}\n")
     except KeyboardInterrupt:
         parser.exit(130, "flightrecorder: interrupted\n")
@@ -319,17 +319,20 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def cmd_gate_suite(args: argparse.Namespace) -> int:
     suite_summary = _read_json(Path(args.suite_summary))
+    options = _gate_suite_options(args)
     result = evaluate_suite_gate(
         suite_summary,
         suite_summary_path=_display_path(Path(args.suite_summary), args.preserve_paths),
-        min_pass_rate=args.min_pass_rate,
-        min_average_score=args.min_average_score,
-        max_failed=args.max_failed,
-        max_errors=args.max_errors,
-        max_critical_failures=args.max_critical_failures,
-        forbid_failed_rules=args.forbid_failed_rule,
-        forbid_critical_rules=args.forbid_critical_rule,
+        min_pass_rate=options["min_pass_rate"],
+        min_average_score=options["min_average_score"],
+        max_failed=options["max_failed"],
+        max_errors=options["max_errors"],
+        max_critical_failures=options["max_critical_failures"],
+        forbid_failed_rules=options["forbid_failed_rules"],
+        forbid_critical_rules=options["forbid_critical_rules"],
     )
+    if options["policy_path"]:
+        result["policy"] = _gate_policy_summary(options)
     rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -472,11 +475,12 @@ def _parser() -> argparse.ArgumentParser:
 
     gate_suite = subparsers.add_parser("gate-suite", help="Evaluate CI thresholds against a run-suite summary")
     gate_suite.add_argument("--suite-summary", required=True, help="Path to suite_summary.json")
+    gate_suite.add_argument("--policy", help="Versioned suite gate policy JSON file with committed threshold defaults")
     gate_suite.add_argument("--out", help="Write gate result JSON to this path")
     gate_suite.add_argument("--min-pass-rate", type=_rate_arg, help="Minimum allowed suite pass rate, from 0.0 to 1.0")
     gate_suite.add_argument("--min-average-score", type=_score_arg, help="Minimum allowed average score, from 0 to 100")
     gate_suite.add_argument("--max-failed", type=_non_negative_int_arg, help="Maximum allowed failed scenarios")
-    gate_suite.add_argument("--max-errors", type=_non_negative_int_arg, default=0, help="Maximum allowed suite execution errors; defaults to 0")
+    gate_suite.add_argument("--max-errors", type=_non_negative_int_arg, help="Maximum allowed suite execution errors; defaults to policy value or 0")
     gate_suite.add_argument("--max-critical-failures", type=_non_negative_int_arg, help="Maximum allowed total critical failures")
     gate_suite.add_argument("--forbid-failed-rule", action="append", default=[], help="Fail if this rule id appears in failed_rule_counts")
     gate_suite.add_argument("--forbid-critical-rule", action="append", default=[], help="Fail if this rule id appears in critical_failure_counts")
@@ -553,6 +557,56 @@ def _write_score_outputs(scorecard: dict[str, Any], args: argparse.Namespace) ->
         write_junit(scorecard, args.junit_out)
     if getattr(args, "markdown_out", None):
         write_markdown_summary(scorecard, args.markdown_out)
+
+
+def _gate_suite_options(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_gate_policy(args.policy) if args.policy else {}
+    return {
+        "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
+        "policy_description": policy.get("description"),
+        "min_pass_rate": args.min_pass_rate if args.min_pass_rate is not None else policy.get("min_pass_rate"),
+        "min_average_score": args.min_average_score if args.min_average_score is not None else policy.get("min_average_score"),
+        "max_failed": args.max_failed if args.max_failed is not None else policy.get("max_failed"),
+        "max_errors": args.max_errors if args.max_errors is not None else policy.get("max_errors", 0),
+        "max_critical_failures": (
+            args.max_critical_failures if args.max_critical_failures is not None else policy.get("max_critical_failures")
+        ),
+        "forbid_failed_rules": _merge_gate_rule_ids(policy.get("forbid_failed_rules", []), args.forbid_failed_rule),
+        "forbid_critical_rules": _merge_gate_rule_ids(policy.get("forbid_critical_rules", []), args.forbid_critical_rule),
+    }
+
+
+def _gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
+    effective_fields = (
+        "min_pass_rate",
+        "min_average_score",
+        "max_failed",
+        "max_errors",
+        "max_critical_failures",
+        "forbid_failed_rules",
+        "forbid_critical_rules",
+    )
+    effective = {
+        field: options[field]
+        for field in effective_fields
+        if options.get(field) is not None and options.get(field) != []
+    }
+    summary: dict[str, Any] = {
+        "schema_version": SUITE_GATE_POLICY_SCHEMA_VERSION,
+        "path": options["policy_path"],
+        "effective": effective,
+    }
+    if options.get("policy_description"):
+        summary["description"] = options["policy_description"]
+    return summary
+
+
+def _merge_gate_rule_ids(policy_values: Any, cli_values: list[str]) -> list[str]:
+    merged: list[str] = []
+    for value in [*(policy_values or []), *cli_values]:
+        if value not in merged:
+            merged.append(value)
+    return merged
 
 
 def _run_scenario_artifacts(

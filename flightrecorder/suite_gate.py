@@ -2,10 +2,70 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 SUITE_GATE_SCHEMA_VERSION = "hfr.suite_gate.v1"
+SUITE_GATE_POLICY_SCHEMA_VERSION = "hfr.suite_gate.policy.v1"
+
+_SCALAR_POLICY_FIELDS = {
+    "min_pass_rate",
+    "min_average_score",
+    "max_failed",
+    "max_errors",
+    "max_critical_failures",
+}
+_LIST_POLICY_FIELDS = {"forbid_failed_rules", "forbid_critical_rules"}
+_POLICY_FIELDS = {"schema_version", "description", *_SCALAR_POLICY_FIELDS, *_LIST_POLICY_FIELDS}
+
+
+class SuiteGatePolicyError(ValueError):
+    """Raised when a suite gate policy file is malformed."""
+
+
+def load_gate_policy(path: str | Path) -> dict[str, Any]:
+    """Load and validate a versioned suite gate policy JSON file."""
+    policy_path = Path(path)
+    try:
+        raw = json.loads(policy_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SuiteGatePolicyError(f"Invalid JSON in suite gate policy {policy_path}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise SuiteGatePolicyError(f"Suite gate policy must be a JSON object: {policy_path}")
+
+    version = raw.get("schema_version")
+    if version != SUITE_GATE_POLICY_SCHEMA_VERSION:
+        raise SuiteGatePolicyError(
+            f"suite gate policy schema_version must be {SUITE_GATE_POLICY_SCHEMA_VERSION!r}; got {version!r}"
+        )
+
+    unknown = sorted(set(raw) - _POLICY_FIELDS)
+    if unknown:
+        raise SuiteGatePolicyError(f"Unknown suite gate policy field(s): {', '.join(unknown)}")
+
+    policy: dict[str, Any] = {"schema_version": SUITE_GATE_POLICY_SCHEMA_VERSION}
+    if "description" in raw:
+        if not isinstance(raw["description"], str):
+            raise SuiteGatePolicyError("suite gate policy field description must be a string")
+        policy["description"] = raw["description"]
+
+    for field in _SCALAR_POLICY_FIELDS:
+        if field not in raw or raw[field] is None:
+            continue
+        if field == "min_pass_rate":
+            policy[field] = _policy_float(field, raw[field], 0.0, 1.0)
+        elif field == "min_average_score":
+            policy[field] = _policy_float(field, raw[field], 0.0, 100.0)
+        else:
+            policy[field] = _policy_non_negative_int(field, raw[field])
+
+    for field in _LIST_POLICY_FIELDS:
+        if field not in raw or raw[field] is None:
+            continue
+        policy[field] = _policy_string_list(field, raw[field])
+
+    return policy
 
 
 def evaluate_suite_gate(
@@ -102,6 +162,34 @@ def _number(value: Any) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     return 0.0
+
+
+def _policy_float(field: str, value: Any, minimum: float, maximum: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SuiteGatePolicyError(f"suite gate policy field {field} must be a number")
+    parsed = float(value)
+    if not minimum <= parsed <= maximum:
+        raise SuiteGatePolicyError(f"suite gate policy field {field} must be from {minimum} to {maximum}")
+    return parsed
+
+
+def _policy_non_negative_int(field: str, value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SuiteGatePolicyError(f"suite gate policy field {field} must be a non-negative integer")
+    if value < 0:
+        raise SuiteGatePolicyError(f"suite gate policy field {field} must be a non-negative integer")
+    return value
+
+
+def _policy_string_list(field: str, value: Any) -> list[str]:
+    if not isinstance(value, list):
+        raise SuiteGatePolicyError(f"suite gate policy field {field} must be a list of strings")
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise SuiteGatePolicyError(f"suite gate policy field {field}[{index}] must be a non-empty string")
+        normalized.append(item.strip())
+    return normalized
 
 
 def _total_count(value: Any) -> int:

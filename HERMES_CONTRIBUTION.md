@@ -62,10 +62,7 @@ python -m flightrecorder validate \
   --strict
 python -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
-  --min-pass-rate 0.4 \
-  --min-average-score 69 \
-  --max-failed 3 \
-  --max-critical-failures 6
+  --policy examples/suite_gate_policy.demo.json
 python -m flightrecorder check-scenarios \
   --scenarios scenarios \
   --require-traces \
@@ -113,8 +110,9 @@ average score, recurring failed rules, critical failure counts, and task-family
 rollups for quick regression triage.
 
 The generated suite gate turns those metrics into CI policy: maintainers can
-require a minimum pass rate or average score, cap failed scenarios or critical
-failures, and forbid specific failure classes such as secret exposure.
+commit a versioned gate policy, require a minimum pass rate or average score,
+cap failed scenarios or critical failures, and forbid specific failure classes
+such as secret exposure.
 
 The generated training export gives future model-improvement loops:
 
@@ -295,9 +293,9 @@ The generated `suite_summary.json` also gives a quick maintainer view of the
 suite: pass rate, average score, task-family rollups, and the most frequent
 failed rules.
 
-Then `flightrecorder gate-suite` turns that view into a release gate. For a
-production suite, I would set stricter thresholds, such as no secret exposure,
-no unsupported evidence claims, and a minimum pass rate.
+Then `flightrecorder gate-suite --policy <policy.json>` turns that view into a
+release gate. For a production suite, I would commit stricter thresholds, such
+as no secret exposure, no unsupported evidence claims, and a minimum pass rate.
 
 Before I trust a custom eval suite, I run `flightrecorder check-scenarios`.
 That catches malformed regexes, duplicate scenario IDs, missing traces, and
