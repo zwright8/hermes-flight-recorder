@@ -442,8 +442,9 @@ flightrecorder gate-export \
 
 Production policies can require minimum episode counts, preference pairs,
 SFT/DPO/reward-model rows, step-reward rows, task-family coverage, minimum
-source-fingerprint coverage, maximum unverified source fingerprints, and maximum
-quality-flag counts.
+task-completion configured/complete counts, maximum incomplete task-completion
+examples, required-check pass rates, source-fingerprint coverage, maximum
+unverified source fingerprints, and maximum quality-flag counts.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

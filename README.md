@@ -509,8 +509,8 @@ hiding regressions in one behavior class behind aggregate suite metrics.
 Use `flightrecorder gate-export` to enforce readiness thresholds over
 `dataset_metrics.json` before a training or tuning job consumes the exported
 rows. It can require positives, negatives, preferences, SFT/DPO/reward-model
-views, step attribution, task-family coverage, complete source-fingerprint
-coverage, and zero quality flags:
+views, step attribution, task-family coverage, evidence-backed task completion,
+complete source-fingerprint coverage, and zero quality flags:
 
 ```json
 {
@@ -520,6 +520,10 @@ coverage, and zero quality flags:
   "min_sft": 25,
   "min_dpo": 25,
   "min_step_rewards": 25,
+  "min_task_completion_configured": 100,
+  "min_task_completion_complete": 80,
+  "max_task_completion_incomplete": 10,
+  "min_task_completion_check_pass_rate": 0.95,
   "min_source_fingerprint_rate": 1.0,
   "max_unverified_source_fingerprints": 0,
   "max_quality_flags": 0,

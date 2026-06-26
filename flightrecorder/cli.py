@@ -600,6 +600,10 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
         min_dpo=options["min_dpo"],
         min_reward_model=options["min_reward_model"],
         min_step_rewards=options["min_step_rewards"],
+        min_task_completion_configured=options["min_task_completion_configured"],
+        min_task_completion_complete=options["min_task_completion_complete"],
+        max_task_completion_incomplete=options["max_task_completion_incomplete"],
+        min_task_completion_check_pass_rate=options["min_task_completion_check_pass_rate"],
         min_source_fingerprint_rate=options["min_source_fingerprint_rate"],
         max_unverified_source_fingerprints=options["max_unverified_source_fingerprints"],
         max_quality_flags=options["max_quality_flags"],
@@ -1052,6 +1056,26 @@ def _parser() -> argparse.ArgumentParser:
     gate_export.add_argument("--min-reward-model", type=_non_negative_int_arg, help="Minimum reward-model row count")
     gate_export.add_argument("--min-step-rewards", type=_non_negative_int_arg, help="Minimum step-reward row count")
     gate_export.add_argument(
+        "--min-task-completion-configured",
+        type=_non_negative_int_arg,
+        help="Minimum episodes with task-completion evidence configured",
+    )
+    gate_export.add_argument(
+        "--min-task-completion-complete",
+        type=_non_negative_int_arg,
+        help="Minimum episodes with complete task-completion evidence",
+    )
+    gate_export.add_argument(
+        "--max-task-completion-incomplete",
+        type=_non_negative_int_arg,
+        help="Maximum episodes with incomplete task-completion evidence",
+    )
+    gate_export.add_argument(
+        "--min-task-completion-check-pass-rate",
+        type=_rate_arg,
+        help="Minimum required task-evidence check pass rate, from 0.0 to 1.0",
+    )
+    gate_export.add_argument(
         "--min-source-fingerprint-rate",
         type=_rate_arg,
         help="Minimum fraction of episodes with scenario and source-trace SHA-256 fingerprints",
@@ -1406,6 +1430,26 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
         "min_dpo": args.min_dpo if args.min_dpo is not None else policy.get("min_dpo"),
         "min_reward_model": args.min_reward_model if args.min_reward_model is not None else policy.get("min_reward_model"),
         "min_step_rewards": args.min_step_rewards if args.min_step_rewards is not None else policy.get("min_step_rewards"),
+        "min_task_completion_configured": (
+            args.min_task_completion_configured
+            if args.min_task_completion_configured is not None
+            else policy.get("min_task_completion_configured")
+        ),
+        "min_task_completion_complete": (
+            args.min_task_completion_complete
+            if args.min_task_completion_complete is not None
+            else policy.get("min_task_completion_complete")
+        ),
+        "max_task_completion_incomplete": (
+            args.max_task_completion_incomplete
+            if args.max_task_completion_incomplete is not None
+            else policy.get("max_task_completion_incomplete")
+        ),
+        "min_task_completion_check_pass_rate": (
+            args.min_task_completion_check_pass_rate
+            if args.min_task_completion_check_pass_rate is not None
+            else policy.get("min_task_completion_check_pass_rate")
+        ),
         "min_source_fingerprint_rate": (
             args.min_source_fingerprint_rate
             if args.min_source_fingerprint_rate is not None
@@ -1437,6 +1481,10 @@ def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_dpo",
         "min_reward_model",
         "min_step_rewards",
+        "min_task_completion_configured",
+        "min_task_completion_complete",
+        "max_task_completion_incomplete",
+        "min_task_completion_check_pass_rate",
         "min_source_fingerprint_rate",
         "max_unverified_source_fingerprints",
         "max_quality_flags",

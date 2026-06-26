@@ -16,10 +16,14 @@ _COUNT_POLICY_FIELDS = {
     "min_dpo",
     "min_reward_model",
     "min_step_rewards",
+    "min_task_completion_configured",
+    "min_task_completion_complete",
     "max_quality_flags",
+    "max_task_completion_incomplete",
     "max_unverified_source_fingerprints",
 }
-_SCALAR_POLICY_FIELDS = {"min_pass_rate", "min_average_score", "min_source_fingerprint_rate", *_COUNT_POLICY_FIELDS}
+_RATE_POLICY_FIELDS = {"min_pass_rate", "min_source_fingerprint_rate", "min_task_completion_check_pass_rate"}
+_SCALAR_POLICY_FIELDS = {*_RATE_POLICY_FIELDS, "min_average_score", *_COUNT_POLICY_FIELDS}
 _LIST_POLICY_FIELDS = {"forbid_quality_flags", "forbid_quality_severities", "require_task_families"}
 _TASK_FAMILY_SCALAR_POLICY_FIELDS = {
     "min_episodes",
@@ -30,6 +34,8 @@ _TASK_FAMILY_SCALAR_POLICY_FIELDS = {
     "min_sft",
     "min_dpo",
     "min_reward_model",
+    "min_task_completion_complete",
+    "max_task_completion_incomplete",
     "max_failed",
 }
 _TASK_FAMILY_GATE_FIELDS = {"task_family", *_TASK_FAMILY_SCALAR_POLICY_FIELDS}
@@ -70,7 +76,7 @@ def load_training_gate_policy(path: str | Path) -> dict[str, Any]:
     for field in _SCALAR_POLICY_FIELDS:
         if field not in raw or raw[field] is None:
             continue
-        if field in {"min_pass_rate", "min_source_fingerprint_rate"}:
+        if field in _RATE_POLICY_FIELDS:
             policy[field] = _policy_float(field, raw[field], 0.0, 1.0)
         elif field == "min_average_score":
             policy[field] = _policy_float(field, raw[field], 0.0, 100.0)
@@ -107,6 +113,10 @@ def evaluate_training_gate(
     min_dpo: int | None = None,
     min_reward_model: int | None = None,
     min_step_rewards: int | None = None,
+    min_task_completion_configured: int | None = None,
+    min_task_completion_complete: int | None = None,
+    max_task_completion_incomplete: int | None = None,
+    min_task_completion_check_pass_rate: float | None = None,
     min_source_fingerprint_rate: float | None = None,
     max_unverified_source_fingerprints: int | None = None,
     max_quality_flags: int | None = None,
@@ -118,6 +128,7 @@ def evaluate_training_gate(
     """Evaluate readiness checks against dataset_metrics.json."""
     artifact_counts = dataset_metrics.get("artifact_counts") if isinstance(dataset_metrics.get("artifact_counts"), dict) else {}
     source_fingerprint_coverage = _source_fingerprint_coverage(dataset_metrics)
+    task_completion = _task_completion_metrics(dataset_metrics)
     checks: list[dict[str, Any]] = []
 
     if min_episodes is not None:
@@ -136,6 +147,34 @@ def evaluate_training_gate(
         _add_min_check(checks, "min_reward_model", _int_value(artifact_counts.get("reward_model")), min_reward_model)
     if min_step_rewards is not None:
         _add_min_check(checks, "min_step_rewards", _int_value(artifact_counts.get("step_rewards")), min_step_rewards)
+    if min_task_completion_configured is not None:
+        _add_min_check(
+            checks,
+            "min_task_completion_configured",
+            _int_value(task_completion.get("configured_count")),
+            min_task_completion_configured,
+        )
+    if min_task_completion_complete is not None:
+        _add_min_check(
+            checks,
+            "min_task_completion_complete",
+            _int_value(task_completion.get("complete_count")),
+            min_task_completion_complete,
+        )
+    if max_task_completion_incomplete is not None:
+        _add_max_check(
+            checks,
+            "max_task_completion_incomplete",
+            _int_value(task_completion.get("incomplete_count")),
+            max_task_completion_incomplete,
+        )
+    if min_task_completion_check_pass_rate is not None:
+        _add_min_check(
+            checks,
+            "min_task_completion_check_pass_rate",
+            _number(task_completion.get("check_pass_rate")),
+            min_task_completion_check_pass_rate,
+        )
     if min_source_fingerprint_rate is not None:
         _add_min_check(
             checks,
@@ -181,6 +220,7 @@ def evaluate_training_gate(
             "average_score": dataset_metrics.get("average_score"),
             "quality_flag_count": len(quality_flags),
             "source_fingerprint_coverage": source_fingerprint_coverage,
+            "task_completion": task_completion,
             "artifact_counts": artifact_counts,
         },
     }
@@ -203,6 +243,7 @@ def _evaluate_task_family_gate(checks: list[dict[str, Any]], gate: dict[str, Any
         "min_sft": ("task_family_min_sft", "sft_count"),
         "min_dpo": ("task_family_min_dpo", "dpo_count"),
         "min_reward_model": ("task_family_min_reward_model", "reward_model_count"),
+        "min_task_completion_complete": ("task_family_min_task_completion_complete", "task_completion_complete"),
     }
     for policy_field, (check_id, row_field) in field_checks.items():
         if gate.get(policy_field) is None:
@@ -211,6 +252,14 @@ def _evaluate_task_family_gate(checks: list[dict[str, Any]], gate: dict[str, Any
         _add_min_check(checks, check_id, actual, gate[policy_field], scope)
     if gate.get("max_failed") is not None:
         _add_max_check(checks, "task_family_max_failed", _int_value(row.get("failed")), gate["max_failed"], scope)
+    if gate.get("max_task_completion_incomplete") is not None:
+        _add_max_check(
+            checks,
+            "task_family_max_task_completion_incomplete",
+            _int_value(row.get("task_completion_incomplete")),
+            gate["max_task_completion_incomplete"],
+            scope,
+        )
 
 
 def _add_min_check(
@@ -317,6 +366,33 @@ def _source_fingerprint_coverage(dataset_metrics: dict[str, Any]) -> dict[str, A
         "with_scenario_sha256": _int_value(coverage.get("with_scenario_sha256")),
         "with_source_trace_sha256": _int_value(coverage.get("with_source_trace_sha256")),
         "rate": round(fully_verified / episodes, 4) if episodes else 0.0,
+    }
+
+
+def _task_completion_metrics(dataset_metrics: dict[str, Any]) -> dict[str, Any]:
+    metrics = dataset_metrics.get("task_completion")
+    if not isinstance(metrics, dict):
+        return {
+            "episode_count": _int_value(dataset_metrics.get("episode_count")),
+            "configured_count": 0,
+            "complete_count": 0,
+            "incomplete_count": 0,
+            "not_applicable_count": 0,
+            "unknown_count": 0,
+            "required_check_count": 0,
+            "passed_check_count": 0,
+            "check_pass_rate": 0.0,
+        }
+    return {
+        "episode_count": _int_value(metrics.get("episode_count")),
+        "configured_count": _int_value(metrics.get("configured_count")),
+        "complete_count": _int_value(metrics.get("complete_count")),
+        "incomplete_count": _int_value(metrics.get("incomplete_count")),
+        "not_applicable_count": _int_value(metrics.get("not_applicable_count")),
+        "unknown_count": _int_value(metrics.get("unknown_count")),
+        "required_check_count": _int_value(metrics.get("required_check_count")),
+        "passed_check_count": _int_value(metrics.get("passed_check_count")),
+        "check_pass_rate": _number(metrics.get("check_pass_rate")),
     }
 
 

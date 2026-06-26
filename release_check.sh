@@ -382,8 +382,14 @@ from pathlib import Path
 gate = json.loads(Path("runs/training_gate.json").read_text(encoding="utf-8"))
 assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
 assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
+assert gate["metrics"]["task_completion"]["complete_count"] == 2
+assert gate["metrics"]["task_completion"]["incomplete_count"] == 3
+assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5385
 assert gate["policy"]["effective"]["min_source_fingerprint_rate"] == 1.0
 assert gate["policy"]["effective"]["max_unverified_source_fingerprints"] == 0
+assert gate["policy"]["effective"]["min_task_completion_complete"] == 2
+assert gate["policy"]["effective"]["max_task_completion_incomplete"] == 3
+assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5385
 PY
 python -m flightrecorder export-review \
   --runs runs \
@@ -461,6 +467,12 @@ if python -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-pass-rate 0.9 >/dev/null; then
   echo "gate-export did not fail a too-high pass-rate threshold" >&2
+  exit 1
+fi
+if python -m flightrecorder gate-export \
+  --training-export runs/training_export \
+  --min-task-completion-complete 999 >/dev/null; then
+  echo "gate-export did not fail a too-high task-completion threshold" >&2
   exit 1
 fi
 python -m flightrecorder evidence-bundle \
@@ -549,6 +561,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-task-completion-complete"
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
