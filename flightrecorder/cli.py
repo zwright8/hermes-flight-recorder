@@ -14,6 +14,7 @@ from .redaction import sanitize_trace
 from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scorers import score_trace
+from .training import TrainingExportError, export_rl_dataset
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (AdapterError, ScenarioError, OSError, json.JSONDecodeError) as exc:
+    except (AdapterError, ScenarioError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
         parser.exit(2, f"flightrecorder: error: {exc}\n")
     except KeyboardInterrupt:
         parser.exit(130, "flightrecorder: interrupted\n")
@@ -145,6 +146,23 @@ def cmd_observer_template(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export_rl(args: argparse.Namespace) -> int:
+    manifest = export_rl_dataset(
+        args.runs,
+        args.out,
+        reward_scale=args.reward_scale,
+        min_score_gap=args.min_score_gap,
+        max_pairs_per_family=args.max_pairs_per_family,
+        preserve_paths=args.preserve_paths,
+    )
+    print(
+        "wrote RL export "
+        f"episodes={manifest['episode_count']} rewards={manifest['reward_count']} "
+        f"preferences={manifest['preference_count']} out={args.out}"
+    )
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="flightrecorder", description="Hermes Autonomy Flight Recorder")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -204,6 +222,25 @@ def _parser() -> argparse.ArgumentParser:
     compare.add_argument("--html-out", help="Optional static HTML comparison report")
     compare.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate regresses")
     compare.set_defaults(func=cmd_compare)
+
+    export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
+    export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
+    export_rl.add_argument("--out", required=True, help="Output directory for episodes/rewards/preferences JSONL")
+    export_rl.add_argument(
+        "--reward-scale",
+        default="score",
+        choices=["score", "binary", "signed"],
+        help="Reward transform: score=0..1, binary=pass/fail, signed=-1..1",
+    )
+    export_rl.add_argument("--min-score-gap", type=int, default=1, help="Minimum score gap for a preference pair")
+    export_rl.add_argument(
+        "--max-pairs-per-family",
+        type=int,
+        default=0,
+        help="Maximum preference pairs per task family; 0 means unlimited",
+    )
+    export_rl.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
+    export_rl.set_defaults(func=cmd_export_rl)
 
     observer = subparsers.add_parser("observer-template", help="Print or write a read-only Hermes observer plugin template")
     observer.add_argument("--out", help="Write the template to this path instead of stdout")

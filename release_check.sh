@@ -18,6 +18,10 @@ test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
+test -f runs/training_export/episodes.jsonl
+test -f runs/training_export/rewards.jsonl
+test -f runs/training_export/preferences.jsonl
+test -f runs/training_export/manifest.json
 
 python -m flightrecorder audit \
   --runs runs \

@@ -3,6 +3,7 @@ include LICENSE
 include HERMES_CONTRIBUTION.md
 include DEPLOYMENT.md
 include SECURITY.md
+include TRAINING_PIPELINE.md
 include scenario.schema.json
 include demo.sh
 include release_check.sh

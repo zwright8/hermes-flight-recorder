@@ -39,6 +39,8 @@ Expected demo output:
   - runaway delegation and budget violation.
 - A before/after compare report showing the bad prompt-injection run regressed
   against the good baseline.
+- A training export in `runs/training_export/` with episodes, rewards,
+  preference pairs, and a manifest for future model-improvement loops.
 
 ## Install
 
@@ -87,6 +89,10 @@ flightrecorder compare \
   --out runs/prompt_compare.json \
   --html-out runs/prompt_compare.html
 
+flightrecorder export-rl \
+  --runs runs \
+  --out runs/training_export
+
 flightrecorder observer-template --out flight_recorder_plugin.py
 ```
 
@@ -110,6 +116,14 @@ Each run directory contains:
 - `scorecard.json`: deterministic pass/fail rule results.
 - `report.html`: self-contained static flight-recorder report.
 - `regression_scenario.json`: emitted only for failing runs.
+
+`flightrecorder export-rl` converts completed run directories into future
+training-loop artifacts:
+
+- `episodes.jsonl`: one normalized episode per run.
+- `rewards.jsonl`: terminal rewards, failed rules, and attribution.
+- `preferences.jsonl`: chosen/rejected pairs inside each task family.
+- `manifest.json`: export settings, counts, and caveats.
 
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
 artifacts:
@@ -195,6 +209,33 @@ mail provider later bounced it.
 `field_equals`, `field_contains`, and `field_matches` matchers for lower-level
 claims that are not task actions.
 
+## Training Data Export
+
+Flight Recorder can prepare scorecard-grounded datasets for future RL,
+preference-tuning, reward-modeling, or SFT pipelines:
+
+```bash
+flightrecorder export-rl \
+  --runs runs \
+  --out runs/training_export \
+  --reward-scale score \
+  --min-score-gap 1
+```
+
+The exporter reads only `normalized_trace.json` and `scorecard.json` from each
+completed run directory. It derives scalar rewards from deterministic scores,
+adds failed-rule attribution where the scorecard points to an event or final
+answer, and creates preference pairs when one run clearly beats another in the
+same task family.
+
+Absolute source/output paths are redacted from exported metadata by default.
+Use `--preserve-paths` only for private local debugging.
+
+This is training data plumbing, not a trainer. It does not generate rollouts,
+update model weights, or make weak scenario policies strong. For the full data
+contract and future trainer shape, see
+[TRAINING_PIPELINE.md](TRAINING_PIPELINE.md).
+
 ## Architecture
 
 ```text
@@ -217,6 +258,9 @@ scenario.json + trace artifact
 	          |
 	          v
 	  compare old/new scorecards -> regression delta
+	          |
+	          v
+	  export-rl -> episodes/rewards/preferences JSONL
 ```
 
 ## Project Pitch
@@ -225,7 +269,9 @@ Hermes can already act. This project helps Hermes prove. The Flight Recorder
 turns autonomous runs into inspectable, scoreable, rerunnable evidence so users
 and maintainers can catch prompt-injection obedience, unsupported subagent
 claims, missing completion evidence, budget runaway, and task-completion
-regressions before those failures become invisible.
+regressions before those failures become invisible. The RL export path also
+turns those scorecards into reward and preference artifacts for future
+model-improvement loops.
 
 For the maintainer-facing contribution framing, demo evidence, and upstream PR
 draft, see [HERMES_CONTRIBUTION.md](HERMES_CONTRIBUTION.md).
@@ -292,5 +338,5 @@ Successful output includes:
 ```
 
 This runs unit tests, bytecode compilation, the live-smoke script import/help
-check, the offline demo, report redaction checks through `flightrecorder audit`,
-CI failure-mode checks, and a package install smoke.
+check, the offline demo, RL export generation, report redaction checks through
+`flightrecorder audit`, CI failure-mode checks, and a package install smoke.
