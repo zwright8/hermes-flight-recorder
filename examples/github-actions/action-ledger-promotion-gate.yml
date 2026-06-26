@@ -49,6 +49,23 @@ jobs:
             --decision-gate runs/promotion_decision.json \
             --strict
 
+      - name: Build promotion history
+        run: |
+          if [ -f runs/previous/promotion_decision.json ]; then
+            python -m flightrecorder promotion-ledger \
+              --decision-gate runs/previous/promotion_decision.json \
+              --decision-gate runs/promotion_decision.json \
+              --out runs/promotion_ledger.json
+          else
+            python -m flightrecorder promotion-ledger \
+              --decision-gate runs/promotion_decision.json \
+              --out runs/promotion_ledger.json
+          fi
+
+          python -m flightrecorder validate \
+            --promotion-ledger runs/promotion_ledger.json \
+            --strict
+
       - name: Write promotion summary
         if: always()
         run: |
@@ -61,6 +78,9 @@ jobs:
           if not path.exists():
               raise SystemExit(0)
           gate = json.loads(path.read_text(encoding="utf-8"))
+          ledger_path = Path("runs/promotion_ledger.json")
+          ledger = json.loads(ledger_path.read_text(encoding="utf-8")) if ledger_path.exists() else {}
+          metrics = ledger.get("metrics", {})
           source = gate.get("source_decision", {})
           source_artifact = gate.get("source_artifact", {})
           summary = [
@@ -71,6 +91,8 @@ jobs:
               f"- Source readiness: `{source.get('readiness')}`",
               f"- Source SHA-256: `{source_artifact.get('sha256')}`",
               f"- Failed checks: `{gate.get('failed_check_count')}`",
+              f"- Promotion history decisions: `{metrics.get('decision_count')}`",
+              f"- Consecutive blocks: `{metrics.get('consecutive_blocked_count')}`",
           ]
           Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(summary) + "\n", encoding="utf-8")
           PY

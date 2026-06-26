@@ -45,6 +45,7 @@ from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
+from .promotion_ledger import PromotionLedgerError, build_promotion_ledger
 from .repair import RepairQueueError, build_repair_queue
 from .report import write_index, write_report
 from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
@@ -107,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         ActionLedgerError,
         ActionLedgerGateError,
         ActionLedgerGatePolicyError,
+        PromotionLedgerError,
         ReplayError,
         OSError,
         json.JSONDecodeError,
@@ -627,6 +629,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         action_ledger_paths=args.action_ledger,
         action_ledger_gate_paths=args.action_ledger_gate,
         decision_gate_paths=args.decision_gate,
+        promotion_ledger_paths=args.promotion_ledger,
         trainer_preflight_paths=args.trainer_preflight,
         trainer_launch_check_paths=args.trainer_launch_check,
         repair_queue_paths=args.repair_queue,
@@ -734,6 +737,22 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
 def cmd_action_ledger(args: argparse.Namespace) -> int:
     ledger = build_action_ledger(
         args.bundle,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+    )
+    rendered = json.dumps(ledger, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0
+
+
+def cmd_promotion_ledger(args: argparse.Namespace) -> int:
+    ledger = build_promotion_ledger(
+        args.decision_gate,
         out_path=args.out,
         preserve_paths=args.preserve_paths,
     )
@@ -1368,6 +1387,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
+    validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--trainer-preflight", action="append", default=[], help="Validate one trainer_preflight.json; may be repeated")
     validate.add_argument(
         "--trainer-launch-check",
@@ -1482,6 +1502,20 @@ def _parser() -> argparse.ArgumentParser:
     action_ledger.add_argument("--out", help="Write action ledger JSON to this path")
     action_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
     action_ledger.set_defaults(func=cmd_action_ledger)
+
+    promotion_ledger = subparsers.add_parser(
+        "promotion-ledger",
+        help="Summarize decision gates across promotion attempts",
+    )
+    promotion_ledger.add_argument(
+        "--decision-gate",
+        action="append",
+        required=True,
+        help="decision_gate.json in chronological order; may be repeated",
+    )
+    promotion_ledger.add_argument("--out", help="Write promotion ledger JSON to this path")
+    promotion_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
+    promotion_ledger.set_defaults(func=cmd_promotion_ledger)
 
     gate_action_ledger = subparsers.add_parser(
         "gate-action-ledger",

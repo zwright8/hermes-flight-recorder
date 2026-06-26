@@ -34,4 +34,21 @@ python -m flightrecorder trend-suite \
   --suite-summary runs/suite_summary.json \
   --out runs/suite_trend.json \
   --html-out runs/suite_trend.html
+python -m flightrecorder action-ledger \
+  --bundle runs/evidence_bundle.json \
+  --bundle runs/evidence_bundle.json \
+  --out runs/action_ledger.json
+python -m flightrecorder gate-action-ledger \
+  --action-ledger runs/action_ledger.json \
+  --policy examples/action_ledger_gate_policy.demo.json \
+  --out runs/action_ledger_gate.json
+python -m flightrecorder gate-decision \
+  --artifact runs/action_ledger_gate.json \
+  --expect-recommendation promote_iteration \
+  --expect-readiness ready \
+  --require-passed \
+  --out runs/promotion_decision.json
+python -m flightrecorder promotion-ledger \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_ledger.json
 echo "Demo reports written to $ROOT/runs/index.html"

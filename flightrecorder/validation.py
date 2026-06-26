@@ -19,6 +19,7 @@ from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
+from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
 from .review import (
     REVIEW_ITEM_SCHEMA_VERSION,
@@ -92,6 +93,7 @@ def validate_artifacts(
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
+    promotion_ledger_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
@@ -129,6 +131,8 @@ def validate_artifacts(
         targets.append(validate_action_ledger_gate(action_ledger_gate_path))
     for decision_gate_path in decision_gate_paths or []:
         targets.append(validate_decision_gate(decision_gate_path))
+    for promotion_ledger_path in promotion_ledger_paths or []:
+        targets.append(validate_promotion_ledger(promotion_ledger_path))
     for trainer_preflight_path in trainer_preflight_paths or []:
         targets.append(validate_trainer_preflight(trainer_preflight_path))
     for trainer_launch_check_path in trainer_launch_check_paths or []:
@@ -495,6 +499,16 @@ def validate_decision_gate(path: str | Path) -> ValidationTarget:
     gate = _read_object(gate_path, target, "decision_gate.json")
     if gate is not None:
         _validate_decision_gate(gate, target, gate_path)
+    return target
+
+
+def validate_promotion_ledger(path: str | Path) -> ValidationTarget:
+    """Validate a longitudinal promotion-ledger artifact."""
+    ledger_path = Path(path)
+    target = ValidationTarget("promotion_ledger", str(ledger_path))
+    ledger = _read_object(ledger_path, target, "promotion_ledger.json")
+    if ledger is not None:
+        _validate_promotion_ledger(ledger, target, ledger_path)
     return target
 
 
@@ -4005,6 +4019,253 @@ def _validate_decision_gate_source_decision_matches_artifact(
     for field_name, expected_value in expected.items():
         if source_decision.get(field_name) != expected_value:
             target.errors.append(f"decision_gate.source_decision.{field_name} must match current source artifact.")
+
+
+def _validate_promotion_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(ledger, "schema_version", PROMOTION_LEDGER_SCHEMA_VERSION, target)
+    if not isinstance(ledger.get("ledger_path"), str):
+        target.errors.append("promotion_ledger.ledger_path must be a string.")
+    if ledger.get("passed") is not True:
+        target.errors.append("promotion_ledger.passed must be true.")
+
+    records = ledger.get("records")
+    if not isinstance(records, list):
+        target.errors.append("promotion_ledger.records must be a list.")
+        records = []
+    metrics = ledger.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("promotion_ledger.metrics must be an object.")
+        metrics = {}
+    notes = ledger.get("notes")
+    if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
+        target.errors.append("promotion_ledger.notes must be a list of strings.")
+
+    for index, record in enumerate(records):
+        _validate_promotion_ledger_record(record, target, f"promotion_ledger.records[{index}]", index, source_path)
+
+    if ledger.get("decision_count") != len(records):
+        target.errors.append(f"promotion_ledger.decision_count expected {len(records)}, got {ledger.get('decision_count')!r}.")
+
+    expected_metrics = _promotion_ledger_expected_metrics(records)
+    for field_name in (
+        "decision_count",
+        "allowed_count",
+        "blocked_count",
+        "latest_recommendation",
+        "latest_readiness",
+        "latest_passed",
+        "consecutive_allowed_count",
+        "consecutive_blocked_count",
+        "unique_source_artifact_count",
+    ):
+        if metrics.get(field_name) != expected_metrics[field_name]:
+            target.errors.append(f"promotion_ledger.metrics.{field_name} expected {expected_metrics[field_name]!r}, got {metrics.get(field_name)!r}.")
+    _validate_action_ledger_count_rows(
+        metrics.get("recommendation_counts"),
+        expected_metrics["recommendation_counts"],
+        target,
+        "promotion_ledger.metrics.recommendation_counts",
+    )
+    _validate_action_ledger_count_rows(
+        metrics.get("source_recommendation_counts"),
+        expected_metrics["source_recommendation_counts"],
+        target,
+        "promotion_ledger.metrics.source_recommendation_counts",
+    )
+    if metrics.get("decision_gate_results") != expected_metrics["decision_gate_results"]:
+        target.errors.append("promotion_ledger.metrics.decision_gate_results must match promotion_ledger.records.")
+
+    target.details.update(
+        {
+            "decision_count": len(records),
+            "allowed_count": expected_metrics["allowed_count"],
+            "blocked_count": expected_metrics["blocked_count"],
+            "latest_recommendation": expected_metrics["latest_recommendation"],
+        }
+    )
+
+
+def _validate_promotion_ledger_record(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    expected_index: int,
+    source_path: Path,
+) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if record.get("index") != expected_index:
+        target.errors.append(f"{label}.index expected {expected_index}, got {record.get('index')!r}.")
+    for field_name in ("path", "schema_version", "readiness", "recommendation", "expected_recommendation"):
+        if not isinstance(record.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if record.get("schema_version") != DECISION_GATE_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {DECISION_GATE_SCHEMA_VERSION}.")
+    if record.get("expected_readiness") is not None and not isinstance(record.get("expected_readiness"), str):
+        target.errors.append(f"{label}.expected_readiness must be a string or null.")
+    for field_name in ("exists", "passed", "require_passed"):
+        if not isinstance(record.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    for field_name in ("check_count", "failed_check_count"):
+        if not _is_non_negative_int(record.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    if _is_non_negative_int(record.get("check_count")) and _is_non_negative_int(record.get("failed_check_count")):
+        if record["failed_check_count"] > record["check_count"]:
+            target.errors.append(f"{label}.failed_check_count must be less than or equal to check_count.")
+    if record.get("exists") is True:
+        _validate_preflight_file_hash(record, target, label, source_path, require_kind=False)
+    if record.get("recommendation") not in {"allow_promotion", "block_promotion"}:
+        target.errors.append(f"{label}.recommendation must be allow_promotion or block_promotion.")
+    expected_allowed = record.get("passed") is True and record.get("recommendation") == "allow_promotion"
+    expected_blocked = record.get("passed") is not True or record.get("recommendation") == "block_promotion"
+    if expected_allowed and expected_blocked:
+        target.errors.append(f"{label} cannot be both allowed and blocked.")
+
+    source = record.get("source")
+    if not isinstance(source, dict):
+        target.errors.append(f"{label}.source must be an object.")
+        source = {}
+    _validate_promotion_ledger_source(source, target, f"{label}.source")
+    _validate_promotion_ledger_record_matches_gate(record, source, target, label, source_path)
+
+
+def _validate_promotion_ledger_source(source: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for field_name in ("schema_version", "recommendation", "readiness", "artifact_path"):
+        if not isinstance(source.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if source.get("passed") is not None and not isinstance(source.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean or null.")
+    if source.get("blocking_check_count") is not None and not _is_non_negative_int(source.get("blocking_check_count")):
+        target.errors.append(f"{label}.blocking_check_count must be a non-negative integer or null.")
+    if not isinstance(source.get("artifact_exists"), bool):
+        target.errors.append(f"{label}.artifact_exists must be a boolean.")
+    if source.get("artifact_sha256") is not None and not _is_sha256(source.get("artifact_sha256")):
+        target.errors.append(f"{label}.artifact_sha256 must be a SHA-256 hex string or null.")
+    if source.get("artifact_exists") is True and not _is_sha256(source.get("artifact_sha256")):
+        target.errors.append(f"{label}.artifact_sha256 must be present for existing source artifacts.")
+
+
+def _validate_promotion_ledger_record_matches_gate(
+    record: dict[str, Any],
+    source: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    file_path = _resolve_preflight_record_path(record.get("path"), source_path)
+    if file_path is None or not file_path.exists() or not file_path.is_file():
+        return
+    try:
+        gate = json.loads(file_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"{label}.path contains invalid JSON: {exc}")
+        return
+    if not isinstance(gate, dict):
+        target.errors.append(f"{label}.path must contain a JSON object.")
+        return
+
+    gate_source = gate.get("source_decision") if isinstance(gate.get("source_decision"), dict) else {}
+    gate_artifact = gate.get("source_artifact") if isinstance(gate.get("source_artifact"), dict) else {}
+    expected = {
+        "schema_version": str(gate.get("schema_version") or ""),
+        "passed": gate.get("passed") is True,
+        "readiness": str(gate.get("readiness") or ""),
+        "recommendation": str(gate.get("recommendation") or ""),
+        "expected_recommendation": str(gate.get("expected_recommendation") or ""),
+        "expected_readiness": gate.get("expected_readiness") if isinstance(gate.get("expected_readiness"), str) else None,
+        "require_passed": gate.get("require_passed") is True,
+        "check_count": gate.get("check_count") if _is_non_negative_int(gate.get("check_count")) else 0,
+        "failed_check_count": gate.get("failed_check_count") if _is_non_negative_int(gate.get("failed_check_count")) else 0,
+    }
+    for field_name, expected_value in expected.items():
+        if record.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match current decision gate.")
+
+    expected_source = {
+        "schema_version": str(gate_source.get("schema_version") or ""),
+        "passed": gate_source.get("passed") if isinstance(gate_source.get("passed"), bool) else None,
+        "recommendation": str(gate_source.get("recommendation") or ""),
+        "readiness": str(gate_source.get("readiness") or ""),
+        "blocking_check_count": gate_source.get("blocking_check_count") if _is_non_negative_int(gate_source.get("blocking_check_count")) else None,
+        "artifact_path": str(gate_artifact.get("path") or ""),
+        "artifact_exists": gate_artifact.get("exists") is True,
+        "artifact_sha256": gate_artifact.get("sha256") if _is_sha256(gate_artifact.get("sha256")) else None,
+    }
+    for field_name, expected_value in expected_source.items():
+        if source.get(field_name) != expected_value:
+            target.errors.append(f"{label}.source.{field_name} must match current decision gate.")
+
+
+def _promotion_ledger_expected_metrics(records: list[Any]) -> dict[str, Any]:
+    valid_records = [record for record in records if isinstance(record, dict)]
+    latest = valid_records[-1] if valid_records else {}
+    source_keys = {
+        _promotion_source_artifact_key(record)
+        for record in valid_records
+        if _promotion_source_artifact_key(record)
+    }
+    return {
+        "decision_count": len(records),
+        "allowed_count": sum(1 for record in valid_records if _promotion_record_allowed(record)),
+        "blocked_count": sum(1 for record in valid_records if _promotion_record_blocked(record)),
+        "latest_recommendation": latest.get("recommendation") if valid_records else "",
+        "latest_readiness": latest.get("readiness") if valid_records else "",
+        "latest_passed": latest.get("passed") if valid_records else None,
+        "consecutive_allowed_count": _promotion_consecutive(valid_records, _promotion_record_allowed),
+        "consecutive_blocked_count": _promotion_consecutive(valid_records, _promotion_record_blocked),
+        "unique_source_artifact_count": len(source_keys),
+        "recommendation_counts": _promotion_count_map(record.get("recommendation") for record in valid_records),
+        "source_recommendation_counts": _promotion_count_map(
+            record.get("source", {}).get("recommendation") if isinstance(record.get("source"), dict) else ""
+            for record in valid_records
+        ),
+        "decision_gate_results": [
+            {
+                "index": record.get("index"),
+                "path": record.get("path"),
+                "passed": record.get("passed"),
+                "recommendation": record.get("recommendation"),
+                "source_recommendation": record.get("source", {}).get("recommendation") if isinstance(record.get("source"), dict) else "",
+                "failed_check_count": record.get("failed_check_count"),
+            }
+            for record in valid_records
+        ],
+    }
+
+
+def _promotion_record_allowed(record: dict[str, Any]) -> bool:
+    return record.get("passed") is True and record.get("recommendation") == "allow_promotion"
+
+
+def _promotion_record_blocked(record: dict[str, Any]) -> bool:
+    return record.get("passed") is not True or record.get("recommendation") == "block_promotion"
+
+
+def _promotion_consecutive(records: list[dict[str, Any]], predicate: Any) -> int:
+    count = 0
+    for record in reversed(records):
+        if not predicate(record):
+            break
+        count += 1
+    return count
+
+
+def _promotion_source_artifact_key(record: dict[str, Any]) -> str:
+    source = record.get("source") if isinstance(record.get("source"), dict) else {}
+    sha256 = source.get("artifact_sha256")
+    if isinstance(sha256, str) and sha256:
+        return sha256
+    path = source.get("artifact_path")
+    return path if isinstance(path, str) and path else ""
+
+
+def _promotion_count_map(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        key = str(value or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:

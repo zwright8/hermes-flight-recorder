@@ -790,6 +790,12 @@ python -m flightrecorder gate-decision \
   --require-passed \
   --out runs/promotion_decision.json >/dev/null
 test -f runs/promotion_decision.json
+cp runs/promotion_decision.json runs/promotion_decision_previous.json
+python -m flightrecorder promotion-ledger \
+  --decision-gate runs/promotion_decision_previous.json \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_ledger.json >/dev/null
+test -f runs/promotion_ledger.json
 python -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
@@ -819,6 +825,7 @@ python -m flightrecorder validate \
   --action-ledger runs/action_ledger.json \
   --action-ledger-gate runs/action_ledger_gate.json \
   --decision-gate runs/promotion_decision.json \
+  --promotion-ledger runs/promotion_ledger.json \
   --trainer-preflight runs/trainer_preflight.json \
   --trainer-launch-check runs/trainer_launch_check.json \
   --repair-queue runs/repair_queue.json \
@@ -833,6 +840,7 @@ bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="u
 action_ledger = json.loads(Path("runs/action_ledger.json").read_text(encoding="utf-8"))
 action_ledger_gate = json.loads(Path("runs/action_ledger_gate.json").read_text(encoding="utf-8"))
 promotion_decision = json.loads(Path("runs/promotion_decision.json").read_text(encoding="utf-8"))
+promotion_ledger = json.loads(Path("runs/promotion_ledger.json").read_text(encoding="utf-8"))
 preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
@@ -887,6 +895,22 @@ assert len(promotion_decision["source_artifact"]["sha256"]) == 64
 assert promotion_decision["source_decision"]["schema_version"] == action_ledger_gate["schema_version"]
 assert promotion_decision["source_decision"]["recommendation"] == "promote_iteration"
 assert promotion_decision["source_decision"]["key_metrics"]["recurring_action_count"] == action_ledger_gate["metrics"]["recurring_action_count"]
+assert promotion_ledger["schema_version"] == "hfr.promotion_ledger.v1"
+assert promotion_ledger["passed"] is True
+assert promotion_ledger["decision_count"] == 2
+assert promotion_ledger["metrics"]["decision_count"] == 2
+assert promotion_ledger["metrics"]["allowed_count"] == 2
+assert promotion_ledger["metrics"]["blocked_count"] == 0
+assert promotion_ledger["metrics"]["latest_recommendation"] == "allow_promotion"
+assert promotion_ledger["metrics"]["latest_readiness"] == "ready"
+assert promotion_ledger["metrics"]["latest_passed"] is True
+assert promotion_ledger["metrics"]["consecutive_allowed_count"] == 2
+assert promotion_ledger["metrics"]["consecutive_blocked_count"] == 0
+assert promotion_ledger["metrics"]["unique_source_artifact_count"] == 1
+assert promotion_ledger["metrics"]["recommendation_counts"] == [{"count": 2, "id": "allow_promotion"}]
+assert promotion_ledger["metrics"]["source_recommendation_counts"] == [{"count": 2, "id": "promote_iteration"}]
+assert all(len(record["sha256"]) == 64 for record in promotion_ledger["records"])
+assert all(len(record["source"]["artifact_sha256"]) == 64 for record in promotion_ledger["records"])
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
@@ -960,6 +984,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger-gate"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--decision-gate"
+"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--promotion-ledger"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
@@ -976,9 +1001,12 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help | grep -q -- "--max-recurring-actions"
 "$VENV_DIR/bin/python" -m flightrecorder gate-decision --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-decision --help | grep -q -- "--expect-recommendation"
+"$VENV_DIR/bin/python" -m flightrecorder promotion-ledger --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder promotion-ledger --help | grep -q -- "--decision-gate"
 test -f examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "gate-decision" examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "decision-gate" examples/github-actions/action-ledger-promotion-gate.yml
+grep -q "promotion-ledger" examples/github-actions/action-ledger-promotion-gate.yml
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null

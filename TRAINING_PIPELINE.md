@@ -140,6 +140,13 @@ flightrecorder gate-decision \
   --out runs/promotion_decision.json
 
 flightrecorder validate --decision-gate runs/promotion_decision.json --strict
+
+flightrecorder promotion-ledger \
+  --decision-gate runs/previous/promotion_decision.json \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_ledger.json
+
+flightrecorder validate --promotion-ledger runs/promotion_ledger.json --strict
 ```
 
 Policies can cap open, new, or recurring actions, require a minimum number of
@@ -154,7 +161,12 @@ handoff jobs. The generated `decision_gate.json` carries
 `source_artifact.sha256`, tying the promotion decision to the exact source gate
 artifact it consumed. When that source path is available, validation also
 checks that the embedded `source_decision` still matches the source artifact's
-current decision block.
+current decision block. Use `flightrecorder promotion-ledger` to preserve the
+history of those allow/block artifacts across iterations. The promotion ledger
+records latest recommendation, allowed/blocked counts, consecutive block or
+allow streaks, and source-artifact fingerprints, giving an external trainer
+launcher a stable "how did we get here?" artifact before it consumes the final
+decision gate.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the
