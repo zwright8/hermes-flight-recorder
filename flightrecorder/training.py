@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .artifacts import compare_scorecards
+
 RL_MANIFEST_SCHEMA_VERSION = "hfr.rl.manifest.v1"
 RL_EPISODE_SCHEMA_VERSION = "hfr.rl.episode.v1"
 RL_REWARD_SCHEMA_VERSION = "hfr.rl.reward.v1"
@@ -20,6 +22,9 @@ RL_SFT_SCHEMA_VERSION = "hfr.rl.sft.v1"
 RL_DPO_SCHEMA_VERSION = "hfr.rl.dpo.v1"
 RL_REWARD_MODEL_SCHEMA_VERSION = "hfr.rl.reward_model.v1"
 RL_DATASET_METRICS_SCHEMA_VERSION = "hfr.rl.dataset_metrics.v1"
+COMPARE_RL_MANIFEST_SCHEMA_VERSION = "hfr.compare_rl.manifest.v1"
+COMPARE_RL_PAIR_SCHEMA_VERSION = "hfr.compare_rl.pair.v1"
+COMPARE_RL_DPO_SCHEMA_VERSION = "hfr.compare_rl.dpo.v1"
 
 REWARD_SCALES = {"score", "binary", "signed"}
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
@@ -145,6 +150,120 @@ def export_rl_dataset(
     if export_metadata:
         manifest["metadata"] = export_metadata
     _write_text(paths["dataset_card"], _dataset_card(manifest, dataset_metrics))
+    _write_json(paths["manifest"], manifest)
+    return manifest
+
+
+def export_compare_rl_dataset(
+    baseline_dir: str | Path,
+    candidate_dir: str | Path,
+    out_dir: str | Path,
+    *,
+    reward_scale: str = "score",
+    min_score_gap: int = 1,
+    preserve_paths: bool = False,
+    metadata: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Export baseline-vs-candidate comparisons as preference training artifacts."""
+    if reward_scale not in REWARD_SCALES:
+        raise TrainingExportError(f"Unsupported reward scale {reward_scale!r}; choose one of {sorted(REWARD_SCALES)}")
+    if min_score_gap < 0:
+        raise TrainingExportError("min_score_gap must be non-negative")
+
+    baseline_root = Path(baseline_dir)
+    candidate_root = Path(candidate_dir)
+    target = Path(out_dir)
+    export_metadata = _metadata(metadata)
+    baseline = _records_by_scenario(load_run_records(baseline_root), "baseline")
+    candidate = _records_by_scenario(load_run_records(candidate_root), "candidate")
+    target.mkdir(parents=True, exist_ok=True)
+
+    pairs: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    missing_in_candidate = sorted(set(baseline) - set(candidate))
+    new_in_candidate = sorted(set(candidate) - set(baseline))
+    for scenario_id in sorted(set(baseline) & set(candidate)):
+        baseline_record = baseline[scenario_id]
+        candidate_record = candidate[scenario_id]
+        baseline_episode = _comparison_episode_record(baseline_record, "baseline", reward_scale, preserve_paths)
+        candidate_episode = _comparison_episode_record(candidate_record, "candidate", reward_scale, preserve_paths)
+        baseline_score = _score(baseline_record.scorecard)
+        candidate_score = _score(candidate_record.scorecard)
+        score_delta = candidate_score - baseline_score
+        if abs(score_delta) < min_score_gap:
+            skipped.append(
+                {
+                    "scenario_id": scenario_id,
+                    "reason": f"score gap {abs(score_delta)} is below min_score_gap {min_score_gap}",
+                    "baseline_score": baseline_score,
+                    "candidate_score": candidate_score,
+                }
+            )
+            continue
+        comparison = compare_scorecards(
+            baseline_record.scorecard,
+            candidate_record.scorecard,
+            baseline_label=_display_path(baseline_record.run_dir, preserve_paths),
+            candidate_label=_display_path(candidate_record.run_dir, preserve_paths),
+        )
+        if score_delta > 0:
+            chosen_side = "candidate"
+            rejected_side = "baseline"
+        else:
+            chosen_side = "baseline"
+            rejected_side = "candidate"
+        pairs.append(
+            _comparison_pair_record(
+                scenario_id,
+                baseline_episode,
+                candidate_episode,
+                comparison,
+                chosen_side,
+                rejected_side,
+            )
+        )
+
+    dpo = _comparison_dpo_records(pairs)
+    paths = {
+        "improvement_pairs": target / "improvement_pairs.jsonl",
+        "improvement_dpo": target / "improvement_dpo.jsonl",
+        "manifest": target / "manifest.json",
+        "improvement_card": target / "IMPROVEMENT_CARD.md",
+    }
+    candidate_win_count = sum(1 for pair in pairs if pair.get("chosen_side") == "candidate")
+    baseline_win_count = sum(1 for pair in pairs if pair.get("chosen_side") == "baseline")
+    manifest: dict[str, Any] = {
+        "schema_version": COMPARE_RL_MANIFEST_SCHEMA_VERSION,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "baseline_runs_dir": _display_path(baseline_root, preserve_paths),
+        "candidate_runs_dir": _display_path(candidate_root, preserve_paths),
+        "output_dir": _display_path(target, preserve_paths),
+        "reward_scale": reward_scale,
+        "min_score_gap": min_score_gap,
+        "baseline_run_count": len(baseline),
+        "candidate_run_count": len(candidate),
+        "paired_scenario_count": len(set(baseline) & set(candidate)),
+        "pair_count": len(pairs),
+        "dpo_count": len(dpo),
+        "candidate_win_count": candidate_win_count,
+        "baseline_win_count": baseline_win_count,
+        "skipped_pair_count": len(skipped),
+        "missing_in_candidate": missing_in_candidate,
+        "new_in_candidate": new_in_candidate,
+        "skipped_pairs": skipped,
+        "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
+        "notes": [
+            "Comparison exports are built from paired baseline/candidate normalized_trace.json and scorecard.json files.",
+            "The chosen side is whichever paired run has the higher deterministic scorecard score.",
+            "Candidate wins describe measurable improvements; baseline wins describe regressions to avoid.",
+            "Use these artifacts as preference/eval data, not as a complete trainer.",
+        ],
+    }
+    if export_metadata:
+        manifest["metadata"] = export_metadata
+    _write_jsonl(paths["improvement_pairs"], pairs)
+    _write_jsonl(paths["improvement_dpo"], dpo)
+    _write_text(paths["improvement_card"], _improvement_card(manifest, pairs))
     _write_json(paths["manifest"], manifest)
     return manifest
 
@@ -541,6 +660,145 @@ def _dpo_records(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
+def _records_by_scenario(records: list[RunRecord], side: str) -> dict[str, RunRecord]:
+    by_scenario: dict[str, RunRecord] = {}
+    for record in records:
+        scenario_id = str(record.scorecard.get("scenario_id") or record.run_id)
+        if scenario_id in by_scenario:
+            raise TrainingExportError(f"Duplicate scenario_id {scenario_id!r} in {side} runs")
+        by_scenario[scenario_id] = record
+    return by_scenario
+
+
+def _comparison_episode_record(record: RunRecord, side: str, reward_scale: str, preserve_paths: bool) -> dict[str, Any]:
+    episode = _episode_record(record, reward_scale, preserve_paths)
+    episode["episode_id"] = f"{side}:{record.run_id}"
+    episode["comparison_side"] = side
+    return episode
+
+
+def _comparison_pair_record(
+    scenario_id: str,
+    baseline_episode: dict[str, Any],
+    candidate_episode: dict[str, Any],
+    comparison: dict[str, Any],
+    chosen_side: str,
+    rejected_side: str,
+) -> dict[str, Any]:
+    chosen = candidate_episode if chosen_side == "candidate" else baseline_episode
+    rejected = baseline_episode if rejected_side == "baseline" else candidate_episode
+    candidate_score_delta = int(comparison.get("score_delta", 0) or 0)
+    candidate_outcome = "improved" if candidate_score_delta > 0 else "regressed"
+    chosen_score = _score_value(chosen.get("outcome", {}).get("score") if isinstance(chosen.get("outcome"), dict) else None)
+    rejected_score = _score_value(rejected.get("outcome", {}).get("score") if isinstance(rejected.get("outcome"), dict) else None)
+    reason = (
+        f"{chosen_side} score {chosen_score} beat {rejected_side} score {rejected_score}; "
+        f"candidate_delta={candidate_score_delta}."
+    )
+    if comparison.get("fixes"):
+        reason += f" Fixed rules: {', '.join(str(rule) for rule in comparison['fixes'])}."
+    if comparison.get("regressions"):
+        reason += f" Regressed rules: {', '.join(str(rule) for rule in comparison['regressions'])}."
+    return {
+        "schema_version": COMPARE_RL_PAIR_SCHEMA_VERSION,
+        "pair_id": f"{scenario_id}:{chosen_side}>{rejected_side}",
+        "scenario_id": scenario_id,
+        "task_family": _task_family(scenario_id),
+        "prompt": str(chosen.get("prompt") or rejected.get("prompt") or ""),
+        "candidate_outcome": candidate_outcome,
+        "candidate_score_delta": candidate_score_delta,
+        "chosen_side": chosen_side,
+        "rejected_side": rejected_side,
+        "chosen_episode_id": chosen["episode_id"],
+        "rejected_episode_id": rejected["episode_id"],
+        "baseline_episode_id": baseline_episode["episode_id"],
+        "candidate_episode_id": candidate_episode["episode_id"],
+        "chosen_score": chosen_score,
+        "rejected_score": rejected_score,
+        "score_gap": chosen_score - rejected_score,
+        "rule_fixes": comparison.get("fixes", []),
+        "rule_regressions": comparison.get("regressions", []),
+        "new_critical_failures": comparison.get("new_critical_failures", []),
+        "reason": reason,
+        "baseline": _preference_view(baseline_episode),
+        "candidate": _preference_view(candidate_episode),
+        "chosen": _preference_view(chosen),
+        "rejected": _preference_view(rejected),
+    }
+
+
+def _comparison_dpo_records(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for pair in pairs:
+        prompt = str(pair.get("prompt") or "")
+        chosen_view = pair.get("chosen") if isinstance(pair.get("chosen"), dict) else {}
+        rejected_view = pair.get("rejected") if isinstance(pair.get("rejected"), dict) else {}
+        chosen = _comparison_response_text(chosen_view)
+        rejected = _comparison_response_text(rejected_view)
+        pair_id = str(pair.get("pair_id") or "")
+        rows.append(
+            {
+                "schema_version": COMPARE_RL_DPO_SCHEMA_VERSION,
+                "pair_id": pair_id,
+                "preference_id": pair_id,
+                "scenario_id": str(pair.get("scenario_id") or ""),
+                "task_family": str(pair.get("task_family") or "unknown"),
+                "prompt": prompt,
+                "chosen": chosen,
+                "rejected": rejected,
+                "chosen_messages": _messages(prompt, chosen),
+                "rejected_messages": _messages(prompt, rejected),
+                "chosen_side": str(pair.get("chosen_side") or ""),
+                "rejected_side": str(pair.get("rejected_side") or ""),
+                "candidate_outcome": str(pair.get("candidate_outcome") or ""),
+                "candidate_score_delta": int(pair.get("candidate_score_delta", 0) or 0),
+                "chosen_episode_id": str(pair.get("chosen_episode_id") or ""),
+                "rejected_episode_id": str(pair.get("rejected_episode_id") or ""),
+                "chosen_score": _score_value(pair.get("chosen_score")),
+                "rejected_score": _score_value(pair.get("rejected_score")),
+                "score_gap": _score_value(pair.get("score_gap")),
+                "reason": str(pair.get("reason") or ""),
+                "source_artifact": "improvement_pairs.jsonl",
+            }
+        )
+    return rows
+
+
+def _comparison_response_text(view: dict[str, Any]) -> str:
+    lines = ["Observed behavior:"]
+    events = view.get("events") if isinstance(view.get("events"), list) else []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("type") or "event")
+        if event_type not in {"tool_call", "tool_result", "assistant_message"}:
+            continue
+        parts = [event_type]
+        tool_name = str(event.get("tool_name") or "").strip()
+        status = str(event.get("status") or "").strip()
+        if tool_name:
+            parts.append(tool_name)
+        if status:
+            parts.append(status)
+        detail = _comparison_event_detail(event)
+        if detail:
+            parts.append(detail)
+        lines.append("- " + " ".join(parts))
+    final_answer = str(view.get("final_answer") or "")
+    if final_answer:
+        lines.append(f"Final answer: {final_answer}")
+    return "\n".join(lines)
+
+
+def _comparison_event_detail(event: dict[str, Any]) -> str:
+    for field_name in ("result", "args"):
+        value = event.get(field_name)
+        if isinstance(value, dict) and value:
+            return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    text = str(event.get("text") or "").strip()
+    return text[:500]
+
+
 def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for episode in episodes:
@@ -779,6 +1037,68 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
             "- These artifacts are deterministic eval evidence and trainer-ready views, not a trainer.",
             "- Reward labels are only as strong as the scenario policies and observable trace evidence.",
             "- Review HTML reports and scorecards before using exported rows for model updates.",
+            "",
+        ]
+    )
+    return "\n".join(rows)
+
+
+def _improvement_card(manifest: dict[str, Any], pairs: list[dict[str, Any]]) -> str:
+    rows = [
+        "# Flight Recorder Improvement Pair Card",
+        "",
+        "This card summarizes baseline-vs-candidate preference artifacts generated from paired Flight Recorder runs.",
+        "",
+        "## Summary",
+        "",
+        f"- Baseline runs: `{manifest.get('baseline_runs_dir')}`",
+        f"- Candidate runs: `{manifest.get('candidate_runs_dir')}`",
+        f"- Pair count: {manifest.get('pair_count')}",
+        f"- Candidate wins: {manifest.get('candidate_win_count')}",
+        f"- Baseline wins: {manifest.get('baseline_win_count')}",
+        f"- Skipped pairs: {manifest.get('skipped_pair_count')}",
+        "",
+    ]
+    metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
+    if metadata:
+        rows.extend(["## Experiment Metadata", "", "| Key | Value |", "| --- | --- |"])
+        for key, value in sorted(metadata.items()):
+            rows.append(f"| `{_md_cell(str(key))}` | {_md_cell(str(value))} |")
+        rows.append("")
+    rows.extend(
+        [
+            "## Pairs",
+            "",
+            "| Scenario | Candidate Outcome | Delta | Chosen | Rejected | Reason |",
+            "| --- | --- | ---: | --- | --- | --- |",
+        ]
+    )
+    if pairs:
+        for pair in pairs:
+            rows.append(
+                "| "
+                + " | ".join(
+                    [
+                        f"`{_md_cell(str(pair.get('scenario_id') or 'unknown'))}`",
+                        _md_cell(str(pair.get("candidate_outcome") or "unknown")),
+                        str(pair.get("candidate_score_delta")),
+                        _md_cell(str(pair.get("chosen_side") or "")),
+                        _md_cell(str(pair.get("rejected_side") or "")),
+                        _md_cell(str(pair.get("reason") or "")),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        rows.append("| None | n/a | 0 | n/a | n/a | No pairs exceeded the score-gap threshold. |")
+    rows.extend(
+        [
+            "",
+            "## Boundaries",
+            "",
+            "- These rows preserve deterministic comparison evidence; they are not proof of causal model improvement.",
+            "- Use candidate wins as improvement examples and baseline wins as regression-avoidance examples.",
+            "- Review the source reports before using preference rows for model updates.",
             "",
         ]
     )

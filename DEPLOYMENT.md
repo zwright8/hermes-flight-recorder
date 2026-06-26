@@ -117,6 +117,10 @@ network.
   downstream SFT, preference, reward-model, curriculum, or RL jobs need
   deterministic episode/reward/step-reward/preference/trainer-view/failure-mode
   artifacts plus dataset-level quality metrics and a dataset card.
+- Use `flightrecorder export-compare-rl --baseline <old-runs> --candidate
+  <new-runs> --out runs/compare_rl_export` when downstream jobs need
+  baseline/candidate preference rows that preserve improvement or regression
+  direction.
 - Use `flightrecorder export-review --runs runs --out runs/review_queue` when
   maintainers need a human-curation queue before deterministic score labels are
   trusted as training signal.
@@ -125,8 +129,9 @@ network.
   labels into reviewed SFT, reward-model, preference, and DPO views.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --review-export runs/review_queue --reviewed-export runs/reviewed_export
-  --suite-summary runs/suite_summary.json --suite-trend runs/suite_trend.json
-  --strict` before publishing artifacts or using them downstream.
+  --compare-export runs/compare_rl_export --suite-summary runs/suite_summary.json
+  --suite-trend runs/suite_trend.json --strict` before publishing artifacts or
+  using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no

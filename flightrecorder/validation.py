@@ -30,6 +30,9 @@ from .training import (
     RL_DPO_SCHEMA_VERSION,
     RL_EPISODE_SCHEMA_VERSION,
     RL_FAILURE_MODE_SCHEMA_VERSION,
+    COMPARE_RL_DPO_SCHEMA_VERSION,
+    COMPARE_RL_MANIFEST_SCHEMA_VERSION,
+    COMPARE_RL_PAIR_SCHEMA_VERSION,
     RL_MANIFEST_SCHEMA_VERSION,
     RL_PREFERENCE_SCHEMA_VERSION,
     RL_REWARD_SCHEMA_VERSION,
@@ -67,6 +70,7 @@ def validate_artifacts(
     runs_dir: str | Path | None = None,
     run_dirs: list[str | Path] | None = None,
     training_export_dir: str | Path | None = None,
+    compare_export_dir: str | Path | None = None,
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
     suite_summary_paths: list[str | Path] | None = None,
@@ -81,6 +85,8 @@ def validate_artifacts(
         targets.extend(validate_runs_dir(runs_dir))
     if training_export_dir is not None:
         targets.append(validate_training_export(training_export_dir))
+    if compare_export_dir is not None:
+        targets.append(validate_compare_export(compare_export_dir))
     if review_export_dir is not None:
         targets.append(validate_review_export(review_export_dir))
     if reviewed_export_dir is not None:
@@ -260,6 +266,40 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             "dpo_count": len(dpo),
             "reward_model_count": len(reward_model),
             "quality_flag_count": len(dataset_metrics.get("quality_flags", [])) if isinstance(dataset_metrics, dict) else None,
+        }
+    )
+    return target
+
+
+def validate_compare_export(path: str | Path) -> ValidationTarget:
+    """Validate an export-compare-rl output directory."""
+    export_dir = Path(path)
+    target = ValidationTarget("compare_export", str(export_dir))
+    if not export_dir.exists():
+        target.errors.append(f"Compare export directory not found: {export_dir}")
+        return target
+    if not export_dir.is_dir():
+        target.errors.append(f"Compare export path is not a directory: {export_dir}")
+        return target
+
+    manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
+    pairs = _read_jsonl_objects(export_dir / "improvement_pairs.jsonl", target, "improvement_pairs.jsonl")
+    dpo = _read_jsonl_objects(export_dir / "improvement_dpo.jsonl", target, "improvement_dpo.jsonl")
+    card_path = export_dir / "IMPROVEMENT_CARD.md"
+    if manifest is not None:
+        _validate_compare_manifest(manifest, target, pairs, dpo, card_path.exists())
+    _validate_compare_pairs(pairs, target)
+    _validate_compare_dpo(dpo, target, pairs)
+    if card_path.exists():
+        _validate_improvement_card(card_path, target)
+    else:
+        target.warnings.append("IMPROVEMENT_CARD.md is missing; comparison export is less reviewable.")
+    target.details.update(
+        {
+            "pair_count": len(pairs),
+            "dpo_count": len(dpo),
+            "candidate_win_count": sum(1 for pair in pairs if pair.get("chosen_side") == "candidate"),
+            "baseline_win_count": sum(1 for pair in pairs if pair.get("chosen_side") == "baseline"),
         }
     )
     return target
@@ -568,6 +608,270 @@ def _validate_training_manifest(
         target.warnings.append("manifest.source_runs_dir is absolute; prefer redacted or relative exports for sharing.")
     if _looks_absolute(str(manifest.get("output_dir", ""))):
         target.warnings.append("manifest.output_dir is absolute; prefer redacted or relative exports for sharing.")
+
+
+def _validate_compare_manifest(
+    manifest: dict[str, Any],
+    target: ValidationTarget,
+    pairs: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    has_card: bool,
+) -> None:
+    _require_equal(manifest, "schema_version", COMPARE_RL_MANIFEST_SCHEMA_VERSION, target)
+    expected_counts = {
+        "pair_count": len(pairs),
+        "dpo_count": len(dpo),
+        "candidate_win_count": sum(1 for pair in pairs if pair.get("chosen_side") == "candidate"),
+        "baseline_win_count": sum(1 for pair in pairs if pair.get("chosen_side") == "baseline"),
+    }
+    for field_name, expected in expected_counts.items():
+        if manifest.get(field_name) != expected:
+            target.errors.append(f"compare_manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
+    for field_name in ("baseline_run_count", "candidate_run_count", "paired_scenario_count", "skipped_pair_count", "min_score_gap"):
+        if not _is_non_negative_int(manifest.get(field_name)):
+            target.errors.append(f"compare_manifest.{field_name} must be a non-negative integer.")
+    if not isinstance(manifest.get("outputs"), dict):
+        target.errors.append("compare_manifest.outputs must be an object.")
+    else:
+        for output_name in ("improvement_pairs", "improvement_dpo", "manifest", "improvement_card"):
+            if output_name not in manifest["outputs"]:
+                target.errors.append(f"compare_manifest.outputs.{output_name} is missing.")
+    for field_name in ("missing_in_candidate", "new_in_candidate"):
+        if not _is_string_list(manifest.get(field_name)):
+            target.errors.append(f"compare_manifest.{field_name} must be a list of strings.")
+    skipped = manifest.get("skipped_pairs")
+    if not isinstance(skipped, list):
+        target.errors.append("compare_manifest.skipped_pairs must be a list.")
+    if "metadata" in manifest:
+        _validate_metadata(manifest.get("metadata"), target, "compare_manifest.metadata")
+    if not has_card:
+        target.warnings.append("compare_manifest has no IMPROVEMENT_CARD.md companion.")
+    for field_name in ("baseline_runs_dir", "candidate_runs_dir", "output_dir"):
+        if _looks_absolute(str(manifest.get(field_name, ""))):
+            target.warnings.append(f"compare_manifest.{field_name} is absolute; prefer redacted or relative exports for sharing.")
+
+
+def _validate_compare_pairs(pairs: list[dict[str, Any]], target: ValidationTarget) -> None:
+    seen: set[str] = set()
+    for index, pair in enumerate(pairs):
+        label = f"improvement_pairs[{index}]"
+        _require_equal(pair, "schema_version", COMPARE_RL_PAIR_SCHEMA_VERSION, target, prefix=f"{label}.")
+        pair_id = pair.get("pair_id")
+        if not isinstance(pair_id, str) or not pair_id:
+            target.errors.append(f"{label}.pair_id must be a non-empty string.")
+        elif pair_id in seen:
+            target.errors.append(f"{label}.pair_id duplicates {pair_id!r}.")
+        else:
+            seen.add(pair_id)
+        for field_name in ("scenario_id", "task_family", "chosen_episode_id", "rejected_episode_id", "baseline_episode_id", "candidate_episode_id", "reason"):
+            if not isinstance(pair.get(field_name), str) or not pair.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(pair.get("prompt"), str):
+            target.errors.append(f"{label}.prompt must be a string.")
+        if pair.get("candidate_outcome") not in {"improved", "regressed"}:
+            target.errors.append(f"{label}.candidate_outcome must be improved or regressed.")
+        chosen_side = pair.get("chosen_side")
+        rejected_side = pair.get("rejected_side")
+        if chosen_side not in {"baseline", "candidate"}:
+            target.errors.append(f"{label}.chosen_side must be baseline or candidate.")
+        if rejected_side not in {"baseline", "candidate"}:
+            target.errors.append(f"{label}.rejected_side must be baseline or candidate.")
+        if chosen_side == rejected_side:
+            target.errors.append(f"{label}.chosen_side and rejected_side must differ.")
+        if not _is_plain_int(pair.get("candidate_score_delta")):
+            target.errors.append(f"{label}.candidate_score_delta must be an integer.")
+        for field_name in ("chosen_score", "rejected_score", "score_gap"):
+            if not _is_int_between(pair.get(field_name), 0, 100):
+                target.errors.append(f"{label}.{field_name} must be an integer from 0 to 100.")
+        if _is_int_between(pair.get("chosen_score"), 0, 100) and _is_int_between(pair.get("rejected_score"), 0, 100):
+            expected_gap = pair["chosen_score"] - pair["rejected_score"]
+            if pair.get("score_gap") != expected_gap:
+                target.errors.append(f"{label}.score_gap expected {expected_gap}, got {pair.get('score_gap')!r}.")
+            if expected_gap <= 0:
+                target.errors.append(f"{label}.chosen_score must be greater than rejected_score.")
+        for field_name in ("rule_fixes", "rule_regressions", "new_critical_failures"):
+            if not _is_string_list(pair.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a list of strings.")
+        baseline = _validate_compare_view(pair.get("baseline"), target, f"{label}.baseline")
+        candidate = _validate_compare_view(pair.get("candidate"), target, f"{label}.candidate")
+        chosen = _validate_compare_view(pair.get("chosen"), target, f"{label}.chosen")
+        rejected = _validate_compare_view(pair.get("rejected"), target, f"{label}.rejected")
+        _validate_compare_pair_links(pair, baseline, candidate, chosen, rejected, target, label)
+
+
+def _validate_compare_pair_links(
+    pair: dict[str, Any],
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+    chosen: dict[str, Any],
+    rejected: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if baseline and pair.get("baseline_episode_id") != baseline.get("episode_id"):
+        target.errors.append(f"{label}.baseline_episode_id must match baseline.episode_id.")
+    if candidate and pair.get("candidate_episode_id") != candidate.get("episode_id"):
+        target.errors.append(f"{label}.candidate_episode_id must match candidate.episode_id.")
+    chosen_side = pair.get("chosen_side")
+    rejected_side = pair.get("rejected_side")
+    expected_chosen = candidate if chosen_side == "candidate" else baseline if chosen_side == "baseline" else {}
+    expected_rejected = candidate if rejected_side == "candidate" else baseline if rejected_side == "baseline" else {}
+    if expected_chosen and chosen and chosen.get("episode_id") != expected_chosen.get("episode_id"):
+        target.errors.append(f"{label}.chosen must match the chosen_side view.")
+    if expected_rejected and rejected and rejected.get("episode_id") != expected_rejected.get("episode_id"):
+        target.errors.append(f"{label}.rejected must match the rejected_side view.")
+    if pair.get("candidate_outcome") == "improved" and not (_is_plain_int(pair.get("candidate_score_delta")) and pair["candidate_score_delta"] > 0):
+        target.errors.append(f"{label}.candidate_score_delta must be positive when candidate_outcome is improved.")
+    if pair.get("candidate_outcome") == "regressed" and not (_is_plain_int(pair.get("candidate_score_delta")) and pair["candidate_score_delta"] < 0):
+        target.errors.append(f"{label}.candidate_score_delta must be negative when candidate_outcome is regressed.")
+
+
+def _validate_compare_view(value: Any, target: ValidationTarget, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return {}
+    for field_name in ("episode_id", "scenario_id"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if not isinstance(value.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    if not _is_int_between(value.get("score"), 0, 100):
+        target.errors.append(f"{label}.score must be an integer from 0 to 100.")
+    if not isinstance(value.get("reward"), (int, float)) or isinstance(value.get("reward"), bool):
+        target.errors.append(f"{label}.reward must be numeric.")
+    if not _is_string_list(value.get("failed_rules")):
+        target.errors.append(f"{label}.failed_rules must be a list of strings.")
+    if not isinstance(value.get("events"), list):
+        target.errors.append(f"{label}.events must be a list.")
+    if not isinstance(value.get("final_answer"), str):
+        target.errors.append(f"{label}.final_answer must be a string.")
+    return value
+
+
+def _validate_compare_dpo(dpo: list[dict[str, Any]], target: ValidationTarget, pairs: list[dict[str, Any]]) -> None:
+    pair_by_id = {pair.get("pair_id"): pair for pair in pairs if isinstance(pair.get("pair_id"), str)}
+    seen: set[str] = set()
+    for index, row in enumerate(dpo):
+        label = f"improvement_dpo[{index}]"
+        _require_equal(row, "schema_version", COMPARE_RL_DPO_SCHEMA_VERSION, target, prefix=f"{label}.")
+        pair_id = row.get("pair_id")
+        if not isinstance(pair_id, str) or not pair_id:
+            target.errors.append(f"{label}.pair_id must be a non-empty string.")
+            pair = None
+        elif pair_id in seen:
+            target.errors.append(f"{label}.pair_id duplicates {pair_id!r}.")
+            pair = pair_by_id.get(pair_id)
+        else:
+            seen.add(pair_id)
+            pair = pair_by_id.get(pair_id)
+        if row.get("preference_id") != pair_id:
+            target.errors.append(f"{label}.preference_id must match pair_id.")
+        if pair is None:
+            target.errors.append(f"{label}.pair_id {pair_id!r} does not reference an improvement pair.")
+            continue
+        if row.get("source_artifact") != "improvement_pairs.jsonl":
+            target.errors.append(f"{label}.source_artifact must be 'improvement_pairs.jsonl'.")
+        for field_name in (
+            "scenario_id",
+            "task_family",
+            "prompt",
+            "chosen",
+            "rejected",
+            "chosen_side",
+            "rejected_side",
+            "candidate_outcome",
+            "reason",
+        ):
+            if not isinstance(row.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+        for field_name in ("chosen_score", "rejected_score", "score_gap"):
+            if not _is_int_between(row.get(field_name), 0, 100):
+                target.errors.append(f"{label}.{field_name} must be an integer from 0 to 100.")
+        if not _is_plain_int(row.get("candidate_score_delta")):
+            target.errors.append(f"{label}.candidate_score_delta must be an integer.")
+        _validate_messages(row.get("chosen_messages"), target, f"{label}.chosen_messages")
+        _validate_messages(row.get("rejected_messages"), target, f"{label}.rejected_messages")
+        _compare_improvement_dpo_to_pair(row, pair, target, label)
+    missing = sorted(set(pair_by_id) - seen)
+    if missing:
+        target.errors.append(f"improvement_dpo.jsonl missing improvement pairs: {missing!r}.")
+
+
+def _compare_improvement_dpo_to_pair(row: dict[str, Any], pair: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    chosen = pair.get("chosen") if isinstance(pair.get("chosen"), dict) else {}
+    rejected = pair.get("rejected") if isinstance(pair.get("rejected"), dict) else {}
+    expected = {
+        "scenario_id": pair.get("scenario_id"),
+        "task_family": pair.get("task_family"),
+        "prompt": pair.get("prompt"),
+        "chosen": _compare_response_text(chosen),
+        "rejected": _compare_response_text(rejected),
+        "chosen_side": pair.get("chosen_side"),
+        "rejected_side": pair.get("rejected_side"),
+        "candidate_outcome": pair.get("candidate_outcome"),
+        "candidate_score_delta": pair.get("candidate_score_delta"),
+        "chosen_episode_id": pair.get("chosen_episode_id"),
+        "rejected_episode_id": pair.get("rejected_episode_id"),
+        "chosen_score": pair.get("chosen_score"),
+        "rejected_score": pair.get("rejected_score"),
+        "score_gap": pair.get("score_gap"),
+        "reason": pair.get("reason"),
+    }
+    for field_name, expected_value in expected.items():
+        if row.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} does not match improvement pair {pair.get('pair_id')!r}.")
+
+
+def _compare_response_text(view: dict[str, Any]) -> str:
+    lines = ["Observed behavior:"]
+    events = view.get("events") if isinstance(view.get("events"), list) else []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("type") or "event")
+        if event_type not in {"tool_call", "tool_result", "assistant_message"}:
+            continue
+        parts = [event_type]
+        tool_name = str(event.get("tool_name") or "").strip()
+        status = str(event.get("status") or "").strip()
+        if tool_name:
+            parts.append(tool_name)
+        if status:
+            parts.append(status)
+        detail = _compare_event_detail(event)
+        if detail:
+            parts.append(detail)
+        lines.append("- " + " ".join(parts))
+    final_answer = str(view.get("final_answer") or "")
+    if final_answer:
+        lines.append(f"Final answer: {final_answer}")
+    return "\n".join(lines)
+
+
+def _compare_event_detail(event: dict[str, Any]) -> str:
+    for field_name in ("result", "args"):
+        value = event.get(field_name)
+        if isinstance(value, dict) and value:
+            return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    text = str(event.get("text") or "").strip()
+    return text[:500]
+
+
+def _validate_improvement_card(path: Path, target: ValidationTarget) -> None:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        target.errors.append(f"IMPROVEMENT_CARD.md could not be read: {exc}")
+        return
+    required = [
+        "# Flight Recorder Improvement Pair Card",
+        "## Summary",
+        "## Pairs",
+        "## Boundaries",
+    ]
+    for marker in required:
+        if marker not in text:
+            target.errors.append(f"IMPROVEMENT_CARD.md missing section marker {marker!r}.")
 
 
 def _validate_review_manifest(
@@ -2093,6 +2397,10 @@ def _validate_metadata(value: Any, target: ValidationTarget, label: str) -> None
 
 def _is_int_between(value: Any, minimum: int, maximum: int) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= maximum
+
+
+def _is_plain_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _is_non_negative_int(value: Any) -> bool:

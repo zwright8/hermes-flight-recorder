@@ -136,9 +136,15 @@ flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
 
+flightrecorder export-compare-rl \
+  --baseline runs_baseline \
+  --candidate runs_candidate \
+  --out runs/compare_rl_export
+
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
   --suite-summary runs/suite_summary.json \
   --strict
 
@@ -215,6 +221,20 @@ training-loop artifacts:
 - `DATASET_CARD.md`: human-readable summary of the generated dataset and its
   boundaries.
 - `manifest.json`: export settings, counts, and caveats.
+
+`flightrecorder export-compare-rl` converts paired baseline/candidate run
+directories into improvement-loop preference artifacts:
+
+- `improvement_pairs.jsonl`: one chosen/rejected evidence pair per paired
+  scenario whose score gap exceeds the threshold. Candidate wins become
+  improvement examples; baseline wins become regression-avoidance examples.
+- `improvement_dpo.jsonl`: behavior-transcript DPO rows derived from
+  `improvement_pairs.jsonl`, including tool-call/tool-result evidence instead
+  of final-answer text alone.
+- `manifest.json`: counts, source directories, metadata, skipped pairs, and
+  output paths.
+- `IMPROVEMENT_CARD.md`: human-readable summary of candidate wins, baseline
+  wins, and pair rationale.
 
 `flightrecorder export-review` converts completed run directories into a
 human-curation queue:
@@ -535,6 +555,22 @@ and training-readiness signals.
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.
 
+When you have a baseline and candidate suite, use `export-compare-rl` to keep
+the improvement direction explicit:
+
+```bash
+flightrecorder export-compare-rl \
+  --baseline runs_baseline \
+  --candidate runs_candidate \
+  --out runs/compare_rl_export \
+  --min-score-gap 1
+```
+
+This export preserves whether the candidate improved or regressed for each
+paired scenario and writes behavior-transcript preference rows, so a task can
+be preferred because it had the right tool evidence even when both final
+answers look similar.
+
 This is training data plumbing, not a trainer. It does not generate rollouts,
 update model weights, or make weak scenario policies strong. For the full data
 contract and future trainer shape, see
@@ -557,6 +593,7 @@ flightrecorder validate \
   --training-export runs/training_export \
   --review-export runs/review_queue \
   --reviewed-export runs/reviewed_export \
+  --compare-export runs/compare_rl_export \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --out runs/validation.json \
@@ -597,6 +634,9 @@ scenario directory or single scenario + trace artifact
 	          |
 	          v
 	  compare-suite baseline/candidate directories -> suite regression delta
+	          |
+	          v
+	  export-compare-rl -> baseline/candidate improvement pairs
 	          |
 	          v
 	  export-review -> review queue + label templates

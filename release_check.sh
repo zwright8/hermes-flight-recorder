@@ -86,6 +86,54 @@ test -f runs/suite_gate.json
 test -f examples/suite_gate_policy.demo.json
 python - <<'PY'
 import json
+import shutil
+from pathlib import Path
+
+baseline = Path("runs/compare_rl_baseline/email_reply_completion")
+candidate = Path("runs/compare_rl_candidate/email_reply_completion")
+for root in (baseline.parent, candidate.parent):
+    if root.exists():
+        shutil.rmtree(root)
+shutil.copytree(Path("runs/email_reply_completion_bad"), baseline)
+shutil.copytree(Path("runs/email_reply_completion_good"), candidate)
+for score_path in (baseline / "scorecard.json", candidate / "scorecard.json"):
+    scorecard = json.loads(score_path.read_text(encoding="utf-8"))
+    scorecard["scenario_id"] = "email_reply_completion"
+    scorecard["scenario_title"] = "Email Reply Completion"
+    score_path.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+python -m flightrecorder export-compare-rl \
+  --baseline runs/compare_rl_baseline \
+  --candidate runs/compare_rl_candidate \
+  --out runs/compare_rl_export \
+  --metadata candidate=email-evidence-fix >/dev/null
+test -f runs/compare_rl_export/manifest.json
+test -f runs/compare_rl_export/improvement_pairs.jsonl
+test -f runs/compare_rl_export/improvement_dpo.jsonl
+test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
+python -m flightrecorder validate \
+  --compare-export runs/compare_rl_export \
+  --strict >/dev/null
+python - <<'PY'
+import json
+from pathlib import Path
+
+manifest = json.loads(Path("runs/compare_rl_export/manifest.json").read_text(encoding="utf-8"))
+pair = json.loads(Path("runs/compare_rl_export/improvement_pairs.jsonl").read_text(encoding="utf-8").splitlines()[0])
+dpo = json.loads(Path("runs/compare_rl_export/improvement_dpo.jsonl").read_text(encoding="utf-8").splitlines()[0])
+card = Path("runs/compare_rl_export/IMPROVEMENT_CARD.md").read_text(encoding="utf-8")
+assert manifest["pair_count"] == 1
+assert manifest["candidate_win_count"] == 1
+assert manifest["metadata"]["candidate"] == "email-evidence-fix"
+assert pair["chosen_side"] == "candidate"
+assert pair["candidate_score_delta"] == 90
+assert "required_actions" in pair["rule_fixes"]
+assert "tool_result gmail_send ok" in dpo["chosen"]
+assert "tool_result gmail_send ok" not in dpo["rejected"]
+assert "# Flight Recorder Improvement Pair Card" in card
+PY
+python - <<'PY'
+import json
 from pathlib import Path
 
 gate = json.loads(Path("runs/suite_gate.json").read_text(encoding="utf-8"))
@@ -190,6 +238,7 @@ test -f runs/validation.json
 python -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --strict >/dev/null
@@ -287,6 +336,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
+"$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder apply-review --help >/dev/null
 

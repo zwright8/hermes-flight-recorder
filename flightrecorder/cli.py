@@ -36,7 +36,7 @@ from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
 from .scorers import score_trace
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
-from .training import TrainingExportError, export_rl_dataset
+from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
     TRAINING_GATE_POLICY_SCHEMA_VERSION,
     TrainingGatePolicyError,
@@ -345,6 +345,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         runs_dir=args.runs,
         run_dirs=args.run,
         training_export_dir=args.training_export,
+        compare_export_dir=args.compare_export,
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
         suite_summary_paths=args.suite_summary,
@@ -531,6 +532,26 @@ def cmd_export_rl(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export_compare_rl(args: argparse.Namespace) -> int:
+    metadata = _metadata_options(args.metadata)
+    manifest = export_compare_rl_dataset(
+        args.baseline,
+        args.candidate,
+        args.out,
+        reward_scale=args.reward_scale,
+        min_score_gap=args.min_score_gap,
+        preserve_paths=args.preserve_paths,
+        metadata=metadata,
+    )
+    print(
+        "wrote compare RL export "
+        f"pairs={manifest['pair_count']} dpo={manifest['dpo_count']} "
+        f"candidate_wins={manifest['candidate_win_count']} "
+        f"baseline_wins={manifest['baseline_win_count']} out={args.out}"
+    )
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="flightrecorder", description="Hermes Autonomy Flight Recorder")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -658,6 +679,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--run", action="append", default=[], help="Validate one run directory; may be repeated")
     validate.add_argument("--runs", help="Validate every completed run directory inside this runs directory")
     validate.add_argument("--training-export", help="Validate an export-rl output directory")
+    validate.add_argument("--compare-export", help="Validate an export-compare-rl output directory")
     validate.add_argument("--review-export", help="Validate an export-review output directory")
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
@@ -771,6 +793,31 @@ def _parser() -> argparse.ArgumentParser:
         help="Attach experiment metadata to manifest, dataset metrics, and dataset card; may be repeated",
     )
     export_rl.set_defaults(func=cmd_export_rl)
+
+    export_compare_rl = subparsers.add_parser(
+        "export-compare-rl",
+        help="Export paired baseline/candidate runs as preference artifacts",
+    )
+    export_compare_rl.add_argument("--baseline", required=True, help="Baseline run-suite directory")
+    export_compare_rl.add_argument("--candidate", required=True, help="Candidate run-suite directory")
+    export_compare_rl.add_argument("--out", required=True, help="Output directory for comparison preference artifacts")
+    export_compare_rl.add_argument(
+        "--reward-scale",
+        default="score",
+        choices=["score", "binary", "signed"],
+        help="Reward transform used inside episode views: score=0..1, binary=pass/fail, signed=-1..1",
+    )
+    export_compare_rl.add_argument("--min-score-gap", type=int, default=1, help="Minimum absolute score gap for an improvement pair")
+    export_compare_rl.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
+    export_compare_rl.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach experiment metadata to the comparison export; may be repeated",
+    )
+    export_compare_rl.set_defaults(func=cmd_export_compare_rl)
 
     export_review = subparsers.add_parser("export-review", help="Export completed runs as a human review queue")
     export_review.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")

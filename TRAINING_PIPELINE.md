@@ -44,6 +44,11 @@ two iterations and want pass-rate, score, failed-rule, and critical-failure
 trajectories across the whole improvement run. Validate `suite_trend.json`
 before using a trend as improvement-loop evidence.
 
+Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
+want trainer-ready preference rows that preserve the baseline/candidate
+direction. Candidate wins become improvement examples; baseline wins become
+regression-avoidance examples.
+
 Or export training artifacts from an existing runs directory:
 
 ```bash
@@ -121,6 +126,7 @@ Validate the generated dataset before sending it to downstream jobs:
 flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --strict
@@ -233,6 +239,35 @@ flightrecorder export-rl \
 
 Preference records are suitable as a starting point for DPO-style datasets or
 reward-model comparisons.
+
+## Comparison Improvement Pairs
+
+When evaluating a concrete candidate against a baseline, export comparison
+preferences directly from paired run directories:
+
+```bash
+flightrecorder export-compare-rl \
+  --baseline runs_baseline \
+  --candidate runs_candidate \
+  --out runs/compare_rl_export \
+  --min-score-gap 1
+```
+
+The export contains:
+
+- `improvement_pairs.jsonl`: baseline/candidate evidence views, chosen/rejected
+  sides, score deltas, rule fixes, rule regressions, and rationale.
+- `improvement_dpo.jsonl`: DPO-shaped rows whose `chosen` and `rejected` fields
+  are compact behavior transcripts with tool-call/tool-result evidence.
+- `manifest.json`: counts, metadata, skipped pairs, source directories, and
+  output paths.
+- `IMPROVEMENT_CARD.md`: a human-readable summary of candidate wins and
+  baseline wins.
+
+This is important for autonomous agents because two runs can produce the same
+final answer while only one actually performed the required tool action. The
+comparison DPO view keeps the observable behavior in the row, so the preference
+can distinguish evidence-backed completion from unsupported claims.
 
 ## Trainer-Ready Views
 
