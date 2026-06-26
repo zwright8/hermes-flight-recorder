@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -168,7 +169,13 @@ def main(argv: list[str] | None = None) -> int:
     temp_root_obj = tempfile.TemporaryDirectory(prefix="hfr-live-hermes-")
     temp_root = Path(temp_root_obj.name)
     try:
-        result = _run_live_session(hermes_root, Path.cwd().resolve(), out_dir, temp_root, server.server_address[1])
+        result = _run_live_session(
+            hermes_root,
+            Path(__file__).resolve().parents[1],
+            out_dir,
+            temp_root,
+            server.server_address[1],
+        )
     finally:
         server.shutdown()
         server.server_close()
@@ -269,6 +276,7 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
         "report": str(report_path),
         "lineage": str(run_result["paths"]["lineage"]),
         "task_completion": str(run_result["paths"]["task_completion"]),
+        "environment": _environment_summary(hermes_root, flight_root),
     }
 
 
@@ -396,6 +404,50 @@ def _scenario(observer_path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _environment_summary(hermes_root: Path, flight_root: Path) -> dict[str, Any]:
+    """Return compact provenance for comparing smoke results across checkouts."""
+    hermes_git = _git_info(hermes_root)
+    flight_git = _git_info(flight_root)
+    return {
+        "python_version": platform.python_version(),
+        "python_implementation": platform.python_implementation(),
+        "platform": platform.platform(),
+        "hermes_root": str(hermes_root),
+        "hermes_git_commit": hermes_git["commit"],
+        "hermes_git_dirty": hermes_git["dirty"],
+        "flight_recorder_root": str(flight_root),
+        "flight_recorder_git_commit": flight_git["commit"],
+        "flight_recorder_git_dirty": flight_git["dirty"],
+    }
+
+
+def _git_info(root: Path) -> dict[str, Any]:
+    """Return best-effort git provenance without failing the live smoke."""
+    commit = _git_output(root, "rev-parse", "--short=12", "HEAD")
+    status = _git_output(root, "status", "--porcelain")
+    return {
+        "commit": commit or "unknown",
+        "dirty": bool(status) if status is not None else None,
+    }
+
+
+def _git_output(root: Path, *args: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), *args],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
 
 
 def _default_hermes_root() -> str:

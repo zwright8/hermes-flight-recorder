@@ -632,6 +632,17 @@ summary = {
     "report": "report.html",
     "lineage": "artifact_lineage.json",
     "task_completion": "task_completion.json",
+    "environment": {
+        "python_version": "3.11.0",
+        "python_implementation": "CPython",
+        "platform": "Linux-release-check",
+        "hermes_root": "/tmp/hermes-agent",
+        "hermes_git_commit": "abcdef123456",
+        "hermes_git_dirty": False,
+        "flight_recorder_root": str(Path.cwd()),
+        "flight_recorder_git_commit": "123456abcdef",
+        "flight_recorder_git_dirty": False,
+    },
     "summary": str(summary_path),
 }
 summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -682,6 +693,9 @@ assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["passed"] is True
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["consistent"] is True
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["score"] == 100
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["missing_hook_count"] == 0
+assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["platform"] == "Linux-release-check"
+assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["hermes_git_commit"] == "abcdef123456"
+assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["flight_recorder_git_commit"] == "123456abcdef"
 assert bundle["decision"]["key_metrics"]["trace_observability"]["run_count"] == 6
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
@@ -692,6 +706,7 @@ assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
 }
 assert bundle["metrics"]["compare_export"]["candidate_win_count"] == 1
 assert bundle["metrics"]["live_smoke_summary"]["chat_completion_request_count"] == 1
+assert bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"] == str(Path.cwd())
 assert bundle["metrics"]["trace_observability"]["final_answer_rate"] == 1.0
 assert bundle["metrics"]["review_export"]["item_count"] >= 6
 assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]

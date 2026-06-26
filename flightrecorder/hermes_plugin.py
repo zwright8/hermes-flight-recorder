@@ -30,7 +30,7 @@ HOOKS = (
     "subagent_start",
     "subagent_stop",
 )
-LIVE_SMOKE_SUMMARY_SCHEMA_VERSION = "hfr.live_smoke.summary.v1"
+LIVE_SMOKE_SUMMARY_SCHEMA_VERSION = "hfr.live_smoke.summary.v2"
 
 _LOCK = threading.Lock()
 

@@ -53,6 +53,7 @@ from .training import (
 
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 
 
 @dataclass
@@ -520,7 +521,16 @@ def validate_scenario_quality(path: str | Path) -> ValidationTarget:
 
 
 def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
-    _require_equal(summary, "schema_version", LIVE_SMOKE_SUMMARY_SCHEMA_VERSION, target, prefix="live_smoke_summary.")
+    schema_version = summary.get("schema_version")
+    allowed_versions = {LIVE_SMOKE_SUMMARY_SCHEMA_VERSION, *LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS}
+    if schema_version not in allowed_versions:
+        target.errors.append(
+            f"live_smoke_summary.schema_version expected one of {sorted(allowed_versions)!r}, got {schema_version!r}."
+        )
+    if schema_version in LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS:
+        target.warnings.append(
+            "live_smoke_summary is a legacy schema without required runtime provenance; regenerate it with the current live smoke script."
+        )
     if not isinstance(summary.get("passed"), bool):
         target.errors.append("live_smoke_summary.passed must be a boolean.")
     score = summary.get("score")
@@ -541,6 +551,12 @@ def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarg
     if not _is_string_list(missing_hooks):
         target.errors.append("live_smoke_summary.missing_hooks must be a list of strings.")
         missing_hooks = []
+    environment = summary.get("environment")
+    environment_details: dict[str, Any] = {}
+    if schema_version == LIVE_SMOKE_SUMMARY_SCHEMA_VERSION:
+        environment_details = _validate_live_smoke_environment(environment, target)
+    elif isinstance(environment, dict):
+        environment_details = _validate_live_smoke_environment(environment, target)
 
     expected_passed = (
         summary.get("hermes_exit_code") == 0
@@ -561,8 +577,38 @@ def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarg
             "hook_count": len(hooks),
             "missing_hook_count": len(missing_hooks),
             "chat_completion_request_count": summary.get("chat_completion_request_count"),
+            **environment_details,
         }
     )
+
+
+def _validate_live_smoke_environment(environment: Any, target: ValidationTarget) -> dict[str, Any]:
+    if not isinstance(environment, dict):
+        target.errors.append("live_smoke_summary.environment must be an object.")
+        return {}
+    details: dict[str, Any] = {}
+    required_strings = (
+        "python_version",
+        "python_implementation",
+        "platform",
+        "hermes_root",
+        "hermes_git_commit",
+        "flight_recorder_root",
+        "flight_recorder_git_commit",
+    )
+    for field_name in required_strings:
+        value = environment.get(field_name)
+        if not isinstance(value, str) or not value:
+            target.errors.append(f"live_smoke_summary.environment.{field_name} must be a non-empty string.")
+    for field_name in ("hermes_git_dirty", "flight_recorder_git_dirty"):
+        value = environment.get(field_name)
+        if value is not None and not isinstance(value, bool):
+            target.errors.append(f"live_smoke_summary.environment.{field_name} must be a boolean or null.")
+    for field_name in ("platform", "hermes_git_commit", "flight_recorder_git_commit"):
+        value = environment.get(field_name)
+        if isinstance(value, str) and value:
+            details[field_name] = value
+    return details
 
 
 def validate_suite_trend(path: str | Path) -> ValidationTarget:

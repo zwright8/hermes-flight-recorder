@@ -354,7 +354,20 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "review_export": ("item_count", "failed_count", "passed_count"),
         "reviewed_export": ("reviewed_label_count", "sft_count", "dpo_count", "reward_model_count"),
         "review_calibration": ("reviewed_label_count", "comparable_label_count", "agreement_rate", "disagreement_count"),
-        "live_smoke_summary": ("passed", "consistent", "score", "hook_count", "missing_hook_count", "chat_completion_request_count"),
+        "live_smoke_summary": (
+            "passed",
+            "consistent",
+            "score",
+            "hook_count",
+            "missing_hook_count",
+            "chat_completion_request_count",
+            "python_version",
+            "platform",
+            "hermes_git_commit",
+            "hermes_git_dirty",
+            "flight_recorder_git_commit",
+            "flight_recorder_git_dirty",
+        ),
     }
     summary: dict[str, Any] = {}
     for section, fields in keys.items():
@@ -702,6 +715,7 @@ def _summarize_live_smoke_summary(summary: dict[str, Any], metrics: dict[str, An
         "missing_hook_count": len([item for item in missing_hooks if isinstance(item, str)]),
         "missing_hooks": [item for item in missing_hooks if isinstance(item, str)],
         "chat_completion_request_count": summary.get("chat_completion_request_count"),
+        **_live_smoke_environment_metrics(summary.get("environment")),
     }
     _add_presence_check(checks, "live_smoke_summary_passed", summary.get("passed") is True, {"artifact": "live_smoke_summary"})
     _add_presence_check(checks, "live_smoke_summary_consistent", consistent, {"artifact": "live_smoke_summary"})
@@ -719,6 +733,23 @@ def _live_smoke_summary_consistent(summary: dict[str, Any], missing_hooks: list[
         and not missing_hooks
         and _non_negative_int(summary.get("chat_completion_request_count")) > 0
     )
+
+
+def _live_smoke_environment_metrics(environment: Any) -> dict[str, Any]:
+    if not isinstance(environment, dict):
+        return {}
+    fields = (
+        "python_version",
+        "python_implementation",
+        "platform",
+        "hermes_root",
+        "hermes_git_commit",
+        "hermes_git_dirty",
+        "flight_recorder_root",
+        "flight_recorder_git_commit",
+        "flight_recorder_git_dirty",
+    )
+    return {field: environment.get(field) for field in fields if field in environment}
 
 
 def _summarize_boolean_artifact(

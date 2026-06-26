@@ -230,7 +230,10 @@ observer plugin, executed `uv run hermes chat`, emitted `on_session_start`,
 `on_session_end`, and `on_session_finalize`, and Flight Recorder converted the
 captured observer JSONL into `normalized_trace.json`, `scorecard.json`, and
 `report.html`, plus `live_smoke_summary.json` and an `artifact_lineage.json`
-provenance manifest.
+provenance manifest. The smoke summary records compact runtime provenance
+including Python/platform details and the Hermes and Flight Recorder git
+commits, so runtime-integration evidence can be compared across checkouts
+instead of treated as an anonymous pass/fail artifact.
 
 ## How This Improves The Self-Improvement Loop
 

@@ -146,6 +146,17 @@ class EvidenceBundleTests(unittest.TestCase):
                         "report": "report.html",
                         "lineage": "artifact_lineage.json",
                         "task_completion": "task_completion.json",
+                        "environment": {
+                            "python_version": "3.11.0",
+                            "python_implementation": "CPython",
+                            "platform": "Linux-test",
+                            "hermes_root": "/tmp/hermes-agent",
+                            "hermes_git_commit": "abcdef123456",
+                            "hermes_git_dirty": False,
+                            "flight_recorder_root": str(ROOT),
+                            "flight_recorder_git_commit": "123456abcdef",
+                            "flight_recorder_git_dirty": True,
+                        },
                         "summary": "live_smoke_summary.json",
                     },
                     indent=2,
@@ -227,6 +238,9 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["consistent"], True)
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["score"], 100)
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["missing_hook_count"], 0)
+            self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["platform"], "Linux-test")
+            self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["hermes_git_commit"], "abcdef123456")
+            self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["flight_recorder_git_commit"], "123456abcdef")
             top_priorities = bundle["decision"]["key_metrics"]["training_export"]["top_curriculum_priorities"]
             self.assertEqual(len(top_priorities), 5)
             self.assertEqual(
@@ -246,6 +260,8 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["training_export"]["episode_count"], 6)
             self.assertEqual(bundle["metrics"]["training_export"]["curriculum_failure_mode_count"], 10)
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hook_count"], 3)
+            self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hermes_root"], "/tmp/hermes-agent")
+            self.assertEqual(bundle["metrics"]["live_smoke_summary"]["flight_recorder_git_dirty"], True)
             self.assertEqual(bundle["metrics"]["gates"][0]["id"], "suite_gate")
             self.assertTrue(bundle["metrics"]["gates"][0]["passed"])
             self.assertEqual(bundle["artifacts"]["suite_summary"]["kind"], "file")

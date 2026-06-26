@@ -88,6 +88,10 @@ metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
 useful for provenance and job routing, but it should not be read as permission
 to train unless the included scenario, evidence-coverage, validation, review,
 and gate policies are also appropriate for the target job.
+When a `live_smoke_summary.json` is included, current v2 summaries also carry
+Python/platform details and Hermes plus Flight Recorder git provenance so
+runtime-integration evidence can be tied back to the exact code that produced
+the candidate traces.
 The same `decision` block includes deterministic `next_actions` derived from
 the included artifacts, such as repairing failed scenarios, resolving critical
 failures, dispatching the concrete repair queue, grounding weak scenario

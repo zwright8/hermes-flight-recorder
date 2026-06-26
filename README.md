@@ -1116,7 +1116,8 @@ Hermes checkout, but no external API key or network.
 Successful output includes:
 
 - `live_smoke_summary.json`: machine-readable smoke verdict with hook coverage,
-  score, report path, lineage path, and captured observer path.
+  score, report path, lineage path, captured observer path, and compact runtime
+  provenance for the Hermes and Flight Recorder checkouts that produced it.
 - `live_scenario.json`: generated scenario contract for the live observer run.
 - `live_observer.jsonl`: hook events captured from the real Hermes plugin path.
 - `normalized_trace.json`: canonical `hfr.trace.v1` observer trace.
@@ -1132,6 +1133,12 @@ flightrecorder validate \
   --live-smoke-summary live_smoke_artifacts/latest/live_smoke_summary.json \
   --strict
 ```
+
+Current live-smoke summaries use `hfr.live_smoke.summary.v2`, which requires
+runtime provenance such as Python version, platform, Hermes git commit, Hermes
+dirty state, Flight Recorder git commit, and Flight Recorder dirty state. Legacy
+v1 summaries still validate in non-strict mode, but strict validation warns that
+they are weaker evidence because they cannot identify the exact runtime origin.
 
 ## Release Check
 

@@ -17,6 +17,20 @@ from scripts.live_hermes_smoke import EXPECTED, _write_smoke_artifacts, _write_s
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _sample_environment() -> dict:
+    return {
+        "python_version": "3.11.0",
+        "python_implementation": "CPython",
+        "platform": "Linux-test",
+        "hermes_root": "/tmp/hermes-agent",
+        "hermes_git_commit": "abcdef123456",
+        "hermes_git_dirty": False,
+        "flight_recorder_root": str(ROOT),
+        "flight_recorder_git_commit": "123456abcdef",
+        "flight_recorder_git_dirty": True,
+    }
+
+
 def _run_cli(args):
     with redirect_stdout(StringIO()):
         return main(args)
@@ -104,6 +118,7 @@ class DeploymentHardeningTests(unittest.TestCase):
                     "report": str(out / "report.html"),
                     "lineage": str(out / "artifact_lineage.json"),
                     "task_completion": str(out / "task_completion.json"),
+                    "environment": _sample_environment(),
                 },
             )
 
@@ -114,11 +129,44 @@ class DeploymentHardeningTests(unittest.TestCase):
             self.assertTrue(persisted["passed"])
             self.assertEqual(persisted["score"], 100)
             self.assertEqual(persisted["summary"], str(summary_path))
+            self.assertEqual(persisted["environment"]["platform"], "Linux-test")
+            self.assertEqual(persisted["environment"]["hermes_git_commit"], "abcdef123456")
             self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path), "--strict"]), 0)
 
             persisted["missing_hooks"] = ["post_llm_call"]
             summary_path.write_text(json.dumps(persisted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path)]), 1)
+
+    def test_legacy_live_smoke_summary_warns_without_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            summary_path = out / "live_smoke_summary.json"
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.live_smoke.summary.v1",
+                        "passed": True,
+                        "hermes_exit_code": 0,
+                        "mock_request_count": 9,
+                        "chat_completion_request_count": 1,
+                        "score": 100,
+                        "hooks": ["on_session_start", "post_llm_call"],
+                        "missing_hooks": [],
+                        "observer_file": "live_observer.jsonl",
+                        "report": "report.html",
+                        "lineage": "artifact_lineage.json",
+                        "task_completion": "task_completion.json",
+                        "summary": "live_smoke_summary.json",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path)]), 0)
+            self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path), "--strict"]), 1)
 
     def test_scenario_schema_is_valid_json(self):
         schema = json.loads((ROOT / "scenario.schema.json").read_text(encoding="utf-8"))
