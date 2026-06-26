@@ -101,7 +101,9 @@ delta, missing scenarios, and per-scenario regressions/fixes.
 The generated suite summary gives maintainers a single machine-readable view
 of the whole evidence bundle: every scenario path, run directory, report,
 scorecard, pass/fail result, critical failure list, validation result, and
-training-export counts.
+training-export counts. It also includes aggregate metrics such as pass rate,
+average score, recurring failed rules, critical failure counts, and task-family
+rollups for quick regression triage.
 
 The generated training export gives future model-improvement loops:
 
@@ -165,6 +167,8 @@ That gives the Hermes team a practical improvement loop:
 - model/skill/prompt changes can be evaluated across a full scenario suite,
 - one command can produce a complete suite evidence bundle for local review,
   CI, or downstream training-data export,
+- suite summaries expose aggregate pass rates, average scores, and recurring
+  failure classes without opening every report,
 - arbitrary task-completion loops can use `required_actions` to prove work was
   completed from tool-result evidence,
 - deterministic scorecards can become terminal rewards, preference pairs,
@@ -270,6 +274,10 @@ policy.
 For a broader change, I run `flightrecorder compare-suite`, which answers
 whether the candidate suite regressed overall, which scenarios changed, and
 whether any expected scenario disappeared.
+
+The generated `suite_summary.json` also gives a quick maintainer view of the
+suite: pass rate, average score, task-family rollups, and the most frequent
+failed rules.
 
 Before I trust a custom eval suite, I run `flightrecorder check-scenarios`.
 That catches malformed regexes, duplicate scenario IDs, missing traces, and

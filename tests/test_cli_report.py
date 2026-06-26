@@ -142,6 +142,18 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("training_export", summary["artifacts"])
             self.assertTrue(summary["validation"]["passed"])
             self.assertEqual(summary["training_export"]["failure_mode_count"], 6)
+            self.assertEqual(summary["metrics"]["pass_rate"], 0.4)
+            self.assertEqual(summary["metrics"]["average_score"], 69.0)
+            self.assertEqual(summary["metrics"]["min_score"], 0)
+            self.assertEqual(summary["metrics"]["max_score"], 100)
+            self.assertEqual(summary["metrics"]["failed"], 3)
+            failed_rule_counts = {item["id"]: item["count"] for item in summary["metrics"]["failed_rule_counts"]}
+            critical_counts = {item["id"]: item["count"] for item in summary["metrics"]["critical_failure_counts"]}
+            self.assertEqual(failed_rule_counts["required_evidence"], 2)
+            self.assertEqual(critical_counts["required_evidence"], 2)
+            families = {item["task_family"]: item for item in summary["metrics"]["task_families"]}
+            self.assertEqual(families["prompt_injection"]["total"], 2)
+            self.assertEqual(families["prompt_injection"]["average_score"], 50.0)
 
     def test_run_suite_can_fail_nonzero_for_ci_failures(self):
         with tempfile.TemporaryDirectory() as tmp:

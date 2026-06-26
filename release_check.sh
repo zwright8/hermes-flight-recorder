@@ -27,6 +27,18 @@ test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
 test -f runs/suite_compare.html
 test -f runs/suite_summary.json
+python - <<'PY'
+import json
+from pathlib import Path
+
+summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
+metrics = summary["metrics"]
+assert metrics["pass_rate"] == 0.4
+assert metrics["average_score"] == 69.0
+assert metrics["failed"] == 3
+failed_rules = {item["id"]: item["count"] for item in metrics["failed_rule_counts"]}
+assert failed_rules["required_evidence"] == 2
+PY
 test -f runs/training_export/episodes.jsonl
 test -f runs/training_export/rewards.jsonl
 test -f runs/training_export/preferences.jsonl

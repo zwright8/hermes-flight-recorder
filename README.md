@@ -42,7 +42,8 @@ Expected demo output:
 - A suite compare report showing aggregate score/pass-rate deltas across a run
   directory.
 - A suite summary in `runs/suite_summary.json` covering every generated
-  scenario run and suite-level artifact.
+  scenario run, suite-level artifact, pass rate, average score, task-family
+  rollups, and recurring failed rules.
 - A training export in `runs/training_export/` with episodes, rewards,
   preference pairs, failure modes, curriculum metadata, and a manifest for
   future model-improvement loops.
@@ -187,9 +188,10 @@ literal strings that must not ship.
 
 Use `flightrecorder run-suite` when you want the normal eval-loop entry point:
 it discovers scenario JSON files, creates one run directory per scenario ID,
-writes `suite_summary.json`, optionally emits JUnit/Markdown summaries for
-each run, optionally exports RL artifacts, optionally validates the generated
-bundle, and can fail CI when any scenario fails via `--fail-on-failed`.
+writes `suite_summary.json` with aggregate metrics, optionally emits
+JUnit/Markdown summaries for each run, optionally exports RL artifacts,
+optionally validates the generated bundle, and can fail CI when any scenario
+fails via `--fail-on-failed`.
 
 Use `flightrecorder validate --strict` to verify that generated run and training
 artifacts still satisfy the expected data contracts before publishing or using

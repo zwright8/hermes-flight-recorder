@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from .training import TrainingExportError, export_rl_dataset
 from .validation import validate_artifacts
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -120,6 +122,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 {
                     "scenario_id": result["scenario"]["id"],
                     "scenario_title": result["scenario"].get("title", result["scenario"]["id"]),
+                    "task_family": _task_family(str(result["scenario"]["id"])),
                     "scenario_path": _display_path(scenario_path, args.preserve_paths),
                     "trace_path": _display_path(result["trace_path"], args.preserve_paths),
                     "run_dir": _display_path(run_dir, args.preserve_paths),
@@ -127,6 +130,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                     "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
                     "passed": bool(scorecard["passed"]),
                     "score": scorecard["score"],
+                    "failed_rules": _failed_rule_ids(scorecard),
                     "critical_failures": scorecard.get("critical_failures", []),
                 }
             )
@@ -566,6 +570,7 @@ def _run_suite_summary(
         "failed": failed,
         "error_count": len(errors),
         "errors": errors,
+        "metrics": _suite_metrics(runs),
         "runs": runs,
         "artifacts": artifacts,
     }
@@ -584,6 +589,90 @@ def _run_suite_summary(
             "warning_count": validation_summary.get("warning_count"),
         }
     return summary
+
+
+def _suite_metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    scores = [_int_score(run.get("score")) for run in runs]
+    passed = sum(1 for run in runs if run.get("passed") is True)
+    failed = len(runs) - passed
+    return {
+        "pass_rate": round(passed / len(runs), 4) if runs else 0.0,
+        "average_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
+        "min_score": min(scores) if scores else None,
+        "max_score": max(scores) if scores else None,
+        "failed_rule_counts": _count_values(
+            str(rule_id)
+            for run in runs
+            for rule_id in run.get("failed_rules", [])
+        ),
+        "critical_failure_counts": _count_values(
+            str(rule_id)
+            for run in runs
+            for rule_id in run.get("critical_failures", [])
+        ),
+        "task_families": _task_family_metrics(runs),
+        "failed": failed,
+        "passed": passed,
+    }
+
+
+def _task_family_metrics(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for run in runs:
+        buckets.setdefault(str(run.get("task_family") or _task_family(str(run.get("scenario_id") or ""))), []).append(run)
+
+    metrics: list[dict[str, Any]] = []
+    for family, family_runs in sorted(buckets.items()):
+        scores = [_int_score(run.get("score")) for run in family_runs]
+        passed = sum(1 for run in family_runs if run.get("passed") is True)
+        metrics.append(
+            {
+                "task_family": family,
+                "total": len(family_runs),
+                "passed": passed,
+                "failed": len(family_runs) - passed,
+                "pass_rate": round(passed / len(family_runs), 4) if family_runs else 0.0,
+                "average_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
+                "failed_rule_counts": _count_values(
+                    str(rule_id)
+                    for run in family_runs
+                    for rule_id in run.get("failed_rules", [])
+                ),
+            }
+        )
+    return metrics
+
+
+def _count_values(values: Any) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for value in values:
+        if not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    return [
+        {"id": key, "count": count}
+        for key, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _failed_rule_ids(scorecard: dict[str, Any]) -> list[str]:
+    return [
+        str(rule.get("id"))
+        for rule in scorecard.get("rules", [])
+        if isinstance(rule, dict) and rule.get("id") and not rule.get("passed")
+    ]
+
+
+def _int_score(value: Any) -> int:
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _task_family(scenario_id: str) -> str:
+    family = FAMILY_SUFFIX_RE.sub("", scenario_id).strip("_-")
+    return family or scenario_id or "unknown"
 
 
 def _regression_scenario(scenario: dict[str, Any], trace_path: Path, regression_path: Path, preserve_paths: bool) -> dict[str, Any]:
