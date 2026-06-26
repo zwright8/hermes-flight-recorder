@@ -11,9 +11,15 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 from flightrecorder.hermes_plugin import HOOKS, register, write_event
+from scripts.live_hermes_smoke import EXPECTED, _write_smoke_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _run_cli(args):
+    with redirect_stdout(StringIO()):
+        return main(args)
 
 
 class DeploymentHardeningTests(unittest.TestCase):
@@ -36,6 +42,49 @@ class DeploymentHardeningTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("live Hermes Flight Recorder observer smoke test", completed.stdout)
+
+    def test_live_smoke_artifact_writer_uses_normal_run_outputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            observer = out / "live_observer.jsonl"
+            rows = [
+                {
+                    "hook": "pre_llm_call",
+                    "payload": {
+                        "session_id": "live-session",
+                        "model": "hfr-mock",
+                        "user_message": "Reply exactly: flight recorder live smoke ok",
+                    },
+                },
+                {
+                    "hook": "post_api_request",
+                    "payload": {
+                        "session_id": "live-session",
+                        "model": "hfr-mock",
+                        "finish_reason": "stop",
+                    },
+                },
+                {
+                    "hook": "post_llm_call",
+                    "payload": {
+                        "session_id": "live-session",
+                        "model": "hfr-mock",
+                        "assistant_response": EXPECTED,
+                    },
+                },
+            ]
+            observer.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+            result = _write_smoke_artifacts(observer, out)
+
+            self.assertTrue(result["scorecard"]["passed"])
+            self.assertTrue((out / "live_scenario.json").exists())
+            self.assertTrue((out / "normalized_trace.json").exists())
+            self.assertTrue((out / "scorecard.json").exists())
+            self.assertTrue((out / "task_completion.json").exists())
+            self.assertTrue((out / "artifact_lineage.json").exists())
+            self.assertTrue((out / "report.html").exists())
+            self.assertEqual(_run_cli(["validate", "--run", str(out), "--strict"]), 0)
 
     def test_scenario_schema_is_valid_json(self):
         schema = json.loads((ROOT / "scenario.schema.json").read_text(encoding="utf-8"))

@@ -5,7 +5,7 @@ This script proves the Flight Recorder observer adapter can be loaded by a real
 Hermes runtime session without requiring external API keys. It creates an
 isolated HERMES_HOME, installs a temporary user plugin wrapper, starts a local
 OpenAI-compatible streaming endpoint, runs `uv run hermes chat`, then normalizes,
-scores, and reports the captured observer JSONL.
+scores, reports, and records lineage for the captured observer JSONL.
 """
 
 from __future__ import annotations
@@ -25,11 +25,9 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from flightrecorder.adapters import normalize_trace
+from flightrecorder.cli import _run_scenario_artifacts
 from flightrecorder.hermes_plugin import HOOKS
-from flightrecorder.report import write_report
 from flightrecorder.schema import ScenarioError
-from flightrecorder.scorers import score_trace
 
 
 PROMPT = "Reply exactly: flight recorder live smoke ok"
@@ -246,12 +244,9 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
 
     observer_path = out_dir / "live_observer.jsonl"
     shutil.copyfile(observer_files[0], observer_path)
-    trace = normalize_trace(observer_path, "observer_jsonl")
-    scenario = _scenario(observer_path)
-    scorecard = score_trace(scenario, trace)
-    _write_json(out_dir / "normalized_trace.json", trace)
-    _write_json(out_dir / "scorecard.json", scorecard)
-    write_report(scenario, trace, scorecard, out_dir / "report.html")
+    run_result = _write_smoke_artifacts(observer_path, out_dir)
+    scorecard = run_result["scorecard"]
+    report_path = run_result["paths"]["report"]
 
     hook_names = []
     for line in observer_path.read_text(encoding="utf-8").splitlines():
@@ -270,8 +265,22 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
         "hooks": hook_names,
         "missing_hooks": missing_hooks,
         "score": scorecard["score"],
-        "report": str(out_dir / "report.html"),
+        "report": str(report_path),
+        "lineage": str(run_result["paths"]["lineage"]),
+        "task_completion": str(run_result["paths"]["task_completion"]),
     }
+
+
+def _write_smoke_artifacts(observer_path: Path, out_dir: Path) -> dict[str, Any]:
+    """Write normal Flight Recorder artifacts for a captured live observer JSONL."""
+    scenario_path = out_dir / "live_scenario.json"
+    trace_ref = Path(observer_path.name) if observer_path.parent == out_dir else observer_path
+    _write_json(scenario_path, _scenario(trace_ref))
+    return _run_scenario_artifacts(
+        scenario_path,
+        out_dir,
+        trace_format="observer_jsonl",
+    )
 
 
 def _write_plugin(plugin_dir: Path) -> None:

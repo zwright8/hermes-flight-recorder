@@ -1021,9 +1021,11 @@ Hermes checkout, but no external API key or network.
 
 Successful output includes:
 
+- `live_scenario.json`: generated scenario contract for the live observer run.
 - `live_observer.jsonl`: hook events captured from the real Hermes plugin path.
 - `normalized_trace.json`: canonical `hfr.trace.v1` observer trace.
 - `scorecard.json`: deterministic pass/fail evidence for the live run.
+- `task_completion.json`: standalone task-completion verdict for the live run.
 - `report.html`: static report suitable for a maintainer demo.
 - `artifact_lineage.json`: file-hash and evidence-ref provenance for the run.
 

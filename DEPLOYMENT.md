@@ -76,9 +76,9 @@ python scripts/live_hermes_smoke.py \
 The smoke runs a real `uv run hermes chat` session against a local mock model
 endpoint and an isolated temporary `HERMES_HOME`. It proves the optional
 observer plugin can be loaded by Hermes, receives observer hooks, and produces
-`live_observer.jsonl`, `normalized_trace.json`, `scorecard.json`, and
-`report.html`, plus `artifact_lineage.json`, without external API keys or
-network.
+`live_scenario.json`, `live_observer.jsonl`, `normalized_trace.json`,
+`scorecard.json`, `task_completion.json`, `report.html`, and
+`artifact_lineage.json`, without external API keys or network.
 
 ## Operational Checklist
 
