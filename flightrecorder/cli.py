@@ -572,6 +572,8 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
         min_dpo=options["min_dpo"],
         min_reward_model=options["min_reward_model"],
         min_step_rewards=options["min_step_rewards"],
+        min_source_fingerprint_rate=options["min_source_fingerprint_rate"],
+        max_unverified_source_fingerprints=options["max_unverified_source_fingerprints"],
         max_quality_flags=options["max_quality_flags"],
         forbid_quality_flags=options["forbid_quality_flags"],
         forbid_quality_severities=options["forbid_quality_severities"],
@@ -954,6 +956,16 @@ def _parser() -> argparse.ArgumentParser:
     gate_export.add_argument("--min-dpo", type=_non_negative_int_arg, help="Minimum DPO row count")
     gate_export.add_argument("--min-reward-model", type=_non_negative_int_arg, help="Minimum reward-model row count")
     gate_export.add_argument("--min-step-rewards", type=_non_negative_int_arg, help="Minimum step-reward row count")
+    gate_export.add_argument(
+        "--min-source-fingerprint-rate",
+        type=_rate_arg,
+        help="Minimum fraction of episodes with scenario and source-trace SHA-256 fingerprints",
+    )
+    gate_export.add_argument(
+        "--max-unverified-source-fingerprints",
+        type=_non_negative_int_arg,
+        help="Maximum episodes allowed to lack scenario or source-trace SHA-256 fingerprints",
+    )
     gate_export.add_argument("--max-quality-flags", type=_non_negative_int_arg, help="Maximum allowed dataset quality flags")
     gate_export.add_argument("--forbid-quality-flag", action="append", default=[], help="Fail if this quality flag id appears")
     gate_export.add_argument(
@@ -1265,6 +1277,16 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
         "min_dpo": args.min_dpo if args.min_dpo is not None else policy.get("min_dpo"),
         "min_reward_model": args.min_reward_model if args.min_reward_model is not None else policy.get("min_reward_model"),
         "min_step_rewards": args.min_step_rewards if args.min_step_rewards is not None else policy.get("min_step_rewards"),
+        "min_source_fingerprint_rate": (
+            args.min_source_fingerprint_rate
+            if args.min_source_fingerprint_rate is not None
+            else policy.get("min_source_fingerprint_rate")
+        ),
+        "max_unverified_source_fingerprints": (
+            args.max_unverified_source_fingerprints
+            if args.max_unverified_source_fingerprints is not None
+            else policy.get("max_unverified_source_fingerprints")
+        ),
         "max_quality_flags": args.max_quality_flags if args.max_quality_flags is not None else policy.get("max_quality_flags"),
         "forbid_quality_flags": _merge_unique_strings(policy.get("forbid_quality_flags", []), args.forbid_quality_flag),
         "forbid_quality_severities": _merge_unique_strings(
@@ -1286,6 +1308,8 @@ def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_dpo",
         "min_reward_model",
         "min_step_rewards",
+        "min_source_fingerprint_rate",
+        "max_unverified_source_fingerprints",
         "max_quality_flags",
         "forbid_quality_flags",
         "forbid_quality_severities",

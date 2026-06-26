@@ -392,11 +392,14 @@ start:
 ```bash
 flightrecorder gate-export \
   --training-export runs/training_export \
-  --policy examples/training_gate_policy.demo.json
+  --policy examples/training_gate_policy.demo.json \
+  --min-source-fingerprint-rate 1.0 \
+  --max-unverified-source-fingerprints 0
 ```
 
 Production policies can require minimum episode counts, preference pairs,
-SFT/DPO/reward-model rows, step-reward rows, task-family coverage, and maximum
+SFT/DPO/reward-model rows, step-reward rows, task-family coverage, minimum
+source-fingerprint coverage, maximum unverified source fingerprints, and maximum
 quality-flag counts.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports

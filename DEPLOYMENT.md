@@ -167,8 +167,9 @@ network.
   using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has
-  enough examples, preferences, attribution, task-family coverage, and no
-  forbidden quality flags.
+  enough examples, preferences, attribution, task-family coverage, complete
+  source-fingerprint coverage via `--min-source-fingerprint-rate 1.0
+  --max-unverified-source-fingerprints 0`, and no forbidden quality flags.
 - Use `flightrecorder gate-reviewed --reviewed-export runs/reviewed_export
   --policy <policy.json>` when trainer jobs should wait for enough completed
   human labels, accepted and negative examples, reviewed trainer views,

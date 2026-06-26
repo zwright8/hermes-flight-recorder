@@ -17,8 +17,9 @@ _COUNT_POLICY_FIELDS = {
     "min_reward_model",
     "min_step_rewards",
     "max_quality_flags",
+    "max_unverified_source_fingerprints",
 }
-_SCALAR_POLICY_FIELDS = {"min_pass_rate", "min_average_score", *_COUNT_POLICY_FIELDS}
+_SCALAR_POLICY_FIELDS = {"min_pass_rate", "min_average_score", "min_source_fingerprint_rate", *_COUNT_POLICY_FIELDS}
 _LIST_POLICY_FIELDS = {"forbid_quality_flags", "forbid_quality_severities", "require_task_families"}
 _TASK_FAMILY_SCALAR_POLICY_FIELDS = {
     "min_episodes",
@@ -69,7 +70,7 @@ def load_training_gate_policy(path: str | Path) -> dict[str, Any]:
     for field in _SCALAR_POLICY_FIELDS:
         if field not in raw or raw[field] is None:
             continue
-        if field == "min_pass_rate":
+        if field in {"min_pass_rate", "min_source_fingerprint_rate"}:
             policy[field] = _policy_float(field, raw[field], 0.0, 1.0)
         elif field == "min_average_score":
             policy[field] = _policy_float(field, raw[field], 0.0, 100.0)
@@ -106,6 +107,8 @@ def evaluate_training_gate(
     min_dpo: int | None = None,
     min_reward_model: int | None = None,
     min_step_rewards: int | None = None,
+    min_source_fingerprint_rate: float | None = None,
+    max_unverified_source_fingerprints: int | None = None,
     max_quality_flags: int | None = None,
     forbid_quality_flags: list[str] | None = None,
     forbid_quality_severities: list[str] | None = None,
@@ -114,6 +117,7 @@ def evaluate_training_gate(
 ) -> dict[str, Any]:
     """Evaluate readiness checks against dataset_metrics.json."""
     artifact_counts = dataset_metrics.get("artifact_counts") if isinstance(dataset_metrics.get("artifact_counts"), dict) else {}
+    source_fingerprint_coverage = _source_fingerprint_coverage(dataset_metrics)
     checks: list[dict[str, Any]] = []
 
     if min_episodes is not None:
@@ -132,6 +136,20 @@ def evaluate_training_gate(
         _add_min_check(checks, "min_reward_model", _int_value(artifact_counts.get("reward_model")), min_reward_model)
     if min_step_rewards is not None:
         _add_min_check(checks, "min_step_rewards", _int_value(artifact_counts.get("step_rewards")), min_step_rewards)
+    if min_source_fingerprint_rate is not None:
+        _add_min_check(
+            checks,
+            "min_source_fingerprint_rate",
+            _number(source_fingerprint_coverage.get("rate")),
+            min_source_fingerprint_rate,
+        )
+    if max_unverified_source_fingerprints is not None:
+        _add_max_check(
+            checks,
+            "max_unverified_source_fingerprints",
+            _int_value(source_fingerprint_coverage.get("unverified")),
+            max_unverified_source_fingerprints,
+        )
 
     quality_flags = _quality_flags(dataset_metrics.get("quality_flags"))
     if max_quality_flags is not None:
@@ -162,6 +180,7 @@ def evaluate_training_gate(
             "pass_rate": dataset_metrics.get("pass_rate"),
             "average_score": dataset_metrics.get("average_score"),
             "quality_flag_count": len(quality_flags),
+            "source_fingerprint_coverage": source_fingerprint_coverage,
             "artifact_counts": artifact_counts,
         },
     }
@@ -277,6 +296,28 @@ def _task_family_rows(value: Any) -> dict[str, dict[str, Any]]:
             continue
         rows[row["task_family"]] = row
     return rows
+
+
+def _source_fingerprint_coverage(dataset_metrics: dict[str, Any]) -> dict[str, Any]:
+    coverage = dataset_metrics.get("source_fingerprint_coverage")
+    if not isinstance(coverage, dict):
+        episode_count = _int_value(dataset_metrics.get("episode_count"))
+        return {
+            "episodes": episode_count,
+            "fully_verified": 0,
+            "unverified": episode_count,
+            "rate": 0.0,
+        }
+    episodes = _int_value(coverage.get("episodes"))
+    fully_verified = _int_value(coverage.get("fully_verified"))
+    return {
+        "episodes": episodes,
+        "fully_verified": fully_verified,
+        "unverified": _int_value(coverage.get("unverified")),
+        "with_scenario_sha256": _int_value(coverage.get("with_scenario_sha256")),
+        "with_source_trace_sha256": _int_value(coverage.get("with_source_trace_sha256")),
+        "rate": round(fully_verified / episodes, 4) if episodes else 0.0,
+    }
 
 
 def _count_values(values: Any) -> dict[str, int]:

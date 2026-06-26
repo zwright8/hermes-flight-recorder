@@ -200,7 +200,9 @@ flightrecorder gate-suite \
 
 flightrecorder gate-export \
   --training-export runs/training_export \
-  --policy examples/training_gate_policy.demo.json
+  --policy examples/training_gate_policy.demo.json \
+  --min-source-fingerprint-rate 1.0 \
+  --max-unverified-source-fingerprints 0
 ```
 
 For production suites, commit a stricter gate policy and point CI at it:
@@ -490,7 +492,8 @@ hiding regressions in one behavior class behind aggregate suite metrics.
 Use `flightrecorder gate-export` to enforce readiness thresholds over
 `dataset_metrics.json` before a training or tuning job consumes the exported
 rows. It can require positives, negatives, preferences, SFT/DPO/reward-model
-views, step attribution, task-family coverage, and zero quality flags:
+views, step attribution, task-family coverage, complete source-fingerprint
+coverage, and zero quality flags:
 
 ```json
 {
@@ -500,6 +503,8 @@ views, step attribution, task-family coverage, and zero quality flags:
   "min_sft": 25,
   "min_dpo": 25,
   "min_step_rewards": 25,
+  "min_source_fingerprint_rate": 1.0,
+  "max_unverified_source_fingerprints": 0,
   "max_quality_flags": 0,
   "forbid_quality_severities": ["warning", "error"],
   "require_task_families": ["email_reply_completion", "prompt_injection"]

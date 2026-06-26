@@ -9,6 +9,8 @@
   "min_dpo": 2,
   "min_reward_model": 6,
   "min_step_rewards": 16,
+  "min_source_fingerprint_rate": 1.0,
+  "max_unverified_source_fingerprints": 0,
   "max_quality_flags": 0,
   "forbid_quality_severities": ["warning", "error"],
   "require_task_families": [

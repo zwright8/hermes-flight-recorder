@@ -334,6 +334,16 @@ python -m flightrecorder gate-export \
   --out runs/training_gate.json >/dev/null
 test -f runs/training_gate.json
 test -f examples/training_gate_policy.demo.json
+python - <<'PY'
+import json
+from pathlib import Path
+
+gate = json.loads(Path("runs/training_gate.json").read_text(encoding="utf-8"))
+assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
+assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
+assert gate["policy"]["effective"]["min_source_fingerprint_rate"] == 1.0
+assert gate["policy"]["effective"]["max_unverified_source_fingerprints"] == 0
+PY
 python -m flightrecorder export-review \
   --runs runs \
   --out runs/review_queue >/dev/null

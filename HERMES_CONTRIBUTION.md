@@ -281,7 +281,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
 22. Gate training-export readiness with `flightrecorder gate-export` before
-   handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
+   handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs,
+   including source-fingerprint coverage thresholds so unproven labels do not
+   enter the improvement loop.
 
 That gives the Hermes team a practical improvement loop:
 
