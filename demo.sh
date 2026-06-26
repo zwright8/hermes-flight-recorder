@@ -50,5 +50,13 @@ python -m flightrecorder evidence-coverage \
   --min-critical-failed-rule-evidence-rate 1.0 \
   --max-failed-rules-without-evidence 0 \
   --max-critical-failed-rules-without-evidence 0
+python -m flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --out runs/evidence_bundle.json
 
 echo "Demo reports written to $ROOT/runs/index.html"

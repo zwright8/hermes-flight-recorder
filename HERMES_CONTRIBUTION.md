@@ -25,6 +25,9 @@ artifacts and turns them into maintainable eval evidence:
 - and CI/compare artifacts for before/after eval loops.
 - RL-ready episode, terminal reward, step-reward, and preference exports for
   future training loops.
+- a compact evidence-bundle manifest that tells CI, reviewers, or future
+  trainers which artifacts and gates were included in a handoff and whether the
+  package is ready to consume.
 
 That makes Hermes' self-improvement loop auditable. Instead of only learning
 from successful work or user corrections, Hermes can accumulate reproducible
@@ -61,10 +64,19 @@ python -m flightrecorder evidence-coverage \
   --out runs/evidence_coverage.json \
   --min-failed-rule-evidence-rate 1.0 \
   --max-failed-rules-without-evidence 0
+python -m flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --out runs/evidence_bundle.json
 python -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --evidence-bundle runs/evidence_bundle.json \
   --suite-summary runs/suite_summary.json \
   --strict
 python -m flightrecorder gate-suite \
@@ -170,6 +182,12 @@ rules are not free-floating labels: every failed and critical failed rule in
 the demo has structured evidence refs, giving review, regression, and future
 reward-attribution jobs concrete trace/final-answer/episode targets.
 
+The generated evidence bundle gives the self-improvement loop one compact
+handoff manifest over suite summary, scenario quality, evidence coverage,
+validation, training export, and optional gate outputs. That makes it easier to
+route only ready evidence packages into review or training jobs while preserving
+artifact hashes and readiness notes for audit.
+
 The generated validation summary confirms the report/training artifacts satisfy
 their machine-readable contracts before being used as evidence, including
 suite-summary aggregate metrics.
@@ -232,21 +250,24 @@ Flight Recorder turns Hermes' experience into regression pressure.
 13. Measure failed-rule attribution coverage with
    `flightrecorder evidence-coverage` before turning failures into review or
    training signal.
-14. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-15. Export a human review queue with `flightrecorder export-review` when
+14. Build an `evidence_bundle.json` manifest with `flightrecorder
+   evidence-bundle` so CI or downstream jobs can consume one readiness summary
+   over the included artifacts and gates.
+15. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
+16. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
-16. Apply completed labels with `flightrecorder apply-review` to produce
+17. Apply completed labels with `flightrecorder apply-review` to produce
    human-reviewed SFT, reward-model, preference, and DPO views.
-17. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
+18. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
    human-curated labels become trainer input.
-18. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+19. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-19. Validate the generated artifacts and suite summary with
+20. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-20. Gate training-export readiness with `flightrecorder gate-export` before
+21. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:

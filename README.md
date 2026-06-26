@@ -55,6 +55,9 @@ Expected demo output:
 - An evidence coverage report in `runs/evidence_coverage.json` showing whether
   failed-rule judgments are backed by structured event, final-answer, or
   episode evidence refs.
+- An evidence bundle summary in `runs/evidence_bundle.json` that turns the
+  generated suite, quality, coverage, validation, and training-export artifacts
+  into one readiness/read-only handoff manifest.
 
 ## Install
 
@@ -152,6 +155,15 @@ flightrecorder evidence-coverage \
   --min-failed-rule-evidence-rate 1.0 \
   --max-failed-rules-without-evidence 0
 
+flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --out runs/evidence_bundle.json
+
 flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -170,6 +182,7 @@ flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --evidence-bundle runs/evidence_bundle.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --strict
@@ -223,6 +236,12 @@ Each run directory contains:
 - `artifact_lineage.json`: provenance graph linking inputs, outputs, file
   hashes, and scorecard evidence refs.
 - `regression_scenario.json`: emitted only for failing runs.
+
+`flightrecorder evidence-bundle` writes a top-level `evidence_bundle.json`
+handoff manifest over existing suite artifacts. It records included paths,
+file hashes, readiness checks, pass/fail state, summarized metrics, and gate
+results so a reviewer, CI job, or future trainer can consume one compact
+artifact before deciding whether to trust the underlying evidence package.
 
 `flightrecorder export-rl` converts completed run directories into future
 training-loop artifacts:
@@ -376,6 +395,29 @@ flightrecorder evidence-coverage \
   --min-critical-failed-rule-evidence-rate 1.0 \
   --max-failed-rules-without-evidence 0
 ```
+
+Use `flightrecorder evidence-bundle` when a CI job, reviewer, or downstream
+trainer needs one compact manifest that says which evidence artifacts were
+included, whether their gates passed, and which high-level metrics describe the
+handoff. It is a read-only summary over existing artifacts; it does not rescore
+runs or decide that labels are safe for training by itself.
+
+```bash
+flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --gate runs/suite_gate.json \
+  --gate runs/training_gate.json \
+  --out runs/evidence_bundle.json
+```
+
+The bundle returns exit code 0 only when every included check passes. Validate it
+before publishing with `flightrecorder validate --evidence-bundle
+runs/evidence_bundle.json --strict`.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
@@ -685,6 +727,7 @@ flightrecorder validate \
   --reviewed-export runs/reviewed_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --evidence-bundle runs/evidence_bundle.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
@@ -741,6 +784,9 @@ scenario directory or single scenario + trace artifact
 	          |
 	          v
 	  validate -> machine-checkable artifact contract
+	          |
+	          v
+	  evidence-bundle -> readiness manifest over generated evidence
 	          |
 	          v
 	  run-suite -> suite_summary.json

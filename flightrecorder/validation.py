@@ -10,6 +10,7 @@ from typing import Any
 
 from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import SUITE_TREND_SCHEMA_VERSION
+from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION
 from .review import (
@@ -76,6 +77,7 @@ def validate_artifacts(
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
+    evidence_bundle_paths: list[str | Path] | None = None,
     scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
@@ -97,6 +99,8 @@ def validate_artifacts(
         targets.append(validate_reviewed_export(reviewed_export_dir))
     for evidence_coverage_path in evidence_coverage_paths or []:
         targets.append(validate_evidence_coverage(evidence_coverage_path))
+    for evidence_bundle_path in evidence_bundle_paths or []:
+        targets.append(validate_evidence_bundle(evidence_bundle_path))
     for scenario_quality_path in scenario_quality_paths or []:
         targets.append(validate_scenario_quality(scenario_quality_path))
     for suite_summary_path in suite_summary_paths or []:
@@ -391,6 +395,16 @@ def validate_evidence_coverage(path: str | Path) -> ValidationTarget:
     coverage = _read_object(coverage_path, target, "evidence_coverage.json")
     if coverage is not None:
         _validate_evidence_coverage(coverage, target)
+    return target
+
+
+def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
+    """Validate an evidence-bundle handoff summary artifact."""
+    bundle_path = Path(path)
+    target = ValidationTarget("evidence_bundle", str(bundle_path))
+    bundle = _read_object(bundle_path, target, "evidence_bundle.json")
+    if bundle is not None:
+        _validate_evidence_bundle(bundle, target)
     return target
 
 
@@ -2232,6 +2246,135 @@ def _validate_evidence_coverage_metrics(metrics: dict[str, Any], totals: dict[st
         ):
             if not _is_non_negative_int(row.get(field_name)):
                 target.errors.append(f"evidence_coverage.metrics.rule_coverage[{index}].{field_name} must be a non-negative integer.")
+
+
+def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(bundle, "schema_version", EVIDENCE_BUNDLE_SCHEMA_VERSION, target)
+    if not isinstance(bundle.get("bundle_path"), str) or not bundle.get("bundle_path"):
+        target.errors.append("evidence_bundle.bundle_path must be a non-empty string.")
+    if not isinstance(bundle.get("passed"), bool):
+        target.errors.append("evidence_bundle.passed must be a boolean.")
+
+    checks = bundle.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("evidence_bundle.checks must be a list.")
+        checks = []
+    artifacts = bundle.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("evidence_bundle.artifacts must be an object.")
+        artifacts = {}
+    metrics = bundle.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("evidence_bundle.metrics must be an object.")
+        metrics = {}
+    notes = bundle.get("notes")
+    if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
+        target.errors.append("evidence_bundle.notes must be a list of strings.")
+
+    failed_checks = _validate_evidence_bundle_checks(checks, target)
+    if bundle.get("check_count") != len(checks):
+        target.errors.append(f"evidence_bundle.check_count expected {len(checks)}, got {bundle.get('check_count')!r}.")
+    if bundle.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"evidence_bundle.failed_check_count expected {failed_checks}, got {bundle.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(bundle.get("passed"), bool) and bundle["passed"] != expected_passed:
+        target.errors.append("evidence_bundle.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    if bundle.get("readiness") != expected_readiness:
+        target.errors.append(f"evidence_bundle.readiness expected {expected_readiness!r}, got {bundle.get('readiness')!r}.")
+    if not artifacts:
+        target.errors.append("evidence_bundle.artifacts must not be empty.")
+    for name, record in artifacts.items():
+        _validate_evidence_bundle_artifact_record(name, record, target)
+    _validate_evidence_bundle_metrics(metrics, target)
+    target.details.update(
+        {
+            "readiness": bundle.get("readiness"),
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "artifact_count": len(artifacts),
+        }
+    )
+
+
+def _validate_evidence_bundle_checks(checks: list[Any], target: ValidationTarget) -> int:
+    failed_checks = 0
+    for index, check in enumerate(checks):
+        label = f"evidence_bundle.checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(check.get("id"), str) or not check.get("id"):
+            target.errors.append(f"{label}.id must be a non-empty string.")
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean.")
+        elif not check["passed"]:
+            failed_checks += 1
+        for field_name in ("actual", "expected", "scope"):
+            if not isinstance(check.get(field_name), dict):
+                target.errors.append(f"{label}.{field_name} must be an object.")
+        if not isinstance(check.get("summary"), str) or not check.get("summary"):
+            target.errors.append(f"{label}.summary must be a non-empty string.")
+    return failed_checks
+
+
+def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: ValidationTarget) -> None:
+    if not isinstance(name, str) or not name:
+        target.errors.append("evidence_bundle.artifacts keys must be non-empty strings.")
+    label = f"evidence_bundle.artifacts.{name}"
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    if not isinstance(record.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if record.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be file or directory.")
+    if record.get("kind") == "file" and record.get("exists") is True:
+        if not _is_non_negative_int(record.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        sha = record.get("sha256")
+        if not isinstance(sha, str) or len(sha) != 64 or sha != sha.lower() or any(char not in "0123456789abcdef" for char in sha):
+            target.errors.append(f"{label}.sha256 must be a lowercase 64-character hex digest for existing files.")
+    if record.get("kind") == "directory" and record.get("exists") is True and not _is_non_negative_int(record.get("entry_count")):
+        target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
+    if "schema_version" in record and record.get("schema_version") is not None and not isinstance(record.get("schema_version"), str):
+        target.errors.append(f"{label}.schema_version must be a string or null.")
+    if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean or null.")
+
+
+def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
+    expected_sections = (
+        "suite_summary",
+        "scenario_quality",
+        "evidence_coverage",
+        "validation",
+        "training_export",
+        "compare_export",
+        "review_export",
+        "reviewed_export",
+    )
+    for section in expected_sections:
+        if section in metrics and not isinstance(metrics[section], dict):
+            target.errors.append(f"evidence_bundle.metrics.{section} must be an object when present.")
+    gates = metrics.get("gates")
+    if gates is not None:
+        if not isinstance(gates, list):
+            target.errors.append("evidence_bundle.metrics.gates must be a list when present.")
+            return
+        for index, gate in enumerate(gates):
+            if not isinstance(gate, dict):
+                target.errors.append(f"evidence_bundle.metrics.gates[{index}] must be an object.")
+                continue
+            for field_name in ("id", "path"):
+                if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
+                    target.errors.append(f"evidence_bundle.metrics.gates[{index}].{field_name} must be a non-empty string.")
+            if not isinstance(gate.get("passed"), bool):
+                target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
 
 
 def _merge_count_rows(target_counts: dict[str, int], value: Any, target: ValidationTarget, label: str) -> None:

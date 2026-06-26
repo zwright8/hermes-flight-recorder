@@ -21,6 +21,7 @@ from .artifacts import (
     write_suite_compare_report,
     write_suite_trend_report,
 )
+from .bundle import EvidenceBundleError, build_evidence_bundle
 from .compare_gate import (
     COMPARE_GATE_POLICY_SCHEMA_VERSION,
     CompareGatePolicyError,
@@ -73,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         TrainingGatePolicyError,
         CompareGatePolicyError,
         EvidenceCoverageError,
+        EvidenceBundleError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -384,6 +386,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
+        evidence_bundle_paths=args.evidence_bundle,
         scenario_quality_paths=args.scenario_quality,
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
@@ -418,6 +421,26 @@ def cmd_evidence_coverage(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0 if coverage["passed"] else 1
+
+
+def cmd_evidence_bundle(args: argparse.Namespace) -> int:
+    bundle = build_evidence_bundle(
+        out_path=args.out,
+        runs_dir=args.runs,
+        suite_summary_path=args.suite_summary,
+        scenario_quality_path=args.scenario_quality,
+        evidence_coverage_path=args.evidence_coverage,
+        validation_path=args.validation,
+        training_export_dir=args.training_export,
+        compare_export_dir=args.compare_export,
+        review_export_dir=args.review_export,
+        reviewed_export_dir=args.reviewed_export,
+        gate_paths=args.gate,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), bundle)
+    print(f"wrote {args.out}")
+    return 0 if bundle["passed"] else 1
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -790,6 +813,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--review-export", help="Validate an export-review output directory")
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
+    validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
     validate.add_argument("--scenario-quality", action="append", default=[], help="Validate one scenario_quality.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
@@ -836,6 +860,24 @@ def _parser() -> argparse.ArgumentParser:
     )
     evidence_coverage.add_argument("--preserve-paths", action="store_true", help="Allow absolute run paths in coverage output")
     evidence_coverage.set_defaults(func=cmd_evidence_coverage)
+
+    evidence_bundle = subparsers.add_parser(
+        "evidence-bundle",
+        help="Summarize a complete evidence handoff bundle and readiness checks",
+    )
+    evidence_bundle.add_argument("--out", required=True, help="Write evidence bundle summary JSON to this path")
+    evidence_bundle.add_argument("--runs", help="Runs directory included in the handoff")
+    evidence_bundle.add_argument("--suite-summary", help="run-suite suite_summary.json included in the handoff")
+    evidence_bundle.add_argument("--scenario-quality", help="scenario_quality.json included in the handoff")
+    evidence_bundle.add_argument("--evidence-coverage", help="evidence_coverage.json included in the handoff")
+    evidence_bundle.add_argument("--validation", help="validation.json included in the handoff")
+    evidence_bundle.add_argument("--training-export", help="export-rl directory included in the handoff")
+    evidence_bundle.add_argument("--compare-export", help="export-compare-rl directory included in the handoff")
+    evidence_bundle.add_argument("--review-export", help="export-review directory included in the handoff")
+    evidence_bundle.add_argument("--reviewed-export", help="apply-review directory included in the handoff")
+    evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
+    evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
+    evidence_bundle.set_defaults(func=cmd_evidence_bundle)
 
     draft = subparsers.add_parser("draft-scenario", help="Draft a scenario JSON file from an existing run or trace")
     draft_source = draft.add_mutually_exclusive_group(required=True)

@@ -50,6 +50,27 @@ coverage report measures how many failed and critical failed rules have
 structured evidence refs, plus whether those refs point to trace events, final
 answers, or episode-level facts.
 
+Use `flightrecorder evidence-bundle` at the handoff boundary when a downstream
+trainer, reviewer, or CI job needs one manifest over the generated evidence:
+
+```bash
+flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --gate runs/suite_gate.json \
+  --gate runs/training_gate.json \
+  --out runs/evidence_bundle.json
+```
+
+The bundle records artifact hashes, readiness checks, gate results, and compact
+metrics. It is useful for provenance and job routing, but it should not be read
+as permission to train unless the included scenario, evidence-coverage,
+validation, review, and gate policies are also appropriate for the target job.
+
 Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate
 direction. Candidate wins become improvement examples; baseline wins become
@@ -149,6 +170,7 @@ flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --evidence-bundle runs/evidence_bundle.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \

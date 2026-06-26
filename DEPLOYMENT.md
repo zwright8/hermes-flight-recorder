@@ -28,8 +28,8 @@ The demo runs `flightrecorder run-suite` and generates `runs/index.html` with
 two passing reports, four failing adversarial reports, per-run
 `artifact_lineage.json` provenance manifests, `runs/suite_summary.json`,
 single-run and suite compare reports, `runs/scenario_quality.json`,
-`runs/evidence_coverage.json`, and `runs/training_export/` training artifacts.
-It also writes
+`runs/evidence_coverage.json`, `runs/evidence_bundle.json`, and
+`runs/training_export/` training artifacts. It also writes
 `runs/validation.json` to prove the generated contracts are internally
 consistent. No API keys or network are required.
 
@@ -118,6 +118,12 @@ network.
   --max-failed-rules-without-evidence 0` when CI must prove failed scorecard
   judgments have structured evidence refs before those failures feed review,
   regression, or training loops.
+- Use `flightrecorder evidence-bundle --runs runs --suite-summary
+  runs/suite_summary.json --scenario-quality runs/scenario_quality.json
+  --evidence-coverage runs/evidence_coverage.json --validation
+  runs/validation.json --training-export runs/training_export --out
+  runs/evidence_bundle.json` when CI should publish one readiness manifest over
+  the generated evidence package.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or
@@ -145,9 +151,10 @@ network.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --review-export runs/review_queue --reviewed-export runs/reviewed_export
   --compare-export runs/compare_rl_export --evidence-coverage
-  runs/evidence_coverage.json --scenario-quality runs/scenario_quality.json
-  --suite-summary runs/suite_summary.json --suite-trend runs/suite_trend.json
-  --strict` before publishing artifacts or using them downstream.
+  runs/evidence_coverage.json --evidence-bundle runs/evidence_bundle.json
+  --scenario-quality runs/scenario_quality.json --suite-summary
+  runs/suite_summary.json --suite-trend runs/suite_trend.json --strict` before
+  publishing artifacts or using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no
@@ -156,8 +163,8 @@ network.
   --policy <policy.json>` when trainer jobs should wait for enough completed
   human labels, accepted and negative examples, reviewed trainer views,
   task-family coverage, and zero unresolved review labels.
-- Publish `report.html`, `scorecard.json`, and `artifact_lineage.json`; avoid
-  publishing raw traces.
+- Publish `report.html`, `scorecard.json`, `artifact_lineage.json`, and
+  `evidence_bundle.json`; avoid publishing raw traces.
 - Run `flightrecorder audit --runs runs --fail-on-leak --forbid-text <secret>`
   before publishing generated artifacts.
 - Keep failing `regression_scenario.json` files with the test suite.

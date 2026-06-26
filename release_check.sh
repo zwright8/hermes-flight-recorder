@@ -34,6 +34,7 @@ test -f runs/scenario_quality_check.json
 python -m flightrecorder validate \
   --scenario-quality runs/scenario_quality.json \
   --scenario-quality runs/scenario_quality_check.json \
+  --evidence-bundle runs/evidence_bundle.json \
   --strict >/dev/null
 if python -m flightrecorder scenario-quality \
   --scenarios scenarios \
@@ -66,6 +67,7 @@ test -f runs/suite_trend.json
 test -f runs/suite_trend.html
 test -f runs/scenario_quality.json
 test -f runs/evidence_coverage.json
+test -f runs/evidence_bundle.json
 test -f runs/suite_summary.json
 python - <<'PY'
 import json
@@ -74,6 +76,7 @@ from pathlib import Path
 summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
 scenario_quality = json.loads(Path("runs/scenario_quality.json").read_text(encoding="utf-8"))
 evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(encoding="utf-8"))
+evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
 suite_compare = json.loads(Path("runs/suite_compare.json").read_text(encoding="utf-8"))
 suite_compare_html = Path("runs/suite_compare.html").read_text(encoding="utf-8")
 suite_trend = json.loads(Path("runs/suite_trend.json").read_text(encoding="utf-8"))
@@ -104,6 +107,13 @@ assert evidence_coverage["passed"] is True
 assert evidence_coverage["metrics"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["critical_failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["failed_rules_without_evidence"] == 0
+assert evidence_bundle["passed"] is True
+assert evidence_bundle["readiness"] == "ready"
+assert evidence_bundle["metrics"]["suite_summary"]["total"] == 6
+assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
+assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 89.17
+assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
+assert evidence_bundle["failed_check_count"] == 0
 assert metrics["pass_rate"] == 0.3333
 assert metrics["average_score"] == 59.17
 assert metrics["failed"] == 4
@@ -293,6 +303,7 @@ python -m flightrecorder validate \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
+  --evidence-bundle runs/evidence_bundle.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
@@ -362,6 +373,44 @@ if python -m flightrecorder gate-export \
   echo "gate-export did not fail a too-high pass-rate threshold" >&2
   exit 1
 fi
+python -m flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
+  --review-export runs/review_queue \
+  --reviewed-export runs/reviewed_export \
+  --gate runs/suite_gate.json \
+  --gate runs/compare_gate.json \
+  --gate runs/training_gate.json \
+  --gate runs/reviewed_gate.json \
+  --out runs/evidence_bundle_full.json >/dev/null
+test -f runs/evidence_bundle_full.json
+python -m flightrecorder validate \
+  --evidence-bundle runs/evidence_bundle.json \
+  --evidence-bundle runs/evidence_bundle_full.json \
+  --strict >/dev/null
+python - <<'PY'
+import json
+from pathlib import Path
+
+bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="utf-8"))
+assert bundle["passed"] is True
+assert bundle["readiness"] == "ready"
+assert len(bundle["metrics"]["gates"]) == 4
+assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
+    "suite_gate",
+    "compare_gate",
+    "training_gate",
+    "reviewed_gate",
+}
+assert bundle["metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["metrics"]["review_export"]["item_count"] >= 6
+assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]
+PY
 python -m flightrecorder compare-suite --baseline runs --candidate runs --out runs/suite_compare_check.json --fail-on-regression >/dev/null
 
 python -m flightrecorder audit \
@@ -388,6 +437,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder scenario-quality --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-coverage --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
