@@ -125,6 +125,12 @@ flightrecorder compare-suite \
   --html-out runs/suite_compare.html \
   --fail-on-regression
 
+flightrecorder trend-suite \
+  --suite-summary runs_iter_1/suite_summary.json \
+  --suite-summary runs_iter_2/suite_summary.json \
+  --out runs/suite_trend.json \
+  --html-out runs/suite_trend.html
+
 flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -291,6 +297,10 @@ JSON and HTML report show the baseline and candidate metadata side by side.
 The aggregate comparison also includes failed-rule and critical-failure deltas
 so repair loops can see which failure classes increased, decreased, or stayed
 flat across paired scenarios.
+
+Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
+files over multiple iterations. The trend JSON and HTML report show pass-rate
+and score movement plus failed-rule and critical-failure trajectories.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum

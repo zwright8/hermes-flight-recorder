@@ -39,6 +39,9 @@ outputs so baseline/candidate comparisons remain tied to the evaluated configs.
 It also emits aggregate failed-rule and critical-failure deltas across paired
 scenarios, giving repair or curriculum loops a compact view of which failure
 classes gained or lost pressure.
+Use `flightrecorder trend-suite --suite-summary ...` when you have more than
+two iterations and want pass-rate, score, failed-rule, and critical-failure
+trajectories across the whole improvement run.
 
 Or export training artifacts from an existing runs directory:
 

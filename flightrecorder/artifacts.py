@@ -10,6 +10,7 @@ from typing import Any
 
 COMPARE_SCHEMA_VERSION = "hfr.compare.v1"
 SUITE_COMPARE_SCHEMA_VERSION = "hfr.suite_compare.v1"
+SUITE_TREND_SCHEMA_VERSION = "hfr.suite_trend.v1"
 
 
 class ArtifactError(ValueError):
@@ -295,6 +296,32 @@ def compare_suites(
     }
 
 
+def build_suite_trend(suite_summary_paths: list[str | Path]) -> dict[str, Any]:
+    """Build a longitudinal trend over ordered run-suite summaries."""
+    if not suite_summary_paths:
+        raise ArtifactError("At least one --suite-summary path is required")
+    points: list[dict[str, Any]] = []
+    previous: dict[str, Any] | None = None
+    for index, raw_path in enumerate(suite_summary_paths):
+        path = Path(raw_path)
+        summary = _read_json(path)
+        if not isinstance(summary, dict):
+            raise ArtifactError(f"Suite summary must be a JSON object: {path}")
+        point = _trend_point(summary, path, index)
+        point["delta_from_previous"] = _trend_delta(previous, point) if previous is not None else None
+        points.append(point)
+        previous = point
+
+    return {
+        "schema_version": SUITE_TREND_SCHEMA_VERSION,
+        "point_count": len(points),
+        "points": points,
+        "failed_rule_trends": _count_trends(points, "failed_rule_counts"),
+        "critical_failure_trends": _count_trends(points, "critical_failure_counts"),
+        "summary": _suite_trend_summary(points),
+    }
+
+
 def write_compare_report(comparison: dict[str, Any], out_path: str | Path) -> None:
     """Write a static HTML compare report."""
     path = Path(out_path)
@@ -410,6 +437,55 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
     <thead><tr><th>Scenario</th><th>Status</th><th>Baseline</th><th>Candidate</th><th>Delta</th><th>Summary</th></tr></thead>
     <tbody>{''.join(rows)}</tbody>
   </table>
+</body>
+</html>
+"""
+    path.write_text(doc, encoding="utf-8")
+
+
+def write_suite_trend_report(trend: dict[str, Any], out_path: str | Path) -> None:
+    """Write a static HTML suite trend report."""
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    point_rows = []
+    for point in trend.get("points", []):
+        point_rows.append(
+            "<tr>"
+            f"<td>{_esc(point.get('index'))}</td>"
+            f"<td><code>{_esc(point.get('label'))}</code></td>"
+            f"<td>{_esc(point.get('pass_rate'))}</td>"
+            f"<td>{_esc(point.get('average_score'))}</td>"
+            f"<td>{_esc(point.get('failed_rule_count'))}</td>"
+            f"<td>{_esc(point.get('critical_failure_count'))}</td>"
+            "</tr>"
+        )
+    failed_rows = _trend_count_table(trend.get("failed_rule_trends"), "Failed Rule Trends")
+    critical_rows = _trend_count_table(trend.get("critical_failure_trends"), "Critical Failure Trends")
+    doc = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flight Recorder Suite Trend</title>
+  <style>
+    body {{ font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin:32px; color:#17202a; }}
+    table {{ border-collapse:collapse; width:100%; max-width:1100px; margin-top:18px; }}
+    th, td {{ border-bottom:1px solid #d6dbdf; text-align:left; padding:10px; vertical-align:top; }}
+    code {{ background:#eef2f6; border-radius:6px; padding:2px 5px; }}
+    .improved {{ color:#147a3d; }}
+    .regressed {{ color:#b42318; }}
+    .unchanged {{ color:#566573; }}
+  </style>
+</head>
+<body>
+  <h1>Flight Recorder Suite Trend</h1>
+  <p>{_esc(trend.get('summary'))}</p>
+  <table>
+    <thead><tr><th>#</th><th>Label</th><th>Pass Rate</th><th>Avg Score</th><th>Failed Rules</th><th>Critical Failures</th></tr></thead>
+    <tbody>{''.join(point_rows)}</tbody>
+  </table>
+  {failed_rows}
+  {critical_rows}
 </body>
 </html>
 """
@@ -561,6 +637,149 @@ def _failure_delta_table(value: Any, title: str) -> str:
     )
 
 
+def _trend_point(summary: dict[str, Any], path: Path, index: int) -> dict[str, Any]:
+    metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
+    failed_rule_counts = _count_map(metrics.get("failed_rule_counts"))
+    critical_failure_counts = _count_map(metrics.get("critical_failure_counts"))
+    metadata = _metadata_map(summary.get("metadata"))
+    return {
+        "index": index,
+        "label": _trend_label(summary, path, index, metadata),
+        "path": _display_path(path),
+        "metadata": metadata,
+        "total": _int_value(summary.get("total")),
+        "passed": _int_value(summary.get("passed")),
+        "failed": _int_value(summary.get("failed")),
+        "error_count": _int_value(summary.get("error_count")),
+        "pass_rate": _number(metrics.get("pass_rate")),
+        "average_score": _number(metrics.get("average_score")),
+        "failed_rule_counts": failed_rule_counts,
+        "critical_failure_counts": critical_failure_counts,
+        "failed_rule_count": sum(failed_rule_counts.values()),
+        "critical_failure_count": sum(critical_failure_counts.values()),
+    }
+
+
+def _trend_label(summary: dict[str, Any], path: Path, index: int, metadata: dict[str, str]) -> str:
+    for key in ("candidate", "run", "iteration", "model"):
+        if metadata.get(key):
+            return metadata[key]
+    label = summary.get("out_dir") or summary.get("scenarios_dir")
+    if isinstance(label, str) and label:
+        return label
+    return f"point-{index + 1}"
+
+
+def _trend_delta(previous: dict[str, Any], point: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "pass_rate_delta": _number_delta(previous.get("pass_rate"), point.get("pass_rate")),
+        "average_score_delta": _number_delta(previous.get("average_score"), point.get("average_score")),
+        "failed_rule_count_delta": _int_value(point.get("failed_rule_count")) - _int_value(previous.get("failed_rule_count")),
+        "critical_failure_count_delta": (
+            _int_value(point.get("critical_failure_count")) - _int_value(previous.get("critical_failure_count"))
+        ),
+    }
+
+
+def _count_trends(points: list[dict[str, Any]], field_name: str) -> list[dict[str, Any]]:
+    ids = sorted(
+        {
+            rule_id
+            for point in points
+            for rule_id in (point.get(field_name) if isinstance(point.get(field_name), dict) else {})
+        }
+    )
+    rows: list[dict[str, Any]] = []
+    for rule_id in ids:
+        counts = [
+            {
+                "index": point["index"],
+                "label": point["label"],
+                "count": _int_value(point.get(field_name, {}).get(rule_id)) if isinstance(point.get(field_name), dict) else 0,
+            }
+            for point in points
+        ]
+        first = counts[0]["count"] if counts else 0
+        last = counts[-1]["count"] if counts else 0
+        rows.append({"id": rule_id, "first_count": first, "last_count": last, "delta": last - first, "counts": counts})
+    return sorted(rows, key=lambda item: (-abs(int(item["delta"])), str(item["id"])))
+
+
+def _trend_count_table(value: Any, title: str) -> str:
+    rows_data = value if isinstance(value, list) else []
+    if not rows_data:
+        return ""
+    rows = []
+    for item in rows_data:
+        if not isinstance(item, dict):
+            continue
+        delta = int(item.get("delta", 0) or 0)
+        cls = "regressed" if delta > 0 else "improved" if delta < 0 else "unchanged"
+        counts = item.get("counts") if isinstance(item.get("counts"), list) else []
+        sparkline = " -> ".join(str(count.get("count", 0)) for count in counts if isinstance(count, dict))
+        rows.append(
+            "<tr>"
+            f"<td><code>{_esc(item.get('id'))}</code></td>"
+            f"<td>{_esc(sparkline)}</td>"
+            f"<td class=\"{cls}\">{_esc(delta)}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        '<section class="trend-counts">'
+        f"<h2>{_esc(title)}</h2>"
+        "<table>"
+        "<thead><tr><th>Rule</th><th>Counts</th><th>Delta</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _suite_trend_summary(points: list[dict[str, Any]]) -> str:
+    if not points:
+        return "TREND: no suite summaries."
+    if len(points) == 1:
+        point = points[0]
+        return (
+            f"TREND: one point; pass rate {point.get('pass_rate')}; "
+            f"average score {point.get('average_score')}."
+        )
+    first = points[0]
+    last = points[-1]
+    pass_delta = _number_delta(first.get("pass_rate"), last.get("pass_rate"))
+    score_delta = _number_delta(first.get("average_score"), last.get("average_score"))
+    failed_delta = _int_value(last.get("failed_rule_count")) - _int_value(first.get("failed_rule_count"))
+    critical_delta = _int_value(last.get("critical_failure_count")) - _int_value(first.get("critical_failure_count"))
+    return (
+        f"TREND: {len(points)} points; pass_rate_delta={pass_delta}; "
+        f"average_score_delta={score_delta}; failed_rule_delta={failed_delta}; "
+        f"critical_failure_delta={critical_delta}."
+    )
+
+
+def _count_map(value: Any) -> dict[str, int]:
+    if not isinstance(value, list):
+        return {}
+    counts: dict[str, int] = {}
+    for row in value:
+        if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row.get("id"):
+            continue
+        counts[row["id"]] = _int_value(row.get("count"))
+    return counts
+
+
+def _metadata_map(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): value
+        for key, value in sorted(value.items())
+        if isinstance(key, str) and key and isinstance(value, str)
+    }
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -603,6 +822,26 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     if denominator == 0:
         return None
     return round(numerator / denominator, 4)
+
+
+def _number(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0
+
+
+def _number_delta(before: Any, after: Any) -> float:
+    return round(_number(after) - _number(before), 4)
+
+
+def _int_value(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    return 0
 
 
 def _suite_compare_summary(

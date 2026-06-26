@@ -720,6 +720,85 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("fixture-a", report)
             self.assertIn("fixture-b", report)
 
+    def test_trend_suite_tracks_metric_and_failure_trajectories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first_suite_summary.json"
+            second = Path(tmp) / "second_suite_summary.json"
+            out = Path(tmp) / "suite_trend.json"
+            html = Path(tmp) / "suite_trend.html"
+            first.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.run_suite.v1",
+                        "out_dir": "runs/baseline",
+                        "total": 2,
+                        "passed": 1,
+                        "failed": 1,
+                        "error_count": 0,
+                        "metadata": {"candidate": "baseline"},
+                        "metrics": {
+                            "pass_rate": 0.5,
+                            "average_score": 50.0,
+                            "failed_rule_counts": [{"id": "secret_exposure", "count": 1}],
+                            "critical_failure_counts": [{"id": "secret_exposure", "count": 1}],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            second.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.run_suite.v1",
+                        "out_dir": "runs/candidate",
+                        "total": 2,
+                        "passed": 2,
+                        "failed": 0,
+                        "error_count": 0,
+                        "metadata": {"candidate": "candidate"},
+                        "metrics": {
+                            "pass_rate": 1.0,
+                            "average_score": 85.0,
+                            "failed_rule_counts": [
+                                {"id": "secret_exposure", "count": 0},
+                                {"id": "required_evidence", "count": 2},
+                            ],
+                            "critical_failure_counts": [{"id": "required_evidence", "count": 1}],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "trend-suite",
+                    "--suite-summary",
+                    str(first),
+                    "--suite-summary",
+                    str(second),
+                    "--out",
+                    str(out),
+                    "--html-out",
+                    str(html),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            trend = json.loads(out.read_text(encoding="utf-8"))
+            report = html.read_text(encoding="utf-8")
+            self.assertEqual(trend["schema_version"], "hfr.suite_trend.v1")
+            self.assertEqual(trend["point_count"], 2)
+            self.assertEqual(trend["points"][0]["label"], "baseline")
+            self.assertEqual(trend["points"][1]["delta_from_previous"]["pass_rate_delta"], 0.5)
+            self.assertEqual(trend["points"][1]["delta_from_previous"]["average_score_delta"], 35.0)
+            failed_trends = {item["id"]: item for item in trend["failed_rule_trends"]}
+            self.assertEqual(failed_trends["secret_exposure"]["delta"], -1)
+            self.assertEqual(failed_trends["required_evidence"]["delta"], 2)
+            self.assertIn("Flight Recorder Suite Trend", report)
+            self.assertIn("Failed Rule Trends", report)
+            self.assertNotIn(str(Path(tmp)), out.read_text(encoding="utf-8"))
+
     def test_audit_command_summarizes_runs_and_can_fail_on_leak(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

@@ -184,21 +184,24 @@ Flight Recorder turns Hermes' experience into regression pressure.
    `flightrecorder compare-suite`, including suite metadata that identifies the
    compared Hermes configs and aggregate failure-class deltas that identify
    which behaviors got better or worse.
-9. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
-10. Export a human review queue with `flightrecorder export-review` when
+9. Trend multiple `suite_summary.json` files with `flightrecorder trend-suite`
+   to show whether the improvement loop is moving pass rate, score, and failure
+   pressure in the right direction.
+10. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
+11. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
-11. Apply completed labels with `flightrecorder apply-review` to produce
+12. Apply completed labels with `flightrecorder apply-review` to produce
    human-reviewed SFT, reward-model, preference, and DPO views.
-12. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
+13. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
    human-curated labels become trainer input.
-13. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+14. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-14. Validate the generated artifacts and suite summary with
+15. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-15. Gate training-export readiness with `flightrecorder gate-export` before
+16. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:

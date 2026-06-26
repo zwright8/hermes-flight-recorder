@@ -12,12 +12,14 @@ from typing import Any
 from .adapters import AdapterError, normalize_trace
 from .artifacts import (
     ArtifactError,
+    build_suite_trend,
     compare_scorecards,
     compare_suites,
     write_compare_report,
     write_junit,
     write_markdown_summary,
     write_suite_compare_report,
+    write_suite_trend_report,
 )
 from .lineage import write_run_lineage
 from .redaction import sanitize_trace
@@ -294,6 +296,15 @@ def cmd_compare_suite(args: argparse.Namespace) -> int:
         f"paired={aggregate['paired_count']} avg_score_delta={aggregate['avg_score_delta']} wrote {args.out}"
     )
     return 1 if args.fail_on_regression and comparison["regressed"] else 0
+
+
+def cmd_trend_suite(args: argparse.Namespace) -> int:
+    trend = build_suite_trend(args.suite_summary)
+    _write_json(Path(args.out), trend)
+    if args.html_out:
+        write_suite_trend_report(trend, args.html_out)
+    print(f"TREND points={trend['point_count']} summary={trend['summary']} wrote {args.out}")
+    return 0
 
 
 def cmd_observer_template(args: argparse.Namespace) -> int:
@@ -620,6 +631,17 @@ def _parser() -> argparse.ArgumentParser:
     compare_suite.add_argument("--candidate-label", help="Human-readable candidate label")
     compare_suite.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate suite regresses")
     compare_suite.set_defaults(func=cmd_compare_suite)
+
+    trend_suite = subparsers.add_parser("trend-suite", help="Build a longitudinal trend over run-suite summaries")
+    trend_suite.add_argument(
+        "--suite-summary",
+        action="append",
+        required=True,
+        help="Path to a suite_summary.json in chronological/order-of-comparison order; may be repeated",
+    )
+    trend_suite.add_argument("--out", required=True, help="Suite trend JSON output path")
+    trend_suite.add_argument("--html-out", help="Optional static HTML suite trend report")
+    trend_suite.set_defaults(func=cmd_trend_suite)
 
     check = subparsers.add_parser("check-scenarios", help="Validate scenario definitions before running them")
     check.add_argument("--scenarios", required=True, help="Directory containing scenario files")

@@ -102,6 +102,9 @@ network.
   `suite_summary.json` metadata, the comparison JSON and HTML show the
   baseline/candidate config identity side by side. Use aggregate failed-rule and
   critical-failure deltas to prioritize which failure classes need repair.
+- Use `flightrecorder trend-suite --suite-summary <old> --suite-summary <new>
+  --out <trend.json>` when CI stores multiple suite summaries and maintainers
+  need to review progress across an improvement run, not just one comparison.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or

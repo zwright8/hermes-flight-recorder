@@ -28,5 +28,10 @@ python -m flightrecorder compare-suite \
   --candidate runs \
   --out runs/suite_compare.json \
   --html-out runs/suite_compare.html
+python -m flightrecorder trend-suite \
+  --suite-summary runs/suite_summary.json \
+  --suite-summary runs/suite_summary.json \
+  --out runs/suite_trend.json \
+  --html-out runs/suite_trend.html
 
 echo "Demo reports written to $ROOT/runs/index.html"

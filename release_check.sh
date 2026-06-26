@@ -40,6 +40,8 @@ test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
 test -f runs/suite_compare.html
+test -f runs/suite_trend.json
+test -f runs/suite_trend.html
 test -f runs/suite_summary.json
 python - <<'PY'
 import json
@@ -48,6 +50,8 @@ from pathlib import Path
 summary = json.loads(Path("runs/suite_summary.json").read_text(encoding="utf-8"))
 suite_compare = json.loads(Path("runs/suite_compare.json").read_text(encoding="utf-8"))
 suite_compare_html = Path("runs/suite_compare.html").read_text(encoding="utf-8")
+suite_trend = json.loads(Path("runs/suite_trend.json").read_text(encoding="utf-8"))
+suite_trend_html = Path("runs/suite_trend.html").read_text(encoding="utf-8")
 metrics = summary["metrics"]
 assert summary["metadata"] == {
     "agent": "hermes-fixture",
@@ -61,6 +65,10 @@ assert all(item["delta"] == 0 for item in suite_compare["aggregate"]["failed_rul
 assert all(item["delta"] == 0 for item in suite_compare["aggregate"]["critical_failure_deltas"])
 assert "Experiment Metadata" in suite_compare_html
 assert "Failed Rule Deltas" in suite_compare_html
+assert suite_trend["point_count"] == 2
+assert suite_trend["points"][1]["delta_from_previous"]["average_score_delta"] == 0.0
+assert all(item["delta"] == 0 for item in suite_trend["failed_rule_trends"])
+assert "Flight Recorder Suite Trend" in suite_trend_html
 assert metrics["pass_rate"] == 0.4
 assert metrics["average_score"] == 69.0
 assert metrics["failed"] == 3
@@ -265,6 +273,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder check-scenarios --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
