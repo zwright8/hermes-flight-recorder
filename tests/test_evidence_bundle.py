@@ -106,6 +106,18 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(
                 run_cli(
                     [
+                        "repair-queue",
+                        "--runs",
+                        str(runs),
+                        "--out",
+                        str(runs / "repair_queue.json"),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
                         "gate-suite",
                         "--suite-summary",
                         str(runs / "suite_summary.json"),
@@ -131,6 +143,8 @@ class EvidenceBundleTests(unittest.TestCase):
                     str(runs / "evidence_coverage.json"),
                     "--trace-observability",
                     str(runs / "trace_observability.json"),
+                    "--repair-queue",
+                    str(runs / "repair_queue.json"),
                     "--validation",
                     str(runs / "validation.json"),
                     "--training-export",
@@ -160,11 +174,21 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["next_action_count"], len(bundle["decision"]["next_actions"]))
             self.assertIn("repair_failed_scenarios", action_ids)
             self.assertIn("repair_critical_failures", action_ids)
+            self.assertIn("dispatch_repair_queue", action_ids)
             self.assertIn("ground_scenario_contracts", action_ids)
             self.assertIn("improve_trace_observability", action_ids)
+            repair_action = next(action for action in bundle["decision"]["next_actions"] if action["id"] == "dispatch_repair_queue")
+            self.assertEqual(repair_action["priority"], "critical")
+            self.assertEqual(repair_action["artifact"], "repair_queue")
+            self.assertEqual(repair_action["evidence"]["item_count"], 10)
+            self.assertEqual(repair_action["evidence"]["critical_item_count"], 10)
+            self.assertEqual(repair_action["evidence"]["scenario_count"], 4)
+            self.assertEqual(repair_action["evidence"]["priority_counts"], {"critical": 10})
+            self.assertEqual(repair_action["evidence"]["rule_counts"]["required_evidence"], 2)
             self.assertEqual(bundle["decision"]["key_metrics"]["suite_summary"]["total"], 6)
             self.assertEqual(bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"], 0.8333)
             self.assertIn("risk_counts", bundle["decision"]["key_metrics"]["trace_observability"])
+            self.assertEqual(bundle["decision"]["key_metrics"]["repair_queue"]["item_count"], 10)
             self.assertEqual(bundle["decision"]["key_metrics"]["training_export"]["episode_count"], 6)
             self.assertEqual(bundle["metrics"]["suite_summary"]["total"], 6)
             self.assertEqual(bundle["metrics"]["scenario_quality"]["average_contract_score"], 89.17)
@@ -173,6 +197,7 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["trace_observability"]["run_count"], 6)
             self.assertEqual(bundle["metrics"]["trace_observability"]["event_type_count"], 6)
             self.assertIn("risk_counts", bundle["metrics"]["trace_observability"])
+            self.assertEqual(bundle["metrics"]["repair_queue"]["critical_item_count"], 10)
             self.assertEqual(bundle["metrics"]["training_export"]["episode_count"], 6)
             self.assertEqual(bundle["metrics"]["gates"][0]["id"], "suite_gate")
             self.assertTrue(bundle["metrics"]["gates"][0]["passed"])

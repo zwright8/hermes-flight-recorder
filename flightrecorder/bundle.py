@@ -467,6 +467,28 @@ def _next_actions(
             )
         )
 
+    repair_queue = metrics.get("repair_queue") if isinstance(metrics.get("repair_queue"), dict) else {}
+    repair_items = _non_negative_int(repair_queue.get("item_count"))
+    critical_repair_items = _non_negative_int(repair_queue.get("critical_item_count"))
+    if repair_items:
+        actions.append(
+            _action(
+                "dispatch_repair_queue",
+                "critical" if critical_repair_items else "high",
+                "repair_queue",
+                f"Route {repair_items} failed-rule repair item(s) to the next improvement iteration.",
+                {
+                    "item_count": repair_items,
+                    "critical_item_count": critical_repair_items,
+                    "scenario_count": _non_negative_int(repair_queue.get("scenario_count")),
+                    "task_family_count": _non_negative_int(repair_queue.get("task_family_count")),
+                    "priority_counts": _count_rows(repair_queue.get("priority_counts")),
+                    "rule_counts": _count_rows(repair_queue.get("rule_counts")),
+                    "critical_rule_counts": _count_rows(repair_queue.get("critical_rule_counts")),
+                },
+            )
+        )
+
     validation = metrics.get("validation") if isinstance(metrics.get("validation"), dict) else {}
     validation_errors = _non_negative_int(validation.get("error_count"))
     validation_warnings = _non_negative_int(validation.get("warning_count"))

@@ -585,8 +585,9 @@ blocking gates, deterministic `next_actions`, included evidence artifact names,
 and key metrics for automation that should not scrape the full check list.
 `next_actions` is advisory repair guidance for improvement loops: a bundle can
 be ready to hand off while still recommending that the agent repair failing
-scenarios, strengthen weak contracts, improve trace capture, or review training
-quality flags before a later promotion or model-update gate.
+scenarios, dispatch the concrete `repair_queue.json` work items, strengthen
+weak contracts, improve trace capture, or review training quality flags before
+a later promotion or model-update gate.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum

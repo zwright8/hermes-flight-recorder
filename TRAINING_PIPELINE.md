@@ -89,9 +89,10 @@ to train unless the included scenario, evidence-coverage, validation, review,
 and gate policies are also appropriate for the target job.
 The same `decision` block includes deterministic `next_actions` derived from
 the included artifacts, such as repairing failed scenarios, resolving critical
-failures, grounding weak scenario contracts, improving trace capture, or
-reviewing training quality flags. Treat those actions as a repair queue for the
-next improvement iteration, not as a substitute for the gates themselves.
+failures, dispatching the concrete repair queue, grounding weak scenario
+contracts, improving trace capture, or reviewing training quality flags. Treat
+those actions as routing guidance for the next improvement iteration, not as a
+substitute for the gates themselves.
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
 runs/repair_queue.json`. Each item points to a failed rule, evidence refs,
