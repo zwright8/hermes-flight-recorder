@@ -107,6 +107,10 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --suite-summary runs/suite_summary.json --strict` before publishing artifacts
   or using them downstream.
+- Use `flightrecorder gate-export --training-export runs/training_export
+  --policy <policy.json>` when CI must block training jobs unless an export has
+  enough examples, preferences, attribution, task-family coverage, and no
+  forbidden quality flags.
 - Publish `report.html` and `scorecard.json`; avoid publishing raw traces.
 - Run `flightrecorder audit --runs runs --fail-on-leak --forbid-text <secret>`
   before publishing generated artifacts.

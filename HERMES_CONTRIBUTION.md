@@ -189,6 +189,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
 11. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
+12. Gate training-export readiness with `flightrecorder gate-export` before
+   handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:
 
@@ -276,6 +278,8 @@ Demo evidence:
   curriculum, and manifest artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
   internally consistent, including suite-summary metrics.
+- `flightrecorder gate-export` enforces dataset-readiness thresholds before
+  trainer-facing rows are consumed downstream.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
   the raw fixture secret.
 - `scripts/live_hermes_smoke.py` has been run against a local Hermes checkout

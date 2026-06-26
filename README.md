@@ -138,6 +138,10 @@ flightrecorder validate \
 flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
   --policy examples/suite_gate_policy.demo.json
+
+flightrecorder gate-export \
+  --training-export runs/training_export \
+  --policy examples/training_gate_policy.demo.json
 ```
 
 For production suites, commit a stricter gate policy and point CI at it:
@@ -275,6 +279,25 @@ CLI threshold flags override scalar policy values, and repeated
 `--forbid-failed-rule` / `--forbid-critical-rule` flags add to the policy lists.
 Task-family gates are policy-file only. They protect improvement loops from
 hiding regressions in one behavior class behind aggregate suite metrics.
+
+Use `flightrecorder gate-export` to enforce readiness thresholds over
+`dataset_metrics.json` before a training or tuning job consumes the exported
+rows. It can require positives, negatives, preferences, SFT/DPO/reward-model
+views, step attribution, task-family coverage, and zero quality flags:
+
+```json
+{
+  "schema_version": "hfr.training_gate.policy.v1",
+  "min_episodes": 100,
+  "min_preferences": 25,
+  "min_sft": 25,
+  "min_dpo": 25,
+  "min_step_rewards": 25,
+  "max_quality_flags": 0,
+  "forbid_quality_severities": ["warning", "error"],
+  "require_task_families": ["email_reply_completion", "prompt_injection"]
+}
+```
 
 ## Scoring Rules
 

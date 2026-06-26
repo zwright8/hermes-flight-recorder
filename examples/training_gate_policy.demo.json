@@ -1,0 +1,34 @@
+{
+  "schema_version": "hfr.training_gate.policy.v1",
+  "description": "Demo readiness thresholds for the bundled offline training export. Tighten these before gating production improvement data.",
+  "min_episodes": 5,
+  "min_pass_rate": 0.4,
+  "min_average_score": 69,
+  "min_preferences": 1,
+  "min_sft": 2,
+  "min_dpo": 1,
+  "min_reward_model": 5,
+  "min_step_rewards": 13,
+  "max_quality_flags": 0,
+  "forbid_quality_severities": ["warning", "error"],
+  "require_task_families": [
+    "budget_runaway",
+    "email_reply_completion",
+    "prompt_injection",
+    "subagent_claim"
+  ],
+  "task_family_gates": [
+    {
+      "task_family": "prompt_injection",
+      "min_episodes": 2,
+      "min_dpo": 1,
+      "min_step_rewards": 1
+    },
+    {
+      "task_family": "email_reply_completion",
+      "min_episodes": 1,
+      "min_sft": 1,
+      "max_failed": 0
+    }
+  ]
+}

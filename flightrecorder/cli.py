@@ -27,6 +27,12 @@ from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title
 from .scorers import score_trace
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .training import TrainingExportError, export_rl_dataset
+from .training_gate import (
+    TRAINING_GATE_POLICY_SCHEMA_VERSION,
+    TrainingGatePolicyError,
+    evaluate_training_gate,
+    load_training_gate_policy,
+)
 from .validation import validate_artifacts
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
@@ -38,7 +44,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (AdapterError, ArtifactError, ScenarioError, SuiteGatePolicyError, TrainingExportError, OSError, json.JSONDecodeError) as exc:
+    except (
+        AdapterError,
+        ArtifactError,
+        ScenarioError,
+        SuiteGatePolicyError,
+        TrainingExportError,
+        TrainingGatePolicyError,
+        OSError,
+        json.JSONDecodeError,
+    ) as exc:
         parser.exit(2, f"flightrecorder: error: {exc}\n")
     except KeyboardInterrupt:
         parser.exit(130, "flightrecorder: interrupted\n")
@@ -378,6 +393,40 @@ def cmd_gate_suite(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_gate_export(args: argparse.Namespace) -> int:
+    export_dir = Path(args.training_export)
+    metrics_path = export_dir / "dataset_metrics.json"
+    dataset_metrics = _read_json(metrics_path)
+    options = _training_gate_options(args)
+    result = evaluate_training_gate(
+        dataset_metrics,
+        training_export_path=_display_path(export_dir, args.preserve_paths),
+        min_episodes=options["min_episodes"],
+        min_pass_rate=options["min_pass_rate"],
+        min_average_score=options["min_average_score"],
+        min_preferences=options["min_preferences"],
+        min_sft=options["min_sft"],
+        min_dpo=options["min_dpo"],
+        min_reward_model=options["min_reward_model"],
+        min_step_rewards=options["min_step_rewards"],
+        max_quality_flags=options["max_quality_flags"],
+        forbid_quality_flags=options["forbid_quality_flags"],
+        forbid_quality_severities=options["forbid_quality_severities"],
+        require_task_families=options["require_task_families"],
+        task_family_gates=options["task_family_gates"],
+    )
+    if options["policy_path"]:
+        result["policy"] = _training_gate_policy_summary(options)
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_export_rl(args: argparse.Namespace) -> int:
     manifest = export_rl_dataset(
         args.runs,
@@ -539,6 +588,31 @@ def _parser() -> argparse.ArgumentParser:
     gate_suite.add_argument("--preserve-paths", action="store_true", help="Allow absolute suite summary paths in gate output")
     gate_suite.set_defaults(func=cmd_gate_suite)
 
+    gate_export = subparsers.add_parser("gate-export", help="Evaluate readiness thresholds against an export-rl dataset")
+    gate_export.add_argument("--training-export", required=True, help="Directory containing export-rl artifacts")
+    gate_export.add_argument("--policy", help="Versioned training gate policy JSON file with committed threshold defaults")
+    gate_export.add_argument("--out", help="Write gate result JSON to this path")
+    gate_export.add_argument("--min-episodes", type=_non_negative_int_arg, help="Minimum episode count")
+    gate_export.add_argument("--min-pass-rate", type=_rate_arg, help="Minimum dataset pass rate, from 0.0 to 1.0")
+    gate_export.add_argument("--min-average-score", type=_score_arg, help="Minimum average score, from 0 to 100")
+    gate_export.add_argument("--min-preferences", type=_non_negative_int_arg, help="Minimum preference pair count")
+    gate_export.add_argument("--min-sft", type=_non_negative_int_arg, help="Minimum SFT row count")
+    gate_export.add_argument("--min-dpo", type=_non_negative_int_arg, help="Minimum DPO row count")
+    gate_export.add_argument("--min-reward-model", type=_non_negative_int_arg, help="Minimum reward-model row count")
+    gate_export.add_argument("--min-step-rewards", type=_non_negative_int_arg, help="Minimum step-reward row count")
+    gate_export.add_argument("--max-quality-flags", type=_non_negative_int_arg, help="Maximum allowed dataset quality flags")
+    gate_export.add_argument("--forbid-quality-flag", action="append", default=[], help="Fail if this quality flag id appears")
+    gate_export.add_argument(
+        "--forbid-quality-severity",
+        action="append",
+        default=[],
+        choices=["info", "warning", "error"],
+        help="Fail if any quality flag has this severity",
+    )
+    gate_export.add_argument("--require-task-family", action="append", default=[], help="Fail unless this task family is present")
+    gate_export.add_argument("--preserve-paths", action="store_true", help="Allow absolute export paths in gate output")
+    gate_export.set_defaults(func=cmd_gate_export)
+
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
     export_rl.add_argument("--out", required=True, help="Output directory for evidence and trainer-ready artifacts")
@@ -655,7 +729,66 @@ def _gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_training_gate_policy(args.policy) if args.policy else {}
+    return {
+        "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
+        "policy_description": policy.get("description"),
+        "min_episodes": args.min_episodes if args.min_episodes is not None else policy.get("min_episodes"),
+        "min_pass_rate": args.min_pass_rate if args.min_pass_rate is not None else policy.get("min_pass_rate"),
+        "min_average_score": args.min_average_score if args.min_average_score is not None else policy.get("min_average_score"),
+        "min_preferences": args.min_preferences if args.min_preferences is not None else policy.get("min_preferences"),
+        "min_sft": args.min_sft if args.min_sft is not None else policy.get("min_sft"),
+        "min_dpo": args.min_dpo if args.min_dpo is not None else policy.get("min_dpo"),
+        "min_reward_model": args.min_reward_model if args.min_reward_model is not None else policy.get("min_reward_model"),
+        "min_step_rewards": args.min_step_rewards if args.min_step_rewards is not None else policy.get("min_step_rewards"),
+        "max_quality_flags": args.max_quality_flags if args.max_quality_flags is not None else policy.get("max_quality_flags"),
+        "forbid_quality_flags": _merge_unique_strings(policy.get("forbid_quality_flags", []), args.forbid_quality_flag),
+        "forbid_quality_severities": _merge_unique_strings(
+            policy.get("forbid_quality_severities", []),
+            args.forbid_quality_severity,
+        ),
+        "require_task_families": _merge_unique_strings(policy.get("require_task_families", []), args.require_task_family),
+        "task_family_gates": policy.get("task_family_gates", []),
+    }
+
+
+def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
+    effective_fields = (
+        "min_episodes",
+        "min_pass_rate",
+        "min_average_score",
+        "min_preferences",
+        "min_sft",
+        "min_dpo",
+        "min_reward_model",
+        "min_step_rewards",
+        "max_quality_flags",
+        "forbid_quality_flags",
+        "forbid_quality_severities",
+        "require_task_families",
+        "task_family_gates",
+    )
+    effective = {
+        field: options[field]
+        for field in effective_fields
+        if options.get(field) is not None and options.get(field) != []
+    }
+    summary: dict[str, Any] = {
+        "schema_version": TRAINING_GATE_POLICY_SCHEMA_VERSION,
+        "path": options["policy_path"],
+        "effective": effective,
+    }
+    if options.get("policy_description"):
+        summary["description"] = options["policy_description"]
+    return summary
+
+
 def _merge_gate_rule_ids(policy_values: Any, cli_values: list[str]) -> list[str]:
+    return _merge_unique_strings(policy_values, cli_values)
+
+
+def _merge_unique_strings(policy_values: Any, cli_values: list[str]) -> list[str]:
     merged: list[str] = []
     for value in [*(policy_values or []), *cli_values]:
         if value not in merged:

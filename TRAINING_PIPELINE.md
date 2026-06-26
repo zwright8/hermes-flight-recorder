@@ -199,6 +199,19 @@ first checkpoint before handing an export to an SFT, DPO, reward-model, or RL
 job. The card helps answer: "Do we have enough positive examples, negative
 pressure, task-family coverage, and attribution to learn anything meaningful?"
 
+Use `gate-export` when CI should enforce that answer before downstream jobs
+start:
+
+```bash
+flightrecorder gate-export \
+  --training-export runs/training_export \
+  --policy examples/training_gate_policy.demo.json
+```
+
+Production policies can require minimum episode counts, preference pairs,
+SFT/DPO/reward-model rows, step-reward rows, task-family coverage, and maximum
+quality-flag counts.
+
 ## Failure Modes And Curriculum
 
 `failure_modes.jsonl` makes the negative signal explicit. Each row links a

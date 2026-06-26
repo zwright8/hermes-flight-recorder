@@ -147,6 +147,18 @@ python -m flightrecorder validate \
   --training-export runs/training_export \
   --suite-summary runs/suite_summary.json \
   --strict >/dev/null
+python -m flightrecorder gate-export \
+  --training-export runs/training_export \
+  --policy examples/training_gate_policy.demo.json \
+  --out runs/training_gate.json >/dev/null
+test -f runs/training_gate.json
+test -f examples/training_gate_policy.demo.json
+if python -m flightrecorder gate-export \
+  --training-export runs/training_export \
+  --min-pass-rate 0.9 >/dev/null; then
+  echo "gate-export did not fail a too-high pass-rate threshold" >&2
+  exit 1
+fi
 python -m flightrecorder compare-suite --baseline runs --candidate runs --out runs/suite_compare_check.json --fail-on-regression >/dev/null
 
 python -m flightrecorder audit \
@@ -172,6 +184,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder check-scenarios --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \
