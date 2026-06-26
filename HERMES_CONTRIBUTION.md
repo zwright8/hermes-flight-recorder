@@ -244,7 +244,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
    tool-policy revision.
    The bundle's `decision.next_actions` field turns the evidence into a
    deterministic summary of what the next Hermes improvement iteration should
-   do, while `repair_queue.json` gives the concrete failed-rule work items.
+   do, while `repair_queue.json` gives the concrete failed-rule work items with
+   evidence refs, bounded snippets, artifacts, and replay commands.
 6. If a scenario fails, save the generated `regression_scenario.json`.
 7. After Hermes updates a skill, memory, prompt, model, or tool policy, rerun the
    same scenario.

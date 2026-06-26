@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -83,6 +84,7 @@ def _repair_items(record: RunRecord, preserve_paths: bool) -> list[dict[str, Any
                 "suggested_action": _suggested_action(rule_id),
                 "evidence": _string_list(rule.get("evidence")),
                 "evidence_refs": _evidence_refs(rule),
+                "evidence_snippets": _evidence_snippets(record.trace, _evidence_refs(rule)),
                 "source_artifacts": _source_artifacts(record, preserve_paths),
                 "replay": _replay(record.lineage),
             }
@@ -161,6 +163,84 @@ def _evidence_refs(rule: dict[str, Any]) -> list[dict[str, Any]]:
     return [ref for ref in refs if isinstance(ref, dict)]
 
 
+def _evidence_snippets(trace: dict[str, Any], refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    snippets: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    events = trace.get("events") if isinstance(trace.get("events"), list) else []
+    for ref in refs:
+        target = ref.get("target")
+        event_index = ref.get("event_index")
+        key = (target, event_index, ref.get("reason"))
+        if key in seen:
+            continue
+        seen.add(key)
+        if target == "event" and isinstance(event_index, int) and not isinstance(event_index, bool):
+            event = events[event_index] if 0 <= event_index < len(events) and isinstance(events[event_index], dict) else {}
+            snippets.append(_event_snippet(event_index, event, ref))
+        elif target == "final_answer":
+            snippets.append(_final_answer_snippet(trace, ref))
+        elif target == "state_snapshot":
+            snippets.append(_state_snapshot_snippet(ref))
+        else:
+            snippets.append(_episode_snippet(trace, ref))
+    return snippets
+
+
+def _event_snippet(event_index: int, event: dict[str, Any], ref: dict[str, Any]) -> dict[str, Any]:
+    payload = {
+        "type": event.get("type"),
+        "tool_name": event.get("tool_name"),
+        "status": event.get("status"),
+        "args": event.get("args"),
+        "text": event.get("text"),
+    }
+    return {
+        "target": "event",
+        "event_index": event_index,
+        "event_type": str(event.get("type") or "unknown"),
+        "tool_name": str(event.get("tool_name") or ""),
+        "status": str(event.get("status") or ""),
+        "reason": str(ref.get("reason") or ""),
+        "text": _truncate(_json_text(payload)),
+    }
+
+
+def _final_answer_snippet(trace: dict[str, Any], ref: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "target": "final_answer",
+        "reason": str(ref.get("reason") or ""),
+        "text": _truncate(str(trace.get("final_answer") or "")),
+    }
+
+
+def _state_snapshot_snippet(ref: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "target": "state_snapshot",
+        "reason": str(ref.get("reason") or ""),
+        "text": "State snapshot evidence is referenced; inspect source_artifacts and evidence_refs for the exact check.",
+    }
+
+
+def _episode_snippet(trace: dict[str, Any], ref: dict[str, Any]) -> dict[str, Any]:
+    events = trace.get("events") if isinstance(trace.get("events"), list) else []
+    final_answer = str(trace.get("final_answer") or "")
+    return {
+        "target": "episode",
+        "reason": str(ref.get("reason") or ""),
+        "text": f"episode_summary: events={len(events)}, final_answer_chars={len(final_answer)}",
+    }
+
+
+def _json_text(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _truncate(value: str, limit: int = 600) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 15] + "...[truncated]"
+
+
 def _count_rows(values: Any) -> list[dict[str, Any]]:
     counts: dict[str, int] = {}
     for value in values:
@@ -200,4 +280,3 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(path.relative_to(Path.cwd()))
     except ValueError:
         return path.name
-

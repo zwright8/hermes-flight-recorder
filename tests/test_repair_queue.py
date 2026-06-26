@@ -41,6 +41,12 @@ class RepairQueueTests(unittest.TestCase):
             self.assertIn("regression_scenario", item["source_artifacts"])
             self.assertIn("python -m flightrecorder run", item["replay"]["command"])
             self.assertTrue(item["evidence_refs"])
+            self.assertTrue(item["evidence_snippets"])
+            event_snippet = next(snippet for snippet in item["evidence_snippets"] if snippet["target"] == "event")
+            self.assertEqual(event_snippet["event_index"], 3)
+            self.assertEqual(event_snippet["tool_name"], "terminal")
+            self.assertIn("evil.example", event_snippet["text"])
+            self.assertLessEqual(len(event_snippet["text"]), 600)
 
             self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict"]), 0)
 
@@ -80,6 +86,7 @@ class RepairQueueTests(unittest.TestCase):
             self.assertEqual(run_cli(["repair-queue", "--runs", str(runs), "--out", str(queue_path)]), 0)
             queue = json.loads(queue_path.read_text(encoding="utf-8"))
             queue["metrics"]["item_count"] = 0
+            queue["items"][0]["evidence_snippets"][0]["text"] = "x" * 601
             queue_path.write_text(json.dumps(queue, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             code = run_cli(["validate", "--repair-queue", str(queue_path), "--out", str(summary_path)])
@@ -88,6 +95,7 @@ class RepairQueueTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("repair_queue.metrics.item_count", errors)
+            self.assertIn("evidence_snippets", errors)
 
 
 if __name__ == "__main__":

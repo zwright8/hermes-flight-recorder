@@ -294,9 +294,9 @@ evidence package.
 
 `flightrecorder repair-queue` writes `repair_queue.json`, a deterministic queue
 with one item per failed scorecard rule. Each repair item carries the failed
-rule id, priority, task family, evidence refs, report path, regression scenario,
-and lineage replay command when available. This is the artifact to hand to a
-repair agent, issue tracker, or curriculum builder.
+rule id, priority, task family, evidence refs, bounded evidence snippets, report
+path, regression scenario, and lineage replay command when available. This is
+the artifact to hand to a repair agent, issue tracker, or curriculum builder.
 
 `flightrecorder export-rl` converts completed run directories into future
 training-loop artifacts:
@@ -545,7 +545,9 @@ flightrecorder trace-observability \
 
 Use `flightrecorder repair-queue` when an improvement loop needs concrete work
 items instead of only aggregate failure counts. The queue is derived from
-failed scorecard rules and does not change pass/fail outcomes.
+failed scorecard rules and does not change pass/fail outcomes. Each item
+includes bounded `evidence_snippets` from the normalized trace so repair agents
+can see the relevant event/final-answer context before opening the full report.
 
 ```bash
 flightrecorder repair-queue \

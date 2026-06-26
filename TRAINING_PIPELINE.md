@@ -95,8 +95,9 @@ next improvement iteration, not as a substitute for the gates themselves.
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
 runs/repair_queue.json`. Each item points to a failed rule, evidence refs,
-source artifacts, and a replay command, which makes it better suited to repair
-agents or issue trackers than aggregate suite metrics.
+bounded normalized-trace snippets, source artifacts, and a replay command,
+which makes it better suited to repair agents or issue trackers than aggregate
+suite metrics.
 
 Use `flightrecorder export-compare-rl --baseline ... --candidate ...` when you
 want trainer-ready preference rows that preserve the baseline/candidate

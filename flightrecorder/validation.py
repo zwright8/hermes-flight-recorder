@@ -3311,6 +3311,7 @@ def _validate_repair_item(
     if not _is_string_list(item.get("evidence")):
         target.errors.append(f"{label}.evidence must be a list of strings.")
     _validate_evidence_refs(item.get("evidence_refs"), target, f"{label}.evidence_refs")
+    _validate_repair_evidence_snippets(item.get("evidence_snippets"), target, f"{label}.evidence_snippets")
     _validate_repair_source_artifacts(item.get("source_artifacts"), target, f"{label}.source_artifacts")
     _validate_repair_replay(item.get("replay"), target, f"{label}.replay")
 
@@ -3323,6 +3324,31 @@ def _validate_repair_item(
     if item.get("critical") is True:
         _increment_count(totals["critical_rule_counts"], item.get("rule_id"))
     _increment_count(totals["task_completion_status_counts"], item.get("task_completion_status"))
+
+
+def _validate_repair_evidence_snippets(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list.")
+        return
+    for index, snippet in enumerate(value):
+        snippet_label = f"{label}[{index}]"
+        if not isinstance(snippet, dict):
+            target.errors.append(f"{snippet_label} must be an object.")
+            continue
+        if snippet.get("target") not in {"event", "final_answer", "episode", "state_snapshot"}:
+            target.errors.append(f"{snippet_label}.target must be event, final_answer, episode, or state_snapshot.")
+        if not isinstance(snippet.get("reason"), str):
+            target.errors.append(f"{snippet_label}.reason must be a string.")
+        if not isinstance(snippet.get("text"), str):
+            target.errors.append(f"{snippet_label}.text must be a string.")
+        elif len(snippet["text"]) > 600:
+            target.errors.append(f"{snippet_label}.text must be at most 600 characters.")
+        if snippet.get("target") == "event":
+            if not _is_non_negative_int(snippet.get("event_index")):
+                target.errors.append(f"{snippet_label}.event_index must be a non-negative integer.")
+            for field_name in ("event_type", "tool_name", "status"):
+                if not isinstance(snippet.get(field_name), str):
+                    target.errors.append(f"{snippet_label}.{field_name} must be a string.")
 
 
 def _validate_repair_source_artifacts(value: Any, target: ValidationTarget, label: str) -> None:
