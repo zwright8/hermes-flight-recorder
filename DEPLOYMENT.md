@@ -162,7 +162,9 @@ network.
   scenario coverage, expected task-completion improvements, expected rule fixes,
   no forbidden score or task-completion regression signal, and optionally no
   drifted or unverified comparison contracts via `--max-contract-drifts 0
-  --max-unverified-contracts 0`.
+  --max-unverified-contracts 0`. Use compare-policy `task_family_gates` when
+  CI must protect specific workflow families from being hidden by aggregate
+  candidate-win counts.
 - Use `flightrecorder export-review --runs runs --out runs/review_queue` when
   maintainers need a human-curation queue before deterministic score labels are
   trusted as training signal.

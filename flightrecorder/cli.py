@@ -680,6 +680,7 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
         require_rule_fixes=options["require_rule_fixes"],
         forbid_rule_regressions=options["forbid_rule_regressions"],
         forbid_new_critical_failures=options["forbid_new_critical_failures"],
+        task_family_gates=options["task_family_gates"],
     )
     if options["policy_path"]:
         result["policy"] = _compare_gate_policy_summary(options)
@@ -1640,6 +1641,7 @@ def _compare_gate_options(args: argparse.Namespace) -> dict[str, Any]:
             policy.get("forbid_new_critical_failures", []),
             args.forbid_new_critical_failure,
         ),
+        "task_family_gates": policy.get("task_family_gates", []),
     }
 
 
@@ -1662,6 +1664,7 @@ def _compare_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "require_rule_fixes",
         "forbid_rule_regressions",
         "forbid_new_critical_failures",
+        "task_family_gates",
     )
     effective = {
         field: options[field]

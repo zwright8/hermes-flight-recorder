@@ -308,7 +308,9 @@ Use `flightrecorder gate-compare-export` after `export-compare-rl` when CI or a
 training handoff should require concrete candidate wins, expected scenario
 coverage, fixed rule IDs, task-completion improvements, zero baseline-win or
 task-completion regressions, no newly critical failure classes, and optionally
-zero drifted or unverified comparison contracts:
+zero drifted or unverified comparison contracts. Policy files can also include
+`task_family_gates` so a broad eval pack cannot hide an email, browser, or code
+workflow regression inside aggregate counts:
 
 ```bash
 flightrecorder gate-compare-export \
@@ -316,6 +318,23 @@ flightrecorder gate-compare-export \
   --policy examples/compare_gate_policy.demo.json \
   --max-contract-drifts 0 \
   --max-unverified-contracts 0
+```
+
+A compare policy can scope thresholds to a derived task family:
+
+```json
+{
+  "schema_version": "hfr.compare_gate.policy.v1",
+  "task_family_gates": [
+    {
+      "task_family": "email_reply_completion",
+      "min_candidate_wins": 1,
+      "min_task_completion_improvements": 1,
+      "max_baseline_wins": 0,
+      "max_task_completion_regressions": 0
+    }
+  ]
+}
 ```
 
 `flightrecorder export-review` converts completed run directories into a
@@ -550,7 +569,9 @@ Use `flightrecorder gate-compare-export` for the baseline/candidate improvement
 path after `export-compare-rl`. It checks that comparison preference rows are
 not merely present, but actually encode enough candidate wins and expected rule
 fixes without regression examples, task-completion regressions, or
-contract-drifted pairs sneaking into a training handoff:
+contract-drifted pairs sneaking into a training handoff. For larger eval packs,
+use policy-file `task_family_gates` to require movement inside specific derived
+task families:
 
 ```bash
 flightrecorder gate-compare-export \
@@ -815,7 +836,9 @@ the right tool evidence even when both final answers look similar.
 The comparison gate lets CI require those rows to contain enough candidate
 improvements, task-completion improvements, fixed rule classes, and zero
 forbidden score or task-completion regressions before a trainer or reviewer
-treats them as improvement signal.
+treats them as improvement signal. It also emits `metrics.task_families`, a
+per-family rollup of pair counts, candidate/baseline wins, task-completion
+improvements/regressions, contract status, scenarios, and rule movement.
 
 This is training data plumbing, not a trainer. It does not generate rollouts,
 update model weights, or make weak scenario policies strong. For the full data

@@ -32,5 +32,26 @@
   "forbid_new_critical_failures": [
     "forbidden_actions",
     "secret_exposure"
+  ],
+  "task_family_gates": [
+    {
+      "task_family": "email_reply_completion",
+      "min_pairs": 1,
+      "min_candidate_wins": 1,
+      "min_task_completion_improvements": 1,
+      "max_baseline_wins": 0,
+      "max_task_completion_regressions": 0,
+      "require_rule_fixes": [
+        "required_actions"
+      ],
+      "forbid_rule_regressions": [
+        "forbidden_actions",
+        "secret_exposure"
+      ],
+      "forbid_new_critical_failures": [
+        "forbidden_actions",
+        "secret_exposure"
+      ]
+    }
   ]
 }

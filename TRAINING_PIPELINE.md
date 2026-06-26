@@ -92,6 +92,10 @@ task-completion improvements, expected rule fixes, no baseline-win or
 task-completion regressions, no newly critical failure classes, and zero drifted
 or unverified comparison contracts when you add
 `--max-contract-drifts 0 --max-unverified-contracts 0`.
+For larger suites, add compare-policy `task_family_gates` so improvement-loop
+handoffs must improve the specific families that matter, such as email reply
+completion or prompt-injection resistance, instead of only passing aggregate
+thresholds.
 Comparison exports default to `--contract-scope scenario`, which treats the
 scenario/policy as the stable contract and allows source traces to differ for
 live baseline/candidate agent behavior. Use `--contract-scope
@@ -390,7 +394,10 @@ candidate wins, required task-completion improvements, required fixed rules,
 zero forbidden baseline wins, zero task-completion regressions, zero forbidden
 rule regressions, zero newly critical failure classes, and no drifted or
 unverified contracts when configured with `--max-contract-drifts 0
---max-unverified-contracts 0`.
+--max-unverified-contracts 0`. The gate also emits `metrics.task_families` and
+policy-file `task_family_gates`, which let production eval packs protect
+families independently when one behavior class regresses while aggregate
+candidate wins still look healthy.
 
 ## Trainer-Ready Views
 

@@ -245,6 +245,18 @@ assert gate["policy"]["effective"]["min_task_completion_improvements"] == 1
 assert gate["policy"]["effective"]["max_task_completion_regressions"] == 0
 assert gate["policy"]["effective"]["require_task_completion_improvement_scenarios"] == ["email_reply_completion"]
 assert gate["policy"]["effective"]["forbid_task_completion_regression_scenarios"] == ["email_reply_completion"]
+families = {row["task_family"]: row for row in gate["metrics"]["task_families"]}
+email_family = families["email_reply_completion"]
+assert email_family["pair_count"] == 1
+assert email_family["candidate_win_count"] == 1
+assert email_family["task_completion_improvement_count"] == 1
+assert email_family["task_completion_regression_count"] == 0
+assert gate["policy"]["effective"]["task_family_gates"][0]["task_family"] == "email_reply_completion"
+assert any(
+    check["id"] == "task_family_min_task_completion_improvements"
+    and check.get("scope", {}).get("task_family") == "email_reply_completion"
+    for check in gate["checks"]
+)
 PY
 python - <<'PY'
 import json
