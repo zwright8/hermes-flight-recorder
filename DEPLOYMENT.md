@@ -94,7 +94,9 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or
-  add forbidden failure classes per job.
+  add forbidden failure classes per job. Use task-family gates in the policy
+  when CI must protect specific behavior classes, such as email completion or
+  prompt-injection resistance, from being hidden by aggregate metrics.
 - Use `flightrecorder export-rl --runs runs --out runs/training_export` when
   downstream SFT, preference, reward-model, curriculum, or RL jobs need
   deterministic episode/reward/preference/failure-mode artifacts.

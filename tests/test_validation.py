@@ -147,6 +147,32 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("suite_summary.metrics.pass_rate", errors)
 
+    def test_validate_warns_on_legacy_family_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)])
+            suite_path = runs / "suite_summary.json"
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            for row in suite["metrics"]["task_families"]:
+                row.pop("critical_failure_counts", None)
+            suite_path.write_text(json.dumps(suite), encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(suite_path),
+                    "--out",
+                    str(summary_path),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("critical_failure_counts is missing", warnings)
+
     def test_validate_strict_fails_on_warnings(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"

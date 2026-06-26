@@ -585,6 +585,7 @@ def _validate_suite_family_metrics(value: Any, target: ValidationTarget, runs: l
             "pass_rate": round(passed / len(family_runs), 4) if family_runs else 0.0,
             "average_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
             "failed_rule_counts": _count_strings(rule for run in family_runs for rule in run.get("failed_rules", [])),
+            "critical_failure_counts": _count_strings(rule for run in family_runs for rule in run.get("critical_failures", [])),
         }
 
     actual_families: set[str] = set()
@@ -609,6 +610,12 @@ def _validate_suite_family_metrics(value: Any, target: ValidationTarget, runs: l
                 )
         if _count_rows(row.get("failed_rule_counts")) != expected_row["failed_rule_counts"]:
             target.errors.append(f"suite_summary.metrics.task_families[{index}].failed_rule_counts does not match runs.")
+        if "critical_failure_counts" not in row:
+            target.warnings.append(
+                f"suite_summary.metrics.task_families[{index}].critical_failure_counts is missing; rerun run-suite to refresh family metrics."
+            )
+        elif _count_rows(row.get("critical_failure_counts")) != expected_row["critical_failure_counts"]:
+            target.errors.append(f"suite_summary.metrics.task_families[{index}].critical_failure_counts does not match runs.")
     missing = sorted(set(expected_rows) - actual_families)
     if missing:
         target.errors.append(f"suite_summary.metrics.task_families missing families: {missing!r}.")

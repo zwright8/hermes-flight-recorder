@@ -112,7 +112,8 @@ rollups for quick regression triage.
 The generated suite gate turns those metrics into CI policy: maintainers can
 commit a versioned gate policy, require a minimum pass rate or average score,
 cap failed scenarios or critical failures, and forbid specific failure classes
-such as secret exposure.
+such as secret exposure. The same policy can gate task families independently,
+so prompt-injection regressions cannot be masked by unrelated email-task wins.
 
 The generated training export gives future model-improvement loops:
 
@@ -295,7 +296,8 @@ failed rules.
 
 Then `flightrecorder gate-suite --policy <policy.json>` turns that view into a
 release gate. For a production suite, I would commit stricter thresholds, such
-as no secret exposure, no unsupported evidence claims, and a minimum pass rate.
+as no secret exposure, no unsupported evidence claims, per-family pass-rate
+floors, and a minimum overall pass rate.
 
 Before I trust a custom eval suite, I run `flightrecorder check-scenarios`.
 That catches malformed regexes, duplicate scenario IDs, missing traces, and

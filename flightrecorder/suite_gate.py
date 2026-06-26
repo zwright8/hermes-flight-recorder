@@ -17,7 +17,9 @@ _SCALAR_POLICY_FIELDS = {
     "max_critical_failures",
 }
 _LIST_POLICY_FIELDS = {"forbid_failed_rules", "forbid_critical_rules"}
-_POLICY_FIELDS = {"schema_version", "description", *_SCALAR_POLICY_FIELDS, *_LIST_POLICY_FIELDS}
+_TASK_FAMILY_SCALAR_POLICY_FIELDS = _SCALAR_POLICY_FIELDS - {"max_errors"}
+_TASK_FAMILY_GATE_FIELDS = {"task_family", *_TASK_FAMILY_SCALAR_POLICY_FIELDS, *_LIST_POLICY_FIELDS}
+_POLICY_FIELDS = {"schema_version", "description", "task_family_gates", *_SCALAR_POLICY_FIELDS, *_LIST_POLICY_FIELDS}
 
 
 class SuiteGatePolicyError(ValueError):
@@ -65,6 +67,9 @@ def load_gate_policy(path: str | Path) -> dict[str, Any]:
             continue
         policy[field] = _policy_string_list(field, raw[field])
 
+    if "task_family_gates" in raw and raw["task_family_gates"] is not None:
+        policy["task_family_gates"] = _policy_task_family_gates(raw["task_family_gates"])
+
     return policy
 
 
@@ -79,6 +84,7 @@ def evaluate_suite_gate(
     max_critical_failures: int | None = None,
     forbid_failed_rules: list[str] | None = None,
     forbid_critical_rules: list[str] | None = None,
+    task_family_gates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate threshold checks against a run-suite summary."""
     metrics = suite_summary.get("metrics") if isinstance(suite_summary.get("metrics"), dict) else {}
@@ -102,6 +108,10 @@ def evaluate_suite_gate(
     for rule_id in forbid_critical_rules or []:
         _add_absence_check(checks, "forbid_critical_rule", rule_id, critical_rule_counts.get(rule_id, 0))
 
+    family_rows = _task_family_rows(metrics.get("task_families"), suite_summary.get("runs"))
+    for gate in task_family_gates or []:
+        _evaluate_task_family_gate(checks, gate, family_rows)
+
     passed = all(check["passed"] for check in checks)
     return {
         "schema_version": SUITE_GATE_SCHEMA_VERSION,
@@ -120,40 +130,122 @@ def evaluate_suite_gate(
     }
 
 
-def _add_min_check(checks: list[dict[str, Any]], check_id: str, actual: float, minimum: float) -> None:
-    checks.append(
-        {
-            "id": check_id,
-            "passed": actual >= minimum,
-            "actual": actual,
-            "expected": {"min": minimum},
-            "summary": f"{check_id}: actual={actual}, min={minimum}",
-        }
-    )
+def _evaluate_task_family_gate(checks: list[dict[str, Any]], gate: dict[str, Any], family_rows: dict[str, dict[str, Any]]) -> None:
+    family = str(gate["task_family"])
+    row = family_rows.get(family)
+    scope = {"task_family": family}
+    if row is None:
+        _add_presence_check(checks, "task_family_present", False, scope)
+        return
+    _add_presence_check(checks, "task_family_present", True, scope)
+
+    if gate.get("min_pass_rate") is not None:
+        _add_min_check(checks, "task_family_min_pass_rate", _number(row.get("pass_rate")), gate["min_pass_rate"], scope)
+    if gate.get("min_average_score") is not None:
+        _add_min_check(
+            checks,
+            "task_family_min_average_score",
+            _number(row.get("average_score")),
+            gate["min_average_score"],
+            scope,
+        )
+    if gate.get("max_failed") is not None:
+        _add_max_check(checks, "task_family_max_failed", int(row.get("failed", 0) or 0), gate["max_failed"], scope)
+    if gate.get("max_critical_failures") is not None:
+        _add_max_check(
+            checks,
+            "task_family_max_critical_failures",
+            _total_count(row.get("critical_failure_counts")),
+            gate["max_critical_failures"],
+            scope,
+        )
+
+    failed_rule_counts = _count_rows(row.get("failed_rule_counts"))
+    critical_rule_counts = _count_rows(row.get("critical_failure_counts"))
+    for rule_id in gate.get("forbid_failed_rules", []):
+        _add_absence_check(
+            checks,
+            "task_family_forbid_failed_rule",
+            rule_id,
+            failed_rule_counts.get(rule_id, 0),
+            scope,
+        )
+    for rule_id in gate.get("forbid_critical_rules", []):
+        _add_absence_check(
+            checks,
+            "task_family_forbid_critical_rule",
+            rule_id,
+            critical_rule_counts.get(rule_id, 0),
+            scope,
+        )
 
 
-def _add_max_check(checks: list[dict[str, Any]], check_id: str, actual: int, maximum: int) -> None:
-    checks.append(
-        {
-            "id": check_id,
-            "passed": actual <= maximum,
-            "actual": actual,
-            "expected": {"max": maximum},
-            "summary": f"{check_id}: actual={actual}, max={maximum}",
-        }
-    )
+def _add_min_check(
+    checks: list[dict[str, Any]],
+    check_id: str,
+    actual: float,
+    minimum: float,
+    scope: dict[str, str] | None = None,
+) -> None:
+    check = {
+        "id": check_id,
+        "passed": actual >= minimum,
+        "actual": actual,
+        "expected": {"min": minimum},
+        "summary": f"{check_id}: actual={actual}, min={minimum}",
+    }
+    _append_check(checks, check, scope)
 
 
-def _add_absence_check(checks: list[dict[str, Any]], check_id: str, rule_id: str, count: int) -> None:
-    checks.append(
-        {
-            "id": check_id,
-            "passed": count == 0,
-            "actual": {"rule_id": rule_id, "count": count},
-            "expected": {"count": 0},
-            "summary": f"{check_id}: rule_id={rule_id}, count={count}",
-        }
-    )
+def _add_max_check(
+    checks: list[dict[str, Any]],
+    check_id: str,
+    actual: int,
+    maximum: int,
+    scope: dict[str, str] | None = None,
+) -> None:
+    check = {
+        "id": check_id,
+        "passed": actual <= maximum,
+        "actual": actual,
+        "expected": {"max": maximum},
+        "summary": f"{check_id}: actual={actual}, max={maximum}",
+    }
+    _append_check(checks, check, scope)
+
+
+def _add_absence_check(
+    checks: list[dict[str, Any]],
+    check_id: str,
+    rule_id: str,
+    count: int,
+    scope: dict[str, str] | None = None,
+) -> None:
+    check = {
+        "id": check_id,
+        "passed": count == 0,
+        "actual": {"rule_id": rule_id, "count": count},
+        "expected": {"count": 0},
+        "summary": f"{check_id}: rule_id={rule_id}, count={count}",
+    }
+    _append_check(checks, check, scope)
+
+
+def _add_presence_check(checks: list[dict[str, Any]], check_id: str, present: bool, scope: dict[str, str]) -> None:
+    check = {
+        "id": check_id,
+        "passed": present,
+        "actual": {"present": present},
+        "expected": {"present": True},
+        "summary": f"{check_id}: present={present}",
+    }
+    _append_check(checks, check, scope)
+
+
+def _append_check(checks: list[dict[str, Any]], check: dict[str, Any], scope: dict[str, str] | None = None) -> None:
+    if scope:
+        check["scope"] = scope
+    checks.append(check)
 
 
 def _number(value: Any) -> float:
@@ -192,8 +284,100 @@ def _policy_string_list(field: str, value: Any) -> list[str]:
     return normalized
 
 
+def _policy_task_family_gates(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise SuiteGatePolicyError("suite gate policy field task_family_gates must be a list")
+    gates: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise SuiteGatePolicyError(f"suite gate policy field task_family_gates[{index}] must be an object")
+        unknown = sorted(set(item) - _TASK_FAMILY_GATE_FIELDS)
+        if unknown:
+            raise SuiteGatePolicyError(
+                f"Unknown suite gate policy field(s) in task_family_gates[{index}]: {', '.join(unknown)}"
+            )
+        family = item.get("task_family")
+        if not isinstance(family, str) or not family.strip():
+            raise SuiteGatePolicyError(f"suite gate policy field task_family_gates[{index}].task_family must be a non-empty string")
+        gate: dict[str, Any] = {"task_family": family.strip()}
+        for field in _TASK_FAMILY_SCALAR_POLICY_FIELDS:
+            if field not in item or item[field] is None:
+                continue
+            if field == "min_pass_rate":
+                gate[field] = _policy_float(f"task_family_gates[{index}].{field}", item[field], 0.0, 1.0)
+            elif field == "min_average_score":
+                gate[field] = _policy_float(f"task_family_gates[{index}].{field}", item[field], 0.0, 100.0)
+            else:
+                gate[field] = _policy_non_negative_int(f"task_family_gates[{index}].{field}", item[field])
+        for field in _LIST_POLICY_FIELDS:
+            if field not in item or item[field] is None:
+                continue
+            gate[field] = _policy_string_list(f"task_family_gates[{index}].{field}", item[field])
+        gates.append(gate)
+    return gates
+
+
 def _total_count(value: Any) -> int:
     return sum(_count_rows(value).values())
+
+
+def _task_family_rows(value: Any, runs: Any) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    if isinstance(value, list):
+        for row in value:
+            if not isinstance(row, dict):
+                continue
+            family = row.get("task_family")
+            if isinstance(family, str) and family:
+                rows[family] = dict(row)
+    for family, fallback in _task_family_rows_from_runs(runs).items():
+        row = rows.setdefault(family, {"task_family": family})
+        for field, field_value in fallback.items():
+            row.setdefault(field, field_value)
+    return rows
+
+
+def _task_family_rows_from_runs(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, list):
+        return {}
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for run in value:
+        if not isinstance(run, dict):
+            continue
+        family = run.get("task_family")
+        if isinstance(family, str) and family:
+            buckets.setdefault(family, []).append(run)
+
+    rows: dict[str, dict[str, Any]] = {}
+    for family, family_runs in buckets.items():
+        scores = [_bounded_score(run.get("score")) for run in family_runs]
+        passed = sum(1 for run in family_runs if run.get("passed") is True)
+        rows[family] = {
+            "task_family": family,
+            "total": len(family_runs),
+            "passed": passed,
+            "failed": len(family_runs) - passed,
+            "pass_rate": round(passed / len(family_runs), 4) if family_runs else 0.0,
+            "average_score": round(sum(scores) / len(scores), 2) if scores else 0.0,
+            "failed_rule_counts": _count_values(rule for run in family_runs for rule in run.get("failed_rules", [])),
+            "critical_failure_counts": _count_values(rule for run in family_runs for rule in run.get("critical_failures", [])),
+        }
+    return rows
+
+
+def _count_values(values: Any) -> list[dict[str, int]]:
+    counts: dict[str, int] = {}
+    for value in values:
+        if isinstance(value, str) and value:
+            counts[value] = counts.get(value, 0) + 1
+    return [{"id": key, "count": count} for key, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+
+
+def _bounded_score(value: Any) -> int:
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _count_rows(value: Any) -> dict[str, int]:

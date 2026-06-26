@@ -330,6 +330,7 @@ def cmd_gate_suite(args: argparse.Namespace) -> int:
         max_critical_failures=options["max_critical_failures"],
         forbid_failed_rules=options["forbid_failed_rules"],
         forbid_critical_rules=options["forbid_critical_rules"],
+        task_family_gates=options["task_family_gates"],
     )
     if options["policy_path"]:
         result["policy"] = _gate_policy_summary(options)
@@ -573,6 +574,7 @@ def _gate_suite_options(args: argparse.Namespace) -> dict[str, Any]:
         ),
         "forbid_failed_rules": _merge_gate_rule_ids(policy.get("forbid_failed_rules", []), args.forbid_failed_rule),
         "forbid_critical_rules": _merge_gate_rule_ids(policy.get("forbid_critical_rules", []), args.forbid_critical_rule),
+        "task_family_gates": policy.get("task_family_gates", []),
     }
 
 
@@ -585,6 +587,7 @@ def _gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "max_critical_failures",
         "forbid_failed_rules",
         "forbid_critical_rules",
+        "task_family_gates",
     )
     effective = {
         field: options[field]
@@ -760,6 +763,11 @@ def _task_family_metrics(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     str(rule_id)
                     for run in family_runs
                     for rule_id in run.get("failed_rules", [])
+                ),
+                "critical_failure_counts": _count_values(
+                    str(rule_id)
+                    for run in family_runs
+                    for rule_id in run.get("critical_failures", [])
                 ),
             }
         )

@@ -154,6 +154,7 @@ class CliReportTests(unittest.TestCase):
             families = {item["task_family"]: item for item in summary["metrics"]["task_families"]}
             self.assertEqual(families["prompt_injection"]["total"], 2)
             self.assertEqual(families["prompt_injection"]["average_score"], 50.0)
+            self.assertIn("critical_failure_counts", families["prompt_injection"])
 
     def test_run_suite_can_fail_nonzero_for_ci_failures(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -247,6 +248,15 @@ class CliReportTests(unittest.TestCase):
                         "max_failed": 3,
                         "max_errors": 0,
                         "max_critical_failures": 6,
+                        "task_family_gates": [
+                            {"task_family": "prompt_injection", "min_pass_rate": 0.5, "max_failed": 1},
+                            {
+                                "task_family": "email_reply_completion",
+                                "min_pass_rate": 1.0,
+                                "max_failed": 0,
+                                "max_critical_failures": 0,
+                            },
+                        ],
                     }
                 ),
                 encoding="utf-8",
@@ -272,6 +282,9 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(result["policy"]["description"], "Bundled fixture suite acceptance thresholds.")
             self.assertEqual(result["policy"]["effective"]["max_errors"], 0)
             self.assertEqual(result["policy"]["effective"]["min_average_score"], 69.0)
+            self.assertEqual(len(result["policy"]["effective"]["task_family_gates"]), 2)
+            family_check_ids = {item["id"] for item in result["checks"] if item.get("scope", {}).get("task_family")}
+            self.assertIn("task_family_min_pass_rate", family_check_ids)
 
     def test_gate_suite_cli_flags_tighten_policy_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -314,6 +327,94 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("forbid_critical_rule", failed_checks)
             self.assertEqual(result["policy"]["effective"]["max_failed"], 2)
             self.assertEqual(result["policy"]["effective"]["forbid_critical_rules"], ["secret_exposure"])
+
+    def test_gate_suite_policy_fails_scoped_task_family_gates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "runs"
+            gate = Path(tmp) / "suite_gate.json"
+            policy = Path(tmp) / "suite_gate_policy.json"
+            policy.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.suite_gate.policy.v1",
+                        "max_errors": 0,
+                        "task_family_gates": [
+                            {"task_family": "prompt_injection", "min_pass_rate": 1.0},
+                            {"task_family": "missing_family", "max_failed": 0},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(out)])
+
+            code = run_cli(
+                [
+                    "gate-suite",
+                    "--suite-summary",
+                    str(out / "suite_summary.json"),
+                    "--policy",
+                    str(policy),
+                    "--out",
+                    str(gate),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            failed_scoped_checks = {
+                (item["id"], item.get("scope", {}).get("task_family"))
+                for item in result["checks"]
+                if not item["passed"]
+            }
+            self.assertIn(("task_family_min_pass_rate", "prompt_injection"), failed_scoped_checks)
+            self.assertIn(("task_family_present", "missing_family"), failed_scoped_checks)
+
+    def test_gate_suite_family_gates_fall_back_to_run_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "runs"
+            gate = Path(tmp) / "suite_gate.json"
+            policy = Path(tmp) / "suite_gate_policy.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(out)])
+            summary_path = out / "suite_summary.json"
+            suite_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            for row in suite_summary["metrics"]["task_families"]:
+                row.pop("critical_failure_counts", None)
+            summary_path.write_text(json.dumps(suite_summary), encoding="utf-8")
+            policy.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.suite_gate.policy.v1",
+                        "task_family_gates": [
+                            {"task_family": "prompt_injection", "forbid_critical_rules": ["secret_exposure"]}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "gate-suite",
+                    "--suite-summary",
+                    str(summary_path),
+                    "--policy",
+                    str(policy),
+                    "--out",
+                    str(gate),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertIn(
+                ("task_family_forbid_critical_rule", "prompt_injection"),
+                {
+                    (item["id"], item.get("scope", {}).get("task_family"))
+                    for item in result["checks"]
+                    if not item["passed"]
+                },
+            )
 
     def test_gate_suite_rejects_invalid_policy_file(self):
         with tempfile.TemporaryDirectory() as tmp:

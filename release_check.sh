@@ -45,6 +45,19 @@ python -m flightrecorder gate-suite \
   --out runs/suite_gate.json >/dev/null
 test -f runs/suite_gate.json
 test -f examples/suite_gate_policy.demo.json
+python - <<'PY'
+import json
+from pathlib import Path
+
+gate = json.loads(Path("runs/suite_gate.json").read_text(encoding="utf-8"))
+scoped_checks = [
+    check
+    for check in gate["checks"]
+    if check.get("scope", {}).get("task_family")
+]
+assert scoped_checks
+assert gate["policy"]["effective"]["task_family_gates"]
+PY
 if python -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
   --forbid-critical-rule secret_exposure >/dev/null; then
