@@ -270,8 +270,8 @@ The export directory contains:
   quality flags.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
-- `manifest.json`: generation settings, counts, output paths, caveats, and
-  optional experiment metadata.
+- `manifest.json`: generation settings, counts, output paths, artifact
+  fingerprints, caveats, and optional experiment metadata.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
 use the redacted evidence surface rather than raw sensitive traces. When a run
@@ -279,6 +279,10 @@ contains `artifact_lineage.json`, each episode also includes `source_lineage`
 and `source_fingerprints` so downstream training rows can be traced back to the
 provenance graph and filtered by the scenario/source-trace hashes that produced
 the label.
+The manifest also fingerprints each generated JSONL, JSON, and Markdown export
+artifact except the manifest itself. Validation recomputes those SHA-256 hashes,
+which lets a training launcher reject stale, swapped, or partially copied export
+files before they reach a trainer.
 New scorecards also emit `task_completion`, a compact verdict over required
 evidence, required actions, ordered action sequences, event counts, and optional
 post-run state snapshots. Exported episodes, rewards, preferences, SFT rows, DPO
@@ -430,9 +434,13 @@ The export contains:
 - `improvement_dpo.jsonl`: DPO-shaped rows whose `chosen` and `rejected` fields
   are compact behavior transcripts with tool-call/tool-result evidence.
 - `manifest.json`: counts, metadata, skipped pairs, contract-drift counts,
-  source directories, and output paths.
+  source directories, output paths, and artifact fingerprints.
 - `IMPROVEMENT_CARD.md`: a human-readable summary of candidate wins and
   baseline wins.
+
+Comparison manifests include SHA-256 fingerprints for the pair, DPO, and card
+artifacts, so a promotion gate can verify the exact improvement evidence before
+passing it into a training job.
 
 This is important for autonomous agents because two runs can produce the same
 final answer while only one actually performed the required tool action. The

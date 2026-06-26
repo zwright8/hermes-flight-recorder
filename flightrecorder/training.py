@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -154,6 +155,7 @@ def export_rl_dataset(
     if export_metadata:
         manifest["metadata"] = export_metadata
     _write_text(paths["dataset_card"], _dataset_card(manifest, dataset_metrics))
+    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest"})
     _write_json(paths["manifest"], manifest)
     return manifest
 
@@ -281,6 +283,7 @@ def export_compare_rl_dataset(
     _write_jsonl(paths["improvement_pairs"], pairs)
     _write_jsonl(paths["improvement_dpo"], dpo)
     _write_text(paths["improvement_card"], _improvement_card(manifest, pairs))
+    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest"})
     _write_json(paths["manifest"], manifest)
     return manifest
 
@@ -1791,6 +1794,31 @@ def _basename(value: str) -> str:
 
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _artifact_fingerprints(paths: dict[str, Path], preserve_paths: bool, *, exclude: set[str]) -> dict[str, Any]:
+    fingerprints: dict[str, Any] = {}
+    for name, path in sorted(paths.items()):
+        if name in exclude:
+            continue
+        record: dict[str, Any] = {
+            "path": _display_path(path, preserve_paths),
+            "exists": path.exists(),
+        }
+        if path.exists() and path.is_file():
+            stat = path.stat()
+            record["size_bytes"] = stat.st_size
+            record["sha256"] = _sha256_file(path)
+        fingerprints[name] = record
+    return fingerprints
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:

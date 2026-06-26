@@ -392,6 +392,26 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("dataset_metrics.pass_rate", errors)
             self.assertIn("dataset_metrics.trace_signal.average_event_count", errors)
             self.assertIn("dataset_metrics.trainer_view_source_fingerprint_coverage.fully_verified", errors)
+            self.assertIn("manifest.artifact_fingerprints.dataset_metrics.sha256", errors)
+
+    def test_validate_rejects_training_manifest_artifact_fingerprint_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            manifest_path = export / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifact_fingerprints"]["episodes"]["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("manifest.artifact_fingerprints.episodes.sha256", errors)
 
     def test_validate_warns_on_legacy_training_export_without_trainer_views(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -410,6 +430,7 @@ class ValidationTests(unittest.TestCase):
                 manifest["outputs"].pop(name, None)
             for name in ("sft_count", "dpo_count", "reward_model_count", "quality_flag_count"):
                 manifest.pop(name, None)
+            manifest.pop("artifact_fingerprints", None)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             non_strict = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
@@ -423,6 +444,7 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("manifest.sft_count is missing", warnings)
             self.assertIn("dataset_metrics.json is missing", warnings)
             self.assertIn("manifest.quality_flag_count is missing", warnings)
+            self.assertIn("manifest.artifact_fingerprints is missing", warnings)
 
     def test_validate_accepts_suite_summary_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:

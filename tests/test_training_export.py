@@ -64,6 +64,25 @@ class TrainingExportTests(unittest.TestCase):
             self.assertIn("reward_model", manifest["outputs"])
             self.assertIn("dataset_metrics", manifest["outputs"])
             self.assertIn("dataset_card", manifest["outputs"])
+            self.assertEqual(
+                set(manifest["artifact_fingerprints"]),
+                {
+                    "curriculum",
+                    "dataset_card",
+                    "dataset_metrics",
+                    "dpo",
+                    "episodes",
+                    "failure_modes",
+                    "preferences",
+                    "reward_model",
+                    "rewards",
+                    "sft",
+                    "step_rewards",
+                },
+            )
+            self.assertTrue(all(record["exists"] is True for record in manifest["artifact_fingerprints"].values()))
+            self.assertTrue(all(len(record["sha256"]) == 64 for record in manifest["artifact_fingerprints"].values()))
+            self.assertNotIn(str(Path(tmp)), json.dumps(manifest["artifact_fingerprints"]))
             self.assertNotIn(str(Path(tmp)), (out / "manifest.json").read_text(encoding="utf-8"))
             self.assertTrue(all(str(Path(tmp)) not in json.dumps(episode) for episode in episodes))
             self.assertEqual({episode["schema_version"] for episode in episodes}, {"hfr.rl.episode.v1"})

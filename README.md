@@ -325,7 +325,12 @@ training-loop artifacts:
   quality flags.
 - `DATASET_CARD.md`: human-readable summary of the generated dataset and its
   boundaries.
-- `manifest.json`: export settings, counts, and caveats.
+- `manifest.json`: export settings, counts, artifact fingerprints, and caveats.
+
+Current manifests include SHA-256 fingerprints for every generated JSONL, JSON,
+and Markdown export artifact except the manifest itself. The validate command
+recomputes those hashes so a downstream trainer, reviewer, or CI job can reject
+stale or swapped files before learning from them.
 
 `flightrecorder export-compare-rl` converts paired baseline/candidate run
 directories into improvement-loop preference artifacts:
@@ -337,9 +342,13 @@ directories into improvement-loop preference artifacts:
   `improvement_pairs.jsonl`, including tool-call/tool-result evidence instead
   of final-answer text alone.
 - `manifest.json`: counts, source directories, metadata, skipped pairs,
-  contract-drift counts, and output paths.
+  contract-drift counts, output paths, and artifact fingerprints.
 - `IMPROVEMENT_CARD.md`: human-readable summary of candidate wins, baseline
   wins, contract status, and pair rationale.
+
+Comparison manifests carry the same artifact-fingerprint block for the pair,
+DPO, and improvement-card files, giving promotion gates a compact integrity
+check over the exact improvement evidence handed to a trainer.
 
 Use `flightrecorder gate-compare-export` after `export-compare-rl` when CI or a
 training handoff should require concrete candidate wins, expected scenario

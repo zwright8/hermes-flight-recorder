@@ -295,6 +295,13 @@ assert manifest["contract_scope"] == "scenario"
 assert manifest["contract_drift_count"] == 1
 assert manifest["unverified_contract_count"] == 0
 assert manifest["metadata"]["candidate"] == "email-evidence-fix"
+assert set(manifest["artifact_fingerprints"]) == {
+    "improvement_card",
+    "improvement_dpo",
+    "improvement_pairs",
+}
+assert all(record["exists"] is True for record in manifest["artifact_fingerprints"].values())
+assert all(len(record["sha256"]) == 64 for record in manifest["artifact_fingerprints"].values())
 assert pair["chosen_side"] == "candidate"
 assert pair["candidate_score_delta"] == 100
 assert pair["contract_fingerprint_status"] == "drifted"
@@ -395,6 +402,7 @@ assert lineage["replay"]["input_fingerprints"]["scenario"]["sha256"]
 assert lineage["replay"]["input_fingerprints"]["source_trace"]["sha256"]
 assert lineage["summary"]["self_contained_replay"] == lineage["replay"]["self_contained"]
 
+training_manifest = json.loads(Path("runs/training_export/manifest.json").read_text(encoding="utf-8"))
 rewards = [
     json.loads(line)
     for line in Path("runs/training_export/rewards.jsonl").read_text(encoding="utf-8").splitlines()
@@ -445,6 +453,21 @@ assert all(item["trace_signal"]["event_count"] == len(item["events"]) for item i
 assert all(item["trace_signal"]["has_final_answer"] for item in episodes)
 assert all(len(item["source_fingerprints"]["scenario"]["sha256"]) == 64 for item in episodes)
 assert all(len(item["source_fingerprints"]["source_trace"]["sha256"]) == 64 for item in episodes)
+assert set(training_manifest["artifact_fingerprints"]) == {
+    "curriculum",
+    "dataset_card",
+    "dataset_metrics",
+    "dpo",
+    "episodes",
+    "failure_modes",
+    "preferences",
+    "reward_model",
+    "rewards",
+    "sft",
+    "step_rewards",
+}
+assert all(record["exists"] is True for record in training_manifest["artifact_fingerprints"].values())
+assert all(len(record["sha256"]) == 64 for record in training_manifest["artifact_fingerprints"].values())
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
 assert any(item["chosen_episode_id"] == "email_reply_completion_good" and item["rejected_episode_id"] == "email_reply_completion_bad" for item in dpo)
 assert {item["episode_id"] for item in reward_model} >= {

@@ -52,6 +52,12 @@ class CompareRlExportTests(unittest.TestCase):
             self.assertEqual(manifest["contract_drift_count"], 1)
             self.assertEqual(manifest["unverified_contract_count"], 0)
             self.assertEqual(manifest["metadata"]["candidate"], "email-fix")
+            self.assertEqual(
+                set(manifest["artifact_fingerprints"]),
+                {"improvement_card", "improvement_dpo", "improvement_pairs"},
+            )
+            self.assertTrue(all(record["exists"] is True for record in manifest["artifact_fingerprints"].values()))
+            self.assertTrue(all(len(record["sha256"]) == 64 for record in manifest["artifact_fingerprints"].values()))
             self.assertEqual(pairs[0]["schema_version"], "hfr.compare_rl.pair.v1")
             self.assertEqual(pairs[0]["scenario_id"], "email_reply_completion")
             self.assertEqual(pairs[0]["chosen_side"], "candidate")
@@ -124,6 +130,24 @@ class CompareRlExportTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("improvement_dpo[0].chosen", errors)
+
+    def test_validate_rejects_compare_export_artifact_fingerprint_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            out = Path(tmp) / "compare_rl"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["export-compare-rl", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(out)])
+            manifest_path = out / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifact_fingerprints"]["improvement_pairs"]["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            code = run_cli(["validate", "--compare-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("compare_manifest.artifact_fingerprints.improvement_pairs.sha256", errors)
 
     def _paired_email_dirs(self, root: Path) -> tuple[Path, Path]:
         baseline = root / "baseline"

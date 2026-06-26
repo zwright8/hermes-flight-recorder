@@ -276,6 +276,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             reward_model,
             dataset_metrics,
             dataset_card_path.exists(),
+            export_dir,
         )
     _validate_episodes(episodes, target)
     _validate_rewards(rewards, target, episodes)
@@ -339,7 +340,7 @@ def validate_compare_export(path: str | Path) -> ValidationTarget:
     dpo = _read_jsonl_objects(export_dir / "improvement_dpo.jsonl", target, "improvement_dpo.jsonl")
     card_path = export_dir / "IMPROVEMENT_CARD.md"
     if manifest is not None:
-        _validate_compare_manifest(manifest, target, pairs, dpo, card_path.exists())
+        _validate_compare_manifest(manifest, target, pairs, dpo, card_path.exists(), export_dir)
     _validate_compare_pairs(pairs, target)
     _validate_compare_dpo(dpo, target, pairs)
     if card_path.exists():
@@ -1027,6 +1028,7 @@ def _validate_training_manifest(
     reward_model: list[dict[str, Any]],
     dataset_metrics: dict[str, Any] | None,
     has_dataset_card: bool,
+    export_dir: Path,
 ) -> None:
     _require_equal(manifest, "schema_version", RL_MANIFEST_SCHEMA_VERSION, target)
     expected_counts = {
@@ -1071,6 +1073,12 @@ def _validate_training_manifest(
             target.warnings.append("manifest.outputs.dataset_metrics is missing; rerun export-rl to refresh dataset-level metrics.")
         if "dataset_card" not in manifest["outputs"]:
             target.warnings.append("manifest.outputs.dataset_card is missing; rerun export-rl to refresh the dataset card.")
+    _validate_manifest_artifact_fingerprints(
+        manifest.get("artifact_fingerprints"),
+        target,
+        "manifest.artifact_fingerprints",
+        _training_export_artifact_paths(export_dir),
+    )
     if dataset_metrics is None:
         target.warnings.append("manifest has no validated dataset_metrics.json companion.")
     if not has_dataset_card:
@@ -1095,6 +1103,7 @@ def _validate_compare_manifest(
     pairs: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     has_card: bool,
+    export_dir: Path,
 ) -> None:
     _require_equal(manifest, "schema_version", COMPARE_RL_MANIFEST_SCHEMA_VERSION, target)
     expected_counts = {
@@ -1126,6 +1135,12 @@ def _validate_compare_manifest(
         for output_name in ("improvement_pairs", "improvement_dpo", "manifest", "improvement_card"):
             if output_name not in manifest["outputs"]:
                 target.errors.append(f"compare_manifest.outputs.{output_name} is missing.")
+    _validate_manifest_artifact_fingerprints(
+        manifest.get("artifact_fingerprints"),
+        target,
+        "compare_manifest.artifact_fingerprints",
+        _compare_export_artifact_paths(export_dir),
+    )
     for field_name in ("missing_in_candidate", "new_in_candidate"):
         if not _is_string_list(manifest.get(field_name)):
             target.errors.append(f"compare_manifest.{field_name} must be a list of strings.")
@@ -1147,6 +1162,76 @@ def _validate_compare_manifest(
     for field_name in ("baseline_runs_dir", "candidate_runs_dir", "output_dir"):
         if _looks_absolute(str(manifest.get(field_name, ""))):
             target.warnings.append(f"compare_manifest.{field_name} is absolute; prefer redacted or relative exports for sharing.")
+
+
+def _validate_manifest_artifact_fingerprints(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    expected_paths: dict[str, Path],
+) -> None:
+    if value is None:
+        target.warnings.append(f"{label} is missing; rerun the export to emit artifact integrity hashes.")
+        return
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+
+    expected_names = set(expected_paths)
+    actual_names = {name for name in value if isinstance(name, str)}
+    for name in sorted(actual_names - expected_names):
+        target.errors.append(f"{label}.{name} is not a known export artifact.")
+    for name in value:
+        if not isinstance(name, str) or not name:
+            target.errors.append(f"{label} keys must be non-empty strings.")
+
+    for name, path in expected_paths.items():
+        record = value.get(name)
+        record_label = f"{label}.{name}"
+        if not isinstance(record, dict):
+            target.errors.append(f"{record_label} must be an object.")
+            continue
+        if not isinstance(record.get("path"), str) or not record.get("path"):
+            target.errors.append(f"{record_label}.path must be a non-empty string.")
+        if record.get("exists") is not True:
+            target.errors.append(f"{record_label}.exists must be true for generated export artifacts.")
+        if not path.exists() or not path.is_file():
+            target.errors.append(f"{record_label} file is missing: {path}")
+            continue
+        size_bytes = record.get("size_bytes")
+        if not _is_non_negative_int(size_bytes):
+            target.errors.append(f"{record_label}.size_bytes must be a non-negative integer.")
+        elif size_bytes != path.stat().st_size:
+            target.errors.append(f"{record_label}.size_bytes does not match current file size.")
+        expected_sha = record.get("sha256")
+        if not _is_sha256(expected_sha):
+            target.errors.append(f"{record_label}.sha256 must be a SHA-256 hex string.")
+        elif _sha256(path) != expected_sha:
+            target.errors.append(f"{record_label}.sha256 does not match current file contents.")
+
+
+def _training_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
+    return {
+        "curriculum": export_dir / "curriculum.json",
+        "dataset_card": export_dir / "DATASET_CARD.md",
+        "dataset_metrics": export_dir / "dataset_metrics.json",
+        "dpo": export_dir / "dpo.jsonl",
+        "episodes": export_dir / "episodes.jsonl",
+        "failure_modes": export_dir / "failure_modes.jsonl",
+        "preferences": export_dir / "preferences.jsonl",
+        "reward_model": export_dir / "reward_model.jsonl",
+        "rewards": export_dir / "rewards.jsonl",
+        "sft": export_dir / "sft.jsonl",
+        "step_rewards": export_dir / "step_rewards.jsonl",
+    }
+
+
+def _compare_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
+    return {
+        "improvement_card": export_dir / "IMPROVEMENT_CARD.md",
+        "improvement_dpo": export_dir / "improvement_dpo.jsonl",
+        "improvement_pairs": export_dir / "improvement_pairs.jsonl",
+    }
 
 
 def _validate_compare_pairs(pairs: list[dict[str, Any]], target: ValidationTarget) -> None:
