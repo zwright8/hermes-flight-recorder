@@ -88,8 +88,9 @@ flightrecorder gate-compare-export \
 ```
 
 This can require enough candidate wins, specific scenario coverage, expected
-rule fixes, no baseline-win regressions, no newly critical failure classes, and
-zero drifted or unverified comparison contracts when you add
+task-completion improvements, expected rule fixes, no baseline-win or
+task-completion regressions, no newly critical failure classes, and zero drifted
+or unverified comparison contracts when you add
 `--max-contract-drifts 0 --max-unverified-contracts 0`.
 Comparison exports default to `--contract-scope scenario`, which treats the
 scenario/policy as the stable contract and allows source traces to differ for
@@ -385,9 +386,10 @@ should count as contract drift.
 `gate-compare-export` is the readiness check for this path. It reads
 `manifest.json` plus `improvement_pairs.jsonl` and can block a training handoff
 unless the comparison export contains enough pairs and DPO rows, enough
-candidate wins, required fixed rules, zero forbidden baseline wins, zero
-forbidden rule regressions, zero newly critical failure classes, and no drifted
-or unverified contracts when configured with `--max-contract-drifts 0
+candidate wins, required task-completion improvements, required fixed rules,
+zero forbidden baseline wins, zero task-completion regressions, zero forbidden
+rule regressions, zero newly critical failure classes, and no drifted or
+unverified contracts when configured with `--max-contract-drifts 0
 --max-unverified-contracts 0`.
 
 ## Trainer-Ready Views

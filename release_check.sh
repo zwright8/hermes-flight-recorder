@@ -195,6 +195,12 @@ if python -m flightrecorder gate-compare-export \
 fi
 if python -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
+  --min-task-completion-improvements 999 >/dev/null; then
+  echo "gate-compare-export did not fail a too-high task-completion improvement threshold" >&2
+  exit 1
+fi
+if python -m flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export \
   --max-contract-drifts 0 >/dev/null; then
   echo "gate-compare-export did not fail a zero contract-drift threshold" >&2
   exit 1
@@ -207,6 +213,7 @@ manifest = json.loads(Path("runs/compare_rl_export/manifest.json").read_text(enc
 pair = json.loads(Path("runs/compare_rl_export/improvement_pairs.jsonl").read_text(encoding="utf-8").splitlines()[0])
 dpo = json.loads(Path("runs/compare_rl_export/improvement_dpo.jsonl").read_text(encoding="utf-8").splitlines()[0])
 card = Path("runs/compare_rl_export/IMPROVEMENT_CARD.md").read_text(encoding="utf-8")
+gate = json.loads(Path("runs/compare_gate.json").read_text(encoding="utf-8"))
 assert manifest["pair_count"] == 1
 assert manifest["candidate_win_count"] == 1
 assert manifest["contract_scope"] == "scenario"
@@ -230,6 +237,14 @@ assert "required_actions" in pair["rule_fixes"]
 assert "tool_result gmail_send ok" in dpo["chosen"]
 assert "tool_result gmail_send ok" not in dpo["rejected"]
 assert "# Flight Recorder Improvement Pair Card" in card
+assert gate["metrics"]["task_completion_improvement_count"] == 1
+assert gate["metrics"]["task_completion_regression_count"] == 0
+assert gate["metrics"]["task_completion_improvement_scenarios"] == ["email_reply_completion"]
+assert gate["metrics"]["task_completion_regression_scenarios"] == []
+assert gate["policy"]["effective"]["min_task_completion_improvements"] == 1
+assert gate["policy"]["effective"]["max_task_completion_regressions"] == 0
+assert gate["policy"]["effective"]["require_task_completion_improvement_scenarios"] == ["email_reply_completion"]
+assert gate["policy"]["effective"]["forbid_task_completion_regression_scenarios"] == ["email_reply_completion"]
 PY
 python - <<'PY'
 import json
@@ -564,6 +579,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-task-completion-complete"
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--min-task-completion-improvements"
 "$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null

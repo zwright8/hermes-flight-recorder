@@ -52,8 +52,21 @@ class CompareGateTests(unittest.TestCase):
             self.assertTrue(gate["passed"])
             self.assertEqual(gate["metrics"]["candidate_win_count"], 1)
             self.assertEqual(gate["metrics"]["baseline_win_count"], 0)
+            self.assertEqual(gate["metrics"]["task_completion_improvement_count"], 1)
+            self.assertEqual(gate["metrics"]["task_completion_regression_count"], 0)
             self.assertEqual(gate["policy"]["schema_version"], "hfr.compare_gate.policy.v1")
             self.assertIn("email_reply_completion", gate["metrics"]["candidate_win_scenarios"])
+            self.assertIn("email_reply_completion", gate["metrics"]["task_completion_improvement_scenarios"])
+            self.assertEqual(gate["policy"]["effective"]["min_task_completion_improvements"], 1)
+            self.assertEqual(gate["policy"]["effective"]["max_task_completion_regressions"], 0)
+            self.assertEqual(
+                gate["policy"]["effective"]["require_task_completion_improvement_scenarios"],
+                ["email_reply_completion"],
+            )
+            self.assertEqual(
+                gate["policy"]["effective"]["forbid_task_completion_regression_scenarios"],
+                ["email_reply_completion"],
+            )
 
     def test_gate_compare_export_fails_strict_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -82,6 +95,42 @@ class CompareGateTests(unittest.TestCase):
             failed_ids = [check["id"] for check in gate["checks"] if not check["passed"]]
             self.assertIn("min_candidate_wins", failed_ids)
             self.assertIn("require_rule_fix", failed_ids)
+
+    def test_gate_compare_export_blocks_task_completion_regressions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            compare_export = Path(tmp) / "compare_rl"
+            gate_path = Path(tmp) / "gate.json"
+            run_cli(["export-compare-rl", "--baseline", str(candidate), "--candidate", str(baseline), "--out", str(compare_export)])
+
+            code = run_cli(
+                [
+                    "gate-compare-export",
+                    "--compare-export",
+                    str(compare_export),
+                    "--min-task-completion-improvements",
+                    "1",
+                    "--max-task-completion-regressions",
+                    "0",
+                    "--forbid-task-completion-regression-scenario",
+                    "email_reply_completion",
+                    "--out",
+                    str(gate_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            self.assertFalse(gate["passed"])
+            self.assertEqual(gate["metrics"]["candidate_win_count"], 0)
+            self.assertEqual(gate["metrics"]["baseline_win_count"], 1)
+            self.assertEqual(gate["metrics"]["task_completion_improvement_count"], 0)
+            self.assertEqual(gate["metrics"]["task_completion_regression_count"], 1)
+            self.assertIn("email_reply_completion", gate["metrics"]["task_completion_regression_scenarios"])
+            failed_ids = [check["id"] for check in gate["checks"] if not check["passed"]]
+            self.assertIn("min_task_completion_improvements", failed_ids)
+            self.assertIn("max_task_completion_regressions", failed_ids)
+            self.assertIn("forbid_task_completion_regression_scenario", failed_ids)
 
     def test_gate_compare_export_can_block_contract_drift(self):
         with tempfile.TemporaryDirectory() as tmp:

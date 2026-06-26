@@ -666,13 +666,17 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
         min_pairs=options["min_pairs"],
         min_dpo=options["min_dpo"],
         min_candidate_wins=options["min_candidate_wins"],
+        min_task_completion_improvements=options["min_task_completion_improvements"],
         max_baseline_wins=options["max_baseline_wins"],
+        max_task_completion_regressions=options["max_task_completion_regressions"],
         max_skipped_pairs=options["max_skipped_pairs"],
         max_contract_drifts=options["max_contract_drifts"],
         max_unverified_contracts=options["max_unverified_contracts"],
         require_scenarios=options["require_scenarios"],
         require_candidate_win_scenarios=options["require_candidate_win_scenarios"],
+        require_task_completion_improvement_scenarios=options["require_task_completion_improvement_scenarios"],
         forbid_regression_scenarios=options["forbid_regression_scenarios"],
+        forbid_task_completion_regression_scenarios=options["forbid_task_completion_regression_scenarios"],
         require_rule_fixes=options["require_rule_fixes"],
         forbid_rule_regressions=options["forbid_rule_regressions"],
         forbid_new_critical_failures=options["forbid_new_critical_failures"],
@@ -1132,7 +1136,17 @@ def _parser() -> argparse.ArgumentParser:
     gate_compare.add_argument("--min-pairs", type=_non_negative_int_arg, help="Minimum comparison pair count")
     gate_compare.add_argument("--min-dpo", type=_non_negative_int_arg, help="Minimum comparison DPO row count")
     gate_compare.add_argument("--min-candidate-wins", type=_non_negative_int_arg, help="Minimum candidate-win pair count")
+    gate_compare.add_argument(
+        "--min-task-completion-improvements",
+        type=_non_negative_int_arg,
+        help="Minimum pairs where the candidate completed the task and the baseline did not",
+    )
     gate_compare.add_argument("--max-baseline-wins", type=_non_negative_int_arg, help="Maximum allowed baseline-win regression pairs")
+    gate_compare.add_argument(
+        "--max-task-completion-regressions",
+        type=_non_negative_int_arg,
+        help="Maximum pairs where the baseline completed the task and the candidate did not",
+    )
     gate_compare.add_argument("--max-skipped-pairs", type=_non_negative_int_arg, help="Maximum allowed skipped paired scenarios")
     gate_compare.add_argument("--max-contract-drifts", type=_non_negative_int_arg, help="Maximum allowed drifted comparison contract fingerprints")
     gate_compare.add_argument(
@@ -1148,10 +1162,22 @@ def _parser() -> argparse.ArgumentParser:
         help="Fail unless this scenario is a candidate win",
     )
     gate_compare.add_argument(
+        "--require-task-completion-improvement-scenario",
+        action="append",
+        default=[],
+        help="Fail unless this scenario has candidate task completion and baseline non-completion",
+    )
+    gate_compare.add_argument(
         "--forbid-regression-scenario",
         action="append",
         default=[],
         help="Fail if this scenario is a baseline win",
+    )
+    gate_compare.add_argument(
+        "--forbid-task-completion-regression-scenario",
+        action="append",
+        default=[],
+        help="Fail if this scenario has baseline task completion and candidate non-completion",
     )
     gate_compare.add_argument("--require-rule-fix", action="append", default=[], help="Fail unless this rule id appears in rule_fixes")
     gate_compare.add_argument(
@@ -1566,8 +1592,18 @@ def _compare_gate_options(args: argparse.Namespace) -> dict[str, Any]:
         "min_candidate_wins": (
             args.min_candidate_wins if args.min_candidate_wins is not None else policy.get("min_candidate_wins")
         ),
+        "min_task_completion_improvements": (
+            args.min_task_completion_improvements
+            if args.min_task_completion_improvements is not None
+            else policy.get("min_task_completion_improvements")
+        ),
         "max_baseline_wins": (
             args.max_baseline_wins if args.max_baseline_wins is not None else policy.get("max_baseline_wins")
+        ),
+        "max_task_completion_regressions": (
+            args.max_task_completion_regressions
+            if args.max_task_completion_regressions is not None
+            else policy.get("max_task_completion_regressions")
         ),
         "max_skipped_pairs": args.max_skipped_pairs if args.max_skipped_pairs is not None else policy.get("max_skipped_pairs"),
         "max_contract_drifts": (
@@ -1583,9 +1619,17 @@ def _compare_gate_options(args: argparse.Namespace) -> dict[str, Any]:
             policy.get("require_candidate_win_scenarios", []),
             args.require_candidate_win_scenario,
         ),
+        "require_task_completion_improvement_scenarios": _merge_unique_strings(
+            policy.get("require_task_completion_improvement_scenarios", []),
+            args.require_task_completion_improvement_scenario,
+        ),
         "forbid_regression_scenarios": _merge_unique_strings(
             policy.get("forbid_regression_scenarios", []),
             args.forbid_regression_scenario,
+        ),
+        "forbid_task_completion_regression_scenarios": _merge_unique_strings(
+            policy.get("forbid_task_completion_regression_scenarios", []),
+            args.forbid_task_completion_regression_scenario,
         ),
         "require_rule_fixes": _merge_unique_strings(policy.get("require_rule_fixes", []), args.require_rule_fix),
         "forbid_rule_regressions": _merge_unique_strings(
@@ -1604,13 +1648,17 @@ def _compare_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_pairs",
         "min_dpo",
         "min_candidate_wins",
+        "min_task_completion_improvements",
         "max_baseline_wins",
+        "max_task_completion_regressions",
         "max_skipped_pairs",
         "max_contract_drifts",
         "max_unverified_contracts",
         "require_scenarios",
         "require_candidate_win_scenarios",
+        "require_task_completion_improvement_scenarios",
         "forbid_regression_scenarios",
+        "forbid_task_completion_regression_scenarios",
         "require_rule_fixes",
         "forbid_rule_regressions",
         "forbid_new_critical_failures",

@@ -13,7 +13,9 @@ _COUNT_POLICY_FIELDS = {
     "min_pairs",
     "min_dpo",
     "min_candidate_wins",
+    "min_task_completion_improvements",
     "max_baseline_wins",
+    "max_task_completion_regressions",
     "max_skipped_pairs",
     "max_contract_drifts",
     "max_unverified_contracts",
@@ -21,7 +23,9 @@ _COUNT_POLICY_FIELDS = {
 _LIST_POLICY_FIELDS = {
     "require_scenarios",
     "require_candidate_win_scenarios",
+    "require_task_completion_improvement_scenarios",
     "forbid_regression_scenarios",
+    "forbid_task_completion_regression_scenarios",
     "require_rule_fixes",
     "forbid_rule_regressions",
     "forbid_new_critical_failures",
@@ -80,13 +84,17 @@ def evaluate_compare_gate(
     min_pairs: int | None = None,
     min_dpo: int | None = None,
     min_candidate_wins: int | None = None,
+    min_task_completion_improvements: int | None = None,
     max_baseline_wins: int | None = None,
+    max_task_completion_regressions: int | None = None,
     max_skipped_pairs: int | None = None,
     max_contract_drifts: int | None = None,
     max_unverified_contracts: int | None = None,
     require_scenarios: list[str] | None = None,
     require_candidate_win_scenarios: list[str] | None = None,
+    require_task_completion_improvement_scenarios: list[str] | None = None,
     forbid_regression_scenarios: list[str] | None = None,
+    forbid_task_completion_regression_scenarios: list[str] | None = None,
     require_rule_fixes: list[str] | None = None,
     forbid_rule_regressions: list[str] | None = None,
     forbid_new_critical_failures: list[str] | None = None,
@@ -107,8 +115,24 @@ def evaluate_compare_gate(
         _add_min_check(checks, "min_dpo", dpo_count, min_dpo)
     if min_candidate_wins is not None:
         _add_min_check(checks, "min_candidate_wins", candidate_win_count, min_candidate_wins)
+    task_completion_improvement_scenarios = _task_completion_improvement_scenarios(pairs)
+    task_completion_regression_scenarios = _task_completion_regression_scenarios(pairs)
+    if min_task_completion_improvements is not None:
+        _add_min_check(
+            checks,
+            "min_task_completion_improvements",
+            len(task_completion_improvement_scenarios),
+            min_task_completion_improvements,
+        )
     if max_baseline_wins is not None:
         _add_max_check(checks, "max_baseline_wins", baseline_win_count, max_baseline_wins)
+    if max_task_completion_regressions is not None:
+        _add_max_check(
+            checks,
+            "max_task_completion_regressions",
+            len(task_completion_regression_scenarios),
+            max_task_completion_regressions,
+        )
     if max_skipped_pairs is not None:
         _add_max_check(checks, "max_skipped_pairs", skipped_pair_count, max_skipped_pairs)
     if max_contract_drifts is not None:
@@ -140,12 +164,27 @@ def evaluate_compare_gate(
             scenario_id in candidate_win_scenarios,
             {"scenario_id": scenario_id},
         )
+    for scenario_id in require_task_completion_improvement_scenarios or []:
+        _add_presence_check(
+            checks,
+            "require_task_completion_improvement_scenario",
+            scenario_id in task_completion_improvement_scenarios,
+            {"scenario_id": scenario_id},
+        )
     for scenario_id in forbid_regression_scenarios or []:
         _add_absence_check(
             checks,
             "forbid_regression_scenario",
             scenario_id,
             1 if scenario_id in baseline_win_scenarios else 0,
+            {"scenario_id": scenario_id},
+        )
+    for scenario_id in forbid_task_completion_regression_scenarios or []:
+        _add_absence_check(
+            checks,
+            "forbid_task_completion_regression_scenario",
+            scenario_id,
+            1 if scenario_id in task_completion_regression_scenarios else 0,
             {"scenario_id": scenario_id},
         )
     for rule_id in require_rule_fixes or []:
@@ -173,6 +212,10 @@ def evaluate_compare_gate(
             "unverified_contract_count": unverified_contract_count,
             "candidate_win_scenarios": sorted(candidate_win_scenarios),
             "baseline_win_scenarios": sorted(baseline_win_scenarios),
+            "task_completion_improvement_count": len(task_completion_improvement_scenarios),
+            "task_completion_regression_count": len(task_completion_regression_scenarios),
+            "task_completion_improvement_scenarios": sorted(task_completion_improvement_scenarios),
+            "task_completion_regression_scenarios": sorted(task_completion_regression_scenarios),
             "fixed_rule_counts": fixed_rules,
             "regressed_rule_counts": regressed_rules,
             "new_critical_failure_counts": new_critical,
@@ -243,6 +286,36 @@ def _pairs_by_scenario(pairs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
         if isinstance(scenario_id, str) and scenario_id:
             rows[scenario_id] = pair
     return rows
+
+
+def _task_completion_improvement_scenarios(pairs: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(pair["scenario_id"])
+        for pair in pairs
+        if isinstance(pair.get("scenario_id"), str)
+        and _task_completion_status(pair.get("candidate")) == "complete"
+        and _task_completion_status(pair.get("baseline")) != "complete"
+    }
+
+
+def _task_completion_regression_scenarios(pairs: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(pair["scenario_id"])
+        for pair in pairs
+        if isinstance(pair.get("scenario_id"), str)
+        and _task_completion_status(pair.get("baseline")) == "complete"
+        and _task_completion_status(pair.get("candidate")) != "complete"
+    }
+
+
+def _task_completion_status(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "unknown"
+    task = value.get("task_completion")
+    if not isinstance(task, dict):
+        return "unknown"
+    status = task.get("status")
+    return str(status) if isinstance(status, str) and status else "unknown"
 
 
 def _count_values(values: Any) -> dict[str, int]:

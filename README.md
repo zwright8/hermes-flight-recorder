@@ -306,8 +306,9 @@ directories into improvement-loop preference artifacts:
 
 Use `flightrecorder gate-compare-export` after `export-compare-rl` when CI or a
 training handoff should require concrete candidate wins, expected scenario
-coverage, fixed rule IDs, zero baseline-win regressions, no newly critical
-failure classes, and optionally zero drifted or unverified comparison contracts:
+coverage, fixed rule IDs, task-completion improvements, zero baseline-win or
+task-completion regressions, no newly critical failure classes, and optionally
+zero drifted or unverified comparison contracts:
 
 ```bash
 flightrecorder gate-compare-export \
@@ -548,8 +549,8 @@ deterministic raw training export.
 Use `flightrecorder gate-compare-export` for the baseline/candidate improvement
 path after `export-compare-rl`. It checks that comparison preference rows are
 not merely present, but actually encode enough candidate wins and expected rule
-fixes without regression examples or contract-drifted pairs sneaking into a
-training handoff:
+fixes without regression examples, task-completion regressions, or
+contract-drifted pairs sneaking into a training handoff:
 
 ```bash
 flightrecorder gate-compare-export \
@@ -812,8 +813,9 @@ drifted, or were unverified under the selected `--contract-scope`, and writes
 behavior-transcript preference rows, so a task can be preferred because it had
 the right tool evidence even when both final answers look similar.
 The comparison gate lets CI require those rows to contain enough candidate
-improvements, fixed rule classes, and zero forbidden regressions before a
-trainer or reviewer treats them as improvement signal.
+improvements, task-completion improvements, fixed rule classes, and zero
+forbidden score or task-completion regressions before a trainer or reviewer
+treats them as improvement signal.
 
 This is training data plumbing, not a trainer. It does not generate rollouts,
 update model weights, or make weak scenario policies strong. For the full data

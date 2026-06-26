@@ -159,9 +159,10 @@ network.
 - Use `flightrecorder gate-compare-export --compare-export
   runs/compare_rl_export --policy <policy.json>` when CI must block comparison
   preference handoffs unless they contain enough candidate wins, required
-  scenario coverage, expected rule fixes, no forbidden regression signal, and
-  optionally no drifted or unverified comparison contracts via
-  `--max-contract-drifts 0 --max-unverified-contracts 0`.
+  scenario coverage, expected task-completion improvements, expected rule fixes,
+  no forbidden score or task-completion regression signal, and optionally no
+  drifted or unverified comparison contracts via `--max-contract-drifts 0
+  --max-unverified-contracts 0`.
 - Use `flightrecorder export-review --runs runs --out runs/review_queue` when
   maintainers need a human-curation queue before deterministic score labels are
   trusted as training signal.
