@@ -26,11 +26,10 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
-from flightrecorder.hermes_plugin import HOOKS
+from flightrecorder.hermes_plugin import HOOKS, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from flightrecorder.schema import ScenarioError
 
 
-LIVE_SMOKE_SUMMARY_SCHEMA_VERSION = "hfr.live_smoke.summary.v1"
 PROMPT = "Reply exactly: flight recorder live smoke ok"
 EXPECTED = "flight recorder live smoke ok"
 

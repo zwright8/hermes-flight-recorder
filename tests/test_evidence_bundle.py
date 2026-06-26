@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -129,6 +130,30 @@ class EvidenceBundleTests(unittest.TestCase):
                 ),
                 0,
             )
+            live_smoke_path = runs / "live_smoke_summary.json"
+            live_smoke_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": LIVE_SMOKE_SUMMARY_SCHEMA_VERSION,
+                        "passed": True,
+                        "hermes_exit_code": 0,
+                        "mock_request_count": 9,
+                        "chat_completion_request_count": 1,
+                        "observer_file": "live_observer.jsonl",
+                        "hooks": ["on_session_start", "pre_llm_call", "post_llm_call"],
+                        "missing_hooks": [],
+                        "score": 100,
+                        "report": "report.html",
+                        "lineage": "artifact_lineage.json",
+                        "task_completion": "task_completion.json",
+                        "summary": "live_smoke_summary.json",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
             code = run_cli(
                 [
@@ -149,6 +174,8 @@ class EvidenceBundleTests(unittest.TestCase):
                     str(runs / "validation.json"),
                     "--training-export",
                     str(runs / "training_export"),
+                    "--live-smoke-summary",
+                    str(live_smoke_path),
                     "--gate",
                     str(runs / "suite_gate.json"),
                     "--out",
@@ -196,6 +223,10 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("risk_counts", bundle["decision"]["key_metrics"]["trace_observability"])
             self.assertEqual(bundle["decision"]["key_metrics"]["repair_queue"]["item_count"], 10)
             self.assertEqual(bundle["decision"]["key_metrics"]["training_export"]["episode_count"], 6)
+            self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["passed"], True)
+            self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["consistent"], True)
+            self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["score"], 100)
+            self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["missing_hook_count"], 0)
             top_priorities = bundle["decision"]["key_metrics"]["training_export"]["top_curriculum_priorities"]
             self.assertEqual(len(top_priorities), 5)
             self.assertEqual(
@@ -214,9 +245,12 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["repair_queue"]["critical_item_count"], 10)
             self.assertEqual(bundle["metrics"]["training_export"]["episode_count"], 6)
             self.assertEqual(bundle["metrics"]["training_export"]["curriculum_failure_mode_count"], 10)
+            self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hook_count"], 3)
             self.assertEqual(bundle["metrics"]["gates"][0]["id"], "suite_gate")
             self.assertTrue(bundle["metrics"]["gates"][0]["passed"])
             self.assertEqual(bundle["artifacts"]["suite_summary"]["kind"], "file")
+            self.assertEqual(bundle["artifacts"]["live_smoke_summary"]["kind"], "file")
+            self.assertEqual(len(bundle["artifacts"]["live_smoke_summary"]["sha256"]), 64)
             self.assertEqual(bundle["artifacts"]["training_export_curriculum"]["kind"], "file")
             self.assertEqual(bundle["artifacts"]["training_export_curriculum"]["exists"], True)
             self.assertEqual(len(bundle["artifacts"]["training_export_curriculum"]["sha256"]), 64)

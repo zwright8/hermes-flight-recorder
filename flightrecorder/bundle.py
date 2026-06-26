@@ -29,6 +29,7 @@ def build_evidence_bundle(
     review_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
     review_calibration_path: str | Path | None = None,
+    live_smoke_summary_path: str | Path | None = None,
     gate_paths: list[str | Path] | None = None,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
@@ -224,6 +225,10 @@ def build_evidence_bundle(
             ),
         )
 
+    if live_smoke_summary_path is not None:
+        live_smoke_summary = _read_json_artifact(Path(live_smoke_summary_path), artifacts, "live_smoke_summary", preserve_paths)
+        _summarize_live_smoke_summary(live_smoke_summary, metrics, checks)
+
     gate_rows: list[dict[str, Any]] = []
     for index, gate_path in enumerate(gate_paths or []):
         gate_name = f"gate_{index + 1}"
@@ -349,6 +354,7 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         "review_export": ("item_count", "failed_count", "passed_count"),
         "reviewed_export": ("reviewed_label_count", "sft_count", "dpo_count", "reward_model_count"),
         "review_calibration": ("reviewed_label_count", "comparable_label_count", "agreement_rate", "disagreement_count"),
+        "live_smoke_summary": ("passed", "consistent", "score", "hook_count", "missing_hook_count", "chat_completion_request_count"),
     }
     summary: dict[str, Any] = {}
     for section, fields in keys.items():
@@ -560,6 +566,23 @@ def _next_actions(
                 },
             )
         )
+
+    live_smoke = metrics.get("live_smoke_summary") if isinstance(metrics.get("live_smoke_summary"), dict) else {}
+    if live_smoke and (live_smoke.get("passed") is not True or live_smoke.get("consistent") is not True):
+        actions.append(
+            _action(
+                "fix_live_observer_smoke",
+                "critical",
+                "live_smoke_summary",
+                "Fix the live Hermes observer smoke before relying on runtime integration evidence.",
+                {
+                    "score": live_smoke.get("score"),
+                    "missing_hook_count": _non_negative_int(live_smoke.get("missing_hook_count")),
+                    "missing_hooks": live_smoke.get("missing_hooks") if isinstance(live_smoke.get("missing_hooks"), list) else [],
+                    "chat_completion_request_count": _non_negative_int(live_smoke.get("chat_completion_request_count")),
+                },
+            )
+        )
     return actions
 
 
@@ -665,6 +688,37 @@ def _summarize_suite_summary(suite_summary: dict[str, Any], metrics: dict[str, A
         "failed_rule_counts": suite_metrics.get("failed_rule_counts"),
     }
     _add_presence_check(checks, "suite_summary_no_errors", suite_summary.get("error_count") == 0, {"artifact": "suite_summary"})
+
+
+def _summarize_live_smoke_summary(summary: dict[str, Any], metrics: dict[str, Any], checks: list[dict[str, Any]]) -> None:
+    hooks = summary.get("hooks") if isinstance(summary.get("hooks"), list) else []
+    missing_hooks = summary.get("missing_hooks") if isinstance(summary.get("missing_hooks"), list) else []
+    consistent = _live_smoke_summary_consistent(summary, missing_hooks)
+    metrics["live_smoke_summary"] = {
+        "passed": summary.get("passed") if isinstance(summary.get("passed"), bool) else False,
+        "consistent": consistent,
+        "score": summary.get("score"),
+        "hook_count": len([item for item in hooks if isinstance(item, str)]),
+        "missing_hook_count": len([item for item in missing_hooks if isinstance(item, str)]),
+        "missing_hooks": [item for item in missing_hooks if isinstance(item, str)],
+        "chat_completion_request_count": summary.get("chat_completion_request_count"),
+    }
+    _add_presence_check(checks, "live_smoke_summary_passed", summary.get("passed") is True, {"artifact": "live_smoke_summary"})
+    _add_presence_check(checks, "live_smoke_summary_consistent", consistent, {"artifact": "live_smoke_summary"})
+    _add_presence_check(checks, "live_smoke_summary_no_missing_hooks", not missing_hooks, {"artifact": "live_smoke_summary"})
+
+
+def _live_smoke_summary_consistent(summary: dict[str, Any], missing_hooks: list[Any]) -> bool:
+    score = summary.get("score")
+    return (
+        summary.get("passed") is True
+        and summary.get("hermes_exit_code") == 0
+        and isinstance(score, int)
+        and not isinstance(score, bool)
+        and score >= 90
+        and not missing_hooks
+        and _non_negative_int(summary.get("chat_completion_request_count")) > 0
+    )
 
 
 def _summarize_boolean_artifact(

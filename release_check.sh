@@ -612,6 +612,33 @@ if python -m flightrecorder gate-export \
   echo "gate-export did not fail a too-high trace-event threshold" >&2
   exit 1
 fi
+python - <<'PY'
+import json
+from pathlib import Path
+
+from flightrecorder.hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+
+summary_path = Path("runs/live_smoke_summary.json")
+summary = {
+    "schema_version": LIVE_SMOKE_SUMMARY_SCHEMA_VERSION,
+    "passed": True,
+    "hermes_exit_code": 0,
+    "mock_request_count": 9,
+    "chat_completion_request_count": 1,
+    "observer_file": "live_observer.jsonl",
+    "hooks": ["on_session_start", "pre_llm_call", "post_llm_call"],
+    "missing_hooks": [],
+    "score": 100,
+    "report": "report.html",
+    "lineage": "artifact_lineage.json",
+    "task_completion": "task_completion.json",
+    "summary": str(summary_path),
+}
+summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+python -m flightrecorder validate \
+  --live-smoke-summary runs/live_smoke_summary.json \
+  --strict >/dev/null
 python -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
@@ -625,6 +652,7 @@ python -m flightrecorder evidence-bundle \
   --review-export runs/review_queue \
   --reviewed-export runs/reviewed_export \
   --review-calibration runs/review_calibration.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --gate runs/suite_gate.json \
   --gate runs/compare_gate.json \
   --gate runs/training_gate.json \
@@ -636,6 +664,7 @@ python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle_full.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --strict >/dev/null
 python - <<'PY'
 import json
@@ -649,6 +678,10 @@ assert bundle["decision"]["gate_count"] == 4
 assert bundle["decision"]["passed_gate_count"] == 4
 assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["passed"] is True
+assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["consistent"] is True
+assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["score"] == 100
+assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["missing_hook_count"] == 0
 assert bundle["decision"]["key_metrics"]["trace_observability"]["run_count"] == 6
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
@@ -658,6 +691,7 @@ assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "reviewed_gate",
 }
 assert bundle["metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["metrics"]["live_smoke_summary"]["chat_completion_request_count"] == 1
 assert bundle["metrics"]["trace_observability"]["final_answer_rate"] == 1.0
 assert bundle["metrics"]["review_export"]["item_count"] >= 6
 assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]
@@ -700,6 +734,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--replay-bundle"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--state-snapshot"
+"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--live-smoke-summary"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
@@ -709,6 +744,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder evidence-coverage --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trace-observability --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help | grep -q -- "--live-smoke-summary"
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null

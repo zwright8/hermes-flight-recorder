@@ -573,6 +573,7 @@ flightrecorder evidence-bundle \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --review-calibration runs/review_calibration.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --gate runs/suite_gate.json \
   --gate runs/training_gate.json \
   --out runs/evidence_bundle.json
@@ -980,6 +981,7 @@ flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
@@ -1122,6 +1124,14 @@ Successful output includes:
 - `task_completion.json`: standalone task-completion verdict for the live run.
 - `report.html`: static report suitable for a maintainer demo.
 - `artifact_lineage.json`: file-hash and evidence-ref provenance for the run.
+
+Validate the smoke summary before using it as runtime-integration evidence:
+
+```bash
+flightrecorder validate \
+  --live-smoke-summary live_smoke_artifacts/latest/live_smoke_summary.json \
+  --strict
+```
 
 ## Release Check
 

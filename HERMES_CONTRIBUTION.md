@@ -74,6 +74,7 @@ python -m flightrecorder evidence-bundle \
   --repair-queue runs/repair_queue.json \
   --validation runs/validation.json \
   --training-export runs/training_export \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --out runs/evidence_bundle.json
 python -m flightrecorder validate \
   --runs runs \
@@ -81,6 +82,7 @@ python -m flightrecorder validate \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
   --repair-queue runs/repair_queue.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --suite-summary runs/suite_summary.json \
   --strict
 python -m flightrecorder gate-suite \
@@ -296,7 +298,7 @@ Flight Recorder turns Hermes' experience into regression pressure.
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-21. Validate the generated artifacts and suite summary with
+21. Validate the generated artifacts, live-smoke summary, and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
 22. Gate training-export readiness with `flightrecorder gate-export` before

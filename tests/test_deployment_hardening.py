@@ -10,8 +10,8 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
-from flightrecorder.hermes_plugin import HOOKS, register, write_event
-from scripts.live_hermes_smoke import EXPECTED, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION, _write_smoke_artifacts, _write_smoke_summary
+from flightrecorder.hermes_plugin import HOOKS, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION, register, write_event
+from scripts.live_hermes_smoke import EXPECTED, _write_smoke_artifacts, _write_smoke_summary
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,10 +94,16 @@ class DeploymentHardeningTests(unittest.TestCase):
                 out,
                 {
                     "passed": True,
+                    "hermes_exit_code": 0,
+                    "mock_request_count": 9,
+                    "chat_completion_request_count": 1,
                     "score": 100,
                     "hooks": ["on_session_start", "post_llm_call"],
                     "missing_hooks": [],
                     "observer_file": str(out / "live_observer.jsonl"),
+                    "report": str(out / "report.html"),
+                    "lineage": str(out / "artifact_lineage.json"),
+                    "task_completion": str(out / "task_completion.json"),
                 },
             )
 
@@ -108,6 +114,11 @@ class DeploymentHardeningTests(unittest.TestCase):
             self.assertTrue(persisted["passed"])
             self.assertEqual(persisted["score"], 100)
             self.assertEqual(persisted["summary"], str(summary_path))
+            self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path), "--strict"]), 0)
+
+            persisted["missing_hooks"] = ["post_llm_call"]
+            summary_path.write_text(json.dumps(persisted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path)]), 1)
 
     def test_scenario_schema_is_valid_json(self):
         schema = json.loads((ROOT / "scenario.schema.json").read_text(encoding="utf-8"))

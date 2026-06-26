@@ -617,6 +617,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
         state_snapshot_paths=args.state_snapshot,
+        live_smoke_summary_paths=args.live_smoke_summary,
         strict=args.strict,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -701,6 +702,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         review_export_dir=args.review_export,
         reviewed_export_dir=args.reviewed_export,
         review_calibration_path=args.review_calibration,
+        live_smoke_summary_path=args.live_smoke_summary,
         gate_paths=args.gate,
         preserve_paths=args.preserve_paths,
     )
@@ -1220,6 +1222,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
     validate.add_argument("--state-snapshot", action="append", default=[], help="Validate one hfr.state_snapshot.v1 JSON file; may be repeated")
+    validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
@@ -1305,6 +1308,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--review-export", help="export-review directory included in the handoff")
     evidence_bundle.add_argument("--reviewed-export", help="apply-review directory included in the handoff")
     evidence_bundle.add_argument("--review-calibration", help="review_calibration.json included in the handoff")
+    evidence_bundle.add_argument("--live-smoke-summary", help="live_smoke_summary.json included in the handoff")
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)

@@ -77,6 +77,7 @@ flightrecorder evidence-bundle \
   --validation runs/validation.json \
   --training-export runs/training_export \
   --review-calibration runs/review_calibration.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --gate runs/suite_gate.json \
   --gate runs/training_gate.json \
   --out runs/evidence_bundle.json
@@ -233,6 +234,7 @@ flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
@@ -301,7 +303,8 @@ use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
 links, step-reward event indexes, preference references, failure-mode links,
 curriculum counts, trainer-ready view rows, dataset metrics, dataset-card
-sections, lineage hashes, and lineage evidence links are internally consistent.
+sections, lineage hashes, lineage evidence links, and live-smoke summaries are
+internally consistent.
 Run lineage also records `replay.argv`, `replay.command`, input fingerprints,
 and `replay.self_contained` so regression and training loops can tell whether a
 run can be reproduced from the published paths. Use `flightrecorder replay`

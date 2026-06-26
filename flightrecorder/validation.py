@@ -13,6 +13,7 @@ from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
+from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
 from .review import (
@@ -91,6 +92,7 @@ def validate_artifacts(
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
     state_snapshot_paths: list[str | Path] | None = None,
+    live_smoke_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -127,6 +129,8 @@ def validate_artifacts(
         targets.append(validate_suite_trend(suite_trend_path))
     for state_snapshot_path in state_snapshot_paths or []:
         targets.append(validate_state_snapshot(state_snapshot_path))
+    for live_smoke_summary_path in live_smoke_summary_paths or []:
+        targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -443,6 +447,16 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_live_smoke_summary(path: str | Path) -> ValidationTarget:
+    """Validate a live Hermes observer-smoke summary artifact."""
+    summary_path = Path(path)
+    target = ValidationTarget("live_smoke_summary", str(summary_path))
+    summary = _read_object(summary_path, target, "live_smoke_summary.json")
+    if summary is not None:
+        _validate_live_smoke_summary(summary, target)
+    return target
+
+
 def validate_repair_queue(path: str | Path) -> ValidationTarget:
     """Validate a repair-queue artifact."""
     queue_path = Path(path)
@@ -503,6 +517,52 @@ def validate_scenario_quality(path: str | Path) -> ValidationTarget:
     if quality is not None:
         _validate_scenario_quality(quality, target)
     return target
+
+
+def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(summary, "schema_version", LIVE_SMOKE_SUMMARY_SCHEMA_VERSION, target, prefix="live_smoke_summary.")
+    if not isinstance(summary.get("passed"), bool):
+        target.errors.append("live_smoke_summary.passed must be a boolean.")
+    score = summary.get("score")
+    if not isinstance(score, int) or isinstance(score, bool) or not 0 <= score <= 100:
+        target.errors.append("live_smoke_summary.score must be an integer from 0 to 100.")
+        score = 0
+    for field_name in ("hermes_exit_code", "mock_request_count", "chat_completion_request_count"):
+        if not _is_non_negative_int(summary.get(field_name)):
+            target.errors.append(f"live_smoke_summary.{field_name} must be a non-negative integer.")
+    for field_name in ("observer_file", "report", "lineage", "task_completion", "summary"):
+        if not isinstance(summary.get(field_name), str) or not summary.get(field_name):
+            target.errors.append(f"live_smoke_summary.{field_name} must be a non-empty string.")
+    hooks = summary.get("hooks")
+    if not _is_string_list(hooks):
+        target.errors.append("live_smoke_summary.hooks must be a list of strings.")
+        hooks = []
+    missing_hooks = summary.get("missing_hooks")
+    if not _is_string_list(missing_hooks):
+        target.errors.append("live_smoke_summary.missing_hooks must be a list of strings.")
+        missing_hooks = []
+
+    expected_passed = (
+        summary.get("hermes_exit_code") == 0
+        and isinstance(score, int)
+        and score >= 90
+        and not missing_hooks
+        and _is_non_negative_int(summary.get("chat_completion_request_count"))
+        and int(summary.get("chat_completion_request_count")) > 0
+    )
+    if isinstance(summary.get("passed"), bool) and summary.get("passed") != expected_passed:
+        target.errors.append(
+            "live_smoke_summary.passed must match exit code, score, missing hooks, and chat completion request count."
+        )
+    target.details.update(
+        {
+            "passed": summary.get("passed"),
+            "score": summary.get("score"),
+            "hook_count": len(hooks),
+            "missing_hook_count": len(missing_hooks),
+            "chat_completion_request_count": summary.get("chat_completion_request_count"),
+        }
+    )
 
 
 def validate_suite_trend(path: str | Path) -> ValidationTarget:
@@ -3821,6 +3881,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "review_export",
         "reviewed_export",
         "review_calibration",
+        "live_smoke_summary",
     )
     for section in expected_sections:
         if section in metrics and not isinstance(metrics[section], dict):
