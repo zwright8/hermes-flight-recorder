@@ -59,6 +59,23 @@ class ValidationTests(unittest.TestCase):
 
             self.assertEqual(code, 1)
 
+    def test_validate_rejects_malformed_scorecard_evidence_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(run_dir)])
+            score_path = run_dir / "scorecard.json"
+            scorecard = json.loads(score_path.read_text(encoding="utf-8"))
+            scorecard["rules"][0]["evidence_refs"] = [{"target": "event", "event_index": -1}]
+            score_path.write_text(json.dumps(scorecard), encoding="utf-8")
+
+            code = run_cli(["validate", "--run", str(run_dir), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_refs[0].event_index", errors)
+
     def test_validate_rejects_broken_preference_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

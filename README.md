@@ -370,8 +370,9 @@ flightrecorder export-rl \
 The exporter reads only `normalized_trace.json` and `scorecard.json` from each
 completed run directory. It derives scalar rewards from deterministic scores,
 adds failed-rule attribution where the scorecard points to an event or final
-answer, creates preference pairs when one run clearly beats another in the same
-task family, emits failure-mode records for every failed rule, and writes a
+answer, carries structured `evidence_refs` into rewards and failure modes,
+creates preference pairs when one run clearly beats another in the same task
+family, emits failure-mode records for every failed rule, and writes a
 curriculum summary that groups failure pressure by task family and rule.
 
 Absolute source/output paths are redacted from exported metadata by default.

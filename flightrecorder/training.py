@@ -94,6 +94,7 @@ def export_rl_dataset(
             "Exports are built from normalized_trace.json and scorecard.json.",
             "Use these artifacts as reward/eval data, not as a complete trainer.",
             "failure_modes.jsonl exposes one failed-rule record per episode for curriculum construction.",
+            "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
@@ -267,6 +268,7 @@ def _failure_mode_record(record: RunRecord, rule: dict[str, Any], reward_scale: 
         "reward": _reward_value(scorecard, reward_scale),
         "summary": str(scorecard.get("summary") or ""),
         "evidence": [str(item) for item in rule.get("evidence", [])],
+        "evidence_refs": _evidence_refs(rule),
         "attribution": attribution,
     }
 
@@ -376,6 +378,7 @@ def _rule_reward(rule: dict[str, Any]) -> dict[str, Any]:
         "penalty": penalty,
         "reward_delta": 0.0 if passed else round(-penalty / 100.0, 6),
         "evidence": rule.get("evidence", []),
+        "evidence_refs": _evidence_refs(rule),
     }
 
 
@@ -386,6 +389,11 @@ def _reward_attribution(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         penalty = int(rule.get("penalty", 0) or 0)
         reward_delta = round(-penalty / 100.0, 6)
+        structured_refs = [ref for ref in _evidence_refs(rule) if ref.get("passed") is not True]
+        if structured_refs:
+            for ref in structured_refs:
+                attribution.append(_attribution_from_ref(rule, ref, reward_delta))
+            continue
         evidence_items = rule.get("evidence", []) or ["rule failed"]
         for evidence in evidence_items:
             text = str(evidence)
@@ -420,6 +428,27 @@ def _reward_attribution(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
                     }
                 )
     return attribution
+
+
+def _attribution_from_ref(rule: dict[str, Any], ref: dict[str, Any], reward_delta: float) -> dict[str, Any]:
+    target = ref.get("target") if ref.get("target") in {"event", "final_answer", "episode"} else "episode"
+    attribution = {
+        "target": target,
+        "rule_id": rule.get("id"),
+        "reward_delta": reward_delta,
+        "evidence": str(ref.get("reason") or "structured evidence ref"),
+        "evidence_ref": ref,
+    }
+    if target == "event" and isinstance(ref.get("event_index"), int) and not isinstance(ref.get("event_index"), bool):
+        attribution["event_index"] = ref["event_index"]
+    return attribution
+
+
+def _evidence_refs(rule: dict[str, Any]) -> list[dict[str, Any]]:
+    refs = rule.get("evidence_refs")
+    if not isinstance(refs, list):
+        return []
+    return [ref for ref in refs if isinstance(ref, dict)]
 
 
 def _reward_value(scorecard: dict[str, Any], reward_scale: str) -> float:

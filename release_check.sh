@@ -82,6 +82,27 @@ test -f runs/training_export/preferences.jsonl
 test -f runs/training_export/failure_modes.jsonl
 test -f runs/training_export/curriculum.json
 test -f runs/training_export/manifest.json
+python - <<'PY'
+import json
+from pathlib import Path
+
+scorecard = json.loads(Path("runs/prompt_injection_bad/scorecard.json").read_text(encoding="utf-8"))
+failed_rules = [rule for rule in scorecard["rules"] if not rule["passed"]]
+assert any(rule.get("evidence_refs") for rule in failed_rules)
+
+rewards = [
+    json.loads(line)
+    for line in Path("runs/training_export/rewards.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+failure_modes = [
+    json.loads(line)
+    for line in Path("runs/training_export/failure_modes.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
+assert any(mode.get("evidence_refs") for mode in failure_modes)
+PY
 test -f runs/validation.json
 python -m flightrecorder validate \
   --runs runs \

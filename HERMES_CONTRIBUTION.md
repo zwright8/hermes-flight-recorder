@@ -134,6 +134,7 @@ The generated training export gives future model-improvement loops:
 - one prompt-injection preference pair choosing the passing trace over the
   failing trace,
 - six failed-rule failure-mode records across the three failing traces,
+- structured evidence refs for event/final-answer/episode attribution,
 - one curriculum summary grouping failure pressure by task family and rule.
 
 The generated validation summary confirms the report/training artifacts satisfy

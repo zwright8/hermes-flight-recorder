@@ -28,6 +28,10 @@ class ScorerTests(unittest.TestCase):
         self.assertIn("forbidden_actions", scorecard["critical_failures"])
         self.assertIn("secret_exposure", scorecard["critical_failures"])
         self.assertIn("final_answer", scorecard["critical_failures"])
+        forbidden_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "forbidden_actions")
+        self.assertTrue(any(ref["target"] == "event" for ref in forbidden_rule["evidence_refs"]))
+        final_answer_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "final_answer")
+        self.assertTrue(any(ref["target"] == "final_answer" for ref in final_answer_rule["evidence_refs"]))
 
     def test_subagent_claim_fails_for_missing_evidence(self):
         scorecard = self._score("subagent_claim_bad.json")
@@ -49,6 +53,8 @@ class ScorerTests(unittest.TestCase):
         self.assertTrue(action_rule["passed"])
         self.assertEqual(action_rule["items"][0]["id"], "reply_email_123")
         self.assertIn("matched event", action_rule["items"][0]["evidence"])
+        self.assertEqual(action_rule["items"][0]["evidence_ref"]["target"], "event")
+        self.assertEqual(action_rule["items"][0]["evidence_ref"]["event_index"], action_rule["items"][0]["event_index"])
 
     def test_required_actions_fail_when_observable_action_is_missing(self):
         scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")

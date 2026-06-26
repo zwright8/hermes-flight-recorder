@@ -247,6 +247,8 @@ def _validate_scorecard(scorecard: dict[str, Any], target: ValidationTarget) -> 
             target.errors.append(f"scorecard.rules[{index}].penalty must be an integer from 0 to 100.")
         if not isinstance(rule.get("evidence"), list):
             target.errors.append(f"scorecard.rules[{index}].evidence must be a list.")
+        if "evidence_refs" in rule:
+            _validate_evidence_refs(rule.get("evidence_refs"), target, f"scorecard.rules[{index}].evidence_refs")
         if rule.get("critical") is True and rule.get("passed") is False:
             failed_critical.append(str(rule_id))
 
@@ -352,6 +354,14 @@ def _validate_rewards(rewards: list[dict[str, Any]], target: ValidationTarget, e
                     )
         if not isinstance(reward.get("rule_rewards"), list):
             target.errors.append(f"rewards[{index}].rule_rewards must be a list.")
+        else:
+            for rule_index, rule_reward in enumerate(reward["rule_rewards"]):
+                if isinstance(rule_reward, dict) and "evidence_refs" in rule_reward:
+                    _validate_evidence_refs(
+                        rule_reward.get("evidence_refs"),
+                        target,
+                        f"rewards[{index}].rule_rewards[{rule_index}].evidence_refs",
+                    )
         if not isinstance(reward.get("attribution"), list):
             target.errors.append(f"rewards[{index}].attribution must be a list.")
 
@@ -421,6 +431,8 @@ def _validate_failure_modes(
             target.errors.append(f"failure_modes[{index}].reward must be numeric.")
         if not isinstance(failure.get("evidence"), list):
             target.errors.append(f"failure_modes[{index}].evidence must be a list.")
+        if "evidence_refs" in failure:
+            _validate_evidence_refs(failure.get("evidence_refs"), target, f"failure_modes[{index}].evidence_refs")
         if not isinstance(failure.get("attribution"), list):
             target.errors.append(f"failure_modes[{index}].attribution must be a list.")
 
@@ -619,6 +631,27 @@ def _validate_suite_family_metrics(value: Any, target: ValidationTarget, runs: l
     missing = sorted(set(expected_rows) - actual_families)
     if missing:
         target.errors.append(f"suite_summary.metrics.task_families missing families: {missing!r}.")
+
+
+def _validate_evidence_refs(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list when present.")
+        return
+    for index, ref in enumerate(value):
+        if not isinstance(ref, dict):
+            target.errors.append(f"{label}[{index}] must be an object.")
+            continue
+        ref_target = ref.get("target")
+        if ref_target not in {"event", "final_answer", "episode"}:
+            target.errors.append(f"{label}[{index}].target must be one of event, final_answer, or episode.")
+        if ref_target == "event":
+            event_index = ref.get("event_index")
+            if not isinstance(event_index, int) or isinstance(event_index, bool) or event_index < 0:
+                target.errors.append(f"{label}[{index}].event_index must be a non-negative integer for event refs.")
+        if "reason" in ref and not isinstance(ref.get("reason"), str):
+            target.errors.append(f"{label}[{index}].reason must be a string when present.")
+        if "passed" in ref and not isinstance(ref.get("passed"), bool):
+            target.errors.append(f"{label}[{index}].passed must be a boolean when present.")
 
 
 def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, Any] | None:

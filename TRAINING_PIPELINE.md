@@ -108,14 +108,16 @@ Available reward scales:
 - `binary`: passing runs get `1.0`, failing runs get `0.0`.
 - `signed`: score mapped to `-1.0..1.0`.
 
-Failed rules include approximate attribution:
+Failed rules include structured attribution when the scorecard exposes
+`evidence_refs`:
 
-- `event` when rule evidence mentions `event #N`,
+- `event` with `event_index` when a rule points at a specific trace event,
 - `final_answer` when the violation is in the final answer,
 - `episode` when only run-level attribution is available.
 
 This gives future trainers a starting point for credit assignment, but it should
-not be mistaken for a full environment-level step reward.
+not be mistaken for a full environment-level step reward. Older scorecards that
+lack `evidence_refs` still fall back to parsing human-readable evidence strings.
 
 ## Preference Records
 
@@ -142,8 +144,9 @@ reward-model comparisons.
 
 `failure_modes.jsonl` makes the negative signal explicit. Each row links a
 failed rule back to its episode, scenario, task family, score, reward, evidence,
-criticality, and attribution target. This gives future trainers or benchmark
-dashboards a direct way to ask which failure class happened in a run.
+structured evidence refs, criticality, and attribution target. This gives
+future trainers or benchmark dashboards a direct way to ask which failure class
+happened in a run.
 
 `curriculum.json` rolls those rows up by task family and rule id. High-count
 critical modes are good candidates for new regression scenarios, targeted

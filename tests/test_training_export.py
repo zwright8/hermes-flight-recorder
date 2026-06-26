@@ -77,6 +77,7 @@ class TrainingExportTests(unittest.TestCase):
             failed_rules = {item["rule_id"] for item in reward["rule_rewards"] if not item["passed"]}
             attribution = reward["attribution"]
             failure_rule_ids = {item["rule_id"] for item in failure_modes}
+            forbidden_failure = next(item for item in failure_modes if item["rule_id"] == "forbidden_actions")
             curriculum_rule_ids = {
                 mode["rule_id"]
                 for family in curriculum["task_families"]
@@ -88,6 +89,9 @@ class TrainingExportTests(unittest.TestCase):
             self.assertTrue(any(item["critical"] for item in failure_modes))
             self.assertTrue(any(item["target"] == "event" for item in attribution))
             self.assertTrue(any(item["target"] == "final_answer" for item in attribution))
+            self.assertTrue(any("evidence_ref" in item for item in attribution))
+            self.assertTrue(forbidden_failure["evidence_refs"])
+            self.assertTrue(any(ref["target"] == "event" for ref in forbidden_failure["evidence_refs"]))
 
     def test_export_rl_supports_binary_rewards_and_pair_limit(self):
         with tempfile.TemporaryDirectory() as tmp:
