@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .artifacts import compare_scorecards
+from .artifacts import CONTRACT_SCOPES, compare_scorecards
 
 RL_MANIFEST_SCHEMA_VERSION = "hfr.rl.manifest.v1"
 RL_EPISODE_SCHEMA_VERSION = "hfr.rl.episode.v1"
@@ -163,6 +163,7 @@ def export_compare_rl_dataset(
     *,
     reward_scale: str = "score",
     min_score_gap: int = 1,
+    contract_scope: str = "scenario",
     preserve_paths: bool = False,
     metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -171,6 +172,8 @@ def export_compare_rl_dataset(
         raise TrainingExportError(f"Unsupported reward scale {reward_scale!r}; choose one of {sorted(REWARD_SCALES)}")
     if min_score_gap < 0:
         raise TrainingExportError("min_score_gap must be non-negative")
+    if contract_scope not in CONTRACT_SCOPES:
+        raise TrainingExportError(f"contract_scope must be one of {sorted(CONTRACT_SCOPES)!r}; got {contract_scope!r}")
 
     baseline_root = Path(baseline_dir)
     candidate_root = Path(candidate_dir)
@@ -189,7 +192,7 @@ def export_compare_rl_dataset(
         candidate_record = candidate[scenario_id]
         baseline_episode = _comparison_episode_record(baseline_record, "baseline", reward_scale, preserve_paths)
         candidate_episode = _comparison_episode_record(candidate_record, "candidate", reward_scale, preserve_paths)
-        contract = _episode_contract_comparison(baseline_episode, candidate_episode)
+        contract = _episode_contract_comparison(baseline_episode, candidate_episode, contract_scope)
         baseline_score = _score(baseline_record.scorecard)
         candidate_score = _score(candidate_record.scorecard)
         score_delta = candidate_score - baseline_score
@@ -248,6 +251,7 @@ def export_compare_rl_dataset(
         "output_dir": _display_path(target, preserve_paths),
         "reward_scale": reward_scale,
         "min_score_gap": min_score_gap,
+        "contract_scope": contract_scope,
         "baseline_run_count": len(baseline),
         "candidate_run_count": len(candidate),
         "paired_scenario_count": len(set(baseline) & set(candidate)),
@@ -760,6 +764,7 @@ def _comparison_pair_record(
         "rule_regressions": comparison.get("regressions", []),
         "new_critical_failures": comparison.get("new_critical_failures", []),
         "contract_fingerprint_status": contract["status"],
+        "contract_fingerprint_scope": contract["scope"],
         "contract_fingerprint_reasons": contract["reasons"],
         "contract_fingerprints": contract["fingerprints"],
         "reason": reason,
@@ -801,6 +806,7 @@ def _comparison_dpo_records(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "rejected_score": _score_value(pair.get("rejected_score")),
                 "score_gap": _score_value(pair.get("score_gap")),
                 "contract_fingerprint_status": str(pair.get("contract_fingerprint_status") or "unverified"),
+                "contract_fingerprint_scope": str(pair.get("contract_fingerprint_scope") or "scenario"),
                 "contract_fingerprint_reasons": _string_list(pair.get("contract_fingerprint_reasons")),
                 "contract_fingerprints": pair.get("contract_fingerprints") if isinstance(pair.get("contract_fingerprints"), dict) else {},
                 "reason": str(pair.get("reason") or ""),
@@ -1232,12 +1238,12 @@ def _fingerprint_sha(value: Any) -> str | None:
     return sha if isinstance(sha, str) and sha else None
 
 
-def _episode_contract_comparison(baseline: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+def _episode_contract_comparison(baseline: dict[str, Any], candidate: dict[str, Any], contract_scope: str) -> dict[str, Any]:
     baseline_inputs = baseline.get("source_fingerprints") if isinstance(baseline.get("source_fingerprints"), dict) else {}
     candidate_inputs = candidate.get("source_fingerprints") if isinstance(candidate.get("source_fingerprints"), dict) else {}
     reasons: list[str] = []
     unknowns: list[str] = []
-    for name in ("scenario", "source_trace"):
+    for name in _contract_input_names(contract_scope):
         baseline_hash = _fingerprint_sha(baseline_inputs.get(name))
         candidate_hash = _fingerprint_sha(candidate_inputs.get(name))
         if baseline_hash and candidate_hash:
@@ -1248,12 +1254,17 @@ def _episode_contract_comparison(baseline: dict[str, Any], candidate: dict[str, 
     status = "drifted" if reasons else "unverified" if unknowns else "matched"
     return {
         "status": status,
+        "scope": contract_scope,
         "reasons": reasons or unknowns,
         "fingerprints": {
             "baseline": _contract_fingerprint_inputs(baseline_inputs),
             "candidate": _contract_fingerprint_inputs(candidate_inputs),
         },
     }
+
+
+def _contract_input_names(contract_scope: str) -> tuple[str, ...]:
+    return ("scenario", "source_trace") if contract_scope == "scenario-and-trace" else ("scenario",)
 
 
 def _contract_fingerprint_inputs(inputs: dict[str, Any]) -> dict[str, dict[str, Any]]:

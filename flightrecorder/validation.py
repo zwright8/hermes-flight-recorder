@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .adapters import TRACE_SCHEMA_VERSION
-from .artifacts import SUITE_TREND_SCHEMA_VERSION
+from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
@@ -714,6 +714,14 @@ def _validate_compare_manifest(
         _validate_metadata(manifest.get("metadata"), target, "compare_manifest.metadata")
     if not has_card:
         target.warnings.append("compare_manifest has no IMPROVEMENT_CARD.md companion.")
+    if "contract_scope" in manifest and manifest.get("contract_scope") not in CONTRACT_SCOPES:
+        target.errors.append(f"compare_manifest.contract_scope must be one of {sorted(CONTRACT_SCOPES)!r}.")
+    if manifest.get("contract_scope") in CONTRACT_SCOPES:
+        for index, pair in enumerate(pairs):
+            if isinstance(pair, dict) and pair.get("contract_fingerprint_scope") not in {None, manifest.get("contract_scope")}:
+                target.errors.append(
+                    f"improvement_pairs[{index}].contract_fingerprint_scope must match compare_manifest.contract_scope."
+                )
     for field_name in ("baseline_runs_dir", "candidate_runs_dir", "output_dir"):
         if _looks_absolute(str(manifest.get(field_name, ""))):
             target.warnings.append(f"compare_manifest.{field_name} is absolute; prefer redacted or relative exports for sharing.")
@@ -889,6 +897,7 @@ def _compare_improvement_dpo_to_pair(row: dict[str, Any], pair: dict[str, Any], 
         "rejected_score": pair.get("rejected_score"),
         "score_gap": pair.get("score_gap"),
         "contract_fingerprint_status": pair.get("contract_fingerprint_status"),
+        "contract_fingerprint_scope": pair.get("contract_fingerprint_scope"),
         "contract_fingerprint_reasons": pair.get("contract_fingerprint_reasons"),
         "contract_fingerprints": pair.get("contract_fingerprints"),
         "reason": pair.get("reason"),
@@ -1699,6 +1708,8 @@ def _validate_contract_fingerprint_status(row: dict[str, Any], target: Validatio
     status = row.get("contract_fingerprint_status")
     if status not in {"matched", "drifted", "unverified"}:
         target.errors.append(f"{label}.contract_fingerprint_status must be matched, drifted, or unverified.")
+    if "contract_fingerprint_scope" in row and row.get("contract_fingerprint_scope") not in CONTRACT_SCOPES:
+        target.errors.append(f"{label}.contract_fingerprint_scope must be one of {sorted(CONTRACT_SCOPES)!r}.")
     reasons = row.get("contract_fingerprint_reasons")
     if not _is_string_list(reasons):
         target.errors.append(f"{label}.contract_fingerprint_reasons must be a list of strings.")

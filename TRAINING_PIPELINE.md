@@ -91,6 +91,11 @@ This can require enough candidate wins, specific scenario coverage, expected
 rule fixes, no baseline-win regressions, no newly critical failure classes, and
 zero drifted or unverified comparison contracts when you add
 `--max-contract-drifts 0 --max-unverified-contracts 0`.
+Comparison exports default to `--contract-scope scenario`, which treats the
+scenario/policy as the stable contract and allows source traces to differ for
+live baseline/candidate agent behavior. Use `--contract-scope
+scenario-and-trace` only for strict fixture replay where the source trace is part
+of the benchmark contract.
 
 Or export training artifacts from an existing runs directory:
 
@@ -342,6 +347,11 @@ This is important for autonomous agents because two runs can produce the same
 final answer while only one actually performed the required tool action. The
 comparison DPO view keeps the observable behavior in the row, so the preference
 can distinguish evidence-backed completion from unsupported claims.
+
+`export-compare-rl` defaults to `--contract-scope scenario` so live improvement
+runs can compare different behavior traces against the same scenario contract.
+Use `--contract-scope scenario-and-trace` for fixture replay where trace changes
+should count as contract drift.
 
 `gate-compare-export` is the readiness check for this path. It reads
 `manifest.json` plus `improvement_pairs.jsonl` and can block a training handoff

@@ -11,6 +11,7 @@ from typing import Any
 COMPARE_SCHEMA_VERSION = "hfr.compare.v1"
 SUITE_COMPARE_SCHEMA_VERSION = "hfr.suite_compare.v1"
 SUITE_TREND_SCHEMA_VERSION = "hfr.suite_trend.v1"
+CONTRACT_SCOPES = {"scenario", "scenario-and-trace"}
 
 
 class ArtifactError(ValueError):
@@ -152,8 +153,11 @@ def compare_suites(
     *,
     baseline_label: str | None = None,
     candidate_label: str | None = None,
+    contract_scope: str = "scenario",
 ) -> dict[str, Any]:
     """Compare two directories of Flight Recorder run artifacts."""
+    if contract_scope not in CONTRACT_SCOPES:
+        raise ArtifactError(f"contract_scope must be one of {sorted(CONTRACT_SCOPES)!r}; got {contract_scope!r}")
     baseline_root = Path(baseline_dir)
     candidate_root = Path(candidate_dir)
     baseline = _suite_scorecards(baseline_root)
@@ -219,7 +223,7 @@ def compare_suites(
             baseline_label=before["label"],
             candidate_label=after["label"],
         )
-        contract = _contract_comparison(before, after)
+        contract = _contract_comparison(before, after, contract_scope)
         if contract["status"] == "drifted":
             contract_drifts.append({"scenario_id": scenario_id, **contract})
         elif contract["status"] == "unverified":
@@ -256,6 +260,7 @@ def compare_suites(
                 "new_critical_failures": comparison["new_critical_failures"],
                 "regressed": comparison["regressed"],
                 "contract_fingerprint_status": contract["status"],
+                "contract_fingerprint_scope": contract["scope"],
                 "contract_fingerprint_reasons": contract["reasons"],
                 "contract_fingerprints": contract["fingerprints"],
                 "summary": comparison["summary"],
@@ -298,6 +303,7 @@ def compare_suites(
             "metadata": candidate_metadata,
         },
         "aggregate": aggregate,
+        "contract_scope": contract_scope,
         "scenario_changes": scenario_changes,
         "regressions": regressions,
         "improvements": improvements,
@@ -575,14 +581,14 @@ def _run_fingerprints(run_dir: Path) -> dict[str, Any]:
     return fingerprints
 
 
-def _contract_comparison(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+def _contract_comparison(before: dict[str, Any], after: dict[str, Any], contract_scope: str) -> dict[str, Any]:
     before_inputs = before.get("fingerprints", {}).get("inputs") if isinstance(before.get("fingerprints"), dict) else {}
     after_inputs = after.get("fingerprints", {}).get("inputs") if isinstance(after.get("fingerprints"), dict) else {}
     before_inputs = before_inputs if isinstance(before_inputs, dict) else {}
     after_inputs = after_inputs if isinstance(after_inputs, dict) else {}
     reasons: list[str] = []
     unknowns: list[str] = []
-    for name in ("scenario", "source_trace"):
+    for name in _contract_input_names(contract_scope):
         before_hash = _input_sha(before_inputs.get(name))
         after_hash = _input_sha(after_inputs.get(name))
         if before_hash and after_hash:
@@ -593,12 +599,17 @@ def _contract_comparison(before: dict[str, Any], after: dict[str, Any]) -> dict[
     status = "drifted" if reasons else "unverified" if unknowns else "matched"
     return {
         "status": status,
+        "scope": contract_scope,
         "reasons": reasons or unknowns,
         "fingerprints": {
             "baseline": _contract_inputs(before_inputs),
             "candidate": _contract_inputs(after_inputs),
         },
     }
+
+
+def _contract_input_names(contract_scope: str) -> tuple[str, ...]:
+    return ("scenario", "source_trace") if contract_scope == "scenario-and-trace" else ("scenario",)
 
 
 def _input_sha(value: Any) -> str | None:

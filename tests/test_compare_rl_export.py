@@ -48,6 +48,7 @@ class CompareRlExportTests(unittest.TestCase):
             self.assertEqual(manifest["pair_count"], 1)
             self.assertEqual(manifest["candidate_win_count"], 1)
             self.assertEqual(manifest["baseline_win_count"], 0)
+            self.assertEqual(manifest["contract_scope"], "scenario")
             self.assertEqual(manifest["contract_drift_count"], 1)
             self.assertEqual(manifest["unverified_contract_count"], 0)
             self.assertEqual(manifest["metadata"]["candidate"], "email-fix")
@@ -57,16 +58,44 @@ class CompareRlExportTests(unittest.TestCase):
             self.assertEqual(pairs[0]["rejected_side"], "baseline")
             self.assertEqual(pairs[0]["candidate_score_delta"], 90)
             self.assertEqual(pairs[0]["contract_fingerprint_status"], "drifted")
+            self.assertEqual(pairs[0]["contract_fingerprint_scope"], "scenario")
             self.assertIn("scenario_sha256_changed", pairs[0]["contract_fingerprint_reasons"])
-            self.assertIn("source_trace_sha256_changed", pairs[0]["contract_fingerprint_reasons"])
+            self.assertNotIn("source_trace_sha256_changed", pairs[0]["contract_fingerprint_reasons"])
             self.assertEqual(pairs[0]["candidate"]["source_fingerprint_status"], "verified")
             self.assertIn("required_actions", pairs[0]["rule_fixes"])
             self.assertEqual(dpo[0]["schema_version"], "hfr.compare_rl.dpo.v1")
             self.assertEqual(dpo[0]["contract_fingerprint_status"], "drifted")
+            self.assertEqual(dpo[0]["contract_fingerprint_scope"], "scenario")
             self.assertIn("tool_result gmail_send ok", dpo[0]["chosen"])
             self.assertNotIn("tool_result gmail_send ok", dpo[0]["rejected"])
             self.assertNotEqual(dpo[0]["chosen"], dpo[0]["rejected"])
             self.assertIn("# Flight Recorder Improvement Pair Card", card)
+
+    def test_export_compare_rl_can_require_strict_trace_fixture_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            out = Path(tmp) / "compare_rl"
+
+            code = run_cli(
+                [
+                    "export-compare-rl",
+                    "--baseline",
+                    str(baseline),
+                    "--candidate",
+                    str(candidate),
+                    "--out",
+                    str(out),
+                    "--contract-scope",
+                    "scenario-and-trace",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            pair = self._read_jsonl(out / "improvement_pairs.jsonl")[0]
+            self.assertEqual(manifest["contract_scope"], "scenario-and-trace")
+            self.assertEqual(pair["contract_fingerprint_scope"], "scenario-and-trace")
+            self.assertIn("source_trace_sha256_changed", pair["contract_fingerprint_reasons"])
 
     def test_validate_rejects_compare_dpo_that_does_not_match_pair(self):
         with tempfile.TemporaryDirectory() as tmp:

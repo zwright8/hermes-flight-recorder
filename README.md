@@ -405,10 +405,13 @@ The aggregate comparison also includes failed-rule and critical-failure deltas
 so repair loops can see which failure classes increased, decreased, or stayed
 flat across paired scenarios.
 When run directories include `artifact_lineage.json`, suite comparison also
-checks scenario and source-trace SHA-256 fingerprints. Add
-`--fail-on-contract-drift` to fail CI when a paired scenario used a different
-scenario contract or trace fixture, and `--fail-on-unverified-contracts` to
-require lineage fingerprints before trusting the comparison.
+checks contract fingerprints. By default `--contract-scope scenario` checks the
+scenario contract and allows source traces to differ, which is usually what live
+baseline/candidate agent runs need. Use `--contract-scope scenario-and-trace`
+for strict fixture replay where the source trace should also match. Add
+`--fail-on-contract-drift` to fail CI on drift under the chosen scope, and
+`--fail-on-unverified-contracts` to require lineage fingerprints before trusting
+the comparison.
 
 Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
 files over multiple iterations. The trend JSON and HTML report show pass-rate
@@ -737,10 +740,10 @@ flightrecorder gate-compare-export \
 ```
 
 This export preserves whether the candidate improved or regressed for each
-paired scenario, records whether the paired source fingerprints matched,
-drifted, or were unverified, and writes behavior-transcript preference rows, so a task can
-be preferred because it had the right tool evidence even when both final
-answers look similar.
+paired scenario, records whether the paired contract fingerprints matched,
+drifted, or were unverified under the selected `--contract-scope`, and writes
+behavior-transcript preference rows, so a task can be preferred because it had
+the right tool evidence even when both final answers look similar.
 The comparison gate lets CI require those rows to contain enough candidate
 improvements, fixed rule classes, and zero forbidden regressions before a
 trainer or reviewer treats them as improvement signal.

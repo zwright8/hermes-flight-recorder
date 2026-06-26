@@ -302,6 +302,7 @@ def cmd_compare_suite(args: argparse.Namespace) -> int:
         args.candidate,
         baseline_label=args.baseline_label,
         candidate_label=args.candidate_label,
+        contract_scope=args.contract_scope,
     )
     _write_json(Path(args.out), comparison)
     if args.html_out:
@@ -688,6 +689,7 @@ def cmd_export_compare_rl(args: argparse.Namespace) -> int:
         args.out,
         reward_scale=args.reward_scale,
         min_score_gap=args.min_score_gap,
+        contract_scope=args.contract_scope,
         preserve_paths=args.preserve_paths,
         metadata=metadata,
     )
@@ -799,8 +801,14 @@ def _parser() -> argparse.ArgumentParser:
     compare_suite.add_argument("--html-out", help="Optional static HTML suite comparison report")
     compare_suite.add_argument("--baseline-label", help="Human-readable baseline label")
     compare_suite.add_argument("--candidate-label", help="Human-readable candidate label")
+    compare_suite.add_argument(
+        "--contract-scope",
+        default="scenario",
+        choices=["scenario", "scenario-and-trace"],
+        help="Fingerprint contract to compare: scenario for live improvement loops, scenario-and-trace for strict fixture replay",
+    )
     compare_suite.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate suite regresses")
-    compare_suite.add_argument("--fail-on-contract-drift", action="store_true", help="Exit nonzero when paired scenarios use different scenario or trace fingerprints")
+    compare_suite.add_argument("--fail-on-contract-drift", action="store_true", help="Exit nonzero when paired scenarios drift under --contract-scope")
     compare_suite.add_argument("--fail-on-unverified-contracts", action="store_true", help="Exit nonzero when paired scenarios are missing lineage fingerprints")
     compare_suite.set_defaults(func=cmd_compare_suite)
 
@@ -1091,6 +1099,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Reward transform used inside episode views: score=0..1, binary=pass/fail, signed=-1..1",
     )
     export_compare_rl.add_argument("--min-score-gap", type=int, default=1, help="Minimum absolute score gap for an improvement pair")
+    export_compare_rl.add_argument(
+        "--contract-scope",
+        default="scenario",
+        choices=["scenario", "scenario-and-trace"],
+        help="Fingerprint contract to compare: scenario for live improvement loops, scenario-and-trace for strict fixture replay",
+    )
     export_compare_rl.add_argument("--preserve-paths", action="store_true", help="Allow absolute source/output paths in exported metadata")
     export_compare_rl.add_argument(
         "--metadata",

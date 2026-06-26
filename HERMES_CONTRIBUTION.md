@@ -245,7 +245,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
    `flightrecorder compare-suite`, including suite metadata that identifies the
    compared Hermes configs and aggregate failure-class deltas that identify
    which behaviors got better or worse. Lineage fingerprints also show whether
-   same-named paired scenarios used the same scenario contract and trace fixture.
+   same-named paired scenarios used the same scenario contract; strict fixture
+   replay can opt into source-trace matching with `--contract-scope
+   scenario-and-trace`.
 10. Export baseline/candidate preference rows with
    `flightrecorder export-compare-rl`, preserving whether the candidate
    improved or regressed, including tool-evidence behavior transcripts, and

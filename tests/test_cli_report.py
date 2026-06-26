@@ -766,6 +766,60 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("scenario_sha256_changed", change["contract_fingerprint_reasons"])
             self.assertIn("Contract Fingerprint Drift", html.read_text(encoding="utf-8"))
 
+    def test_compare_suite_contract_scope_allows_live_trace_changes_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            relaxed_out = root / "relaxed_compare.json"
+            strict_out = root / "strict_compare.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(baseline / "prompt")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(candidate / "prompt")])
+            lineage_path = candidate / "prompt" / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            for record in lineage["inputs"]:
+                if record["name"] == "source_trace":
+                    record["sha256"] = "f" * 64
+            lineage_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            relaxed_code = run_cli(
+                [
+                    "compare-suite",
+                    "--baseline",
+                    str(baseline),
+                    "--candidate",
+                    str(candidate),
+                    "--out",
+                    str(relaxed_out),
+                    "--fail-on-contract-drift",
+                ]
+            )
+            strict_code = run_cli(
+                [
+                    "compare-suite",
+                    "--baseline",
+                    str(baseline),
+                    "--candidate",
+                    str(candidate),
+                    "--out",
+                    str(strict_out),
+                    "--contract-scope",
+                    "scenario-and-trace",
+                    "--fail-on-contract-drift",
+                ]
+            )
+
+            self.assertEqual(relaxed_code, 0)
+            relaxed = json.loads(relaxed_out.read_text(encoding="utf-8"))
+            self.assertEqual(relaxed["contract_scope"], "scenario")
+            self.assertEqual(relaxed["aggregate"]["contract_drift_count"], 0)
+            self.assertEqual(relaxed["scenario_changes"][0]["contract_fingerprint_status"], "matched")
+            self.assertEqual(strict_code, 1)
+            strict = json.loads(strict_out.read_text(encoding="utf-8"))
+            self.assertEqual(strict["contract_scope"], "scenario-and-trace")
+            self.assertEqual(strict["aggregate"]["contract_drift_count"], 1)
+            self.assertIn("source_trace_sha256_changed", strict["contract_drifts"][0]["reasons"])
+
     def test_trend_suite_tracks_metric_and_failure_trajectories(self):
         with tempfile.TemporaryDirectory() as tmp:
             first = Path(tmp) / "first_suite_summary.json"

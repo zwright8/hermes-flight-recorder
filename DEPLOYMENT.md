@@ -109,7 +109,10 @@ network.
   baseline/candidate config identity side by side. Use aggregate failed-rule and
   critical-failure deltas to prioritize which failure classes need repair.
   Add `--fail-on-contract-drift --fail-on-unverified-contracts` when CI must
-  prove paired scenarios used the same scenario and source-trace fingerprints.
+  prove paired scenarios used the same scenario contract. Keep the default
+  `--contract-scope scenario` for live baseline/candidate behavior comparisons;
+  use `--contract-scope scenario-and-trace` only for strict fixture replay where
+  the source trace must also match.
 - Use `flightrecorder trend-suite --suite-summary <old> --suite-summary <new>
   --out <trend.json>` when CI stores multiple suite summaries and maintainers
   need to review progress across an improvement run, not just one comparison.

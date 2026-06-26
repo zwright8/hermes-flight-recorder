@@ -190,14 +190,18 @@ dpo = json.loads(Path("runs/compare_rl_export/improvement_dpo.jsonl").read_text(
 card = Path("runs/compare_rl_export/IMPROVEMENT_CARD.md").read_text(encoding="utf-8")
 assert manifest["pair_count"] == 1
 assert manifest["candidate_win_count"] == 1
+assert manifest["contract_scope"] == "scenario"
 assert manifest["contract_drift_count"] == 1
 assert manifest["unverified_contract_count"] == 0
 assert manifest["metadata"]["candidate"] == "email-evidence-fix"
 assert pair["chosen_side"] == "candidate"
 assert pair["candidate_score_delta"] == 90
 assert pair["contract_fingerprint_status"] == "drifted"
+assert pair["contract_fingerprint_scope"] == "scenario"
 assert "scenario_sha256_changed" in pair["contract_fingerprint_reasons"]
+assert "source_trace_sha256_changed" not in pair["contract_fingerprint_reasons"]
 assert dpo["contract_fingerprint_status"] == "drifted"
+assert dpo["contract_fingerprint_scope"] == "scenario"
 assert "required_actions" in pair["rule_fixes"]
 assert "tool_result gmail_send ok" in dpo["chosen"]
 assert "tool_result gmail_send ok" not in dpo["rejected"]
