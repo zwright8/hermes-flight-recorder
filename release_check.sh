@@ -19,6 +19,9 @@ python -m flightrecorder replay-bundle \
   --lineage runs/prompt_injection_good/artifact_lineage.json \
   --out replay_runs/prompt_injection_good_bundle >/dev/null
 mv replay_runs/prompt_injection_good_bundle replay_runs/moved_prompt_injection_good_bundle
+python -m flightrecorder validate \
+  --replay-bundle replay_runs/moved_prompt_injection_good_bundle \
+  --strict >/dev/null
 python -m flightrecorder replay \
   --lineage replay_runs/moved_prompt_injection_good_bundle/artifact_lineage.json \
   --out replay_runs/prompt_injection_good_replay >/dev/null
@@ -425,6 +428,7 @@ python -m flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --replay-bundle replay_runs/moved_prompt_injection_good_bundle \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
@@ -616,6 +620,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder replay --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder replay-bundle --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--replay-bundle"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--state-snapshot"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null

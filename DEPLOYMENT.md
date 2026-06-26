@@ -100,8 +100,10 @@ network.
   evidence from a self-contained lineage contract after input-hash verification.
   Use `flightrecorder replay-bundle` before publishing or moving evidence
   packages so scenario, trace, and state inputs travel with the lineage contract.
-  Shared artifacts redact paths by default; use `--preserve-paths` only in
-  private CI when exact source paths are required.
+  Validate those packages with `flightrecorder validate` and
+  `--replay-bundle <bundle-dir> --strict`. Shared artifacts redact paths by
+  default; use `--preserve-paths` only in private CI when exact source paths are
+  required.
 - Add `--junit`, `--markdown`, and `--export-rl` when CI should publish native
   test reports, job summaries, and downstream training/failure-mode artifacts.
 - Add repeated `--metadata key=value` flags to label the evaluated agent, model,
@@ -189,9 +191,10 @@ network.
   --review-export runs/review_queue --reviewed-export runs/reviewed_export
   --compare-export runs/compare_rl_export --evidence-coverage
   runs/evidence_coverage.json --evidence-bundle runs/evidence_bundle.json
-  --review-calibration runs/review_calibration.json --scenario-quality
-  runs/scenario_quality.json --suite-summary runs/suite_summary.json
-  --suite-trend runs/suite_trend.json --strict` before publishing artifacts or
+  --replay-bundle replay_bundles/prompt_injection_good --review-calibration
+  runs/review_calibration.json --scenario-quality runs/scenario_quality.json
+  --suite-summary runs/suite_summary.json --suite-trend runs/suite_trend.json
+  --strict` before publishing artifacts or
   using them downstream.
 - Use `flightrecorder gate-export --training-export runs/training_export
   --policy <policy.json>` when CI must block training jobs unless an export has

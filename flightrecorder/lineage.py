@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 LINEAGE_SCHEMA_VERSION = "hfr.lineage.v1"
+REPLAY_BUNDLE_SCHEMA_VERSION = "hfr.replay_bundle.v1"
 
 
 def write_run_lineage(

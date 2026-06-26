@@ -217,6 +217,7 @@ class CliReportTests(unittest.TestCase):
             self.assertTrue(lineage["replay"]["self_contained"])
             self.assertEqual(lineage["replay"]["argv"][lineage["replay"]["argv"].index("--scenario") + 1], "inputs/scenario.json")
             self.assertEqual(lineage["replay"]["argv"][lineage["replay"]["argv"].index("--state") + 1], "inputs/source_state_snapshot.json")
+            self.assertEqual(run_cli(["validate", "--replay-bundle", str(moved_bundle), "--strict"]), 0)
             self.assertEqual(run_cli(["validate", "--run", str(replay), "--strict"]), 0)
 
     def test_replay_bundle_rejects_stale_source_input_fingerprint(self):
@@ -235,6 +236,23 @@ class CliReportTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.code, 2)
             self.assertFalse(bundle.exists())
+
+    def test_validate_replay_bundle_rejects_tampered_copied_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            bundle = Path(tmp) / "bundle"
+            summary_path = Path(tmp) / "validation.json"
+            self.assertEqual(run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(source)]), 0)
+            self.assertEqual(run_cli(["replay-bundle", "--lineage", str(source / "artifact_lineage.json"), "--out", str(bundle)]), 0)
+            (bundle / "inputs" / "scenario.json").write_text("{}", encoding="utf-8")
+
+            code = run_cli(["validate", "--replay-bundle", str(bundle), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("replay_bundle.inputs", errors)
+            self.assertIn("sha256", errors)
 
     def test_failing_report_redacts_secret_values_and_writes_regression(self):
         with tempfile.TemporaryDirectory() as tmp:

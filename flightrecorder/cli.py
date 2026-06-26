@@ -33,7 +33,7 @@ from .compare_gate import (
     load_compare_gate_policy,
 )
 from .evidence import EvidenceCoverageError, build_evidence_coverage
-from .lineage import write_run_lineage
+from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .report import write_index, write_report
 from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
@@ -61,7 +61,6 @@ from .training_gate import (
 from .validation import validate_artifacts
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
-REPLAY_BUNDLE_SCHEMA_VERSION = "hfr.replay_bundle.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 
 
@@ -527,6 +526,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
+        replay_bundle_paths=args.replay_bundle,
         review_calibration_paths=args.review_calibration,
         scenario_quality_paths=args.scenario_quality,
         suite_summary_paths=args.suite_summary,
@@ -1077,6 +1077,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
+    validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--review-calibration", action="append", default=[], help="Validate one review_calibration.json; may be repeated")
     validate.add_argument("--scenario-quality", action="append", default=[], help="Validate one scenario_quality.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
@@ -2153,6 +2154,7 @@ def _portable_replay_lineage(
         record["path"] = _bundle_relative_path(copied)
         record["sha256"] = copied["sha256"]
         record["exists"] = True
+    _rewrite_lineage_inputs_for_bundle(bundle_lineage, copied_inputs)
     summary = bundle_lineage.get("summary")
     if isinstance(summary, dict):
         summary["self_contained_replay"] = True
@@ -2166,6 +2168,23 @@ def _portable_replay_lineage(
         ],
     }
     return bundle_lineage
+
+
+def _rewrite_lineage_inputs_for_bundle(lineage: dict[str, Any], copied_inputs: dict[str, dict[str, Any]]) -> None:
+    inputs = lineage.get("inputs")
+    if not isinstance(inputs, list):
+        return
+    for record in inputs:
+        if not isinstance(record, dict):
+            continue
+        name = record.get("name")
+        copied = copied_inputs.get(name) if isinstance(name, str) else None
+        if copied is None:
+            continue
+        record["path"] = _bundle_relative_path(copied)
+        record["exists"] = True
+        record["sha256"] = copied["sha256"]
+        record["size_bytes"] = copied["size_bytes"]
 
 
 def _replace_replay_flag(argv: list[str], flag: str, value: str, *, required: bool = True) -> None:

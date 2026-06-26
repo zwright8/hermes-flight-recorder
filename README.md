@@ -195,6 +195,7 @@ flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --evidence-coverage runs/evidence_coverage.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --replay-bundle replay_bundles/prompt_injection_good \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
   --suite-summary runs/suite_summary.json \
@@ -433,9 +434,9 @@ flightrecorder run-suite \
 ```
 
 Use `flightrecorder validate --strict` to verify that generated run, training,
-suite-summary, and suite-trend artifacts still satisfy the expected data
-contracts before publishing or using them in downstream evaluation/training
-jobs.
+suite-summary, suite-trend, and replay-bundle artifacts still satisfy the
+expected data contracts before publishing or using them in downstream
+evaluation/training jobs.
 
 Use `flightrecorder compare-suite --fail-on-regression` to gate a candidate
 agent, model, skill, prompt, or policy change against a baseline run directory.
@@ -463,9 +464,10 @@ passed. Use `flightrecorder replay-bundle` with
 `--lineage <run>/artifact_lineage.json --out <bundle-dir>` to copy the source
 inputs into a portable directory and rewrite replay paths so
 `flightrecorder replay` still works against the bundled `artifact_lineage.json`
-after the directory is moved. Use `--preserve-paths` only in private CI or local
-debugging when exact absolute source paths matter; shared artifacts keep paths
-redacted.
+after the directory is moved. Validate portable bundles with
+`flightrecorder validate --replay-bundle <bundle-dir> --strict`. Use
+`--preserve-paths` only in private CI or local debugging when exact absolute
+source paths matter; shared artifacts keep paths redacted.
 
 Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
 files over multiple iterations. The trend JSON and HTML report show pass-rate

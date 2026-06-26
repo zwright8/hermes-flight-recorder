@@ -13,7 +13,7 @@ from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
-from .lineage import LINEAGE_SCHEMA_VERSION
+from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .review import (
     REVIEW_ITEM_SCHEMA_VERSION,
     REVIEW_LABEL_SCHEMA_VERSION,
@@ -81,6 +81,7 @@ def validate_artifacts(
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
+    replay_bundle_paths: list[str | Path] | None = None,
     review_calibration_paths: list[str | Path] | None = None,
     scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
@@ -106,6 +107,8 @@ def validate_artifacts(
         targets.append(validate_evidence_coverage(evidence_coverage_path))
     for evidence_bundle_path in evidence_bundle_paths or []:
         targets.append(validate_evidence_bundle(evidence_bundle_path))
+    for replay_bundle_path in replay_bundle_paths or []:
+        targets.append(validate_replay_bundle(replay_bundle_path))
     for review_calibration_path in review_calibration_paths or []:
         targets.append(validate_review_calibration(review_calibration_path))
     for scenario_quality_path in scenario_quality_paths or []:
@@ -429,6 +432,18 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     bundle = _read_object(bundle_path, target, "evidence_bundle.json")
     if bundle is not None:
         _validate_evidence_bundle(bundle, target)
+    return target
+
+
+def validate_replay_bundle(path: str | Path) -> ValidationTarget:
+    """Validate a portable replay-bundle directory or replay_bundle.json artifact."""
+    raw_path = Path(path)
+    bundle_dir = raw_path if raw_path.is_dir() else raw_path.parent
+    manifest_path = raw_path / "replay_bundle.json" if raw_path.is_dir() else raw_path
+    target = ValidationTarget("replay_bundle", str(raw_path))
+    manifest = _read_object(manifest_path, target, "replay_bundle.json")
+    if manifest is not None:
+        _validate_replay_bundle(manifest, bundle_dir, target)
     return target
 
 
@@ -2885,6 +2900,192 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
             "artifact_count": len(artifacts),
         }
     )
+
+
+def _validate_replay_bundle(manifest: dict[str, Any], bundle_dir: Path, target: ValidationTarget) -> None:
+    _require_equal(manifest, "schema_version", REPLAY_BUNDLE_SCHEMA_VERSION, target, prefix="replay_bundle.")
+    lineage_name = manifest.get("lineage")
+    if not isinstance(lineage_name, str) or not lineage_name:
+        target.errors.append("replay_bundle.lineage must be a non-empty string.")
+        lineage_name = "artifact_lineage.json"
+    lineage_path = bundle_dir / lineage_name
+    lineage = _read_object(lineage_path, target, "artifact_lineage.json")
+    if lineage is not None:
+        _validate_replay_bundle_lineage(lineage, manifest, bundle_dir, target)
+
+    inputs = manifest.get("inputs")
+    if not isinstance(inputs, list):
+        target.errors.append("replay_bundle.inputs must be a list.")
+        inputs = []
+    if manifest.get("input_count") != len(inputs):
+        target.errors.append(f"replay_bundle.input_count expected {len(inputs)}, got {manifest.get('input_count')!r}.")
+    input_records: dict[str, dict[str, Any]] = {}
+    for index, record in enumerate(inputs):
+        label = f"replay_bundle.inputs[{index}]"
+        if not isinstance(record, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        name = record.get("name")
+        if not isinstance(name, str) or not name:
+            target.errors.append(f"{label}.name must be a non-empty string.")
+            continue
+        input_records[name] = record
+        _validate_replay_bundle_input_record(record, bundle_dir, target, label)
+    for required_name in ("scenario", "source_trace"):
+        if required_name not in input_records:
+            target.errors.append(f"replay_bundle.inputs missing {required_name}.")
+
+    replay = manifest.get("replay")
+    if not isinstance(replay, dict):
+        target.errors.append("replay_bundle.replay must be an object.")
+        replay = {}
+    if replay.get("self_contained") is not True:
+        target.errors.append("replay_bundle.replay.self_contained must be true.")
+    argv = replay.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) and item for item in argv):
+        target.errors.append("replay_bundle.replay.argv must be a list of non-empty strings.")
+        argv = []
+    else:
+        if argv[:4] != ["python", "-m", "flightrecorder", "run"]:
+            target.errors.append("replay_bundle.replay.argv must start with python -m flightrecorder run.")
+        _validate_replay_bundle_argv_inputs(argv, input_records, target)
+    if not isinstance(replay.get("command"), str) or not replay.get("command"):
+        target.errors.append("replay_bundle.replay.command must be a non-empty string.")
+    notes = manifest.get("notes")
+    if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
+        target.errors.append("replay_bundle.notes must be a list of strings.")
+    target.details.update(
+        {
+            "input_count": len(input_records),
+            "lineage": lineage_name,
+            "self_contained": replay.get("self_contained") is True,
+        }
+    )
+
+
+def _validate_replay_bundle_lineage(
+    lineage: dict[str, Any],
+    manifest: dict[str, Any],
+    bundle_dir: Path,
+    target: ValidationTarget,
+) -> None:
+    _require_equal(lineage, "schema_version", LINEAGE_SCHEMA_VERSION, target, prefix="artifact_lineage.")
+    portable = lineage.get("portable_replay_bundle")
+    if not isinstance(portable, dict):
+        target.errors.append("artifact_lineage.portable_replay_bundle must be an object.")
+        portable = {}
+    _require_equal(portable, "schema_version", REPLAY_BUNDLE_SCHEMA_VERSION, target, prefix="artifact_lineage.portable_replay_bundle.")
+    if portable.get("input_count") != manifest.get("input_count"):
+        target.errors.append("artifact_lineage.portable_replay_bundle.input_count must match replay_bundle.input_count.")
+    replay = lineage.get("replay")
+    manifest_replay = manifest.get("replay") if isinstance(manifest.get("replay"), dict) else {}
+    if not isinstance(replay, dict):
+        target.errors.append("artifact_lineage.replay must be an object.")
+        return
+    if replay.get("self_contained") is not True:
+        target.errors.append("artifact_lineage.replay.self_contained must be true for replay bundles.")
+    if replay.get("argv") != manifest_replay.get("argv"):
+        target.errors.append("artifact_lineage.replay.argv must match replay_bundle.replay.argv.")
+    if replay.get("command") != manifest_replay.get("command"):
+        target.errors.append("artifact_lineage.replay.command must match replay_bundle.replay.command.")
+
+    inputs = _lineage_records(lineage.get("inputs"), target, "artifact_lineage.inputs")
+    fingerprints = replay.get("input_fingerprints") if isinstance(replay.get("input_fingerprints"), dict) else {}
+    if not isinstance(fingerprints, dict):
+        target.errors.append("artifact_lineage.replay.input_fingerprints must be an object.")
+        fingerprints = {}
+    for input_record in manifest.get("inputs", []) if isinstance(manifest.get("inputs"), list) else []:
+        if not isinstance(input_record, dict):
+            continue
+        name = input_record.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        fingerprint = fingerprints.get(name)
+        if not isinstance(fingerprint, dict):
+            target.errors.append(f"artifact_lineage.replay.input_fingerprints missing {name}.")
+            continue
+        for field_name in ("path", "sha256"):
+            if fingerprint.get(field_name) != input_record.get(field_name):
+                target.errors.append(f"artifact_lineage.replay.input_fingerprints.{name}.{field_name} must match replay_bundle input.")
+        if fingerprint.get("exists") is not True:
+            target.errors.append(f"artifact_lineage.replay.input_fingerprints.{name}.exists must be true.")
+        lineage_input = inputs.get(name)
+        if lineage_input is not None:
+            for field_name in ("path", "sha256"):
+                if lineage_input.get(field_name) != input_record.get(field_name):
+                    target.errors.append(f"artifact_lineage.inputs.{name}.{field_name} must match replay_bundle input.")
+    _validate_replay_bundle_copied_lineage_inputs(inputs, bundle_dir, target)
+
+
+def _validate_replay_bundle_input_record(record: dict[str, Any], bundle_dir: Path, target: ValidationTarget, label: str) -> None:
+    path_value = record.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        return
+    if not _is_safe_relative_path(path_value):
+        target.errors.append(f"{label}.path must be relative to the replay bundle directory.")
+        return
+    file_path = bundle_dir / path_value
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to a bundled file.")
+        return
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    elif file_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the bundled file.")
+    if not _is_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+    elif _sha256(file_path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the bundled file.")
+    if "source_path" in record and not isinstance(record.get("source_path"), str):
+        target.errors.append(f"{label}.source_path must be a string when present.")
+
+
+def _validate_replay_bundle_argv_inputs(argv: list[str], inputs: dict[str, dict[str, Any]], target: ValidationTarget) -> None:
+    flag_to_input = {"--scenario": "scenario", "--trace": "source_trace", "--state": "source_state_snapshot"}
+    for flag, input_name in flag_to_input.items():
+        if flag not in argv:
+            if flag in {"--scenario", "--trace"}:
+                target.errors.append(f"replay_bundle.replay.argv missing {flag}.")
+            continue
+        index = argv.index(flag)
+        if index + 1 >= len(argv):
+            target.errors.append(f"replay_bundle.replay.argv missing value for {flag}.")
+            continue
+        expected = inputs.get(input_name, {}).get("path")
+        if expected is not None and argv[index + 1] != expected:
+            target.errors.append(f"replay_bundle.replay.argv value for {flag} must match replay_bundle.inputs.{input_name}.path.")
+
+
+def _validate_replay_bundle_copied_lineage_inputs(inputs: dict[str, dict[str, Any]], bundle_dir: Path, target: ValidationTarget) -> None:
+    for name in ("scenario", "source_trace", "source_state_snapshot"):
+        record = inputs.get(name)
+        if record is None:
+            if name != "source_state_snapshot":
+                target.errors.append(f"artifact_lineage.inputs missing {name}.")
+            continue
+        path_value = record.get("path")
+        if not isinstance(path_value, str) or not path_value:
+            target.errors.append(f"artifact_lineage.inputs.{name}.path must be a non-empty string.")
+            continue
+        if not _is_safe_relative_path(path_value):
+            target.errors.append(f"artifact_lineage.inputs.{name}.path must be relative to the replay bundle directory.")
+            continue
+        file_path = bundle_dir / path_value
+        if not file_path.exists() or not file_path.is_file():
+            target.errors.append(f"artifact_lineage.inputs.{name}.path does not resolve to a bundled file.")
+            continue
+        if record.get("exists") is not True:
+            target.errors.append(f"artifact_lineage.inputs.{name}.exists must be true.")
+        if not _is_sha256(record.get("sha256")):
+            target.errors.append(f"artifact_lineage.inputs.{name}.sha256 must be a SHA-256 hex string.")
+        elif _sha256(file_path) != record.get("sha256"):
+            target.errors.append(f"artifact_lineage.inputs.{name}.sha256 does not match the bundled file.")
+
+
+def _is_safe_relative_path(value: str) -> bool:
+    path = Path(value)
+    return not path.is_absolute() and not _is_windows_absolute(value) and ".." not in path.parts
 
 
 def _validate_evidence_bundle_checks(checks: list[Any], target: ValidationTarget) -> int:

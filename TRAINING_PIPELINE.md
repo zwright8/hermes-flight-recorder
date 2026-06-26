@@ -279,9 +279,11 @@ lineage contract before adding its outputs to a training handoff. The replay
 command checks recorded scenario, trace, and state-snapshot hashes before
 regenerating artifacts. Use `flightrecorder replay-bundle` before publishing or
 moving evidence packages; it copies the scenario, trace, and state snapshot into
-a portable directory and rewrites replay paths to those copied inputs. Use
-`--preserve-paths` only for private runs when absolute replay commands are
-acceptable.
+a portable directory and rewrites replay paths to those copied inputs. Validate
+portable bundles with `flightrecorder validate` and
+`--replay-bundle <bundle-dir> --strict` before publishing them as reproducible
+evidence. Use `--preserve-paths` only for private runs when absolute replay
+commands are acceptable.
 Derived reward, preference, SFT, DPO, and reward-model rows carry matching
 source fingerprint fields so trainer-ready views remain auditable after they are
 separated from `episodes.jsonl`.
