@@ -227,7 +227,8 @@ observer plugin, executed `uv run hermes chat`, emitted `on_session_start`,
 `pre_llm_call`, `pre_api_request`, `post_api_request`, `post_llm_call`,
 `on_session_end`, and `on_session_finalize`, and Flight Recorder converted the
 captured observer JSONL into `normalized_trace.json`, `scorecard.json`, and
-`report.html`, plus an `artifact_lineage.json` provenance manifest.
+`report.html`, plus `live_smoke_summary.json` and an `artifact_lineage.json`
+provenance manifest.
 
 ## How This Improves The Self-Improvement Loop
 

@@ -30,6 +30,7 @@ from flightrecorder.hermes_plugin import HOOKS
 from flightrecorder.schema import ScenarioError
 
 
+LIVE_SMOKE_SUMMARY_SCHEMA_VERSION = "hfr.live_smoke.summary.v1"
 PROMPT = "Reply exactly: flight recorder live smoke ok"
 EXPECTED = "flight recorder live smoke ok"
 
@@ -177,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             temp_root_obj.cleanup()
 
+    result = _write_smoke_summary(out_dir, result)
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result["passed"] else 1
 
@@ -281,6 +283,18 @@ def _write_smoke_artifacts(observer_path: Path, out_dir: Path) -> dict[str, Any]
         out_dir,
         trace_format="observer_jsonl",
     )
+
+
+def _write_smoke_summary(out_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
+    """Write a stable machine-readable live smoke summary."""
+    summary_path = out_dir / "live_smoke_summary.json"
+    summary = {
+        "schema_version": LIVE_SMOKE_SUMMARY_SCHEMA_VERSION,
+        **result,
+        "summary": str(summary_path),
+    }
+    _write_json(summary_path, summary)
+    return summary
 
 
 def _write_plugin(plugin_dir: Path) -> None:

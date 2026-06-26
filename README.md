@@ -1113,6 +1113,8 @@ Hermes checkout, but no external API key or network.
 
 Successful output includes:
 
+- `live_smoke_summary.json`: machine-readable smoke verdict with hook coverage,
+  score, report path, lineage path, and captured observer path.
 - `live_scenario.json`: generated scenario contract for the live observer run.
 - `live_observer.jsonl`: hook events captured from the real Hermes plugin path.
 - `normalized_trace.json`: canonical `hfr.trace.v1` observer trace.
