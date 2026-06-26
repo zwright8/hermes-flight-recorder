@@ -11,6 +11,7 @@ from .adapters import TRACE_SCHEMA_VERSION
 from .scorers import SCORE_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
+    RL_DATASET_METRICS_SCHEMA_VERSION,
     RL_DPO_SCHEMA_VERSION,
     RL_EPISODE_SCHEMA_VERSION,
     RL_FAILURE_MODE_SCHEMA_VERSION,
@@ -158,6 +159,8 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     sft_path = export_dir / "sft.jsonl"
     dpo_path = export_dir / "dpo.jsonl"
     reward_model_path = export_dir / "reward_model.jsonl"
+    dataset_metrics_path = export_dir / "dataset_metrics.json"
+    dataset_card_path = export_dir / "DATASET_CARD.md"
     sft = _read_jsonl_objects_optional(sft_path, target, "sft.jsonl", "rerun export-rl to emit trainer-ready SFT rows")
     dpo = _read_jsonl_objects_optional(dpo_path, target, "dpo.jsonl", "rerun export-rl to emit trainer-ready DPO rows")
     reward_model = _read_jsonl_objects_optional(
@@ -165,6 +168,12 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         target,
         "reward_model.jsonl",
         "rerun export-rl to emit trainer-ready reward-model rows",
+    )
+    dataset_metrics = _read_object_optional(
+        dataset_metrics_path,
+        target,
+        "dataset_metrics.json",
+        "rerun export-rl to emit dataset-level metrics",
     )
     if manifest is not None:
         _validate_training_manifest(
@@ -179,6 +188,8 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             sft,
             dpo,
             reward_model,
+            dataset_metrics,
+            dataset_card_path.exists(),
         )
     _validate_episodes(episodes, target)
     _validate_rewards(rewards, target, episodes)
@@ -193,6 +204,23 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         _validate_dpo_records(dpo, target, preferences, episodes)
     if reward_model_path.exists():
         _validate_reward_model_records(reward_model, target, episodes)
+    if dataset_metrics is not None:
+        _validate_dataset_metrics(
+            dataset_metrics,
+            target,
+            episodes,
+            rewards,
+            step_rewards,
+            preferences,
+            failure_modes,
+            sft,
+            dpo,
+            reward_model,
+        )
+    if dataset_card_path.exists():
+        _validate_dataset_card(dataset_card_path, target)
+    else:
+        target.warnings.append("DATASET_CARD.md is missing; rerun export-rl to emit the human-readable dataset card.")
     target.details.update(
         {
             "episode_count": len(episodes),
@@ -203,6 +231,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             "sft_count": len(sft),
             "dpo_count": len(dpo),
             "reward_model_count": len(reward_model),
+            "quality_flag_count": len(dataset_metrics.get("quality_flags", [])) if isinstance(dataset_metrics, dict) else None,
         }
     )
     return target
@@ -317,6 +346,8 @@ def _validate_training_manifest(
     sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
+    dataset_metrics: dict[str, Any] | None,
+    has_dataset_card: bool,
 ) -> None:
     _require_equal(manifest, "schema_version", RL_MANIFEST_SCHEMA_VERSION, target)
     expected_counts = {
@@ -339,6 +370,10 @@ def _validate_training_manifest(
             expected_counts[field_name] = expected
         else:
             target.warnings.append(f"manifest.{field_name} is missing; rerun export-rl to refresh trainer-ready views.")
+    if "quality_flag_count" in manifest and dataset_metrics is not None:
+        expected_counts["quality_flag_count"] = len(dataset_metrics.get("quality_flags", [])) if isinstance(dataset_metrics.get("quality_flags"), list) else 0
+    elif "quality_flag_count" not in manifest:
+        target.warnings.append("manifest.quality_flag_count is missing; rerun export-rl to refresh dataset-level metrics.")
     for field_name, expected in expected_counts.items():
         if manifest.get(field_name) != expected:
             target.errors.append(f"manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
@@ -353,6 +388,14 @@ def _validate_training_manifest(
         for output_name in ("sft", "dpo", "reward_model"):
             if output_name not in manifest["outputs"]:
                 target.warnings.append(f"manifest.outputs.{output_name} is missing; rerun export-rl to refresh trainer-ready views.")
+        if "dataset_metrics" not in manifest["outputs"]:
+            target.warnings.append("manifest.outputs.dataset_metrics is missing; rerun export-rl to refresh dataset-level metrics.")
+        if "dataset_card" not in manifest["outputs"]:
+            target.warnings.append("manifest.outputs.dataset_card is missing; rerun export-rl to refresh the dataset card.")
+    if dataset_metrics is None:
+        target.warnings.append("manifest has no validated dataset_metrics.json companion.")
+    if not has_dataset_card:
+        target.warnings.append("manifest has no DATASET_CARD.md companion.")
     if curriculum is not None and curriculum.get("failure_mode_count") != len(failure_modes):
         target.errors.append(
             f"curriculum.failure_mode_count expected {len(failure_modes)}, got {curriculum.get('failure_mode_count')!r}."
@@ -746,6 +789,194 @@ def _validate_messages(value: Any, target: ValidationTarget, label: str) -> None
             target.errors.append(f"{label}[{index}].content must be a string.")
 
 
+def _validate_dataset_metrics(
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+    episodes: list[dict[str, Any]],
+    rewards: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
+    preferences: list[dict[str, Any]],
+    failure_modes: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> None:
+    _require_equal(metrics, "schema_version", RL_DATASET_METRICS_SCHEMA_VERSION, target, prefix="dataset_metrics.")
+    artifact_counts = metrics.get("artifact_counts")
+    if not isinstance(artifact_counts, dict):
+        target.errors.append("dataset_metrics.artifact_counts must be an object.")
+        artifact_counts = {}
+    expected_counts = {
+        "episodes": len(episodes),
+        "rewards": len(rewards),
+        "step_rewards": len(step_rewards),
+        "preferences": len(preferences),
+        "failure_modes": len(failure_modes),
+        "sft": len(sft),
+        "dpo": len(dpo),
+        "reward_model": len(reward_model),
+    }
+    for field_name, expected in expected_counts.items():
+        if artifact_counts.get(field_name) != expected:
+            target.errors.append(f"dataset_metrics.artifact_counts.{field_name} expected {expected}, got {artifact_counts.get(field_name)!r}.")
+
+    scores = [_score_value(episode.get("outcome", {}).get("score")) for episode in episodes if isinstance(episode.get("outcome"), dict)]
+    reward_values = [
+        float(reward.get("reward"))
+        for reward in rewards
+        if isinstance(reward.get("reward"), (int, float)) and not isinstance(reward.get("reward"), bool)
+    ]
+    passed = sum(1 for episode in episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+    failed = len(episodes) - passed
+    expected_scalars = {
+        "episode_count": len(episodes),
+        "passed": passed,
+        "failed": failed,
+        "pass_rate": round(passed / len(episodes), 4) if episodes else 0.0,
+        "average_score": _average_number(scores),
+        "min_score": min(scores) if scores else None,
+        "max_score": max(scores) if scores else None,
+        "average_reward": _average_number(reward_values),
+        "min_reward": min(reward_values) if reward_values else None,
+        "max_reward": max(reward_values) if reward_values else None,
+    }
+    for field_name, expected in expected_scalars.items():
+        if metrics.get(field_name) != expected:
+            target.errors.append(f"dataset_metrics.{field_name} expected {expected!r}, got {metrics.get(field_name)!r}.")
+
+    expected_failed = _count_strings(rule for episode in episodes for rule in _outcome_strings(episode, "failed_rules"))
+    expected_critical = _count_strings(rule for episode in episodes for rule in _outcome_strings(episode, "critical_failures"))
+    if _count_rows(metrics.get("failed_rule_counts")) != expected_failed:
+        target.errors.append("dataset_metrics.failed_rule_counts does not match episode failed_rules.")
+    if _count_rows(metrics.get("critical_failure_counts")) != expected_critical:
+        target.errors.append("dataset_metrics.critical_failure_counts does not match episode critical_failures.")
+
+    _validate_dataset_family_metrics(metrics.get("task_families"), target, episodes, step_rewards, failure_modes, sft, dpo, reward_model)
+    _validate_quality_flags(metrics.get("quality_flags"), target)
+    if not _is_string_list(metrics.get("recommended_checks")):
+        target.errors.append("dataset_metrics.recommended_checks must be a list of strings.")
+
+
+def _validate_dataset_family_metrics(
+    value: Any,
+    target: ValidationTarget,
+    episodes: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
+    failure_modes: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> None:
+    if not isinstance(value, list):
+        target.errors.append("dataset_metrics.task_families must be a list.")
+        return
+    expected = _expected_dataset_family_metrics(episodes, step_rewards, failure_modes, sft, dpo, reward_model)
+    actual_families: set[str] = set()
+    for index, row in enumerate(value):
+        if not isinstance(row, dict):
+            target.errors.append(f"dataset_metrics.task_families[{index}] must be an object.")
+            continue
+        family = row.get("task_family")
+        if not isinstance(family, str) or not family:
+            target.errors.append(f"dataset_metrics.task_families[{index}].task_family must be a non-empty string.")
+            continue
+        actual_families.add(family)
+        expected_row = expected.get(family)
+        if expected_row is None:
+            target.errors.append(f"dataset_metrics.task_families[{index}] has unknown task_family {family!r}.")
+            continue
+        for field_name, expected_value in expected_row.items():
+            if row.get(field_name) != expected_value:
+                target.errors.append(
+                    f"dataset_metrics.task_families[{index}].{field_name} expected {expected_value!r}, got {row.get(field_name)!r}."
+                )
+    missing = sorted(set(expected) - actual_families)
+    if missing:
+        target.errors.append(f"dataset_metrics.task_families missing families: {missing!r}.")
+
+
+def _expected_dataset_family_metrics(
+    episodes: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
+    failure_modes: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    families = sorted(
+        {
+            str(item.get("task_family") or "unknown")
+            for source in (episodes, step_rewards, failure_modes, sft, dpo, reward_model)
+            for item in source
+            if isinstance(item, dict)
+        }
+    )
+    expected: dict[str, dict[str, Any]] = {}
+    for family in families:
+        family_episodes = [episode for episode in episodes if str(episode.get("task_family") or "unknown") == family]
+        scores = [
+            _score_value(episode.get("outcome", {}).get("score"))
+            for episode in family_episodes
+            if isinstance(episode.get("outcome"), dict)
+        ]
+        passed = sum(1 for episode in family_episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+        expected[family] = {
+            "task_family": family,
+            "episode_count": len(family_episodes),
+            "passed": passed,
+            "failed": len(family_episodes) - passed,
+            "pass_rate": round(passed / len(family_episodes), 4) if family_episodes else 0.0,
+            "average_score": _average_number(scores),
+            "step_reward_count": _count_family(step_rewards, family),
+            "failure_mode_count": _count_family(failure_modes, family),
+            "sft_count": _count_family(sft, family),
+            "dpo_count": _count_family(dpo, family),
+            "reward_model_count": _count_family(reward_model, family),
+        }
+    return expected
+
+
+def _validate_quality_flags(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, list):
+        target.errors.append("dataset_metrics.quality_flags must be a list.")
+        return
+    seen: set[str] = set()
+    for index, flag in enumerate(value):
+        if not isinstance(flag, dict):
+            target.errors.append(f"dataset_metrics.quality_flags[{index}] must be an object.")
+            continue
+        flag_id = flag.get("id")
+        if not isinstance(flag_id, str) or not flag_id:
+            target.errors.append(f"dataset_metrics.quality_flags[{index}].id must be a non-empty string.")
+        elif flag_id in seen:
+            target.errors.append(f"dataset_metrics.quality_flags[{index}].id duplicates {flag_id!r}.")
+        else:
+            seen.add(flag_id)
+        if flag.get("severity") not in {"info", "warning", "error"}:
+            target.errors.append(f"dataset_metrics.quality_flags[{index}].severity must be info, warning, or error.")
+        if not isinstance(flag.get("message"), str) or not flag.get("message"):
+            target.errors.append(f"dataset_metrics.quality_flags[{index}].message must be a non-empty string.")
+
+
+def _validate_dataset_card(path: Path, target: ValidationTarget) -> None:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        target.errors.append(f"DATASET_CARD.md could not be read: {exc}")
+        return
+    required = [
+        "# Flight Recorder Dataset Card",
+        "## Summary",
+        "## Artifact Counts",
+        "## Task Families",
+        "## Quality Flags",
+        "## Boundaries",
+    ]
+    for marker in required:
+        if marker not in text:
+            target.errors.append(f"DATASET_CARD.md missing section marker {marker!r}.")
+
+
 def _validate_preferences(preferences: list[dict[str, Any]], target: ValidationTarget, episodes: list[dict[str, Any]]) -> None:
     episode_by_id = {episode.get("episode_id"): episode for episode in episodes if isinstance(episode.get("episode_id"), str)}
     for index, preference in enumerate(preferences):
@@ -1049,6 +1280,13 @@ def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, 
     return value
 
 
+def _read_object_optional(path: Path, target: ValidationTarget, label: str, refresh_message: str) -> dict[str, Any] | None:
+    if not path.exists():
+        target.warnings.append(f"{label} is missing; {refresh_message}.")
+        return None
+    return _read_object(path, target, label)
+
+
 def _read_jsonl_objects(path: Path, target: ValidationTarget, label: str) -> list[dict[str, Any]]:
     if not path.exists():
         target.errors.append(f"{label} is missing.")
@@ -1110,6 +1348,20 @@ def _score_value(value: Any) -> int:
         return max(0, min(100, int(value)))
     except (TypeError, ValueError):
         return 0
+
+
+def _average_number(values: list[int] | list[float]) -> float:
+    return round(sum(values) / len(values), 4) if values else 0.0
+
+
+def _count_family(rows: list[dict[str, Any]], family: str) -> int:
+    return sum(1 for row in rows if isinstance(row, dict) and str(row.get("task_family") or "unknown") == family)
+
+
+def _outcome_strings(episode: dict[str, Any], field_name: str) -> list[str]:
+    outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+    values = outcome.get(field_name)
+    return values if _is_string_list(values) else []
 
 
 def _count_strings(values: Any) -> dict[str, int]:

@@ -46,8 +46,8 @@ Expected demo output:
   rollups, and recurring failed rules.
 - A training export in `runs/training_export/` with episodes, terminal rewards,
   step-level reward attribution, preference pairs, trainer-ready SFT/DPO/reward
-  model views, failure modes, curriculum metadata, and a manifest for future
-  model-improvement loops.
+  model views, failure modes, curriculum metadata, dataset quality metrics, a
+  dataset card, and a manifest for future model-improvement loops.
 
 ## Install
 
@@ -197,6 +197,10 @@ training-loop artifacts:
   rows.
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
+- `dataset_metrics.json`: export-level coverage, reward/score distribution,
+  failure pressure, and quality flags.
+- `DATASET_CARD.md`: human-readable summary of the generated dataset and its
+  boundaries.
 - `manifest.json`: export settings, counts, and caveats.
 
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
@@ -382,8 +386,9 @@ adds failed-rule attribution where the scorecard points to an event or final
 answer, carries structured `evidence_refs` into rewards, step rewards, and
 failure modes, creates preference pairs when one run clearly beats another in
 the same task family, emits trainer-ready SFT/DPO/reward-model views, emits
-failure-mode records for every failed rule, and writes a curriculum summary
-that groups failure pressure by task family and rule.
+failure-mode records for every failed rule, and writes a curriculum summary,
+dataset metrics file, and dataset card that group failure pressure, coverage,
+and training-readiness signals.
 
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.

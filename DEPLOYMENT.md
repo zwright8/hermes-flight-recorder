@@ -103,7 +103,7 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Use `flightrecorder export-rl --runs runs --out runs/training_export` when
   downstream SFT, preference, reward-model, curriculum, or RL jobs need
   deterministic episode/reward/step-reward/preference/trainer-view/failure-mode
-  artifacts.
+  artifacts plus dataset-level quality metrics and a dataset card.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --suite-summary runs/suite_summary.json --strict` before publishing artifacts
   or using them downstream.

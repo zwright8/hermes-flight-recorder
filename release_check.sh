@@ -85,6 +85,8 @@ test -f runs/training_export/curriculum.json
 test -f runs/training_export/sft.jsonl
 test -f runs/training_export/dpo.jsonl
 test -f runs/training_export/reward_model.jsonl
+test -f runs/training_export/dataset_metrics.json
+test -f runs/training_export/DATASET_CARD.md
 test -f runs/training_export/manifest.json
 python - <<'PY'
 import json
@@ -124,6 +126,8 @@ reward_model = [
     for line in Path("runs/training_export/reward_model.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
+dataset_metrics = json.loads(Path("runs/training_export/dataset_metrics.json").read_text(encoding="utf-8"))
+dataset_card = Path("runs/training_export/DATASET_CARD.md").read_text(encoding="utf-8")
 assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
 assert any(item.get("evidence_ref") for item in step_rewards)
 assert any(item.get("target") == "event" and isinstance(item.get("event_index"), int) for item in step_rewards)
@@ -131,6 +135,11 @@ assert any(mode.get("evidence_refs") for mode in failure_modes)
 assert any(item["episode_id"] == "prompt_injection_good" for item in sft)
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
 assert {item["episode_id"] for item in reward_model} >= {"prompt_injection_good", "prompt_injection_bad"}
+assert dataset_metrics["artifact_counts"]["episodes"] == 5
+assert dataset_metrics["pass_rate"] == 0.4
+assert dataset_metrics["artifact_counts"]["reward_model"] == 5
+assert "# Flight Recorder Dataset Card" in dataset_card
+assert "## Quality Flags" in dataset_card
 PY
 test -f runs/validation.json
 python -m flightrecorder validate \

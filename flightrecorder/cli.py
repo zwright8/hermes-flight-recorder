@@ -393,7 +393,8 @@ def cmd_export_rl(args: argparse.Namespace) -> int:
         f"step_rewards={manifest['step_reward_count']} "
         f"preferences={manifest['preference_count']} failure_modes={manifest['failure_mode_count']} "
         f"sft={manifest['sft_count']} dpo={manifest['dpo_count']} "
-        f"reward_model={manifest['reward_model_count']} out={args.out}"
+        f"reward_model={manifest['reward_model_count']} "
+        f"quality_flags={manifest['quality_flag_count']} out={args.out}"
     )
     return 0
 
@@ -760,6 +761,7 @@ def _run_suite_summary(
             "sft_count": training_manifest.get("sft_count"),
             "dpo_count": training_manifest.get("dpo_count"),
             "reward_model_count": training_manifest.get("reward_model_count"),
+            "quality_flag_count": training_manifest.get("quality_flag_count"),
         }
     if validation_summary is not None:
         summary["validation"] = {

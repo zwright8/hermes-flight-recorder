@@ -137,6 +137,8 @@ The generated training export gives future model-improvement loops:
   failing trace,
 - trainer-ready SFT, DPO, and reward-model views over the canonical evidence,
 - six failed-rule failure-mode records across the three failing traces,
+- dataset-level metrics and a dataset card summarizing coverage, quality flags,
+  and training-readiness boundaries,
 - structured evidence refs for event/final-answer/episode attribution,
 - one curriculum summary grouping failure pressure by task family and rule.
 
@@ -181,9 +183,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
    `flightrecorder compare-suite`.
 9. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
 10. Export episodes, rewards, step rewards, preference pairs, trainer-ready
-   SFT/DPO/reward-model views, failure modes, and curriculum metadata with
-   `flightrecorder export-rl` for future SFT, DPO, reward-modeling, or RL
-   pipelines.
+   SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
+   and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
+   reward-modeling, or RL pipelines.
 11. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
@@ -270,8 +272,8 @@ Demo evidence:
 - `flightrecorder check-scenarios` emits machine-readable scenario contract
   validation before scenarios are used as benchmark inputs.
 - `flightrecorder export-rl` emits episode, reward, step-reward, preference,
-  SFT, DPO, reward-model, failure-mode, curriculum, and manifest artifacts for
-  future training loops.
+  SFT, DPO, reward-model, failure-mode, dataset-metrics, dataset-card,
+  curriculum, and manifest artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
   internally consistent, including suite-summary metrics.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
@@ -326,8 +328,9 @@ evidence.
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards, step-level attribution rows, chosen/rejected pairs,
 trainer-ready SFT/DPO/reward-model rows, failure-mode rows, and curriculum
-metadata, so training code can consume the evidence without scraping HTML
-reports.
+metadata, plus a dataset card that shows whether the export has enough positive
+examples, negative pressure, preferences, and attribution to be useful. Training
+code can consume the evidence without scraping HTML reports.
 
 Then I run `flightrecorder validate --strict`, which checks the data contracts:
 scorecards match their rules, rewards link back to episodes, step rewards point

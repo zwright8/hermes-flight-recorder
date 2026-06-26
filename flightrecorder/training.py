@@ -19,6 +19,7 @@ RL_CURRICULUM_SCHEMA_VERSION = "hfr.rl.curriculum.v1"
 RL_SFT_SCHEMA_VERSION = "hfr.rl.sft.v1"
 RL_DPO_SCHEMA_VERSION = "hfr.rl.dpo.v1"
 RL_REWARD_MODEL_SCHEMA_VERSION = "hfr.rl.reward_model.v1"
+RL_DATASET_METRICS_SCHEMA_VERSION = "hfr.rl.dataset_metrics.v1"
 
 REWARD_SCALES = {"score", "binary", "signed"}
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
@@ -68,6 +69,17 @@ def export_rl_dataset(
     sft = _sft_records(episodes)
     dpo = _dpo_records(preferences)
     reward_model = _reward_model_records(episodes)
+    dataset_metrics = _dataset_metrics(
+        episodes,
+        rewards,
+        step_rewards,
+        preferences,
+        failure_modes,
+        sft,
+        dpo,
+        reward_model,
+        reward_scale,
+    )
 
     paths = {
         "episodes": target / "episodes.jsonl",
@@ -79,6 +91,8 @@ def export_rl_dataset(
         "sft": target / "sft.jsonl",
         "dpo": target / "dpo.jsonl",
         "reward_model": target / "reward_model.jsonl",
+        "dataset_metrics": target / "dataset_metrics.json",
+        "dataset_card": target / "DATASET_CARD.md",
         "manifest": target / "manifest.json",
     }
     _write_jsonl(paths["episodes"], episodes)
@@ -90,6 +104,7 @@ def export_rl_dataset(
     _write_jsonl(paths["sft"], sft)
     _write_jsonl(paths["dpo"], dpo)
     _write_jsonl(paths["reward_model"], reward_model)
+    _write_json(paths["dataset_metrics"], dataset_metrics)
 
     manifest = {
         "schema_version": RL_MANIFEST_SCHEMA_VERSION,
@@ -108,6 +123,7 @@ def export_rl_dataset(
         "sft_count": len(sft),
         "dpo_count": len(dpo),
         "reward_model_count": len(reward_model),
+        "quality_flag_count": len(dataset_metrics.get("quality_flags", [])),
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "notes": [
@@ -117,9 +133,11 @@ def export_rl_dataset(
             "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
             "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
             "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
+            "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
+    _write_text(paths["dataset_card"], _dataset_card(manifest, dataset_metrics))
     _write_json(paths["manifest"], manifest)
     return manifest
 
@@ -531,6 +549,244 @@ def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]
     return rows
 
 
+def _dataset_metrics(
+    episodes: list[dict[str, Any]],
+    rewards: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
+    preferences: list[dict[str, Any]],
+    failure_modes: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+    reward_scale: str,
+) -> dict[str, Any]:
+    scores = [_score_value(episode.get("outcome", {}).get("score")) for episode in episodes if isinstance(episode.get("outcome"), dict)]
+    rewards_values = [_numeric_value(reward.get("reward")) for reward in rewards]
+    passed = sum(1 for episode in episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+    failed = len(episodes) - passed
+    artifact_counts = {
+        "episodes": len(episodes),
+        "rewards": len(rewards),
+        "step_rewards": len(step_rewards),
+        "preferences": len(preferences),
+        "failure_modes": len(failure_modes),
+        "sft": len(sft),
+        "dpo": len(dpo),
+        "reward_model": len(reward_model),
+    }
+    metrics = {
+        "schema_version": RL_DATASET_METRICS_SCHEMA_VERSION,
+        "reward_scale": reward_scale,
+        "artifact_counts": artifact_counts,
+        "episode_count": len(episodes),
+        "passed": passed,
+        "failed": failed,
+        "pass_rate": round(passed / len(episodes), 4) if episodes else 0.0,
+        "average_score": _average(scores),
+        "min_score": min(scores) if scores else None,
+        "max_score": max(scores) if scores else None,
+        "average_reward": _average(rewards_values),
+        "min_reward": min(rewards_values) if rewards_values else None,
+        "max_reward": max(rewards_values) if rewards_values else None,
+        "failed_rule_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "failed_rules")),
+        "critical_failure_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "critical_failures")),
+        "task_families": _dataset_family_metrics(episodes, step_rewards, failure_modes, sft, dpo, reward_model),
+        "quality_flags": _quality_flags(episodes, step_rewards, preferences, sft, dpo, reward_model),
+        "recommended_checks": [
+            "Review scenario policies before treating labels as training rewards.",
+            "Inspect failure-mode and step-reward coverage before credit-assignment experiments.",
+            "Use validation output and the HTML reports alongside trainer-ready JSONL views.",
+        ],
+    }
+    return metrics
+
+
+def _dataset_family_metrics(
+    episodes: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
+    failure_modes: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    families = sorted(
+        {
+            str(item.get("task_family") or "unknown")
+            for source in (episodes, step_rewards, failure_modes, sft, dpo, reward_model)
+            for item in source
+            if isinstance(item, dict)
+        }
+    )
+    rows: list[dict[str, Any]] = []
+    for family in families:
+        family_episodes = [episode for episode in episodes if str(episode.get("task_family") or "unknown") == family]
+        scores = [
+            _score_value(episode.get("outcome", {}).get("score"))
+            for episode in family_episodes
+            if isinstance(episode.get("outcome"), dict)
+        ]
+        passed = sum(1 for episode in family_episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+        failed = len(family_episodes) - passed
+        rows.append(
+            {
+                "task_family": family,
+                "episode_count": len(family_episodes),
+                "passed": passed,
+                "failed": failed,
+                "pass_rate": round(passed / len(family_episodes), 4) if family_episodes else 0.0,
+                "average_score": _average(scores),
+                "step_reward_count": _count_family(step_rewards, family),
+                "failure_mode_count": _count_family(failure_modes, family),
+                "sft_count": _count_family(sft, family),
+                "dpo_count": _count_family(dpo, family),
+                "reward_model_count": _count_family(reward_model, family),
+            }
+        )
+    return rows
+
+
+def _quality_flags(
+    episodes: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
+    preferences: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    flags: list[dict[str, str]] = []
+    passed = sum(1 for episode in episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+    failed = len(episodes) - passed
+    families = {str(episode.get("task_family") or "unknown") for episode in episodes}
+    if not episodes:
+        flags.append(_quality_flag("empty_export", "error", "No episodes were exported."))
+    if passed == 0:
+        flags.append(_quality_flag("no_passing_episodes", "warning", "No passing episodes are available for positive references or SFT."))
+    if failed == 0:
+        flags.append(_quality_flag("no_failing_episodes", "warning", "No failing episodes are available for negative reward analysis."))
+    if not preferences:
+        flags.append(_quality_flag("no_preferences", "warning", "No preference pairs were generated within task families."))
+    if preferences and not dpo:
+        flags.append(_quality_flag("missing_dpo_view", "error", "Preference pairs exist, but the DPO view is empty."))
+    if passed and not sft:
+        flags.append(_quality_flag("missing_sft_view", "error", "Passing episodes exist, but the SFT view is empty."))
+    if episodes and len(reward_model) != len(episodes):
+        flags.append(_quality_flag("reward_model_coverage", "error", "Reward-model rows do not cover every episode."))
+    if not step_rewards and failed:
+        flags.append(_quality_flag("no_step_rewards", "warning", "Failing episodes exist, but no step-level attribution rows were exported."))
+    if len(families) == 1:
+        flags.append(_quality_flag("single_task_family", "info", "Only one task family is represented; broaden coverage before generalizing."))
+    return flags
+
+
+def _quality_flag(flag_id: str, severity: str, message: str) -> dict[str, str]:
+    return {"id": flag_id, "severity": severity, "message": message}
+
+
+def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
+    rows = [
+        "# Flight Recorder Dataset Card",
+        "",
+        "This card summarizes a Flight Recorder training export. It is generated from the same canonical artifacts as the JSONL views.",
+        "",
+        "## Summary",
+        "",
+        f"- Source runs: `{manifest.get('source_runs_dir')}`",
+        f"- Reward scale: `{metrics.get('reward_scale')}`",
+        f"- Episodes: {metrics.get('episode_count')} ({metrics.get('passed')} passed, {metrics.get('failed')} failed)",
+        f"- Pass rate: {metrics.get('pass_rate')}",
+        f"- Average score: {metrics.get('average_score')}",
+        f"- Average reward: {metrics.get('average_reward')}",
+        "",
+        "## Artifact Counts",
+        "",
+        "| Artifact | Count |",
+        "| --- | ---: |",
+    ]
+    for name, count in sorted((metrics.get("artifact_counts") or {}).items()):
+        rows.append(f"| `{_md_cell(name)}` | {count} |")
+    rows.extend(
+        [
+            "",
+            "## Task Families",
+            "",
+            "| Family | Episodes | Passed | Failed | Avg Score | Step Rewards | Failures | SFT | DPO | Reward Model |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for family in metrics.get("task_families", []):
+        rows.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(str(family.get("task_family") or "unknown")),
+                    str(family.get("episode_count")),
+                    str(family.get("passed")),
+                    str(family.get("failed")),
+                    str(family.get("average_score")),
+                    str(family.get("step_reward_count")),
+                    str(family.get("failure_mode_count")),
+                    str(family.get("sft_count")),
+                    str(family.get("dpo_count")),
+                    str(family.get("reward_model_count")),
+                ]
+            )
+            + " |"
+        )
+    rows.extend(["", "## Failure Pressure", "", "| Rule | Count |", "| --- | ---: |"])
+    failed_rule_counts = metrics.get("failed_rule_counts") or []
+    if failed_rule_counts:
+        for item in failed_rule_counts:
+            rows.append(f"| `{_md_cell(str(item.get('id') or 'unknown'))}` | {item.get('count')} |")
+    else:
+        rows.append("| None | 0 |")
+    rows.extend(["", "## Quality Flags", ""])
+    quality_flags = metrics.get("quality_flags") or []
+    if quality_flags:
+        for flag in quality_flags:
+            rows.append(f"- **{_md_cell(str(flag.get('severity') or 'unknown'))}** `{_md_cell(str(flag.get('id') or 'flag'))}`: {_md_cell(str(flag.get('message') or ''))}")
+    else:
+        rows.append("- No dataset-level quality flags were emitted.")
+    rows.extend(
+        [
+            "",
+            "## Boundaries",
+            "",
+            "- These artifacts are deterministic eval evidence and trainer-ready views, not a trainer.",
+            "- Reward labels are only as strong as the scenario policies and observable trace evidence.",
+            "- Review HTML reports and scorecards before using exported rows for model updates.",
+            "",
+        ]
+    )
+    return "\n".join(rows)
+
+
+def _average(values: list[int] | list[float]) -> float:
+    return round(sum(values) / len(values), 4) if values else 0.0
+
+
+def _count_family(rows: list[dict[str, Any]], family: str) -> int:
+    return sum(1 for row in rows if str(row.get("task_family") or "unknown") == family)
+
+
+def _count_rows(values: Any) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for value in values:
+        if not isinstance(value, str) or not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    return [{"id": key, "count": counts[key]} for key in sorted(counts)]
+
+
+def _outcome_string_list(episode: dict[str, Any], field_name: str) -> list[str]:
+    outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+    values = outcome.get(field_name)
+    return values if isinstance(values, list) and all(isinstance(item, str) for item in values) else []
+
+
+def _md_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")
+
+
 def _messages(prompt: str, response: str) -> list[dict[str, str]]:
     return [
         {"role": "user", "content": prompt},
@@ -734,3 +990,8 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n")
+
+
+def _write_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload.rstrip() + "\n", encoding="utf-8")

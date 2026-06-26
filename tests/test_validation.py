@@ -196,6 +196,26 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("manifest.dpo_count", errors)
             self.assertIn("dpo.jsonl missing preference pairs", errors)
 
+    def test_validate_rejects_dataset_metrics_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            metrics_path = export / "dataset_metrics.json"
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+            metrics["pass_rate"] = 1.0
+            metrics_path.write_text(json.dumps(metrics), encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("dataset_metrics.pass_rate", errors)
+
     def test_validate_warns_on_legacy_training_export_without_trainer_views(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -205,11 +225,13 @@ class ValidationTests(unittest.TestCase):
             run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
             for name in ("sft", "dpo", "reward_model"):
                 (export / f"{name}.jsonl").unlink()
+            (export / "dataset_metrics.json").unlink()
+            (export / "DATASET_CARD.md").unlink()
             manifest_path = export / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            for name in ("sft", "dpo", "reward_model"):
+            for name in ("sft", "dpo", "reward_model", "dataset_metrics", "dataset_card"):
                 manifest["outputs"].pop(name, None)
-            for name in ("sft_count", "dpo_count", "reward_model_count"):
+            for name in ("sft_count", "dpo_count", "reward_model_count", "quality_flag_count"):
                 manifest.pop(name, None)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -222,6 +244,8 @@ class ValidationTests(unittest.TestCase):
             warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
             self.assertIn("sft.jsonl is missing", warnings)
             self.assertIn("manifest.sft_count is missing", warnings)
+            self.assertIn("dataset_metrics.json is missing", warnings)
+            self.assertIn("manifest.quality_flag_count is missing", warnings)
 
     def test_validate_accepts_suite_summary_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:

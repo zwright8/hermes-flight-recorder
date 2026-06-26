@@ -81,6 +81,10 @@ The export directory contains:
   rows.
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
+- `dataset_metrics.json`: machine-readable export coverage, reward/score
+  distribution, failure pressure, and quality flags.
+- `DATASET_CARD.md`: human-readable dataset summary for review before training
+  jobs consume the JSONL views.
 - `manifest.json`: generation settings, counts, output paths, and caveats.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
@@ -89,7 +93,8 @@ Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
 links, step-reward event indexes, preference references, failure-mode links,
-curriculum counts, and trainer-ready view rows are internally consistent.
+curriculum counts, trainer-ready view rows, dataset metrics, and dataset-card
+sections are internally consistent.
 
 ## Episode Records
 
@@ -178,6 +183,22 @@ These files are convenience views, not new labels. Validation checks them back
 against `episodes.jsonl` and `preferences.jsonl` so downstream jobs can consume
 simple rows without losing the audit trail.
 
+## Dataset Metrics And Card
+
+`dataset_metrics.json` is the export-level readiness summary. It includes:
+
+- artifact counts for every generated JSONL/JSON view,
+- pass/fail balance, score distribution, reward distribution, and pass rate,
+- failed-rule and critical-failure counts,
+- task-family coverage with SFT/DPO/reward-model/step-reward counts,
+- quality flags such as missing positives, missing negatives, missing
+  preferences, missing step attribution, or single-family coverage.
+
+`DATASET_CARD.md` renders the same signal for human review. Treat it as the
+first checkpoint before handing an export to an SFT, DPO, reward-model, or RL
+job. The card helps answer: "Do we have enough positive examples, negative
+pressure, task-family coverage, and attribution to learn anything meaningful?"
+
 ## Failure Modes And Curriculum
 
 `failure_modes.jsonl` makes the negative signal explicit. Each row links a
@@ -228,6 +249,8 @@ reward_model = [
     json.loads(line)
     for line in Path("runs/training_export/reward_model.jsonl").read_text().splitlines()
 ]
+dataset_metrics = json.loads(Path("runs/training_export/dataset_metrics.json").read_text())
+dataset_card = Path("runs/training_export/DATASET_CARD.md").read_text()
 failure_modes = [
     json.loads(line)
     for line in Path("runs/training_export/failure_modes.jsonl").read_text().splitlines()
@@ -240,6 +263,7 @@ Recommended first uses:
 - filter passing episodes into SFT candidates,
 - convert preference records into chosen/rejected pairs,
 - feed the trainer-ready SFT/DPO/reward-model views to downstream pipelines,
+- review `dataset_metrics.json` and `DATASET_CARD.md` before launching training,
 - consume step rewards for event/final-answer credit-assignment experiments,
 - train a small reward model on scorecard-derived labels,
 - build failure-mode dashboards or curricula from explicit failed-rule rows,
