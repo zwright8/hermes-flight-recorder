@@ -122,11 +122,22 @@ flightrecorder trainer-preflight \
   --out runs/trainer_preflight.json
 
 flightrecorder validate --trainer-preflight runs/trainer_preflight.json --strict
+
+flightrecorder trainer-launch-check \
+  --preflight runs/trainer_preflight.json \
+  --require-gate training_gate \
+  --require-gate compare_gate \
+  --out runs/trainer_launch_check.json
+
+flightrecorder validate --trainer-launch-check runs/trainer_launch_check.json --strict
 ```
 
-The preflight manifest is still evidence plumbing, not a trainer. It does not
-execute the command or update weights; it gives CI and trainer launchers a
-single pass/fail contract to enforce before they run.
+The preflight manifest and launch check are still evidence plumbing, not a
+trainer. They do not execute the command or update weights. `trainer-preflight`
+creates the signed-off evidence contract; `trainer-launch-check` is the
+consumer-side check an external training launcher can call immediately before it
+runs. It re-validates the preflight hashes and prints the approved command only
+when the launch contract still passes.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
@@ -561,9 +572,10 @@ the export and manifest artifact fingerprints by default; set
 should also block a training handoff.
 
 After `gate-export` and any comparison or reviewed gates pass, run
-`trainer-preflight` and require `recommendation: launch_allowed` before invoking
-an external trainer. This closes the handoff loop: the trainer consumes only
-exports that are tied to passed gates and current artifact hashes.
+`trainer-preflight`, then have the external launcher run `trainer-launch-check`
+and require `recommendation: launch_allowed` before invoking a trainer. This
+closes the handoff loop: the trainer consumes only exports that are tied to
+passed gates and current artifact hashes.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

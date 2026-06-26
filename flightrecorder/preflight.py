@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 TRAINER_PREFLIGHT_SCHEMA_VERSION = "hfr.trainer_preflight.v1"
+TRAINER_LAUNCH_CHECK_SCHEMA_VERSION = "hfr.trainer_launch_check.v1"
 
 _TRAINING_EXPORT_FILES = (
     "manifest.json",
@@ -137,6 +138,94 @@ def build_trainer_preflight(
     return preflight
 
 
+def build_trainer_launch_check(
+    *,
+    preflight_path: str | Path,
+    preflight: dict[str, Any],
+    validation_summary: dict[str, Any],
+    require_gates: list[str] | None = None,
+    require_metadata: dict[str, str] | None = None,
+    preserve_paths: bool = False,
+) -> dict[str, Any]:
+    """Build a side-effect-free trainer launch decision from a preflight artifact."""
+    if not isinstance(preflight, dict):
+        raise TrainerPreflightError(f"trainer preflight must contain a JSON object: {preflight_path}")
+
+    checks: list[dict[str, Any]] = []
+    display_preflight_path = _display_path(Path(preflight_path), preserve_paths)
+    validation = _validation_record(validation_summary)
+    gates = _launch_gate_records(preflight.get("gates"))
+    metadata = _metadata(preflight.get("metadata") if isinstance(preflight.get("metadata"), dict) else None)
+    required_gates = list(dict.fromkeys(require_gates or []))
+    required_metadata = _metadata(require_metadata)
+    command = _approved_command_record(preflight.get("trainer_command"))
+
+    _add_bool_check(checks, "preflight_validation_passed", validation["passed"], {"preflight": display_preflight_path})
+    _add_bool_check(
+        checks,
+        "preflight_schema_supported",
+        preflight.get("schema_version") == TRAINER_PREFLIGHT_SCHEMA_VERSION,
+        {"schema_version": str(preflight.get("schema_version") or "")},
+    )
+    _add_bool_check(checks, "preflight_passed", preflight.get("passed") is True, {"preflight": display_preflight_path})
+    _add_bool_check(
+        checks,
+        "recommendation_launch_allowed",
+        preflight.get("recommendation") == "launch_allowed",
+        {"recommendation": str(preflight.get("recommendation") or "")},
+    )
+    _add_bool_check(
+        checks,
+        "trainer_command_ready",
+        bool(command["provided"] and command["parseable"] and command["argv"]),
+        {"provided": str(command["provided"]).lower(), "parseable": str(command["parseable"]).lower()},
+    )
+    for gate_id in required_gates:
+        matching_gate = next((gate for gate in gates if gate["id"] == gate_id), None)
+        _add_bool_check(checks, "required_gate_present", matching_gate is not None, {"gate": gate_id})
+        _add_bool_check(
+            checks,
+            "required_gate_passed",
+            bool(matching_gate and matching_gate.get("passed") is True),
+            {"gate": gate_id},
+        )
+    for key, expected in required_metadata.items():
+        actual = metadata.get(key)
+        _add_bool_check(
+            checks,
+            "required_metadata_matches",
+            actual == expected,
+            {"key": key, "expected": expected, "actual": "" if actual is None else actual},
+        )
+
+    failed_checks = sum(1 for check in checks if check.get("passed") is False)
+    passed = failed_checks == 0
+    command["approved"] = passed
+    artifacts = preflight.get("artifacts") if isinstance(preflight.get("artifacts"), dict) else {}
+    return {
+        "schema_version": TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
+        "preflight_path": display_preflight_path,
+        "passed": passed,
+        "readiness": "ready" if passed else "blocked",
+        "recommendation": "launch_allowed" if passed else "block_launch",
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+        "checks": checks,
+        "validation": validation,
+        "required_gates": required_gates,
+        "required_metadata": required_metadata,
+        "gates": gates,
+        "gate_count": len(gates),
+        "passed_gate_count": sum(1 for gate in gates if gate.get("passed") is True),
+        "artifacts": {"count": len(artifacts), "names": sorted(str(name) for name in artifacts.keys())},
+        "approved_command": command,
+        "notes": [
+            "Trainer launch check validates the preflight and emits the approved command; it does not execute it.",
+            "A ready launch check means the preflight artifact, referenced hashes, required gates, and required metadata passed.",
+        ],
+    }
+
+
 def _gate_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
     gate = _read_json_required(path, "gate")
     schema_version = gate.get("schema_version") if isinstance(gate.get("schema_version"), str) else "unknown"
@@ -197,6 +286,61 @@ def _trainer_command_record(value: str | None) -> dict[str, Any]:
     except ValueError:
         argv = []
     return {"provided": True, "raw": value, "argv": argv, "parseable": bool(argv)}
+
+
+def _approved_command_record(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {"approved": False, "provided": False, "raw": "", "argv": [], "parseable": False, "shell": ""}
+    argv = value.get("argv") if isinstance(value.get("argv"), list) else []
+    argv = [item for item in argv if isinstance(item, str)]
+    raw = value.get("raw") if isinstance(value.get("raw"), str) else ""
+    parseable = bool(value.get("parseable")) if "parseable" in value else bool(argv)
+    return {
+        "approved": False,
+        "provided": value.get("provided") is True,
+        "raw": raw,
+        "argv": argv,
+        "parseable": parseable,
+        "shell": shlex.join(argv) if argv else raw,
+    }
+
+
+def _validation_record(summary: dict[str, Any]) -> dict[str, Any]:
+    targets = summary.get("targets") if isinstance(summary.get("targets"), list) else []
+    errors: list[str] = []
+    warnings: list[str] = []
+    for target in targets:
+        if not isinstance(target, dict):
+            continue
+        errors.extend(str(error) for error in target.get("errors", []) if isinstance(error, str))
+        warnings.extend(str(warning) for warning in target.get("warnings", []) if isinstance(warning, str))
+    return {
+        "passed": summary.get("passed") is True,
+        "strict": summary.get("strict") is True,
+        "target_count": _int_value(summary.get("target_count")),
+        "error_count": _int_value(summary.get("error_count")),
+        "warning_count": _int_value(summary.get("warning_count")),
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
+def _launch_gate_records(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    records: list[dict[str, Any]] = []
+    for gate in value:
+        if not isinstance(gate, dict):
+            continue
+        records.append(
+            {
+                "id": str(gate.get("id") or ""),
+                "path": str(gate.get("path") or ""),
+                "schema_version": str(gate.get("schema_version") or ""),
+                "passed": gate.get("passed") is True,
+            }
+        )
+    return records
 
 
 def _add_bool_check(checks: list[dict[str, Any]], check_id: str, passed: bool, scope: dict[str, str]) -> None:

@@ -239,6 +239,11 @@ flightrecorder trainer-preflight \
   --require-gate training_gate \
   --trainer-command "python train.py --dataset runs/training_export" \
   --out runs/trainer_preflight.json
+
+flightrecorder trainer-launch-check \
+  --preflight runs/trainer_preflight.json \
+  --require-gate training_gate \
+  --print-command
 ```
 
 For production suites, commit a stricter gate policy and point CI at it:
@@ -734,7 +739,20 @@ flightrecorder trainer-preflight \
   --out runs/trainer_preflight.json
 
 flightrecorder validate --trainer-preflight runs/trainer_preflight.json --strict
+
+flightrecorder trainer-launch-check \
+  --preflight runs/trainer_preflight.json \
+  --require-gate training_gate \
+  --require-gate compare_gate \
+  --out runs/trainer_launch_check.json
+
+flightrecorder validate --trainer-launch-check runs/trainer_launch_check.json --strict
 ```
+
+`trainer-launch-check` is the consumer-side guard for an external trainer
+wrapper. It re-validates the preflight, checks current artifact hashes, enforces
+required gates and metadata, and prints the shell-escaped trainer command only
+when launch is approved. It still does not execute training.
 
 ## Scoring Rules
 

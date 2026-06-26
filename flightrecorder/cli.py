@@ -35,7 +35,7 @@ from .compare_gate import (
 from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
-from .preflight import TrainerPreflightError, build_trainer_preflight
+from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .repair import RepairQueueError, build_repair_queue
 from .report import write_index, write_report
 from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
@@ -612,6 +612,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
         trainer_preflight_paths=args.trainer_preflight,
+        trainer_launch_check_paths=args.trainer_launch_check,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -973,6 +974,35 @@ def cmd_trainer_preflight(args: argparse.Namespace) -> int:
     return 0 if preflight["passed"] else 1
 
 
+def cmd_trainer_launch_check(args: argparse.Namespace) -> int:
+    preflight_path = Path(args.preflight)
+    preflight = _read_json(preflight_path)
+    if not isinstance(preflight, dict):
+        raise TrainerPreflightError(f"trainer preflight must contain a JSON object: {preflight_path}")
+    validation_summary = validate_artifacts(trainer_preflight_paths=[preflight_path], strict=args.strict)
+    launch_check = build_trainer_launch_check(
+        preflight_path=preflight_path,
+        preflight=preflight,
+        validation_summary=validation_summary,
+        require_gates=args.require_gate,
+        require_metadata=_metadata_options(args.require_metadata),
+        preserve_paths=args.preserve_paths,
+    )
+    if args.out:
+        _write_json(Path(args.out), launch_check)
+    if args.print_command and launch_check["passed"]:
+        print(launch_check["approved_command"]["shell"])
+    elif args.out:
+        print(
+            f"{'READY' if launch_check['passed'] else 'BLOCKED'} trainer-launch-check "
+            f"checks={launch_check['check_count'] - launch_check['failed_check_count']}/{launch_check['check_count']} "
+            f"out={args.out}"
+        )
+    else:
+        print(json.dumps(launch_check, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if launch_check["passed"] else 1
+
+
 def cmd_export_rl(args: argparse.Namespace) -> int:
     metadata = _metadata_options(args.metadata)
     manifest = export_rl_dataset(
@@ -1257,6 +1287,12 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
     validate.add_argument("--trainer-preflight", action="append", default=[], help="Validate one trainer_preflight.json; may be repeated")
+    validate.add_argument(
+        "--trainer-launch-check",
+        action="append",
+        default=[],
+        help="Validate one trainer_launch_check.json; may be repeated",
+    )
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -1595,6 +1631,26 @@ def _parser() -> argparse.ArgumentParser:
         help="Attach launch metadata to the preflight manifest; may be repeated",
     )
     trainer_preflight.set_defaults(func=cmd_trainer_preflight)
+
+    trainer_launch_check = subparsers.add_parser(
+        "trainer-launch-check",
+        help="Validate a trainer preflight and emit the approved command without executing it",
+    )
+    trainer_launch_check.add_argument("--preflight", required=True, help="trainer_preflight.json to verify before trainer launch")
+    trainer_launch_check.add_argument("--out", help="Write trainer launch-check JSON to this path")
+    trainer_launch_check.add_argument("--require-gate", action="append", default=[], help="Require this preflight gate id to be present and passed")
+    trainer_launch_check.add_argument(
+        "--require-metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Require this metadata key/value from the preflight manifest; may be repeated",
+    )
+    trainer_launch_check.add_argument("--strict", action="store_true", help="Treat preflight validation warnings as launch blockers")
+    trainer_launch_check.add_argument("--print-command", action="store_true", help="Print only the shell-escaped approved command when launch is allowed")
+    trainer_launch_check.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in launch-check output")
+    trainer_launch_check.set_defaults(func=cmd_trainer_launch_check)
 
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")

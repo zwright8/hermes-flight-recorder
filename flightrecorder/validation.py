@@ -15,7 +15,7 @@ from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
-from .preflight import TRAINER_PREFLIGHT_SCHEMA_VERSION
+from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
 from .review import (
     REVIEW_ITEM_SCHEMA_VERSION,
@@ -87,6 +87,7 @@ def validate_artifacts(
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
+    trainer_launch_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -118,6 +119,8 @@ def validate_artifacts(
         targets.append(validate_evidence_bundle(evidence_bundle_path))
     for trainer_preflight_path in trainer_preflight_paths or []:
         targets.append(validate_trainer_preflight(trainer_preflight_path))
+    for trainer_launch_check_path in trainer_launch_check_paths or []:
+        targets.append(validate_trainer_launch_check(trainer_launch_check_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -460,6 +463,16 @@ def validate_trainer_preflight(path: str | Path) -> ValidationTarget:
     preflight = _read_object(preflight_path, target, "trainer_preflight.json")
     if preflight is not None:
         _validate_trainer_preflight(preflight, target, preflight_path)
+    return target
+
+
+def validate_trainer_launch_check(path: str | Path) -> ValidationTarget:
+    """Validate a trainer launch-check consumer artifact."""
+    launch_check_path = Path(path)
+    target = ValidationTarget("trainer_launch_check", str(launch_check_path))
+    launch_check = _read_object(launch_check_path, target, "trainer_launch_check.json")
+    if launch_check is not None:
+        _validate_trainer_launch_check(launch_check, target)
     return target
 
 
@@ -3637,6 +3650,128 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
             "artifact_count": len(artifacts),
         }
     )
+
+
+def _validate_trainer_launch_check(launch_check: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(launch_check, "schema_version", TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, target)
+    if not isinstance(launch_check.get("preflight_path"), str) or not launch_check.get("preflight_path"):
+        target.errors.append("trainer_launch_check.preflight_path must be a non-empty string.")
+    if not isinstance(launch_check.get("passed"), bool):
+        target.errors.append("trainer_launch_check.passed must be a boolean.")
+    checks = launch_check.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("trainer_launch_check.checks must be a list.")
+        checks = []
+    failed_checks = _validate_handoff_checks(checks, target, "trainer_launch_check.checks")
+    if launch_check.get("check_count") != len(checks):
+        target.errors.append(f"trainer_launch_check.check_count expected {len(checks)}, got {launch_check.get('check_count')!r}.")
+    if launch_check.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"trainer_launch_check.failed_check_count expected {failed_checks}, got {launch_check.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(launch_check.get("passed"), bool) and launch_check.get("passed") != expected_passed:
+        target.errors.append("trainer_launch_check.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "launch_allowed" if expected_passed else "block_launch"
+    if launch_check.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"trainer_launch_check.readiness expected {expected_readiness!r}, got {launch_check.get('readiness')!r}."
+        )
+    if launch_check.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"trainer_launch_check.recommendation expected {expected_recommendation!r}, got {launch_check.get('recommendation')!r}."
+        )
+    if not _is_string_list(launch_check.get("required_gates")):
+        target.errors.append("trainer_launch_check.required_gates must be a list of strings.")
+    required_metadata = launch_check.get("required_metadata")
+    if not isinstance(required_metadata, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in required_metadata.items()):
+        target.errors.append("trainer_launch_check.required_metadata must be an object of string values.")
+    gates = launch_check.get("gates")
+    if not isinstance(gates, list):
+        target.errors.append("trainer_launch_check.gates must be a list.")
+        gates = []
+    passed_gates = 0
+    for index, gate in enumerate(gates):
+        if _validate_launch_check_gate(gate, target, f"trainer_launch_check.gates[{index}]"):
+            passed_gates += 1
+    if launch_check.get("gate_count") != len(gates):
+        target.errors.append(f"trainer_launch_check.gate_count expected {len(gates)}, got {launch_check.get('gate_count')!r}.")
+    if launch_check.get("passed_gate_count") != passed_gates:
+        target.errors.append(
+            f"trainer_launch_check.passed_gate_count expected {passed_gates}, got {launch_check.get('passed_gate_count')!r}."
+        )
+    _validate_launch_validation_record(launch_check.get("validation"), target)
+    _validate_launch_artifacts_summary(launch_check.get("artifacts"), target)
+    _validate_approved_command(launch_check.get("approved_command"), target, expected_passed)
+    if not _is_string_list(launch_check.get("notes")):
+        target.errors.append("trainer_launch_check.notes must be a list of strings.")
+    target.details.update(
+        {
+            "readiness": launch_check.get("readiness"),
+            "gate_count": len(gates),
+            "failed_check_count": failed_checks,
+        }
+    )
+
+
+def _validate_launch_check_gate(gate: Any, target: ValidationTarget, label: str) -> bool:
+    if not isinstance(gate, dict):
+        target.errors.append(f"{label} must be an object.")
+        return False
+    for field_name in ("id", "path", "schema_version"):
+        if not isinstance(gate.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if not isinstance(gate.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    return gate.get("passed") is True
+
+
+def _validate_launch_validation_record(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_launch_check.validation must be an object.")
+        return
+    for field_name in ("passed", "strict"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_launch_check.validation.{field_name} must be a boolean.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"trainer_launch_check.validation.{field_name} must be a non-negative integer.")
+    for field_name in ("errors", "warnings"):
+        if not _is_string_list(value.get(field_name)):
+            target.errors.append(f"trainer_launch_check.validation.{field_name} must be a list of strings.")
+
+
+def _validate_launch_artifacts_summary(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_launch_check.artifacts must be an object.")
+        return
+    if not _is_non_negative_int(value.get("count")):
+        target.errors.append("trainer_launch_check.artifacts.count must be a non-negative integer.")
+    names = value.get("names")
+    if not _is_string_list(names):
+        target.errors.append("trainer_launch_check.artifacts.names must be a list of strings.")
+    elif _is_non_negative_int(value.get("count")) and value.get("count") != len(names):
+        target.errors.append(f"trainer_launch_check.artifacts.count expected {len(names)}, got {value.get('count')!r}.")
+
+
+def _validate_approved_command(command: Any, target: ValidationTarget, expected_approved: bool) -> None:
+    if not isinstance(command, dict):
+        target.errors.append("trainer_launch_check.approved_command must be an object.")
+        return
+    for field_name in ("approved", "provided", "parseable"):
+        if not isinstance(command.get(field_name), bool):
+            target.errors.append(f"trainer_launch_check.approved_command.{field_name} must be a boolean.")
+    if isinstance(command.get("approved"), bool) and command.get("approved") != expected_approved:
+        target.errors.append("trainer_launch_check.approved_command.approved must match launch check passed.")
+    if not isinstance(command.get("raw"), str):
+        target.errors.append("trainer_launch_check.approved_command.raw must be a string.")
+    if not isinstance(command.get("shell"), str):
+        target.errors.append("trainer_launch_check.approved_command.shell must be a string.")
+    if not isinstance(command.get("argv"), list) or not all(isinstance(item, str) for item in command.get("argv", [])):
+        target.errors.append("trainer_launch_check.approved_command.argv must be a list of strings.")
+    if expected_approved and not command.get("shell"):
+        target.errors.append("trainer_launch_check.approved_command.shell must be non-empty when approved.")
 
 
 def _validate_handoff_checks(checks: list[Any], target: ValidationTarget, label: str) -> int:
