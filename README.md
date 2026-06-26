@@ -3,7 +3,7 @@
 Hermes Autonomy Flight Recorder is a standalone adversarial eval harness for
 Hermes Agent runs. It converts existing run artifacts into a normalized trace,
 scores the trace against explicit autonomy boundaries, and renders a static
-HTML report that a maintainer or hackathon judge can inspect quickly.
+HTML report that a maintainer can inspect quickly.
 
 This is accountability and regression infrastructure. It is not a sandbox, not
 prompt-injection prevention, and not a security boundary. Real containment
