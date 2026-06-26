@@ -420,6 +420,8 @@ assert all("artifact_lineage.json" in item.get("source_lineage", "") for item in
 assert all(item["source_fingerprint_status"] == "verified" for item in episodes)
 assert all(item["task_completion"]["schema_version"] == "hfr.task_completion.v1" for item in episodes)
 assert {item["task_completion"]["status"] for item in episodes} == {"complete", "incomplete", "not_applicable"}
+assert all(item["trace_signal"]["event_count"] == len(item["events"]) for item in episodes)
+assert all(item["trace_signal"]["has_final_answer"] for item in episodes)
 assert all(len(item["source_fingerprints"]["scenario"]["sha256"]) == 64 for item in episodes)
 assert all(len(item["source_fingerprints"]["source_trace"]["sha256"]) == 64 for item in episodes)
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
@@ -441,10 +443,16 @@ assert dataset_metrics["task_completion"]["incomplete_count"] == 3
 assert dataset_metrics["task_completion"]["not_applicable_count"] == 1
 assert dataset_metrics["task_completion"]["required_check_count"] == 13
 assert dataset_metrics["task_completion"]["passed_check_count"] == 7
+assert dataset_metrics["trace_signal"]["average_event_count"] == 5.67
+assert dataset_metrics["trace_signal"]["event_type_count"] == 6
+assert dataset_metrics["trace_signal"]["final_answer_rate"] == 1.0
+assert dataset_metrics["trace_signal"]["tool_or_api_episode_rate"] == 0.8333
+assert dataset_metrics["trace_signal"]["risk_count"] == 2
 assert dataset_metrics["metadata"]["candidate"] == "offline-demo"
 assert "# Flight Recorder Dataset Card" in dataset_card
 assert "## Experiment Metadata" in dataset_card
 assert "## Source Fingerprints" in dataset_card
+assert "## Trace Signal" in dataset_card
 assert "## Quality Flags" in dataset_card
 PY
 test -f runs/validation.json
@@ -475,11 +483,22 @@ assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
 assert gate["metrics"]["task_completion"]["complete_count"] == 2
 assert gate["metrics"]["task_completion"]["incomplete_count"] == 3
 assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5385
+assert gate["metrics"]["trace_signal"]["average_event_count"] == 5.67
+assert gate["metrics"]["trace_signal"]["event_type_count"] == 6
+assert gate["metrics"]["trace_signal"]["tool_or_api_episode_rate"] == 0.8333
+assert gate["metrics"]["trace_signal"]["risk_count"] == 2
 assert gate["policy"]["effective"]["min_source_fingerprint_rate"] == 1.0
 assert gate["policy"]["effective"]["max_unverified_source_fingerprints"] == 0
 assert gate["policy"]["effective"]["min_task_completion_complete"] == 2
 assert gate["policy"]["effective"]["max_task_completion_incomplete"] == 3
 assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5385
+assert gate["policy"]["effective"]["min_trace_average_events"] == 5.0
+assert gate["policy"]["effective"]["min_trace_event_type_count"] == 4
+assert gate["policy"]["effective"]["min_trace_final_answer_rate"] == 1.0
+assert gate["policy"]["effective"]["min_trace_tool_or_api_rate"] == 0.8
+assert gate["policy"]["effective"]["max_trace_empty_final_answers"] == 0
+assert gate["policy"]["effective"]["max_trace_risk_count"] == 2
+assert gate["policy"]["effective"]["require_trace_event_types"] == ["assistant_message"]
 PY
 python -m flightrecorder export-review \
   --runs runs \
@@ -563,6 +582,12 @@ if python -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-task-completion-complete 999 >/dev/null; then
   echo "gate-export did not fail a too-high task-completion threshold" >&2
+  exit 1
+fi
+if python -m flightrecorder gate-export \
+  --training-export runs/training_export \
+  --min-trace-average-events 999 >/dev/null; then
+  echo "gate-export did not fail a too-high trace-event threshold" >&2
   exit 1
 fi
 python -m flightrecorder evidence-bundle \
@@ -664,6 +689,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-task-completion-complete"
+"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-trace-average-events"
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--min-task-completion-improvements"

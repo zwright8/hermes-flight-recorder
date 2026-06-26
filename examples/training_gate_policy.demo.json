@@ -15,6 +15,13 @@
   "min_task_completion_check_pass_rate": 0.5385,
   "min_source_fingerprint_rate": 1.0,
   "max_unverified_source_fingerprints": 0,
+  "min_trace_average_events": 5,
+  "min_trace_event_type_count": 4,
+  "min_trace_final_answer_rate": 1.0,
+  "min_trace_tool_or_api_rate": 0.8,
+  "max_trace_empty_final_answers": 0,
+  "max_trace_risk_count": 2,
+  "require_trace_event_types": ["assistant_message"],
   "max_quality_flags": 0,
   "forbid_quality_severities": ["warning", "error"],
   "require_task_families": [

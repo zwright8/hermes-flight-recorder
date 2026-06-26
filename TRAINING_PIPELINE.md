@@ -236,8 +236,8 @@ The export directory contains:
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
 - `dataset_metrics.json`: machine-readable export coverage, source-fingerprint
-  coverage, task-completion coverage, reward/score distribution, failure
-  pressure, and quality flags.
+  coverage, task-completion coverage, trace-signal coverage, reward/score
+  distribution, failure pressure, and quality flags.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
 - `manifest.json`: generation settings, counts, output paths, caveats, and
@@ -452,6 +452,8 @@ simple rows without losing the audit trail.
 - pass/fail balance, score distribution, reward distribution, and pass rate,
 - task-completion configured/complete/incomplete/not-applicable counts and
   evidence-check pass rate,
+- trace-signal metrics for event volume, distinct event types, final-answer
+  coverage, tool/API visibility, and trace observability risks,
 - failed-rule and critical-failure counts,
 - task-family coverage with SFT/DPO/reward-model/step-reward counts,
 - quality flags such as missing positives, missing negatives, missing
@@ -472,14 +474,18 @@ flightrecorder gate-export \
   --training-export runs/training_export \
   --policy examples/training_gate_policy.demo.json \
   --min-source-fingerprint-rate 1.0 \
-  --max-unverified-source-fingerprints 0
+  --max-unverified-source-fingerprints 0 \
+  --min-trace-average-events 5 \
+  --min-trace-tool-or-api-rate 0.8 \
+  --require-trace-event-type assistant_message
 ```
 
 Production policies can require minimum episode counts, preference pairs,
 SFT/DPO/reward-model rows, step-reward rows, task-family coverage, minimum
 task-completion configured/complete counts, maximum incomplete task-completion
 examples, required-check pass rates, source-fingerprint coverage, maximum
-unverified source fingerprints, and maximum quality-flag counts.
+unverified source fingerprints, trace-signal thresholds, required normalized
+event types, and maximum quality-flag counts.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:
@@ -576,6 +582,7 @@ Recommended first uses:
 
 - filter passing episodes into SFT candidates,
 - filter or weight examples by `task_completion.status` before training,
+- filter or weight examples by `trace_signal` before training,
 - convert preference records into chosen/rejected pairs,
 - feed the trainer-ready SFT/DPO/reward-model views to downstream pipelines,
 - review `dataset_metrics.json` and `DATASET_CARD.md` before launching training,

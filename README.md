@@ -305,8 +305,8 @@ training-loop artifacts:
 - `reward_model.jsonl`: one prompt/response label per episode with deterministic
   score and reward fields.
 - `dataset_metrics.json`: export-level coverage, source-fingerprint coverage,
-  task-completion coverage, reward/score distribution, failure pressure, and
-  quality flags.
+  task-completion coverage, trace-signal coverage, reward/score distribution,
+  failure pressure, and quality flags.
 - `DATASET_CARD.md`: human-readable summary of the generated dataset and its
   boundaries.
 - `manifest.json`: export settings, counts, and caveats.
@@ -587,7 +587,8 @@ Use `flightrecorder gate-export` to enforce readiness thresholds over
 `dataset_metrics.json` before a training or tuning job consumes the exported
 rows. It can require positives, negatives, preferences, SFT/DPO/reward-model
 views, step attribution, task-family coverage, evidence-backed task completion,
-complete source-fingerprint coverage, and zero quality flags:
+complete source-fingerprint coverage, enough trace signal, and zero quality
+flags:
 
 ```json
 {
@@ -603,6 +604,13 @@ complete source-fingerprint coverage, and zero quality flags:
   "min_task_completion_check_pass_rate": 0.95,
   "min_source_fingerprint_rate": 1.0,
   "max_unverified_source_fingerprints": 0,
+  "min_trace_average_events": 5,
+  "min_trace_event_type_count": 4,
+  "min_trace_final_answer_rate": 1.0,
+  "min_trace_tool_or_api_rate": 0.8,
+  "max_trace_empty_final_answers": 0,
+  "max_trace_risk_count": 2,
+  "require_trace_event_types": ["assistant_message", "tool_call"],
   "max_quality_flags": 0,
   "forbid_quality_severities": ["warning", "error"],
   "require_task_families": ["email_reply_completion", "prompt_injection"]
@@ -862,10 +870,12 @@ final answer, carries structured `evidence_refs` into rewards, step rewards, and
 failure modes, creates preference pairs when one run clearly beats another in
 the same task family, carries `task_completion` status into episodes, rewards,
 preferences, SFT rows, DPO rows, reward-model rows, and comparison exports,
-emits trainer-ready SFT/DPO/reward-model views, emits failure-mode records for
-every failed rule, and writes a curriculum summary, dataset metrics file, and
-dataset card that group failure pressure, task-completion coverage, provenance
-coverage, and training-readiness signals.
+adds per-episode `trace_signal` features for event volume, event types,
+final-answer coverage, tool/API visibility, and trace risks, emits
+trainer-ready SFT/DPO/reward-model views, emits failure-mode records for every
+failed rule, and writes a curriculum summary, dataset metrics file, and dataset
+card that group failure pressure, task-completion coverage, provenance
+coverage, trace-signal coverage, and training-readiness signals.
 
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.

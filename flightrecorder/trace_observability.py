@@ -13,6 +13,30 @@ class TraceObservabilityError(ValueError):
     """Raised when trace observability cannot be summarized."""
 
 
+def build_trace_signal(events: list[Any], final_answer: str) -> dict[str, Any]:
+    """Return deterministic trace-richness features for one normalized trace."""
+    event_type_counts = _count_rows(_count_values(_event_type(event) for event in events if isinstance(event, dict)))
+    tool_call_count = _event_type_count(events, "tool_call")
+    tool_result_count = _event_type_count(events, "tool_result")
+    api_call_count = _event_type_count(events, "api_call")
+    subagent_event_count = sum(1 for event in events if isinstance(event, dict) and str(event.get("type") or "").startswith("subagent_"))
+    approval_event_count = _event_type_count(events, "approval")
+    return {
+        "event_count": len(events),
+        "event_type_count": len(event_type_counts),
+        "event_types": event_type_counts,
+        "has_final_answer": bool(final_answer.strip()),
+        "final_answer_chars": len(final_answer),
+        "tool_call_count": tool_call_count,
+        "tool_result_count": tool_result_count,
+        "api_call_count": api_call_count,
+        "subagent_event_count": subagent_event_count,
+        "approval_event_count": approval_event_count,
+        "has_tool_or_api_events": (tool_call_count + tool_result_count + api_call_count) > 0,
+        "risks": _run_risks(len(events), final_answer, tool_call_count, tool_result_count, api_call_count),
+    }
+
+
 def build_trace_observability(
     runs_dir: str | Path,
     *,
@@ -80,34 +104,18 @@ def _run_row(record: dict[str, Any], preserve_paths: bool) -> dict[str, Any]:
     scorecard = record.get("scorecard") if isinstance(record.get("scorecard"), dict) else {}
     session = trace.get("session") if isinstance(trace.get("session"), dict) else {}
     events = trace.get("events") if isinstance(trace.get("events"), list) else []
-    event_type_counts = _count_rows(_count_values(_event_type(event) for event in events if isinstance(event, dict)))
-    event_types = [row["id"] for row in event_type_counts]
     final_answer = trace.get("final_answer") if isinstance(trace.get("final_answer"), str) else ""
-    tool_call_count = _event_type_count(events, "tool_call")
-    tool_result_count = _event_type_count(events, "tool_result")
-    api_call_count = _event_type_count(events, "api_call")
-    subagent_event_count = sum(1 for event in events if isinstance(event, dict) and str(event.get("type") or "").startswith("subagent_"))
-    approval_event_count = _event_type_count(events, "approval")
-    return {
+    signal = build_trace_signal(events, final_answer)
+    row = {
         "run_dir": _display_path(record["run_dir"], preserve_paths),
         "scenario_id": str(scorecard.get("scenario_id") or record["run_dir"].name),
         "passed": scorecard.get("passed") if isinstance(scorecard.get("passed"), bool) else None,
         "score": _score(scorecard),
         "source_format": str(session.get("source_format") or "unknown"),
         "model": str(session.get("model") or "unknown"),
-        "event_count": len(events),
-        "event_type_count": len(event_type_counts),
-        "event_types": event_type_counts,
-        "has_final_answer": bool(final_answer.strip()),
-        "final_answer_chars": len(final_answer),
-        "tool_call_count": tool_call_count,
-        "tool_result_count": tool_result_count,
-        "api_call_count": api_call_count,
-        "subagent_event_count": subagent_event_count,
-        "approval_event_count": approval_event_count,
-        "has_tool_or_api_events": (tool_call_count + tool_result_count + api_call_count) > 0,
-        "risks": _run_risks(len(events), final_answer, tool_call_count, tool_result_count, api_call_count),
     }
+    row.update(signal)
+    return row
 
 
 def _metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:

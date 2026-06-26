@@ -21,10 +21,20 @@ _COUNT_POLICY_FIELDS = {
     "max_quality_flags",
     "max_task_completion_incomplete",
     "max_unverified_source_fingerprints",
+    "min_trace_event_type_count",
+    "max_trace_empty_final_answers",
+    "max_trace_risk_count",
 }
-_RATE_POLICY_FIELDS = {"min_pass_rate", "min_source_fingerprint_rate", "min_task_completion_check_pass_rate"}
-_SCALAR_POLICY_FIELDS = {*_RATE_POLICY_FIELDS, "min_average_score", *_COUNT_POLICY_FIELDS}
-_LIST_POLICY_FIELDS = {"forbid_quality_flags", "forbid_quality_severities", "require_task_families"}
+_RATE_POLICY_FIELDS = {
+    "min_pass_rate",
+    "min_source_fingerprint_rate",
+    "min_task_completion_check_pass_rate",
+    "min_trace_final_answer_rate",
+    "min_trace_tool_or_api_rate",
+}
+_FLOAT_POLICY_FIELDS = {"min_trace_average_events"}
+_SCALAR_POLICY_FIELDS = {*_RATE_POLICY_FIELDS, *_FLOAT_POLICY_FIELDS, "min_average_score", *_COUNT_POLICY_FIELDS}
+_LIST_POLICY_FIELDS = {"forbid_quality_flags", "forbid_quality_severities", "require_task_families", "require_trace_event_types"}
 _TASK_FAMILY_SCALAR_POLICY_FIELDS = {
     "min_episodes",
     "min_pass_rate",
@@ -78,6 +88,8 @@ def load_training_gate_policy(path: str | Path) -> dict[str, Any]:
             continue
         if field in _RATE_POLICY_FIELDS:
             policy[field] = _policy_float(field, raw[field], 0.0, 1.0)
+        elif field in _FLOAT_POLICY_FIELDS:
+            policy[field] = _policy_float(field, raw[field], 0.0, None)
         elif field == "min_average_score":
             policy[field] = _policy_float(field, raw[field], 0.0, 100.0)
         else:
@@ -119,16 +131,24 @@ def evaluate_training_gate(
     min_task_completion_check_pass_rate: float | None = None,
     min_source_fingerprint_rate: float | None = None,
     max_unverified_source_fingerprints: int | None = None,
+    min_trace_average_events: float | None = None,
+    min_trace_event_type_count: int | None = None,
+    min_trace_final_answer_rate: float | None = None,
+    min_trace_tool_or_api_rate: float | None = None,
+    max_trace_empty_final_answers: int | None = None,
+    max_trace_risk_count: int | None = None,
     max_quality_flags: int | None = None,
     forbid_quality_flags: list[str] | None = None,
     forbid_quality_severities: list[str] | None = None,
     require_task_families: list[str] | None = None,
+    require_trace_event_types: list[str] | None = None,
     task_family_gates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate readiness checks against dataset_metrics.json."""
     artifact_counts = dataset_metrics.get("artifact_counts") if isinstance(dataset_metrics.get("artifact_counts"), dict) else {}
     source_fingerprint_coverage = _source_fingerprint_coverage(dataset_metrics)
     task_completion = _task_completion_metrics(dataset_metrics)
+    trace_signal = _trace_signal_metrics(dataset_metrics)
     checks: list[dict[str, Any]] = []
 
     if min_episodes is not None:
@@ -189,6 +209,32 @@ def evaluate_training_gate(
             _int_value(source_fingerprint_coverage.get("unverified")),
             max_unverified_source_fingerprints,
         )
+    if min_trace_average_events is not None:
+        _add_min_check(checks, "min_trace_average_events", _number(trace_signal.get("average_event_count")), min_trace_average_events)
+    if min_trace_event_type_count is not None:
+        _add_min_check(checks, "min_trace_event_type_count", _int_value(trace_signal.get("event_type_count")), min_trace_event_type_count)
+    if min_trace_final_answer_rate is not None:
+        _add_min_check(checks, "min_trace_final_answer_rate", _number(trace_signal.get("final_answer_rate")), min_trace_final_answer_rate)
+    if min_trace_tool_or_api_rate is not None:
+        _add_min_check(checks, "min_trace_tool_or_api_rate", _number(trace_signal.get("tool_or_api_episode_rate")), min_trace_tool_or_api_rate)
+    if max_trace_empty_final_answers is not None:
+        _add_max_check(
+            checks,
+            "max_trace_empty_final_answers",
+            _int_value(trace_signal.get("empty_final_answer_count")),
+            max_trace_empty_final_answers,
+        )
+    if max_trace_risk_count is not None:
+        _add_max_check(checks, "max_trace_risk_count", _int_value(trace_signal.get("risk_count")), max_trace_risk_count)
+    event_type_counts = _count_rows(trace_signal.get("event_type_counts"))
+    for event_type in require_trace_event_types or []:
+        _add_min_check(
+            checks,
+            "require_trace_event_type",
+            event_type_counts.get(event_type, 0),
+            1,
+            {"event_type": event_type},
+        )
 
     quality_flags = _quality_flags(dataset_metrics.get("quality_flags"))
     if max_quality_flags is not None:
@@ -221,6 +267,7 @@ def evaluate_training_gate(
             "quality_flag_count": len(quality_flags),
             "source_fingerprint_coverage": source_fingerprint_coverage,
             "task_completion": task_completion,
+            "trace_signal": trace_signal,
             "artifact_counts": artifact_counts,
         },
     }
@@ -396,6 +443,64 @@ def _task_completion_metrics(dataset_metrics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _trace_signal_metrics(dataset_metrics: dict[str, Any]) -> dict[str, Any]:
+    metrics = dataset_metrics.get("trace_signal")
+    if not isinstance(metrics, dict):
+        episode_count = _int_value(dataset_metrics.get("episode_count"))
+        return {
+            "episode_count": episode_count,
+            "total_event_count": 0,
+            "average_event_count": 0.0,
+            "min_event_count": 0,
+            "max_event_count": 0,
+            "event_type_count": 0,
+            "event_type_counts": [],
+            "episodes_with_final_answer": 0,
+            "empty_final_answer_count": episode_count,
+            "final_answer_rate": 0.0,
+            "episodes_with_tool_or_api_events": 0,
+            "tool_or_api_episode_rate": 0.0,
+            "tool_call_count": 0,
+            "tool_result_count": 0,
+            "api_call_count": 0,
+            "subagent_event_count": 0,
+            "approval_event_count": 0,
+            "risk_count": 0,
+            "risk_counts": [],
+        }
+    return {
+        "episode_count": _int_value(metrics.get("episode_count")),
+        "total_event_count": _int_value(metrics.get("total_event_count")),
+        "average_event_count": _number(metrics.get("average_event_count")),
+        "min_event_count": _int_value(metrics.get("min_event_count")),
+        "max_event_count": _int_value(metrics.get("max_event_count")),
+        "event_type_count": _int_value(metrics.get("event_type_count")),
+        "event_type_counts": metrics.get("event_type_counts") if isinstance(metrics.get("event_type_counts"), list) else [],
+        "episodes_with_final_answer": _int_value(metrics.get("episodes_with_final_answer")),
+        "empty_final_answer_count": _int_value(metrics.get("empty_final_answer_count")),
+        "final_answer_rate": _number(metrics.get("final_answer_rate")),
+        "episodes_with_tool_or_api_events": _int_value(metrics.get("episodes_with_tool_or_api_events")),
+        "tool_or_api_episode_rate": _number(metrics.get("tool_or_api_episode_rate")),
+        "tool_call_count": _int_value(metrics.get("tool_call_count")),
+        "tool_result_count": _int_value(metrics.get("tool_result_count")),
+        "api_call_count": _int_value(metrics.get("api_call_count")),
+        "subagent_event_count": _int_value(metrics.get("subagent_event_count")),
+        "approval_event_count": _int_value(metrics.get("approval_event_count")),
+        "risk_count": _int_value(metrics.get("risk_count")),
+        "risk_counts": metrics.get("risk_counts") if isinstance(metrics.get("risk_counts"), list) else [],
+    }
+
+
+def _count_rows(value: Any) -> dict[str, int]:
+    if not isinstance(value, list):
+        return {}
+    counts: dict[str, int] = {}
+    for row in value:
+        if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("count"), int):
+            counts[row["id"]] = max(0, row["count"])
+    return counts
+
+
 def _count_values(values: Any) -> dict[str, int]:
     counts: dict[str, int] = {}
     for value in values:
@@ -421,11 +526,13 @@ def _int_value(value: Any) -> int:
     return 0
 
 
-def _policy_float(field: str, value: Any, minimum: float, maximum: float) -> float:
+def _policy_float(field: str, value: Any, minimum: float, maximum: float | None) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TrainingGatePolicyError(f"training gate policy field {field} must be a number")
     parsed = float(value)
-    if not minimum <= parsed <= maximum:
+    if parsed < minimum or (maximum is not None and parsed > maximum):
+        if maximum is None:
+            raise TrainingGatePolicyError(f"training gate policy field {field} must be at least {minimum}")
         raise TrainingGatePolicyError(f"training gate policy field {field} must be between {minimum} and {maximum}")
     return parsed
 

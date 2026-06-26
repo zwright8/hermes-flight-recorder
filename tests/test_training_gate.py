@@ -44,11 +44,21 @@ class TrainingGateTests(unittest.TestCase):
             self.assertEqual(result["metrics"]["source_fingerprint_coverage"]["rate"], 1.0)
             self.assertEqual(result["metrics"]["task_completion"]["complete_count"], 2)
             self.assertEqual(result["metrics"]["task_completion"]["check_pass_rate"], 0.5385)
+            self.assertEqual(result["metrics"]["trace_signal"]["average_event_count"], 5.67)
+            self.assertEqual(result["metrics"]["trace_signal"]["tool_or_api_episode_rate"], 0.8333)
+            self.assertEqual(result["metrics"]["trace_signal"]["risk_count"], 2)
             self.assertEqual(result["policy"]["effective"]["min_source_fingerprint_rate"], 1.0)
             self.assertEqual(result["policy"]["effective"]["max_unverified_source_fingerprints"], 0)
             self.assertEqual(result["policy"]["effective"]["min_task_completion_complete"], 2)
             self.assertEqual(result["policy"]["effective"]["max_task_completion_incomplete"], 3)
             self.assertEqual(result["policy"]["effective"]["min_task_completion_check_pass_rate"], 0.5385)
+            self.assertEqual(result["policy"]["effective"]["min_trace_average_events"], 5.0)
+            self.assertEqual(result["policy"]["effective"]["min_trace_event_type_count"], 4)
+            self.assertEqual(result["policy"]["effective"]["min_trace_final_answer_rate"], 1.0)
+            self.assertEqual(result["policy"]["effective"]["min_trace_tool_or_api_rate"], 0.8)
+            self.assertEqual(result["policy"]["effective"]["max_trace_empty_final_answers"], 0)
+            self.assertEqual(result["policy"]["effective"]["max_trace_risk_count"], 2)
+            self.assertEqual(result["policy"]["effective"]["require_trace_event_types"], ["assistant_message"])
 
     def test_gate_export_fails_thresholds_and_quality_flags(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -153,6 +163,59 @@ class TrainingGateTests(unittest.TestCase):
             self.assertIn("min_task_completion_check_pass_rate", failed_ids)
             self.assertIn("task_family_min_task_completion_complete", failed_ids)
             self.assertIn("task_family_max_task_completion_incomplete", failed_ids)
+
+    def test_gate_export_fails_trace_signal_thresholds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            gate = Path(tmp) / "training_gate.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--export-rl"])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            metrics_path = export / "dataset_metrics.json"
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+            metrics["trace_signal"]["average_event_count"] = 1.0
+            metrics["trace_signal"]["event_type_count"] = 1
+            metrics["trace_signal"]["final_answer_rate"] = 0.5
+            metrics["trace_signal"]["tool_or_api_episode_rate"] = 0.0
+            metrics["trace_signal"]["empty_final_answer_count"] = 3
+            metrics["trace_signal"]["risk_count"] = 99
+            metrics["trace_signal"]["event_type_counts"] = [{"id": "user_message", "count": 6}]
+            metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "gate-export",
+                    "--training-export",
+                    str(export),
+                    "--min-trace-average-events",
+                    "5",
+                    "--min-trace-event-type-count",
+                    "4",
+                    "--min-trace-final-answer-rate",
+                    "1.0",
+                    "--min-trace-tool-or-api-rate",
+                    "0.8",
+                    "--max-trace-empty-final-answers",
+                    "0",
+                    "--max-trace-risk-count",
+                    "2",
+                    "--require-trace-event-type",
+                    "assistant_message",
+                    "--out",
+                    str(gate),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            failed_ids = [item["id"] for item in result["checks"] if not item["passed"]]
+            self.assertIn("min_trace_average_events", failed_ids)
+            self.assertIn("min_trace_event_type_count", failed_ids)
+            self.assertIn("min_trace_final_answer_rate", failed_ids)
+            self.assertIn("min_trace_tool_or_api_rate", failed_ids)
+            self.assertIn("max_trace_empty_final_answers", failed_ids)
+            self.assertIn("max_trace_risk_count", failed_ids)
+            self.assertIn("require_trace_event_type", failed_ids)
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ from .review import (
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
-from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION
+from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION, build_trace_signal
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
     RL_DATASET_METRICS_SCHEMA_VERSION,
@@ -1601,6 +1601,15 @@ def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget)
         _validate_source_fingerprint_fields(episode, target, f"episodes[{index}]", warn_if_missing=True)
         if not isinstance(episode.get("events"), list):
             target.errors.append(f"episodes[{index}].events must be a list.")
+        if "trace_signal" in episode:
+            _validate_trace_signal(
+                episode.get("trace_signal"),
+                _expected_episode_trace_signal(episode),
+                target,
+                f"episodes[{index}].trace_signal",
+            )
+        else:
+            target.warnings.append(f"episodes[{index}].trace_signal is missing; rerun export-rl to refresh trace-signal metrics.")
         if "task_completion" in episode:
             _validate_task_completion(episode.get("task_completion"), target, f"episodes[{index}].task_completion")
         else:
@@ -2231,6 +2240,15 @@ def _validate_dataset_metrics(
                     )
     else:
         target.warnings.append("dataset_metrics.task_completion is missing; rerun export-rl to refresh task-completion metrics.")
+    if "trace_signal" in metrics:
+        _validate_trace_signal_metrics(
+            metrics.get("trace_signal"),
+            _expected_trace_signal_metrics(episodes),
+            target,
+            "dataset_metrics.trace_signal",
+        )
+    else:
+        target.warnings.append("dataset_metrics.trace_signal is missing; rerun export-rl to refresh trace-signal metrics.")
     _validate_dataset_family_metrics(metrics.get("task_families"), target, episodes, step_rewards, failure_modes, sft, dpo, reward_model)
     _validate_quality_flags(metrics.get("quality_flags"), target)
     if "metadata" in metrics:
@@ -2303,6 +2321,7 @@ def _expected_dataset_family_metrics(
         ]
         passed = sum(1 for episode in family_episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
         task_metrics = _expected_task_completion_metrics(family_episodes)
+        trace_metrics = _expected_trace_signal_metrics(family_episodes)
         expected[family] = {
             "task_family": family,
             "episode_count": len(family_episodes),
@@ -2312,6 +2331,11 @@ def _expected_dataset_family_metrics(
             "task_completion_configured": task_metrics["configured_count"],
             "task_completion_complete": task_metrics["complete_count"],
             "task_completion_incomplete": task_metrics["incomplete_count"],
+            "trace_average_event_count": trace_metrics["average_event_count"],
+            "trace_event_type_count": trace_metrics["event_type_count"],
+            "trace_tool_or_api_episode_rate": trace_metrics["tool_or_api_episode_rate"],
+            "trace_empty_final_answer_count": trace_metrics["empty_final_answer_count"],
+            "trace_risk_count": trace_metrics["risk_count"],
             "average_score": _average_number(scores),
             "step_reward_count": _count_family(step_rewards, family),
             "failure_mode_count": _count_family(failure_modes, family),
@@ -2352,6 +2376,112 @@ def _expected_task_completion_metrics(episodes: list[dict[str, Any]]) -> dict[st
     }
 
 
+def _expected_episode_trace_signal(episode: dict[str, Any]) -> dict[str, Any]:
+    events = episode.get("events") if isinstance(episode.get("events"), list) else []
+    final_answer = episode.get("final_answer") if isinstance(episode.get("final_answer"), str) else ""
+    return build_trace_signal(events, final_answer)
+
+
+def _validate_trace_signal(value: Any, expected: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in (
+        "event_count",
+        "event_type_count",
+        "final_answer_chars",
+        "tool_call_count",
+        "tool_result_count",
+        "api_call_count",
+        "subagent_event_count",
+        "approval_event_count",
+    ):
+        if value.get(field_name) != expected[field_name]:
+            target.errors.append(f"{label}.{field_name} expected {expected[field_name]!r}, got {value.get(field_name)!r}.")
+    for field_name in ("has_final_answer", "has_tool_or_api_events"):
+        if value.get(field_name) != expected[field_name]:
+            target.errors.append(f"{label}.{field_name} expected {expected[field_name]!r}, got {value.get(field_name)!r}.")
+    if _count_rows(value.get("event_types")) != _count_rows(expected.get("event_types")):
+        target.errors.append(f"{label}.event_types does not match episode events.")
+    if value.get("risks") != expected.get("risks"):
+        target.errors.append(f"{label}.risks expected {expected.get('risks')!r}, got {value.get('risks')!r}.")
+
+
+def _expected_trace_signal_metrics(episodes: list[dict[str, Any]]) -> dict[str, Any]:
+    signals = [_expected_episode_trace_signal(episode) for episode in episodes]
+    event_counts = [_non_negative_int_value(signal.get("event_count")) for signal in signals]
+    event_type_counts: dict[str, int] = {}
+    risk_counts: dict[str, int] = {}
+    for signal in signals:
+        _merge_count_rows_quiet(event_type_counts, signal.get("event_types"))
+        for risk in signal.get("risks", []):
+            if isinstance(risk, str) and risk:
+                risk_counts[risk] = risk_counts.get(risk, 0) + 1
+    episode_count = len(signals)
+    with_final = sum(1 for signal in signals if signal.get("has_final_answer") is True)
+    with_tool_or_api = sum(1 for signal in signals if signal.get("has_tool_or_api_events") is True)
+    return {
+        "episode_count": episode_count,
+        "total_event_count": sum(event_counts),
+        "average_event_count": round(sum(event_counts) / episode_count, 2) if episode_count else 0.0,
+        "min_event_count": min(event_counts) if event_counts else 0,
+        "max_event_count": max(event_counts) if event_counts else 0,
+        "event_type_count": len(event_type_counts),
+        "event_type_counts": event_type_counts,
+        "episodes_with_final_answer": with_final,
+        "empty_final_answer_count": episode_count - with_final,
+        "final_answer_rate": round(with_final / episode_count, 4) if episode_count else 0.0,
+        "episodes_with_tool_or_api_events": with_tool_or_api,
+        "tool_or_api_episode_rate": round(with_tool_or_api / episode_count, 4) if episode_count else 0.0,
+        "tool_call_count": sum(_non_negative_int_value(signal.get("tool_call_count")) for signal in signals),
+        "tool_result_count": sum(_non_negative_int_value(signal.get("tool_result_count")) for signal in signals),
+        "api_call_count": sum(_non_negative_int_value(signal.get("api_call_count")) for signal in signals),
+        "subagent_event_count": sum(_non_negative_int_value(signal.get("subagent_event_count")) for signal in signals),
+        "approval_event_count": sum(_non_negative_int_value(signal.get("approval_event_count")) for signal in signals),
+        "risk_count": sum(risk_counts.values()),
+        "risk_counts": risk_counts,
+    }
+
+
+def _validate_trace_signal_metrics(value: Any, expected: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in (
+        "episode_count",
+        "total_event_count",
+        "average_event_count",
+        "min_event_count",
+        "max_event_count",
+        "event_type_count",
+        "episodes_with_final_answer",
+        "empty_final_answer_count",
+        "final_answer_rate",
+        "episodes_with_tool_or_api_events",
+        "tool_or_api_episode_rate",
+        "tool_call_count",
+        "tool_result_count",
+        "api_call_count",
+        "subagent_event_count",
+        "approval_event_count",
+        "risk_count",
+    ):
+        if value.get(field_name) != expected[field_name]:
+            target.errors.append(f"{label}.{field_name} expected {expected[field_name]!r}, got {value.get(field_name)!r}.")
+    if _count_rows(value.get("event_type_counts")) != expected["event_type_counts"]:
+        target.errors.append(f"{label}.event_type_counts does not match episode trace_signal.")
+    if _count_rows(value.get("risk_counts")) != expected["risk_counts"]:
+        target.errors.append(f"{label}.risk_counts does not match episode trace_signal.")
+
+
+def _merge_count_rows_quiet(counts: dict[str, int], rows: Any) -> None:
+    if not isinstance(rows, list):
+        return
+    for row in rows:
+        if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("count"), int):
+            counts[row["id"]] = counts.get(row["id"], 0) + row["count"]
+
+
 def _validate_quality_flags(value: Any, target: ValidationTarget) -> None:
     if not isinstance(value, list):
         target.errors.append("dataset_metrics.quality_flags must be a list.")
@@ -2384,6 +2514,7 @@ def _validate_dataset_card(path: Path, target: ValidationTarget) -> None:
         "# Flight Recorder Dataset Card",
         "## Summary",
         "## Source Fingerprints",
+        "## Trace Signal",
         "## Artifact Counts",
         "## Task Families",
         "## Quality Flags",

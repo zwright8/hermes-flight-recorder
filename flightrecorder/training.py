@@ -11,6 +11,7 @@ from typing import Any
 
 from .artifacts import CONTRACT_SCOPES, compare_scorecards
 from .scorers import TASK_COMPLETION_SCHEMA_VERSION
+from .trace_observability import build_trace_signal
 
 RL_MANIFEST_SCHEMA_VERSION = "hfr.rl.manifest.v1"
 RL_EPISODE_SCHEMA_VERSION = "hfr.rl.episode.v1"
@@ -332,6 +333,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     scenario_id = str(scorecard.get("scenario_id") or record.run_id)
     scenario_title = str(scorecard.get("scenario_title") or scenario_id)
     events = [_event_record(index, event) for index, event in enumerate(trace.get("events", []))]
+    final_answer = str(trace.get("final_answer") or "")
     failed_rules = _failed_rule_ids(scorecard)
     source_fingerprints = _source_fingerprints(record)
     source_fingerprint_status = _source_fingerprint_status(source_fingerprints)
@@ -347,7 +349,8 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
         "source_format": trace.get("session", {}).get("source_format", "unknown"),
         "model": trace.get("session", {}).get("model", "unknown"),
         "events": events,
-        "final_answer": str(trace.get("final_answer") or ""),
+        "final_answer": final_answer,
+        "trace_signal": build_trace_signal(events, final_answer),
         "source_fingerprint_status": source_fingerprint_status,
         "source_fingerprints": source_fingerprints,
         "task_completion": task_completion,
@@ -975,12 +978,14 @@ def _dataset_metrics(
         "max_reward": max(rewards_values) if rewards_values else None,
         "source_fingerprint_coverage": _source_fingerprint_coverage(episodes),
         "task_completion": _task_completion_metrics(episodes),
+        "trace_signal": _trace_signal_metrics(episodes),
         "failed_rule_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "failed_rules")),
         "critical_failure_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "critical_failures")),
         "task_families": _dataset_family_metrics(episodes, step_rewards, failure_modes, sft, dpo, reward_model),
         "quality_flags": _quality_flags(episodes, step_rewards, preferences, sft, dpo, reward_model),
         "recommended_checks": [
             "Review scenario policies before treating labels as training rewards.",
+            "Gate trace_signal before training so low-observability episodes do not become weak reward data.",
             "Inspect failure-mode and step-reward coverage before credit-assignment experiments.",
             "Use validation output and the HTML reports alongside trainer-ready JSONL views.",
         ],
@@ -1017,6 +1022,7 @@ def _dataset_family_metrics(
         passed = sum(1 for episode in family_episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
         failed = len(family_episodes) - passed
         task_metrics = _task_completion_metrics(family_episodes)
+        trace_metrics = _trace_signal_metrics(family_episodes)
         rows.append(
             {
                 "task_family": family,
@@ -1027,6 +1033,11 @@ def _dataset_family_metrics(
                 "task_completion_configured": task_metrics["configured_count"],
                 "task_completion_complete": task_metrics["complete_count"],
                 "task_completion_incomplete": task_metrics["incomplete_count"],
+                "trace_average_event_count": trace_metrics["average_event_count"],
+                "trace_event_type_count": trace_metrics["event_type_count"],
+                "trace_tool_or_api_episode_rate": trace_metrics["tool_or_api_episode_rate"],
+                "trace_empty_final_answer_count": trace_metrics["empty_final_answer_count"],
+                "trace_risk_count": trace_metrics["risk_count"],
                 "average_score": _average(scores),
                 "step_reward_count": _count_family(step_rewards, family),
                 "failure_mode_count": _count_family(failure_modes, family),
@@ -1066,6 +1077,51 @@ def _task_completion_metrics(episodes: list[dict[str, Any]]) -> dict[str, Any]:
         "passed_check_count": total_passed_checks,
         "check_pass_rate": round(total_passed_checks / total_required_checks, 4) if total_required_checks else 0.0,
     }
+
+
+def _trace_signal_metrics(episodes: list[dict[str, Any]]) -> dict[str, Any]:
+    signals = [_episode_trace_signal(episode) for episode in episodes]
+    event_counts = [_int_value(signal.get("event_count")) for signal in signals]
+    event_type_counts: dict[str, int] = {}
+    risk_counts: dict[str, int] = {}
+    for signal in signals:
+        _merge_count_rows(event_type_counts, signal.get("event_types"))
+        for risk in signal.get("risks", []):
+            if isinstance(risk, str) and risk:
+                risk_counts[risk] = risk_counts.get(risk, 0) + 1
+    episode_count = len(signals)
+    with_final = sum(1 for signal in signals if signal.get("has_final_answer") is True)
+    with_tool_or_api = sum(1 for signal in signals if signal.get("has_tool_or_api_events") is True)
+    return {
+        "episode_count": episode_count,
+        "total_event_count": sum(event_counts),
+        "average_event_count": round(sum(event_counts) / episode_count, 2) if episode_count else 0.0,
+        "min_event_count": min(event_counts) if event_counts else 0,
+        "max_event_count": max(event_counts) if event_counts else 0,
+        "event_type_count": len(event_type_counts),
+        "event_type_counts": _count_rows_from_counts(event_type_counts),
+        "episodes_with_final_answer": with_final,
+        "empty_final_answer_count": episode_count - with_final,
+        "final_answer_rate": _rate(with_final, episode_count),
+        "episodes_with_tool_or_api_events": with_tool_or_api,
+        "tool_or_api_episode_rate": _rate(with_tool_or_api, episode_count),
+        "tool_call_count": sum(_int_value(signal.get("tool_call_count")) for signal in signals),
+        "tool_result_count": sum(_int_value(signal.get("tool_result_count")) for signal in signals),
+        "api_call_count": sum(_int_value(signal.get("api_call_count")) for signal in signals),
+        "subagent_event_count": sum(_int_value(signal.get("subagent_event_count")) for signal in signals),
+        "approval_event_count": sum(_int_value(signal.get("approval_event_count")) for signal in signals),
+        "risk_count": sum(risk_counts.values()),
+        "risk_counts": _count_rows_from_counts(risk_counts),
+    }
+
+
+def _episode_trace_signal(episode: dict[str, Any]) -> dict[str, Any]:
+    signal = episode.get("trace_signal")
+    if isinstance(signal, dict):
+        return signal
+    events = episode.get("events") if isinstance(episode.get("events"), list) else []
+    final_answer = episode.get("final_answer") if isinstance(episode.get("final_answer"), str) else ""
+    return build_trace_signal(events, final_answer)
 
 
 def _quality_flags(
@@ -1144,6 +1200,19 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
             f"- Fully verified episodes: {coverage.get('fully_verified', 0)} / {coverage.get('episodes', metrics.get('episode_count'))}",
             f"- Scenario fingerprints: {coverage.get('with_scenario_sha256', 0)}",
             f"- Source-trace fingerprints: {coverage.get('with_source_trace_sha256', 0)}",
+            "",
+        ]
+    )
+    trace_signal = metrics.get("trace_signal") if isinstance(metrics.get("trace_signal"), dict) else {}
+    rows.extend(
+        [
+            "## Trace Signal",
+            "",
+            f"- Average events per episode: {trace_signal.get('average_event_count', 0.0)}",
+            f"- Event types: {trace_signal.get('event_type_count', 0)}",
+            f"- Final-answer rate: {trace_signal.get('final_answer_rate', 0.0)}",
+            f"- Tool/API episode rate: {trace_signal.get('tool_or_api_episode_rate', 0.0)}",
+            f"- Trace risk count: {trace_signal.get('risk_count', 0)}",
             "",
         ]
     )
@@ -1383,6 +1452,24 @@ def _count_rows(values: Any) -> list[dict[str, Any]]:
     return [{"id": key, "count": counts[key]} for key in sorted(counts)]
 
 
+def _count_rows_from_counts(counts: dict[str, int]) -> list[dict[str, Any]]:
+    return [{"id": key, "count": count} for key, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+
+
+def _merge_count_rows(counts: dict[str, int], rows: Any) -> None:
+    if not isinstance(rows, list):
+        return
+    for row in rows:
+        if isinstance(row, dict) and isinstance(row.get("id"), str) and isinstance(row.get("count"), int):
+            counts[row["id"]] = counts.get(row["id"], 0) + row["count"]
+
+
+def _rate(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 0.0
+    return round(numerator / denominator, 4)
+
+
 def _outcome_string_list(episode: dict[str, Any], field_name: str) -> list[str]:
     outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
     values = outcome.get(field_name)
@@ -1557,6 +1644,15 @@ def _numeric_value(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _int_value(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _string_list(value: Any) -> list[str]:

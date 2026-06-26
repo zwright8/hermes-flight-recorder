@@ -735,10 +735,17 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
         min_task_completion_check_pass_rate=options["min_task_completion_check_pass_rate"],
         min_source_fingerprint_rate=options["min_source_fingerprint_rate"],
         max_unverified_source_fingerprints=options["max_unverified_source_fingerprints"],
+        min_trace_average_events=options["min_trace_average_events"],
+        min_trace_event_type_count=options["min_trace_event_type_count"],
+        min_trace_final_answer_rate=options["min_trace_final_answer_rate"],
+        min_trace_tool_or_api_rate=options["min_trace_tool_or_api_rate"],
+        max_trace_empty_final_answers=options["max_trace_empty_final_answers"],
+        max_trace_risk_count=options["max_trace_risk_count"],
         max_quality_flags=options["max_quality_flags"],
         forbid_quality_flags=options["forbid_quality_flags"],
         forbid_quality_severities=options["forbid_quality_severities"],
         require_task_families=options["require_task_families"],
+        require_trace_event_types=options["require_trace_event_types"],
         task_family_gates=options["task_family_gates"],
     )
     if options["policy_path"]:
@@ -1255,6 +1262,13 @@ def _parser() -> argparse.ArgumentParser:
         type=_non_negative_int_arg,
         help="Maximum episodes allowed to lack scenario or source-trace SHA-256 fingerprints",
     )
+    gate_export.add_argument("--min-trace-average-events", type=_non_negative_float_arg, help="Minimum average normalized events per exported episode")
+    gate_export.add_argument("--min-trace-event-type-count", type=_non_negative_int_arg, help="Minimum distinct normalized event types in the export")
+    gate_export.add_argument("--min-trace-final-answer-rate", type=_rate_arg, help="Minimum fraction of episodes with final answers")
+    gate_export.add_argument("--min-trace-tool-or-api-rate", type=_rate_arg, help="Minimum fraction of episodes with tool or API events")
+    gate_export.add_argument("--max-trace-empty-final-answers", type=_non_negative_int_arg, help="Maximum exported episodes allowed to have empty final answers")
+    gate_export.add_argument("--max-trace-risk-count", type=_non_negative_int_arg, help="Maximum total trace observability risks allowed")
+    gate_export.add_argument("--require-trace-event-type", action="append", default=[], help="Fail unless this normalized event type appears in exported traces")
     gate_export.add_argument("--max-quality-flags", type=_non_negative_int_arg, help="Maximum allowed dataset quality flags")
     gate_export.add_argument("--forbid-quality-flag", action="append", default=[], help="Fail if this quality flag id appears")
     gate_export.add_argument(
@@ -1662,6 +1676,36 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
             if args.max_unverified_source_fingerprints is not None
             else policy.get("max_unverified_source_fingerprints")
         ),
+        "min_trace_average_events": (
+            args.min_trace_average_events
+            if args.min_trace_average_events is not None
+            else policy.get("min_trace_average_events")
+        ),
+        "min_trace_event_type_count": (
+            args.min_trace_event_type_count
+            if args.min_trace_event_type_count is not None
+            else policy.get("min_trace_event_type_count")
+        ),
+        "min_trace_final_answer_rate": (
+            args.min_trace_final_answer_rate
+            if args.min_trace_final_answer_rate is not None
+            else policy.get("min_trace_final_answer_rate")
+        ),
+        "min_trace_tool_or_api_rate": (
+            args.min_trace_tool_or_api_rate
+            if args.min_trace_tool_or_api_rate is not None
+            else policy.get("min_trace_tool_or_api_rate")
+        ),
+        "max_trace_empty_final_answers": (
+            args.max_trace_empty_final_answers
+            if args.max_trace_empty_final_answers is not None
+            else policy.get("max_trace_empty_final_answers")
+        ),
+        "max_trace_risk_count": (
+            args.max_trace_risk_count
+            if args.max_trace_risk_count is not None
+            else policy.get("max_trace_risk_count")
+        ),
         "max_quality_flags": args.max_quality_flags if args.max_quality_flags is not None else policy.get("max_quality_flags"),
         "forbid_quality_flags": _merge_unique_strings(policy.get("forbid_quality_flags", []), args.forbid_quality_flag),
         "forbid_quality_severities": _merge_unique_strings(
@@ -1669,6 +1713,7 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
             args.forbid_quality_severity,
         ),
         "require_task_families": _merge_unique_strings(policy.get("require_task_families", []), args.require_task_family),
+        "require_trace_event_types": _merge_unique_strings(policy.get("require_trace_event_types", []), args.require_trace_event_type),
         "task_family_gates": policy.get("task_family_gates", []),
     }
 
@@ -1689,10 +1734,17 @@ def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_task_completion_check_pass_rate",
         "min_source_fingerprint_rate",
         "max_unverified_source_fingerprints",
+        "min_trace_average_events",
+        "min_trace_event_type_count",
+        "min_trace_final_answer_rate",
+        "min_trace_tool_or_api_rate",
+        "max_trace_empty_final_answers",
+        "max_trace_risk_count",
         "max_quality_flags",
         "forbid_quality_flags",
         "forbid_quality_severities",
         "require_task_families",
+        "require_trace_event_types",
         "task_family_gates",
     )
     effective = {
