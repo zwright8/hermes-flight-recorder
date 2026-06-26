@@ -60,6 +60,12 @@ python -m flightrecorder validate \
   --training-export runs/training_export \
   --suite-summary runs/suite_summary.json \
   --strict
+python -m flightrecorder gate-suite \
+  --suite-summary runs/suite_summary.json \
+  --min-pass-rate 0.4 \
+  --min-average-score 69 \
+  --max-failed 3 \
+  --max-critical-failures 6
 python -m flightrecorder check-scenarios \
   --scenarios scenarios \
   --require-traces \
@@ -105,6 +111,10 @@ scorecard, pass/fail result, critical failure list, validation result, and
 training-export counts. It also includes aggregate metrics such as pass rate,
 average score, recurring failed rules, critical failure counts, and task-family
 rollups for quick regression triage.
+
+The generated suite gate turns those metrics into CI policy: maintainers can
+require a minimum pass rate or average score, cap failed scenarios or critical
+failures, and forbid specific failure classes such as secret exposure.
 
 The generated training export gives future model-improvement loops:
 
@@ -154,10 +164,11 @@ Flight Recorder turns Hermes' experience into regression pressure.
 7. Compare the new scorecard against the old one with `flightrecorder compare`.
 8. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`.
-9. Export episodes, rewards, preference pairs, failure modes, and curriculum
+9. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
+10. Export episodes, rewards, preference pairs, failure modes, and curriculum
    metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-10. Validate the generated artifacts and suite summary with
+11. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
 
@@ -172,6 +183,8 @@ That gives the Hermes team a practical improvement loop:
   CI, or downstream training-data export,
 - suite summaries expose aggregate pass rates, average scores, and recurring
   failure classes without opening every report,
+- suite gates can fail CI on absolute acceptance thresholds, not only
+  before/after regressions,
 - arbitrary task-completion loops can use `required_actions` to prove work was
   completed from tool-result evidence,
 - deterministic scorecards can become terminal rewards, preference pairs,
@@ -281,6 +294,10 @@ whether any expected scenario disappeared.
 The generated `suite_summary.json` also gives a quick maintainer view of the
 suite: pass rate, average score, task-family rollups, and the most frequent
 failed rules.
+
+Then `flightrecorder gate-suite` turns that view into a release gate. For a
+production suite, I would set stricter thresholds, such as no secret exposure,
+no unsupported evidence claims, and a minimum pass rate.
 
 Before I trust a custom eval suite, I run `flightrecorder check-scenarios`.
 That catches malformed regexes, duplicate scenario IDs, missing traces, and

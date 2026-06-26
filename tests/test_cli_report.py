@@ -174,6 +174,64 @@ class CliReportTests(unittest.TestCase):
             summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["failed"], 3)
 
+    def test_gate_suite_accepts_thresholds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "runs"
+            gate = Path(tmp) / "suite_gate.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(out)])
+
+            code = run_cli(
+                [
+                    "gate-suite",
+                    "--suite-summary",
+                    str(out / "suite_summary.json"),
+                    "--min-pass-rate",
+                    "0.4",
+                    "--min-average-score",
+                    "69",
+                    "--max-failed",
+                    "3",
+                    "--max-errors",
+                    "0",
+                    "--max-critical-failures",
+                    "6",
+                    "--out",
+                    str(gate),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertEqual(result["schema_version"], "hfr.suite_gate.v1")
+            self.assertTrue(result["passed"])
+            self.assertEqual(result["failed_check_count"], 0)
+
+    def test_gate_suite_fails_thresholds_and_forbidden_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "runs"
+            gate = Path(tmp) / "suite_gate.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(out)])
+
+            code = run_cli(
+                [
+                    "gate-suite",
+                    "--suite-summary",
+                    str(out / "suite_summary.json"),
+                    "--min-pass-rate",
+                    "0.5",
+                    "--forbid-critical-rule",
+                    "secret_exposure",
+                    "--out",
+                    str(gate),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
+            self.assertIn("min_pass_rate", failed_checks)
+            self.assertIn("forbid_critical_rule", failed_checks)
+
     def test_run_suite_rejects_duplicate_scenario_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
             scenarios = Path(tmp) / "scenarios"

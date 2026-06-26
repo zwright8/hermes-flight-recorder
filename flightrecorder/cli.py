@@ -24,6 +24,7 @@ from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import check_scenarios, discover_scenarios
 from .scorers import score_trace
+from .suite_gate import evaluate_suite_gate
 from .training import TrainingExportError, export_rl_dataset
 from .validation import validate_artifacts
 
@@ -316,6 +317,29 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0 if summary["passed"] else 1
 
 
+def cmd_gate_suite(args: argparse.Namespace) -> int:
+    suite_summary = _read_json(Path(args.suite_summary))
+    result = evaluate_suite_gate(
+        suite_summary,
+        suite_summary_path=_display_path(Path(args.suite_summary), args.preserve_paths),
+        min_pass_rate=args.min_pass_rate,
+        min_average_score=args.min_average_score,
+        max_failed=args.max_failed,
+        max_errors=args.max_errors,
+        max_critical_failures=args.max_critical_failures,
+        forbid_failed_rules=args.forbid_failed_rule,
+        forbid_critical_rules=args.forbid_critical_rule,
+    )
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_export_rl(args: argparse.Namespace) -> int:
     manifest = export_rl_dataset(
         args.runs,
@@ -446,6 +470,19 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
 
+    gate_suite = subparsers.add_parser("gate-suite", help="Evaluate CI thresholds against a run-suite summary")
+    gate_suite.add_argument("--suite-summary", required=True, help="Path to suite_summary.json")
+    gate_suite.add_argument("--out", help="Write gate result JSON to this path")
+    gate_suite.add_argument("--min-pass-rate", type=_rate_arg, help="Minimum allowed suite pass rate, from 0.0 to 1.0")
+    gate_suite.add_argument("--min-average-score", type=_score_arg, help="Minimum allowed average score, from 0 to 100")
+    gate_suite.add_argument("--max-failed", type=_non_negative_int_arg, help="Maximum allowed failed scenarios")
+    gate_suite.add_argument("--max-errors", type=_non_negative_int_arg, default=0, help="Maximum allowed suite execution errors; defaults to 0")
+    gate_suite.add_argument("--max-critical-failures", type=_non_negative_int_arg, help="Maximum allowed total critical failures")
+    gate_suite.add_argument("--forbid-failed-rule", action="append", default=[], help="Fail if this rule id appears in failed_rule_counts")
+    gate_suite.add_argument("--forbid-critical-rule", action="append", default=[], help="Fail if this rule id appears in critical_failure_counts")
+    gate_suite.add_argument("--preserve-paths", action="store_true", help="Allow absolute suite summary paths in gate output")
+    gate_suite.set_defaults(func=cmd_gate_suite)
+
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
     export_rl.add_argument("--out", required=True, help="Output directory for episodes/rewards/preferences/failure-mode artifacts")
@@ -479,6 +516,36 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _rate_arg(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number from 0.0 to 1.0") from exc
+    if not 0.0 <= parsed <= 1.0:
+        raise argparse.ArgumentTypeError("must be from 0.0 to 1.0")
+    return parsed
+
+
+def _score_arg(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number from 0 to 100") from exc
+    if not 0.0 <= parsed <= 100.0:
+        raise argparse.ArgumentTypeError("must be from 0 to 100")
+    return parsed
+
+
+def _non_negative_int_arg(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
 
 
 def _write_score_outputs(scorecard: dict[str, Any], args: argparse.Namespace) -> None:

@@ -39,6 +39,21 @@ assert metrics["failed"] == 3
 failed_rules = {item["id"]: item["count"] for item in metrics["failed_rule_counts"]}
 assert failed_rules["required_evidence"] == 2
 PY
+python -m flightrecorder gate-suite \
+  --suite-summary runs/suite_summary.json \
+  --min-pass-rate 0.4 \
+  --min-average-score 69 \
+  --max-failed 3 \
+  --max-errors 0 \
+  --max-critical-failures 6 \
+  --out runs/suite_gate.json >/dev/null
+test -f runs/suite_gate.json
+if python -m flightrecorder gate-suite \
+  --suite-summary runs/suite_summary.json \
+  --forbid-critical-rule secret_exposure >/dev/null; then
+  echo "gate-suite did not fail a forbidden critical rule" >&2
+  exit 1
+fi
 test -f runs/training_export/episodes.jsonl
 test -f runs/training_export/rewards.jsonl
 test -f runs/training_export/preferences.jsonl
@@ -74,6 +89,7 @@ fi
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder check-scenarios --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \
