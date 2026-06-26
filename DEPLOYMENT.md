@@ -120,6 +120,10 @@ network.
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no
   forbidden quality flags.
+- Use `flightrecorder gate-reviewed --reviewed-export runs/reviewed_export
+  --policy <policy.json>` when trainer jobs should wait for enough completed
+  human labels, accepted and negative examples, reviewed trainer views,
+  task-family coverage, and zero unresolved review labels.
 - Publish `report.html`, `scorecard.json`, and `artifact_lineage.json`; avoid
   publishing raw traces.
 - Run `flightrecorder audit --runs runs --fail-on-leak --forbid-text <secret>`

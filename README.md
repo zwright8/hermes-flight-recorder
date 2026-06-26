@@ -229,6 +229,12 @@ completed human labels into reviewed training views:
 - `reviewed_dpo.jsonl`: DPO-shaped rows derived from reviewed preferences.
 - `manifest.json`: reviewed export counts and provenance.
 
+Use `flightrecorder gate-reviewed` after `apply-review` when CI should block
+trainer jobs until human-reviewed labels meet policy. It reads
+`runs/reviewed_export/manifest.json` and can require enough completed labels,
+accepted rows, negative rows, SFT/reward-model/preference/DPO views, task-family
+coverage, and zero unresolved `needs_review` labels.
+
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
 artifacts:
 
@@ -320,6 +326,19 @@ views, step attribution, task-family coverage, and zero quality flags:
   "require_task_families": ["email_reply_completion", "prompt_injection"]
 }
 ```
+
+Use `flightrecorder gate-reviewed` for the human-curated path after
+`apply-review`:
+
+```bash
+flightrecorder gate-reviewed \
+  --reviewed-export runs/reviewed_export \
+  --policy examples/reviewed_gate_policy.demo.json
+```
+
+The reviewed gate is intentionally separate from `gate-export`: it checks human
+label completion and reviewed trainer views, while `gate-export` checks the
+deterministic raw training export.
 
 ## Scoring Rules
 

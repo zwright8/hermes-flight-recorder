@@ -65,12 +65,21 @@ flightrecorder apply-review \
 flightrecorder validate \
   --reviewed-export runs/reviewed_export \
   --strict
+
+flightrecorder gate-reviewed \
+  --reviewed-export runs/reviewed_export \
+  --policy examples/reviewed_gate_policy.demo.json
 ```
 
 The reviewed export writes `reviewed_labels.jsonl`, `reviewed_sft.jsonl`,
 `reviewed_reward_model.jsonl`, `reviewed_preferences.jsonl`,
 `reviewed_dpo.jsonl`, and a manifest. Labels marked `needs_review` remain in
 `reviewed_labels.jsonl` but are excluded from trainer-ready views.
+
+`gate-reviewed` is the CI handoff for human-curated training signal. Use it to
+require completed labels, enough accepted and negative examples, reviewed
+SFT/reward-model/preference/DPO views, task-family coverage, and no unresolved
+review labels before a trainer consumes `runs/reviewed_export`.
 
 `demo.sh` already runs the training export for the included scenarios, and
 `release_check.sh` also exercises review export plus reviewed-label ingestion.
@@ -252,6 +261,21 @@ flightrecorder gate-export \
 Production policies can require minimum episode counts, preference pairs,
 SFT/DPO/reward-model rows, step-reward rows, task-family coverage, and maximum
 quality-flag counts.
+
+Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
+instead of deterministic labels:
+
+```bash
+flightrecorder gate-reviewed \
+  --reviewed-export runs/reviewed_export \
+  --policy examples/reviewed_gate_policy.demo.json
+```
+
+Reviewed-gate policies can require minimum reviewed-label counts, accepted and
+negative examples, SFT/reward-model/preference/DPO rows, task families, and a
+maximum number of unresolved `needs_review` labels. Keep this gate separate from
+`gate-export`: the reviewed gate proves curation readiness; the export gate
+proves deterministic dataset readiness.
 
 ## Failure Modes And Curriculum
 

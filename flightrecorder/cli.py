@@ -22,7 +22,13 @@ from .artifacts import (
 from .lineage import write_run_lineage
 from .redaction import sanitize_trace
 from .report import write_index, write_report
-from .review import ReviewExportError, apply_review_labels, export_review_queue
+from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
+from .reviewed_gate import (
+    REVIEWED_GATE_POLICY_SCHEMA_VERSION,
+    ReviewedGatePolicyError,
+    evaluate_reviewed_gate,
+    load_reviewed_gate_policy,
+)
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
@@ -52,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         ScenarioError,
         SuiteGatePolicyError,
         ReviewExportError,
+        ReviewedGatePolicyError,
         TrainingExportError,
         TrainingGatePolicyError,
         OSError,
@@ -456,6 +463,36 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_gate_reviewed(args: argparse.Namespace) -> int:
+    reviewed_dir = Path(args.reviewed_export)
+    manifest = _read_json(reviewed_dir / "manifest.json")
+    options = _reviewed_gate_options(args)
+    result = evaluate_reviewed_gate(
+        manifest,
+        reviewed_export_path=_display_path(reviewed_dir, args.preserve_paths),
+        min_reviewed_labels=options["min_reviewed_labels"],
+        min_accepted=options["min_accepted"],
+        min_rejected=options["min_rejected"],
+        min_sft=options["min_sft"],
+        min_reward_model=options["min_reward_model"],
+        min_preferences=options["min_preferences"],
+        min_dpo=options["min_dpo"],
+        max_needs_review=options["max_needs_review"],
+        forbid_labels=options["forbid_labels"],
+        require_task_families=options["require_task_families"],
+    )
+    if options["policy_path"]:
+        result["policy"] = _reviewed_gate_policy_summary(options)
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_export_rl(args: argparse.Namespace) -> int:
     manifest = export_rl_dataset(
         args.runs,
@@ -644,6 +681,33 @@ def _parser() -> argparse.ArgumentParser:
     gate_export.add_argument("--preserve-paths", action="store_true", help="Allow absolute export paths in gate output")
     gate_export.set_defaults(func=cmd_gate_export)
 
+    gate_reviewed = subparsers.add_parser("gate-reviewed", help="Evaluate readiness thresholds against an apply-review export")
+    gate_reviewed.add_argument("--reviewed-export", required=True, help="Directory containing apply-review artifacts")
+    gate_reviewed.add_argument("--policy", help="Versioned reviewed gate policy JSON file with committed threshold defaults")
+    gate_reviewed.add_argument("--out", help="Write gate result JSON to this path")
+    gate_reviewed.add_argument("--min-reviewed-labels", type=_non_negative_int_arg, help="Minimum completed human label count")
+    gate_reviewed.add_argument("--min-accepted", type=_non_negative_int_arg, help="Minimum accepted human label count")
+    gate_reviewed.add_argument(
+        "--min-rejected",
+        type=_non_negative_int_arg,
+        help="Minimum negative human label count across reject, unsafe, and incomplete labels",
+    )
+    gate_reviewed.add_argument("--min-sft", type=_non_negative_int_arg, help="Minimum reviewed SFT row count")
+    gate_reviewed.add_argument("--min-reward-model", type=_non_negative_int_arg, help="Minimum reviewed reward-model row count")
+    gate_reviewed.add_argument("--min-preferences", type=_non_negative_int_arg, help="Minimum reviewed preference pair count")
+    gate_reviewed.add_argument("--min-dpo", type=_non_negative_int_arg, help="Minimum reviewed DPO row count")
+    gate_reviewed.add_argument("--max-needs-review", type=_non_negative_int_arg, help="Maximum allowed needs_review labels")
+    gate_reviewed.add_argument(
+        "--forbid-label",
+        action="append",
+        default=[],
+        choices=list(REVIEW_LABELS),
+        help="Fail if this human label appears in the reviewed export",
+    )
+    gate_reviewed.add_argument("--require-task-family", action="append", default=[], help="Fail unless this task family is present")
+    gate_reviewed.add_argument("--preserve-paths", action="store_true", help="Allow absolute export paths in gate output")
+    gate_reviewed.set_defaults(func=cmd_gate_reviewed)
+
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
     export_rl.add_argument("--out", required=True, help="Output directory for evidence and trainer-ready artifacts")
@@ -827,6 +891,54 @@ def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
     }
     summary: dict[str, Any] = {
         "schema_version": TRAINING_GATE_POLICY_SCHEMA_VERSION,
+        "path": options["policy_path"],
+        "effective": effective,
+    }
+    if options.get("policy_description"):
+        summary["description"] = options["policy_description"]
+    return summary
+
+
+def _reviewed_gate_options(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_reviewed_gate_policy(args.policy) if args.policy else {}
+    return {
+        "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
+        "policy_description": policy.get("description"),
+        "min_reviewed_labels": (
+            args.min_reviewed_labels if args.min_reviewed_labels is not None else policy.get("min_reviewed_labels")
+        ),
+        "min_accepted": args.min_accepted if args.min_accepted is not None else policy.get("min_accepted"),
+        "min_rejected": args.min_rejected if args.min_rejected is not None else policy.get("min_rejected"),
+        "min_sft": args.min_sft if args.min_sft is not None else policy.get("min_sft"),
+        "min_reward_model": args.min_reward_model if args.min_reward_model is not None else policy.get("min_reward_model"),
+        "min_preferences": args.min_preferences if args.min_preferences is not None else policy.get("min_preferences"),
+        "min_dpo": args.min_dpo if args.min_dpo is not None else policy.get("min_dpo"),
+        "max_needs_review": args.max_needs_review if args.max_needs_review is not None else policy.get("max_needs_review"),
+        "forbid_labels": _merge_unique_strings(policy.get("forbid_labels", []), args.forbid_label),
+        "require_task_families": _merge_unique_strings(policy.get("require_task_families", []), args.require_task_family),
+    }
+
+
+def _reviewed_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
+    effective_fields = (
+        "min_reviewed_labels",
+        "min_accepted",
+        "min_rejected",
+        "min_sft",
+        "min_reward_model",
+        "min_preferences",
+        "min_dpo",
+        "max_needs_review",
+        "forbid_labels",
+        "require_task_families",
+    )
+    effective = {
+        field: options[field]
+        for field in effective_fields
+        if options.get(field) is not None and options.get(field) != []
+    }
+    summary: dict[str, Any] = {
+        "schema_version": REVIEWED_GATE_POLICY_SCHEMA_VERSION,
         "path": options["policy_path"],
         "effective": effective,
     }

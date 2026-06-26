@@ -186,14 +186,16 @@ Flight Recorder turns Hermes' experience into regression pressure.
    maintainers want to curate deterministic score labels before training.
 11. Apply completed labels with `flightrecorder apply-review` to produce
    human-reviewed SFT, reward-model, preference, and DPO views.
-12. Export episodes, rewards, step rewards, preference pairs, trainer-ready
+12. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before
+   human-curated labels become trainer input.
+13. Export episodes, rewards, step rewards, preference pairs, trainer-ready
    SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
    and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
    reward-modeling, or RL pipelines.
-13. Validate the generated artifacts and suite summary with
+14. Validate the generated artifacts and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
-14. Gate training-export readiness with `flightrecorder gate-export` before
+15. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs.
 
 That gives the Hermes team a practical improvement loop:
@@ -290,6 +292,8 @@ Demo evidence:
   curriculum, and manifest artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
   internally consistent, including suite-summary metrics.
+- `flightrecorder gate-reviewed` enforces human-review readiness before
+  reviewed labels and trainer-ready views are consumed downstream.
 - `flightrecorder gate-export` enforces dataset-readiness thresholds before
   trainer-facing rows are consumed downstream.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak

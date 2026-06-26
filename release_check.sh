@@ -206,6 +206,18 @@ test -f runs/reviewed_export/reviewed_dpo.jsonl
 python -m flightrecorder validate \
   --reviewed-export runs/reviewed_export \
   --strict >/dev/null
+python -m flightrecorder gate-reviewed \
+  --reviewed-export runs/reviewed_export \
+  --policy examples/reviewed_gate_policy.demo.json \
+  --out runs/reviewed_gate.json >/dev/null
+test -f runs/reviewed_gate.json
+test -f examples/reviewed_gate_policy.demo.json
+if python -m flightrecorder gate-reviewed \
+  --reviewed-export runs/reviewed_export \
+  --min-reviewed-labels 999 >/dev/null; then
+  echo "gate-reviewed did not fail a too-high reviewed-label threshold" >&2
+  exit 1
+fi
 if python -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-pass-rate 0.9 >/dev/null; then
@@ -238,6 +250,7 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder apply-review --help >/dev/null
 
