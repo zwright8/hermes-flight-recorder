@@ -246,8 +246,9 @@ The export directory contains:
 - `preferences.jsonl`: chosen/rejected pairs within the same task family.
 - `failure_modes.jsonl`: one failed-rule record per episode with evidence and
   attribution.
-- `curriculum.json`: task-family and rule-level rollups for prioritizing
-  regression work and future training curricula.
+- `curriculum.json`: task-family and rule-level rollups with priority scores,
+  scenario IDs, failure IDs, and evidence refs for prioritizing regression work
+  and future training curricula.
 - `sft.jsonl`: passing episode responses as supervised fine-tuning candidates.
 - `dpo.jsonl`: preference pairs reshaped as `prompt`, `chosen`, and `rejected`
   rows.
@@ -545,11 +546,14 @@ structured evidence refs, criticality, and attribution target. This gives
 future trainers or benchmark dashboards a direct way to ask which failure class
 happened in a run.
 
-`curriculum.json` rolls those rows up by task family and rule id. High-count
-critical modes are good candidates for new regression scenarios, targeted
-synthetic data generation, or focused reward-model review. Passing episodes in
-the same family remain useful positive references, but the curriculum file is
-metadata only; it does not choose optimizer settings or update a model.
+`curriculum.json` rolls those rows up by task family and rule id. Each failure
+mode carries a deterministic `priority_score`, `priority_band`, scenario IDs,
+failure IDs, penalties, example evidence, and bounded `example_evidence_refs`.
+High-priority critical modes are good candidates for new regression scenarios,
+targeted synthetic data generation, or focused reward-model review. Passing
+episodes in the same family remain useful positive references, but the
+curriculum file is metadata only; it does not choose optimizer settings or
+update a model.
 
 ## Future Trainer Shape
 

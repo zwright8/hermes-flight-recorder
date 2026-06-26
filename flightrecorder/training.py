@@ -634,20 +634,39 @@ def _curriculum_record(episodes: list[dict[str, Any]], failure_modes: list[dict[
                 "count": 0,
                 "critical_count": 0,
                 "episode_ids": [],
+                "scenario_ids": [],
+                "failure_ids": [],
                 "example_evidence": [],
+                "example_evidence_refs": [],
+                "_penalties": [],
             },
         )
         mode["count"] += 1
         if failure.get("critical"):
             mode["critical_count"] += 1
+        penalty = _int_value(failure.get("penalty"))
+        mode["_penalties"].append(penalty)
         episode_id = str(failure.get("episode_id") or "")
         if episode_id and episode_id not in mode["episode_ids"]:
             mode["episode_ids"].append(episode_id)
+        scenario_id = str(failure.get("scenario_id") or "")
+        if scenario_id and scenario_id not in mode["scenario_ids"]:
+            mode["scenario_ids"].append(scenario_id)
+        failure_id = str(failure.get("failure_id") or "")
+        if failure_id and failure_id not in mode["failure_ids"]:
+            mode["failure_ids"].append(failure_id)
         for evidence in failure.get("evidence", []):
             text = str(evidence)
             if text and text not in mode["example_evidence"]:
                 mode["example_evidence"].append(text)
             if len(mode["example_evidence"]) >= 3:
+                break
+        for ref in failure.get("evidence_refs", []):
+            if not isinstance(ref, dict):
+                continue
+            if ref not in mode["example_evidence_refs"]:
+                mode["example_evidence_refs"].append(ref)
+            if len(mode["example_evidence_refs"]) >= 3:
                 break
 
     family_rows: list[dict[str, Any]] = []
@@ -655,9 +674,15 @@ def _curriculum_record(episodes: list[dict[str, Any]], failure_modes: list[dict[
         scores = bucket.pop("scores")
         failure_map = bucket.pop("failure_modes")
         bucket["average_score"] = round(sum(scores) / len(scores), 2) if scores else 0.0
+        for mode in failure_map.values():
+            penalties = mode.pop("_penalties", [])
+            mode["max_penalty"] = max(penalties) if penalties else 0
+            mode["average_penalty"] = round(sum(penalties) / len(penalties), 2) if penalties else 0.0
+            mode["priority_score"] = _curriculum_priority_score(mode)
+            mode["priority_band"] = _curriculum_priority_band(mode["priority_score"])
         bucket["failure_modes"] = sorted(
             failure_map.values(),
-            key=lambda item: (-int(item["count"]), str(item["rule_id"])),
+            key=lambda item: (-int(item["priority_score"]), -int(item["count"]), str(item["rule_id"])),
         )
         family_rows.append(bucket)
 
@@ -668,10 +693,28 @@ def _curriculum_record(episodes: list[dict[str, Any]], failure_modes: list[dict[
         "task_families": family_rows,
         "recommended_use": [
             "Use high-count critical failure modes as regression priorities.",
+            "Sort failure_modes by priority_score to decide which scenario contracts or repair tasks to address first.",
             "Use passing episodes in the same task family as positive references.",
             "Treat this as curriculum metadata, not as an automatic trainer policy.",
         ],
     }
+
+
+def _curriculum_priority_score(mode: dict[str, Any]) -> int:
+    count = _int_value(mode.get("count"))
+    critical_count = _int_value(mode.get("critical_count"))
+    max_penalty = _int_value(mode.get("max_penalty"))
+    return count * 10 + critical_count * 100 + max_penalty
+
+
+def _curriculum_priority_band(priority_score: int) -> str:
+    if priority_score >= 150:
+        return "critical"
+    if priority_score >= 75:
+        return "high"
+    if priority_score >= 25:
+        return "medium"
+    return "low"
 
 
 def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:

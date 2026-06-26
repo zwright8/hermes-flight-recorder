@@ -265,6 +265,30 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("failure_modes[0].episode_id", errors)
             self.assertIn("does not reference an episode", errors)
 
+    def test_validate_rejects_broken_curriculum_priority_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            curriculum_path = export / "curriculum.json"
+            curriculum = json.loads(curriculum_path.read_text(encoding="utf-8"))
+            mode = curriculum["task_families"][0]["failure_modes"][0]
+            mode["priority_score"] = 999
+            mode["priority_band"] = "urgent"
+            mode["example_evidence_refs"] = [{"target": "not-a-target"}]
+            curriculum_path.write_text(json.dumps(curriculum, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("priority_score", errors)
+            self.assertIn("priority_band", errors)
+            self.assertIn("example_evidence_refs", errors)
+
     def test_validate_rejects_broken_step_reward_event_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

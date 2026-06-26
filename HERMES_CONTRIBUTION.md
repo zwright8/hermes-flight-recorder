@@ -170,7 +170,8 @@ The generated training export gives future model-improvement loops:
 - dataset-level metrics and a dataset card summarizing coverage, quality flags,
   and training-readiness boundaries,
 - structured evidence refs for event/final-answer/episode attribution,
-- one curriculum summary grouping failure pressure by task family and rule.
+- one prioritized curriculum summary grouping failure pressure by task family,
+  rule, scenario, failure ID, penalty, and evidence ref.
 
 The generated comparison export and gate give model-improvement loops a
 candidate-vs-baseline handoff check: it can require a concrete candidate win on
@@ -466,9 +467,10 @@ evidence.
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards, step-level attribution rows, chosen/rejected pairs,
 trainer-ready SFT/DPO/reward-model rows, failure-mode rows, and curriculum
-metadata, plus a dataset card that shows whether the export has enough positive
-examples, negative pressure, preferences, and attribution to be useful. Training
-code can consume the evidence without scraping HTML reports.
+metadata with deterministic priority scores, plus a dataset card that shows
+whether the export has enough positive examples, negative pressure, preferences,
+and attribution to be useful. Training code can consume the evidence without
+scraping HTML reports.
 
 Then I run `flightrecorder validate --strict`, which checks the data contracts:
 scorecards match their rules, rewards link back to episodes, step rewards point

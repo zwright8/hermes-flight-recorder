@@ -2658,10 +2658,71 @@ def _validate_curriculum(
                 target.errors.append(
                     f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].count must be a non-negative integer."
                 )
+            if not isinstance(mode.get("critical_count"), int) or isinstance(mode.get("critical_count"), bool) or mode.get("critical_count") < 0:
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].critical_count must be a non-negative integer."
+                )
+            if not isinstance(mode.get("max_penalty"), int) or isinstance(mode.get("max_penalty"), bool) or mode.get("max_penalty") < 0:
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].max_penalty must be a non-negative integer."
+                )
+            if not isinstance(mode.get("average_penalty"), (int, float)) or isinstance(mode.get("average_penalty"), bool):
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].average_penalty must be numeric."
+                )
+            if not isinstance(mode.get("priority_score"), int) or isinstance(mode.get("priority_score"), bool) or mode.get("priority_score") < 0:
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].priority_score must be a non-negative integer."
+                )
+            elif _is_non_negative_int(mode.get("count")) and _is_non_negative_int(mode.get("critical_count")) and _is_non_negative_int(mode.get("max_penalty")):
+                expected_priority = int(mode["count"]) * 10 + int(mode["critical_count"]) * 100 + int(mode["max_penalty"])
+                if mode.get("priority_score") != expected_priority:
+                    target.errors.append(
+                        f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].priority_score expected "
+                        f"{expected_priority}, got {mode.get('priority_score')!r}."
+                    )
+            if mode.get("priority_band") not in {"critical", "high", "medium", "low"}:
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].priority_band must be critical, high, medium, or low."
+                )
+            elif _is_non_negative_int(mode.get("priority_score")):
+                expected_band = _expected_curriculum_priority_band(int(mode["priority_score"]))
+                if mode.get("priority_band") != expected_band:
+                    target.errors.append(
+                        f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].priority_band expected "
+                        f"{expected_band!r}, got {mode.get('priority_band')!r}."
+                    )
             if not isinstance(mode.get("episode_ids"), list):
                 target.errors.append(
                     f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].episode_ids must be a list."
                 )
+            if not isinstance(mode.get("scenario_ids"), list):
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].scenario_ids must be a list."
+                )
+            if not isinstance(mode.get("failure_ids"), list):
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].failure_ids must be a list."
+                )
+            if not isinstance(mode.get("example_evidence"), list):
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].example_evidence must be a list."
+                )
+            _validate_evidence_refs(
+                mode.get("example_evidence_refs"),
+                target,
+                f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].example_evidence_refs",
+            )
+
+
+def _expected_curriculum_priority_band(priority_score: int) -> str:
+    if priority_score >= 150:
+        return "critical"
+    if priority_score >= 75:
+        return "high"
+    if priority_score >= 25:
+        return "medium"
+    return "low"
 
 
 def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -> None:

@@ -308,8 +308,9 @@ training-loop artifacts:
 - `preferences.jsonl`: chosen/rejected pairs inside each task family.
 - `failure_modes.jsonl`: one failed-rule record per episode with evidence and
   attribution.
-- `curriculum.json`: task-family rollups for prioritizing regression and
-  training curricula.
+- `curriculum.json`: task-family rollups with priority scores, scenario IDs,
+  failure IDs, and evidence refs for prioritizing regression and training
+  curricula.
 - `sft.jsonl`: passing episode responses formatted as supervised fine-tuning
   candidates.
 - `dpo.jsonl`: preference pairs reshaped as `prompt`, `chosen`, and `rejected`
@@ -914,9 +915,9 @@ preferences, SFT rows, DPO rows, reward-model rows, and comparison exports,
 adds per-episode `trace_signal` features for event volume, event types,
 final-answer coverage, tool/API visibility, and trace risks, emits
 trainer-ready SFT/DPO/reward-model views, emits failure-mode records for every
-failed rule, and writes a curriculum summary, dataset metrics file, and dataset
-card that group failure pressure, task-completion coverage, provenance
-coverage, trace-signal coverage, and training-readiness signals.
+failed rule, and writes a prioritized curriculum summary, dataset metrics file,
+and dataset card that group failure pressure, task-completion coverage,
+provenance coverage, trace-signal coverage, and training-readiness signals.
 
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.

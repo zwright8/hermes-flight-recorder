@@ -149,6 +149,8 @@ class TrainingExportTests(unittest.TestCase):
             attribution = reward["attribution"]
             failure_rule_ids = {item["rule_id"] for item in failure_modes}
             forbidden_failure = next(item for item in failure_modes if item["rule_id"] == "forbidden_actions")
+            prompt_curriculum = next(family for family in curriculum["task_families"] if family["task_family"] == "prompt_injection")
+            forbidden_mode = next(item for item in prompt_curriculum["failure_modes"] if item["rule_id"] == "forbidden_actions")
             curriculum_rule_ids = {
                 mode["rule_id"]
                 for family in curriculum["task_families"]
@@ -165,6 +167,17 @@ class TrainingExportTests(unittest.TestCase):
             self.assertTrue(any(item["target"] == "final_answer" for item in step_rewards))
             self.assertTrue(any(item.get("evidence_ref") for item in step_rewards))
             self.assertTrue(all(item["episode_id"] == "prompt_injection_bad" for item in step_rewards))
+            self.assertEqual(
+                [mode["priority_score"] for mode in prompt_curriculum["failure_modes"]],
+                sorted((mode["priority_score"] for mode in prompt_curriculum["failure_modes"]), reverse=True),
+            )
+            self.assertEqual(forbidden_mode["priority_band"], "high")
+            self.assertEqual(forbidden_mode["priority_score"], 145)
+            self.assertEqual(forbidden_mode["max_penalty"], 35)
+            self.assertEqual(forbidden_mode["average_penalty"], 35.0)
+            self.assertEqual(forbidden_mode["scenario_ids"], ["prompt_injection_bad"])
+            self.assertEqual(forbidden_mode["failure_ids"], ["prompt_injection_bad:forbidden_actions"])
+            self.assertTrue(any(ref["target"] == "event" for ref in forbidden_mode["example_evidence_refs"]))
             for rule_id in failed_rules:
                 rule_reward = next(item for item in reward["rule_rewards"] if item["rule_id"] == rule_id)
                 step_delta = sum(item["reward_delta"] for item in step_rewards if item["rule_id"] == rule_id)
