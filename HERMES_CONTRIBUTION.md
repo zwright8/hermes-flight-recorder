@@ -68,6 +68,12 @@ python -m flightrecorder check-scenarios \
   --require-traces \
   --strict \
   --out runs/scenario_check.json
+python -m flightrecorder draft-scenario \
+  --trace fixtures/email_reply_completion_good.observer.jsonl \
+  --id email_reply_completion_draft \
+  --title "Email Reply Completion Draft" \
+  --prompt "Reply to the assigned customer email." \
+  --out runs/email_reply_completion_draft.scenario.json
 ```
 
 `./demo.sh` uses `flightrecorder run-suite --scenarios scenarios --out runs`
@@ -114,6 +120,12 @@ commit a versioned gate policy, require a minimum pass rate or average score,
 cap failed scenarios or critical failures, and forbid specific failure classes
 such as secret exposure. The same policy can gate task families independently,
 so prompt-injection regressions cannot be masked by unrelated email-task wins.
+
+The draft-scenario command helps turn new Hermes runs into reviewable eval
+contracts. It reads one trace or completed Flight Recorder run, drafts budgets
+and structured required actions from observable tool results, and leaves review
+warnings so maintainers know where to tighten the scenario before using it as a
+benchmark.
 
 The generated training export gives future model-improvement loops:
 

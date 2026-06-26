@@ -83,6 +83,13 @@ flightrecorder check-scenarios \
   --strict \
   --out runs/scenario_check.json
 
+flightrecorder draft-scenario \
+  --trace fixtures/email_reply_completion_good.observer.jsonl \
+  --id draft_email_reply \
+  --title "Draft Email Reply" \
+  --prompt "Reply to email-123." \
+  --out runs/draft_email_reply.scenario.json
+
 flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --format auto \
@@ -274,6 +281,23 @@ Flight Recorder turns Hermes traces into deterministic task-completion
 evidence. Users can define their own eval scenarios, but the claims must be
 grounded in observable events: tool calls, tool results, observer hooks,
 artifacts, final answers, budgets, and policy constraints.
+
+To bootstrap a custom scenario from a known-good run, use `draft-scenario`:
+
+```bash
+flightrecorder draft-scenario \
+  --trace fixtures/email_reply_completion_good.observer.jsonl \
+  --id email_reply_completion_draft \
+  --title "Email Reply Completion Draft" \
+  --prompt "Reply to the assigned customer email." \
+  --out scenarios/email_reply_completion_draft.json
+```
+
+The draft is intentionally conservative: it derives budgets, creates structured
+required actions from successful tool-result events, avoids long body/content
+fields and secret-like values, and adds review warnings under `draft.warnings`.
+Treat it as a starting point, then tighten task-specific assertions before using
+it as a benchmark or training signal.
 
 For example, an email automation scenario can require one successful send event
 per assigned email thread. The matcher is structured, so users do not need to

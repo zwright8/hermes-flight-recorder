@@ -81,6 +81,9 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Store raw Hermes exports in a restricted directory.
 - Run `flightrecorder check-scenarios --scenarios <dir> --require-traces
   --strict` before publishing or running a custom scenario suite.
+- Use `flightrecorder draft-scenario --trace <trace> --out <scenario.json>` to
+  bootstrap a scenario from a known-good run, then review and tighten the
+  generated assertions before adding it to a release suite.
 - Run `flightrecorder run-suite --scenarios <dir> --out runs --validate
   --strict` as the default CI evidence-bundle command.
 - Add `--junit`, `--markdown`, and `--export-rl` when CI should publish native

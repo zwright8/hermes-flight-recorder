@@ -38,6 +38,21 @@ flightrecorder export-rl \
 
 `demo.sh` already runs this export for the included scenarios.
 
+When you have a new known-good trace but no scenario yet, bootstrap one first:
+
+```bash
+flightrecorder draft-scenario \
+  --trace traces/email_reply_good.observer.jsonl \
+  --id email_reply_good \
+  --title "Email Reply Good" \
+  --prompt "Reply to the assigned customer email." \
+  --out scenarios/email_reply_good.json
+```
+
+Review the generated `draft.warnings`, tighten the required actions and
+evidence, then add the scenario to the suite. Training exports are only as
+strong as the scenario contracts that produce their scorecards.
+
 Validate the generated dataset before sending it to downstream jobs:
 
 ```bash

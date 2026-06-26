@@ -23,6 +23,7 @@ from .redaction import sanitize_trace
 from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import check_scenarios, discover_scenarios
+from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
 from .scorers import score_trace
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .training import TrainingExportError, export_rl_dataset
@@ -317,6 +318,39 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0 if summary["passed"] else 1
 
 
+def cmd_draft_scenario(args: argparse.Namespace) -> int:
+    if args.run:
+        source_path = Path(args.run) / "normalized_trace.json"
+        trace = _read_json(source_path)
+        trace_format = "normalized_json"
+        source_label = str(source_path)
+    else:
+        source_path = Path(args.trace)
+        trace = normalize_trace(source_path, args.format)
+        trace_format = args.format
+        source_label = str(source_path)
+
+    scenario_id = safe_scenario_id(args.id or Path(args.run or args.trace).stem)
+    scenario = draft_scenario(
+        trace,
+        scenario_id=scenario_id,
+        title=args.title or f"Draft: {title_from_id(scenario_id)}",
+        prompt=args.prompt or "TODO: describe the intended task for this run.",
+        trace_path=source_path,
+        trace_format=trace_format,
+        out_path=args.out,
+        max_actions=args.max_actions,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), scenario)
+    source_score = score_draft(scenario, trace)
+    print(
+        f"wrote {args.out} from {source_label} "
+        f"source_score={source_score['score']} source_passed={str(source_score['passed']).lower()}"
+    )
+    return 0
+
+
 def cmd_gate_suite(args: argparse.Namespace) -> int:
     suite_summary = _read_json(Path(args.suite_summary))
     options = _gate_suite_options(args)
@@ -473,6 +507,19 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
+
+    draft = subparsers.add_parser("draft-scenario", help="Draft a scenario JSON file from an existing run or trace")
+    draft_source = draft.add_mutually_exclusive_group(required=True)
+    draft_source.add_argument("--trace", help="Trace artifact to normalize and use as source evidence")
+    draft_source.add_argument("--run", help="Run directory containing normalized_trace.json")
+    draft.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    draft.add_argument("--out", required=True, help="Scenario JSON output path")
+    draft.add_argument("--id", help="Scenario id; defaults to the source stem")
+    draft.add_argument("--title", help="Scenario title; defaults from --id")
+    draft.add_argument("--prompt", help="Scenario prompt; defaults to a TODO placeholder")
+    draft.add_argument("--max-actions", type=_non_negative_int_arg, default=8, help="Maximum tool-result actions to draft")
+    draft.add_argument("--preserve-paths", action="store_true", help="Write absolute trace paths instead of paths relative to --out")
+    draft.set_defaults(func=cmd_draft_scenario)
 
     gate_suite = subparsers.add_parser("gate-suite", help="Evaluate CI thresholds against a run-suite summary")
     gate_suite.add_argument("--suite-summary", required=True, help="Path to suite_summary.json")

@@ -20,6 +20,18 @@ python -m flightrecorder check-scenarios \
   --strict \
   --out runs/scenario_check.json >/dev/null
 test -f runs/scenario_check.json
+python -m flightrecorder draft-scenario \
+  --trace fixtures/email_reply_completion_good.observer.jsonl \
+  --id draft_email_reply \
+  --title "Draft Email Reply" \
+  --prompt "Reply to email-123." \
+  --out runs/draft_email_reply.scenario.json >/dev/null
+python -m flightrecorder run \
+  --scenario runs/draft_email_reply.scenario.json \
+  --out runs/draft_email_reply \
+  --fail-on-score >/dev/null
+test -f runs/draft_email_reply.scenario.json
+test -f runs/draft_email_reply/scorecard.json
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/prompt_injection_compare.json
@@ -99,6 +111,7 @@ fi
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder check-scenarios --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder draft-scenario --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
