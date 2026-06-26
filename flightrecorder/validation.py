@@ -1959,6 +1959,9 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -
             target.errors.append(f"suite_summary.runs[{index}].failed_rules must be a list of strings.")
         if not _is_string_list(run.get("critical_failures")):
             target.errors.append(f"suite_summary.runs[{index}].critical_failures must be a list of strings.")
+        for field_name in ("scenario_sha256", "trace_sha256"):
+            if field_name in run and run.get(field_name) is not None and not _is_sha256(run.get(field_name)):
+                target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a SHA-256 hex string or null.")
 
     metrics = summary.get("metrics")
     if not isinstance(metrics, dict):
@@ -3136,6 +3139,10 @@ def _is_non_negative_int(value: Any) -> bool:
 
 def _is_number_between(value: Any, minimum: float, maximum: float) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and minimum <= float(value) <= maximum
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value.lower())
 
 
 def _looks_absolute(value: str) -> bool:

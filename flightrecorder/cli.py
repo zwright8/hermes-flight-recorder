@@ -168,7 +168,9 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                     "scenario_title": result["scenario"].get("title", result["scenario"]["id"]),
                     "task_family": _task_family(str(result["scenario"]["id"])),
                     "scenario_path": _display_path(scenario_path, args.preserve_paths),
+                    "scenario_sha256": _lineage_input_hash(result["lineage"], "scenario"),
                     "trace_path": _display_path(result["trace_path"], args.preserve_paths),
+                    "trace_sha256": _lineage_input_hash(result["lineage"], "source_trace"),
                     "run_dir": _display_path(run_dir, args.preserve_paths),
                     "report": _display_path(result["paths"]["report"], args.preserve_paths),
                     "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
@@ -309,6 +311,10 @@ def cmd_compare_suite(args: argparse.Namespace) -> int:
         f"{'REGRESSION' if comparison['regressed'] else 'NO REGRESSION'} "
         f"paired={aggregate['paired_count']} avg_score_delta={aggregate['avg_score_delta']} wrote {args.out}"
     )
+    if args.fail_on_contract_drift and aggregate.get("contract_drift_count", 0) > 0:
+        return 1
+    if args.fail_on_unverified_contracts and aggregate.get("unverified_contract_count", 0) > 0:
+        return 1
     return 1 if args.fail_on_regression and comparison["regressed"] else 0
 
 
@@ -790,6 +796,8 @@ def _parser() -> argparse.ArgumentParser:
     compare_suite.add_argument("--baseline-label", help="Human-readable baseline label")
     compare_suite.add_argument("--candidate-label", help="Human-readable candidate label")
     compare_suite.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate suite regresses")
+    compare_suite.add_argument("--fail-on-contract-drift", action="store_true", help="Exit nonzero when paired scenarios use different scenario or trace fingerprints")
+    compare_suite.add_argument("--fail-on-unverified-contracts", action="store_true", help="Exit nonzero when paired scenarios are missing lineage fingerprints")
     compare_suite.set_defaults(func=cmd_compare_suite)
 
     trend_suite = subparsers.add_parser("trend-suite", help="Build a longitudinal trend over run-suite summaries")
@@ -1462,7 +1470,7 @@ def _run_scenario_artifacts(
     if markdown_out:
         write_markdown_summary(scorecard, markdown_out)
     write_report(scenario, trace, scorecard, report_path, regression_display)
-    write_run_lineage(
+    lineage = write_run_lineage(
         scenario=scenario,
         trace=trace,
         scorecard=scorecard,
@@ -1491,6 +1499,7 @@ def _run_scenario_artifacts(
             "report": report_path,
             "lineage": lineage_path,
         },
+        "lineage": lineage,
     }
 
 
@@ -1625,6 +1634,13 @@ def _failed_rule_ids(scorecard: dict[str, Any]) -> list[str]:
         for rule in scorecard.get("rules", [])
         if isinstance(rule, dict) and rule.get("id") and not rule.get("passed")
     ]
+
+
+def _lineage_input_hash(lineage: dict[str, Any], name: str) -> str | None:
+    for record in lineage.get("inputs", []):
+        if isinstance(record, dict) and record.get("name") == name and isinstance(record.get("sha256"), str):
+            return record["sha256"]
+    return None
 
 
 def _int_score(value: Any) -> int:

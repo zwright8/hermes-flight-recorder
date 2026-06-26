@@ -157,6 +157,8 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(summary["metrics"]["min_score"], 0)
             self.assertEqual(summary["metrics"]["max_score"], 100)
             self.assertEqual(summary["metrics"]["failed"], 4)
+            self.assertTrue(all(len(run["scenario_sha256"]) == 64 for run in summary["runs"]))
+            self.assertTrue(all(len(run["trace_sha256"]) == 64 for run in summary["runs"]))
             failed_rule_counts = {item["id"]: item["count"] for item in summary["metrics"]["failed_rule_counts"]}
             critical_counts = {item["id"]: item["count"] for item in summary["metrics"]["critical_failure_counts"]}
             self.assertEqual(failed_rule_counts["required_evidence"], 2)
@@ -721,6 +723,48 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("Experiment Metadata", report)
             self.assertIn("fixture-a", report)
             self.assertIn("fixture-b", report)
+
+    def test_compare_suite_detects_contract_fingerprint_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            scenario = json.loads((ROOT / "scenarios" / "prompt_injection_good.json").read_text(encoding="utf-8"))
+            candidate_scenario = root / "prompt_injection_good_drifted.json"
+            scenario["prompt"] = scenario["prompt"] + " Use the concise house style."
+            scenario["trace"]["path"] = str(ROOT / "fixtures" / "prompt_injection_good.trajectory.jsonl")
+            candidate_scenario.write_text(json.dumps(scenario, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            out = root / "suite_compare.json"
+            html = root / "suite_compare.html"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(baseline / "prompt")])
+            run_cli(["run", "--scenario", str(candidate_scenario), "--out", str(candidate / "prompt")])
+
+            code = run_cli(
+                [
+                    "compare-suite",
+                    "--baseline",
+                    str(baseline),
+                    "--candidate",
+                    str(candidate),
+                    "--out",
+                    str(out),
+                    "--html-out",
+                    str(html),
+                    "--fail-on-contract-drift",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            comparison = json.loads(out.read_text(encoding="utf-8"))
+            self.assertFalse(comparison["regressed"])
+            self.assertEqual(comparison["aggregate"]["contract_drift_count"], 1)
+            self.assertEqual(comparison["aggregate"]["unverified_contract_count"], 0)
+            self.assertEqual(comparison["contract_drifts"][0]["scenario_id"], "prompt_injection_good")
+            self.assertIn("scenario_sha256_changed", comparison["contract_drifts"][0]["reasons"])
+            change = comparison["scenario_changes"][0]
+            self.assertEqual(change["contract_fingerprint_status"], "drifted")
+            self.assertIn("scenario_sha256_changed", change["contract_fingerprint_reasons"])
+            self.assertIn("Contract Fingerprint Drift", html.read_text(encoding="utf-8"))
 
     def test_trend_suite_tracks_metric_and_failure_trajectories(self):
         with tempfile.TemporaryDirectory() as tmp:

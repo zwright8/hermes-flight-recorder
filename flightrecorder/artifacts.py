@@ -174,6 +174,8 @@ def compare_suites(
     paired_candidate_passed = 0
     paired_baseline_scorecards: dict[str, dict[str, Any]] = {}
     paired_candidate_scorecards: dict[str, dict[str, Any]] = {}
+    contract_drifts: list[dict[str, Any]] = []
+    unverified_contracts: list[dict[str, Any]] = []
 
     for scenario_id in scenario_ids:
         before = baseline.get(scenario_id)
@@ -217,6 +219,11 @@ def compare_suites(
             baseline_label=before["label"],
             candidate_label=after["label"],
         )
+        contract = _contract_comparison(before, after)
+        if contract["status"] == "drifted":
+            contract_drifts.append({"scenario_id": scenario_id, **contract})
+        elif contract["status"] == "unverified":
+            unverified_contracts.append({"scenario_id": scenario_id, **contract})
         delta = int(comparison["score_delta"])
         paired_deltas.append(delta)
         paired_baseline_scores.append(_score(before["scorecard"]))
@@ -248,6 +255,9 @@ def compare_suites(
                 "rule_fixes": comparison["fixes"],
                 "new_critical_failures": comparison["new_critical_failures"],
                 "regressed": comparison["regressed"],
+                "contract_fingerprint_status": contract["status"],
+                "contract_fingerprint_reasons": contract["reasons"],
+                "contract_fingerprints": contract["fingerprints"],
                 "summary": comparison["summary"],
             }
         )
@@ -269,6 +279,8 @@ def compare_suites(
             paired_candidate_scorecards,
             "critical_failures",
         ),
+        "contract_drift_count": len(contract_drifts),
+        "unverified_contract_count": len(unverified_contracts),
     }
     regressed = bool(regressions or missing_in_candidate)
     return {
@@ -291,6 +303,8 @@ def compare_suites(
         "improvements": improvements,
         "missing_in_candidate": missing_in_candidate,
         "new_in_candidate": new_in_candidate,
+        "contract_drifts": contract_drifts,
+        "unverified_contracts": unverified_contracts,
         "regressed": regressed,
         "summary": _suite_compare_summary(regressed, regressions, missing_in_candidate, improvements, aggregate),
     }
@@ -385,12 +399,15 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
     metadata = _suite_metadata_table(comparison.get("baseline", {}), comparison.get("candidate", {}))
     failure_deltas = _failure_delta_table(aggregate.get("failed_rule_deltas"), "Failed Rule Deltas")
     critical_deltas = _failure_delta_table(aggregate.get("critical_failure_deltas"), "Critical Failure Deltas")
+    contract_drift_table = _contract_drift_table(comparison.get("contract_drifts"), "Contract Fingerprint Drift")
+    unverified_contract_table = _contract_drift_table(comparison.get("unverified_contracts"), "Unverified Contract Fingerprints")
     rows = []
     for change in comparison.get("scenario_changes", []):
         rows.append(
             "<tr>"
             f"<td>{_esc(change.get('scenario_id'))}</td>"
             f"<td class=\"{_esc(change.get('status'))}\">{_esc(change.get('status'))}</td>"
+            f"<td class=\"{_esc(change.get('contract_fingerprint_status'))}\">{_esc(change.get('contract_fingerprint_status'))}</td>"
             f"<td>{_esc(change.get('baseline_score'))}</td>"
             f"<td>{_esc(change.get('candidate_score'))}</td>"
             f"<td>{_esc(change.get('score_delta'))}</td>"
@@ -409,7 +426,8 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
     .pass {{ color:#147a3d; background:#d1fadf; }}
     .fail, .regressed, .missing {{ color:#b42318; background:#fee4e2; }}
     .improved, .new {{ color:#147a3d; }}
-    .unchanged {{ color:#566573; }}
+    .unchanged, .matched {{ color:#566573; }}
+    .drifted, .unverified {{ color:#b42318; background:#fff1f0; }}
     .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; max-width:980px; margin:18px 0; }}
     .metric {{ border:1px solid #d6dbdf; border-radius:8px; padding:12px; }}
     .metric strong {{ display:block; font-size:1.4rem; }}
@@ -430,11 +448,14 @@ def write_suite_compare_report(comparison: dict[str, Any], out_path: str | Path)
     <div class="metric"><span>Avg Score Delta</span><strong>{aggregate.get('avg_score_delta')}</strong></div>
     <div class="metric"><span>Regressions</span><strong>{len(comparison.get('regressions', []))}</strong></div>
     <div class="metric"><span>Missing Candidate</span><strong>{len(comparison.get('missing_in_candidate', []))}</strong></div>
+    <div class="metric"><span>Contract Drift</span><strong>{aggregate.get('contract_drift_count')}</strong></div>
   </section>
   {failure_deltas}
   {critical_deltas}
+  {contract_drift_table}
+  {unverified_contract_table}
   <table>
-    <thead><tr><th>Scenario</th><th>Status</th><th>Baseline</th><th>Candidate</th><th>Delta</th><th>Summary</th></tr></thead>
+    <thead><tr><th>Scenario</th><th>Status</th><th>Contract</th><th>Baseline</th><th>Candidate</th><th>Delta</th><th>Summary</th></tr></thead>
     <tbody>{''.join(rows)}</tbody>
   </table>
 </body>
@@ -517,10 +538,84 @@ def _suite_scorecards(root: Path, *, allow_empty: bool = False) -> dict[str, dic
             "scorecard": scorecard,
             "run": score_path.parent.name,
             "label": _display_path(score_path),
+            "fingerprints": _run_fingerprints(score_path.parent),
         }
     if not scorecards and not allow_empty:
         raise ArtifactError(f"No scorecard.json files found in suite directory: {root}")
     return scorecards
+
+
+def _run_fingerprints(run_dir: Path) -> dict[str, Any]:
+    lineage_path = run_dir / "artifact_lineage.json"
+    fingerprints: dict[str, Any] = {
+        "lineage_path": _display_path(lineage_path),
+        "lineage_present": lineage_path.exists(),
+        "inputs": {},
+    }
+    if not lineage_path.exists():
+        return fingerprints
+    try:
+        lineage = _read_json(lineage_path)
+    except (OSError, json.JSONDecodeError):
+        fingerprints["lineage_readable"] = False
+        return fingerprints
+    fingerprints["lineage_readable"] = True
+    inputs = lineage.get("inputs") if isinstance(lineage.get("inputs"), list) else []
+    for record in inputs:
+        if not isinstance(record, dict):
+            continue
+        name = record.get("name")
+        if name not in {"scenario", "source_trace"}:
+            continue
+        fingerprints["inputs"][name] = {
+            "path": record.get("path"),
+            "sha256": record.get("sha256"),
+            "exists": record.get("exists"),
+        }
+    return fingerprints
+
+
+def _contract_comparison(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    before_inputs = before.get("fingerprints", {}).get("inputs") if isinstance(before.get("fingerprints"), dict) else {}
+    after_inputs = after.get("fingerprints", {}).get("inputs") if isinstance(after.get("fingerprints"), dict) else {}
+    before_inputs = before_inputs if isinstance(before_inputs, dict) else {}
+    after_inputs = after_inputs if isinstance(after_inputs, dict) else {}
+    reasons: list[str] = []
+    unknowns: list[str] = []
+    for name in ("scenario", "source_trace"):
+        before_hash = _input_sha(before_inputs.get(name))
+        after_hash = _input_sha(after_inputs.get(name))
+        if before_hash and after_hash:
+            if before_hash != after_hash:
+                reasons.append(f"{name}_sha256_changed")
+        else:
+            unknowns.append(f"{name}_sha256_unverified")
+    status = "drifted" if reasons else "unverified" if unknowns else "matched"
+    return {
+        "status": status,
+        "reasons": reasons or unknowns,
+        "fingerprints": {
+            "baseline": _contract_inputs(before_inputs),
+            "candidate": _contract_inputs(after_inputs),
+        },
+    }
+
+
+def _input_sha(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    sha = value.get("sha256")
+    return sha if isinstance(sha, str) and sha else None
+
+
+def _contract_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+    return {
+        name: {
+            "path": inputs.get(name, {}).get("path") if isinstance(inputs.get(name), dict) else None,
+            "sha256": _input_sha(inputs.get(name)),
+        }
+        for name in ("scenario", "source_trace")
+    }
 
 
 def _suite_metadata(root: Path) -> dict[str, str]:
@@ -635,6 +730,49 @@ def _failure_delta_table(value: Any, title: str) -> str:
         "</table>"
         "</section>"
     )
+
+
+def _contract_drift_table(value: Any, title: str) -> str:
+    rows_data = value if isinstance(value, list) else []
+    if not rows_data:
+        return ""
+    rows = []
+    for item in rows_data:
+        if not isinstance(item, dict):
+            continue
+        reasons = ", ".join(str(reason) for reason in item.get("reasons", []) if reason)
+        fingerprints = item.get("fingerprints") if isinstance(item.get("fingerprints"), dict) else {}
+        baseline = fingerprints.get("baseline") if isinstance(fingerprints.get("baseline"), dict) else {}
+        candidate = fingerprints.get("candidate") if isinstance(fingerprints.get("candidate"), dict) else {}
+        rows.append(
+            "<tr>"
+            f"<td><code>{_esc(item.get('scenario_id'))}</code></td>"
+            f"<td>{_esc(item.get('status'))}</td>"
+            f"<td>{_esc(reasons)}</td>"
+            f"<td><code>{_esc(_short_fingerprint(baseline))}</code></td>"
+            f"<td><code>{_esc(_short_fingerprint(candidate))}</code></td>"
+            "</tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        '<section class="contract-fingerprints">'
+        f"<h2>{_esc(title)}</h2>"
+        "<table>"
+        "<thead><tr><th>Scenario</th><th>Status</th><th>Reason</th><th>Baseline</th><th>Candidate</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        "</section>"
+    )
+
+
+def _short_fingerprint(inputs: dict[str, Any]) -> str:
+    parts = []
+    for name in ("scenario", "source_trace"):
+        record = inputs.get(name) if isinstance(inputs.get(name), dict) else {}
+        sha = record.get("sha256") if isinstance(record.get("sha256"), str) else None
+        parts.append(f"{name}={sha[:12] if sha else 'missing'}")
+    return "; ".join(parts)
 
 
 def _trend_point(summary: dict[str, Any], path: Path, index: int) -> dict[str, Any]:

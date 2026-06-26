@@ -400,6 +400,11 @@ JSON and HTML report show the baseline and candidate metadata side by side.
 The aggregate comparison also includes failed-rule and critical-failure deltas
 so repair loops can see which failure classes increased, decreased, or stayed
 flat across paired scenarios.
+When run directories include `artifact_lineage.json`, suite comparison also
+checks scenario and source-trace SHA-256 fingerprints. Add
+`--fail-on-contract-drift` to fail CI when a paired scenario used a different
+scenario contract or trace fixture, and `--fail-on-unverified-contracts` to
+require lineage fingerprints before trusting the comparison.
 
 Use `flightrecorder trend-suite` to summarize a sequence of `suite_summary.json`
 files over multiple iterations. The trend JSON and HTML report show pass-rate

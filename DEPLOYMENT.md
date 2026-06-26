@@ -108,6 +108,8 @@ network.
   `suite_summary.json` metadata, the comparison JSON and HTML show the
   baseline/candidate config identity side by side. Use aggregate failed-rule and
   critical-failure deltas to prioritize which failure classes need repair.
+  Add `--fail-on-contract-drift --fail-on-unverified-contracts` when CI must
+  prove paired scenarios used the same scenario and source-trace fingerprints.
 - Use `flightrecorder trend-suite --suite-summary <old> --suite-summary <new>
   --out <trend.json>` when CI stores multiple suite summaries and maintainers
   need to review progress across an improvement run, not just one comparison.

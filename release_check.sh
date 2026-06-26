@@ -92,6 +92,9 @@ assert suite_compare["candidate"]["metadata"]["candidate"] == "offline-demo"
 assert suite_compare["aggregate"]["failed_rule_deltas"]
 assert all(item["delta"] == 0 for item in suite_compare["aggregate"]["failed_rule_deltas"])
 assert all(item["delta"] == 0 for item in suite_compare["aggregate"]["critical_failure_deltas"])
+assert suite_compare["aggregate"]["contract_drift_count"] == 0
+assert suite_compare["aggregate"]["unverified_contract_count"] == 0
+assert all(item["contract_fingerprint_status"] == "matched" for item in suite_compare["scenario_changes"])
 assert "Experiment Metadata" in suite_compare_html
 assert "Failed Rule Deltas" in suite_compare_html
 assert suite_trend["point_count"] == 2
@@ -434,7 +437,13 @@ assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["m
 assert bundle["metrics"]["review_calibration"]["agreement_rate"] == 1.0
 assert bundle["metrics"]["review_calibration"]["disagreement_count"] == 0
 PY
-python -m flightrecorder compare-suite --baseline runs --candidate runs --out runs/suite_compare_check.json --fail-on-regression >/dev/null
+python -m flightrecorder compare-suite \
+  --baseline runs \
+  --candidate runs \
+  --out runs/suite_compare_check.json \
+  --fail-on-regression \
+  --fail-on-contract-drift \
+  --fail-on-unverified-contracts >/dev/null
 
 python -m flightrecorder audit \
   --runs runs \

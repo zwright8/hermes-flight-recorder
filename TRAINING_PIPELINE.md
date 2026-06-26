@@ -39,6 +39,9 @@ outputs so baseline/candidate comparisons remain tied to the evaluated configs.
 It also emits aggregate failed-rule and critical-failure deltas across paired
 scenarios, giving repair or curriculum loops a compact view of which failure
 classes gained or lost pressure.
+It also checks per-run lineage fingerprints when available, so improvement
+loops can detect when a same-named paired scenario actually changed scenario
+contract or trace fixture between baseline and candidate runs.
 Use `flightrecorder trend-suite --suite-summary ...` when you have more than
 two iterations and want pass-rate, score, failed-rule, and critical-failure
 trajectories across the whole improvement run. Validate `suite_trend.json`
