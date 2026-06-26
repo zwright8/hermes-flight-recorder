@@ -772,6 +772,17 @@ python -m flightrecorder action-ledger \
   --bundle runs/evidence_bundle_full.json \
   --out runs/action_ledger.json >/dev/null
 test -f runs/action_ledger.json
+python -m flightrecorder gate-action-ledger \
+  --action-ledger runs/action_ledger.json \
+  --policy examples/action_ledger_gate_policy.demo.json \
+  --out runs/action_ledger_gate.json >/dev/null
+test -f runs/action_ledger_gate.json
+if python -m flightrecorder gate-action-ledger \
+  --action-ledger runs/action_ledger.json \
+  --max-recurring-actions 0 >/dev/null; then
+  echo "gate-action-ledger did not fail a too-strict recurring action threshold" >&2
+  exit 1
+fi
 python -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
@@ -811,6 +822,7 @@ from pathlib import Path
 
 bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="utf-8"))
 action_ledger = json.loads(Path("runs/action_ledger.json").read_text(encoding="utf-8"))
+action_ledger_gate = json.loads(Path("runs/action_ledger_gate.json").read_text(encoding="utf-8"))
 preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
@@ -845,6 +857,12 @@ assert all(
     entry["routing_key"] == f"{entry['artifact']}:{entry['id']}:{entry['action_fingerprint'][:12]}"
     for entry in action_ledger["entries"]
 )
+assert action_ledger_gate["schema_version"] == "hfr.action_ledger_gate.v1"
+assert action_ledger_gate["passed"] is True
+assert action_ledger_gate["failed_check_count"] == 0
+assert action_ledger_gate["policy"]["schema_version"] == "hfr.action_ledger_gate.policy.v1"
+assert action_ledger_gate["policy"]["effective"]["max_recurring_actions"] == 6
+assert action_ledger_gate["metrics"]["recurring_action_count"] == action_ledger["metrics"]["recurring_action_count"]
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
@@ -928,6 +946,8 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help | grep -q -- "--live-smoke-summary"
 "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help | grep -q -- "--bundle"
+"$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help | grep -q -- "--max-recurring-actions"
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null

@@ -121,6 +121,21 @@ The ledger groups advisory actions by `routing_key`, records which bundle first
 and last saw each action, and marks each one as `new`, `recurring`, `open`, or
 `resolved` relative to the latest bundle.
 
+Use `flightrecorder gate-action-ledger` to block trainer promotion when repair
+pressure is not shrinking:
+
+```bash
+flightrecorder gate-action-ledger \
+  --action-ledger runs/action_ledger.json \
+  --policy examples/action_ledger_gate_policy.demo.json \
+  --out runs/action_ledger_gate.json
+```
+
+Policies can cap open, new, or recurring actions, require a minimum number of
+resolved actions, forbid open priority levels, and require specific routing keys
+to be resolved. That makes repeated eval evidence usable as an explicit
+trainer-side readiness signal.
+
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the
 trainer-facing export files, verifies required gates are present and passed, and

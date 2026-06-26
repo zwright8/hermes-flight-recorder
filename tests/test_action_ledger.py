@@ -2,15 +2,17 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def run_cli(args):
-    with redirect_stdout(StringIO()):
+    with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
         return main(args)
 
 
@@ -43,6 +45,68 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertTrue(all(entry["routing_key"].endswith(entry["action_fingerprint"][:12]) for entry in ledger["entries"]))
             self.assertEqual(run_cli(["validate", "--action-ledger", str(ledger_path), "--strict"]), 0)
 
+            gate_path = root / "action_ledger_gate.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-action-ledger",
+                        "--action-ledger",
+                        str(ledger_path),
+                        "--policy",
+                        str(ROOT / "examples" / "action_ledger_gate_policy.demo.json"),
+                        "--out",
+                        str(gate_path),
+                    ]
+                ),
+                0,
+            )
+            gate_result = json.loads(gate_path.read_text(encoding="utf-8"))
+            self.assertEqual(gate_result["schema_version"], "hfr.action_ledger_gate.v1")
+            self.assertTrue(gate_result["passed"])
+            self.assertEqual(gate_result["policy"]["schema_version"], "hfr.action_ledger_gate.policy.v1")
+            self.assertEqual(gate_result["policy"]["effective"]["max_recurring_actions"], 6)
+
+            strict_gate_path = root / "strict_action_ledger_gate.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-action-ledger",
+                        "--action-ledger",
+                        str(ledger_path),
+                        "--max-recurring-actions",
+                        "0",
+                        "--forbid-open-priority",
+                        "critical",
+                        "--out",
+                        str(strict_gate_path),
+                    ]
+                ),
+                1,
+            )
+            strict_gate = json.loads(strict_gate_path.read_text(encoding="utf-8"))
+            failed_checks = {check["id"] for check in strict_gate["checks"] if not check["passed"]}
+            self.assertIn("max_recurring_actions", failed_checks)
+            self.assertIn("forbid_open_priority", failed_checks)
+
+    def test_gate_action_ledger_rejects_wrong_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            not_ledger = root / "not_ledger.json"
+            not_ledger.write_text(json.dumps({"schema_version": "hfr.not_a_ledger.v1", "metrics": {}, "entries": []}) + "\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "gate-action-ledger",
+                        "--action-ledger",
+                        str(not_ledger),
+                        "--max-open-actions",
+                        "0",
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+
     def test_action_ledger_marks_resolved_and_new_actions(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -69,6 +133,28 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertGreater(ledger["metrics"]["resolved_action_count"], 0)
             self.assertGreater(ledger["metrics"]["new_action_count"], 0)
             self.assertEqual(run_cli(["validate", "--action-ledger", str(ledger_path), "--strict"]), 0)
+
+            resolved_key = next(entry["routing_key"] for entry in ledger["entries"] if entry["status"] == "resolved")
+            gate_path = root / "resolved_action_ledger_gate.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-action-ledger",
+                        "--action-ledger",
+                        str(ledger_path),
+                        "--min-resolved-actions",
+                        "1",
+                        "--require-resolved-action",
+                        resolved_key,
+                        "--out",
+                        str(gate_path),
+                    ]
+                ),
+                0,
+            )
+            gate_result = json.loads(gate_path.read_text(encoding="utf-8"))
+            self.assertTrue(gate_result["passed"])
+            self.assertEqual(gate_result["metrics"]["resolved_action_count"], ledger["metrics"]["resolved_action_count"])
 
     def test_validate_rejects_stale_action_ledger_counts(self):
         with tempfile.TemporaryDirectory() as tmp:

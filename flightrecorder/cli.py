@@ -13,6 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from .action_ledger import ActionLedgerError, build_action_ledger
+from .action_gate import (
+    ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
+    ActionLedgerGateError,
+    ActionLedgerGatePolicyError,
+    evaluate_action_ledger_gate,
+    load_action_ledger_gate_policy,
+)
 from .adapters import AdapterError, normalize_trace
 from .artifacts import (
     ArtifactError,
@@ -96,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
         ReviewCalibrationError,
         TraceObservabilityError,
         ActionLedgerError,
+        ActionLedgerGateError,
+        ActionLedgerGatePolicyError,
         ReplayError,
         OSError,
         json.JSONDecodeError,
@@ -970,6 +979,33 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_gate_action_ledger(args: argparse.Namespace) -> int:
+    ledger = _read_json(Path(args.action_ledger))
+    options = _action_ledger_gate_options(args)
+    result = evaluate_action_ledger_gate(
+        ledger,
+        action_ledger_path=_display_path(Path(args.action_ledger), args.preserve_paths),
+        min_bundles=options["min_bundles"],
+        max_open_actions=options["max_open_actions"],
+        max_new_actions=options["max_new_actions"],
+        max_recurring_actions=options["max_recurring_actions"],
+        min_resolved_actions=options["min_resolved_actions"],
+        forbid_open_priorities=options["forbid_open_priorities"],
+        forbid_open_actions=options["forbid_open_actions"],
+        require_resolved_actions=options["require_resolved_actions"],
+    )
+    if options["policy_path"]:
+        result["policy"] = _action_ledger_gate_policy_summary(options)
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_trainer_preflight(args: argparse.Namespace) -> int:
     metadata = _metadata_options(args.metadata)
     preflight = build_trainer_preflight(
@@ -1420,6 +1456,40 @@ def _parser() -> argparse.ArgumentParser:
     action_ledger.add_argument("--out", help="Write action ledger JSON to this path")
     action_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
     action_ledger.set_defaults(func=cmd_action_ledger)
+
+    gate_action_ledger = subparsers.add_parser(
+        "gate-action-ledger",
+        help="Evaluate improvement-loop thresholds against an action ledger",
+    )
+    gate_action_ledger.add_argument("--action-ledger", required=True, help="Path to action_ledger.json")
+    gate_action_ledger.add_argument("--policy", help="Versioned action-ledger gate policy JSON file")
+    gate_action_ledger.add_argument("--out", help="Write action-ledger gate JSON to this path")
+    gate_action_ledger.add_argument("--min-bundles", type=_non_negative_int_arg, help="Minimum evidence bundles required in the ledger")
+    gate_action_ledger.add_argument("--max-open-actions", type=_non_negative_int_arg, help="Maximum actions still open in the latest bundle")
+    gate_action_ledger.add_argument("--max-new-actions", type=_non_negative_int_arg, help="Maximum actions first seen in the latest bundle")
+    gate_action_ledger.add_argument("--max-recurring-actions", type=_non_negative_int_arg, help="Maximum actions recurring from earlier bundles")
+    gate_action_ledger.add_argument("--min-resolved-actions", type=_non_negative_int_arg, help="Minimum actions resolved before the latest bundle")
+    gate_action_ledger.add_argument(
+        "--forbid-open-priority",
+        action="append",
+        default=[],
+        choices=["critical", "high", "medium", "low"],
+        help="Fail if any open action has this priority; may be repeated",
+    )
+    gate_action_ledger.add_argument(
+        "--forbid-open-action",
+        action="append",
+        default=[],
+        help="Fail if this action id, routing key, or fingerprint is open; may be repeated",
+    )
+    gate_action_ledger.add_argument(
+        "--require-resolved-action",
+        action="append",
+        default=[],
+        help="Fail unless this action id, routing key, or fingerprint is resolved; may be repeated",
+    )
+    gate_action_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute ledger paths in gate output")
+    gate_action_ledger.set_defaults(func=cmd_gate_action_ledger)
 
     draft = subparsers.add_parser("draft-scenario", help="Draft a scenario JSON file from an existing run or trace")
     draft_source = draft.add_mutually_exclusive_group(required=True)
@@ -2226,6 +2296,52 @@ def _compare_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
     }
     summary: dict[str, Any] = {
         "schema_version": COMPARE_GATE_POLICY_SCHEMA_VERSION,
+        "path": options["policy_path"],
+        "effective": effective,
+    }
+    if options.get("policy_description"):
+        summary["description"] = options["policy_description"]
+    return summary
+
+
+def _action_ledger_gate_options(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_action_ledger_gate_policy(args.policy) if args.policy else {}
+    return {
+        "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
+        "policy_description": policy.get("description"),
+        "min_bundles": args.min_bundles if args.min_bundles is not None else policy.get("min_bundles"),
+        "max_open_actions": args.max_open_actions if args.max_open_actions is not None else policy.get("max_open_actions"),
+        "max_new_actions": args.max_new_actions if args.max_new_actions is not None else policy.get("max_new_actions"),
+        "max_recurring_actions": (
+            args.max_recurring_actions if args.max_recurring_actions is not None else policy.get("max_recurring_actions")
+        ),
+        "min_resolved_actions": (
+            args.min_resolved_actions if args.min_resolved_actions is not None else policy.get("min_resolved_actions")
+        ),
+        "forbid_open_priorities": _merge_unique_strings(policy.get("forbid_open_priorities", []), args.forbid_open_priority),
+        "forbid_open_actions": _merge_unique_strings(policy.get("forbid_open_actions", []), args.forbid_open_action),
+        "require_resolved_actions": _merge_unique_strings(policy.get("require_resolved_actions", []), args.require_resolved_action),
+    }
+
+
+def _action_ledger_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
+    effective_fields = (
+        "min_bundles",
+        "max_open_actions",
+        "max_new_actions",
+        "max_recurring_actions",
+        "min_resolved_actions",
+        "forbid_open_priorities",
+        "forbid_open_actions",
+        "require_resolved_actions",
+    )
+    effective = {
+        field: options[field]
+        for field in effective_fields
+        if options.get(field) is not None and options.get(field) != []
+    }
+    summary: dict[str, Any] = {
+        "schema_version": ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
         "path": options["policy_path"],
         "effective": effective,
     }

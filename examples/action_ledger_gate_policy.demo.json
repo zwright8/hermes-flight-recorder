@@ -1,0 +1,9 @@
+{
+  "schema_version": "hfr.action_ledger_gate.policy.v1",
+  "description": "Demo action-ledger gate for longitudinal improvement-loop pressure.",
+  "min_bundles": 2,
+  "max_open_actions": 6,
+  "max_new_actions": 0,
+  "max_recurring_actions": 6,
+  "min_resolved_actions": 0
+}

@@ -638,6 +638,21 @@ marks actions as `new`, `recurring`, `open`, or `resolved` relative to the
 latest bundle. It is useful for issue trackers, repair-agent queues, and
 experiment notes; it still does not execute repairs.
 
+Use `flightrecorder gate-action-ledger` when CI should require the improvement
+loop to reduce repair pressure before promotion:
+
+```bash
+flightrecorder gate-action-ledger \
+  --action-ledger runs/action_ledger.json \
+  --policy examples/action_ledger_gate_policy.demo.json \
+  --out runs/action_ledger_gate.json
+```
+
+The gate can enforce minimum bundle history, maximum open/new/recurring
+actions, minimum resolved actions, forbidden open priorities, forbidden open
+action IDs, and required resolved action IDs. This turns the ledger into a
+deterministic convergence check while keeping repairs external and auditable.
+
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
 failed scenarios, maximum critical failures, or forbidden failed-rule IDs.
