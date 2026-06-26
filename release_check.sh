@@ -32,8 +32,10 @@ python -m flightrecorder run \
   --fail-on-score >/dev/null
 test -f runs/draft_email_reply.scenario.json
 test -f runs/draft_email_reply/scorecard.json
+test -f runs/draft_email_reply/artifact_lineage.json
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
+test -f runs/email_reply_completion_good/artifact_lineage.json
 test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
@@ -95,6 +97,10 @@ from pathlib import Path
 scorecard = json.loads(Path("runs/prompt_injection_bad/scorecard.json").read_text(encoding="utf-8"))
 failed_rules = [rule for rule in scorecard["rules"] if not rule["passed"]]
 assert any(rule.get("evidence_refs") for rule in failed_rules)
+lineage = json.loads(Path("runs/prompt_injection_bad/artifact_lineage.json").read_text(encoding="utf-8"))
+assert lineage["schema_version"] == "hfr.lineage.v1"
+assert any(item["name"] == "scorecard" and item.get("sha256") for item in lineage["outputs"])
+assert lineage["summary"]["evidence_link_count"] == len(lineage["evidence_links"])
 
 rewards = [
     json.loads(line)
@@ -128,11 +134,17 @@ reward_model = [
 ]
 dataset_metrics = json.loads(Path("runs/training_export/dataset_metrics.json").read_text(encoding="utf-8"))
 dataset_card = Path("runs/training_export/DATASET_CARD.md").read_text(encoding="utf-8")
+episodes = [
+    json.loads(line)
+    for line in Path("runs/training_export/episodes.jsonl").read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
 assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
 assert any(item.get("evidence_ref") for item in step_rewards)
 assert any(item.get("target") == "event" and isinstance(item.get("event_index"), int) for item in step_rewards)
 assert any(mode.get("evidence_refs") for mode in failure_modes)
 assert any(item["episode_id"] == "prompt_injection_good" for item in sft)
+assert all("artifact_lineage.json" in item.get("source_lineage", "") for item in episodes)
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
 assert {item["episode_id"] for item in reward_model} >= {"prompt_injection_good", "prompt_injection_bad"}
 assert dataset_metrics["artifact_counts"]["episodes"] == 5

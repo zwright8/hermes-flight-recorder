@@ -25,7 +25,8 @@ python -m unittest discover
 ```
 
 The demo runs `flightrecorder run-suite` and generates `runs/index.html` with
-two passing reports, three failing adversarial reports, `runs/suite_summary.json`,
+two passing reports, three failing adversarial reports, per-run
+`artifact_lineage.json` provenance manifests, `runs/suite_summary.json`,
 single-run and suite compare reports, and `runs/training_export/` training
 artifacts. It also writes `runs/validation.json` to prove the generated
 contracts are internally consistent. No API keys or network are required.
@@ -74,7 +75,8 @@ The smoke runs a real `uv run hermes chat` session against a local mock model
 endpoint and an isolated temporary `HERMES_HOME`. It proves the optional
 observer plugin can be loaded by Hermes, receives observer hooks, and produces
 `live_observer.jsonl`, `normalized_trace.json`, `scorecard.json`, and
-`report.html` without external API keys or network.
+`report.html`, plus `artifact_lineage.json`, without external API keys or
+network.
 
 ## Operational Checklist
 
@@ -111,7 +113,8 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
   --policy <policy.json>` when CI must block training jobs unless an export has
   enough examples, preferences, attribution, task-family coverage, and no
   forbidden quality flags.
-- Publish `report.html` and `scorecard.json`; avoid publishing raw traces.
+- Publish `report.html`, `scorecard.json`, and `artifact_lineage.json`; avoid
+  publishing raw traces.
 - Run `flightrecorder audit --runs runs --fail-on-leak --forbid-text <secret>`
   before publishing generated artifacts.
 - Keep failing `regression_scenario.json` files with the test suite.

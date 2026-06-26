@@ -164,7 +164,7 @@ observer plugin, executed `uv run hermes chat`, emitted `on_session_start`,
 `pre_llm_call`, `pre_api_request`, `post_api_request`, `post_llm_call`,
 `on_session_end`, and `on_session_finalize`, and Flight Recorder converted the
 captured observer JSONL into `normalized_trace.json`, `scorecard.json`, and
-`report.html`.
+`report.html`, plus an `artifact_lineage.json` provenance manifest.
 
 ## How This Improves The Self-Improvement Loop
 
@@ -211,6 +211,8 @@ That gives the Hermes team a practical improvement loop:
   did not under- or over-execute,
 - deterministic scorecards can become terminal rewards, step-level reward
   attribution, preference pairs, failure taxonomies, and curriculum metadata,
+- artifact lineage can connect every scorecard and training episode back to the
+  source trace, generated files, hashes, and structured evidence refs,
 - generated artifacts can be contract-validated before they become evidence,
 - and reports give maintainers a quick visual explanation of why a run passed
   or failed.

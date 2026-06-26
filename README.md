@@ -181,6 +181,8 @@ Each run directory contains:
 - `normalized_trace.json`: canonical `hfr.trace.v1` trace, redacted by default.
 - `scorecard.json`: deterministic pass/fail rule results.
 - `report.html`: self-contained static flight-recorder report.
+- `artifact_lineage.json`: provenance graph linking inputs, outputs, file
+  hashes, and scorecard evidence refs.
 - `regression_scenario.json`: emitted only for failing runs.
 
 `flightrecorder export-rl` converts completed run directories into future
@@ -446,10 +448,12 @@ flightrecorder export-rl \
   --min-score-gap 1
 ```
 
-The exporter reads only `normalized_trace.json` and `scorecard.json` from each
-completed run directory. It derives scalar rewards from deterministic scores,
-adds failed-rule attribution where the scorecard points to an event or final
-answer, carries structured `evidence_refs` into rewards, step rewards, and
+The exporter reads canonical evidence from `normalized_trace.json` and
+`scorecard.json` in each completed run directory, and carries
+`artifact_lineage.json` into each episode as `source_lineage` when the run
+emitted provenance metadata. It derives scalar rewards from deterministic
+scores, adds failed-rule attribution where the scorecard points to an event or
+final answer, carries structured `evidence_refs` into rewards, step rewards, and
 failure modes, creates preference pairs when one run clearly beats another in
 the same task family, emits trainer-ready SFT/DPO/reward-model views, emits
 failure-mode records for every failed rule, and writes a curriculum summary,
@@ -497,6 +501,9 @@ scenario directory or single scenario + trace artifact
           |
           v
 	  static report renderer -> report.html
+	          |
+	          v
+	  lineage builder -> artifact_lineage.json
 	          |
 	          v
 	  failed run -> regression_scenario.json
@@ -584,6 +591,7 @@ Successful output includes:
 - `normalized_trace.json`: canonical `hfr.trace.v1` observer trace.
 - `scorecard.json`: deterministic pass/fail evidence for the live run.
 - `report.html`: static report suitable for a maintainer demo.
+- `artifact_lineage.json`: file-hash and evidence-ref provenance for the run.
 
 ## Release Check
 

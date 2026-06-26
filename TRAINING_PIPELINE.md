@@ -88,19 +88,23 @@ The export directory contains:
 - `manifest.json`: generation settings, counts, output paths, and caveats.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
-use the redacted evidence surface rather than raw sensitive traces.
+use the redacted evidence surface rather than raw sensitive traces. When a run
+contains `artifact_lineage.json`, each episode also includes `source_lineage`
+so downstream training rows can be traced back to the provenance graph that
+connected source trace, scorecard, report, and evidence refs.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
 links, step-reward event indexes, preference references, failure-mode links,
-curriculum counts, trainer-ready view rows, dataset metrics, and dataset-card
-sections are internally consistent.
+curriculum counts, trainer-ready view rows, dataset metrics, dataset-card
+sections, lineage hashes, and lineage evidence links are internally consistent.
 
 ## Episode Records
 
 Each episode includes:
 
 - `episode_id` and source run directory,
+- optional `source_lineage` pointing to the run provenance manifest,
 - scenario id/title and derived `task_family`,
 - prompt recovered from the first user-message event,
 - normalized events,

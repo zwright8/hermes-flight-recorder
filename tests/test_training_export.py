@@ -67,6 +67,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertNotIn(str(Path(tmp)), (out / "manifest.json").read_text(encoding="utf-8"))
             self.assertTrue(all(str(Path(tmp)) not in json.dumps(episode) for episode in episodes))
             self.assertEqual({episode["schema_version"] for episode in episodes}, {"hfr.rl.episode.v1"})
+            self.assertTrue(all("artifact_lineage.json" in episode["source_lineage"] for episode in episodes))
             self.assertEqual({reward["schema_version"] for reward in rewards}, {"hfr.rl.reward.v1"})
             self.assertEqual({step_reward["schema_version"] for step_reward in step_rewards}, {"hfr.rl.step_reward.v1"})
             self.assertEqual(preferences[0]["schema_version"], "hfr.rl.preference.v1")

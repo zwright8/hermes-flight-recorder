@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .adapters import TRACE_SCHEMA_VERSION
+from .lineage import LINEAGE_SCHEMA_VERSION
 from .scorers import SCORE_SCHEMA_VERSION
 from .training import (
     RL_CURRICULUM_SCHEMA_VERSION,
@@ -116,12 +118,16 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     trace_path = run_dir / "normalized_trace.json"
     score_path = run_dir / "scorecard.json"
     report_path = run_dir / "report.html"
+    lineage_path = run_dir / "artifact_lineage.json"
     trace = _read_object(trace_path, target, "normalized_trace.json")
     scorecard = _read_object(score_path, target, "scorecard.json")
+    lineage = _read_object_optional(lineage_path, target, "artifact_lineage.json", "rerun the run to emit provenance metadata")
     if trace is not None:
         _validate_trace(trace, target)
     if scorecard is not None:
         _validate_scorecard(scorecard, target)
+    if lineage is not None:
+        _validate_lineage(lineage, target, run_dir, trace, scorecard)
     if trace is not None and scorecard is not None:
         target.details.update(
             {
@@ -334,6 +340,67 @@ def _validate_scorecard(scorecard: dict[str, Any], target: ValidationTarget) -> 
             )
 
 
+def _validate_lineage(
+    lineage: dict[str, Any],
+    target: ValidationTarget,
+    run_dir: Path,
+    trace: dict[str, Any] | None,
+    scorecard: dict[str, Any] | None,
+) -> None:
+    _require_equal(lineage, "schema_version", LINEAGE_SCHEMA_VERSION, target, prefix="artifact_lineage.")
+    scenario = lineage.get("scenario")
+    if not isinstance(scenario, dict):
+        target.errors.append("artifact_lineage.scenario must be an object.")
+        scenario = {}
+    if scorecard is not None and scenario.get("id") != scorecard.get("scenario_id"):
+        target.errors.append("artifact_lineage.scenario.id must match scorecard.scenario_id.")
+    lineage_trace = lineage.get("trace")
+    if not isinstance(lineage_trace, dict):
+        target.errors.append("artifact_lineage.trace must be an object.")
+        lineage_trace = {}
+    events = trace.get("events", []) if isinstance(trace, dict) and isinstance(trace.get("events"), list) else []
+    if trace is not None and lineage_trace.get("event_count") != len(events):
+        target.errors.append("artifact_lineage.trace.event_count must match normalized_trace.events.")
+    lineage_scorecard = lineage.get("scorecard")
+    if not isinstance(lineage_scorecard, dict):
+        target.errors.append("artifact_lineage.scorecard must be an object.")
+        lineage_scorecard = {}
+    if scorecard is not None:
+        for field_name in ("score", "passed", "critical_failures"):
+            if lineage_scorecard.get(field_name) != scorecard.get(field_name):
+                target.errors.append(f"artifact_lineage.scorecard.{field_name} must match scorecard.{field_name}.")
+    outputs = _lineage_records(lineage.get("outputs"), target, "artifact_lineage.outputs")
+    for output_name in ("normalized_trace", "scorecard", "report"):
+        if output_name not in outputs:
+            target.errors.append(f"artifact_lineage.outputs missing {output_name!r}.")
+            continue
+        _validate_lineage_file_record(outputs[output_name], run_dir, target, f"artifact_lineage.outputs.{output_name}")
+    evidence_links = lineage.get("evidence_links")
+    if not isinstance(evidence_links, list):
+        target.errors.append("artifact_lineage.evidence_links must be a list.")
+        evidence_links = []
+    expected_ref_count = _scorecard_evidence_ref_count(scorecard)
+    if scorecard is not None and len(evidence_links) != expected_ref_count:
+        target.errors.append(
+            f"artifact_lineage.evidence_links expected {expected_ref_count}, got {len(evidence_links)}."
+        )
+    for index, link in enumerate(evidence_links):
+        _validate_lineage_evidence_link(link, index, len(events), target)
+    graph = lineage.get("graph")
+    if not isinstance(graph, list):
+        target.errors.append("artifact_lineage.graph must be a list.")
+    summary = lineage.get("summary")
+    if not isinstance(summary, dict):
+        target.errors.append("artifact_lineage.summary must be an object.")
+    else:
+        outputs_raw = lineage.get("outputs")
+        expected_output_count = len(outputs_raw) if isinstance(outputs_raw, list) else None
+        if summary.get("output_count") != expected_output_count:
+            target.errors.append("artifact_lineage.summary.output_count must match outputs length.")
+        if summary.get("evidence_link_count") != len(evidence_links):
+            target.errors.append("artifact_lineage.summary.evidence_link_count must match evidence_links length.")
+
+
 def _validate_training_manifest(
     manifest: dict[str, Any],
     target: ValidationTarget,
@@ -422,6 +489,8 @@ def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget)
                 target.errors.append(f"episodes[{index}].{field_name} must be a string.")
         if _looks_absolute(str(episode.get("source_run", ""))):
             target.warnings.append(f"episodes[{index}].source_run is absolute; prefer redacted or relative exports for sharing.")
+        if "source_lineage" in episode and _looks_absolute(str(episode.get("source_lineage", ""))):
+            target.warnings.append(f"episodes[{index}].source_lineage is absolute; prefer redacted or relative exports for sharing.")
         if not isinstance(episode.get("events"), list):
             target.errors.append(f"episodes[{index}].events must be a list.")
         outcome = episode.get("outcome")
@@ -1124,7 +1193,7 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -
         if not isinstance(run, dict):
             target.errors.append(f"suite_summary.runs[{index}] must be an object.")
             continue
-        for field_name in ("scenario_id", "scenario_title", "task_family", "scenario_path", "trace_path", "run_dir", "report", "scorecard"):
+        for field_name in ("scenario_id", "scenario_title", "task_family", "scenario_path", "trace_path", "run_dir", "report", "scorecard", "lineage"):
             if not isinstance(run.get(field_name), str) or not run.get(field_name):
                 target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a non-empty string.")
         if not isinstance(run.get("passed"), bool):
@@ -1265,6 +1334,93 @@ def _validate_evidence_refs(value: Any, target: ValidationTarget, label: str) ->
             target.errors.append(f"{label}[{index}].passed must be a boolean when present.")
 
 
+def _lineage_records(value: Any, target: ValidationTarget, label: str) -> dict[str, dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list.")
+        return records
+    for index, record in enumerate(value):
+        if not isinstance(record, dict):
+            target.errors.append(f"{label}[{index}] must be an object.")
+            continue
+        name = record.get("name")
+        if not isinstance(name, str) or not name:
+            target.errors.append(f"{label}[{index}].name must be a non-empty string.")
+            continue
+        records[name] = record
+    return records
+
+
+def _validate_lineage_file_record(record: dict[str, Any], run_dir: Path, target: ValidationTarget, label: str) -> None:
+    path_label = record.get("path")
+    if not isinstance(path_label, str) or not path_label:
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        return
+    if record.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true for required run outputs.")
+        return
+    basename = _lineage_basename(path_label)
+    file_path = run_dir / basename
+    if not file_path.exists():
+        target.errors.append(f"{label}.path does not resolve inside the run directory.")
+        return
+    expected_size = record.get("size_bytes")
+    if not isinstance(expected_size, int) or isinstance(expected_size, bool) or expected_size < 0:
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    elif file_path.stat().st_size != expected_size:
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    expected_hash = record.get("sha256")
+    if not isinstance(expected_hash, str) or len(expected_hash) != 64:
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+    elif _sha256(file_path) != expected_hash:
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _validate_lineage_evidence_link(link: Any, index: int, event_count: int, target: ValidationTarget) -> None:
+    label = f"artifact_lineage.evidence_links[{index}]"
+    if not isinstance(link, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("rule_id", "rule_name", "scorecard_pointer", "target"):
+        if not isinstance(link.get(field_name), str) or not link.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    ref_target = link.get("target")
+    if ref_target not in {"event", "final_answer", "episode"}:
+        target.errors.append(f"{label}.target must be one of event, final_answer, or episode.")
+    if ref_target == "event":
+        event_index = link.get("event_index")
+        if not isinstance(event_index, int) or isinstance(event_index, bool) or event_index < 0:
+            target.errors.append(f"{label}.event_index must be a non-negative integer.")
+        elif event_index >= event_count:
+            target.errors.append(f"{label}.event_index must refer to an existing trace event.")
+        if link.get("trace_pointer") != f"/events/{event_index}":
+            target.errors.append(f"{label}.trace_pointer must point at the referenced trace event.")
+    elif ref_target == "final_answer" and link.get("trace_pointer") != "/final_answer":
+        target.errors.append(f"{label}.trace_pointer must point at /final_answer.")
+    elif ref_target == "episode" and link.get("trace_pointer") != "/":
+        target.errors.append(f"{label}.trace_pointer must point at the trace root.")
+    if "rule_passed" in link and not isinstance(link.get("rule_passed"), bool):
+        target.errors.append(f"{label}.rule_passed must be a boolean when present.")
+    if "ref_passed" in link and not isinstance(link.get("ref_passed"), bool):
+        target.errors.append(f"{label}.ref_passed must be a boolean when present.")
+
+
+def _scorecard_evidence_ref_count(scorecard: dict[str, Any] | None) -> int:
+    if not isinstance(scorecard, dict):
+        return 0
+    total = 0
+    for rule in scorecard.get("rules", []):
+        if isinstance(rule, dict) and isinstance(rule.get("evidence_refs"), list):
+            total += len(rule["evidence_refs"])
+    return total
+
+
+def _lineage_basename(path_label: str) -> str:
+    if path_label.startswith("<redacted:") and path_label.endswith(">"):
+        return path_label[len("<redacted:") : -1]
+    return path_label.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+
+
 def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, Any] | None:
     if not path.exists():
         target.errors.append(f"{label} is missing.")
@@ -1341,6 +1497,14 @@ def _is_int_between(value: Any, minimum: int, maximum: int) -> bool:
 
 def _looks_absolute(value: str) -> bool:
     return value.startswith("/") or _is_windows_absolute(value)
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _score_value(value: Any) -> int:

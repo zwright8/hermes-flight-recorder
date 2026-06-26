@@ -36,6 +36,7 @@ class RunRecord:
     run_dir: Path
     trace: dict[str, Any]
     scorecard: dict[str, Any]
+    lineage_path: Path | None = None
 
 
 def export_rl_dataset(
@@ -134,6 +135,7 @@ def export_rl_dataset(
             "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
             "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
             "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
+            "episodes.jsonl includes source_lineage when the originating run emitted artifact_lineage.json.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
@@ -154,13 +156,22 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
     for run_dir in sorted(path for path in root.iterdir() if path.is_dir()):
         trace_path = run_dir / "normalized_trace.json"
         score_path = run_dir / "scorecard.json"
+        lineage_path = run_dir / "artifact_lineage.json"
         if not trace_path.exists() or not score_path.exists():
             continue
         trace = _read_json(trace_path)
         scorecard = _read_json(score_path)
         if not isinstance(trace, dict) or not isinstance(scorecard, dict):
             raise TrainingExportError(f"Run {run_dir} must contain JSON objects")
-        records.append(RunRecord(run_id=run_dir.name, run_dir=run_dir, trace=trace, scorecard=scorecard))
+        records.append(
+            RunRecord(
+                run_id=run_dir.name,
+                run_dir=run_dir,
+                trace=trace,
+                scorecard=scorecard,
+                lineage_path=lineage_path if lineage_path.exists() else None,
+            )
+        )
 
     if not records:
         raise TrainingExportError(f"No completed Flight Recorder runs found in {root}")
@@ -176,7 +187,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     scenario_title = str(scorecard.get("scenario_title") or scenario_id)
     events = [_event_record(index, event) for index, event in enumerate(trace.get("events", []))]
     failed_rules = _failed_rule_ids(scorecard)
-    return {
+    episode = {
         "schema_version": RL_EPISODE_SCHEMA_VERSION,
         "episode_id": record.run_id,
         "source_run": _display_path(record.run_dir, preserve_paths),
@@ -198,6 +209,9 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
             "summary": scorecard.get("summary", ""),
         },
     }
+    if record.lineage_path is not None:
+        episode["source_lineage"] = _display_path(record.lineage_path, preserve_paths)
+    return episode
 
 
 def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:

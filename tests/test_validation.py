@@ -76,6 +76,24 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_refs[0].event_index", errors)
 
+    def test_validate_rejects_stale_lineage_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(run_dir)])
+            lineage_path = run_dir / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            score_record = next(item for item in lineage["outputs"] if item["name"] == "scorecard")
+            score_record["sha256"] = "0" * 64
+            lineage_path.write_text(json.dumps(lineage), encoding="utf-8")
+
+            code = run_cli(["validate", "--run", str(run_dir), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("artifact_lineage.outputs.scorecard.sha256", errors)
+
     def test_validate_rejects_broken_preference_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -326,6 +344,7 @@ class ValidationTests(unittest.TestCase):
             run_dir = Path(tmp) / "run"
             run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(run_dir)])
             (run_dir / "report.html").unlink()
+            (run_dir / "artifact_lineage.json").unlink()
 
             non_strict = run_cli(["validate", "--run", str(run_dir)])
             strict = run_cli(["validate", "--run", str(run_dir), "--strict"])

@@ -19,6 +19,7 @@ from .artifacts import (
     write_markdown_summary,
     write_suite_compare_report,
 )
+from .lineage import write_run_lineage
 from .redaction import sanitize_trace
 from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
@@ -145,6 +146,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                     "run_dir": _display_path(run_dir, args.preserve_paths),
                     "report": _display_path(result["paths"]["report"], args.preserve_paths),
                     "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
+                    "lineage": _display_path(result["paths"]["lineage"], args.preserve_paths),
                     "passed": bool(scorecard["passed"]),
                     "score": scorecard["score"],
                     "failed_rules": _failed_rule_ids(scorecard),
@@ -822,11 +824,15 @@ def _run_scenario_artifacts(
     normalized_path = run_dir / "normalized_trace.json"
     score_path = run_dir / "scorecard.json"
     report_path = run_dir / "report.html"
+    lineage_path = run_dir / "artifact_lineage.json"
     _write_json(normalized_path, trace)
     _write_json(score_path, scorecard)
+    raw_trace_path = None
     if write_sensitive_trace:
-        _write_json(run_dir / "raw_trace.sensitive.json", raw_trace)
+        raw_trace_path = run_dir / "raw_trace.sensitive.json"
+        _write_json(raw_trace_path, raw_trace)
 
+    regression_path = None
     regression_display = None
     if not scorecard["passed"]:
         regression_path = run_dir / "regression_scenario.json"
@@ -839,6 +845,23 @@ def _run_scenario_artifacts(
     if markdown_out:
         write_markdown_summary(scorecard, markdown_out)
     write_report(scenario, trace, scorecard, report_path, regression_display)
+    write_run_lineage(
+        scenario=scenario,
+        trace=trace,
+        scorecard=scorecard,
+        source_trace_path=trace_path,
+        artifacts={
+            "normalized_trace": normalized_path,
+            "scorecard": score_path,
+            "report": report_path,
+            "regression_scenario": regression_path,
+            "junit": junit_out,
+            "markdown": markdown_out,
+            "raw_trace_sensitive": raw_trace_path,
+        },
+        out_path=lineage_path,
+        preserve_paths=preserve_paths,
+    )
 
     return {
         "scenario": scenario,
@@ -849,6 +872,7 @@ def _run_scenario_artifacts(
             "normalized_trace": normalized_path,
             "scorecard": score_path,
             "report": report_path,
+            "lineage": lineage_path,
         },
     }
 
