@@ -303,7 +303,7 @@ def cmd_export_rl(args: argparse.Namespace) -> int:
     print(
         "wrote RL export "
         f"episodes={manifest['episode_count']} rewards={manifest['reward_count']} "
-        f"preferences={manifest['preference_count']} out={args.out}"
+        f"preferences={manifest['preference_count']} failure_modes={manifest['failure_mode_count']} out={args.out}"
     )
     return 0
 
@@ -358,7 +358,7 @@ def _parser() -> argparse.ArgumentParser:
     run_suite.add_argument("--no-index", action="store_true", help="Skip writing the report index")
     run_suite.add_argument("--junit", action="store_true", help="Write scorecard.junit.xml inside each run directory")
     run_suite.add_argument("--markdown", action="store_true", help="Write scorecard.md inside each run directory")
-    run_suite.add_argument("--export-rl", action="store_true", help="Also export episodes/rewards/preferences for the completed suite")
+    run_suite.add_argument("--export-rl", action="store_true", help="Also export episodes/rewards/preferences/failure modes for the completed suite")
     run_suite.add_argument("--training-export-out", help="RL export directory; defaults to <out>/training_export")
     run_suite.add_argument("--reward-scale", default="score", choices=["score", "binary", "signed"])
     run_suite.add_argument("--min-score-gap", type=int, default=1)
@@ -412,7 +412,7 @@ def _parser() -> argparse.ArgumentParser:
 
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")
-    export_rl.add_argument("--out", required=True, help="Output directory for episodes/rewards/preferences JSONL")
+    export_rl.add_argument("--out", required=True, help="Output directory for episodes/rewards/preferences/failure-mode artifacts")
     export_rl.add_argument(
         "--reward-scale",
         default="score",
@@ -556,6 +556,7 @@ def _run_suite_summary(
             "episode_count": training_manifest.get("episode_count"),
             "reward_count": training_manifest.get("reward_count"),
             "preference_count": training_manifest.get("preference_count"),
+            "failure_mode_count": training_manifest.get("failure_mode_count"),
         }
     if validation_summary is not None:
         summary["validation"] = {

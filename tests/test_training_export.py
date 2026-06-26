@@ -37,16 +37,24 @@ class TrainingExportTests(unittest.TestCase):
             episodes = read_jsonl(out / "episodes.jsonl")
             rewards = read_jsonl(out / "rewards.jsonl")
             preferences = read_jsonl(out / "preferences.jsonl")
+            failure_modes = read_jsonl(out / "failure_modes.jsonl")
+            curriculum = json.loads((out / "curriculum.json").read_text(encoding="utf-8"))
 
             self.assertEqual(manifest["schema_version"], "hfr.rl.manifest.v1")
             self.assertEqual(manifest["episode_count"], 2)
             self.assertEqual(manifest["reward_count"], 2)
             self.assertEqual(manifest["preference_count"], 1)
+            self.assertEqual(manifest["failure_mode_count"], len(failure_modes))
+            self.assertIn("failure_modes", manifest["outputs"])
+            self.assertIn("curriculum", manifest["outputs"])
             self.assertNotIn(str(Path(tmp)), (out / "manifest.json").read_text(encoding="utf-8"))
             self.assertTrue(all(str(Path(tmp)) not in json.dumps(episode) for episode in episodes))
             self.assertEqual({episode["schema_version"] for episode in episodes}, {"hfr.rl.episode.v1"})
             self.assertEqual({reward["schema_version"] for reward in rewards}, {"hfr.rl.reward.v1"})
             self.assertEqual(preferences[0]["schema_version"], "hfr.rl.preference.v1")
+            self.assertEqual({failure["schema_version"] for failure in failure_modes}, {"hfr.rl.failure_mode.v1"})
+            self.assertEqual(curriculum["schema_version"], "hfr.rl.curriculum.v1")
+            self.assertEqual(curriculum["failure_mode_count"], len(failure_modes))
             self.assertEqual(preferences[0]["chosen_episode_id"], "prompt_injection_good")
             self.assertEqual(preferences[0]["rejected_episode_id"], "prompt_injection_bad")
             self.assertEqual(preferences[0]["task_family"], "prompt_injection")
@@ -64,9 +72,20 @@ class TrainingExportTests(unittest.TestCase):
 
             self.assertEqual(code, 0)
             reward = read_jsonl(out / "rewards.jsonl")[0]
+            failure_modes = read_jsonl(out / "failure_modes.jsonl")
+            curriculum = json.loads((out / "curriculum.json").read_text(encoding="utf-8"))
             failed_rules = {item["rule_id"] for item in reward["rule_rewards"] if not item["passed"]}
             attribution = reward["attribution"]
+            failure_rule_ids = {item["rule_id"] for item in failure_modes}
+            curriculum_rule_ids = {
+                mode["rule_id"]
+                for family in curriculum["task_families"]
+                for mode in family["failure_modes"]
+            }
             self.assertIn("forbidden_actions", failed_rules)
+            self.assertIn("forbidden_actions", failure_rule_ids)
+            self.assertIn("forbidden_actions", curriculum_rule_ids)
+            self.assertTrue(any(item["critical"] for item in failure_modes))
             self.assertTrue(any(item["target"] == "event" for item in attribution))
             self.assertTrue(any(item["target"] == "final_answer" for item in attribution))
 

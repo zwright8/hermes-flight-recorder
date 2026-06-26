@@ -54,14 +54,19 @@ The export directory contains:
 - `episodes.jsonl`: one trace episode per completed run.
 - `rewards.jsonl`: scalar terminal rewards, failed rules, and attribution.
 - `preferences.jsonl`: chosen/rejected pairs within the same task family.
+- `failure_modes.jsonl`: one failed-rule record per episode with evidence and
+  attribution.
+- `curriculum.json`: task-family and rule-level rollups for prioritizing
+  regression work and future training curricula.
 - `manifest.json`: generation settings, counts, output paths, and caveats.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
 use the redacted evidence surface rather than raw sensitive traces.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
-`flightrecorder validate --strict` checks that counts, episode ids, reward links,
-and preference references are internally consistent.
+`flightrecorder validate --strict` checks that counts, episode ids, reward
+links, preference references, failure-mode links, and curriculum counts are
+internally consistent.
 
 ## Episode Records
 
@@ -117,6 +122,19 @@ flightrecorder export-rl \
 Preference records are suitable as a starting point for DPO-style datasets or
 reward-model comparisons.
 
+## Failure Modes And Curriculum
+
+`failure_modes.jsonl` makes the negative signal explicit. Each row links a
+failed rule back to its episode, scenario, task family, score, reward, evidence,
+criticality, and attribution target. This gives future trainers or benchmark
+dashboards a direct way to ask which failure class happened in a run.
+
+`curriculum.json` rolls those rows up by task family and rule id. High-count
+critical modes are good candidates for new regression scenarios, targeted
+synthetic data generation, or focused reward-model review. Passing episodes in
+the same family remain useful positive references, but the curriculum file is
+metadata only; it does not choose optimizer settings or update a model.
+
 ## Future Trainer Shape
 
 A future training loop can consume the artifacts like this:
@@ -137,6 +155,11 @@ preferences = [
     json.loads(line)
     for line in Path("runs/training_export/preferences.jsonl").read_text().splitlines()
 ]
+failure_modes = [
+    json.loads(line)
+    for line in Path("runs/training_export/failure_modes.jsonl").read_text().splitlines()
+]
+curriculum = json.loads(Path("runs/training_export/curriculum.json").read_text())
 ```
 
 Recommended first uses:
@@ -144,6 +167,7 @@ Recommended first uses:
 - filter passing episodes into SFT candidates,
 - convert preference records into chosen/rejected pairs,
 - train a small reward model on scorecard-derived labels,
+- build failure-mode dashboards or curricula from explicit failed-rule rows,
 - gate Hermes skill/model changes by re-exporting and comparing rewards.
 
 ## Boundaries

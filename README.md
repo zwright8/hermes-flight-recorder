@@ -44,7 +44,8 @@ Expected demo output:
 - A suite summary in `runs/suite_summary.json` covering every generated
   scenario run and suite-level artifact.
 - A training export in `runs/training_export/` with episodes, rewards,
-  preference pairs, and a manifest for future model-improvement loops.
+  preference pairs, failure modes, curriculum metadata, and a manifest for
+  future model-improvement loops.
 
 ## Install
 
@@ -148,6 +149,10 @@ training-loop artifacts:
 - `episodes.jsonl`: one normalized episode per run.
 - `rewards.jsonl`: terminal rewards, failed rules, and attribution.
 - `preferences.jsonl`: chosen/rejected pairs inside each task family.
+- `failure_modes.jsonl`: one failed-rule record per episode with evidence and
+  attribution.
+- `curriculum.json`: task-family rollups for prioritizing regression and
+  training curricula.
 - `manifest.json`: export settings, counts, and caveats.
 
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
@@ -263,8 +268,9 @@ flightrecorder export-rl \
 The exporter reads only `normalized_trace.json` and `scorecard.json` from each
 completed run directory. It derives scalar rewards from deterministic scores,
 adds failed-rule attribution where the scorecard points to an event or final
-answer, and creates preference pairs when one run clearly beats another in the
-same task family.
+answer, creates preference pairs when one run clearly beats another in the same
+task family, emits failure-mode records for every failed rule, and writes a
+curriculum summary that groups failure pressure by task family and rule.
 
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.
@@ -314,7 +320,7 @@ scenario directory or single scenario + trace artifact
 	  compare-suite baseline/candidate directories -> suite regression delta
 	          |
 	          v
-	  export-rl -> episodes/rewards/preferences JSONL
+	  export-rl -> episodes/rewards/preferences/failure modes/curriculum
 	          |
 	          v
 	  validate -> machine-checkable artifact contract

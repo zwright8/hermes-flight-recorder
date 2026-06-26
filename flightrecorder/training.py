@@ -13,6 +13,8 @@ RL_MANIFEST_SCHEMA_VERSION = "hfr.rl.manifest.v1"
 RL_EPISODE_SCHEMA_VERSION = "hfr.rl.episode.v1"
 RL_REWARD_SCHEMA_VERSION = "hfr.rl.reward.v1"
 RL_PREFERENCE_SCHEMA_VERSION = "hfr.rl.preference.v1"
+RL_FAILURE_MODE_SCHEMA_VERSION = "hfr.rl.failure_mode.v1"
+RL_CURRICULUM_SCHEMA_VERSION = "hfr.rl.curriculum.v1"
 
 REWARD_SCALES = {"score", "binary", "signed"}
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
@@ -56,16 +58,22 @@ def export_rl_dataset(
     episodes = [_episode_record(record, reward_scale, preserve_paths) for record in records]
     rewards = [_reward_record(record, reward_scale) for record in records]
     preferences = _preference_records(episodes, min_score_gap=min_score_gap, max_pairs_per_family=max_pairs_per_family)
+    failure_modes = [_failure_mode_record(record, rule, reward_scale) for record in records for rule in _failed_rules(record.scorecard)]
+    curriculum = _curriculum_record(episodes, failure_modes)
 
     paths = {
         "episodes": target / "episodes.jsonl",
         "rewards": target / "rewards.jsonl",
         "preferences": target / "preferences.jsonl",
+        "failure_modes": target / "failure_modes.jsonl",
+        "curriculum": target / "curriculum.json",
         "manifest": target / "manifest.json",
     }
     _write_jsonl(paths["episodes"], episodes)
     _write_jsonl(paths["rewards"], rewards)
     _write_jsonl(paths["preferences"], preferences)
+    _write_jsonl(paths["failure_modes"], failure_modes)
+    _write_json(paths["curriculum"], curriculum)
 
     manifest = {
         "schema_version": RL_MANIFEST_SCHEMA_VERSION,
@@ -79,11 +87,13 @@ def export_rl_dataset(
         "episode_count": len(episodes),
         "reward_count": len(rewards),
         "preference_count": len(preferences),
+        "failure_mode_count": len(failure_modes),
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "notes": [
             "Exports are built from normalized_trace.json and scorecard.json.",
             "Use these artifacts as reward/eval data, not as a complete trainer.",
+            "failure_modes.jsonl exposes one failed-rule record per episode for curriculum construction.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
     }
@@ -237,6 +247,116 @@ def _preference_view(episode: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _failure_mode_record(record: RunRecord, rule: dict[str, Any], reward_scale: str) -> dict[str, Any]:
+    scorecard = record.scorecard
+    scenario_id = str(scorecard.get("scenario_id") or record.run_id)
+    rule_id = str(rule.get("id") or "unknown_rule")
+    attribution = [item for item in _reward_attribution(scorecard) if item.get("rule_id") == rule_id]
+    return {
+        "schema_version": RL_FAILURE_MODE_SCHEMA_VERSION,
+        "failure_id": f"{record.run_id}:{rule_id}",
+        "episode_id": record.run_id,
+        "scenario_id": scenario_id,
+        "scenario_title": str(scorecard.get("scenario_title") or scenario_id),
+        "task_family": _task_family(scenario_id),
+        "rule_id": rule_id,
+        "rule_name": str(rule.get("name") or rule_id),
+        "critical": bool(rule.get("critical")),
+        "penalty": int(rule.get("penalty", 0) or 0),
+        "score": _score(scorecard),
+        "reward": _reward_value(scorecard, reward_scale),
+        "summary": str(scorecard.get("summary") or ""),
+        "evidence": [str(item) for item in rule.get("evidence", [])],
+        "attribution": attribution,
+    }
+
+
+def _curriculum_record(episodes: list[dict[str, Any]], failure_modes: list[dict[str, Any]]) -> dict[str, Any]:
+    families: dict[str, dict[str, Any]] = {}
+    for episode in episodes:
+        family = str(episode.get("task_family") or "unknown")
+        outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+        bucket = families.setdefault(
+            family,
+            {
+                "task_family": family,
+                "episode_count": 0,
+                "passed": 0,
+                "failed": 0,
+                "scores": [],
+                "failure_modes": {},
+            },
+        )
+        bucket["episode_count"] += 1
+        if outcome.get("passed"):
+            bucket["passed"] += 1
+        else:
+            bucket["failed"] += 1
+        if isinstance(outcome.get("score"), int):
+            bucket["scores"].append(outcome["score"])
+
+    for failure in failure_modes:
+        family = str(failure.get("task_family") or "unknown")
+        rule_id = str(failure.get("rule_id") or "unknown_rule")
+        bucket = families.setdefault(
+            family,
+            {
+                "task_family": family,
+                "episode_count": 0,
+                "passed": 0,
+                "failed": 0,
+                "scores": [],
+                "failure_modes": {},
+            },
+        )
+        mode = bucket["failure_modes"].setdefault(
+            rule_id,
+            {
+                "rule_id": rule_id,
+                "rule_name": failure.get("rule_name", rule_id),
+                "count": 0,
+                "critical_count": 0,
+                "episode_ids": [],
+                "example_evidence": [],
+            },
+        )
+        mode["count"] += 1
+        if failure.get("critical"):
+            mode["critical_count"] += 1
+        episode_id = str(failure.get("episode_id") or "")
+        if episode_id and episode_id not in mode["episode_ids"]:
+            mode["episode_ids"].append(episode_id)
+        for evidence in failure.get("evidence", []):
+            text = str(evidence)
+            if text and text not in mode["example_evidence"]:
+                mode["example_evidence"].append(text)
+            if len(mode["example_evidence"]) >= 3:
+                break
+
+    family_rows: list[dict[str, Any]] = []
+    for family, bucket in sorted(families.items()):
+        scores = bucket.pop("scores")
+        failure_map = bucket.pop("failure_modes")
+        bucket["average_score"] = round(sum(scores) / len(scores), 2) if scores else 0.0
+        bucket["failure_modes"] = sorted(
+            failure_map.values(),
+            key=lambda item: (-int(item["count"]), str(item["rule_id"])),
+        )
+        family_rows.append(bucket)
+
+    return {
+        "schema_version": RL_CURRICULUM_SCHEMA_VERSION,
+        "episode_count": len(episodes),
+        "failure_mode_count": len(failure_modes),
+        "task_families": family_rows,
+        "recommended_use": [
+            "Use high-count critical failure modes as regression priorities.",
+            "Use passing episodes in the same task family as positive references.",
+            "Treat this as curriculum metadata, not as an automatic trainer policy.",
+        ],
+    }
+
+
 def _event_record(index: int, event: Any) -> dict[str, Any]:
     if not isinstance(event, dict):
         return {"index": index, "type": "unknown", "text": str(event)}
@@ -314,8 +434,16 @@ def _reward_value(scorecard: dict[str, Any], reward_scale: str) -> float:
 def _failed_rule_ids(scorecard: dict[str, Any]) -> list[str]:
     return [
         str(rule.get("id"))
+        for rule in _failed_rules(scorecard)
+        if rule.get("id")
+    ]
+
+
+def _failed_rules(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        rule
         for rule in scorecard.get("rules", [])
-        if isinstance(rule, dict) and rule.get("id") and not rule.get("passed")
+        if isinstance(rule, dict) and not rule.get("passed")
     ]
 
 

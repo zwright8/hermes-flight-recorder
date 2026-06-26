@@ -82,7 +82,7 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Run `flightrecorder run-suite --scenarios <dir> --out runs --validate
   --strict` as the default CI evidence-bundle command.
 - Add `--junit`, `--markdown`, and `--export-rl` when CI should publish native
-  test reports, job summaries, and downstream training artifacts.
+  test reports, job summaries, and downstream training/failure-mode artifacts.
 - Add `--fail-on-failed` when any failed scenario should fail the CI job.
 - Use `flightrecorder run --fail-on-score` for targeted single-scenario gates.
 - Use `flightrecorder compare --fail-on-regression` to gate candidate runs
@@ -90,8 +90,8 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 - Use `flightrecorder compare-suite --fail-on-regression` to gate an entire
   candidate run directory against a baseline suite.
 - Use `flightrecorder export-rl --runs runs --out runs/training_export` when
-  downstream SFT, preference, reward-model, or RL jobs need deterministic
-  episode/reward/preference JSONL.
+  downstream SFT, preference, reward-model, curriculum, or RL jobs need
+  deterministic episode/reward/preference/failure-mode artifacts.
 - Use `flightrecorder validate --runs runs --training-export runs/training_export
   --strict` before publishing artifacts or using them downstream.
 - Publish `report.html` and `scorecard.json`; avoid publishing raw traces.

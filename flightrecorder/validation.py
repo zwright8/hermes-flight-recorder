@@ -10,7 +10,9 @@ from typing import Any
 from .adapters import TRACE_SCHEMA_VERSION
 from .scorers import SCORE_SCHEMA_VERSION
 from .training import (
+    RL_CURRICULUM_SCHEMA_VERSION,
     RL_EPISODE_SCHEMA_VERSION,
+    RL_FAILURE_MODE_SCHEMA_VERSION,
     RL_MANIFEST_SCHEMA_VERSION,
     RL_PREFERENCE_SCHEMA_VERSION,
     RL_REWARD_SCHEMA_VERSION,
@@ -141,16 +143,22 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     episodes = _read_jsonl_objects(export_dir / "episodes.jsonl", target, "episodes.jsonl")
     rewards = _read_jsonl_objects(export_dir / "rewards.jsonl", target, "rewards.jsonl")
     preferences = _read_jsonl_objects(export_dir / "preferences.jsonl", target, "preferences.jsonl")
+    failure_modes = _read_jsonl_objects(export_dir / "failure_modes.jsonl", target, "failure_modes.jsonl")
+    curriculum = _read_object(export_dir / "curriculum.json", target, "curriculum.json")
     if manifest is not None:
-        _validate_training_manifest(manifest, target, episodes, rewards, preferences)
+        _validate_training_manifest(manifest, target, episodes, rewards, preferences, failure_modes, curriculum)
     _validate_episodes(episodes, target)
     _validate_rewards(rewards, target, episodes)
     _validate_preferences(preferences, target, episodes)
+    _validate_failure_modes(failure_modes, target, episodes)
+    if curriculum is not None:
+        _validate_curriculum(curriculum, target, episodes, failure_modes)
     target.details.update(
         {
             "episode_count": len(episodes),
             "reward_count": len(rewards),
             "preference_count": len(preferences),
+            "failure_mode_count": len(failure_modes),
         }
     )
     return target
@@ -246,18 +254,29 @@ def _validate_training_manifest(
     episodes: list[dict[str, Any]],
     rewards: list[dict[str, Any]],
     preferences: list[dict[str, Any]],
+    failure_modes: list[dict[str, Any]],
+    curriculum: dict[str, Any] | None,
 ) -> None:
     _require_equal(manifest, "schema_version", RL_MANIFEST_SCHEMA_VERSION, target)
     expected_counts = {
         "episode_count": len(episodes),
         "reward_count": len(rewards),
         "preference_count": len(preferences),
+        "failure_mode_count": len(failure_modes),
     }
     for field_name, expected in expected_counts.items():
         if manifest.get(field_name) != expected:
             target.errors.append(f"manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
     if not isinstance(manifest.get("outputs"), dict):
         target.errors.append("manifest.outputs must be an object.")
+    else:
+        for output_name in ("episodes", "rewards", "preferences", "failure_modes", "curriculum", "manifest"):
+            if output_name not in manifest["outputs"]:
+                target.errors.append(f"manifest.outputs.{output_name} is missing.")
+    if curriculum is not None and curriculum.get("failure_mode_count") != len(failure_modes):
+        target.errors.append(
+            f"curriculum.failure_mode_count expected {len(failure_modes)}, got {curriculum.get('failure_mode_count')!r}."
+        )
     if _looks_absolute(str(manifest.get("source_runs_dir", ""))):
         target.warnings.append("manifest.source_runs_dir is absolute; prefer redacted or relative exports for sharing.")
     if _looks_absolute(str(manifest.get("output_dir", ""))):
@@ -351,6 +370,94 @@ def _validate_preferences(preferences: list[dict[str, Any]], target: ValidationT
                 target.errors.append(f"preferences[{index}] chosen/rejected task families differ.")
             if preference.get("task_family") != chosen.get("task_family"):
                 target.errors.append(f"preferences[{index}].task_family does not match chosen episode.")
+
+
+def _validate_failure_modes(
+    failure_modes: list[dict[str, Any]],
+    target: ValidationTarget,
+    episodes: list[dict[str, Any]],
+) -> None:
+    episode_ids = {episode.get("episode_id") for episode in episodes if isinstance(episode.get("episode_id"), str)}
+    seen: set[str] = set()
+    for index, failure in enumerate(failure_modes):
+        _require_equal(failure, "schema_version", RL_FAILURE_MODE_SCHEMA_VERSION, target, prefix=f"failure_modes[{index}].")
+        failure_id = failure.get("failure_id")
+        if not isinstance(failure_id, str) or not failure_id:
+            target.errors.append(f"failure_modes[{index}].failure_id must be a non-empty string.")
+        elif failure_id in seen:
+            target.errors.append(f"failure_modes[{index}].failure_id duplicates {failure_id!r}.")
+        else:
+            seen.add(failure_id)
+        episode_id = failure.get("episode_id")
+        if not isinstance(episode_id, str) or not episode_id:
+            target.errors.append(f"failure_modes[{index}].episode_id must be a non-empty string.")
+        elif episode_id not in episode_ids:
+            target.errors.append(f"failure_modes[{index}].episode_id {episode_id!r} does not reference an episode.")
+        for field_name in ("scenario_id", "task_family", "rule_id", "rule_name", "summary"):
+            if not isinstance(failure.get(field_name), str):
+                target.errors.append(f"failure_modes[{index}].{field_name} must be a string.")
+        if not isinstance(failure.get("critical"), bool):
+            target.errors.append(f"failure_modes[{index}].critical must be a boolean.")
+        if not _is_int_between(failure.get("penalty"), 0, 100):
+            target.errors.append(f"failure_modes[{index}].penalty must be an integer from 0 to 100.")
+        if not _is_int_between(failure.get("score"), 0, 100):
+            target.errors.append(f"failure_modes[{index}].score must be an integer from 0 to 100.")
+        if not isinstance(failure.get("reward"), (int, float)):
+            target.errors.append(f"failure_modes[{index}].reward must be numeric.")
+        if not isinstance(failure.get("evidence"), list):
+            target.errors.append(f"failure_modes[{index}].evidence must be a list.")
+        if not isinstance(failure.get("attribution"), list):
+            target.errors.append(f"failure_modes[{index}].attribution must be a list.")
+
+
+def _validate_curriculum(
+    curriculum: dict[str, Any],
+    target: ValidationTarget,
+    episodes: list[dict[str, Any]],
+    failure_modes: list[dict[str, Any]],
+) -> None:
+    _require_equal(curriculum, "schema_version", RL_CURRICULUM_SCHEMA_VERSION, target, prefix="curriculum.")
+    if curriculum.get("episode_count") != len(episodes):
+        target.errors.append(f"curriculum.episode_count expected {len(episodes)}, got {curriculum.get('episode_count')!r}.")
+    if curriculum.get("failure_mode_count") != len(failure_modes):
+        target.errors.append(
+            f"curriculum.failure_mode_count expected {len(failure_modes)}, got {curriculum.get('failure_mode_count')!r}."
+        )
+    families = curriculum.get("task_families")
+    if not isinstance(families, list):
+        target.errors.append("curriculum.task_families must be a list.")
+        return
+    for family_index, family in enumerate(families):
+        if not isinstance(family, dict):
+            target.errors.append(f"curriculum.task_families[{family_index}] must be an object.")
+            continue
+        if not isinstance(family.get("task_family"), str) or not family.get("task_family"):
+            target.errors.append(f"curriculum.task_families[{family_index}].task_family must be a non-empty string.")
+        for field_name in ("episode_count", "passed", "failed"):
+            if not isinstance(family.get(field_name), int) or isinstance(family.get(field_name), bool) or family.get(field_name) < 0:
+                target.errors.append(f"curriculum.task_families[{family_index}].{field_name} must be a non-negative integer.")
+        if not isinstance(family.get("average_score"), (int, float)):
+            target.errors.append(f"curriculum.task_families[{family_index}].average_score must be numeric.")
+        modes = family.get("failure_modes")
+        if not isinstance(modes, list):
+            target.errors.append(f"curriculum.task_families[{family_index}].failure_modes must be a list.")
+            continue
+        for mode_index, mode in enumerate(modes):
+            if not isinstance(mode, dict):
+                target.errors.append(f"curriculum.task_families[{family_index}].failure_modes[{mode_index}] must be an object.")
+                continue
+            if not isinstance(mode.get("rule_id"), str) or not mode.get("rule_id"):
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].rule_id must be a non-empty string."
+                )
+            if not isinstance(mode.get("count"), int) or isinstance(mode.get("count"), bool) or mode.get("count") < 0:
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].count must be a non-negative integer."
+                )
+            if not isinstance(mode.get("episode_ids"), list):
+                target.errors.append(
+                    f"curriculum.task_families[{family_index}].failure_modes[{mode_index}].episode_ids must be a list."
+                )
 
 
 def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, Any] | None:

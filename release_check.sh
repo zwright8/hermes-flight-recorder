@@ -24,6 +24,8 @@ test -f runs/suite_summary.json
 test -f runs/training_export/episodes.jsonl
 test -f runs/training_export/rewards.jsonl
 test -f runs/training_export/preferences.jsonl
+test -f runs/training_export/failure_modes.jsonl
+test -f runs/training_export/curriculum.json
 test -f runs/training_export/manifest.json
 test -f runs/validation.json
 python -m flightrecorder validate --runs runs --training-export runs/training_export --strict >/dev/null

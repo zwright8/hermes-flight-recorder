@@ -79,6 +79,26 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("does not reference an episode", errors)
 
+    def test_validate_rejects_broken_failure_mode_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            failure_path = export / "failure_modes.jsonl"
+            failure = json.loads(failure_path.read_text(encoding="utf-8").splitlines()[0])
+            failure["episode_id"] = "missing-episode"
+            failure_path.write_text(json.dumps(failure) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("failure_modes[0].episode_id", errors)
+            self.assertIn("does not reference an episode", errors)
+
     def test_validate_strict_fails_on_warnings(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"

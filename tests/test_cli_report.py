@@ -141,6 +141,7 @@ class CliReportTests(unittest.TestCase):
             self.assertTrue((out / "email_reply_completion_good" / "scorecard.md").exists())
             self.assertIn("training_export", summary["artifacts"])
             self.assertTrue(summary["validation"]["passed"])
+            self.assertEqual(summary["training_export"]["failure_mode_count"], 6)
 
     def test_run_suite_can_fail_nonzero_for_ci_failures(self):
         with tempfile.TemporaryDirectory() as tmp:

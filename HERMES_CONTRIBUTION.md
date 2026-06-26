@@ -103,7 +103,9 @@ The generated training export gives future model-improvement loops:
 - five episode records,
 - five deterministic terminal reward records,
 - one prompt-injection preference pair choosing the passing trace over the
-  failing trace.
+  failing trace,
+- six failed-rule failure-mode records across the three failing traces,
+- one curriculum summary grouping failure pressure by task family and rule.
 
 The generated validation summary confirms the report/training artifacts satisfy
 their machine-readable contracts before being used as evidence.
@@ -138,8 +140,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
 6. Compare the new scorecard against the old one with `flightrecorder compare`.
 7. Compare whole baseline/candidate run directories with
    `flightrecorder compare-suite`.
-8. Export episodes, rewards, and preference pairs with `flightrecorder export-rl`
-   for future SFT, DPO, reward-modeling, or RL pipelines.
+8. Export episodes, rewards, preference pairs, failure modes, and curriculum
+   metadata with `flightrecorder export-rl` for future SFT, DPO,
+   reward-modeling, or RL pipelines.
 9. Validate the generated artifacts with `flightrecorder validate --strict`
    before publishing them or using them downstream.
 
@@ -154,7 +157,8 @@ That gives the Hermes team a practical improvement loop:
   CI, or downstream training-data export,
 - arbitrary task-completion loops can use `required_actions` to prove work was
   completed from tool-result evidence,
-- deterministic scorecards can become terminal rewards and preference pairs,
+- deterministic scorecards can become terminal rewards, preference pairs,
+  failure taxonomies, and curriculum metadata,
 - generated artifacts can be contract-validated before they become evidence,
 - and reports give maintainers a quick visual explanation of why a run passed
   or failed.
@@ -216,8 +220,8 @@ Demo evidence:
   compare report.
 - `flightrecorder compare-suite` emits aggregate suite-level regression
   evidence.
-- `flightrecorder export-rl` emits episode, reward, preference, and manifest
-  artifacts for future training loops.
+- `flightrecorder export-rl` emits episode, reward, preference, failure-mode,
+  curriculum, and manifest artifacts for future training loops.
 - `flightrecorder validate --strict` confirms generated artifacts are
   internally consistent.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
@@ -238,7 +242,8 @@ can we prove whether a specific autonomous run behaved within policy?
 
 I run `./demo.sh`. It produces five reports offline: two passing traces, three
 failing adversarial traces, a before/after compare report, a suite compare
-report, and a training export with episodes, rewards, and a preference pair.
+report, and a training export with episodes, rewards, a preference pair,
+failure modes, and curriculum metadata.
 
 The passing traces show prompt-injection resistance and structured task
 completion evidence for an email reply. The failing traces show the three
@@ -255,12 +260,14 @@ whether the candidate suite regressed overall, which scenarios changed, and
 whether any expected scenario disappeared.
 
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
-into terminal rewards and chosen/rejected pairs, so training code can consume
-the evidence without scraping HTML reports.
+into terminal rewards, chosen/rejected pairs, failure-mode rows, and curriculum
+metadata, so training code can consume the evidence without scraping HTML
+reports.
 
 Then I run `flightrecorder validate --strict`, which checks the data contracts:
-scorecards match their rules, rewards link back to episodes, and preferences
-reference real chosen/rejected traces.
+scorecards match their rules, rewards link back to episodes, preferences
+reference real chosen/rejected traces, and failure modes reference real
+episodes.
 
 So this is not a competing self-improvement loop. It is the eval harness that
 makes Hermes' existing loop measurable.
