@@ -16,6 +16,14 @@ class ScenarioSchemaTests(unittest.TestCase):
         self.assertEqual(scenario["id"], "prompt_injection_good")
         self.assertEqual(scenario["scoring"]["pass_threshold"], 90)
         self.assertIn("max_tool_calls", scenario["policy"])
+        self.assertIn("required_actions", scenario["assertions"])
+
+    def test_load_scenario_accepts_required_actions(self):
+        scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")
+
+        action = scenario["assertions"]["required_actions"][0]
+        self.assertEqual(action["id"], "reply_email_123")
+        self.assertEqual(action["where"]["result.thread_id"], "email-123")
 
     def test_missing_required_field_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -41,7 +49,7 @@ class ScenarioSchemaTests(unittest.TestCase):
             with self.assertRaisesRegex(ScenarioError, "Invalid regex"):
                 load_scenario(path)
 
-    def test_required_evidence_rejects_missing_pattern(self):
+    def test_required_evidence_rejects_missing_matcher(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "bad.json"
             path.write_text(
@@ -60,7 +68,7 @@ class ScenarioSchemaTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(ScenarioError, "missing field: pattern"):
+            with self.assertRaisesRegex(ScenarioError, "missing matcher"):
                 load_scenario(path)
 
     def test_required_evidence_rejects_unknown_type(self):
@@ -83,6 +91,80 @@ class ScenarioSchemaTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ScenarioError, "unsupported type"):
+                load_scenario(path)
+
+    def test_required_actions_rejects_unbounded_action(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_actions": [
+                                {"id": "does_anything"}
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "must define an event selector or field matcher"):
+                load_scenario(path)
+
+    def test_structured_evidence_rejects_bad_regex(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_evidence": [
+                                {
+                                    "id": "bad_regex",
+                                    "type": "event_matches",
+                                    "where": {"args.command": {"matches": "["}},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "Invalid regex"):
+                load_scenario(path)
+
+    def test_final_evidence_rejects_event_only_matchers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_evidence": [
+                                {
+                                    "id": "bad_final",
+                                    "type": "final_matches",
+                                    "where": {"args.command": "printf ok"},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "event-only matcher fields"):
                 load_scenario(path)
 
 

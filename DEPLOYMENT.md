@@ -24,8 +24,8 @@ python -m unittest discover
 ./demo.sh
 ```
 
-The demo generates `runs/index.html` with one passing and three failing
-scenarios. No API keys or network are required.
+The demo generates `runs/index.html` with two passing reports, three failing
+adversarial reports, and a compare report. No API keys or network are required.
 
 ## Live Hermes Collection
 
@@ -39,6 +39,12 @@ from flightrecorder.hermes_plugin import register as register_flight_recorder
 
 def register(ctx):
     return register_flight_recorder(ctx)
+```
+
+Generate the same wrapper from the CLI:
+
+```bash
+flightrecorder observer-template --out flight_recorder_plugin.py
 ```
 
 Environment variables:
@@ -57,6 +63,10 @@ never rewrites requests, and fails open if writing is impossible.
 - Run `flightrecorder run` with scenario policies that match your credential
   formats.
 - Use `flightrecorder run --fail-on-score` for CI gates.
+- Add `--junit-out` and `--markdown-out` when CI should publish native test
+  reports and job summaries.
+- Use `flightrecorder compare --fail-on-regression` to gate candidate runs
+  against a baseline scorecard.
 - Publish `report.html` and `scorecard.json`; avoid publishing raw traces.
 - Run `flightrecorder audit --runs runs --fail-on-leak --forbid-text <secret>`
   before publishing generated artifacts.

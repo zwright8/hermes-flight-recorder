@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.report import render_report
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,33 @@ class CliReportTests(unittest.TestCase):
             self.assertTrue((out / "report.html").exists())
             scorecard = json.loads((out / "scorecard.json").read_text(encoding="utf-8"))
             self.assertTrue(scorecard["passed"])
+
+    def test_run_command_writes_ci_outputs_and_task_checklist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            junit = out / "scorecard.junit.xml"
+            markdown = out / "scorecard.md"
+
+            code = run_cli(
+                [
+                    "run",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "email_reply_completion_good.json"),
+                    "--out",
+                    str(out),
+                    "--junit-out",
+                    str(junit),
+                    "--markdown-out",
+                    str(markdown),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            self.assertIn("<testsuite", junit.read_text(encoding="utf-8"))
+            self.assertIn("Flight Recorder Scorecard", markdown.read_text(encoding="utf-8"))
+            report = (out / "report.html").read_text(encoding="utf-8")
+            self.assertIn("Task Checklist", report)
+            self.assertIn("Send a reply to assigned thread email-123", report)
 
     def test_failing_report_redacts_secret_values_and_writes_regression(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -102,6 +130,33 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue(report_path.exists())
 
+    def test_score_command_writes_junit_and_markdown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp) / "run"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(run)])
+            junit = Path(tmp) / "score.xml"
+            markdown = Path(tmp) / "score.md"
+
+            code = run_cli(
+                [
+                    "score",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                    "--trace",
+                    str(run / "normalized_trace.json"),
+                    "--out",
+                    str(Path(tmp) / "scorecard.json"),
+                    "--junit-out",
+                    str(junit),
+                    "--markdown-out",
+                    str(markdown),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            self.assertIn("testsuite", junit.read_text(encoding="utf-8"))
+            self.assertIn("Forbidden Actions", markdown.read_text(encoding="utf-8"))
+
     def test_index_command_generates_report_index(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -115,6 +170,37 @@ class CliReportTests(unittest.TestCase):
             index = index_path.read_text(encoding="utf-8")
             self.assertIn("Hermes Flight Recorder Demo Runs", index)
             self.assertIn("Prompt Injection", index)
+
+    def test_compare_command_detects_regression(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            good = runs / "good"
+            bad = runs / "bad"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(good)])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(bad)])
+            out = Path(tmp) / "compare.json"
+            html = Path(tmp) / "compare.html"
+
+            code = run_cli(
+                [
+                    "compare",
+                    "--baseline",
+                    str(good),
+                    "--candidate",
+                    str(bad),
+                    "--out",
+                    str(out),
+                    "--html-out",
+                    str(html),
+                    "--fail-on-regression",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            comparison = json.loads(out.read_text(encoding="utf-8"))
+            self.assertTrue(comparison["regressed"])
+            self.assertLess(comparison["score_delta"], 0)
+            self.assertIn("Flight Recorder Compare", html.read_text(encoding="utf-8"))
 
     def test_audit_command_summarizes_runs_and_can_fail_on_leak(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -155,6 +241,107 @@ class CliReportTests(unittest.TestCase):
                 main(["audit", "--runs", str(Path(tmp) / "missing")])
 
             self.assertEqual(raised.exception.code, 2)
+
+    def test_regression_artifacts_do_not_leak_external_absolute_trace_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace_path = Path(tmp) / "external_trace.json"
+            trace_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.trace.v1",
+                        "session": {"id": "s1", "source_format": "normalized_json", "model": "fixture"},
+                        "events": [],
+                        "final_answer": "violates policy",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            scenario_path = Path(tmp) / "scenario.json"
+            scenario_path.write_text(
+                json.dumps(
+                    {
+                        "id": "external_failure",
+                        "title": "External Failure",
+                        "prompt": "x",
+                        "trace": {"format": "auto", "path": str(trace_path)},
+                        "policy": {},
+                        "assertions": {"final_not_contains": ["violates"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out = Path(tmp) / "run"
+
+            code = run_cli(["run", "--scenario", str(scenario_path), "--out", str(out)])
+
+            self.assertEqual(code, 0)
+            regression = (out / "regression_scenario.json").read_text(encoding="utf-8")
+            report = (out / "report.html").read_text(encoding="utf-8")
+            self.assertNotIn(str(trace_path), regression)
+            self.assertNotIn(str(trace_path), report)
+            self.assertIn("<redacted:external_trace.json>", regression)
+
+    def test_report_redacts_windows_absolute_trace_path(self):
+        scenario = {
+            "id": "windows_path",
+            "title": "Windows Path",
+            "prompt": "x",
+            "trace": {"path": "C:/Users/alice/secrets/trace.json"},
+            "policy": {},
+        }
+        trace = {
+            "session": {"source_format": "normalized_json"},
+            "events": [],
+            "final_answer": "",
+        }
+        scorecard = {
+            "passed": True,
+            "score": 100,
+            "pass_threshold": 90,
+            "summary": "PASS",
+            "rules": [],
+        }
+
+        report = render_report(scenario, trace, scorecard)
+
+        self.assertIn("&lt;redacted:trace.json&gt;", report)
+        self.assertNotIn("C:/Users/alice", report)
+
+    def test_report_redacts_unc_absolute_trace_path(self):
+        scenario = {
+            "id": "unc_path",
+            "title": "UNC Path",
+            "prompt": "x",
+            "trace": {"path": "\\\\server\\share\\trace.json"},
+            "policy": {},
+        }
+        trace = {
+            "session": {"source_format": "normalized_json"},
+            "events": [],
+            "final_answer": "",
+        }
+        scorecard = {
+            "passed": True,
+            "score": 100,
+            "pass_threshold": 90,
+            "summary": "PASS",
+            "rules": [],
+        }
+
+        report = render_report(scenario, trace, scorecard)
+
+        self.assertIn("&lt;redacted:trace.json&gt;", report)
+        self.assertNotIn("server\\share", report)
+
+    def test_observer_template_command_writes_bootstrap(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "plugin.py"
+
+            code = run_cli(["observer-template", "--out", str(out)])
+
+            self.assertEqual(code, 0)
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("register_flight_recorder", text)
 
 
 if __name__ == "__main__":

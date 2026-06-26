@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 from pathlib import Path
 from typing import Any
 
 from .adapters import AdapterError, normalize_trace
+from .artifacts import compare_scorecards, write_compare_report, write_junit, write_markdown_summary
 from .redaction import sanitize_trace
 from .report import write_index, write_report
 from .schema import ScenarioError, load_scenario, resolve_trace_path
@@ -40,6 +42,7 @@ def cmd_score(args: argparse.Namespace) -> int:
     trace = _read_json(Path(args.trace))
     scorecard = score_trace(scenario, trace)
     _write_json(Path(args.out), scorecard)
+    _write_score_outputs(scorecard, args)
     print(f"wrote {args.out}")
     return 0 if scorecard["passed"] else 1
 
@@ -60,7 +63,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     raw_trace = normalize_trace(trace_path, args.format)
-    scenario.setdefault("trace", {})["path"] = str(trace_path)
+    trace_label = _display_path(trace_path, args.preserve_paths)
+    scenario.setdefault("trace", {})["path"] = trace_label
     scorecard = score_trace(scenario, raw_trace)
     secret_patterns = scenario.get("policy", {}).get("secret_patterns") or []
     trace = sanitize_trace(raw_trace, secret_patterns)
@@ -74,12 +78,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         _write_json(out_dir / "raw_trace.sensitive.json", raw_trace)
 
     regression_path = None
+    regression_display = None
     if not scorecard["passed"]:
         regression_path = out_dir / "regression_scenario.json"
-        regression = _regression_scenario(scenario, trace_path, regression_path)
+        regression_display = _display_path(regression_path, args.preserve_paths)
+        regression = _regression_scenario(scenario, trace_path, regression_path, args.preserve_paths)
         _write_json(regression_path, regression)
 
-    write_report(scenario, trace, scorecard, report_path, regression_path)
+    _write_score_outputs(scorecard, args)
+    write_report(scenario, trace, scorecard, report_path, regression_display)
     print(f"{'PASS' if scorecard['passed'] else 'FAIL'} {scenario['id']} score={scorecard['score']} report={report_path}")
     return 1 if args.fail_on_score and not scorecard["passed"] else 0
 
@@ -108,6 +115,36 @@ def cmd_audit(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compare(args: argparse.Namespace) -> int:
+    baseline, baseline_label = _read_scorecard_ref(Path(args.baseline))
+    candidate, candidate_label = _read_scorecard_ref(Path(args.candidate))
+    comparison = compare_scorecards(
+        baseline,
+        candidate,
+        baseline_label=baseline_label,
+        candidate_label=candidate_label,
+    )
+    _write_json(Path(args.out), comparison)
+    if args.html_out:
+        write_compare_report(comparison, args.html_out)
+    print(f"{'REGRESSION' if comparison['regressed'] else 'NO REGRESSION'} score_delta={comparison['score_delta']} wrote {args.out}")
+    return 1 if args.fail_on_regression and comparison["regressed"] else 0
+
+
+def cmd_observer_template(args: argparse.Namespace) -> int:
+    rendered = OBSERVER_TEMPLATE
+    if args.out:
+        path = Path(args.out)
+        if path.exists() and not args.force:
+            raise FileExistsError(f"Refusing to overwrite existing file without --force: {path}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rendered, encoding="utf-8")
+        print(f"wrote {path}")
+    else:
+        print(rendered, end="")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="flightrecorder", description="Hermes Autonomy Flight Recorder")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -124,6 +161,8 @@ def _parser() -> argparse.ArgumentParser:
     score.add_argument("--scenario", required=True)
     score.add_argument("--trace", required=True)
     score.add_argument("--out", required=True)
+    score.add_argument("--junit-out", help="Also write a JUnit XML score report")
+    score.add_argument("--markdown-out", help="Also write a Markdown score summary")
     score.set_defaults(func=cmd_score)
 
     report = subparsers.add_parser("report", help="Render a static HTML report")
@@ -139,6 +178,9 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
     run.add_argument("--out", required=True)
     run.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json with unredacted evidence")
+    run.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated reports and regression files")
+    run.add_argument("--junit-out", help="Also write a JUnit XML score report")
+    run.add_argument("--markdown-out", help="Also write a Markdown score summary")
     run.add_argument("--fail-on-score", action="store_true", help="Exit nonzero when the scenario score fails")
     run.set_defaults(func=cmd_run)
 
@@ -154,6 +196,19 @@ def _parser() -> argparse.ArgumentParser:
     audit.add_argument("--fail-on-leak", action="store_true", help="Exit nonzero if forbidden text is found")
     audit.add_argument("--fail-on-failed", action="store_true", help="Exit nonzero if any scorecard failed")
     audit.set_defaults(func=cmd_audit)
+
+    compare = subparsers.add_parser("compare", help="Compare two scorecards or run directories")
+    compare.add_argument("--baseline", required=True, help="Baseline scorecard.json or run directory")
+    compare.add_argument("--candidate", required=True, help="Candidate scorecard.json or run directory")
+    compare.add_argument("--out", required=True, help="Comparison JSON output path")
+    compare.add_argument("--html-out", help="Optional static HTML comparison report")
+    compare.add_argument("--fail-on-regression", action="store_true", help="Exit nonzero when the candidate regresses")
+    compare.set_defaults(func=cmd_compare)
+
+    observer = subparsers.add_parser("observer-template", help="Print or write a read-only Hermes observer plugin template")
+    observer.add_argument("--out", help="Write the template to this path instead of stdout")
+    observer.add_argument("--force", action="store_true", help="Overwrite --out when it already exists")
+    observer.set_defaults(func=cmd_observer_template)
     return parser
 
 
@@ -166,20 +221,59 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def _regression_scenario(scenario: dict[str, Any], trace_path: Path, regression_path: Path) -> dict[str, Any]:
+def _write_score_outputs(scorecard: dict[str, Any], args: argparse.Namespace) -> None:
+    if getattr(args, "junit_out", None):
+        write_junit(scorecard, args.junit_out)
+    if getattr(args, "markdown_out", None):
+        write_markdown_summary(scorecard, args.markdown_out)
+
+
+def _regression_scenario(scenario: dict[str, Any], trace_path: Path, regression_path: Path, preserve_paths: bool) -> dict[str, Any]:
     regression = {
         key: value
         for key, value in scenario.items()
         if not key.startswith("_")
     }
+    trace_ref = _display_path(trace_path, preserve_paths)
+    scenario_ref = _display_path(regression_path, preserve_paths)
     regression["id"] = f"{scenario['id']}_regression"
     regression["title"] = f"Regression: {scenario['title']}"
-    regression["trace"] = {"format": "auto", "path": str(trace_path)}
+    regression["trace"] = {"format": "auto", "path": trace_ref}
+    if trace_ref.startswith("<redacted:"):
+        regression["trace"]["path_redacted"] = True
     regression["rerun_command"] = (
-        f"python -m flightrecorder run --scenario {regression_path} "
-        f"--trace {trace_path} --out runs/{scenario['id']}_replay"
+        f"python -m flightrecorder run --scenario {shlex.quote(scenario_ref)} "
+        f"--trace {shlex.quote(trace_ref)} --out {shlex.quote('runs/' + scenario['id'] + '_replay')}"
     )
     return regression
+
+
+def _display_path(path: Path, preserve_paths: bool = False) -> str:
+    raw = str(path)
+    if preserve_paths:
+        return raw
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        return str(resolved.relative_to(cwd))
+    except ValueError:
+        return f"<redacted:{resolved.name}>"
+
+
+def _is_windows_absolute(value: str) -> bool:
+    normalized = value.replace("/", "\\")
+    return (len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()) or normalized.startswith("\\\\")
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
+
+
+def _read_scorecard_ref(path: Path) -> tuple[dict[str, Any], str]:
+    score_path = path / "scorecard.json" if path.is_dir() else path
+    return _read_json(score_path), _display_path(score_path)
 
 
 def _audit_runs(runs_dir: Path, forbidden_text: list[str]) -> dict[str, Any]:
@@ -222,3 +316,19 @@ def _audit_runs(runs_dir: Path, forbidden_text: list[str]) -> dict[str, Any]:
         "leaks": leaks,
         "scorecards": scorecards,
     }
+
+
+OBSERVER_TEMPLATE = '''"""Read-only Hermes Flight Recorder observer plugin.
+
+Install `hermes-flight-recorder`, set HERMES_FLIGHT_RECORDER_OUTPUT_DIR to a
+restricted directory, then load this plugin through Hermes' plugin mechanism.
+The collector records observer-hook JSONL only; it does not block or mutate
+Hermes tools, prompts, memory, or model requests.
+"""
+
+from flightrecorder.hermes_plugin import register as register_flight_recorder
+
+
+def register(ctx):
+    return register_flight_recorder(ctx)
+'''

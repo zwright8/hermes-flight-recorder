@@ -32,6 +32,7 @@ def render_report(
     status = "PASS" if scorecard.get("passed") else "FAIL"
     status_class = "pass" if scorecard.get("passed") else "fail"
     rules = "\n".join(_render_rule(rule) for rule in scorecard.get("rules", []))
+    action_checklist = _render_action_checklist(scorecard)
     timeline = "\n".join(_render_event(i, event, secret_patterns) for i, event in enumerate(trace.get("events", [])))
     violations = "\n".join(_render_violation(rule) for rule in scorecard.get("rules", []) if not rule.get("passed"))
     if not violations:
@@ -47,7 +48,7 @@ def render_report(
         )
 
     final_answer = _esc(redact_text(trace.get("final_answer") or "", secret_patterns))
-    source_trace = _esc(str((scenario.get("trace") or {}).get("path") or "CLI override"))
+    source_trace = _esc(_safe_path_label(str((scenario.get("trace") or {}).get("path") or "CLI override")))
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -69,10 +70,14 @@ def render_report(
     h1, h2, h3 {{ margin:0 0 10px; }}
     .metric {{ font-size:40px; line-height:1; font-weight:800; }}
     .muted {{ color:var(--muted); }}
-    .rule {{ border-left:5px solid var(--ok); margin-bottom:12px; }}
-    .rule.fail {{ border-left-color:var(--bad); }}
-    .rule h3 {{ display:flex; justify-content:space-between; gap:12px; }}
-    .timeline {{ display:grid; gap:10px; }}
+	    .rule {{ border-left:5px solid var(--ok); margin-bottom:12px; }}
+	    .rule.fail {{ border-left-color:var(--bad); }}
+	    .rule h3 {{ display:flex; justify-content:space-between; gap:12px; }}
+	    .checklist {{ display:grid; gap:10px; }}
+	    .check {{ border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px; background:#fff; }}
+	    .check.fail {{ border-left-color:var(--bad); }}
+	    .check strong {{ display:flex; justify-content:space-between; gap:12px; }}
+	    .timeline {{ display:grid; gap:10px; }}
     .event {{ display:grid; grid-template-columns:72px 160px 1fr; gap:12px; align-items:start; }}
     code, pre {{ background:#eef2f6; border-radius:6px; padding:2px 5px; }}
     pre {{ overflow:auto; padding:12px; white-space:pre-wrap; }}
@@ -96,9 +101,10 @@ def render_report(
       <div class="panel"><h2>Score</h2><div class="metric">{scorecard['score']}</div><p class="muted">Threshold: {scorecard['pass_threshold']}</p></div>
       <div class="panel"><h2>Scenario</h2><p><code>{_esc(scenario['id'])}</code></p><p class="muted">{_esc(scenario['prompt'])}</p></div>
       <div class="panel"><h2>Source Trace</h2><p><code>{source_trace}</code></p><p class="muted">Format: {_esc(trace.get('session', {}).get('source_format', 'unknown'))}</p></div>
-    </section>
-    <section class="panel"><h2>Summary</h2><p>{_esc(scorecard['summary'])}</p></section>
-    <section class="panel"><h2>Final Answer</h2><pre>{final_answer}</pre></section>
+	    </section>
+	    <section class="panel"><h2>Summary</h2><p>{_esc(scorecard['summary'])}</p></section>
+	    {action_checklist}
+	    <section class="panel"><h2>Final Answer</h2><pre>{final_answer}</pre></section>
     <section class="panel"><h2>Scorecard</h2>{rules}</section>
     <section class="panel violations"><h2>Violations</h2>{violations}</section>
     {regression}
@@ -144,6 +150,22 @@ def _render_violation(rule: dict[str, Any]) -> str:
     return _render_rule(rule)
 
 
+def _render_action_checklist(scorecard: dict[str, Any]) -> str:
+    action_rule = next((rule for rule in scorecard.get("rules", []) if rule.get("id") == "required_actions"), None)
+    if not action_rule or not action_rule.get("items"):
+        return ""
+    rows = []
+    for item in action_rule.get("items", []):
+        passed = bool(item.get("passed"))
+        status = "PASS" if passed else "FAIL"
+        cls = "" if passed else " fail"
+        rows.append(
+            f"<article class=\"check{cls}\"><strong><span>{_esc(item.get('description') or item.get('id'))}</span>"
+            f"<span>{status}</span></strong><p class=\"muted\">{_esc(item.get('evidence', ''))}</p></article>"
+        )
+    return f"<section class=\"panel\"><h2>Task Checklist</h2><div class=\"checklist\">{''.join(rows)}</div></section>"
+
+
 def _render_event(index: int, event: dict[str, Any], secret_patterns: list[str]) -> str:
     event_type = _esc(str(event.get("type") or "event"))
     label = _esc(str(event.get("tool_name") or event.get("status") or ""))
@@ -153,3 +175,24 @@ def _render_event(index: int, event: dict[str, Any], secret_patterns: list[str])
 
 def _esc(value: Any) -> str:
     return html.escape(str(value), quote=True)
+
+
+def _safe_path_label(value: str) -> str:
+    if _is_windows_absolute(value):
+        return f"<redacted:{_basename(value)}>"
+    if not value.startswith("/"):
+        return value
+    path = Path(value)
+    try:
+        return str(path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return f"<redacted:{path.name}>"
+
+
+def _is_windows_absolute(value: str) -> bool:
+    normalized = value.replace("/", "\\")
+    return (len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()) or normalized.startswith("\\\\")
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"

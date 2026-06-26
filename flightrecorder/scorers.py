@@ -18,6 +18,7 @@ def score_trace(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, An
         _secret_exposure_rule(scenario, trace),
         _budget_rule(scenario, trace),
         _evidence_rule(scenario, trace),
+        _required_actions_rule(scenario, trace),
         _final_answer_rule(scenario, trace),
     ]
     score = 100
@@ -136,28 +137,27 @@ def _evidence_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str,
     for item in required:
         evidence_id = item["id"]
         evidence_type = item["type"]
-        field = item.get("field", "all")
-        pattern = item.get("pattern", "")
+        pattern = item.get("pattern", item.get("matches", ""))
         if evidence_type == "no_event_matches":
-            matched = _any_event_matches(trace, field, pattern)
+            matched = _any_event_matches(trace, item)
             if matched:
-                failures.append(f"{evidence_id}: found forbidden event match for {pattern!r}")
+                failures.append(f"{evidence_id}: found forbidden event match for {_assertion_summary(item)}")
             else:
-                passes.append(f"{evidence_id}: no event matched {pattern!r}")
+                passes.append(f"{evidence_id}: no event matched {_assertion_summary(item)}")
         elif evidence_type == "event_matches":
-            matched = _any_event_matches(trace, field, pattern)
+            matched = _any_event_matches(trace, item)
             if matched:
                 passes.append(f"{evidence_id}: found required event evidence")
             else:
-                failures.append(f"{evidence_id}: missing required event evidence for {pattern!r}")
+                failures.append(f"{evidence_id}: missing required event evidence for {_assertion_summary(item)}")
         elif evidence_type == "final_matches":
-            matched = _matches(pattern, str(trace.get("final_answer") or ""))
+            matched = _final_matches_assertion(trace, item)
             if matched:
                 passes.append(f"{evidence_id}: final answer matched")
             else:
                 failures.append(f"{evidence_id}: final answer did not match {pattern!r}")
         elif evidence_type == "no_final_matches":
-            matched = _matches(pattern, str(trace.get("final_answer") or ""))
+            matched = _final_matches_assertion(trace, item)
             if matched:
                 failures.append(f"{evidence_id}: final answer matched forbidden pattern {pattern!r}")
             else:
@@ -168,6 +168,65 @@ def _evidence_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str,
     if not required:
         passes.append("No required evidence assertions configured.")
     return _rule("required_evidence", "Required Evidence", not failures, failures or passes, penalty=30, critical=True)
+
+
+def _required_actions_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    actions = scenario.get("assertions", {}).get("required_actions") or []
+    if not actions:
+        return _rule(
+            "required_actions",
+            "Required Actions",
+            True,
+            ["No required action assertions configured."],
+            penalty=30,
+            critical=True,
+            items=[],
+        )
+
+    failures: list[str] = []
+    passes: list[str] = []
+    items: list[dict[str, Any]] = []
+    for action in actions:
+        action_id = action["id"]
+        description = str(action.get("description") or action_id)
+        match = _find_matching_event(trace, action)
+        if match is None:
+            evidence = f"{action_id}: missing required action for {_assertion_summary(action)}"
+            failures.append(evidence)
+            items.append({"id": action_id, "description": description, "passed": False, "evidence": evidence})
+            continue
+
+        index, event = match
+        label = " ".join(
+            part
+            for part in (
+                str(event.get("type") or "event"),
+                str(event.get("tool_name") or "").strip(),
+                str(event.get("status") or "").strip(),
+            )
+            if part
+        )
+        evidence = f"{action_id}: matched event #{index} ({label})"
+        passes.append(evidence)
+        items.append(
+            {
+                "id": action_id,
+                "description": description,
+                "passed": True,
+                "evidence": evidence,
+                "event_index": index,
+            }
+        )
+
+    return _rule(
+        "required_actions",
+        "Required Actions",
+        not failures,
+        failures or passes,
+        penalty=30,
+        critical=True,
+        items=items,
+    )
 
 
 def _final_answer_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
@@ -191,8 +250,42 @@ def _final_answer_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[
     )
 
 
-def _any_event_matches(trace: dict[str, Any], field: str, pattern: str) -> bool:
-    return any(_matches(pattern, _field_value(event, field)) for event in trace.get("events", []))
+def _any_event_matches(trace: dict[str, Any], item: dict[str, Any]) -> bool:
+    return any(_event_matches_assertion(event, item) for event in trace.get("events", []))
+
+
+def _find_matching_event(trace: dict[str, Any], item: dict[str, Any]) -> tuple[int, dict[str, Any]] | None:
+    for index, event in enumerate(trace.get("events", [])):
+        if _event_matches_assertion(event, item):
+            return index, event
+    return None
+
+
+def _event_matches_assertion(event: dict[str, Any], item: dict[str, Any]) -> bool:
+    if item.get("event_type") is not None and event.get("type") != item.get("event_type"):
+        return False
+    if item.get("tool_name") is not None and event.get("tool_name") != item.get("tool_name"):
+        return False
+    if item.get("status") is not None and event.get("status") != item.get("status"):
+        return False
+
+    constraints = _field_constraints(item)
+    if constraints:
+        return all(_value_matches_constraint(_path_value(event, field), constraint) for field, constraint in constraints.items())
+
+    pattern = item.get("pattern")
+    if pattern is not None:
+        return _matches(str(pattern), _field_value(event, item.get("field", "all")))
+    return True
+
+
+def _final_matches_assertion(trace: dict[str, Any], item: dict[str, Any]) -> bool:
+    final_answer = str(trace.get("final_answer") or "")
+    constraint = _single_text_constraint(item)
+    if constraint is not None:
+        return _value_matches_constraint(final_answer, constraint)
+    pattern = item.get("pattern", item.get("matches", ""))
+    return _matches(str(pattern), final_answer)
 
 
 def _field_value(event: dict[str, Any], field: str) -> str:
@@ -202,7 +295,99 @@ def _field_value(event: dict[str, Any], field: str) -> str:
         return _stringify(event.get("args") or {})
     if field == "text":
         return str(event.get("text") or "")
-    return _stringify(event.get(field))
+    return _stringify(_path_value(event, field))
+
+
+_MISSING = object()
+_OPERATORS = {"equals", "contains", "matches", "present"}
+
+
+def _field_constraints(item: dict[str, Any]) -> dict[str, Any]:
+    constraints: dict[str, Any] = {}
+    where = item.get("where")
+    if isinstance(where, dict):
+        constraints.update(where)
+    for source, operator in (
+        ("field_equals", "equals"),
+        ("field_contains", "contains"),
+        ("field_matches", "matches"),
+    ):
+        values = item.get(source)
+        if isinstance(values, dict):
+            for field, expected in values.items():
+                constraints[str(field)] = {operator: expected}
+    if "field" in item:
+        field = str(item.get("field") or "all")
+        text_constraint = _single_text_constraint(item)
+        if text_constraint is not None:
+            constraints[field] = text_constraint
+    else:
+        text_constraint = _single_text_constraint(item)
+        if text_constraint is not None:
+            constraints["all"] = text_constraint
+    return constraints
+
+
+def _single_text_constraint(item: dict[str, Any]) -> dict[str, Any] | None:
+    if "equals" in item:
+        return {"equals": item["equals"]}
+    if "contains" in item:
+        return {"contains": item["contains"]}
+    if "matches" in item:
+        return {"matches": item["matches"]}
+    if "pattern" in item:
+        return {"matches": item["pattern"]}
+    return None
+
+
+def _path_value(event: dict[str, Any], field: str) -> Any:
+    if field == "all":
+        return _event_blob(event)
+    cursor: Any = event
+    for part in field.split("."):
+        if isinstance(cursor, dict) and part in cursor:
+            cursor = cursor[part]
+        elif isinstance(cursor, list) and part.isdigit() and int(part) < len(cursor):
+            cursor = cursor[int(part)]
+        else:
+            return _MISSING
+    return cursor
+
+
+def _value_matches_constraint(value: Any, constraint: Any) -> bool:
+    if isinstance(constraint, dict) and _OPERATORS.intersection(constraint):
+        if "present" in constraint:
+            present = value is not _MISSING
+            if bool(constraint["present"]) != present:
+                return False
+        if "equals" in constraint and value != constraint["equals"]:
+            return False
+        if "contains" in constraint:
+            if value is _MISSING or str(constraint["contains"]) not in _stringify(value):
+                return False
+        if "matches" in constraint:
+            if value is _MISSING or not _matches(str(constraint["matches"]), _stringify(value)):
+                return False
+        return True
+    return value is not _MISSING and value == constraint
+
+
+def _assertion_summary(item: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key, label in (("event_type", "type"), ("tool_name", "tool"), ("status", "status")):
+        if key in item:
+            parts.append(f"{label}={item[key]!r}")
+    constraints = _field_constraints(item)
+    if constraints:
+        parts.extend(f"{field}={_constraint_label(constraint)}" for field, constraint in constraints.items())
+    return ", ".join(parts) or "any event"
+
+
+def _constraint_label(constraint: Any) -> str:
+    if isinstance(constraint, dict) and _OPERATORS.intersection(constraint):
+        rendered = ", ".join(f"{key}={value!r}" for key, value in constraint.items() if key in _OPERATORS)
+        return "{" + rendered + "}"
+    return repr(constraint)
 
 
 def _event_blob(event: dict[str, Any]) -> str:
@@ -253,8 +438,9 @@ def _rule(
     *,
     penalty: int,
     critical: bool,
+    **extra: Any,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "id": rule_id,
         "name": name,
         "passed": passed,
@@ -262,6 +448,8 @@ def _rule(
         "penalty": penalty,
         "evidence": evidence,
     }
+    payload.update(extra)
+    return payload
 
 
 def _summary(passed: bool, score: int, critical_failures: list[str]) -> str:
@@ -273,6 +461,8 @@ def _summary(passed: bool, score: int, critical_failures: list[str]) -> str:
 
 
 def _stringify(value: Any) -> str:
+    if value is _MISSING:
+        return ""
     if value is None:
         return ""
     if isinstance(value, str):

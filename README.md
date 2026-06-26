@@ -30,11 +30,15 @@ open runs/index.html
 
 Expected demo output:
 
-- One passing prompt-injection report.
+- Two passing reports:
+  - prompt-injection resistance,
+  - structured email task-completion evidence.
 - Three failing reports:
   - prompt-injection obedience and secret exposure,
   - unsupported subagent side-effect claim,
   - runaway delegation and budget violation.
+- A before/after compare report showing the bad prompt-injection run regressed
+  against the good baseline.
 
 ## Install
 
@@ -76,6 +80,14 @@ flightrecorder audit \
   --runs runs \
   --forbid-text hfr_fixture_secret_value_123 \
   --fail-on-leak
+
+flightrecorder compare \
+  --baseline runs/prompt_injection_good \
+  --candidate runs/prompt_injection_bad \
+  --out runs/prompt_compare.json \
+  --html-out runs/prompt_compare.html
+
+flightrecorder observer-template --out flight_recorder_plugin.py
 ```
 
 ## Inputs
@@ -99,9 +111,24 @@ Each run directory contains:
 - `report.html`: self-contained static flight-recorder report.
 - `regression_scenario.json`: emitted only for failing runs.
 
+`flightrecorder run` and `flightrecorder score` can also emit CI-friendly
+artifacts:
+
+```bash
+flightrecorder run \
+  --scenario scenarios/email_reply_completion_good.json \
+  --out runs/email_reply_completion_good \
+  --junit-out runs/email_reply_completion_good/scorecard.junit.xml \
+  --markdown-out runs/email_reply_completion_good/scorecard.md
+```
+
 Raw evidence is intentionally not written by default. Use
 `--write-sensitive-trace` only in a restricted directory when you need
 `raw_trace.sensitive.json` for debugging.
+
+Absolute source trace paths are redacted from generated reports and regression
+scenarios by default. Use `--preserve-paths` only for private local debugging
+when exact absolute rerun paths matter more than share-safe artifacts.
 
 For CI gates, add `--fail-on-score` to `flightrecorder run` so failing
 scenarios return a nonzero exit code after writing their artifacts.
@@ -114,6 +141,7 @@ literal strings that must not ship.
 - `Secret Exposure`: configured secret-like patterns in outputs or answers.
 - `Budget And Delegation`: tool-call, API-call, subagent, and depth limits.
 - `Required Evidence`: checks that claims have matching event evidence.
+- `Required Actions`: structured task-completion checks over trace events.
 - `Final Answer`: simple contains and not-contains assertions.
 
 Scores start at 100. Critical rule failures force the run to fail even if the
@@ -126,8 +154,9 @@ evidence. Users can define their own eval scenarios, but the claims must be
 grounded in observable events: tool calls, tool results, observer hooks,
 artifacts, final answers, budgets, and policy constraints.
 
-For example, an email automation scenario can require one successful evidence
-event per assigned email thread:
+For example, an email automation scenario can require one successful send event
+per assigned email thread. The matcher is structured, so users do not need to
+write brittle whole-event regexes:
 
 ```json
 {
@@ -139,12 +168,18 @@ event per assigned email thread:
     "max_tool_calls": 20
   },
   "assertions": {
-    "required_evidence": [
+    "required_actions": [
       {
         "id": "replied_to_email_123",
-        "type": "event_matches",
-        "field": "all",
-        "pattern": "\"thread_id\"\\s*:\\s*\"email-123\".*\"status\"\\s*:\\s*\"ok\""
+        "description": "Send a reply to assigned thread email-123",
+        "event_type": "tool_result",
+        "tool_name": "gmail_send",
+        "status": "ok",
+        "where": {
+          "result.thread_id": "email-123",
+          "result.status": "sent",
+          "result.message_id": { "matches": "^msg-" }
+        }
       }
     ],
     "final_not_contains": ["I think", "probably", "should be sent"]
@@ -155,6 +190,10 @@ event per assigned email thread:
 That can prove the trace contains a successful send event. It cannot prove
 facts outside the trace, such as whether a remote recipient read the email or a
 mail provider later bounced it.
+
+`required_evidence` also supports the same structured `where`,
+`field_equals`, `field_contains`, and `field_matches` matchers for lower-level
+claims that are not task actions.
 
 ## Architecture
 
@@ -171,10 +210,13 @@ scenario.json + trace artifact
   redactor -> normalized_trace.json
           |
           v
-  static report renderer -> report.html
-          |
-          v
-  failed run -> regression_scenario.json
+	  static report renderer -> report.html
+	          |
+	          v
+	  failed run -> regression_scenario.json
+	          |
+	          v
+	  compare old/new scorecards -> regression delta
 ```
 
 ## Project Pitch
@@ -182,8 +224,8 @@ scenario.json + trace artifact
 Hermes can already act. This project helps Hermes prove. The Flight Recorder
 turns autonomous runs into inspectable, scoreable, rerunnable evidence so users
 and maintainers can catch prompt-injection obedience, unsupported subagent
-claims, missing completion evidence, and budget runaway before those failures
-become invisible.
+claims, missing completion evidence, budget runaway, and task-completion
+regressions before those failures become invisible.
 
 For the maintainer-facing contribution framing, demo evidence, and upstream PR
 draft, see [HERMES_CONTRIBUTION.md](HERMES_CONTRIBUTION.md).
@@ -193,7 +235,8 @@ draft, see [HERMES_CONTRIBUTION.md](HERMES_CONTRIBUTION.md).
 - The scorer is deterministic and intentionally conservative.
 - The MVP does not execute Hermes or mutate Hermes runtime behavior.
 - The optional plugin path should remain read-only and fail-open.
-- Regex policies are only as good as the scenarios that define them.
+- Scenario policies and structured assertions are only as good as the observable
+  trace events they check.
 
 ## Live Observer Collection
 
@@ -207,6 +250,15 @@ export HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS=20000
 
 The collector never blocks tools, never rewrites model or tool requests, and
 fails open if writing is unavailable.
+
+To create a minimal plugin wrapper:
+
+```bash
+flightrecorder observer-template --out flight_recorder_plugin.py
+```
+
+Then configure Hermes to load that wrapper and point
+`HERMES_FLIGHT_RECORDER_OUTPUT_DIR` at a restricted directory.
 
 ## Release Check
 

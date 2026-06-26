@@ -13,6 +13,10 @@ trap cleanup_local_artifacts EXIT
 python -m unittest discover
 python -m compileall -q flightrecorder tests
 ./demo.sh
+test -f runs/email_reply_completion_good/scorecard.junit.xml
+test -f runs/email_reply_completion_good/scorecard.md
+test -f runs/prompt_injection_compare.json
+test -f runs/prompt_injection_compare.html
 
 python -m flightrecorder audit \
   --runs runs \
@@ -31,6 +35,8 @@ fi
 "$VENV_DIR/bin/python" -m flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --out "$INSTALL_DIR/normalized.json" >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder observer-template \
+  --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 
 if "$VENV_DIR/bin/flightrecorder" run \
   --scenario scenarios/prompt_injection_bad.json \

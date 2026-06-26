@@ -27,6 +27,7 @@ DEFAULT_ASSERTIONS: dict[str, Any] = {
     "final_contains": [],
     "final_not_contains": [],
     "required_evidence": [],
+    "required_actions": [],
 }
 
 DEFAULT_SCORING: dict[str, Any] = {"pass_threshold": 90}
@@ -39,6 +40,8 @@ REGEX_FIELDS = (
 )
 
 EVIDENCE_TYPES = {"event_matches", "no_event_matches", "final_matches", "no_final_matches"}
+MATCHER_FIELDS = ("equals", "contains", "matches", "pattern")
+STRUCTURED_MATCHER_FIELDS = ("where", "field_equals", "field_contains", "field_matches")
 
 
 def load_scenario(path: str | Path) -> dict[str, Any]:
@@ -113,11 +116,37 @@ def _validate_scenario(scenario: dict[str, Any]) -> None:
                 raise ScenarioError(f"required_evidence item missing field: {required}")
         if item["type"] not in EVIDENCE_TYPES:
             raise ScenarioError(f"required_evidence item {item['id']} has unsupported type: {item['type']!r}")
-        if "pattern" not in item:
-            raise ScenarioError(f"required_evidence item {item['id']} missing field: pattern")
-        _compile_regex(item["pattern"], f"required_evidence.{item['id']}.pattern")
+        for field in ("event_type", "tool_name", "status"):
+            if field in item and not isinstance(item[field], str):
+                raise ScenarioError(f"required_evidence item {item['id']} {field} must be a string")
+        final_only = item["type"] in {"final_matches", "no_final_matches"}
+        if final_only:
+            _validate_final_matcher(item, f"required_evidence.{item['id']}")
+        else:
+            _validate_matchers(item, f"required_evidence.{item['id']}", require_matcher=True)
         if "field" in item and not isinstance(item["field"], str):
             raise ScenarioError(f"required_evidence item {item['id']} field must be a string")
+
+    actions = assertions.get("required_actions", [])
+    if not isinstance(actions, list):
+        raise ScenarioError("Assertions field required_actions must be a list")
+    for item in actions:
+        if not isinstance(item, dict):
+            raise ScenarioError("Each required_actions item must be an object")
+        if "id" not in item:
+            raise ScenarioError("required_actions item missing field: id")
+        if not isinstance(item["id"], str) or not item["id"].strip():
+            raise ScenarioError("required_actions item id must be a non-empty string")
+        if "description" in item and not isinstance(item["description"], str):
+            raise ScenarioError(f"required_actions item {item['id']} description must be a string")
+        for field in ("event_type", "tool_name", "status"):
+            if field in item and not isinstance(item[field], str):
+                raise ScenarioError(f"required_actions item {item['id']} {field} must be a string")
+        has_selector = any(field in item for field in ("event_type", "tool_name", "status"))
+        has_matcher = _has_matcher(item)
+        if not has_selector and not has_matcher:
+            raise ScenarioError(f"required_actions item {item['id']} must define an event selector or field matcher")
+        _validate_matchers(item, f"required_actions.{item['id']}", require_matcher=False)
 
     threshold = scoring.get("pass_threshold")
     if not isinstance(threshold, int) or not 0 <= threshold <= 100:
@@ -135,6 +164,75 @@ def _compile_regex(pattern: Any, label: str) -> None:
         re.compile(pattern)
     except re.error as exc:
         raise ScenarioError(f"Invalid regex in {label}: {pattern!r}: {exc}") from exc
+
+
+def _has_matcher(item: dict[str, Any]) -> bool:
+    return any(field in item for field in MATCHER_FIELDS + STRUCTURED_MATCHER_FIELDS)
+
+
+def _validate_matchers(item: dict[str, Any], label: str, *, require_matcher: bool) -> None:
+    if require_matcher and not _has_matcher(item):
+        raise ScenarioError(f"{label} missing matcher: use pattern, equals, contains, matches, where, or field_*")
+
+    if "pattern" in item:
+        _compile_regex(item["pattern"], f"{label}.pattern")
+    if "matches" in item:
+        _compile_regex(item["matches"], f"{label}.matches")
+    for field in ("equals", "contains"):
+        if field in item and isinstance(item[field], (dict, list)):
+            raise ScenarioError(f"{label}.{field} must be a scalar value")
+
+    where = item.get("where")
+    if "where" in item:
+        if not isinstance(where, dict):
+            raise ScenarioError(f"{label}.where must be an object")
+        for path, constraint in where.items():
+            if not isinstance(path, str) or not path.strip():
+                raise ScenarioError(f"{label}.where field paths must be non-empty strings")
+            _validate_constraint(constraint, f"{label}.where.{path}")
+
+    for field in ("field_equals", "field_contains", "field_matches"):
+        values = item.get(field)
+        if field in item and not isinstance(values, dict):
+            raise ScenarioError(f"{label}.{field} must be an object")
+        if isinstance(values, dict):
+            for path, expected in values.items():
+                if not isinstance(path, str) or not path.strip():
+                    raise ScenarioError(f"{label}.{field} field paths must be non-empty strings")
+                if field == "field_matches":
+                    _compile_regex(expected, f"{label}.{field}.{path}")
+                elif isinstance(expected, (dict, list)):
+                    raise ScenarioError(f"{label}.{field}.{path} must be a scalar value")
+
+
+def _validate_final_matcher(item: dict[str, Any], label: str) -> None:
+    forbidden = [field for field in STRUCTURED_MATCHER_FIELDS + ("event_type", "tool_name", "status", "field") if field in item]
+    if forbidden:
+        raise ScenarioError(f"{label} uses event-only matcher fields: {', '.join(forbidden)}")
+    if not any(field in item for field in MATCHER_FIELDS):
+        raise ScenarioError(f"{label} missing final-answer matcher: use pattern, equals, contains, or matches")
+    if "pattern" in item:
+        _compile_regex(item["pattern"], f"{label}.pattern")
+    if "matches" in item:
+        _compile_regex(item["matches"], f"{label}.matches")
+    for field in ("equals", "contains"):
+        if field in item and isinstance(item[field], (dict, list)):
+            raise ScenarioError(f"{label}.{field} must be a scalar value")
+
+
+def _validate_constraint(constraint: Any, label: str) -> None:
+    if not isinstance(constraint, dict):
+        return
+    operators = {"equals", "contains", "matches", "present"}.intersection(constraint)
+    if not operators:
+        return
+    if "present" in constraint and not isinstance(constraint["present"], bool):
+        raise ScenarioError(f"{label}.present must be a boolean")
+    if "matches" in constraint:
+        _compile_regex(constraint["matches"], f"{label}.matches")
+    for field in ("equals", "contains"):
+        if field in constraint and isinstance(constraint[field], (dict, list)):
+            raise ScenarioError(f"{label}.{field} must be a scalar value")
 
 
 def resolve_trace_path(scenario: dict[str, Any], override: str | None = None) -> Path:

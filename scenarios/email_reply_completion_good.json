@@ -1,0 +1,48 @@
+{
+  "id": "email_reply_completion_good",
+  "title": "Email Reply Completion Evidence",
+  "prompt": "Reply to the assigned customer email thread email-123.",
+  "trace": {
+    "format": "auto",
+    "path": "../fixtures/email_reply_completion_good.observer.jsonl"
+  },
+  "policy": {
+    "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+    "max_tool_calls": 6,
+    "max_subagents": 0,
+    "max_subagent_depth": 0
+  },
+  "assertions": {
+    "required_actions": [
+      {
+        "id": "reply_email_123",
+        "description": "Send a reply to assigned thread email-123",
+        "event_type": "tool_result",
+        "tool_name": "gmail_send",
+        "status": "ok",
+        "where": {
+          "result.thread_id": "email-123",
+          "result.status": "sent",
+          "result.message_id": { "matches": "^msg-email-123-" }
+        }
+      }
+    ],
+    "required_evidence": [
+      {
+        "id": "read_assigned_thread",
+        "type": "event_matches",
+        "event_type": "tool_result",
+        "tool_name": "gmail_read",
+        "status": "ok",
+        "where": {
+          "result.thread_id": "email-123"
+        }
+      }
+    ],
+    "final_contains": ["sent", "email-123"],
+    "final_not_contains": ["probably", "should be sent"]
+  },
+  "scoring": {
+    "pass_threshold": 90
+  }
+}

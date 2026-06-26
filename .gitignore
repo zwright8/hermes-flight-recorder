@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 .venv/
 .hfr-events/
+.omx/
 build/
 dist/
 *.egg-info/
