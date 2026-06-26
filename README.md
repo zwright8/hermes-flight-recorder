@@ -646,11 +646,14 @@ Use `flightrecorder gate-export` to enforce readiness thresholds over
 rows. It can require positives, negatives, preferences, SFT/DPO/reward-model
 views, step attribution, task-family coverage, evidence-backed task completion,
 complete source-fingerprint coverage, enough trace signal, and zero quality
-flags:
+flags. By default, it also validates the export directory and manifest artifact
+fingerprints before evaluating metrics, so stale or swapped files fail the
+handoff:
 
 ```json
 {
   "schema_version": "hfr.training_gate.policy.v1",
+  "strict_validation": true,
   "min_episodes": 100,
   "min_preferences": 25,
   "min_sft": 25,
@@ -692,9 +695,10 @@ Use `flightrecorder gate-compare-export` for the baseline/candidate improvement
 path after `export-compare-rl`. It checks that comparison preference rows are
 not merely present, but actually encode enough candidate wins and expected rule
 fixes without regression examples, task-completion regressions, or
-contract-drifted pairs sneaking into a training handoff. For larger eval packs,
-use policy-file `task_family_gates` to require movement inside specific derived
-task families:
+contract-drifted pairs sneaking into a training handoff. It validates comparison
+artifact fingerprints by default before judging those metrics. For larger eval
+packs, use policy-file `task_family_gates` to require movement inside specific
+derived task families:
 
 ```bash
 flightrecorder gate-compare-export \

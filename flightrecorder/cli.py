@@ -819,6 +819,11 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
     metrics_path = export_dir / "dataset_metrics.json"
     dataset_metrics = _read_json(metrics_path)
     options = _training_gate_options(args)
+    validation_summary = (
+        validate_artifacts(training_export_dir=export_dir, strict=options["strict_validation"])
+        if options["require_valid_export"]
+        else None
+    )
     result = evaluate_training_gate(
         dataset_metrics,
         training_export_path=_display_path(export_dir, args.preserve_paths),
@@ -850,6 +855,8 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
         require_task_families=options["require_task_families"],
         require_trace_event_types=options["require_trace_event_types"],
         task_family_gates=options["task_family_gates"],
+        validation_summary=validation_summary,
+        require_valid_export=options["require_valid_export"],
     )
     if options["policy_path"]:
         result["policy"] = _training_gate_policy_summary(options)
@@ -898,6 +905,11 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
     manifest = _read_json(compare_dir / "manifest.json")
     pairs = _read_jsonl(compare_dir / "improvement_pairs.jsonl")
     options = _compare_gate_options(args)
+    validation_summary = (
+        validate_artifacts(compare_export_dir=compare_dir, strict=options["strict_validation"])
+        if options["require_valid_export"]
+        else None
+    )
     result = evaluate_compare_gate(
         manifest,
         pairs,
@@ -920,6 +932,8 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
         forbid_rule_regressions=options["forbid_rule_regressions"],
         forbid_new_critical_failures=options["forbid_new_critical_failures"],
         task_family_gates=options["task_family_gates"],
+        validation_summary=validation_summary,
+        require_valid_export=options["require_valid_export"],
     )
     if options["policy_path"]:
         result["policy"] = _compare_gate_policy_summary(options)
@@ -1346,6 +1360,16 @@ def _parser() -> argparse.ArgumentParser:
     gate_export.add_argument("--training-export", required=True, help="Directory containing export-rl artifacts")
     gate_export.add_argument("--policy", help="Versioned training gate policy JSON file with committed threshold defaults")
     gate_export.add_argument("--out", help="Write gate result JSON to this path")
+    gate_export.add_argument(
+        "--strict-validation",
+        action="store_true",
+        help="Fail export-integrity validation on warnings as well as errors",
+    )
+    gate_export.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Skip export structure and artifact-fingerprint validation before gating",
+    )
     gate_export.add_argument("--min-episodes", type=_non_negative_int_arg, help="Minimum episode count")
     gate_export.add_argument("--min-pass-rate", type=_rate_arg, help="Minimum dataset pass rate, from 0.0 to 1.0")
     gate_export.add_argument("--min-average-score", type=_score_arg, help="Minimum average score, from 0 to 100")
@@ -1445,6 +1469,16 @@ def _parser() -> argparse.ArgumentParser:
     gate_compare.add_argument("--compare-export", required=True, help="Directory containing export-compare-rl artifacts")
     gate_compare.add_argument("--policy", help="Versioned compare gate policy JSON file with committed threshold defaults")
     gate_compare.add_argument("--out", help="Write gate result JSON to this path")
+    gate_compare.add_argument(
+        "--strict-validation",
+        action="store_true",
+        help="Fail comparison-export validation on warnings as well as errors",
+    )
+    gate_compare.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Skip comparison export structure and artifact-fingerprint validation before gating",
+    )
     gate_compare.add_argument("--min-pairs", type=_non_negative_int_arg, help="Minimum comparison pair count")
     gate_compare.add_argument("--min-dpo", type=_non_negative_int_arg, help="Minimum comparison DPO row count")
     gate_compare.add_argument("--min-candidate-wins", type=_non_negative_int_arg, help="Minimum candidate-win pair count")
@@ -1770,6 +1804,8 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
         "policy_description": policy.get("description"),
+        "require_valid_export": False if args.skip_validation else policy.get("require_valid_export", True),
+        "strict_validation": bool(args.strict_validation or policy.get("strict_validation", False)),
         "min_episodes": args.min_episodes if args.min_episodes is not None else policy.get("min_episodes"),
         "min_pass_rate": args.min_pass_rate if args.min_pass_rate is not None else policy.get("min_pass_rate"),
         "min_average_score": args.min_average_score if args.min_average_score is not None else policy.get("min_average_score"),
@@ -1890,6 +1926,8 @@ def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "require_task_families",
         "require_trace_event_types",
         "task_family_gates",
+        "require_valid_export",
+        "strict_validation",
     )
     effective = {
         field: options[field]
@@ -1959,6 +1997,8 @@ def _compare_gate_options(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
         "policy_description": policy.get("description"),
+        "require_valid_export": False if args.skip_validation else policy.get("require_valid_export", True),
+        "strict_validation": bool(args.strict_validation or policy.get("strict_validation", False)),
         "min_pairs": args.min_pairs if args.min_pairs is not None else policy.get("min_pairs"),
         "min_dpo": args.min_dpo if args.min_dpo is not None else policy.get("min_dpo"),
         "min_candidate_wins": (
@@ -2036,6 +2076,8 @@ def _compare_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "forbid_rule_regressions",
         "forbid_new_critical_failures",
         "task_family_gates",
+        "require_valid_export",
+        "strict_validation",
     )
     effective = {
         field: options[field]

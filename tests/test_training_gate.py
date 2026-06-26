@@ -40,7 +40,11 @@ class TrainingGateTests(unittest.TestCase):
             self.assertEqual(result["schema_version"], "hfr.training_gate.v1")
             self.assertTrue(result["passed"])
             self.assertEqual(result["failed_check_count"], 0)
+            self.assertEqual(result["metrics"]["validation"]["passed"], True)
+            self.assertEqual(result["metrics"]["validation"]["error_count"], 0)
             self.assertEqual(result["policy"]["schema_version"], "hfr.training_gate.policy.v1")
+            self.assertTrue(result["policy"]["effective"]["require_valid_export"])
+            self.assertTrue(result["policy"]["effective"]["strict_validation"])
             self.assertEqual(result["metrics"]["source_fingerprint_coverage"]["rate"], 1.0)
             self.assertEqual(result["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"], 10)
             self.assertEqual(result["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"], 10)
@@ -93,6 +97,46 @@ class TrainingGateTests(unittest.TestCase):
             failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
             self.assertIn("min_pass_rate", failed_checks)
             self.assertIn("forbid_quality_flag", failed_checks)
+
+    def test_gate_export_blocks_invalid_export_fingerprints_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            gate = Path(tmp) / "training_gate.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            manifest_path = export / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifact_fingerprints"]["episodes"]["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["gate-export", "--training-export", str(export), "--out", str(gate)])
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
+            self.assertIn("valid_training_export", failed_checks)
+            self.assertEqual(result["metrics"]["validation"]["passed"], False)
+            self.assertGreater(result["metrics"]["validation"]["error_count"], 0)
+
+    def test_gate_export_can_explicitly_skip_validation_for_legacy_handoffs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            gate = Path(tmp) / "training_gate.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            manifest_path = export / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifact_fingerprints"]["episodes"]["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["gate-export", "--training-export", str(export), "--skip-validation", "--out", str(gate)])
+
+            self.assertEqual(code, 0)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertNotIn("valid_training_export", {item["id"] for item in result["checks"]})
+            self.assertEqual(result["metrics"]["validation"]["available"], False)
 
     def test_gate_export_fails_unverified_source_fingerprints(self):
         with tempfile.TemporaryDirectory() as tmp:

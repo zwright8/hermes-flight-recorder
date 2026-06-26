@@ -30,6 +30,7 @@ _LIST_POLICY_FIELDS = {
     "forbid_rule_regressions",
     "forbid_new_critical_failures",
 }
+_BOOLEAN_POLICY_FIELDS = {"require_valid_export", "strict_validation"}
 _TASK_FAMILY_COUNT_POLICY_FIELDS = {
     "min_pairs",
     "min_candidate_wins",
@@ -45,7 +46,14 @@ _TASK_FAMILY_LIST_POLICY_FIELDS = {
     "forbid_new_critical_failures",
 }
 _TASK_FAMILY_GATE_FIELDS = {"task_family", *_TASK_FAMILY_COUNT_POLICY_FIELDS, *_TASK_FAMILY_LIST_POLICY_FIELDS}
-_POLICY_FIELDS = {"schema_version", "description", "task_family_gates", *_COUNT_POLICY_FIELDS, *_LIST_POLICY_FIELDS}
+_POLICY_FIELDS = {
+    "schema_version",
+    "description",
+    "task_family_gates",
+    *_COUNT_POLICY_FIELDS,
+    *_LIST_POLICY_FIELDS,
+    *_BOOLEAN_POLICY_FIELDS,
+}
 
 
 class CompareGatePolicyError(ValueError):
@@ -88,6 +96,13 @@ def load_compare_gate_policy(path: str | Path) -> dict[str, Any]:
             continue
         policy[field] = _policy_string_list(field, raw[field])
 
+    for field in _BOOLEAN_POLICY_FIELDS:
+        if field not in raw or raw[field] is None:
+            continue
+        if not isinstance(raw[field], bool):
+            raise CompareGatePolicyError(f"compare gate policy field {field} must be a boolean")
+        policy[field] = raw[field]
+
     if "task_family_gates" in raw and raw["task_family_gates"] is not None:
         policy["task_family_gates"] = _policy_task_family_gates(raw["task_family_gates"])
 
@@ -117,6 +132,8 @@ def evaluate_compare_gate(
     forbid_rule_regressions: list[str] | None = None,
     forbid_new_critical_failures: list[str] | None = None,
     task_family_gates: list[dict[str, Any]] | None = None,
+    validation_summary: dict[str, Any] | None = None,
+    require_valid_export: bool = True,
 ) -> dict[str, Any]:
     """Evaluate readiness checks against a comparison export manifest and pairs."""
     checks: list[dict[str, Any]] = []
@@ -127,6 +144,9 @@ def evaluate_compare_gate(
     skipped_pair_count = _int_value(manifest.get("skipped_pair_count"))
     contract_drift_count = _int_value(manifest.get("contract_drift_count"))
     unverified_contract_count = _int_value(manifest.get("unverified_contract_count"))
+
+    if require_valid_export:
+        _add_validation_check(checks, "valid_compare_export", validation_summary)
 
     if min_pairs is not None:
         _add_min_check(checks, "min_pairs", pair_count, min_pairs)
@@ -242,6 +262,7 @@ def evaluate_compare_gate(
             "regressed_rule_counts": regressed_rules,
             "new_critical_failure_counts": new_critical,
             "task_families": [task_family_rows[family] for family in sorted(task_family_rows)],
+            "validation": _validation_metrics(validation_summary),
         },
     }
 
@@ -372,6 +393,42 @@ def _add_absence_check(
     if scope:
         check["scope"] = scope
     checks.append(check)
+
+
+def _add_validation_check(checks: list[dict[str, Any]], check_id: str, validation_summary: dict[str, Any] | None) -> None:
+    metrics = _validation_metrics(validation_summary)
+    checks.append(
+        {
+            "id": check_id,
+            "passed": bool(metrics.get("available") and metrics.get("passed")),
+            "actual": metrics,
+            "expected": {"passed": True, "error_count": 0},
+            "summary": (
+                f"{check_id}: passed={metrics['passed']}, "
+                f"errors={metrics['error_count']}, warnings={metrics['warning_count']}"
+            ),
+        }
+    )
+
+
+def _validation_metrics(validation_summary: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(validation_summary, dict):
+        return {
+            "available": False,
+            "passed": False,
+            "strict": False,
+            "target_count": 0,
+            "error_count": 0,
+            "warning_count": 0,
+        }
+    return {
+        "available": True,
+        "passed": bool(validation_summary.get("passed")),
+        "strict": bool(validation_summary.get("strict")),
+        "target_count": _int_value(validation_summary.get("target_count")),
+        "error_count": _int_value(validation_summary.get("error_count")),
+        "warning_count": _int_value(validation_summary.get("warning_count")),
+    }
 
 
 def _pairs_by_scenario(pairs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

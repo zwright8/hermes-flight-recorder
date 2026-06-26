@@ -1,6 +1,7 @@
 {
   "schema_version": "hfr.compare_gate.policy.v1",
   "description": "Demo comparison-export readiness gate for baseline/candidate training handoff checks.",
+  "strict_validation": true,
   "min_pairs": 1,
   "min_dpo": 1,
   "min_candidate_wins": 1,

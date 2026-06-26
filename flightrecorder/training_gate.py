@@ -37,6 +37,7 @@ _RATE_POLICY_FIELDS = {
 _FLOAT_POLICY_FIELDS = {"min_trace_average_events"}
 _SCALAR_POLICY_FIELDS = {*_RATE_POLICY_FIELDS, *_FLOAT_POLICY_FIELDS, "min_average_score", *_COUNT_POLICY_FIELDS}
 _LIST_POLICY_FIELDS = {"forbid_quality_flags", "forbid_quality_severities", "require_task_families", "require_trace_event_types"}
+_BOOLEAN_POLICY_FIELDS = {"require_valid_export", "strict_validation"}
 _TASK_FAMILY_SCALAR_POLICY_FIELDS = {
     "min_episodes",
     "min_pass_rate",
@@ -51,7 +52,14 @@ _TASK_FAMILY_SCALAR_POLICY_FIELDS = {
     "max_failed",
 }
 _TASK_FAMILY_GATE_FIELDS = {"task_family", *_TASK_FAMILY_SCALAR_POLICY_FIELDS}
-_POLICY_FIELDS = {"schema_version", "description", "task_family_gates", *_SCALAR_POLICY_FIELDS, *_LIST_POLICY_FIELDS}
+_POLICY_FIELDS = {
+    "schema_version",
+    "description",
+    "task_family_gates",
+    *_SCALAR_POLICY_FIELDS,
+    *_LIST_POLICY_FIELDS,
+    *_BOOLEAN_POLICY_FIELDS,
+}
 _QUALITY_SEVERITIES = {"info", "warning", "error"}
 
 
@@ -109,6 +117,13 @@ def load_training_gate_policy(path: str | Path) -> dict[str, Any]:
                 )
         policy[field] = values
 
+    for field in _BOOLEAN_POLICY_FIELDS:
+        if field not in raw or raw[field] is None:
+            continue
+        if not isinstance(raw[field], bool):
+            raise TrainingGatePolicyError(f"training gate policy field {field} must be a boolean")
+        policy[field] = raw[field]
+
     if "task_family_gates" in raw and raw["task_family_gates"] is not None:
         policy["task_family_gates"] = _policy_task_family_gates(raw["task_family_gates"])
 
@@ -147,6 +162,8 @@ def evaluate_training_gate(
     require_task_families: list[str] | None = None,
     require_trace_event_types: list[str] | None = None,
     task_family_gates: list[dict[str, Any]] | None = None,
+    validation_summary: dict[str, Any] | None = None,
+    require_valid_export: bool = True,
 ) -> dict[str, Any]:
     """Evaluate readiness checks against dataset_metrics.json."""
     artifact_counts = dataset_metrics.get("artifact_counts") if isinstance(dataset_metrics.get("artifact_counts"), dict) else {}
@@ -155,6 +172,9 @@ def evaluate_training_gate(
     task_completion = _task_completion_metrics(dataset_metrics)
     trace_signal = _trace_signal_metrics(dataset_metrics)
     checks: list[dict[str, Any]] = []
+
+    if require_valid_export:
+        _add_validation_check(checks, "valid_training_export", validation_summary)
 
     if min_episodes is not None:
         _add_min_check(checks, "min_episodes", _int_value(dataset_metrics.get("episode_count")), min_episodes)
@@ -289,6 +309,7 @@ def evaluate_training_gate(
             "task_completion": task_completion,
             "trace_signal": trace_signal,
             "artifact_counts": artifact_counts,
+            "validation": _validation_metrics(validation_summary),
         },
     }
 
@@ -395,6 +416,43 @@ def _append_check(checks: list[dict[str, Any]], check: dict[str, Any], scope: di
     if scope:
         check["scope"] = scope
     checks.append(check)
+
+
+def _add_validation_check(checks: list[dict[str, Any]], check_id: str, validation_summary: dict[str, Any] | None) -> None:
+    metrics = _validation_metrics(validation_summary)
+    passed = bool(metrics.get("available") and metrics.get("passed"))
+    checks.append(
+        {
+            "id": check_id,
+            "passed": passed,
+            "actual": metrics,
+            "expected": {"passed": True, "error_count": 0},
+            "summary": (
+                f"{check_id}: passed={metrics['passed']}, "
+                f"errors={metrics['error_count']}, warnings={metrics['warning_count']}"
+            ),
+        }
+    )
+
+
+def _validation_metrics(validation_summary: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(validation_summary, dict):
+        return {
+            "available": False,
+            "passed": False,
+            "strict": False,
+            "target_count": 0,
+            "error_count": 0,
+            "warning_count": 0,
+        }
+    return {
+        "available": True,
+        "passed": bool(validation_summary.get("passed")),
+        "strict": bool(validation_summary.get("strict")),
+        "target_count": _int_value(validation_summary.get("target_count")),
+        "error_count": _int_value(validation_summary.get("error_count")),
+        "warning_count": _int_value(validation_summary.get("warning_count")),
+    }
 
 
 def _quality_flags(value: Any) -> list[dict[str, Any]]:

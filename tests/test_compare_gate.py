@@ -50,11 +50,15 @@ class CompareGateTests(unittest.TestCase):
             gate = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertEqual(gate["schema_version"], "hfr.compare_gate.v1")
             self.assertTrue(gate["passed"])
+            self.assertEqual(gate["metrics"]["validation"]["passed"], True)
+            self.assertEqual(gate["metrics"]["validation"]["error_count"], 0)
             self.assertEqual(gate["metrics"]["candidate_win_count"], 1)
             self.assertEqual(gate["metrics"]["baseline_win_count"], 0)
             self.assertEqual(gate["metrics"]["task_completion_improvement_count"], 1)
             self.assertEqual(gate["metrics"]["task_completion_regression_count"], 0)
             self.assertEqual(gate["policy"]["schema_version"], "hfr.compare_gate.policy.v1")
+            self.assertTrue(gate["policy"]["effective"]["require_valid_export"])
+            self.assertTrue(gate["policy"]["effective"]["strict_validation"])
             self.assertIn("email_reply_completion", gate["metrics"]["candidate_win_scenarios"])
             self.assertIn("email_reply_completion", gate["metrics"]["task_completion_improvement_scenarios"])
             families = {row["task_family"]: row for row in gate["metrics"]["task_families"]}
@@ -103,6 +107,26 @@ class CompareGateTests(unittest.TestCase):
             failed_ids = [check["id"] for check in gate["checks"] if not check["passed"]]
             self.assertIn("min_candidate_wins", failed_ids)
             self.assertIn("require_rule_fix", failed_ids)
+
+    def test_gate_compare_export_blocks_invalid_export_fingerprints_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            compare_export = Path(tmp) / "compare_rl"
+            gate_path = Path(tmp) / "gate.json"
+            run_cli(["export-compare-rl", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(compare_export)])
+            manifest_path = compare_export / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifact_fingerprints"]["improvement_pairs"]["sha256"] = "0" * 64
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["gate-compare-export", "--compare-export", str(compare_export), "--out", str(gate_path)])
+
+            self.assertEqual(code, 1)
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            failed_ids = {check["id"] for check in gate["checks"] if not check["passed"]}
+            self.assertIn("valid_compare_export", failed_ids)
+            self.assertEqual(gate["metrics"]["validation"]["passed"], False)
+            self.assertGreater(gate["metrics"]["validation"]["error_count"], 0)
 
     def test_gate_compare_export_blocks_task_completion_regressions(self):
         with tempfile.TemporaryDirectory() as tmp:

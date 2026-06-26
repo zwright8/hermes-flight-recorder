@@ -458,11 +458,13 @@ unless the comparison export contains enough pairs and DPO rows, enough
 candidate wins, required task-completion improvements, required fixed rules,
 zero forbidden baseline wins, zero task-completion regressions, zero forbidden
 rule regressions, zero newly critical failure classes, and no drifted or
-unverified contracts when configured with `--max-contract-drifts 0
---max-unverified-contracts 0`. The gate also emits `metrics.task_families` and
-policy-file `task_family_gates`, which let production eval packs protect
-families independently when one behavior class regresses while aggregate
-candidate wins still look healthy.
+unverified contracts when configured to allow zero drifted or unverified
+contracts. It validates comparison artifact fingerprints by
+default, so a stale or swapped pair/DPO/card file blocks the handoff before any
+trainer sees it. The gate also emits `metrics.task_families` and policy-file
+`task_family_gates`, which let production eval packs protect families
+independently when one behavior class regresses while aggregate candidate wins
+still look healthy.
 
 ## Trainer-Ready Views
 
@@ -527,7 +529,10 @@ task-completion configured/complete counts, maximum incomplete task-completion
 examples, required-check pass rates, source-fingerprint coverage, maximum
 unverified source fingerprints, trainer-view source-fingerprint coverage,
 maximum unverified trainer-ready rows, trace-signal thresholds, required
-normalized event types, and maximum quality-flag counts.
+normalized event types, and maximum quality-flag counts. `gate-export` validates
+the export and manifest artifact fingerprints by default; set
+`strict_validation` in policy, or pass `--strict-validation`, when warnings
+should also block a training handoff.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

@@ -280,6 +280,22 @@ if python -m flightrecorder gate-compare-export \
   echo "gate-compare-export did not fail a zero contract-drift threshold" >&2
   exit 1
 fi
+rm -rf runs/compare_rl_export_integrity_probe
+cp -R runs/compare_rl_export runs/compare_rl_export_integrity_probe
+python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("runs/compare_rl_export_integrity_probe/manifest.json")
+manifest = json.loads(path.read_text(encoding="utf-8"))
+manifest["artifact_fingerprints"]["improvement_pairs"]["sha256"] = "0" * 64
+path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+if python -m flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_export_integrity_probe >/dev/null; then
+  echo "gate-compare-export did not fail a stale artifact fingerprint" >&2
+  exit 1
+fi
 python - <<'PY'
 import json
 from pathlib import Path
@@ -319,12 +335,16 @@ assert "required_actions" in pair["rule_fixes"]
 assert "tool_result gmail_send ok" in dpo["chosen"]
 assert "tool_result gmail_send ok" not in dpo["rejected"]
 assert "# Flight Recorder Improvement Pair Card" in card
+assert gate["metrics"]["validation"]["passed"] is True
+assert gate["metrics"]["validation"]["error_count"] == 0
 assert gate["metrics"]["task_completion_improvement_count"] == 1
 assert gate["metrics"]["task_completion_regression_count"] == 0
 assert gate["metrics"]["task_completion_improvement_scenarios"] == ["email_reply_completion"]
 assert gate["metrics"]["task_completion_regression_scenarios"] == []
 assert gate["policy"]["effective"]["min_task_completion_improvements"] == 1
 assert gate["policy"]["effective"]["max_task_completion_regressions"] == 0
+assert gate["policy"]["effective"]["require_valid_export"] is True
+assert gate["policy"]["effective"]["strict_validation"] is True
 assert gate["policy"]["effective"]["require_task_completion_improvement_scenarios"] == ["email_reply_completion"]
 assert gate["policy"]["effective"]["forbid_task_completion_regression_scenarios"] == ["email_reply_completion"]
 families = {row["task_family"]: row for row in gate["metrics"]["task_families"]}
@@ -523,6 +543,8 @@ import json
 from pathlib import Path
 
 gate = json.loads(Path("runs/training_gate.json").read_text(encoding="utf-8"))
+assert gate["metrics"]["validation"]["passed"] is True
+assert gate["metrics"]["validation"]["error_count"] == 0
 assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
 assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
 assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 10
@@ -549,6 +571,8 @@ assert gate["policy"]["effective"]["min_trace_tool_or_api_rate"] == 0.8
 assert gate["policy"]["effective"]["max_trace_empty_final_answers"] == 0
 assert gate["policy"]["effective"]["max_trace_risk_count"] == 2
 assert gate["policy"]["effective"]["require_trace_event_types"] == ["assistant_message"]
+assert gate["policy"]["effective"]["require_valid_export"] is True
+assert gate["policy"]["effective"]["strict_validation"] is True
 PY
 python -m flightrecorder export-review \
   --runs runs \
@@ -638,6 +662,22 @@ if python -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-trace-average-events 999 >/dev/null; then
   echo "gate-export did not fail a too-high trace-event threshold" >&2
+  exit 1
+fi
+rm -rf runs/training_export_integrity_probe
+cp -R runs/training_export runs/training_export_integrity_probe
+python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("runs/training_export_integrity_probe/manifest.json")
+manifest = json.loads(path.read_text(encoding="utf-8"))
+manifest["artifact_fingerprints"]["episodes"]["sha256"] = "0" * 64
+path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+if python -m flightrecorder gate-export \
+  --training-export runs/training_export_integrity_probe >/dev/null; then
+  echo "gate-export did not fail a stale artifact fingerprint" >&2
   exit 1
 fi
 rm -rf runs/training_export_probe
@@ -817,9 +857,13 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-task-completion-complete"
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-trace-average-events"
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-trainer-view-source-fingerprint-rate"
+"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--strict-validation"
+"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--skip-validation"
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--min-task-completion-improvements"
+"$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--strict-validation"
+"$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--skip-validation"
 "$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null

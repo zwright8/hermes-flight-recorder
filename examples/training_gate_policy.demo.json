@@ -1,6 +1,7 @@
 {
   "schema_version": "hfr.training_gate.policy.v1",
   "description": "Demo readiness thresholds for the bundled offline training export. Tighten these before gating production improvement data.",
+  "strict_validation": true,
   "min_episodes": 6,
   "min_pass_rate": 0.3333,
   "min_average_score": 57.5,
