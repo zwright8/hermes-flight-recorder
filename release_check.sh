@@ -59,6 +59,7 @@ test -f runs/draft_email_reply/task_completion.json
 test -f runs/draft_email_reply/artifact_lineage.json
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
+test -f runs/email_reply_completion_good/state_snapshot.json
 test -f runs/email_reply_completion_good/task_completion.json
 test -f runs/email_reply_completion_good/artifact_lineage.json
 test -f runs/prompt_injection_compare.json
@@ -120,13 +121,14 @@ assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] 
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["failed_check_count"] == 0
 assert metrics["pass_rate"] == 0.3333
-assert metrics["average_score"] == 59.17
+assert metrics["average_score"] == 57.5
 assert metrics["failed"] == 4
 failed_rules = {item["id"]: item["count"] for item in metrics["failed_rule_counts"]}
 assert failed_rules["required_evidence"] == 2
 assert failed_rules["required_actions"] == 1
 assert failed_rules["required_action_sequences"] == 1
 assert failed_rules["required_event_counts"] == 1
+assert failed_rules["required_state"] == 1
 PY
 python -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
@@ -197,7 +199,7 @@ assert manifest["contract_drift_count"] == 1
 assert manifest["unverified_contract_count"] == 0
 assert manifest["metadata"]["candidate"] == "email-evidence-fix"
 assert pair["chosen_side"] == "candidate"
-assert pair["candidate_score_delta"] == 90
+assert pair["candidate_score_delta"] == 100
 assert pair["contract_fingerprint_status"] == "drifted"
 assert pair["contract_fingerprint_scope"] == "scenario"
 assert "scenario_sha256_changed" in pair["contract_fingerprint_reasons"]
@@ -208,7 +210,7 @@ assert pair["chosen"]["task_completion"]["status"] == "complete"
 assert pair["rejected"]["task_completion"]["status"] == "incomplete"
 assert dpo["chosen_task_completion_status"] == "complete"
 assert dpo["rejected_task_completion_status"] == "incomplete"
-assert "task_completion complete checks=4/4" in dpo["chosen"]
+assert "task_completion complete checks=5/5" in dpo["chosen"]
 assert "required_actions" in pair["rule_fixes"]
 assert "tool_result gmail_send ok" in dpo["chosen"]
 assert "tool_result gmail_send ok" not in dpo["rejected"]
@@ -333,8 +335,8 @@ assert dataset_metrics["task_completion"]["configured_count"] == 5
 assert dataset_metrics["task_completion"]["complete_count"] == 2
 assert dataset_metrics["task_completion"]["incomplete_count"] == 3
 assert dataset_metrics["task_completion"]["not_applicable_count"] == 1
-assert dataset_metrics["task_completion"]["required_check_count"] == 11
-assert dataset_metrics["task_completion"]["passed_check_count"] == 6
+assert dataset_metrics["task_completion"]["required_check_count"] == 13
+assert dataset_metrics["task_completion"]["passed_check_count"] == 7
 assert dataset_metrics["metadata"]["candidate"] == "offline-demo"
 assert "# Flight Recorder Dataset Card" in dataset_card
 assert "## Experiment Metadata" in dataset_card

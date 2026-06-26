@@ -571,7 +571,7 @@ def _run_fingerprints(run_dir: Path) -> dict[str, Any]:
         if not isinstance(record, dict):
             continue
         name = record.get("name")
-        if name not in {"scenario", "source_trace"}:
+        if name not in {"scenario", "source_trace", "source_state_snapshot"}:
             continue
         fingerprints["inputs"][name] = {
             "path": record.get("path"),
@@ -625,7 +625,7 @@ def _contract_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
             "path": inputs.get(name, {}).get("path") if isinstance(inputs.get(name), dict) else None,
             "sha256": _input_sha(inputs.get(name)),
         }
-        for name in ("scenario", "source_trace")
+        for name in ("scenario", "source_trace", "source_state_snapshot")
     }
 
 

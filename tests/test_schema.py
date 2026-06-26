@@ -26,8 +26,33 @@ class ScenarioSchemaTests(unittest.TestCase):
         self.assertEqual(action["where"]["result.thread_id"], "email-123")
         sequence = scenario["assertions"]["required_action_sequences"][0]
         count = scenario["assertions"]["required_event_counts"][0]
+        state_check = scenario["assertions"]["required_state"][0]
         self.assertEqual(sequence["steps"][0]["tool_name"], "gmail_read")
         self.assertEqual(count["exact_count"], 1)
+        self.assertEqual(state_check["id"], "state_has_sent_reply_email_123")
+        self.assertEqual(scenario["state"]["format"], "json")
+
+    def test_required_state_rejects_unbounded_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_state": [
+                                {"id": "state_anything"}
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "missing matcher"):
+                load_scenario(path)
 
     def test_missing_required_field_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

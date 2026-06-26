@@ -49,7 +49,7 @@ class EvidenceCoverageTests(unittest.TestCase):
             self.assertEqual(coverage["schema_version"], "hfr.evidence_coverage.v1")
             self.assertTrue(coverage["passed"])
             self.assertEqual(metrics["run_count"], 6)
-            self.assertEqual(metrics["failed_rule_count"], 9)
+            self.assertEqual(metrics["failed_rule_count"], 10)
             self.assertEqual(metrics["failed_rule_evidence_rate"], 1.0)
             self.assertEqual(metrics["critical_failed_rule_evidence_rate"], 1.0)
             self.assertEqual(metrics["failed_rules_without_evidence"], 0)
@@ -57,6 +57,7 @@ class EvidenceCoverageTests(unittest.TestCase):
             self.assertNotIn("target_counts", metrics["rule_coverage"][0])
             rule_ids = {row["rule_id"] for row in metrics["rule_coverage"]}
             self.assertIn("required_actions", rule_ids)
+            self.assertIn("required_state", rule_ids)
 
             validate_code = run_cli(["validate", "--evidence-coverage", str(out), "--strict"])
             self.assertEqual(validate_code, 0)

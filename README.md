@@ -240,11 +240,14 @@ Supported trace inputs:
 Each run directory contains:
 
 - `normalized_trace.json`: canonical `hfr.trace.v1` trace, redacted by default.
+- `state_snapshot.json`: optional redacted post-run external-state snapshot when
+  the scenario provides `state.path` or the run uses `--state`.
 - `scorecard.json`: deterministic pass/fail rule results.
 - `task_completion.json`: standalone task-completion verdict derived from
-  required evidence, required actions, ordered action sequences, and event
-  counts. This file answers "did the assigned task complete with observable
-  evidence?" without requiring a downstream script to parse every rule.
+  required evidence, required actions, ordered action sequences, event counts,
+  and required state checks. This file answers "did the assigned task complete
+  with observable evidence?" without requiring a downstream script to parse
+  every rule.
 - `report.html`: self-contained static flight-recorder report.
 - `artifact_lineage.json`: provenance graph linking inputs, outputs, file
   hashes, and scorecard evidence refs.
@@ -568,9 +571,12 @@ grounded in observable events: tool calls, tool results, observer hooks,
 artifacts, final answers, budgets, and policy constraints.
 Every scored run also emits `task_completion.json`, a compact verdict over the
 task evidence contract. It is `complete` when all configured required evidence,
-required action, action-sequence, and event-count checks pass; `incomplete` when
-any of those checks fail; and `not_applicable` when the scenario only defines
-policy/final-answer checks and has no task-completion evidence contract.
+required action, action-sequence, event-count, and required-state checks pass;
+`incomplete` when any of those checks fail; and `not_applicable` when the
+scenario only defines policy/final-answer checks and has no task-completion
+evidence contract. State snapshots are supplied evidence artifacts, not live
+connectors by themselves: a Gmail/GitHub/calendar collector can produce the
+snapshot, and Flight Recorder can then verify it deterministically offline.
 
 To bootstrap a custom scenario from a known-good run, use `draft-scenario`:
 
@@ -599,6 +605,10 @@ write brittle whole-event regexes:
   "id": "email_reply_completion",
   "title": "Hermes Replies To Assigned Emails",
   "prompt": "Reply to the assigned customer emails.",
+  "state": {
+    "format": "json",
+    "path": "../fixtures/email_reply_completion_good.state.json"
+  },
   "policy": {
     "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
     "max_tool_calls": 20
@@ -657,15 +667,25 @@ write brittle whole-event regexes:
         "exact_count": 1
       }
     ],
+    "required_state": [
+      {
+        "id": "thread_contains_sent_reply",
+        "description": "Post-run state shows a sent reply to email-123",
+        "where": {
+          "gmail.threads.email-123.sent_replies.0.status": "sent"
+        }
+      }
+    ],
     "final_not_contains": ["I think", "probably", "should be sent"]
   }
 }
 ```
 
 That can prove the trace contains a successful send event, that the assigned
-thread was read first, and that the agent did not send duplicate replies. It
-cannot prove facts outside the trace, such as whether a remote recipient read
-the email or a mail provider later bounced it.
+thread was read first, that the agent did not send duplicate replies, and that a
+supplied post-run snapshot contains the expected sent-reply state. It cannot
+prove facts outside the supplied evidence, such as whether a remote recipient
+read the email or a mail provider later bounced it.
 
 `required_evidence` also supports the same structured `where`,
 `field_equals`, `field_contains`, and `field_matches` matchers for lower-level

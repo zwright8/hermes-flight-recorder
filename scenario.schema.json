@@ -16,6 +16,13 @@
         "path": { "type": "string" }
       }
     },
+    "state": {
+      "type": "object",
+      "properties": {
+        "format": { "const": "json" },
+        "path": { "type": "string" }
+      }
+    },
     "policy": {
       "type": "object",
       "properties": {
@@ -154,6 +161,26 @@
 	              "exact_count": { "type": "integer", "minimum": 0 },
 	              "min_count": { "type": "integer", "minimum": 0 },
 	              "max_count": { "type": "integer", "minimum": 0 }
+	            },
+	            "required": ["id"]
+	          }
+	        },
+	        "required_state": {
+	          "type": "array",
+	          "items": {
+	            "type": "object",
+	            "properties": {
+	              "id": { "type": "string" },
+	              "description": { "type": "string" },
+	              "field": { "type": "string" },
+	              "pattern": { "type": "string" },
+	              "matches": { "type": "string" },
+	              "contains": { "type": "string" },
+	              "equals": { "type": ["string", "number", "integer", "boolean", "null"] },
+	              "where": { "type": "object" },
+	              "field_equals": { "type": "object" },
+	              "field_contains": { "type": "object" },
+	              "field_matches": { "type": "object" }
 	            },
 	            "required": ["id"]
 	          }

@@ -45,6 +45,7 @@ from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
 from .scenario_quality import build_scenario_quality
 from .scorers import score_trace
+from .state import StateSnapshotError, load_state_snapshot, resolve_state_snapshot_path, sanitize_state_snapshot
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
@@ -68,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         AdapterError,
         ArtifactError,
         ScenarioError,
+        StateSnapshotError,
         SuiteGatePolicyError,
         ReviewExportError,
         ReviewedGatePolicyError,
@@ -98,7 +100,9 @@ def cmd_normalize(args: argparse.Namespace) -> int:
 def cmd_score(args: argparse.Namespace) -> int:
     scenario = load_scenario(args.scenario)
     trace = _read_json(Path(args.trace))
-    scorecard = score_trace(scenario, trace)
+    state_path = resolve_state_snapshot_path(scenario, args.state)
+    state_snapshot = load_state_snapshot(state_path) if state_path is not None else None
+    scorecard = score_trace(scenario, trace, state_snapshot)
     _write_json(Path(args.out), scorecard)
     _write_score_outputs(scorecard, args)
     print(f"wrote {args.out}")
@@ -119,6 +123,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         args.scenario,
         args.out,
         trace_override=args.trace,
+        state_override=args.state,
         trace_format=args.format,
         write_sensitive_trace=args.write_sensitive_trace,
         preserve_paths=args.preserve_paths,
@@ -171,6 +176,8 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                     "scenario_sha256": _lineage_input_hash(result["lineage"], "scenario"),
                     "trace_path": _display_path(result["trace_path"], args.preserve_paths),
                     "trace_sha256": _lineage_input_hash(result["lineage"], "source_trace"),
+                    "state_path": _display_path(result["state_path"], args.preserve_paths) if result.get("state_path") else None,
+                    "state_sha256": _lineage_input_hash(result["lineage"], "source_state_snapshot"),
                     "run_dir": _display_path(run_dir, args.preserve_paths),
                     "report": _display_path(result["paths"]["report"], args.preserve_paths),
                     "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
@@ -717,6 +724,7 @@ def _parser() -> argparse.ArgumentParser:
     score = subparsers.add_parser("score", help="Score a normalized trace against a scenario")
     score.add_argument("--scenario", required=True)
     score.add_argument("--trace", required=True)
+    score.add_argument("--state", help="Optional JSON state snapshot for required_state assertions")
     score.add_argument("--out", required=True)
     score.add_argument("--junit-out", help="Also write a JUnit XML score report")
     score.add_argument("--markdown-out", help="Also write a Markdown score summary")
@@ -732,6 +740,7 @@ def _parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="Normalize, score, and report in one command")
     run.add_argument("--scenario", required=True)
     run.add_argument("--trace")
+    run.add_argument("--state", help="Optional JSON state snapshot for required_state assertions")
     run.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
     run.add_argument("--out", required=True)
     run.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json with unredacted evidence")
@@ -1484,6 +1493,7 @@ def _run_scenario_artifacts(
     out_dir: str | Path,
     *,
     trace_override: str | Path | None = None,
+    state_override: str | Path | None = None,
     trace_format: str = "auto",
     write_sensitive_trace: bool = False,
     preserve_paths: bool = False,
@@ -1492,22 +1502,31 @@ def _run_scenario_artifacts(
 ) -> dict[str, Any]:
     scenario = load_scenario(scenario_path)
     trace_path = resolve_trace_path(scenario, trace_override)
+    state_path = resolve_state_snapshot_path(scenario, state_override)
     run_dir = Path(out_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     raw_trace = normalize_trace(trace_path, trace_format)
+    raw_state_snapshot = load_state_snapshot(state_path) if state_path is not None else None
     trace_label = _display_path(trace_path, preserve_paths)
     scenario.setdefault("trace", {})["path"] = trace_label
-    scorecard = score_trace(scenario, raw_trace)
+    if state_path is not None:
+        scenario.setdefault("state", {})["path"] = _display_path(state_path, preserve_paths)
+        scenario["state"]["format"] = "json"
+    scorecard = score_trace(scenario, raw_trace, raw_state_snapshot)
     secret_patterns = scenario.get("policy", {}).get("secret_patterns") or []
     trace = sanitize_trace(raw_trace, secret_patterns)
+    state_snapshot = sanitize_state_snapshot(raw_state_snapshot, secret_patterns) if raw_state_snapshot is not None else None
 
     normalized_path = run_dir / "normalized_trace.json"
     score_path = run_dir / "scorecard.json"
     task_completion_path = run_dir / "task_completion.json"
+    state_snapshot_path = run_dir / "state_snapshot.json" if state_snapshot is not None else None
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     _write_json(normalized_path, trace)
+    if state_snapshot_path is not None:
+        _write_json(state_snapshot_path, state_snapshot)
     _write_json(score_path, scorecard)
     _write_json(task_completion_path, scorecard["task_completion"])
     raw_trace_path = None
@@ -1533,8 +1552,10 @@ def _run_scenario_artifacts(
         trace=trace,
         scorecard=scorecard,
         source_trace_path=trace_path,
+        source_state_snapshot_path=state_path,
         artifacts={
             "normalized_trace": normalized_path,
+            "state_snapshot": state_snapshot_path,
             "scorecard": score_path,
             "task_completion": task_completion_path,
             "report": report_path,
@@ -1550,10 +1571,12 @@ def _run_scenario_artifacts(
     return {
         "scenario": scenario,
         "trace_path": trace_path,
+        "state_path": state_path,
         "scorecard": scorecard,
         "paths": {
             "run_dir": run_dir,
             "normalized_trace": normalized_path,
+            "state_snapshot": state_snapshot_path,
             "scorecard": score_path,
             "task_completion": task_completion_path,
             "report": report_path,

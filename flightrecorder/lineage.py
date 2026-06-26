@@ -16,6 +16,7 @@ def write_run_lineage(
     trace: dict[str, Any],
     scorecard: dict[str, Any],
     source_trace_path: str | Path,
+    source_state_snapshot_path: str | Path | None = None,
     artifacts: dict[str, str | Path | None],
     out_path: str | Path,
     preserve_paths: bool = False,
@@ -26,6 +27,7 @@ def write_run_lineage(
         trace=trace,
         scorecard=scorecard,
         source_trace_path=source_trace_path,
+        source_state_snapshot_path=source_state_snapshot_path,
         artifacts=artifacts,
         preserve_paths=preserve_paths,
     )
@@ -41,6 +43,7 @@ def build_run_lineage(
     trace: dict[str, Any],
     scorecard: dict[str, Any],
     source_trace_path: str | Path,
+    source_state_snapshot_path: str | Path | None = None,
     artifacts: dict[str, str | Path | None],
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
@@ -50,6 +53,8 @@ def build_run_lineage(
         _file_record("scenario", scenario_path, "input", preserve_paths=preserve_paths),
         _file_record("source_trace", source_trace_path, "input", preserve_paths=preserve_paths),
     ]
+    if source_state_snapshot_path is not None:
+        inputs.append(_file_record("source_state_snapshot", source_state_snapshot_path, "input", preserve_paths=preserve_paths))
     outputs = [
         _file_record(name, path, "output", preserve_paths=preserve_paths, sensitive=name.endswith("_sensitive"))
         for name, path in artifacts.items()
@@ -91,7 +96,7 @@ def _artifact_graph(artifacts: dict[str, str | Path | None]) -> list[dict[str, A
     present = {name for name, path in artifacts.items() if path is not None}
     edges = [
         _edge(["scenario", "source_trace"], "normalized_trace", "normalize"),
-        _edge(["scenario", "normalized_trace"], "scorecard", "score"),
+        _edge(_score_inputs(present), "scorecard", "score"),
         _edge(["scorecard"], "task_completion", "summarize_task_completion"),
         _edge(["scenario", "normalized_trace", "scorecard"], "report", "render"),
     ]
@@ -104,6 +109,13 @@ def _artifact_graph(artifacts: dict[str, str | Path | None]) -> list[dict[str, A
     if "raw_trace_sensitive" in present:
         edges.append(_edge(["source_trace"], "raw_trace_sensitive", "sensitive_trace_export"))
     return edges
+
+
+def _score_inputs(present: set[str]) -> list[str]:
+    inputs = ["scenario", "normalized_trace"]
+    if "state_snapshot" in present:
+        inputs.append("state_snapshot")
+    return inputs
 
 
 def _edge(from_nodes: list[str], to_node: str, operation: str) -> dict[str, Any]:
@@ -144,6 +156,10 @@ def _evidence_links(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
                 link["trace_pointer"] = "/final_answer"
             elif target == "episode":
                 link["trace_pointer"] = "/"
+            elif target == "state_snapshot":
+                link["state_pointer"] = "/"
+                if "field" in ref:
+                    link["state_field"] = ref.get("field")
             links.append(link)
     return links
 

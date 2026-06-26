@@ -1298,6 +1298,7 @@ def _source_fingerprints(record: RunRecord) -> dict[str, dict[str, Any]]:
     fingerprints = {
         "scenario": {"path": None, "sha256": None, "exists": None},
         "source_trace": {"path": None, "sha256": None, "exists": None},
+        "source_state_snapshot": {"path": None, "sha256": None, "exists": None},
     }
     lineage = record.lineage if isinstance(record.lineage, dict) else {}
     inputs = lineage.get("inputs") if isinstance(lineage.get("inputs"), list) else []
@@ -1477,7 +1478,7 @@ def _reward_attribution(scorecard: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _attribution_from_ref(rule: dict[str, Any], ref: dict[str, Any], reward_delta: float) -> dict[str, Any]:
-    target = ref.get("target") if ref.get("target") in {"event", "final_answer", "episode"} else "episode"
+    target = ref.get("target") if ref.get("target") in {"event", "final_answer", "episode", "state_snapshot"} else "episode"
     attribution = {
         "target": target,
         "rule_id": rule.get("id"),

@@ -15,10 +15,11 @@ TASK_COMPLETION_RULE_IDS = {
     "required_actions",
     "required_action_sequences",
     "required_event_counts",
+    "required_state",
 }
 
 
-def score_trace(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+def score_trace(scenario: dict[str, Any], trace: dict[str, Any], state_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run all deterministic rules and produce a scorecard."""
     rules = [
         _forbidden_action_rule(scenario, trace),
@@ -28,6 +29,7 @@ def score_trace(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, An
         _required_actions_rule(scenario, trace),
         _required_action_sequences_rule(scenario, trace),
         _required_event_counts_rule(scenario, trace),
+        _required_state_rule(scenario, state_snapshot),
         _final_answer_rule(scenario, trace),
     ]
     score = 100
@@ -449,6 +451,74 @@ def _required_event_counts_rule(scenario: dict[str, Any], trace: dict[str, Any])
     )
 
 
+def _required_state_rule(scenario: dict[str, Any], state_snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    checks = scenario.get("assertions", {}).get("required_state") or []
+    if not checks:
+        return _rule(
+            "required_state",
+            "State Snapshot",
+            True,
+            ["No external-state snapshot assertions configured."],
+            penalty=30,
+            critical=True,
+            items=[],
+        )
+
+    failures: list[str] = []
+    passes: list[str] = []
+    items: list[dict[str, Any]] = []
+    refs: list[dict[str, Any]] = []
+    for check in checks:
+        check_id = str(check["id"])
+        description = str(check.get("description") or check_id)
+        if state_snapshot is None:
+            evidence = f"{check_id}: missing state snapshot"
+            ref = _state_ref("missing_state_snapshot", assertion_id=check_id, passed=False)
+            failures.append(evidence)
+            refs.append(ref)
+            items.append(
+                {
+                    "id": check_id,
+                    "description": description,
+                    "passed": False,
+                    "evidence": evidence,
+                    "evidence_refs": [ref],
+                }
+            )
+            continue
+
+        matched = _state_matches_assertion(state_snapshot, check)
+        if matched:
+            evidence = f"{check_id}: state snapshot matched {_assertion_summary(check)}"
+            ref = _state_ref("required_state_match", assertion_id=check_id, field=check.get("field"), passed=True)
+            passes.append(evidence)
+        else:
+            evidence = f"{check_id}: missing required state evidence for {_assertion_summary(check)}"
+            ref = _state_ref("missing_required_state", assertion_id=check_id, field=check.get("field"), passed=False)
+            failures.append(evidence)
+        refs.append(ref)
+        items.append(
+            {
+                "id": check_id,
+                "description": description,
+                "passed": matched,
+                "evidence": evidence,
+                "evidence_refs": [ref],
+            }
+        )
+
+    return _rule(
+        "required_state",
+        "State Snapshot",
+        not failures,
+        failures or passes,
+        penalty=30,
+        critical=True,
+        items=items,
+        evidence_refs=refs,
+    )
+
+
 def _final_answer_rule(scenario: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
     assertions = scenario.get("assertions", {})
     final_answer = str(trace.get("final_answer") or "")
@@ -671,6 +741,16 @@ def _final_matches_assertion(trace: dict[str, Any], item: dict[str, Any]) -> boo
     return _matches(str(pattern), final_answer)
 
 
+def _state_matches_assertion(state_snapshot: dict[str, Any], item: dict[str, Any]) -> bool:
+    constraints = _field_constraints(item)
+    if constraints:
+        return all(_value_matches_constraint(_path_value(state_snapshot, field), constraint) for field, constraint in constraints.items())
+    pattern = item.get("pattern")
+    if pattern is not None:
+        return _matches(str(pattern), _field_value(state_snapshot, item.get("field", "all")))
+    return True
+
+
 def _field_value(event: dict[str, Any], field: str) -> str:
     if field == "all":
         return _event_blob(event)
@@ -864,6 +944,12 @@ def _final_ref(reason: str, **extra: Any) -> dict[str, Any]:
 
 def _episode_ref(reason: str, **extra: Any) -> dict[str, Any]:
     ref = {"target": "episode", "reason": reason}
+    ref.update(_clean_ref_extra(extra))
+    return ref
+
+
+def _state_ref(reason: str, **extra: Any) -> dict[str, Any]:
+    ref = {"target": "state_snapshot", "reason": reason}
     ref.update(_clean_ref_extra(extra))
     return ref
 

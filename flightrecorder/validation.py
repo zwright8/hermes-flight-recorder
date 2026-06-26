@@ -649,6 +649,8 @@ def _validate_lineage(
             target.errors.append(f"artifact_lineage.outputs missing {output_name!r}.")
             continue
         _validate_lineage_file_record(outputs[output_name], run_dir, target, f"artifact_lineage.outputs.{output_name}")
+    if "state_snapshot" in outputs:
+        _validate_lineage_file_record(outputs["state_snapshot"], run_dir, target, "artifact_lineage.outputs.state_snapshot")
     evidence_links = lineage.get("evidence_links")
     if not isinstance(evidence_links, list):
         target.errors.append("artifact_lineage.evidence_links must be a list.")
@@ -1482,8 +1484,8 @@ def _validate_step_rewards(
         for field_name in ("scenario_id", "task_family", "rule_id", "rule_name", "evidence"):
             if not isinstance(step_reward.get(field_name), str):
                 target.errors.append(f"step_rewards[{index}].{field_name} must be a string.")
-        if step_reward.get("target") not in {"event", "final_answer", "episode"}:
-            target.errors.append(f"step_rewards[{index}].target must be one of event, final_answer, or episode.")
+        if step_reward.get("target") not in {"event", "final_answer", "episode", "state_snapshot"}:
+            target.errors.append(f"step_rewards[{index}].target must be one of event, final_answer, episode, or state_snapshot.")
         if step_reward.get("reward_scale") not in REWARD_SCALES:
             target.errors.append(f"step_rewards[{index}].reward_scale must be one of {sorted(REWARD_SCALES)!r}.")
         for field_name in ("reward_delta", "rule_reward_delta", "allocation_weight", "episode_reward"):
@@ -3044,6 +3046,7 @@ def _validate_scenario_quality_rows(scenarios: list[Any], target: ValidationTarg
         "weak_scenario_count": 0,
         "final_only_scenario_count": 0,
         "missing_trace_count": 0,
+        "missing_state_count": 0,
         "risk_counts": {},
     }
     for index, row in enumerate(scenarios):
@@ -3085,6 +3088,8 @@ def _validate_scenario_quality_rows(scenarios: list[Any], target: ValidationTarg
         trace = row.get("trace")
         if isinstance(trace, dict) and trace.get("trace_exists") is not True:
             totals["missing_trace_count"] += 1
+        if "missing_state_file" in risks or "required_state_without_snapshot_path" in risks:
+            totals["missing_state_count"] += 1
         for risk in risks:
             totals["risk_counts"][risk] = totals["risk_counts"].get(risk, 0) + 1
     return totals
@@ -3105,6 +3110,7 @@ def _validate_scenario_quality_metrics(metrics: dict[str, Any], totals: dict[str
         "weak_scenario_count": totals["weak_scenario_count"],
         "final_only_scenario_count": totals["final_only_scenario_count"],
         "missing_trace_count": totals["missing_trace_count"],
+        "missing_state_count": totals["missing_state_count"],
     }
     for field_name, expected_value in expected.items():
         if metrics.get(field_name) != expected_value:
@@ -3322,8 +3328,8 @@ def _validate_evidence_refs(value: Any, target: ValidationTarget, label: str) ->
             target.errors.append(f"{label}[{index}] must be an object.")
             continue
         ref_target = ref.get("target")
-        if ref_target not in {"event", "final_answer", "episode"}:
-            target.errors.append(f"{label}[{index}].target must be one of event, final_answer, or episode.")
+        if ref_target not in {"event", "final_answer", "episode", "state_snapshot"}:
+            target.errors.append(f"{label}[{index}].target must be one of event, final_answer, episode, or state_snapshot.")
         if ref_target == "event":
             event_index = ref.get("event_index")
             if not isinstance(event_index, int) or isinstance(event_index, bool) or event_index < 0:
@@ -3385,8 +3391,8 @@ def _validate_lineage_evidence_link(link: Any, index: int, event_count: int, tar
         if not isinstance(link.get(field_name), str) or not link.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
     ref_target = link.get("target")
-    if ref_target not in {"event", "final_answer", "episode"}:
-        target.errors.append(f"{label}.target must be one of event, final_answer, or episode.")
+    if ref_target not in {"event", "final_answer", "episode", "state_snapshot"}:
+        target.errors.append(f"{label}.target must be one of event, final_answer, episode, or state_snapshot.")
     if ref_target == "event":
         event_index = link.get("event_index")
         if not isinstance(event_index, int) or isinstance(event_index, bool) or event_index < 0:
@@ -3399,6 +3405,8 @@ def _validate_lineage_evidence_link(link: Any, index: int, event_count: int, tar
         target.errors.append(f"{label}.trace_pointer must point at /final_answer.")
     elif ref_target == "episode" and link.get("trace_pointer") != "/":
         target.errors.append(f"{label}.trace_pointer must point at the trace root.")
+    elif ref_target == "state_snapshot" and link.get("state_pointer") != "/":
+        target.errors.append(f"{label}.state_pointer must point at the state snapshot root.")
     if "rule_passed" in link and not isinstance(link.get("rule_passed"), bool):
         target.errors.append(f"{label}.rule_passed must be a boolean when present.")
     if "ref_passed" in link and not isinstance(link.get("ref_passed"), bool):

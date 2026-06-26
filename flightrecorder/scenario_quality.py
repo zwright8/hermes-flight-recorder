@@ -8,6 +8,7 @@ from typing import Any
 
 from .schema import REGEX_FIELDS, ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import discover_scenarios
+from .state import resolve_state_snapshot_path
 
 SCENARIO_QUALITY_SCHEMA_VERSION = "hfr.scenario_quality.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
@@ -90,7 +91,8 @@ def _scenario_quality(path: Path, require_traces: bool, preserve_paths: bool) ->
     policy = scenario.get("policy", {})
     assertions = scenario.get("assertions", {})
     trace_info = _trace_info(scenario, require_traces, preserve_paths)
-    signals = _signals(policy, assertions, trace_info, scenario)
+    state_info = _state_info(scenario, preserve_paths)
+    signals = _signals(policy, assertions, trace_info, state_info, scenario)
     score = _contract_score(signals)
     risks = _risks(signals)
     row.update(
@@ -103,6 +105,7 @@ def _scenario_quality(path: Path, require_traces: bool, preserve_paths: bool) ->
             "signals": signals,
             "risks": risks,
             "trace": trace_info,
+            "state": state_info,
         }
     )
     if require_traces and not trace_info.get("trace_exists"):
@@ -121,7 +124,22 @@ def _trace_info(scenario: dict[str, Any], require_traces: bool, preserve_paths: 
     return info
 
 
-def _signals(policy: dict[str, Any], assertions: dict[str, Any], trace_info: dict[str, Any], scenario: dict[str, Any]) -> dict[str, Any]:
+def _state_info(scenario: dict[str, Any], preserve_paths: bool) -> dict[str, Any]:
+    state_path = resolve_state_snapshot_path(scenario)
+    info: dict[str, Any] = {"has_state_path": state_path is not None, "state_exists": False}
+    if state_path is not None:
+        info["state_path"] = _display_path(state_path, preserve_paths)
+        info["state_exists"] = state_path.exists()
+    return info
+
+
+def _signals(
+    policy: dict[str, Any],
+    assertions: dict[str, Any],
+    trace_info: dict[str, Any],
+    state_info: dict[str, Any],
+    scenario: dict[str, Any],
+) -> dict[str, Any]:
     regex_count = sum(len(policy.get(field, [])) for field in REGEX_FIELDS)
     budget_fields = ("max_tool_calls", "max_subagents", "max_subagent_depth", "max_api_calls")
     budget_count = sum(1 for field in budget_fields if policy.get(field) is not None)
@@ -129,12 +147,15 @@ def _signals(policy: dict[str, Any], assertions: dict[str, Any], trace_info: dic
     required_action_count = len(assertions.get("required_actions", []))
     sequence_count = len(assertions.get("required_action_sequences", []))
     event_count_count = len(assertions.get("required_event_counts", []))
+    required_state_count = len(assertions.get("required_state", []))
     final_assertion_count = len(assertions.get("final_contains", [])) + len(assertions.get("final_not_contains", []))
-    observable_count = required_evidence_count + required_action_count + sequence_count + event_count_count
-    task_completion_count = required_action_count + sequence_count + event_count_count
+    observable_count = required_evidence_count + required_action_count + sequence_count + event_count_count + required_state_count
+    task_completion_count = required_action_count + sequence_count + event_count_count + required_state_count
     return {
         "has_trace_path": bool(trace_info.get("has_trace_path")),
         "trace_exists": bool(trace_info.get("trace_exists")),
+        "has_state_path": bool(state_info.get("has_state_path")),
+        "state_exists": bool(state_info.get("state_exists")),
         "regex_constraint_count": regex_count,
         "budget_constraint_count": budget_count,
         "has_secret_policy": bool(policy.get("secret_patterns")),
@@ -143,6 +164,7 @@ def _signals(policy: dict[str, Any], assertions: dict[str, Any], trace_info: dic
         "required_action_count": required_action_count,
         "required_action_sequence_count": sequence_count,
         "required_event_count_count": event_count_count,
+        "required_state_count": required_state_count,
         "observable_assertion_count": observable_count,
         "task_completion_assertion_count": task_completion_count,
         "final_assertion_count": final_assertion_count,
@@ -187,6 +209,10 @@ def _risks(signals: dict[str, Any]) -> list[str]:
         risks.append("no_budget_limits")
     if signals["observable_assertion_count"] == 0:
         risks.append("no_observable_assertions")
+    if signals.get("required_state_count", 0) > 0 and not signals.get("has_state_path"):
+        risks.append("required_state_without_snapshot_path")
+    elif signals.get("has_state_path") and not signals.get("state_exists"):
+        risks.append("missing_state_file")
     if signals["final_assertion_count"] > 0 and signals["observable_assertion_count"] == 0 and signals["budget_constraint_count"] == 0:
         risks.append("final_only_contract")
     if signals["required_action_count"] > 0 and signals["required_event_count_count"] == 0:
@@ -208,6 +234,7 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     weak_count = sum(1 for row in valid_rows if row["quality"] == "weak")
     final_only_count = sum(1 for row in valid_rows if "final_only_contract" in row["risks"])
     missing_trace_count = sum(1 for row in valid_rows if not row.get("trace", {}).get("trace_exists"))
+    missing_state_count = sum(1 for row in valid_rows if "missing_state_file" in row["risks"] or "required_state_without_snapshot_path" in row["risks"])
     return {
         "scenario_count": len(rows),
         "valid_scenario_count": len(valid_rows),
@@ -222,6 +249,7 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "weak_scenario_count": weak_count,
         "final_only_scenario_count": final_only_count,
         "missing_trace_count": missing_trace_count,
+        "missing_state_count": missing_state_count,
         "risk_counts": _count_rows(risk_counts),
     }
 

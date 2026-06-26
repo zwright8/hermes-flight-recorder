@@ -236,10 +236,11 @@ and `source_fingerprints` so downstream training rows can be traced back to the
 provenance graph and filtered by the scenario/source-trace hashes that produced
 the label.
 New scorecards also emit `task_completion`, a compact verdict over required
-evidence, required actions, ordered action sequences, and event counts. Exported
-episodes, rewards, preferences, SFT rows, DPO rows, reward-model rows, and
-baseline/candidate comparison rows carry that verdict so training jobs can
-filter for evidence-backed completion instead of relying on final-answer text.
+evidence, required actions, ordered action sequences, event counts, and optional
+post-run state snapshots. Exported episodes, rewards, preferences, SFT rows, DPO
+rows, reward-model rows, and baseline/candidate comparison rows carry that
+verdict so training jobs can filter for evidence-backed completion instead of
+relying on final-answer text.
 Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
@@ -256,6 +257,7 @@ Each episode includes:
 
 - `episode_id` and source run directory,
 - optional `source_lineage` pointing to the run provenance manifest,
+- optional source fingerprints for a state snapshot when the run used one,
 - scenario id/title and derived `task_family`,
 - prompt recovered from the first user-message event,
 - normalized events,

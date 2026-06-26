@@ -120,7 +120,10 @@ network.
   training export's `dataset_metrics.task_completion` block before promoting a
   candidate. A high final-answer score is weaker evidence than a `complete`
   verdict backed by required tool-result, action-sequence, and event-count
-  checks.
+  checks. When a scenario includes `state.path`, also review `state_snapshot.json`
+  and the `source_state_snapshot` lineage hash; Flight Recorder verifies the
+  supplied snapshot deterministically, but the connector or collector that
+  produced that snapshot remains part of the trust boundary.
   Validate the resulting trend with `flightrecorder validate --suite-trend
   <trend.json> --strict` before treating it as release evidence.
 - Use `flightrecorder evidence-coverage --runs runs --out

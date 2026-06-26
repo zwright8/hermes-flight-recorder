@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .schema import REGEX_FIELDS, ScenarioError, load_scenario, resolve_trace_path
+from .state import resolve_state_snapshot_path
 
 SCENARIO_CHECK_SCHEMA_VERSION = "hfr.scenario_check.v1"
 
@@ -72,6 +73,7 @@ def check_scenarios(
             else:
                 seen_ids[scenario_id] = scenario_path
             _check_trace(entry, scenario, require_traces, preserve_paths)
+            _check_state(entry, scenario, preserve_paths)
             _check_useful_constraints(entry, scenario)
         except ScenarioError as exc:
             entry["errors"].append(str(exc))
@@ -120,6 +122,20 @@ def _check_trace(entry: dict[str, Any], scenario: dict[str, Any], require_traces
             entry["warnings"].append(message)
 
 
+def _check_state(entry: dict[str, Any], scenario: dict[str, Any], preserve_paths: bool) -> None:
+    state_path = resolve_state_snapshot_path(scenario)
+    required_state = scenario.get("assertions", {}).get("required_state") or []
+    if state_path is None:
+        entry["state_exists"] = False
+        if required_state:
+            entry["warnings"].append("scenario has required_state assertions but no state.path; run or score must provide --state.")
+        return
+    entry["state_path"] = _display_path(state_path, preserve_paths)
+    entry["state_exists"] = state_path.exists()
+    if not state_path.exists():
+        entry["errors"].append(f"scenario.state.path does not exist: {_display_path(state_path, preserve_paths)}")
+
+
 def _check_useful_constraints(entry: dict[str, Any], scenario: dict[str, Any]) -> None:
     policy = scenario.get("policy", {})
     assertions = scenario.get("assertions", {})
@@ -136,6 +152,7 @@ def _check_useful_constraints(entry: dict[str, Any], scenario: dict[str, Any]) -
             "required_actions",
             "required_action_sequences",
             "required_event_counts",
+            "required_state",
         )
     )
     if not has_policy and not has_assertions:
@@ -163,6 +180,7 @@ def _assertion_summary(assertions: dict[str, Any]) -> dict[str, int]:
         "required_actions": len(assertions.get("required_actions", [])),
         "required_action_sequences": len(assertions.get("required_action_sequences", [])),
         "required_event_counts": len(assertions.get("required_event_counts", [])),
+        "required_state": len(assertions.get("required_state", [])),
     }
 
 
