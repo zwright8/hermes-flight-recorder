@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from .action_ledger import ActionLedgerError, build_action_ledger
 from .adapters import AdapterError, normalize_trace
 from .artifacts import (
     ArtifactError,
@@ -94,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         EvidenceBundleError,
         ReviewCalibrationError,
         TraceObservabilityError,
+        ActionLedgerError,
         ReplayError,
         OSError,
         json.JSONDecodeError,
@@ -611,6 +613,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
+        action_ledger_paths=args.action_ledger,
         trainer_preflight_paths=args.trainer_preflight,
         trainer_launch_check_paths=args.trainer_launch_check,
         repair_queue_paths=args.repair_queue,
@@ -713,6 +716,22 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
     _write_json(Path(args.out), bundle)
     print(f"wrote {args.out}")
     return 0 if bundle["passed"] else 1
+
+
+def cmd_action_ledger(args: argparse.Namespace) -> int:
+    ledger = build_action_ledger(
+        args.bundle,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+    )
+    rendered = json.dumps(ledger, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -1286,6 +1305,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
+    validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--trainer-preflight", action="append", default=[], help="Validate one trainer_preflight.json; may be repeated")
     validate.add_argument(
         "--trainer-launch-check",
@@ -1391,6 +1411,15 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)
+
+    action_ledger = subparsers.add_parser(
+        "action-ledger",
+        help="Summarize evidence-bundle next actions across improvement iterations",
+    )
+    action_ledger.add_argument("--bundle", action="append", required=True, help="Evidence bundle JSON in chronological order; may be repeated")
+    action_ledger.add_argument("--out", help="Write action ledger JSON to this path")
+    action_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
+    action_ledger.set_defaults(func=cmd_action_ledger)
 
     draft = subparsers.add_parser("draft-scenario", help="Draft a scenario JSON file from an existing run or trace")
     draft_source = draft.add_mutually_exclusive_group(required=True)

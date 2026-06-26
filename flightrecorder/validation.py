@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .action_ledger import ACTION_LEDGER_SCHEMA_VERSION
 from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
@@ -86,6 +87,7 @@ def validate_artifacts(
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
+    action_ledger_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
@@ -117,6 +119,8 @@ def validate_artifacts(
         targets.append(validate_evidence_coverage(evidence_coverage_path))
     for evidence_bundle_path in evidence_bundle_paths or []:
         targets.append(validate_evidence_bundle(evidence_bundle_path))
+    for action_ledger_path in action_ledger_paths or []:
+        targets.append(validate_action_ledger(action_ledger_path))
     for trainer_preflight_path in trainer_preflight_paths or []:
         targets.append(validate_trainer_preflight(trainer_preflight_path))
     for trainer_launch_check_path in trainer_launch_check_paths or []:
@@ -453,6 +457,16 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     bundle = _read_object(bundle_path, target, "evidence_bundle.json")
     if bundle is not None:
         _validate_evidence_bundle(bundle, target)
+    return target
+
+
+def validate_action_ledger(path: str | Path) -> ValidationTarget:
+    """Validate a longitudinal action-ledger artifact."""
+    ledger_path = Path(path)
+    target = ValidationTarget("action_ledger", str(ledger_path))
+    ledger = _read_object(ledger_path, target, "action_ledger.json")
+    if ledger is not None:
+        _validate_action_ledger(ledger, target)
     return target
 
 
@@ -3581,6 +3595,227 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
             "artifact_count": len(artifacts),
         }
     )
+
+
+def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(ledger, "schema_version", ACTION_LEDGER_SCHEMA_VERSION, target)
+    if not isinstance(ledger.get("ledger_path"), str):
+        target.errors.append("action_ledger.ledger_path must be a string.")
+    if ledger.get("passed") is not True:
+        target.errors.append("action_ledger.passed must be true.")
+
+    bundles = ledger.get("bundles")
+    if not isinstance(bundles, list):
+        target.errors.append("action_ledger.bundles must be a list.")
+        bundles = []
+    entries = ledger.get("entries")
+    if not isinstance(entries, list):
+        target.errors.append("action_ledger.entries must be a list.")
+        entries = []
+    metrics = ledger.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("action_ledger.metrics must be an object.")
+        metrics = {}
+    notes = ledger.get("notes")
+    if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
+        target.errors.append("action_ledger.notes must be a list of strings.")
+
+    for index, bundle in enumerate(bundles):
+        _validate_action_ledger_bundle(bundle, target, f"action_ledger.bundles[{index}]", index)
+    latest_index = len(bundles) - 1
+    action_count = 0
+    open_count = 0
+    new_count = 0
+    recurring_count = 0
+    resolved_count = 0
+    status_counts: dict[str, int] = {}
+    priority_counts: dict[str, int] = {}
+    artifact_counts: dict[str, int] = {}
+    routing_keys: set[str] = set()
+    for index, entry in enumerate(entries):
+        counts = _validate_action_ledger_entry(entry, target, f"action_ledger.entries[{index}]", latest_index)
+        action_count += counts["occurrence_count"]
+        open_count += counts["open"]
+        new_count += counts["new"]
+        recurring_count += counts["recurring"]
+        resolved_count += counts["resolved"]
+        if isinstance(entry, dict):
+            routing_key = entry.get("routing_key")
+            if isinstance(routing_key, str):
+                if routing_key in routing_keys:
+                    target.errors.append(f"action_ledger.entries[{index}].routing_key must be unique.")
+                routing_keys.add(routing_key)
+            _increment(status_counts, entry.get("status"))
+            _increment(priority_counts, entry.get("priority"))
+            _increment(artifact_counts, entry.get("artifact"))
+
+    expected_bundle_action_count = sum(
+        bundle.get("action_count") for bundle in bundles if isinstance(bundle, dict) and _is_non_negative_int(bundle.get("action_count"))
+    )
+    if ledger.get("bundle_count") != len(bundles):
+        target.errors.append(f"action_ledger.bundle_count expected {len(bundles)}, got {ledger.get('bundle_count')!r}.")
+    if ledger.get("action_count") != expected_bundle_action_count:
+        target.errors.append(
+            f"action_ledger.action_count expected {expected_bundle_action_count}, got {ledger.get('action_count')!r}."
+        )
+    if action_count != expected_bundle_action_count:
+        target.errors.append(
+            f"action_ledger.entries occurrence total expected {expected_bundle_action_count}, got {action_count}."
+        )
+    if ledger.get("unique_action_count") != len(entries):
+        target.errors.append(f"action_ledger.unique_action_count expected {len(entries)}, got {ledger.get('unique_action_count')!r}.")
+
+    expected_metrics = {
+        "bundle_count": len(bundles),
+        "action_count": expected_bundle_action_count,
+        "unique_action_count": len(entries),
+        "open_action_count": open_count,
+        "new_action_count": new_count,
+        "recurring_action_count": recurring_count,
+        "resolved_action_count": resolved_count,
+    }
+    for field_name, expected in expected_metrics.items():
+        if metrics.get(field_name) != expected:
+            target.errors.append(f"action_ledger.metrics.{field_name} expected {expected}, got {metrics.get(field_name)!r}.")
+    _validate_action_ledger_count_rows(metrics.get("status_counts"), status_counts, target, "action_ledger.metrics.status_counts")
+    _validate_action_ledger_count_rows(metrics.get("priority_counts"), priority_counts, target, "action_ledger.metrics.priority_counts")
+    _validate_action_ledger_count_rows(metrics.get("artifact_counts"), artifact_counts, target, "action_ledger.metrics.artifact_counts")
+    _validate_action_ledger_bundle_action_counts(metrics.get("bundle_action_counts"), bundles, target)
+    target.details.update(
+        {
+            "bundle_count": len(bundles),
+            "unique_action_count": len(entries),
+            "open_action_count": open_count,
+            "resolved_action_count": resolved_count,
+        }
+    )
+
+
+def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:
+    if not isinstance(bundle, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if bundle.get("index") != expected_index:
+        target.errors.append(f"{label}.index expected {expected_index}, got {bundle.get('index')!r}.")
+    for field_name in ("path", "schema_version", "readiness", "recommendation"):
+        if not isinstance(bundle.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if bundle.get("schema_version") != EVIDENCE_BUNDLE_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {EVIDENCE_BUNDLE_SCHEMA_VERSION}.")
+    for field_name in ("exists", "passed"):
+        if not isinstance(bundle.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if not _is_non_negative_int(bundle.get("action_count")):
+        target.errors.append(f"{label}.action_count must be a non-negative integer.")
+    if bundle.get("exists") is True:
+        if not _is_non_negative_int(bundle.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        if not _is_sha256(bundle.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing files.")
+
+
+def _validate_action_ledger_entry(entry: Any, target: ValidationTarget, label: str, latest_index: int) -> dict[str, int]:
+    counts = {"occurrence_count": 0, "open": 0, "new": 0, "recurring": 0, "resolved": 0}
+    if not isinstance(entry, dict):
+        target.errors.append(f"{label} must be an object.")
+        return counts
+    for field_name in ("routing_key", "action_fingerprint", "id", "priority", "artifact", "summary", "status", "first_seen_path", "last_seen_path"):
+        if not isinstance(entry.get(field_name), str) or not entry.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if not _is_sha256(entry.get("action_fingerprint")):
+        target.errors.append(f"{label}.action_fingerprint must be a SHA-256 hex string.")
+    expected_routing_key = f"{entry.get('artifact')}:{entry.get('id')}:{str(entry.get('action_fingerprint') or '')[:12]}"
+    if isinstance(entry.get("routing_key"), str) and entry.get("routing_key") != expected_routing_key:
+        target.errors.append(f"{label}.routing_key expected {expected_routing_key!r}, got {entry.get('routing_key')!r}.")
+    if entry.get("priority") not in {"critical", "high", "medium", "low"}:
+        target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
+    if entry.get("status") not in {"new", "recurring", "open", "resolved"}:
+        target.errors.append(f"{label}.status must be new, recurring, open, or resolved.")
+    if not isinstance(entry.get("open"), bool):
+        target.errors.append(f"{label}.open must be a boolean.")
+    if not isinstance(entry.get("evidence"), dict):
+        target.errors.append(f"{label}.evidence must be an object.")
+    occurrences = entry.get("occurrences")
+    if not isinstance(occurrences, list):
+        target.errors.append(f"{label}.occurrences must be a list.")
+        occurrences = []
+    for index, occurrence in enumerate(occurrences):
+        _validate_action_ledger_occurrence(occurrence, target, f"{label}.occurrences[{index}]")
+    bundle_indexes = entry.get("bundle_indexes")
+    if not isinstance(bundle_indexes, list) or not all(_is_non_negative_int(item) for item in bundle_indexes):
+        target.errors.append(f"{label}.bundle_indexes must be a list of non-negative integers.")
+        bundle_indexes = []
+    else:
+        sorted_indexes = sorted(set(bundle_indexes))
+        if bundle_indexes != sorted_indexes:
+            target.errors.append(f"{label}.bundle_indexes must be sorted and unique.")
+    occurrence_indexes = sorted(
+        {occurrence.get("bundle_index") for occurrence in occurrences if isinstance(occurrence, dict) and _is_non_negative_int(occurrence.get("bundle_index"))}
+    )
+    if bundle_indexes and occurrence_indexes and bundle_indexes != occurrence_indexes:
+        target.errors.append(f"{label}.bundle_indexes must match occurrence bundle indexes.")
+    occurrence_count = len(occurrences)
+    counts["occurrence_count"] = occurrence_count
+    if entry.get("occurrence_count") != occurrence_count:
+        target.errors.append(f"{label}.occurrence_count expected {occurrence_count}, got {entry.get('occurrence_count')!r}.")
+    if bundle_indexes:
+        first_seen = bundle_indexes[0]
+        last_seen = bundle_indexes[-1]
+        if entry.get("first_seen_index") != first_seen:
+            target.errors.append(f"{label}.first_seen_index expected {first_seen}, got {entry.get('first_seen_index')!r}.")
+        if entry.get("last_seen_index") != last_seen:
+            target.errors.append(f"{label}.last_seen_index expected {last_seen}, got {entry.get('last_seen_index')!r}.")
+        open_in_latest = latest_index in bundle_indexes
+        expected_status = "new" if open_in_latest and first_seen == latest_index else "recurring" if open_in_latest and len(bundle_indexes) > 1 else "open" if open_in_latest else "resolved"
+        if entry.get("open") != open_in_latest:
+            target.errors.append(f"{label}.open expected {open_in_latest}, got {entry.get('open')!r}.")
+        if entry.get("status") != expected_status:
+            target.errors.append(f"{label}.status expected {expected_status!r}, got {entry.get('status')!r}.")
+        counts["open"] = 1 if open_in_latest else 0
+        counts["new"] = 1 if expected_status == "new" else 0
+        counts["recurring"] = 1 if expected_status == "recurring" else 0
+        counts["resolved"] = 1 if expected_status == "resolved" else 0
+    return counts
+
+
+def _validate_action_ledger_occurrence(occurrence: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(occurrence, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not _is_non_negative_int(occurrence.get("bundle_index")):
+        target.errors.append(f"{label}.bundle_index must be a non-negative integer.")
+    for field_name in ("bundle_path", "summary", "priority", "artifact"):
+        if not isinstance(occurrence.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if occurrence.get("priority") not in {"critical", "high", "medium", "low"}:
+        target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
+
+
+def _validate_action_ledger_count_rows(value: Any, expected: dict[str, int], target: ValidationTarget, label: str) -> None:
+    counts = _count_rows(value)
+    if counts is None:
+        target.errors.append(f"{label} must be a list of {{id, count}} objects.")
+    elif counts != expected:
+        target.errors.append(f"{label} expected {expected!r}, got {counts!r}.")
+
+
+def _validate_action_ledger_bundle_action_counts(value: Any, bundles: list[Any], target: ValidationTarget) -> None:
+    label = "action_ledger.metrics.bundle_action_counts"
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list.")
+        return
+    expected = [
+        {"index": bundle.get("index"), "path": bundle.get("path"), "action_count": bundle.get("action_count")}
+        for bundle in bundles
+        if isinstance(bundle, dict)
+    ]
+    if value != expected:
+        target.errors.append(f"{label} must match action_ledger.bundles action counts.")
+
+
+def _increment(counts: dict[str, int], value: Any) -> None:
+    if isinstance(value, str) and value:
+        counts[value] = counts.get(value, 0) + 1
 
 
 def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:

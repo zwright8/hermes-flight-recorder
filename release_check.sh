@@ -767,6 +767,11 @@ python -m flightrecorder evidence-bundle \
   --gate runs/reviewed_gate.json \
   --out runs/evidence_bundle_full.json >/dev/null
 test -f runs/evidence_bundle_full.json
+python -m flightrecorder action-ledger \
+  --bundle runs/evidence_bundle.json \
+  --bundle runs/evidence_bundle_full.json \
+  --out runs/action_ledger.json >/dev/null
+test -f runs/action_ledger.json
 python -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
@@ -793,6 +798,7 @@ test -f runs/trainer_launch_check.json
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
+  --action-ledger runs/action_ledger.json \
   --trainer-preflight runs/trainer_preflight.json \
   --trainer-launch-check runs/trainer_launch_check.json \
   --repair-queue runs/repair_queue.json \
@@ -804,6 +810,7 @@ import json
 from pathlib import Path
 
 bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="utf-8"))
+action_ledger = json.loads(Path("runs/action_ledger.json").read_text(encoding="utf-8"))
 preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
@@ -826,6 +833,17 @@ assert all(len(item["action_fingerprint"]) == 64 for item in bundle["decision"][
 assert all(
     item["routing_key"] == f"{item['artifact']}:{item['id']}:{item['action_fingerprint'][:12]}"
     for item in bundle["decision"]["next_actions"]
+)
+assert action_ledger["passed"] is True
+assert action_ledger["bundle_count"] == 2
+assert action_ledger["metrics"]["bundle_count"] == 2
+assert action_ledger["metrics"]["unique_action_count"] == action_ledger["unique_action_count"]
+assert action_ledger["metrics"]["open_action_count"] >= 1
+assert action_ledger["metrics"]["recurring_action_count"] >= 1
+assert all(len(entry["action_fingerprint"]) == 64 for entry in action_ledger["entries"])
+assert all(
+    entry["routing_key"] == f"{entry['artifact']}:{entry['id']}:{entry['action_fingerprint'][:12]}"
+    for entry in action_ledger["entries"]
 )
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
@@ -897,6 +915,7 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--state-snapshot"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--live-smoke-summary"
 "$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--trainer-launch-check"
+"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger"
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
@@ -907,6 +926,8 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder trace-observability --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help | grep -q -- "--live-smoke-summary"
+"$VENV_DIR/bin/python" -m flightrecorder action-ledger --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder action-ledger --help | grep -q -- "--bundle"
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null

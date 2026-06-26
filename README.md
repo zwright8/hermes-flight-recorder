@@ -621,6 +621,23 @@ is included, the bundle fingerprints `manifest.json`, `dataset_metrics.json`,
 and `curriculum.json`, and carries the top curriculum priorities in
 `decision.key_metrics.training_export`.
 
+Use `flightrecorder action-ledger` when an improvement loop has multiple bundle
+snapshots and needs a stable view of repeated repair pressure:
+
+```bash
+flightrecorder action-ledger \
+  --bundle runs/previous/evidence_bundle.json \
+  --bundle runs/current/evidence_bundle.json \
+  --out runs/action_ledger.json
+
+flightrecorder validate --action-ledger runs/action_ledger.json --strict
+```
+
+The ledger groups `next_actions` by `routing_key`, preserves bundle hashes, and
+marks actions as `new`, `recurring`, `open`, or `resolved` relative to the
+latest bundle. It is useful for issue trackers, repair-agent queues, and
+experiment notes; it still does not execute repairs.
+
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over
 `suite_summary.json`, such as minimum pass rate, minimum average score, maximum
 failed scenarios, maximum critical failures, or forbidden failed-rule IDs.

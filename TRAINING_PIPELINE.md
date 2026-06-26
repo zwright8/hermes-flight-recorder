@@ -105,6 +105,22 @@ experiment ledgers can deduplicate work across repeated runs. Treat those
 actions as routing guidance for the next improvement iteration, not as a
 substitute for the gates themselves.
 
+Across repeated iterations, use `flightrecorder action-ledger` to fold multiple
+`evidence_bundle.json` files into a stable repair ledger:
+
+```bash
+flightrecorder action-ledger \
+  --bundle runs/previous/evidence_bundle.json \
+  --bundle runs/current/evidence_bundle.json \
+  --out runs/action_ledger.json
+
+flightrecorder validate --action-ledger runs/action_ledger.json --strict
+```
+
+The ledger groups advisory actions by `routing_key`, records which bundle first
+and last saw each action, and marks each one as `new`, `recurring`, `open`, or
+`resolved` relative to the latest bundle.
+
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the
 trainer-facing export files, verifies required gates are present and passed, and
