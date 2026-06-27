@@ -228,7 +228,9 @@ trainer. They do not execute the command or update weights. `trainer-preflight`
 creates the signed-off evidence contract; `trainer-launch-check` is the
 consumer-side check an external training launcher can call immediately before it
 runs. It re-validates the preflight hashes and prints the approved command only
-when the launch contract still passes.
+when the launch contract still passes. Trainer-facing export files must be
+regular files at preflight time; symlinked JSONL, JSON, or Markdown artifacts
+block launch even if their targets contain matching bytes.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
@@ -668,7 +670,7 @@ After `gate-export` and any comparison or reviewed gates pass, run
 `trainer-preflight`, then have the external launcher run `trainer-launch-check`
 and require `recommendation: launch_allowed` before invoking a trainer. This
 closes the handoff loop: the trainer consumes only exports that are tied to
-passed gates and current artifact hashes.
+passed gates, current artifact hashes, and regular-file export artifacts.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

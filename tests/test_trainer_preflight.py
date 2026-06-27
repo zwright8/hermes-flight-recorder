@@ -182,6 +182,45 @@ class TrainerPreflightTests(unittest.TestCase):
             result = json.loads(preflight.read_text(encoding="utf-8"))
             self.assertIn("gate_validation_passed", {check["id"] for check in result["checks"] if not check["passed"]})
 
+    def test_trainer_preflight_blocks_symlinked_training_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            gate = root / "training_gate.json"
+            preflight = root / "trainer_preflight.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(runs / "training_export")])
+            run_cli(["gate-export", "--training-export", str(runs / "training_export"), "--out", str(gate)])
+            sft_path = runs / "training_export" / "sft.jsonl"
+            external_path = root / "external_sft.jsonl"
+            external_path.write_text(sft_path.read_text(encoding="utf-8"), encoding="utf-8")
+            sft_path.unlink()
+            try:
+                sft_path.symlink_to(external_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--training-export",
+                    str(runs / "training_export"),
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertEqual(result["recommendation"], "block_launch")
+            self.assertFalse(result["artifacts"]["training_export_sft_jsonl"]["regular_file"])
+            self.assertTrue(result["artifacts"]["training_export_sft_jsonl"]["symlink"])
+            failed_checks = {check["id"] for check in result["checks"] if not check["passed"]}
+            self.assertIn("artifact_file_regular", failed_checks)
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+
     def test_validate_rejects_stale_trainer_preflight_gate_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -215,6 +254,52 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertIn("trainer_preflight.gates[0].sha256", errors)
 
             launch_check = Path(tmp) / "trainer_launch_check.json"
+            self.assertEqual(
+                run_cli(["trainer-launch-check", "--preflight", str(preflight), "--out", str(launch_check)]),
+                1,
+            )
+            launch = json.loads(launch_check.read_text(encoding="utf-8"))
+            self.assertIn("preflight_validation_passed", {check["id"] for check in launch["checks"] if not check["passed"]})
+
+    def test_validate_rejects_stale_trainer_preflight_artifact_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            gate = root / "training_gate.json"
+            preflight = root / "trainer_preflight.json"
+            summary = root / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(runs / "training_export")])
+            run_cli(["gate-export", "--training-export", str(runs / "training_export"), "--out", str(gate)])
+            run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--training-export",
+                    str(runs / "training_export"),
+                    "--preserve-paths",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+            episodes_path = runs / "training_export" / "episodes.jsonl"
+            external_path = root / "external_episodes.jsonl"
+            external_path.write_text(episodes_path.read_text(encoding="utf-8"), encoding="utf-8")
+            episodes_path.unlink()
+            try:
+                episodes_path.symlink_to(external_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            code = run_cli(["validate", "--trainer-preflight", str(preflight), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_preflight.artifacts.training_export_episodes_jsonl.path must not resolve to a symlink", errors)
+
+            launch_check = root / "trainer_launch_check.json"
             self.assertEqual(
                 run_cli(["trainer-launch-check", "--preflight", str(preflight), "--out", str(launch_check)]),
                 1,

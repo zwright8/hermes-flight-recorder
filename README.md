@@ -265,6 +265,10 @@ flightrecorder trainer-launch-check \
   --print-command
 ```
 
+The preflight fingerprints trainer-facing files and blocks symlinked export
+artifacts, so the approved command points at regular files captured by the
+evidence contract.
+
 For production suites, commit a stricter gate policy and point CI at it:
 
 ```bash

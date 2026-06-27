@@ -271,11 +271,13 @@ def _add_export_artifacts(
 ) -> None:
     artifacts[name] = _dir_record(root, preserve_paths)
     _add_bool_check(checks, "artifact_dir_exists", root.exists() and root.is_dir(), {"artifact": name})
+    _add_bool_check(checks, "artifact_dir_regular", _is_regular_dir(root), {"artifact": name})
     for relative in files:
         key = f"{name}_{_artifact_key(relative)}"
         path = root / relative
         artifacts[key] = _file_record(path, preserve_paths)
         _add_bool_check(checks, "artifact_file_exists", path.exists() and path.is_file(), {"artifact": name, "file": relative})
+        _add_bool_check(checks, "artifact_file_regular", _is_regular_file(path), {"artifact": name, "file": relative})
 
 
 def _trainer_command_record(value: str | None) -> dict[str, Any]:
@@ -371,18 +373,40 @@ def _read_json_optional(path: Path) -> dict[str, Any] | None:
 
 
 def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
-    record: dict[str, Any] = {"path": _display_path(path, preserve_paths), "exists": path.exists(), "kind": "file"}
-    if path.exists() and path.is_file():
+    regular_file = _is_regular_file(path)
+    record: dict[str, Any] = {
+        "path": _display_path(path, preserve_paths),
+        "exists": path.exists(),
+        "kind": "file",
+        "regular_file": regular_file,
+        "symlink": path.is_symlink(),
+    }
+    if regular_file:
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
     return record
 
 
 def _dir_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
-    record: dict[str, Any] = {"path": _display_path(path, preserve_paths), "exists": path.exists(), "kind": "directory"}
-    if path.exists() and path.is_dir():
+    regular_directory = _is_regular_dir(path)
+    record: dict[str, Any] = {
+        "path": _display_path(path, preserve_paths),
+        "exists": path.exists(),
+        "kind": "directory",
+        "regular_directory": regular_directory,
+        "symlink": path.is_symlink(),
+    }
+    if regular_directory:
         record["entry_count"] = sum(1 for _ in path.iterdir())
     return record
+
+
+def _is_regular_file(path: Path) -> bool:
+    return path.exists() and path.is_file() and not path.is_symlink()
+
+
+def _is_regular_dir(path: Path) -> bool:
+    return path.exists() and path.is_dir() and not path.is_symlink()
 
 
 def _artifact_key(value: str) -> str:

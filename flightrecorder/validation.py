@@ -5050,8 +5050,13 @@ def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: 
         target.errors.append(f"{label}.kind must be file or directory.")
     if record.get("kind") == "file":
         _validate_preflight_file_hash(record, target, label, source_path)
-    if record.get("kind") == "directory" and record.get("exists") is True and not _is_non_negative_int(record.get("entry_count")):
-        target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
+    if record.get("kind") == "directory":
+        if "regular_directory" in record and not isinstance(record.get("regular_directory"), bool):
+            target.errors.append(f"{label}.regular_directory must be a boolean when present.")
+        if "symlink" in record and not isinstance(record.get("symlink"), bool):
+            target.errors.append(f"{label}.symlink must be a boolean when present.")
+        if record.get("regular_directory") is True and not _is_non_negative_int(record.get("entry_count")):
+            target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
 
 
 def _validate_preflight_file_hash(
@@ -5066,6 +5071,12 @@ def _validate_preflight_file_hash(
         return
     if record.get("exists") is not True:
         return
+    if "regular_file" in record and not isinstance(record.get("regular_file"), bool):
+        target.errors.append(f"{label}.regular_file must be a boolean when present.")
+    if "symlink" in record and not isinstance(record.get("symlink"), bool):
+        target.errors.append(f"{label}.symlink must be a boolean when present.")
+    if record.get("regular_file") is False:
+        return
     if not _is_non_negative_int(record.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
     if not _is_sha256(record.get("sha256")):
@@ -5073,6 +5084,9 @@ def _validate_preflight_file_hash(
         return
     file_path = _resolve_preflight_record_path(record.get("path"), source_path)
     if file_path is None:
+        return
+    if file_path.is_symlink():
+        target.errors.append(f"{label}.path must not resolve to a symlink.")
         return
     if not file_path.exists() or not file_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an existing file.")
