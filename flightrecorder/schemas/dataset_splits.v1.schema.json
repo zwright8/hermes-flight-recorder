@@ -1,0 +1,293 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/dataset_splits.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Deterministic train/validation/test split metadata for export-rl handoffs.",
+  "properties": {
+    "artifact_names": {
+      "items": {
+        "enum": [
+          "episodes",
+          "rewards",
+          "step_rewards",
+          "preferences",
+          "failure_modes",
+          "sft",
+          "dpo",
+          "reward_model"
+        ]
+      },
+      "type": "array"
+    },
+    "assignments": {
+      "items": {
+        "$ref": "#/$defs/assignment"
+      },
+      "type": "array"
+    },
+    "leakage_checks": {
+      "$ref": "#/$defs/leakageChecks"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "ratios": {
+      "$ref": "#/$defs/ratios"
+    },
+    "schema_version": {
+      "const": "hfr.rl.dataset_splits.v1"
+    },
+    "seed": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "split_counts": {
+      "$ref": "#/$defs/splitCounts"
+    },
+    "split_names": {
+      "items": {
+        "enum": [
+          "train",
+          "validation",
+          "test"
+        ]
+      },
+      "type": "array"
+    },
+    "strategy": {
+      "const": "task_family_hash"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    }
+  },
+  "required": [
+    "schema_version",
+    "strategy",
+    "seed",
+    "ratios",
+    "split_names",
+    "artifact_names",
+    "summary",
+    "split_counts",
+    "assignments",
+    "leakage_checks",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Dataset Splits",
+  "type": "object",
+  "$defs": {
+    "artifactCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "dpo": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "episodes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_modes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preferences": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reward_model": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rewards": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sft": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "step_rewards": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "episodes",
+        "rewards",
+        "step_rewards",
+        "preferences",
+        "failure_modes",
+        "sft",
+        "dpo",
+        "reward_model"
+      ],
+      "type": "object"
+    },
+    "assignment": {
+      "additionalProperties": true,
+      "properties": {
+        "episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "episode_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "scenario_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "split": {
+          "enum": [
+            "train",
+            "validation",
+            "test"
+          ]
+        },
+        "task_family": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_family",
+        "split",
+        "episode_count",
+        "episode_ids",
+        "scenario_ids"
+      ],
+      "type": "object"
+    },
+    "leakageChecks": {
+      "additionalProperties": true,
+      "properties": {
+        "cross_split_task_families": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "family_exclusive": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "family_exclusive",
+        "cross_split_task_families"
+      ],
+      "type": "object"
+    },
+    "ratios": {
+      "additionalProperties": true,
+      "properties": {
+        "test": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "train": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "validation": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "type": "object"
+    },
+    "splitCount": {
+      "additionalProperties": true,
+      "properties": {
+        "artifacts": {
+          "$ref": "#/$defs/artifactCounts"
+        },
+        "episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task_family_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_family_count",
+        "episode_count",
+        "artifacts"
+      ],
+      "type": "object"
+    },
+    "splitCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "test": {
+          "$ref": "#/$defs/splitCount"
+        },
+        "train": {
+          "$ref": "#/$defs/splitCount"
+        },
+        "validation": {
+          "$ref": "#/$defs/splitCount"
+        }
+      },
+      "required": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "type": "object"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "properties": {
+        "episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "family_exclusive": {
+          "type": "boolean"
+        },
+        "task_family_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "test_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "train_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "validation_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task_family_count",
+        "episode_count",
+        "train_episode_count",
+        "validation_episode_count",
+        "test_episode_count",
+        "family_exclusive"
+      ],
+      "type": "object"
+    }
+  }
+}

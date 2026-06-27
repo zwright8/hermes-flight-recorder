@@ -431,6 +431,12 @@ The export directory contains:
   coverage, trainer-view source-fingerprint coverage, task-completion coverage,
   trace-signal coverage, reward/score distribution, failure pressure, and
   quality flags.
+- `dataset_splits.json`: deterministic task-family train/validation/test split
+  metadata, including family-exclusivity leakage checks and per-split artifact
+  counts.
+- `splits/<split>/*.jsonl`: split copies of `episodes`, `rewards`,
+  `step_rewards`, `preferences`, `failure_modes`, `sft`, `dpo`, and
+  `reward_model` rows for external trainers.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
 - `manifest.json`: generation settings, counts, output paths, artifact
@@ -442,10 +448,12 @@ contains `artifact_lineage.json`, each episode also includes `source_lineage`
 and `source_fingerprints` so downstream training rows can be traced back to the
 provenance graph and filtered by the scenario/source-trace hashes that produced
 the label.
-The manifest also fingerprints each generated JSONL, JSON, and Markdown export
-artifact except the manifest itself. Validation recomputes those SHA-256 hashes,
-which lets a training launcher reject stale, swapped, or partially copied export
-files before they reach a trainer.
+The manifest fingerprints each generated JSONL, JSON, and Markdown export
+artifact except the manifest itself, including every split file.
+`flightrecorder validate --training-export` recomputes those SHA-256 hashes,
+verifies split row counts, and checks that task families do not leak across
+train/validation/test files. This lets a training launcher reject stale,
+swapped, leaky, or partially copied export files before they reach a trainer.
 New scorecards also emit `task_completion`, a compact verdict over required
 evidence, required actions, ordered action sequences, event counts, and optional
 post-run state snapshots. Exported episodes, rewards, preferences, SFT rows, DPO
@@ -474,8 +482,8 @@ Absolute source/output paths are redacted from exported metadata by default;
 use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
 links, step-reward event indexes, preference references, failure-mode links,
-curriculum counts, trainer-ready view rows, dataset metrics, dataset-card
-sections, lineage hashes, lineage evidence links, and live-smoke summaries are
+curriculum counts, trainer-ready view rows, dataset splits, dataset metrics,
+dataset-card sections, lineage hashes, lineage evidence links, and live-smoke summaries are
 internally consistent. Trainer-facing export artifacts must be regular files;
 symlinked JSONL, JSON, or Markdown artifacts fail validation even when their
 targets match the recorded hash.
@@ -660,6 +668,8 @@ simple rows without losing the audit trail.
   evidence-check pass rate,
 - trace-signal metrics for event volume, distinct event types, final-answer
   coverage, tool/API visibility, and trace observability risks,
+- dataset split metrics for train/validation/test episode counts and
+  task-family exclusivity,
 - failed-rule and critical-failure counts,
 - task-family coverage with SFT/DPO/reward-model/step-reward counts,
 - quality flags such as missing positives, missing negatives, missing
@@ -669,6 +679,8 @@ simple rows without losing the audit trail.
 first checkpoint before handing an export to an SFT, DPO, reward-model, or RL
 job. The card helps answer: "Do we have enough positive examples, negative
 pressure, task-family coverage, and attribution to learn anything meaningful?"
+It also shows whether the held-out splits exist and whether the split assignment
+keeps each task family exclusive.
 When `--metadata` is provided, the card also shows an experiment metadata table
 so humans can tell which candidate/config the export represents.
 
@@ -796,12 +808,25 @@ reward_model = [
     for line in Path("runs/training_export/reward_model.jsonl").read_text().splitlines()
 ]
 dataset_metrics = json.loads(Path("runs/training_export/dataset_metrics.json").read_text())
+dataset_splits = json.loads(Path("runs/training_export/dataset_splits.json").read_text())
 dataset_card = Path("runs/training_export/DATASET_CARD.md").read_text()
 failure_modes = [
     json.loads(line)
     for line in Path("runs/training_export/failure_modes.jsonl").read_text().splitlines()
 ]
 curriculum = json.loads(Path("runs/training_export/curriculum.json").read_text())
+train_episodes = [
+    json.loads(line)
+    for line in Path("runs/training_export/splits/train/episodes.jsonl").read_text().splitlines()
+]
+validation_episodes = [
+    json.loads(line)
+    for line in Path("runs/training_export/splits/validation/episodes.jsonl").read_text().splitlines()
+]
+test_episodes = [
+    json.loads(line)
+    for line in Path("runs/training_export/splits/test/episodes.jsonl").read_text().splitlines()
+]
 ```
 
 Recommended first uses:
@@ -811,6 +836,8 @@ Recommended first uses:
 - filter or weight examples by `trace_signal` before training,
 - convert preference records into chosen/rejected pairs,
 - feed the trainer-ready SFT/DPO/reward-model views to downstream pipelines,
+- use `splits/train`, `splits/validation`, and `splits/test` for held-out
+  trainer evaluation without task-family leakage,
 - review `dataset_metrics.json` and `DATASET_CARD.md` before launching training,
 - consume step rewards for event/final-answer credit-assignment experiments,
 - train a small reward model on scorecard-derived labels,

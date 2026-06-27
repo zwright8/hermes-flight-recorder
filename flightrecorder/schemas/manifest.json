@@ -50,6 +50,14 @@
       "name": "training_manifest"
     },
     {
+      "artifact": "dataset_splits",
+      "artifact_schema_version": "hfr.rl.dataset_splits.v1",
+      "description": "Deterministic train/validation/test split metadata emitted by export-rl.",
+      "filename": "dataset_splits.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/dataset_splits.v1.schema.json",
+      "name": "dataset_splits"
+    },
+    {
       "artifact": "compare_rl_manifest",
       "artifact_schema_version": "hfr.compare_rl.manifest.v1",
       "description": "Manifest for export-compare-rl improvement-pair handoffs.",

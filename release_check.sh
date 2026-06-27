@@ -39,6 +39,7 @@ python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.js
 python -m flightrecorder schemas --check runs/prompt_injection_good/task_completion.json >/dev/null
 python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
+python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
 rm -rf replay_runs
 python -m flightrecorder replay-bundle \
   --lineage runs/prompt_injection_good/artifact_lineage.json \
@@ -426,6 +427,10 @@ test -f runs/training_export/sft.jsonl
 test -f runs/training_export/dpo.jsonl
 test -f runs/training_export/reward_model.jsonl
 test -f runs/training_export/dataset_metrics.json
+test -f runs/training_export/dataset_splits.json
+test -f runs/training_export/splits/train/episodes.jsonl
+test -f runs/training_export/splits/validation/episodes.jsonl
+test -f runs/training_export/splits/test/episodes.jsonl
 test -f runs/training_export/DATASET_CARD.md
 test -f runs/training_export/manifest.json
 python - <<'PY'
@@ -485,12 +490,16 @@ reward_model = [
     if line.strip()
 ]
 dataset_metrics = json.loads(Path("runs/training_export/dataset_metrics.json").read_text(encoding="utf-8"))
+dataset_splits = json.loads(Path("runs/training_export/dataset_splits.json").read_text(encoding="utf-8"))
 dataset_card = Path("runs/training_export/DATASET_CARD.md").read_text(encoding="utf-8")
 episodes = [
     json.loads(line)
     for line in Path("runs/training_export/episodes.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
+split_names = ("train", "validation", "test")
+split_artifacts = ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model")
+split_keys = {f"{split}_{artifact}" for split in split_names for artifact in split_artifacts}
 assert any(item.get("evidence_ref") for reward in rewards for item in reward["attribution"])
 assert any(item.get("evidence_ref") for item in step_rewards)
 assert any(item.get("target") == "event" and isinstance(item.get("event_index"), int) for item in step_rewards)
@@ -508,6 +517,7 @@ assert set(training_manifest["artifact_fingerprints"]) == {
     "curriculum",
     "dataset_card",
     "dataset_metrics",
+    "dataset_splits",
     "dpo",
     "episodes",
     "failure_modes",
@@ -516,9 +526,38 @@ assert set(training_manifest["artifact_fingerprints"]) == {
     "rewards",
     "sft",
     "step_rewards",
-}
+} | split_keys
 assert all(record["exists"] is True for record in training_manifest["artifact_fingerprints"].values())
 assert all(len(record["sha256"]) == 64 for record in training_manifest["artifact_fingerprints"].values())
+assert dataset_splits["schema_version"] == "hfr.rl.dataset_splits.v1"
+assert dataset_splits["split_names"] == list(split_names)
+assert dataset_splits["artifact_names"] == list(split_artifacts)
+assert dataset_splits["summary"]["episode_count"] == 6
+assert dataset_splits["summary"]["task_family_count"] == len({item["task_family"] for item in episodes})
+assert dataset_splits["summary"]["family_exclusive"] is True
+assert dataset_splits["leakage_checks"]["family_exclusive"] is True
+assert dataset_splits["leakage_checks"]["cross_split_task_families"] == []
+assert dataset_splits["summary"]["train_episode_count"] + dataset_splits["summary"]["validation_episode_count"] + dataset_splits["summary"]["test_episode_count"] == 6
+assert dataset_splits["summary"]["validation_episode_count"] >= 1
+assert dataset_splits["summary"]["test_episode_count"] >= 1
+assert dataset_metrics["dataset_splits"] == dataset_splits["summary"]
+assert training_manifest["dataset_splits"] == dataset_splits["summary"]
+assigned_episodes = {episode_id for assignment in dataset_splits["assignments"] for episode_id in assignment["episode_ids"]}
+assert assigned_episodes == {item["episode_id"] for item in episodes}
+for split in split_names:
+    split_episode_rows = [
+        json.loads(line)
+        for line in Path(f"runs/training_export/splits/{split}/episodes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(split_episode_rows) == dataset_splits["split_counts"][split]["episode_count"]
+    for artifact in split_artifacts:
+        rows = [
+            json.loads(line)
+            for line in Path(f"runs/training_export/splits/{split}/{artifact}.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert len(rows) == dataset_splits["split_counts"][split]["artifacts"][artifact]
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
 assert any(item["chosen_episode_id"] == "email_reply_completion_good" and item["rejected_episode_id"] == "email_reply_completion_bad" for item in dpo)
 assert {item["episode_id"] for item in reward_model} >= {
@@ -548,6 +587,7 @@ assert "# Flight Recorder Dataset Card" in dataset_card
 assert "## Experiment Metadata" in dataset_card
 assert "## Source Fingerprints" in dataset_card
 assert "## Trace Signal" in dataset_card
+assert "## Dataset Splits" in dataset_card
 assert "## Quality Flags" in dataset_card
 PY
 test -f runs/validation.json

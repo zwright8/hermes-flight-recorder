@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,10 @@ def run_cli(args):
 
 def read_jsonl(path: Path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def split_artifact_keys():
+    return {f"{split}_{artifact}" for split in DATASET_SPLIT_NAMES for artifact in DATASET_SPLIT_ARTIFACTS}
 
 
 class TrainingExportTests(unittest.TestCase):
@@ -44,6 +49,7 @@ class TrainingExportTests(unittest.TestCase):
             reward_model = read_jsonl(out / "reward_model.jsonl")
             curriculum = json.loads((out / "curriculum.json").read_text(encoding="utf-8"))
             dataset_metrics = json.loads((out / "dataset_metrics.json").read_text(encoding="utf-8"))
+            dataset_splits = json.loads((out / "dataset_splits.json").read_text(encoding="utf-8"))
             dataset_card = (out / "DATASET_CARD.md").read_text(encoding="utf-8")
 
             self.assertEqual(manifest["schema_version"], "hfr.rl.manifest.v1")
@@ -63,6 +69,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertIn("dpo", manifest["outputs"])
             self.assertIn("reward_model", manifest["outputs"])
             self.assertIn("dataset_metrics", manifest["outputs"])
+            self.assertIn("dataset_splits", manifest["outputs"])
             self.assertIn("dataset_card", manifest["outputs"])
             self.assertEqual(
                 set(manifest["artifact_fingerprints"]),
@@ -70,6 +77,7 @@ class TrainingExportTests(unittest.TestCase):
                     "curriculum",
                     "dataset_card",
                     "dataset_metrics",
+                    "dataset_splits",
                     "dpo",
                     "episodes",
                     "failure_modes",
@@ -78,7 +86,8 @@ class TrainingExportTests(unittest.TestCase):
                     "rewards",
                     "sft",
                     "step_rewards",
-                },
+                }
+                | split_artifact_keys(),
             )
             self.assertTrue(all(record["exists"] is True for record in manifest["artifact_fingerprints"].values()))
             self.assertTrue(all(len(record["sha256"]) == 64 for record in manifest["artifact_fingerprints"].values()))
@@ -106,6 +115,7 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual({sample["schema_version"] for sample in reward_model}, {"hfr.rl.reward_model.v1"})
             self.assertEqual(curriculum["schema_version"], "hfr.rl.curriculum.v1")
             self.assertEqual(dataset_metrics["schema_version"], "hfr.rl.dataset_metrics.v1")
+            self.assertEqual(dataset_splits["schema_version"], "hfr.rl.dataset_splits.v1")
             self.assertEqual(curriculum["failure_mode_count"], len(failure_modes))
             self.assertEqual(dataset_metrics["artifact_counts"]["episodes"], 2)
             self.assertEqual(dataset_metrics["artifact_counts"]["dpo"], 1)
@@ -124,6 +134,28 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(dataset_metrics["trace_signal"]["event_type_count"], 4)
             self.assertEqual(dataset_metrics["trace_signal"]["final_answer_rate"], 1.0)
             self.assertEqual(dataset_metrics["trace_signal"]["tool_or_api_episode_rate"], 1.0)
+            self.assertEqual(dataset_metrics["dataset_splits"], dataset_splits["summary"])
+            self.assertEqual(manifest["dataset_splits"], dataset_splits["summary"])
+            self.assertEqual(dataset_splits["split_names"], list(DATASET_SPLIT_NAMES))
+            self.assertEqual(dataset_splits["artifact_names"], list(DATASET_SPLIT_ARTIFACTS))
+            self.assertEqual(dataset_splits["summary"]["episode_count"], 2)
+            self.assertEqual(dataset_splits["summary"]["task_family_count"], 1)
+            self.assertEqual(dataset_splits["summary"]["train_episode_count"], 2)
+            self.assertEqual(dataset_splits["summary"]["validation_episode_count"], 0)
+            self.assertEqual(dataset_splits["summary"]["test_episode_count"], 0)
+            self.assertTrue(dataset_splits["summary"]["family_exclusive"])
+            self.assertTrue(dataset_splits["leakage_checks"]["family_exclusive"])
+            self.assertEqual(dataset_splits["leakage_checks"]["cross_split_task_families"], [])
+            self.assertEqual(dataset_splits["assignments"][0]["task_family"], "prompt_injection")
+            self.assertEqual(dataset_splits["assignments"][0]["split"], "train")
+            self.assertEqual(dataset_splits["assignments"][0]["episode_ids"], ["prompt_injection_bad", "prompt_injection_good"])
+            for artifact_name in DATASET_SPLIT_ARTIFACTS:
+                train_rows = read_jsonl(out / "splits" / "train" / f"{artifact_name}.jsonl")
+                validation_rows = read_jsonl(out / "splits" / "validation" / f"{artifact_name}.jsonl")
+                test_rows = read_jsonl(out / "splits" / "test" / f"{artifact_name}.jsonl")
+                self.assertEqual(len(validation_rows), 0)
+                self.assertEqual(len(test_rows), 0)
+                self.assertEqual(dataset_splits["split_counts"]["train"]["artifacts"][artifact_name], len(train_rows))
             self.assertEqual(dataset_metrics["pass_rate"], 0.5)
             self.assertEqual(dataset_metrics["task_families"][0]["task_family"], "prompt_injection")
             self.assertEqual(dataset_metrics["task_families"][0]["task_completion_complete"], 1)
@@ -131,10 +163,13 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(dataset_metrics["task_families"][0]["trace_average_event_count"], 5.0)
             self.assertEqual(dataset_metrics["task_families"][0]["trace_tool_or_api_episode_rate"], 1.0)
             self.assertIn("single_task_family", {flag["id"] for flag in dataset_metrics["quality_flags"]})
+            self.assertIn("empty_validation_split", {flag["id"] for flag in dataset_metrics["quality_flags"]})
+            self.assertIn("empty_test_split", {flag["id"] for flag in dataset_metrics["quality_flags"]})
             self.assertIn("# Flight Recorder Dataset Card", dataset_card)
             self.assertIn("## Source Fingerprints", dataset_card)
             self.assertIn("Fully verified trainer-view rows", dataset_card)
             self.assertIn("## Trace Signal", dataset_card)
+            self.assertIn("## Dataset Splits", dataset_card)
             self.assertIn("## Task Families", dataset_card)
             self.assertEqual([sample["episode_id"] for sample in sft], ["prompt_injection_good"])
             self.assertEqual(sft[0]["source_fingerprint_status"], "verified")

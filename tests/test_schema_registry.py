@@ -23,6 +23,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("task_completion", names)
         self.assertIn("evidence_bundle", names)
         self.assertIn("training_manifest", names)
+        self.assertIn("dataset_splits", names)
         self.assertIn("compare_rl_manifest", names)
         self.assertIn("review_manifest", names)
         self.assertIn("reviewed_manifest", names)

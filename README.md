@@ -50,8 +50,9 @@ Expected demo output:
   contracts, missing traces, and task-family coverage.
 - A training export in `runs/training_export/` with episodes, terminal rewards,
   step-level reward attribution, preference pairs, trainer-ready SFT/DPO/reward
-  model views, failure modes, curriculum metadata, dataset quality metrics, a
-  dataset card, and a manifest for future model-improvement loops.
+  model views, failure modes, curriculum metadata, deterministic
+  train/validation/test split files, dataset quality metrics, a dataset card,
+  and a manifest for future model-improvement loops.
 - An evidence coverage report in `runs/evidence_coverage.json` showing whether
   failed-rule judgments are backed by structured event, final-answer, or
   episode evidence refs.
@@ -382,14 +383,19 @@ training-loop artifacts:
   trainer-view source-fingerprint coverage, task-completion coverage,
   trace-signal coverage, reward/score distribution, failure pressure, and
   quality flags.
+- `dataset_splits.json`: deterministic task-family train/validation/test split
+  metadata, with leakage checks that keep a task family in one split.
+- `splits/<split>/*.jsonl`: split copies of each trainer-facing artifact,
+  partitioned by the same task-family assignment.
 - `DATASET_CARD.md`: human-readable summary of the generated dataset and its
   boundaries.
 - `manifest.json`: export settings, counts, artifact fingerprints, and caveats.
 
 Current manifests include SHA-256 fingerprints for every generated JSONL, JSON,
-and Markdown export artifact except the manifest itself. The validate command
-recomputes those hashes so a downstream trainer, reviewer, or CI job can reject
-stale, swapped, or symlinked files before learning from them.
+and Markdown export artifact except the manifest itself, including the split
+files. The validate command recomputes those hashes and checks split row
+placement so a downstream trainer, reviewer, or CI job can reject stale,
+swapped, leaky, or symlinked files before learning from them.
 
 `flightrecorder export-compare-rl` converts paired baseline/candidate run
 directories into improvement-loop preference artifacts:
@@ -1143,8 +1149,9 @@ adds per-episode `trace_signal` features for event volume, event types,
 final-answer coverage, tool/API visibility, and trace risks, emits
 trainer-ready SFT/DPO/reward-model views, emits failure-mode records for every
 failed rule, and writes a prioritized curriculum summary, dataset metrics file,
-and dataset card that group failure pressure, task-completion coverage,
-provenance coverage, trace-signal coverage, and training-readiness signals.
+deterministic task-family train/validation/test split files, and dataset card
+that group failure pressure, task-completion coverage, provenance coverage,
+trace-signal coverage, leakage risk, and training-readiness signals.
 
 Absolute source/output paths are redacted from exported metadata by default.
 Use `--preserve-paths` only for private local debugging.

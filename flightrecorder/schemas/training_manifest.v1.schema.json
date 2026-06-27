@@ -13,6 +13,35 @@
     "dataset_metrics": {
       "type": "string"
     },
+    "dataset_splits": {
+      "additionalProperties": true,
+      "properties": {
+        "episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "family_exclusive": {
+          "type": "boolean"
+        },
+        "task_family_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "test_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "train_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "validation_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "dpo_count": {
       "minimum": 0,
       "type": "integer"

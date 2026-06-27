@@ -16,6 +16,10 @@ def run_cli(args):
         return main(args)
 
 
+def write_jsonl(path: Path, rows):
+    path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
 class ValidationTests(unittest.TestCase):
     def test_validate_accepts_generated_runs_and_training_export(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -394,6 +398,30 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("dataset_metrics.trainer_view_source_fingerprint_coverage.fully_verified", errors)
             self.assertIn("manifest.artifact_fingerprints.dataset_metrics.sha256", errors)
 
+    def test_validate_rejects_dataset_split_row_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "prompt_injection_bad")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            train_path = export / "splits" / "train" / "episodes.jsonl"
+            validation_path = export / "splits" / "validation" / "episodes.jsonl"
+            train_rows = [json.loads(line) for line in train_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            moved = train_rows.pop()
+            write_jsonl(train_path, train_rows)
+            write_jsonl(validation_path, [moved])
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("splits/validation/episodes.jsonl row 1 belongs in 'train'", errors)
+            self.assertIn("dataset_splits.split_counts.validation.episode_count", errors)
+            self.assertIn("manifest.artifact_fingerprints.train_episodes.sha256", errors)
+
     def test_validate_rejects_training_manifest_artifact_fingerprint_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -446,14 +474,21 @@ class ValidationTests(unittest.TestCase):
             run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
             for name in ("sft", "dpo", "reward_model"):
                 (export / f"{name}.jsonl").unlink()
+            for path in (export / "splits").glob("*/*.jsonl"):
+                path.unlink()
+            (export / "dataset_splits.json").unlink()
             (export / "dataset_metrics.json").unlink()
             (export / "DATASET_CARD.md").unlink()
             manifest_path = export / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            for name in ("sft", "dpo", "reward_model", "dataset_metrics", "dataset_card"):
+            for name in ("sft", "dpo", "reward_model", "dataset_metrics", "dataset_splits", "dataset_card"):
                 manifest["outputs"].pop(name, None)
+            for split_name in ("train", "validation", "test"):
+                for artifact_name in ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model"):
+                    manifest["outputs"].pop(f"{split_name}_{artifact_name}", None)
             for name in ("sft_count", "dpo_count", "reward_model_count", "quality_flag_count"):
                 manifest.pop(name, None)
+            manifest.pop("dataset_splits", None)
             manifest.pop("artifact_fingerprints", None)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -467,6 +502,7 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("sft.jsonl is missing", warnings)
             self.assertIn("manifest.sft_count is missing", warnings)
             self.assertIn("dataset_metrics.json is missing", warnings)
+            self.assertIn("dataset_splits.json is missing", warnings)
             self.assertIn("manifest.quality_flag_count is missing", warnings)
             self.assertIn("manifest.artifact_fingerprints is missing", warnings)
 

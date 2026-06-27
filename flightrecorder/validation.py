@@ -42,8 +42,11 @@ from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
 from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION, build_trace_signal
 from .training import (
+    DATASET_SPLIT_ARTIFACTS,
+    DATASET_SPLIT_NAMES,
     RL_CURRICULUM_SCHEMA_VERSION,
     RL_DATASET_METRICS_SCHEMA_VERSION,
+    RL_DATASET_SPLITS_SCHEMA_VERSION,
     RL_DPO_SCHEMA_VERSION,
     RL_EPISODE_SCHEMA_VERSION,
     RL_FAILURE_MODE_SCHEMA_VERSION,
@@ -278,6 +281,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     dpo_path = export_dir / "dpo.jsonl"
     reward_model_path = export_dir / "reward_model.jsonl"
     dataset_metrics_path = export_dir / "dataset_metrics.json"
+    dataset_splits_path = export_dir / "dataset_splits.json"
     dataset_card_path = export_dir / "DATASET_CARD.md"
     sft = _read_jsonl_objects_optional(sft_path, target, "sft.jsonl", "rerun export-rl to emit trainer-ready SFT rows")
     dpo = _read_jsonl_objects_optional(dpo_path, target, "dpo.jsonl", "rerun export-rl to emit trainer-ready DPO rows")
@@ -293,6 +297,23 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         "dataset_metrics.json",
         "rerun export-rl to emit dataset-level metrics",
     )
+    dataset_splits = _read_object_optional(
+        dataset_splits_path,
+        target,
+        "dataset_splits.json",
+        "rerun export-rl to emit deterministic train/validation/test split metadata",
+    )
+    split_rows = _read_training_split_rows(export_dir, target)
+    rows_by_artifact = {
+        "episodes": episodes,
+        "rewards": rewards,
+        "step_rewards": step_rewards,
+        "preferences": preferences,
+        "failure_modes": failure_modes,
+        "sft": sft,
+        "dpo": dpo,
+        "reward_model": reward_model,
+    }
     if manifest is not None:
         _validate_training_manifest(
             manifest,
@@ -307,6 +328,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             dpo,
             reward_model,
             dataset_metrics,
+            dataset_splits,
             dataset_card_path.exists(),
             export_dir,
         )
@@ -335,7 +357,10 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             sft,
             dpo,
             reward_model,
+            dataset_splits,
         )
+    if dataset_splits is not None:
+        _validate_dataset_splits(dataset_splits, target, rows_by_artifact, split_rows)
     if dataset_card_path.exists():
         _validate_dataset_card(dataset_card_path, target)
     else:
@@ -351,6 +376,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             "dpo_count": len(dpo),
             "reward_model_count": len(reward_model),
             "quality_flag_count": len(dataset_metrics.get("quality_flags", [])) if isinstance(dataset_metrics, dict) else None,
+            "split_episode_counts": dataset_splits.get("summary") if isinstance(dataset_splits, dict) else None,
         }
     )
     return target
@@ -1153,6 +1179,7 @@ def _validate_training_manifest(
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     dataset_metrics: dict[str, Any] | None,
+    dataset_splits: dict[str, Any] | None,
     has_dataset_card: bool,
     export_dir: Path,
 ) -> None:
@@ -1197,8 +1224,15 @@ def _validate_training_manifest(
                 target.warnings.append(f"manifest.outputs.{output_name} is missing; rerun export-rl to refresh trainer-ready views.")
         if "dataset_metrics" not in manifest["outputs"]:
             target.warnings.append("manifest.outputs.dataset_metrics is missing; rerun export-rl to refresh dataset-level metrics.")
+        if "dataset_splits" not in manifest["outputs"]:
+            target.warnings.append("manifest.outputs.dataset_splits is missing; rerun export-rl to refresh deterministic split artifacts.")
         if "dataset_card" not in manifest["outputs"]:
             target.warnings.append("manifest.outputs.dataset_card is missing; rerun export-rl to refresh the dataset card.")
+        for split_name in DATASET_SPLIT_NAMES:
+            for artifact_name in DATASET_SPLIT_ARTIFACTS:
+                output_name = f"{split_name}_{artifact_name}"
+                if output_name not in manifest["outputs"]:
+                    target.warnings.append(f"manifest.outputs.{output_name} is missing; rerun export-rl to refresh split artifacts.")
     _validate_manifest_artifact_fingerprints(
         manifest.get("artifact_fingerprints"),
         target,
@@ -1207,6 +1241,10 @@ def _validate_training_manifest(
     )
     if dataset_metrics is None:
         target.warnings.append("manifest has no validated dataset_metrics.json companion.")
+    if dataset_splits is None:
+        target.warnings.append("manifest has no validated dataset_splits.json companion.")
+    elif manifest.get("dataset_splits") != dataset_splits.get("summary"):
+        target.errors.append("manifest.dataset_splits must match dataset_splits.summary.")
     if not has_dataset_card:
         target.warnings.append("manifest has no DATASET_CARD.md companion.")
     if "metadata" in manifest:
@@ -1345,10 +1383,11 @@ def _validate_manifest_artifact_fingerprints(
 
 
 def _training_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
-    return {
+    paths = {
         "curriculum": export_dir / "curriculum.json",
         "dataset_card": export_dir / "DATASET_CARD.md",
         "dataset_metrics": export_dir / "dataset_metrics.json",
+        "dataset_splits": export_dir / "dataset_splits.json",
         "dpo": export_dir / "dpo.jsonl",
         "episodes": export_dir / "episodes.jsonl",
         "failure_modes": export_dir / "failure_modes.jsonl",
@@ -1358,6 +1397,260 @@ def _training_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
         "sft": export_dir / "sft.jsonl",
         "step_rewards": export_dir / "step_rewards.jsonl",
     }
+    for split_name in DATASET_SPLIT_NAMES:
+        for artifact_name in DATASET_SPLIT_ARTIFACTS:
+            paths[f"{split_name}_{artifact_name}"] = export_dir / "splits" / split_name / f"{artifact_name}.jsonl"
+    return paths
+
+
+def _read_training_split_rows(export_dir: Path, target: ValidationTarget) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    split_rows: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for split_name in DATASET_SPLIT_NAMES:
+        split_rows[split_name] = {}
+        for artifact_name in DATASET_SPLIT_ARTIFACTS:
+            label = f"splits/{split_name}/{artifact_name}.jsonl"
+            split_rows[split_name][artifact_name] = _read_jsonl_objects_optional(
+                export_dir / "splits" / split_name / f"{artifact_name}.jsonl",
+                target,
+                label,
+                "rerun export-rl to emit deterministic train/validation/test split artifacts",
+            )
+    return split_rows
+
+
+def _validate_dataset_splits(
+    value: dict[str, Any],
+    target: ValidationTarget,
+    rows_by_artifact: dict[str, list[dict[str, Any]]],
+    split_rows: dict[str, dict[str, list[dict[str, Any]]]],
+) -> None:
+    _require_equal(value, "schema_version", RL_DATASET_SPLITS_SCHEMA_VERSION, target, prefix="dataset_splits.")
+    if value.get("strategy") != "task_family_hash":
+        target.errors.append("dataset_splits.strategy must be 'task_family_hash'.")
+    if value.get("split_names") != list(DATASET_SPLIT_NAMES):
+        target.errors.append(f"dataset_splits.split_names must be {list(DATASET_SPLIT_NAMES)!r}.")
+    if value.get("artifact_names") != list(DATASET_SPLIT_ARTIFACTS):
+        target.errors.append(f"dataset_splits.artifact_names must be {list(DATASET_SPLIT_ARTIFACTS)!r}.")
+
+    episodes = rows_by_artifact.get("episodes", [])
+    episode_by_id = {str(episode.get("episode_id")): episode for episode in episodes if isinstance(episode.get("episode_id"), str)}
+    family_episode_ids: dict[str, list[str]] = {}
+    family_scenario_ids: dict[str, set[str]] = {}
+    for episode in episodes:
+        family = str(episode.get("task_family") or "unknown")
+        family_episode_ids.setdefault(family, []).append(str(episode.get("episode_id") or ""))
+        family_scenario_ids.setdefault(family, set()).add(str(episode.get("scenario_id") or ""))
+
+    assignments = value.get("assignments")
+    if not isinstance(assignments, list):
+        target.errors.append("dataset_splits.assignments must be a list.")
+        assignments = []
+    family_to_split: dict[str, str] = {}
+    assigned_episode_ids: set[str] = set()
+    for index, assignment in enumerate(assignments):
+        if not isinstance(assignment, dict):
+            target.errors.append(f"dataset_splits.assignments[{index}] must be an object.")
+            continue
+        family = assignment.get("task_family")
+        split_name = assignment.get("split")
+        if not isinstance(family, str) or not family:
+            target.errors.append(f"dataset_splits.assignments[{index}].task_family must be a non-empty string.")
+            continue
+        if family in family_to_split:
+            target.errors.append(f"dataset_splits.assignments[{index}].task_family duplicates {family!r}.")
+        if split_name not in DATASET_SPLIT_NAMES:
+            target.errors.append(f"dataset_splits.assignments[{index}].split must be one of {list(DATASET_SPLIT_NAMES)!r}.")
+            split_name = "train"
+        family_to_split[family] = str(split_name)
+        expected_episode_ids = sorted(family_episode_ids.get(family, []))
+        expected_scenario_ids = sorted(family_scenario_ids.get(family, set()))
+        if assignment.get("episode_count") != len(expected_episode_ids):
+            target.errors.append(
+                f"dataset_splits.assignments[{index}].episode_count expected {len(expected_episode_ids)}, got {assignment.get('episode_count')!r}."
+            )
+        if assignment.get("episode_ids") != expected_episode_ids:
+            target.errors.append(f"dataset_splits.assignments[{index}].episode_ids must match exported episodes for family {family!r}.")
+        if assignment.get("scenario_ids") != expected_scenario_ids:
+            target.errors.append(f"dataset_splits.assignments[{index}].scenario_ids must match exported scenarios for family {family!r}.")
+        assigned_episode_ids.update(item for item in expected_episode_ids if item)
+
+    expected_families = set(family_episode_ids)
+    missing_families = sorted(expected_families - set(family_to_split))
+    unknown_families = sorted(set(family_to_split) - expected_families)
+    if missing_families:
+        target.errors.append(f"dataset_splits.assignments missing task families: {missing_families!r}.")
+    if unknown_families:
+        target.errors.append(f"dataset_splits.assignments contain unknown task families: {unknown_families!r}.")
+    if assigned_episode_ids != set(episode_by_id):
+        target.errors.append("dataset_splits.assignments episode_ids must cover exported episodes exactly.")
+
+    placement_errors = _validate_split_row_placement(rows_by_artifact, split_rows, family_to_split, episode_by_id, target)
+    cross_split_families = _cross_split_families(split_rows)
+    family_exclusive = not cross_split_families and not placement_errors
+    _validate_dataset_split_counts(value.get("split_counts"), target, assignments, split_rows)
+    _validate_dataset_split_summary(value.get("summary"), target, family_to_split, episodes, split_rows, family_exclusive)
+    _validate_dataset_split_leakage(value.get("leakage_checks"), target, family_exclusive, cross_split_families)
+
+
+def _validate_split_row_placement(
+    rows_by_artifact: dict[str, list[dict[str, Any]]],
+    split_rows: dict[str, dict[str, list[dict[str, Any]]]],
+    family_to_split: dict[str, str],
+    episode_by_id: dict[str, dict[str, Any]],
+    target: ValidationTarget,
+) -> int:
+    errors = 0
+    episode_family = {
+        episode_id: str(episode.get("task_family") or "unknown")
+        for episode_id, episode in episode_by_id.items()
+    }
+    for artifact_name in DATASET_SPLIT_ARTIFACTS:
+        expected_total = len(rows_by_artifact.get(artifact_name, []))
+        actual_total = sum(len(split_rows[split_name][artifact_name]) for split_name in DATASET_SPLIT_NAMES)
+        if actual_total != expected_total:
+            target.errors.append(
+                f"dataset_splits split rows for {artifact_name} expected {expected_total}, got {actual_total}."
+            )
+            errors += 1
+    for split_name in DATASET_SPLIT_NAMES:
+        for artifact_name in DATASET_SPLIT_ARTIFACTS:
+            for row_index, row in enumerate(split_rows[split_name][artifact_name]):
+                expected_split = _expected_row_split(row, family_to_split, episode_family)
+                if expected_split != split_name:
+                    target.errors.append(
+                        f"splits/{split_name}/{artifact_name}.jsonl row {row_index + 1} belongs in {expected_split!r}."
+                    )
+                    errors += 1
+                if artifact_name in {"preferences", "dpo"}:
+                    errors += _validate_pair_row_split_locality(row, artifact_name, row_index, episode_family, family_to_split, target)
+    return errors
+
+
+def _validate_pair_row_split_locality(
+    row: dict[str, Any],
+    artifact_name: str,
+    row_index: int,
+    episode_family: dict[str, str],
+    family_to_split: dict[str, str],
+    target: ValidationTarget,
+) -> int:
+    chosen_id = row.get("chosen_episode_id")
+    rejected_id = row.get("rejected_episode_id")
+    if not isinstance(chosen_id, str) or not isinstance(rejected_id, str):
+        return 0
+    chosen_split = family_to_split.get(episode_family.get(chosen_id, ""))
+    rejected_split = family_to_split.get(episode_family.get(rejected_id, ""))
+    if chosen_split and rejected_split and chosen_split != rejected_split:
+        target.errors.append(
+            f"{artifact_name}[{row_index}] crosses dataset splits: chosen={chosen_split!r}, rejected={rejected_split!r}."
+        )
+        return 1
+    return 0
+
+
+def _expected_row_split(row: dict[str, Any], family_to_split: dict[str, str], episode_family: dict[str, str]) -> str:
+    family = row.get("task_family")
+    if isinstance(family, str) and family in family_to_split:
+        return family_to_split[family]
+    episode_id = row.get("episode_id")
+    if isinstance(episode_id, str):
+        return family_to_split.get(episode_family.get(episode_id, ""), "train")
+    for field_name in ("chosen_episode_id", "rejected_episode_id"):
+        candidate = row.get(field_name)
+        if isinstance(candidate, str):
+            split_name = family_to_split.get(episode_family.get(candidate, ""))
+            if split_name:
+                return split_name
+    return "train"
+
+
+def _cross_split_families(split_rows: dict[str, dict[str, list[dict[str, Any]]]]) -> list[str]:
+    family_splits: dict[str, set[str]] = {}
+    for split_name in DATASET_SPLIT_NAMES:
+        for episode in split_rows[split_name]["episodes"]:
+            family_splits.setdefault(str(episode.get("task_family") or "unknown"), set()).add(split_name)
+    return sorted(family for family, splits in family_splits.items() if len(splits) > 1)
+
+
+def _validate_dataset_split_counts(
+    value: Any,
+    target: ValidationTarget,
+    assignments: list[Any],
+    split_rows: dict[str, dict[str, list[dict[str, Any]]]],
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("dataset_splits.split_counts must be an object.")
+        return
+    for split_name in DATASET_SPLIT_NAMES:
+        split_count = value.get(split_name)
+        if not isinstance(split_count, dict):
+            target.errors.append(f"dataset_splits.split_counts.{split_name} must be an object.")
+            continue
+        expected_family_count = sum(
+            1 for assignment in assignments if isinstance(assignment, dict) and assignment.get("split") == split_name
+        )
+        expected_episode_count = len(split_rows[split_name]["episodes"])
+        if split_count.get("task_family_count") != expected_family_count:
+            target.errors.append(
+                f"dataset_splits.split_counts.{split_name}.task_family_count expected {expected_family_count}, got {split_count.get('task_family_count')!r}."
+            )
+        if split_count.get("episode_count") != expected_episode_count:
+            target.errors.append(
+                f"dataset_splits.split_counts.{split_name}.episode_count expected {expected_episode_count}, got {split_count.get('episode_count')!r}."
+            )
+        artifacts = split_count.get("artifacts")
+        if not isinstance(artifacts, dict):
+            target.errors.append(f"dataset_splits.split_counts.{split_name}.artifacts must be an object.")
+            continue
+        for artifact_name in DATASET_SPLIT_ARTIFACTS:
+            expected_artifact_count = len(split_rows[split_name][artifact_name])
+            if artifacts.get(artifact_name) != expected_artifact_count:
+                target.errors.append(
+                    f"dataset_splits.split_counts.{split_name}.artifacts.{artifact_name} expected {expected_artifact_count}, got {artifacts.get(artifact_name)!r}."
+                )
+
+
+def _validate_dataset_split_summary(
+    value: Any,
+    target: ValidationTarget,
+    family_to_split: dict[str, str],
+    episodes: list[dict[str, Any]],
+    split_rows: dict[str, dict[str, list[dict[str, Any]]]],
+    family_exclusive: bool,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("dataset_splits.summary must be an object.")
+        return
+    expected = {
+        "task_family_count": len(family_to_split),
+        "episode_count": len(episodes),
+        "train_episode_count": len(split_rows["train"]["episodes"]),
+        "validation_episode_count": len(split_rows["validation"]["episodes"]),
+        "test_episode_count": len(split_rows["test"]["episodes"]),
+        "family_exclusive": family_exclusive,
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"dataset_splits.summary.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
+
+
+def _validate_dataset_split_leakage(
+    value: Any,
+    target: ValidationTarget,
+    family_exclusive: bool,
+    cross_split_families: list[str],
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("dataset_splits.leakage_checks must be an object.")
+        return
+    if value.get("family_exclusive") != family_exclusive:
+        target.errors.append(
+            f"dataset_splits.leakage_checks.family_exclusive expected {family_exclusive!r}, got {value.get('family_exclusive')!r}."
+        )
+    if value.get("cross_split_task_families") != cross_split_families:
+        target.errors.append(
+            f"dataset_splits.leakage_checks.cross_split_task_families expected {cross_split_families!r}, got {value.get('cross_split_task_families')!r}."
+        )
 
 
 def _compare_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
@@ -2673,6 +2966,7 @@ def _validate_dataset_metrics(
     sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
+    dataset_splits: dict[str, Any] | None,
 ) -> None:
     _require_equal(metrics, "schema_version", RL_DATASET_METRICS_SCHEMA_VERSION, target, prefix="dataset_metrics.")
     artifact_counts = metrics.get("artifact_counts")
@@ -2762,6 +3056,13 @@ def _validate_dataset_metrics(
         )
     else:
         target.warnings.append("dataset_metrics.trace_signal is missing; rerun export-rl to refresh trace-signal metrics.")
+    if "dataset_splits" in metrics:
+        if not isinstance(metrics.get("dataset_splits"), dict):
+            target.errors.append("dataset_metrics.dataset_splits must be an object.")
+        elif dataset_splits is not None and metrics.get("dataset_splits") != dataset_splits.get("summary"):
+            target.errors.append("dataset_metrics.dataset_splits must match dataset_splits.summary.")
+    else:
+        target.warnings.append("dataset_metrics.dataset_splits is missing; rerun export-rl to refresh split metrics.")
     _validate_dataset_family_metrics(metrics.get("task_families"), target, episodes, step_rewards, failure_modes, sft, dpo, reward_model)
     _validate_quality_flags(metrics.get("quality_flags"), target)
     if "metadata" in metrics:
@@ -3028,6 +3329,7 @@ def _validate_dataset_card(path: Path, target: ValidationTarget) -> None:
         "## Summary",
         "## Source Fingerprints",
         "## Trace Signal",
+        "## Dataset Splits",
         "## Artifact Counts",
         "## Task Families",
         "## Quality Flags",

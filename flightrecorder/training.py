@@ -25,11 +25,16 @@ RL_SFT_SCHEMA_VERSION = "hfr.rl.sft.v1"
 RL_DPO_SCHEMA_VERSION = "hfr.rl.dpo.v1"
 RL_REWARD_MODEL_SCHEMA_VERSION = "hfr.rl.reward_model.v1"
 RL_DATASET_METRICS_SCHEMA_VERSION = "hfr.rl.dataset_metrics.v1"
+RL_DATASET_SPLITS_SCHEMA_VERSION = "hfr.rl.dataset_splits.v1"
 COMPARE_RL_MANIFEST_SCHEMA_VERSION = "hfr.compare_rl.manifest.v1"
 COMPARE_RL_PAIR_SCHEMA_VERSION = "hfr.compare_rl.pair.v1"
 COMPARE_RL_DPO_SCHEMA_VERSION = "hfr.compare_rl.dpo.v1"
 
 REWARD_SCALES = {"score", "binary", "signed"}
+DATASET_SPLIT_NAMES = ("train", "validation", "test")
+DATASET_SPLIT_RATIOS = {"train": 0.8, "validation": 0.1, "test": 0.1}
+DATASET_SPLIT_SEED = "hfr.dataset_split.v1"
+DATASET_SPLIT_ARTIFACTS = ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model")
 EVENT_INDEX_RE = re.compile(r"event #(\d+)")
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 
@@ -81,6 +86,17 @@ def export_rl_dataset(
     sft = _sft_records(episodes)
     dpo = _dpo_records(preferences)
     reward_model = _reward_model_records(episodes)
+    rows_by_artifact = {
+        "episodes": episodes,
+        "rewards": rewards,
+        "step_rewards": step_rewards,
+        "preferences": preferences,
+        "failure_modes": failure_modes,
+        "sft": sft,
+        "dpo": dpo,
+        "reward_model": reward_model,
+    }
+    dataset_splits, split_rows = _dataset_splits(rows_by_artifact)
     dataset_metrics = _dataset_metrics(
         episodes,
         rewards,
@@ -90,6 +106,7 @@ def export_rl_dataset(
         sft,
         dpo,
         reward_model,
+        dataset_splits,
         reward_scale,
         export_metadata,
     )
@@ -105,9 +122,13 @@ def export_rl_dataset(
         "dpo": target / "dpo.jsonl",
         "reward_model": target / "reward_model.jsonl",
         "dataset_metrics": target / "dataset_metrics.json",
+        "dataset_splits": target / "dataset_splits.json",
         "dataset_card": target / "DATASET_CARD.md",
         "manifest": target / "manifest.json",
     }
+    for split_name in DATASET_SPLIT_NAMES:
+        for artifact_name in DATASET_SPLIT_ARTIFACTS:
+            paths[f"{split_name}_{artifact_name}"] = target / "splits" / split_name / f"{artifact_name}.jsonl"
     _write_jsonl(paths["episodes"], episodes)
     _write_jsonl(paths["rewards"], rewards)
     _write_jsonl(paths["step_rewards"], step_rewards)
@@ -118,6 +139,10 @@ def export_rl_dataset(
     _write_jsonl(paths["dpo"], dpo)
     _write_jsonl(paths["reward_model"], reward_model)
     _write_json(paths["dataset_metrics"], dataset_metrics)
+    _write_json(paths["dataset_splits"], dataset_splits)
+    for split_name in DATASET_SPLIT_NAMES:
+        for artifact_name in DATASET_SPLIT_ARTIFACTS:
+            _write_jsonl(paths[f"{split_name}_{artifact_name}"], split_rows[split_name][artifact_name])
 
     manifest = {
         "schema_version": RL_MANIFEST_SCHEMA_VERSION,
@@ -138,6 +163,7 @@ def export_rl_dataset(
         "reward_model_count": len(reward_model),
         "quality_flag_count": len(dataset_metrics.get("quality_flags", [])),
         "source_fingerprint_coverage": dataset_metrics.get("source_fingerprint_coverage"),
+        "dataset_splits": dataset_splits["summary"],
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "notes": [
@@ -148,6 +174,7 @@ def export_rl_dataset(
             "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
             "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
             "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
+            "dataset_splits.json and splits/<split>/*.jsonl partition rows by task family to reduce train/eval leakage.",
             "episodes.jsonl includes source_lineage and source_fingerprints when the originating run emitted artifact_lineage.json.",
             "Reward labels are deterministic scenario-policy judgments and can be reward-hacked if scenarios are weak.",
         ],
@@ -982,6 +1009,132 @@ def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]
     return rows
 
 
+def _dataset_splits(rows_by_artifact: dict[str, list[dict[str, Any]]]) -> tuple[dict[str, Any], dict[str, dict[str, list[dict[str, Any]]]]]:
+    episodes = rows_by_artifact.get("episodes", [])
+    family_to_split = _family_split_assignments(episodes)
+    episode_family = {
+        str(episode.get("episode_id") or ""): str(episode.get("task_family") or "unknown")
+        for episode in episodes
+        if isinstance(episode.get("episode_id"), str)
+    }
+    split_rows: dict[str, dict[str, list[dict[str, Any]]]] = {
+        split_name: {artifact_name: [] for artifact_name in DATASET_SPLIT_ARTIFACTS}
+        for split_name in DATASET_SPLIT_NAMES
+    }
+    for artifact_name in DATASET_SPLIT_ARTIFACTS:
+        for row in rows_by_artifact.get(artifact_name, []):
+            split_name = _row_split(row, family_to_split, episode_family)
+            split_rows[split_name][artifact_name].append(row)
+
+    family_episode_ids: dict[str, list[str]] = {}
+    family_scenario_ids: dict[str, set[str]] = {}
+    for episode in episodes:
+        family = str(episode.get("task_family") or "unknown")
+        family_episode_ids.setdefault(family, []).append(str(episode.get("episode_id") or ""))
+        family_scenario_ids.setdefault(family, set()).add(str(episode.get("scenario_id") or ""))
+    assignments = [
+        {
+            "task_family": family,
+            "split": family_to_split[family],
+            "episode_count": len(family_episode_ids.get(family, [])),
+            "episode_ids": sorted(family_episode_ids.get(family, [])),
+            "scenario_ids": sorted(family_scenario_ids.get(family, set())),
+        }
+        for family in sorted(family_to_split)
+    ]
+    split_counts = {
+        split_name: {
+            "task_family_count": sum(1 for item in assignments if item["split"] == split_name),
+            "episode_count": len(split_rows[split_name]["episodes"]),
+            "artifacts": {artifact_name: len(split_rows[split_name][artifact_name]) for artifact_name in DATASET_SPLIT_ARTIFACTS},
+        }
+        for split_name in DATASET_SPLIT_NAMES
+    }
+    family_splits: dict[str, set[str]] = {}
+    for split_name in DATASET_SPLIT_NAMES:
+        for episode in split_rows[split_name]["episodes"]:
+            family_splits.setdefault(str(episode.get("task_family") or "unknown"), set()).add(split_name)
+    cross_split_families = sorted(family for family, splits in family_splits.items() if len(splits) > 1)
+    manifest = {
+        "schema_version": RL_DATASET_SPLITS_SCHEMA_VERSION,
+        "strategy": "task_family_hash",
+        "seed": DATASET_SPLIT_SEED,
+        "ratios": dict(DATASET_SPLIT_RATIOS),
+        "split_names": list(DATASET_SPLIT_NAMES),
+        "artifact_names": list(DATASET_SPLIT_ARTIFACTS),
+        "summary": {
+            "task_family_count": len(family_to_split),
+            "episode_count": len(episodes),
+            "train_episode_count": split_counts["train"]["episode_count"],
+            "validation_episode_count": split_counts["validation"]["episode_count"],
+            "test_episode_count": split_counts["test"]["episode_count"],
+            "family_exclusive": not cross_split_families,
+        },
+        "split_counts": split_counts,
+        "assignments": assignments,
+        "leakage_checks": {
+            "family_exclusive": not cross_split_families,
+            "cross_split_task_families": cross_split_families,
+        },
+        "notes": [
+            "Splits are assigned by task_family, not individual episode, to reduce train/eval leakage.",
+            "Small datasets may have empty validation or test splits; use dataset_metrics.quality_flags before training.",
+        ],
+    }
+    return manifest, split_rows
+
+
+def _family_split_assignments(episodes: list[dict[str, Any]]) -> dict[str, str]:
+    families = sorted({str(episode.get("task_family") or "unknown") for episode in episodes})
+    if not families:
+        return {}
+    ordered = sorted(families, key=lambda family: (_split_hash(family), family))
+    counts = _split_family_counts(len(ordered))
+    assignments: dict[str, str] = {}
+    cursor = 0
+    for split_name in DATASET_SPLIT_NAMES:
+        for family in ordered[cursor : cursor + counts[split_name]]:
+            assignments[family] = split_name
+        cursor += counts[split_name]
+    for family in ordered:
+        assignments.setdefault(family, "train")
+    return assignments
+
+
+def _split_family_counts(family_count: int) -> dict[str, int]:
+    if family_count <= 0:
+        return {split_name: 0 for split_name in DATASET_SPLIT_NAMES}
+    if family_count < len(DATASET_SPLIT_NAMES):
+        return {"train": family_count, "validation": 0, "test": 0}
+    validation_count = max(1, round(family_count * DATASET_SPLIT_RATIOS["validation"]))
+    test_count = max(1, round(family_count * DATASET_SPLIT_RATIOS["test"]))
+    if validation_count + test_count >= family_count:
+        overflow = validation_count + test_count - family_count + 1
+        test_count = max(0, test_count - overflow)
+    train_count = family_count - validation_count - test_count
+    return {"train": train_count, "validation": validation_count, "test": test_count}
+
+
+def _split_hash(value: str) -> str:
+    return hashlib.sha256(f"{DATASET_SPLIT_SEED}:{value}".encode("utf-8")).hexdigest()
+
+
+def _row_split(row: dict[str, Any], family_to_split: dict[str, str], episode_family: dict[str, str]) -> str:
+    family = row.get("task_family")
+    if isinstance(family, str) and family in family_to_split:
+        return family_to_split[family]
+    episode_id = row.get("episode_id")
+    if isinstance(episode_id, str):
+        return family_to_split.get(episode_family.get(episode_id, ""), "train")
+    for field_name in ("chosen_episode_id", "rejected_episode_id"):
+        candidate = row.get(field_name)
+        if isinstance(candidate, str):
+            split_name = family_to_split.get(episode_family.get(candidate, ""))
+            if split_name:
+                return split_name
+    return "train"
+
+
 def _dataset_metrics(
     episodes: list[dict[str, Any]],
     rewards: list[dict[str, Any]],
@@ -991,6 +1144,7 @@ def _dataset_metrics(
     sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
+    dataset_splits: dict[str, Any],
     reward_scale: str,
     metadata: dict[str, str],
 ) -> dict[str, Any]:
@@ -1026,10 +1180,11 @@ def _dataset_metrics(
         "trainer_view_source_fingerprint_coverage": _trainer_view_source_fingerprint_coverage(sft, dpo, reward_model),
         "task_completion": _task_completion_metrics(episodes),
         "trace_signal": _trace_signal_metrics(episodes),
+        "dataset_splits": dataset_splits.get("summary", {}),
         "failed_rule_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "failed_rules")),
         "critical_failure_counts": _count_rows(rule_id for episode in episodes for rule_id in _outcome_string_list(episode, "critical_failures")),
         "task_families": _dataset_family_metrics(episodes, step_rewards, failure_modes, sft, dpo, reward_model),
-        "quality_flags": _quality_flags(episodes, step_rewards, preferences, sft, dpo, reward_model),
+        "quality_flags": _quality_flags(episodes, step_rewards, preferences, sft, dpo, reward_model, dataset_splits),
         "recommended_checks": [
             "Review scenario policies before treating labels as training rewards.",
             "Gate trace_signal before training so low-observability episodes do not become weak reward data.",
@@ -1178,6 +1333,7 @@ def _quality_flags(
     sft: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
+    dataset_splits: dict[str, Any],
 ) -> list[dict[str, str]]:
     flags: list[dict[str, str]] = []
     passed = sum(1 for episode in episodes if isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
@@ -1219,6 +1375,13 @@ def _quality_flags(
         )
     if len(families) == 1:
         flags.append(_quality_flag("single_task_family", "info", "Only one task family is represented; broaden coverage before generalizing."))
+    split_summary = dataset_splits.get("summary") if isinstance(dataset_splits.get("summary"), dict) else {}
+    if episodes and split_summary.get("family_exclusive") is False:
+        flags.append(_quality_flag("split_family_leakage", "error", "Dataset split assignments place a task family in multiple splits."))
+    if episodes and _int_value(split_summary.get("validation_episode_count")) == 0:
+        flags.append(_quality_flag("empty_validation_split", "warning", "Validation split is empty; add more task families before relying on validation metrics."))
+    if episodes and _int_value(split_summary.get("test_episode_count")) == 0:
+        flags.append(_quality_flag("empty_test_split", "warning", "Test split is empty; add more task families before relying on held-out test metrics."))
     return flags
 
 
@@ -1276,6 +1439,19 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
             f"- Final-answer rate: {trace_signal.get('final_answer_rate', 0.0)}",
             f"- Tool/API episode rate: {trace_signal.get('tool_or_api_episode_rate', 0.0)}",
             f"- Trace risk count: {trace_signal.get('risk_count', 0)}",
+            "",
+        ]
+    )
+    dataset_splits = metrics.get("dataset_splits") if isinstance(metrics.get("dataset_splits"), dict) else {}
+    rows.extend(
+        [
+            "## Dataset Splits",
+            "",
+            f"- Task families: {dataset_splits.get('task_family_count', 0)}",
+            f"- Family exclusive: {dataset_splits.get('family_exclusive', False)}",
+            f"- Train episodes: {dataset_splits.get('train_episode_count', 0)}",
+            f"- Validation episodes: {dataset_splits.get('validation_episode_count', 0)}",
+            f"- Test episodes: {dataset_splits.get('test_episode_count', 0)}",
             "",
         ]
     )

@@ -168,7 +168,9 @@ The generated training export gives future model-improvement loops:
 - two preference pairs choosing observable successful traces over failed traces
   in the email-completion and prompt-injection families,
 - trainer-ready SFT, DPO, and reward-model views over the canonical evidence,
-- nine failed-rule failure-mode records across the four failing traces,
+- ten failed-rule failure-mode records across the four failing traces,
+- deterministic task-family train/validation/test split files that reduce
+  train/eval leakage for downstream trainers,
 - dataset-level metrics and a dataset card summarizing coverage, quality flags,
   and training-readiness boundaries,
 - structured evidence refs for event/final-answer/episode attribution,
@@ -411,8 +413,8 @@ Demo evidence:
 - `flightrecorder check-scenarios` emits machine-readable scenario contract
   validation before scenarios are used as benchmark inputs.
 - `flightrecorder export-rl` emits episode, reward, step-reward, preference,
-  SFT, DPO, reward-model, failure-mode, dataset-metrics, dataset-card,
-  curriculum, and manifest artifacts for future training loops.
+  SFT, DPO, reward-model, failure-mode, dataset-split, dataset-metrics,
+  dataset-card, curriculum, and manifest artifacts for future training loops.
 - `--metadata key=value` labels suite and training-export artifacts with the
   candidate/config identity needed for honest before/after comparisons.
 - `flightrecorder validate --strict` confirms generated artifacts are
