@@ -1,0 +1,136 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/reviewed_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Manifest for apply-review reviewed trainer handoffs.",
+  "properties": {
+    "artifact_fingerprints": {
+      "additionalProperties": {
+        "$ref": "#/$defs/fileFingerprint"
+      },
+      "type": "object"
+    },
+    "dpo_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "label_counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "labels_artifact": {
+      "$ref": "#/$defs/fileFingerprint"
+    },
+    "labels_path": {
+      "type": "string"
+    },
+    "max_pairs_per_family": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "outputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "preference_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reviewed_label_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reward_model_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "hfr.reviewed.manifest.v1"
+    },
+    "sft_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_review_artifacts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/fileFingerprint"
+      },
+      "type": "object"
+    },
+    "source_review_export": {
+      "type": "string"
+    },
+    "task_families": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "source_review_export",
+    "labels_path",
+    "output_dir",
+    "max_pairs_per_family",
+    "reviewed_label_count",
+    "sft_count",
+    "reward_model_count",
+    "preference_count",
+    "dpo_count",
+    "label_counts",
+    "task_families",
+    "outputs",
+    "source_review_artifacts",
+    "labels_artifact",
+    "artifact_fingerprints"
+  ],
+  "title": "Hermes Flight Recorder Reviewed Manifest",
+  "type": "object",
+  "$defs": {
+    "fileFingerprint": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "const": true
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "size_bytes",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/review_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Manifest for export-review human review queues.",
+  "properties": {
+    "artifact_fingerprints": {
+      "additionalProperties": {
+        "$ref": "#/$defs/fileFingerprint"
+      },
+      "type": "object"
+    },
+    "failed_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "item_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "label_options": {
+      "items": {
+        "enum": [
+          "accept",
+          "reject",
+          "needs_review",
+          "unsafe",
+          "incomplete"
+        ]
+      },
+      "type": "array"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "only_failed": {
+      "type": "boolean"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "outputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "passed_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "hfr.review.manifest.v1"
+    },
+    "source_runs_dir": {
+      "type": "string"
+    },
+    "task_families": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "source_runs_dir",
+    "output_dir",
+    "only_failed",
+    "item_count",
+    "passed_count",
+    "failed_count",
+    "label_options",
+    "task_families",
+    "outputs",
+    "artifact_fingerprints"
+  ],
+  "title": "Hermes Flight Recorder Review Manifest",
+  "type": "object",
+  "$defs": {
+    "fileFingerprint": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "const": true
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "size_bytes",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/training_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Manifest for export-rl training handoffs.",
+  "properties": {
+    "artifact_fingerprints": {
+      "additionalProperties": {
+        "$ref": "#/$defs/fileFingerprint"
+      },
+      "type": "object"
+    },
+    "dataset_metrics": {
+      "type": "string"
+    },
+    "dpo_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "episode_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "failure_mode_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "max_pairs_per_family": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "min_score_gap": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "outputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "preference_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "quality_flag_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reward_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reward_model_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reward_scale": {
+      "enum": [
+        "score",
+        "binary",
+        "signed"
+      ]
+    },
+    "run_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "hfr.rl.manifest.v1"
+    },
+    "sft_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_fingerprint_coverage": {
+      "type": "object"
+    },
+    "source_runs_dir": {
+      "type": "string"
+    },
+    "step_reward_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "task_families": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "source_runs_dir",
+    "output_dir",
+    "reward_scale",
+    "min_score_gap",
+    "max_pairs_per_family",
+    "run_count",
+    "episode_count",
+    "reward_count",
+    "step_reward_count",
+    "preference_count",
+    "failure_mode_count",
+    "sft_count",
+    "dpo_count",
+    "reward_model_count",
+    "quality_flag_count",
+    "task_families",
+    "outputs",
+    "artifact_fingerprints"
+  ],
+  "title": "Hermes Flight Recorder Training Manifest",
+  "type": "object",
+  "$defs": {
+    "fileFingerprint": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "const": true
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "size_bytes",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  }
+}

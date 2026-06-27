@@ -1,0 +1,77 @@
+{
+  "schema_version": "hfr.schema_catalog.v1",
+  "schemas": [
+    {
+      "artifact": "scenario",
+      "artifact_schema_version": "hfr.scenario.contract.v1",
+      "description": "Scenario contract accepted by run, score, and run-suite.",
+      "filename": "scenario.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/scenario.v1.schema.json",
+      "name": "scenario"
+    },
+    {
+      "artifact": "normalized_trace",
+      "artifact_schema_version": "hfr.trace.v1",
+      "description": "Canonical normalized trace emitted as normalized_trace.json.",
+      "filename": "trace.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trace.v1.schema.json",
+      "name": "trace"
+    },
+    {
+      "artifact": "scorecard",
+      "artifact_schema_version": "hfr.scorecard.v1",
+      "description": "Deterministic scorecard emitted as scorecard.json.",
+      "filename": "scorecard.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/scorecard.v1.schema.json",
+      "name": "scorecard"
+    },
+    {
+      "artifact": "task_completion",
+      "artifact_schema_version": "hfr.task_completion.v1",
+      "description": "Task-completion verdict embedded in scorecards and emitted as task_completion.json.",
+      "filename": "task_completion.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/task_completion.v1.schema.json",
+      "name": "task_completion"
+    },
+    {
+      "artifact": "evidence_bundle",
+      "artifact_schema_version": "hfr.evidence_bundle.v1",
+      "description": "Evidence handoff manifest emitted by evidence-bundle.",
+      "filename": "evidence_bundle.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/evidence_bundle.v1.schema.json",
+      "name": "evidence_bundle"
+    },
+    {
+      "artifact": "training_manifest",
+      "artifact_schema_version": "hfr.rl.manifest.v1",
+      "description": "Manifest for export-rl training handoffs.",
+      "filename": "training_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/training_manifest.v1.schema.json",
+      "name": "training_manifest"
+    },
+    {
+      "artifact": "compare_rl_manifest",
+      "artifact_schema_version": "hfr.compare_rl.manifest.v1",
+      "description": "Manifest for export-compare-rl improvement-pair handoffs.",
+      "filename": "compare_rl_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/compare_rl_manifest.v1.schema.json",
+      "name": "compare_rl_manifest"
+    },
+    {
+      "artifact": "review_manifest",
+      "artifact_schema_version": "hfr.review.manifest.v1",
+      "description": "Manifest for export-review human review queues.",
+      "filename": "review_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/review_manifest.v1.schema.json",
+      "name": "review_manifest"
+    },
+    {
+      "artifact": "reviewed_manifest",
+      "artifact_schema_version": "hfr.reviewed.manifest.v1",
+      "description": "Manifest for apply-review reviewed trainer handoffs.",
+      "filename": "reviewed_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_manifest.v1.schema.json",
+      "name": "reviewed_manifest"
+    }
+  ]
+}

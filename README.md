@@ -80,6 +80,26 @@ Editable development:
 python -m pip install -e . --no-deps
 ```
 
+## Artifact Schemas
+
+Flight Recorder ships machine-readable JSON Schema contracts for the public
+artifacts that downstream eval, review, CI, and training loops are expected to
+consume. The schemas are bundled with the Python package, so they can be
+exported from an installed copy of the tool:
+
+```bash
+flightrecorder schemas
+flightrecorder schemas --name trace --out trace.v1.schema.json
+flightrecorder schemas --write-dir artifact_schemas
+```
+
+The bundled catalog currently covers scenarios, normalized traces, scorecards,
+task-completion verdicts, evidence bundles, training manifests, compare-RL
+manifests, review manifests, and reviewed-export manifests. These schemas are
+compatibility contracts for artifact shape; use `flightrecorder validate` for
+deeper integrity checks such as count reconciliation, evidence links, replay
+hashes, symlink rejection, and artifact-fingerprint verification.
+
 ## CLI
 
 ```bash

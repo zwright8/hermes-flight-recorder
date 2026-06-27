@@ -35,5 +35,8 @@ hermes-flight-recorder = "flightrecorder.cli:main"
 [tool.setuptools.packages.find]
 include = ["flightrecorder*"]
 
+[tool.setuptools.package-data]
+flightrecorder = ["schemas/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

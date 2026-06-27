@@ -1,0 +1,181 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/evidence_bundle.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Evidence handoff manifest emitted by evidence-bundle.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/artifact"
+      },
+      "type": "object"
+    },
+    "bundle_path": {
+      "type": "string"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "next_actions": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "recommendation": {
+          "enum": [
+            "promote_handoff",
+            "block_handoff"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.evidence_bundle.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "bundle_path",
+    "passed",
+    "readiness",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "artifacts",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Evidence Bundle",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "entry_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory",
+            "missing"
+          ]
+        },
+        "passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "exists"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    }
+  }
+}

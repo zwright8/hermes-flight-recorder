@@ -1,0 +1,176 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/compare_rl_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Manifest for export-compare-rl improvement-pair handoffs.",
+  "properties": {
+    "artifact_fingerprints": {
+      "additionalProperties": {
+        "$ref": "#/$defs/fileFingerprint"
+      },
+      "type": "object"
+    },
+    "baseline_run_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "baseline_runs_dir": {
+      "type": "string"
+    },
+    "baseline_win_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "candidate_run_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "candidate_runs_dir": {
+      "type": "string"
+    },
+    "candidate_win_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "contract_drift_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "contract_scope": {
+      "enum": [
+        "scenario",
+        "scenario-and-trace"
+      ]
+    },
+    "dpo_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "min_score_gap": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "missing_in_candidate": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "new_in_candidate": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "outputs": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "pair_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "paired_scenario_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reward_scale": {
+      "enum": [
+        "score",
+        "binary",
+        "signed"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.compare_rl.manifest.v1"
+    },
+    "skipped_pair_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "skipped_pairs": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "task_completion_improvement_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "task_completion_regression_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "unverified_contract_count": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "baseline_runs_dir",
+    "candidate_runs_dir",
+    "output_dir",
+    "reward_scale",
+    "min_score_gap",
+    "contract_scope",
+    "baseline_run_count",
+    "candidate_run_count",
+    "paired_scenario_count",
+    "pair_count",
+    "dpo_count",
+    "candidate_win_count",
+    "baseline_win_count",
+    "skipped_pair_count",
+    "missing_in_candidate",
+    "new_in_candidate",
+    "outputs",
+    "artifact_fingerprints"
+  ],
+  "title": "Hermes Flight Recorder Compare RL Manifest",
+  "type": "object",
+  "$defs": {
+    "fileFingerprint": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "const": true
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "size_bytes",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  }
+}

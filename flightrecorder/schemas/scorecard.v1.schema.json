@@ -1,0 +1,191 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/scorecard.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Deterministic scorecard emitted as scorecard.json.",
+  "properties": {
+    "critical_failures": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "pass_threshold": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/rule"
+      },
+      "type": "array"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "scenario_title": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.scorecard.v1"
+    },
+    "score": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "task_completion": {
+      "$ref": "#/$defs/taskCompletion"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "scenario_title",
+    "score",
+    "pass_threshold",
+    "passed",
+    "critical_failures",
+    "task_completion",
+    "rules",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder Scorecard",
+  "type": "object",
+  "$defs": {
+    "evidenceRef": {
+      "additionalProperties": true,
+      "properties": {
+        "event_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "rule": {
+      "additionalProperties": true,
+      "properties": {
+        "critical": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "penalty": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "passed",
+        "critical",
+        "penalty",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "taskCompletion": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "checks": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "failed_check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "passed_check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "hfr.task_completion.v1"
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "incomplete",
+            "not_configured"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "task_evidence_configured": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schema_version",
+        "passed",
+        "status",
+        "task_evidence_configured",
+        "required_check_count",
+        "passed_check_count",
+        "failed_check_count",
+        "blocking_rule_ids",
+        "checks",
+        "summary"
+      ],
+      "type": "object"
+    }
+  }
+}

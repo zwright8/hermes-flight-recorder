@@ -64,6 +64,7 @@ from .reviewed_gate import (
     load_reviewed_gate_policy,
 )
 from .schema import ScenarioError, load_scenario, resolve_trace_path
+from .schema_registry import SchemaRegistryError, list_schema_records, load_schema, write_schema_bundle
 from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
 from .scenario_quality import build_scenario_quality
@@ -121,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionLedgerError,
         PromotionArchiveError,
         ReplayError,
+        SchemaRegistryError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -664,6 +666,28 @@ def cmd_validate(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0 if summary["passed"] else 1
+
+
+def cmd_schemas(args: argparse.Namespace) -> int:
+    if args.write_dir:
+        written = write_schema_bundle(args.write_dir, args.name or None, force=args.force)
+        print(f"wrote {len(written)} schema file(s) to {args.write_dir}")
+        return 0
+    if args.out:
+        if len(args.name) != 1:
+            raise SchemaRegistryError("--out requires exactly one --name")
+        _write_json(Path(args.out), load_schema(args.name[0]))
+        print(f"wrote {args.out}")
+        return 0
+    if args.name:
+        if len(args.name) != 1:
+            raise SchemaRegistryError("printing to stdout requires exactly one --name")
+        print(json.dumps(load_schema(args.name[0]), indent=2, sort_keys=True))
+        return 0
+
+    for record in list_schema_records():
+        print(f"{record['name']}\t{record['artifact_schema_version']}\t{record['filename']}")
+    return 0
 
 
 def cmd_evidence_coverage(args: argparse.Namespace) -> int:
@@ -1485,6 +1509,13 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
+
+    schemas = subparsers.add_parser("schemas", help="List or export bundled JSON Schema contracts")
+    schemas.add_argument("--name", action="append", default=[], help="Schema name, filename, schema version, or $id; may be repeated with --write-dir")
+    schemas.add_argument("--out", help="Write exactly one selected schema to this JSON file")
+    schemas.add_argument("--write-dir", help="Write the selected schemas, or all schemas, plus catalog manifest to this directory")
+    schemas.add_argument("--force", action="store_true", help="Overwrite existing files when using --write-dir")
+    schemas.set_defaults(func=cmd_schemas)
 
     evidence_coverage = subparsers.add_parser(
         "evidence-coverage",

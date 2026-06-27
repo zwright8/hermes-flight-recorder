@@ -1,0 +1,285 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/scenario.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Scenario contract accepted by Hermes Flight Recorder.",
+  "properties": {
+    "assertions": {
+      "additionalProperties": true,
+      "properties": {
+        "final_contains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "final_not_contains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "required_action_sequences": {
+          "items": {
+            "$ref": "#/$defs/requiredSequence"
+          },
+          "type": "array"
+        },
+        "required_actions": {
+          "items": {
+            "$ref": "#/$defs/actionMatcher"
+          },
+          "type": "array"
+        },
+        "required_event_counts": {
+          "items": {
+            "$ref": "#/$defs/countMatcher"
+          },
+          "type": "array"
+        },
+        "required_evidence": {
+          "items": {
+            "$ref": "#/$defs/evidenceMatcher"
+          },
+          "type": "array"
+        },
+        "required_state": {
+          "items": {
+            "$ref": "#/$defs/stateMatcher"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "forbidden_command_patterns": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "forbidden_tool_names": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "forbidden_url_patterns": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "max_api_calls": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "max_subagent_depth": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "max_subagents": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "max_tool_calls": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "secret_patterns": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "type": "object"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "scoring": {
+      "additionalProperties": true,
+      "properties": {
+        "pass_threshold": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "state": {
+      "additionalProperties": true,
+      "properties": {
+        "format": {
+          "const": "json"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "trace": {
+      "additionalProperties": true,
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "prompt",
+    "policy"
+  ],
+  "title": "Hermes Flight Recorder Scenario",
+  "type": "object",
+  "$defs": {
+    "actionMatcher": {
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "field_contains": {
+          "type": "object"
+        },
+        "field_equals": {
+          "type": "object"
+        },
+        "field_matches": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "tool_name": {
+          "type": "string"
+        },
+        "where": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "countMatcher": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/actionMatcher"
+        },
+        {
+          "properties": {
+            "exact_count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_count": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "min_count": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        }
+      ]
+    },
+    "evidenceMatcher": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/actionMatcher"
+        },
+        {
+          "properties": {
+            "contains": {
+              "type": "string"
+            },
+            "equals": true,
+            "field": {
+              "type": "string"
+            },
+            "matches": {
+              "type": "string"
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "event_matches",
+                "no_event_matches",
+                "final_matches",
+                "no_final_matches"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "nullableNonNegativeInteger": {
+      "oneOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requiredSequence": {
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/actionMatcher"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "stateMatcher": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/evidenceMatcher"
+        }
+      ]
+    },
+    "stringArray": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  }
+}

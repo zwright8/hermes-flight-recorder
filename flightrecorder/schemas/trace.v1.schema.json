@@ -1,0 +1,112 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trace.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Canonical normalized trace emitted as normalized_trace.json.",
+  "properties": {
+    "events": {
+      "items": {
+        "$ref": "#/$defs/event"
+      },
+      "type": "array"
+    },
+    "final_answer": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.trace.v1"
+    },
+    "session": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "source_format": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_format",
+        "model"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "session",
+    "events",
+    "final_answer"
+  ],
+  "title": "Hermes Flight Recorder Normalized Trace",
+  "type": "object",
+  "$defs": {
+    "event": {
+      "additionalProperties": true,
+      "properties": {
+        "args": {
+          "type": "object"
+        },
+        "order": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "parent_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result": true,
+        "session_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_call_id": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "tool_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "session_id"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/task_completion.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Task-completion verdict embedded in scorecards and emitted as task_completion.json.",
+  "properties": {
+    "blocking_rule_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "evidence_refs": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "missing_evidence_refs": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "passed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "required_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "hfr.task_completion.v1"
+    },
+    "status": {
+      "enum": [
+        "complete",
+        "incomplete",
+        "not_configured"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "task_evidence_configured": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "status",
+    "task_evidence_configured",
+    "required_check_count",
+    "passed_check_count",
+    "failed_check_count",
+    "blocking_rule_ids",
+    "checks",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder Task Completion",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "evidence_ref": {
+          "type": "object"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "rule_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "rule_id",
+        "description",
+        "evidence"
+      ],
+      "type": "object"
+    }
+  }
+}

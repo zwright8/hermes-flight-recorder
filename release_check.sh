@@ -22,6 +22,13 @@ python -m unittest discover
 python -m compileall -q flightrecorder scripts tests
 python scripts/live_hermes_smoke.py --help >/dev/null
 assert_help_contains "--evidence-handoff" python -m flightrecorder run-suite --help
+python -m flightrecorder schemas --help >/dev/null
+python -m flightrecorder schemas --name trace >/dev/null
+rm -rf schema_contracts_check
+python -m flightrecorder schemas --write-dir schema_contracts_check >/dev/null
+test -f schema_contracts_check/manifest.json
+test -f schema_contracts_check/trace.v1.schema.json
+rm -rf schema_contracts_check
 python -m flightrecorder repair-queue --help >/dev/null
 ./demo.sh
 rm -rf replay_runs
@@ -1028,6 +1035,9 @@ import flightrecorder
 assert flightrecorder.__version__ == importlib.metadata.version("hermes-flight-recorder")
 PY
 "$VENV_DIR/bin/flightrecorder" --help >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder schemas --name scorecard \
+  --out "$INSTALL_DIR/scorecard.schema.json" >/dev/null
+test -f "$INSTALL_DIR/scorecard.schema.json"
 "$VENV_DIR/bin/python" -m flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --out "$INSTALL_DIR/normalized.json" >/dev/null

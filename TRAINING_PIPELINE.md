@@ -8,6 +8,20 @@ It is not a trainer. It does not generate rollouts, update model weights, or
 guarantee that the reward function is impossible to game. It gives a future
 trainer a clean, deterministic data contract grounded in observed traces.
 
+Public artifact schemas are bundled with the package for downstream systems
+that need stable contracts before wiring Flight Recorder into review or
+training jobs:
+
+```bash
+flightrecorder schemas --write-dir artifact_schemas
+flightrecorder schemas --name training_manifest --out training_manifest.schema.json
+```
+
+Treat those JSON Schemas as shape contracts. Use `flightrecorder validate
+--strict` and the relevant gates for stronger readiness checks over artifact
+hashes, evidence references, replay lineage, reviewed labels, and trainer
+preflight handoffs.
+
 ## Export
 
 Generate normal Flight Recorder runs first:
