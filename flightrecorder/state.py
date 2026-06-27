@@ -14,12 +14,28 @@ class StateSnapshotError(ValueError):
 
 
 def resolve_state_snapshot_path(scenario: dict[str, Any], override: str | Path | None = None) -> Path | None:
-    """Resolve a scenario state snapshot path, if one is configured."""
+    """Resolve a scenario after/post-run state snapshot path, if configured."""
+    return _resolve_state_path(scenario, override, ("path", "after_path"))
+
+
+def resolve_before_state_snapshot_path(scenario: dict[str, Any], override: str | Path | None = None) -> Path | None:
+    """Resolve a scenario before/pre-run state snapshot path, if configured."""
+    return _resolve_state_path(scenario, override, ("before_path",))
+
+
+def _resolve_state_path(
+    scenario: dict[str, Any],
+    override: str | Path | None,
+    keys: tuple[str, ...],
+) -> Path | None:
     raw_path: str | Path | None = override
     if raw_path is None:
         state = scenario.get("state")
-        if isinstance(state, dict) and state.get("path"):
-            raw_path = str(state["path"])
+        if isinstance(state, dict):
+            for key in keys:
+                if state.get(key):
+                    raw_path = str(state[key])
+                    break
     if raw_path is None:
         return None
     path = Path(raw_path)

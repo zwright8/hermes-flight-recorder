@@ -179,10 +179,12 @@ class ValidationTests(unittest.TestCase):
             scenario = json.loads((ROOT / "scenarios" / "email_reply_completion_good.json").read_text(encoding="utf-8"))
             scenario["trace"]["path"] = str(ROOT / "fixtures" / "email_reply_completion_good.observer.jsonl")
             scenario["state"]["path"] = str(state_path)
+            scenario["state"].pop("before_path", None)
             scenario["assertions"]["required_state"][0]["where"] = {
                 "observations.gmail.threads.email-123.sent_replies.0.message_id": {"matches": "^msg-email-123-"},
                 "observations.gmail.threads.email-123.sent_replies.0.status": "sent",
             }
+            scenario["assertions"]["required_state_transitions"] = []
             scenario_path.write_text(json.dumps(scenario), encoding="utf-8")
             run_cli(["run", "--scenario", str(scenario_path), "--out", str(run_dir), "--fail-on-score"])
             artifact.write_text("changed", encoding="utf-8")

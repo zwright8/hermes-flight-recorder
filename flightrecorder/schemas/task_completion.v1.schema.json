@@ -50,7 +50,7 @@
       "enum": [
         "complete",
         "incomplete",
-        "not_configured"
+        "not_applicable"
       ]
     },
     "summary": {

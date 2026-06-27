@@ -460,10 +460,13 @@ train/validation/test files. This lets a training launcher reject stale,
 swapped, leaky, or partially copied export files before they reach a trainer.
 New scorecards also emit `task_completion`, a compact verdict over required
 evidence, required actions, ordered action sequences, event counts, and optional
-post-run state snapshots. Exported episodes, rewards, preferences, SFT rows, DPO
-rows, reward-model rows, and baseline/candidate comparison rows carry that
-verdict so training jobs can filter for evidence-backed completion instead of
-relying on final-answer text.
+post-run state snapshots. Scenarios can also define
+`required_state_transitions` over `state.before_path` and `state.path`/
+`state.after_path`, which proves that an external object changed from a known
+pre-run state to the required post-run state. Exported episodes, rewards,
+preferences, SFT rows, DPO rows, reward-model rows, and baseline/candidate
+comparison rows carry that verdict so training jobs can filter for
+evidence-backed completion instead of relying on final-answer text.
 Use `flightrecorder capture-state` when the post-run state starts as local
 artifacts, connector JSON, or explicit observed facts:
 
@@ -475,10 +478,12 @@ flightrecorder capture-state \
   --out runs/email_reply_completion_good.state.json
 ```
 
-Those snapshots can be supplied through scenario `state.path` or `run --state`.
-The resulting lineage records `source_state_snapshot`, and exported training
-rows keep the source fingerprint so future trainers can reject examples whose
-task-completion labels lack reproducible post-run state evidence.
+Post-run snapshots can be supplied through scenario `state.path` or
+`run --state`; pre-run snapshots can be supplied through `state.before_path` or
+`run --before-state`. The resulting lineage records `source_state_snapshot` and
+`source_before_state_snapshot`, and exported training rows keep those source
+fingerprints so future trainers can reject examples whose task-completion
+labels lack reproducible state evidence.
 Validate captured snapshots with `flightrecorder validate --state-snapshot
 <snapshot.json> --strict`; the validator checks the captured schema and
 recomputes file hashes when the captured paths are still available.

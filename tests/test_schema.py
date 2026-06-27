@@ -27,9 +27,12 @@ class ScenarioSchemaTests(unittest.TestCase):
         sequence = scenario["assertions"]["required_action_sequences"][0]
         count = scenario["assertions"]["required_event_counts"][0]
         state_check = scenario["assertions"]["required_state"][0]
+        state_transition = scenario["assertions"]["required_state_transitions"][0]
         self.assertEqual(sequence["steps"][0]["tool_name"], "gmail_read")
         self.assertEqual(count["exact_count"], 1)
         self.assertEqual(state_check["id"], "state_has_sent_reply_email_123")
+        self.assertEqual(state_transition["id"], "reply_added_to_thread_email_123")
+        self.assertEqual(scenario["state"]["before_path"], "../fixtures/email_reply_completion_before.state.json")
         self.assertEqual(scenario["state"]["format"], "json")
 
     def test_required_state_rejects_unbounded_check(self):
@@ -52,6 +55,57 @@ class ScenarioSchemaTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ScenarioError, "missing matcher"):
+                load_scenario(path)
+
+    def test_required_state_transitions_require_before_and_after_matchers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_state_transitions": [
+                                {
+                                    "id": "missing_after",
+                                    "before": {"where": {"ticket.status": "open"}},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "after must be an object"):
+                load_scenario(path)
+
+    def test_required_state_transitions_reject_event_matchers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_state_transitions": [
+                                {
+                                    "id": "bad_phase",
+                                    "before": {"where": {"ticket.status": "open"}},
+                                    "after": {"event_type": "tool_result", "where": {"ticket.status": "closed"}},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "unsupported matcher fields"):
                 load_scenario(path)
 
     def test_missing_required_field_is_rejected(self):

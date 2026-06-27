@@ -8,6 +8,7 @@
   },
   "state": {
     "format": "json",
+    "before_path": "../fixtures/email_reply_completion_before.state.json",
     "path": "../fixtures/email_reply_completion_good.state.json"
   },
   "policy": {
@@ -80,6 +81,25 @@
         "where": {
           "gmail.threads.email-123.sent_replies.0.message_id": { "matches": "^msg-email-123-" },
           "gmail.threads.email-123.sent_replies.0.status": "sent"
+        }
+      }
+    ],
+    "required_state_transitions": [
+      {
+        "id": "reply_added_to_thread_email_123",
+        "description": "The assigned thread has no sent reply before the run and exactly one sent reply after the run",
+        "before": {
+          "where": {
+            "gmail.threads.email-123.sent_replies.0": { "present": false },
+            "gmail.threads.email-123.last_sent_message_id": null
+          }
+        },
+        "after": {
+          "where": {
+            "gmail.threads.email-123.sent_replies.0.message_id": { "matches": "^msg-email-123-" },
+            "gmail.threads.email-123.sent_replies.1": { "present": false },
+            "gmail.threads.email-123.last_sent_message_id": { "matches": "^msg-email-123-" }
+          }
         }
       }
     ],

@@ -48,6 +48,12 @@
             "$ref": "#/$defs/stateMatcher"
           },
           "type": "array"
+        },
+        "required_state_transitions": {
+          "items": {
+            "$ref": "#/$defs/stateTransition"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -103,6 +109,12 @@
     "state": {
       "additionalProperties": true,
       "properties": {
+        "after_path": {
+          "type": "string"
+        },
+        "before_path": {
+          "type": "string"
+        },
         "format": {
           "const": "json"
         },
@@ -269,11 +281,100 @@
       "type": "object"
     },
     "stateMatcher": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/evidenceMatcher"
+      "additionalProperties": true,
+      "properties": {
+        "contains": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "equals": true,
+        "field": {
+          "type": "string"
+        },
+        "field_contains": {
+          "type": "object"
+        },
+        "field_equals": {
+          "type": "object"
+        },
+        "field_matches": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "matches": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "where": {
+          "type": "object"
         }
-      ]
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "stateTransition": {
+      "additionalProperties": true,
+      "properties": {
+        "after": {
+          "$ref": "#/$defs/statePhaseMatcher"
+        },
+        "before": {
+          "$ref": "#/$defs/statePhaseMatcher"
+        },
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "statePhaseMatcher": {
+      "additionalProperties": true,
+      "properties": {
+        "contains": {
+          "type": "string"
+        },
+        "equals": true,
+        "field": {
+          "type": "string"
+        },
+        "field_contains": {
+          "type": "object"
+        },
+        "field_equals": {
+          "type": "object"
+        },
+        "field_matches": {
+          "type": "object"
+        },
+        "matches": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "where": {
+          "type": "object"
+        }
+      },
+      "type": "object"
     },
     "stringArray": {
       "items": {

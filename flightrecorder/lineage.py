@@ -18,6 +18,7 @@ def write_run_lineage(
     trace: dict[str, Any],
     scorecard: dict[str, Any],
     source_trace_path: str | Path,
+    source_before_state_snapshot_path: str | Path | None = None,
     source_state_snapshot_path: str | Path | None = None,
     artifacts: dict[str, str | Path | None],
     out_path: str | Path,
@@ -29,6 +30,7 @@ def write_run_lineage(
         trace=trace,
         scorecard=scorecard,
         source_trace_path=source_trace_path,
+        source_before_state_snapshot_path=source_before_state_snapshot_path,
         source_state_snapshot_path=source_state_snapshot_path,
         artifacts=artifacts,
         preserve_paths=preserve_paths,
@@ -45,6 +47,7 @@ def build_run_lineage(
     trace: dict[str, Any],
     scorecard: dict[str, Any],
     source_trace_path: str | Path,
+    source_before_state_snapshot_path: str | Path | None = None,
     source_state_snapshot_path: str | Path | None = None,
     artifacts: dict[str, str | Path | None],
     preserve_paths: bool = False,
@@ -55,6 +58,10 @@ def build_run_lineage(
         _file_record("scenario", scenario_path, "input", preserve_paths=preserve_paths),
         _file_record("source_trace", source_trace_path, "input", preserve_paths=preserve_paths),
     ]
+    if source_before_state_snapshot_path is not None:
+        inputs.append(
+            _file_record("source_before_state_snapshot", source_before_state_snapshot_path, "input", preserve_paths=preserve_paths)
+        )
     if source_state_snapshot_path is not None:
         inputs.append(_file_record("source_state_snapshot", source_state_snapshot_path, "input", preserve_paths=preserve_paths))
     outputs = [
@@ -68,6 +75,7 @@ def build_run_lineage(
         artifacts=artifacts,
         scenario_path=scenario_path,
         source_trace_path=source_trace_path,
+        source_before_state_snapshot_path=source_before_state_snapshot_path,
         source_state_snapshot_path=source_state_snapshot_path,
         preserve_paths=preserve_paths,
     )
@@ -125,6 +133,8 @@ def _artifact_graph(artifacts: dict[str, str | Path | None]) -> list[dict[str, A
 
 def _score_inputs(present: set[str]) -> list[str]:
     inputs = ["scenario", "normalized_trace"]
+    if "before_state_snapshot" in present:
+        inputs.append("before_state_snapshot")
     if "state_snapshot" in present:
         inputs.append("state_snapshot")
     return inputs
@@ -182,6 +192,7 @@ def _replay_contract(
     artifacts: dict[str, str | Path | None],
     scenario_path: str | Path | None,
     source_trace_path: str | Path,
+    source_before_state_snapshot_path: str | Path | None,
     source_state_snapshot_path: str | Path | None,
     preserve_paths: bool,
 ) -> dict[str, Any]:
@@ -198,9 +209,15 @@ def _replay_contract(
         "--out",
         _display_path(out_dir, preserve_paths) if out_dir is not None else "<missing-output-dir>",
     ]
+    if source_before_state_snapshot_path is not None:
+        argv.extend(["--before-state", _display_path(Path(source_before_state_snapshot_path), preserve_paths)])
     if source_state_snapshot_path is not None:
         argv.extend(["--state", _display_path(Path(source_state_snapshot_path), preserve_paths)])
-    replay_paths = [arg for index, arg in enumerate(argv) if index > 0 and argv[index - 1] in {"--scenario", "--trace", "--state", "--out"}]
+    replay_paths = [
+        arg
+        for index, arg in enumerate(argv)
+        if index > 0 and argv[index - 1] in {"--scenario", "--trace", "--before-state", "--state", "--out"}
+    ]
     input_fingerprints = {
         str(record.get("name")): {
             "path": record.get("path"),
@@ -210,7 +227,12 @@ def _replay_contract(
         for record in inputs
         if isinstance(record.get("name"), str)
     }
-    required_inputs = ("scenario", "source_trace", *(() if source_state_snapshot_path is None else ("source_state_snapshot",)))
+    required_inputs = (
+        "scenario",
+        "source_trace",
+        *(() if source_before_state_snapshot_path is None else ("source_before_state_snapshot",)),
+        *(() if source_state_snapshot_path is None else ("source_state_snapshot",)),
+    )
     has_required_hashes = all(isinstance(input_fingerprints.get(name, {}).get("sha256"), str) for name in required_inputs)
     has_required_paths = all(isinstance(input_fingerprints.get(name, {}).get("path"), str) for name in required_inputs)
     paths_are_public = all(not _is_redacted_path(path) for path in replay_paths)

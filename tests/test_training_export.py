@@ -330,10 +330,17 @@ class TrainingExportTests(unittest.TestCase):
             summary = json.loads((runs / "suite_summary.json").read_text(encoding="utf-8"))
             manifest = json.loads((runs / "training_export" / "manifest.json").read_text(encoding="utf-8"))
             dataset_metrics = json.loads((runs / "training_export" / "dataset_metrics.json").read_text(encoding="utf-8"))
+            episodes = read_jsonl(runs / "training_export" / "episodes.jsonl")
             expected = {"candidate": "baseline", "policy_rev": "demo"}
             self.assertEqual(summary["metadata"], expected)
             self.assertEqual(manifest["metadata"], expected)
             self.assertEqual(dataset_metrics["metadata"], expected)
+            completed_email = next(episode for episode in episodes if episode["scenario_id"] == "email_reply_completion_good")
+            self.assertEqual(
+                len(completed_email["source_fingerprints"]["source_before_state_snapshot"]["sha256"]),
+                64,
+            )
+            self.assertEqual(len(completed_email["source_fingerprints"]["source_state_snapshot"]["sha256"]), 64)
             self.assertEqual(run_cli(["validate", "--suite-summary", str(runs / "suite_summary.json"), "--strict"]), 0)
 
     def test_metadata_requires_key_value_pairs(self):

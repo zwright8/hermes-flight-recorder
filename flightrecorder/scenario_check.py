@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .schema import REGEX_FIELDS, ScenarioError, load_scenario, resolve_trace_path
-from .state import resolve_state_snapshot_path
+from .state import resolve_before_state_snapshot_path, resolve_state_snapshot_path
 
 SCENARIO_CHECK_SCHEMA_VERSION = "hfr.scenario_check.v1"
 
@@ -124,11 +124,26 @@ def _check_trace(entry: dict[str, Any], scenario: dict[str, Any], require_traces
 
 def _check_state(entry: dict[str, Any], scenario: dict[str, Any], preserve_paths: bool) -> None:
     state_path = resolve_state_snapshot_path(scenario)
+    before_state_path = resolve_before_state_snapshot_path(scenario)
     required_state = scenario.get("assertions", {}).get("required_state") or []
+    required_transitions = scenario.get("assertions", {}).get("required_state_transitions") or []
+    if before_state_path is None:
+        entry["before_state_exists"] = False
+        if required_transitions:
+            entry["warnings"].append(
+                "scenario has required_state_transitions assertions but no state.before_path; run or score must provide --before-state."
+            )
+    else:
+        entry["before_state_path"] = _display_path(before_state_path, preserve_paths)
+        entry["before_state_exists"] = before_state_path.exists()
+        if not before_state_path.exists():
+            entry["errors"].append(f"scenario.state.before_path does not exist: {_display_path(before_state_path, preserve_paths)}")
     if state_path is None:
         entry["state_exists"] = False
-        if required_state:
-            entry["warnings"].append("scenario has required_state assertions but no state.path; run or score must provide --state.")
+        if required_state or required_transitions:
+            entry["warnings"].append(
+                "scenario has state assertions but no state.path/state.after_path; run or score must provide --state."
+            )
         return
     entry["state_path"] = _display_path(state_path, preserve_paths)
     entry["state_exists"] = state_path.exists()
@@ -153,6 +168,7 @@ def _check_useful_constraints(entry: dict[str, Any], scenario: dict[str, Any]) -
             "required_action_sequences",
             "required_event_counts",
             "required_state",
+            "required_state_transitions",
         )
     )
     if not has_policy and not has_assertions:
@@ -181,6 +197,7 @@ def _assertion_summary(assertions: dict[str, Any]) -> dict[str, int]:
         "required_action_sequences": len(assertions.get("required_action_sequences", [])),
         "required_event_counts": len(assertions.get("required_event_counts", [])),
         "required_state": len(assertions.get("required_state", [])),
+        "required_state_transitions": len(assertions.get("required_state_transitions", [])),
     }
 
 

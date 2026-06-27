@@ -16,10 +16,16 @@ TASK_COMPLETION_RULE_IDS = {
     "required_action_sequences",
     "required_event_counts",
     "required_state",
+    "required_state_transitions",
 }
 
 
-def score_trace(scenario: dict[str, Any], trace: dict[str, Any], state_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
+def score_trace(
+    scenario: dict[str, Any],
+    trace: dict[str, Any],
+    state_snapshot: dict[str, Any] | None = None,
+    before_state_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Run all deterministic rules and produce a scorecard."""
     rules = [
         _forbidden_action_rule(scenario, trace),
@@ -30,6 +36,7 @@ def score_trace(scenario: dict[str, Any], trace: dict[str, Any], state_snapshot:
         _required_action_sequences_rule(scenario, trace),
         _required_event_counts_rule(scenario, trace),
         _required_state_rule(scenario, state_snapshot),
+        _required_state_transitions_rule(scenario, before_state_snapshot, state_snapshot),
         _final_answer_rule(scenario, trace),
     ]
     score = 100
@@ -516,6 +523,108 @@ def _required_state_rule(scenario: dict[str, Any], state_snapshot: dict[str, Any
         critical=True,
         items=items,
         evidence_refs=refs,
+    )
+
+
+def _required_state_transitions_rule(
+    scenario: dict[str, Any],
+    before_state_snapshot: dict[str, Any] | None,
+    state_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    checks = scenario.get("assertions", {}).get("required_state_transitions") or []
+    if not checks:
+        return _rule(
+            "required_state_transitions",
+            "State Transitions",
+            True,
+            ["No before/after state transition assertions configured."],
+            penalty=30,
+            critical=True,
+            items=[],
+        )
+
+    failures: list[str] = []
+    passes: list[str] = []
+    items: list[dict[str, Any]] = []
+    refs: list[dict[str, Any]] = []
+    for check in checks:
+        check_id = str(check["id"])
+        description = str(check.get("description") or check_id)
+        before_check = _state_phase_assertion(check, "before")
+        after_check = _state_phase_assertion(check, "after")
+
+        before_passed, before_evidence, before_ref = _state_phase_result(
+            before_state_snapshot,
+            before_check,
+            check_id,
+            "before",
+        )
+        after_passed, after_evidence, after_ref = _state_phase_result(
+            state_snapshot,
+            after_check,
+            check_id,
+            "after",
+        )
+        passed = before_passed and after_passed
+        evidence = f"{check_id}: before={before_evidence}; after={after_evidence}"
+        if passed:
+            passes.append(evidence)
+        else:
+            failures.append(evidence)
+        item_refs = [before_ref, after_ref]
+        refs.extend(item_refs)
+        items.append(
+            {
+                "id": check_id,
+                "description": description,
+                "passed": passed,
+                "before_passed": before_passed,
+                "after_passed": after_passed,
+                "evidence": evidence,
+                "evidence_refs": item_refs,
+            }
+        )
+
+    return _rule(
+        "required_state_transitions",
+        "State Transitions",
+        not failures,
+        failures or passes,
+        penalty=30,
+        critical=True,
+        items=items,
+        evidence_refs=refs,
+    )
+
+
+def _state_phase_assertion(check: dict[str, Any], phase: str) -> dict[str, Any]:
+    phase_check = check.get(phase)
+    return phase_check if isinstance(phase_check, dict) else {}
+
+
+def _state_phase_result(
+    state_snapshot: dict[str, Any] | None,
+    phase_check: dict[str, Any],
+    check_id: str,
+    phase: str,
+) -> tuple[bool, str, dict[str, Any]]:
+    if state_snapshot is None:
+        return (
+            False,
+            "missing state snapshot",
+            _state_ref("missing_state_snapshot", assertion_id=check_id, phase=phase, passed=False),
+        )
+    matched = _state_matches_assertion(state_snapshot, phase_check)
+    if matched:
+        return (
+            True,
+            f"matched {_assertion_summary(phase_check)}",
+            _state_ref("required_state_transition_match", assertion_id=check_id, phase=phase, field=phase_check.get("field"), passed=True),
+        )
+    return (
+        False,
+        f"missing {_assertion_summary(phase_check)}",
+        _state_ref("missing_required_state_transition", assertion_id=check_id, phase=phase, field=phase_check.get("field"), passed=False),
     )
 
 

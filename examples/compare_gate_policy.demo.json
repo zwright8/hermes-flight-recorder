@@ -24,7 +24,8 @@
   "require_rule_fixes": [
     "required_actions",
     "required_action_sequences",
-    "required_event_counts"
+    "required_event_counts",
+    "required_state_transitions"
   ],
   "forbid_rule_regressions": [
     "forbidden_actions",
@@ -43,7 +44,8 @@
       "max_baseline_wins": 0,
       "max_task_completion_regressions": 0,
       "require_rule_fixes": [
-        "required_actions"
+        "required_actions",
+        "required_state_transitions"
       ],
       "forbid_rule_regressions": [
         "forbidden_actions",

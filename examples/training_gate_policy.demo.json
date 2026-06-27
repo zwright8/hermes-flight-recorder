@@ -13,7 +13,7 @@
   "min_task_completion_configured": 5,
   "min_task_completion_complete": 2,
   "max_task_completion_incomplete": 3,
-  "min_task_completion_check_pass_rate": 0.5385,
+  "min_task_completion_check_pass_rate": 0.5333,
   "min_source_fingerprint_rate": 1.0,
   "max_unverified_source_fingerprints": 0,
   "min_trainer_view_source_fingerprint_rate": 1.0,

@@ -74,6 +74,25 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("$.session: missing required property 'model'", errors)
         self.assertIn("$.events[0]: missing required property 'type'", errors)
 
+    def test_task_completion_schema_accepts_not_applicable_status(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.task_completion.v1",
+                "status": "not_applicable",
+                "passed": True,
+                "task_evidence_configured": False,
+                "required_check_count": 0,
+                "passed_check_count": 0,
+                "failed_check_count": 0,
+                "blocking_rule_ids": [],
+                "checks": [],
+                "summary": "No task-completion evidence assertions were configured.",
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "task_completion")
+
     def test_write_schema_bundle_writes_catalog_and_selected_schemas(self):
         with tempfile.TemporaryDirectory() as tmp:
             written = write_schema_bundle(tmp, ["trace", "scorecard"])

@@ -31,6 +31,7 @@ DEFAULT_ASSERTIONS: dict[str, Any] = {
     "required_action_sequences": [],
     "required_event_counts": [],
     "required_state": [],
+    "required_state_transitions": [],
 }
 
 DEFAULT_SCORING: dict[str, Any] = {"pass_threshold": 90}
@@ -92,8 +93,9 @@ def _validate_scenario(scenario: dict[str, Any]) -> None:
         state = scenario["state"]
         if not isinstance(state, dict):
             raise ScenarioError("Scenario state must be an object")
-        if "path" in state and not isinstance(state["path"], str):
-            raise ScenarioError("Scenario state.path must be a string")
+        for field in ("path", "after_path", "before_path"):
+            if field in state and not isinstance(state[field], str):
+                raise ScenarioError(f"Scenario state.{field} must be a string")
         if "format" in state and state["format"] != "json":
             raise ScenarioError("Scenario state.format must be 'json' when provided")
 
@@ -186,6 +188,12 @@ def _validate_scenario(scenario: dict[str, Any]) -> None:
         raise ScenarioError("Assertions field required_state must be a list")
     for item in state_checks:
         _validate_state_assertion(item, "required_state")
+
+    state_transitions = assertions.get("required_state_transitions", [])
+    if not isinstance(state_transitions, list):
+        raise ScenarioError("Assertions field required_state_transitions must be a list")
+    for item in state_transitions:
+        _validate_state_transition_assertion(item, "required_state_transitions")
 
     threshold = scoring.get("pass_threshold")
     if not isinstance(threshold, int) or not 0 <= threshold <= 100:
@@ -281,6 +289,30 @@ def _validate_state_assertion(item: Any, label: str) -> None:
     if forbidden:
         raise ScenarioError(f"{label} item {item_id} uses event-only matcher fields: {', '.join(forbidden)}")
     _validate_matchers(item, f"{label}.{item_id}", require_matcher=True)
+
+
+def _validate_state_transition_assertion(item: Any, label: str) -> None:
+    if not isinstance(item, dict):
+        raise ScenarioError(f"Each {label} item must be an object")
+    if "id" not in item:
+        raise ScenarioError(f"{label} item missing field: id")
+    if not isinstance(item["id"], str) or not item["id"].strip():
+        raise ScenarioError(f"{label} item id must be a non-empty string")
+    item_id = item["id"]
+    if "description" in item and not isinstance(item["description"], str):
+        raise ScenarioError(f"{label} item {item_id} description must be a string")
+    for phase in ("before", "after"):
+        phase_check = item.get(phase)
+        if not isinstance(phase_check, dict):
+            raise ScenarioError(f"{label} item {item_id} {phase} must be an object")
+        _validate_state_phase_assertion(phase_check, f"{label}.{item_id}.{phase}")
+
+
+def _validate_state_phase_assertion(item: dict[str, Any], label: str) -> None:
+    forbidden = [field for field in ("id", "description", "event_type", "tool_name", "status") if field in item]
+    if forbidden:
+        raise ScenarioError(f"{label} uses unsupported matcher fields: {', '.join(forbidden)}")
+    _validate_matchers(item, label, require_matcher=True)
 
 
 def _validate_final_matcher(item: dict[str, Any], label: str) -> None:

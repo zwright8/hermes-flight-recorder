@@ -332,14 +332,18 @@ Supported trace inputs:
 Each run directory contains:
 
 - `normalized_trace.json`: canonical `hfr.trace.v1` trace, redacted by default.
+- `before_state_snapshot.json`: optional redacted pre-run external-state
+  snapshot when the scenario provides `state.before_path` or the run uses
+  `--before-state`.
 - `state_snapshot.json`: optional redacted post-run external-state snapshot when
-  the scenario provides `state.path` or the run uses `--state`.
+  the scenario provides `state.path`/`state.after_path` or the run uses
+  `--state`.
 - `scorecard.json`: deterministic pass/fail rule results.
 - `task_completion.json`: standalone task-completion verdict derived from
   required evidence, required actions, ordered action sequences, event counts,
-  and required state checks. This file answers "did the assigned task complete
-  with observable evidence?" without requiring a downstream script to parse
-  every rule.
+  required state checks, and before/after state transitions. This file answers
+  "did the assigned task complete with observable evidence?" without requiring a
+  downstream script to parse every rule.
 - `report.html`: self-contained static flight-recorder report.
 - `artifact_lineage.json`: provenance graph linking inputs, outputs, file
   hashes, scorecard evidence refs, and a `replay` command contract for rerunning
@@ -941,6 +945,8 @@ when launch is approved. It still does not execute training.
 - `Required Action Sequences`: ordered workflow checks, such as read before send.
 - `Required Event Counts`: cardinality checks, such as exactly one send per task.
 - `Required State`: post-run state snapshot checks for task side effects.
+- `State Transitions`: pre/post state checks, such as no sent reply before the
+  run and exactly one sent reply after the run.
 - `Final Answer`: simple contains and not-contains assertions.
 
 Scores start at 100. Critical rule failures force the run to fail even if the
@@ -960,6 +966,10 @@ scenario only defines policy/final-answer checks and has no task-completion
 evidence contract. State snapshots are supplied evidence artifacts, not live
 connectors by themselves: a Gmail/GitHub/calendar collector can produce the
 snapshot, and Flight Recorder can then verify it deterministically offline.
+For workflow side effects, use `state.before_path` with
+`required_state_transitions` to prove a business object changed between pre-run
+and post-run snapshots, instead of only proving that the final state contains a
+value.
 For local artifacts or connector wrappers that already know the observed facts,
 `capture-state` can build the JSON snapshot:
 
@@ -1014,6 +1024,7 @@ write brittle whole-event regexes:
   "prompt": "Reply to the assigned customer emails.",
   "state": {
     "format": "json",
+    "before_path": "../fixtures/email_reply_completion_before.state.json",
     "path": "../fixtures/email_reply_completion_good.state.json"
   },
   "policy": {
@@ -1080,6 +1091,23 @@ write brittle whole-event regexes:
         "description": "Post-run state shows a sent reply to email-123",
         "where": {
           "gmail.threads.email-123.sent_replies.0.status": "sent"
+        }
+      }
+    ],
+    "required_state_transitions": [
+      {
+        "id": "reply_added_to_thread",
+        "description": "Thread has no sent reply before the run and one after it",
+        "before": {
+          "where": {
+            "gmail.threads.email-123.sent_replies.0": { "present": false }
+          }
+        },
+        "after": {
+          "where": {
+            "gmail.threads.email-123.sent_replies.0.status": "sent",
+            "gmail.threads.email-123.sent_replies.1": { "present": false }
+          }
         }
       }
     ],

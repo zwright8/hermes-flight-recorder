@@ -8,7 +8,7 @@ from typing import Any
 
 from .schema import REGEX_FIELDS, ScenarioError, load_scenario, resolve_trace_path
 from .scenario_check import discover_scenarios
-from .state import resolve_state_snapshot_path
+from .state import resolve_before_state_snapshot_path, resolve_state_snapshot_path
 
 SCENARIO_QUALITY_SCHEMA_VERSION = "hfr.scenario_quality.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
@@ -126,7 +126,16 @@ def _trace_info(scenario: dict[str, Any], require_traces: bool, preserve_paths: 
 
 def _state_info(scenario: dict[str, Any], preserve_paths: bool) -> dict[str, Any]:
     state_path = resolve_state_snapshot_path(scenario)
-    info: dict[str, Any] = {"has_state_path": state_path is not None, "state_exists": False}
+    before_state_path = resolve_before_state_snapshot_path(scenario)
+    info: dict[str, Any] = {
+        "has_before_state_path": before_state_path is not None,
+        "before_state_exists": False,
+        "has_state_path": state_path is not None,
+        "state_exists": False,
+    }
+    if before_state_path is not None:
+        info["before_state_path"] = _display_path(before_state_path, preserve_paths)
+        info["before_state_exists"] = before_state_path.exists()
     if state_path is not None:
         info["state_path"] = _display_path(state_path, preserve_paths)
         info["state_exists"] = state_path.exists()
@@ -148,12 +157,22 @@ def _signals(
     sequence_count = len(assertions.get("required_action_sequences", []))
     event_count_count = len(assertions.get("required_event_counts", []))
     required_state_count = len(assertions.get("required_state", []))
+    required_state_transition_count = len(assertions.get("required_state_transitions", []))
     final_assertion_count = len(assertions.get("final_contains", [])) + len(assertions.get("final_not_contains", []))
-    observable_count = required_evidence_count + required_action_count + sequence_count + event_count_count + required_state_count
-    task_completion_count = required_action_count + sequence_count + event_count_count + required_state_count
+    observable_count = (
+        required_evidence_count
+        + required_action_count
+        + sequence_count
+        + event_count_count
+        + required_state_count
+        + required_state_transition_count
+    )
+    task_completion_count = required_action_count + sequence_count + event_count_count + required_state_count + required_state_transition_count
     return {
         "has_trace_path": bool(trace_info.get("has_trace_path")),
         "trace_exists": bool(trace_info.get("trace_exists")),
+        "has_before_state_path": bool(state_info.get("has_before_state_path")),
+        "before_state_exists": bool(state_info.get("before_state_exists")),
         "has_state_path": bool(state_info.get("has_state_path")),
         "state_exists": bool(state_info.get("state_exists")),
         "regex_constraint_count": regex_count,
@@ -165,6 +184,7 @@ def _signals(
         "required_action_sequence_count": sequence_count,
         "required_event_count_count": event_count_count,
         "required_state_count": required_state_count,
+        "required_state_transition_count": required_state_transition_count,
         "observable_assertion_count": observable_count,
         "task_completion_assertion_count": task_completion_count,
         "final_assertion_count": final_assertion_count,
@@ -211,7 +231,13 @@ def _risks(signals: dict[str, Any]) -> list[str]:
         risks.append("no_observable_assertions")
     if signals.get("required_state_count", 0) > 0 and not signals.get("has_state_path"):
         risks.append("required_state_without_snapshot_path")
-    elif signals.get("has_state_path") and not signals.get("state_exists"):
+    if signals.get("required_state_transition_count", 0) > 0 and not signals.get("has_before_state_path"):
+        risks.append("required_state_transition_without_before_snapshot_path")
+    if signals.get("required_state_transition_count", 0) > 0 and not signals.get("has_state_path"):
+        risks.append("required_state_transition_without_after_snapshot_path")
+    if signals.get("has_before_state_path") and not signals.get("before_state_exists"):
+        risks.append("missing_before_state_file")
+    if signals.get("has_state_path") and not signals.get("state_exists"):
         risks.append("missing_state_file")
     if signals["final_assertion_count"] > 0 and signals["observable_assertion_count"] == 0 and signals["budget_constraint_count"] == 0:
         risks.append("final_only_contract")
@@ -234,7 +260,20 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     weak_count = sum(1 for row in valid_rows if row["quality"] == "weak")
     final_only_count = sum(1 for row in valid_rows if "final_only_contract" in row["risks"])
     missing_trace_count = sum(1 for row in valid_rows if not row.get("trace", {}).get("trace_exists"))
-    missing_state_count = sum(1 for row in valid_rows if "missing_state_file" in row["risks"] or "required_state_without_snapshot_path" in row["risks"])
+    missing_state_count = sum(
+        1
+        for row in valid_rows
+        if any(
+            risk in row["risks"]
+            for risk in (
+                "missing_state_file",
+                "missing_before_state_file",
+                "required_state_without_snapshot_path",
+                "required_state_transition_without_before_snapshot_path",
+                "required_state_transition_without_after_snapshot_path",
+            )
+        )
+    )
     return {
         "scenario_count": len(rows),
         "valid_scenario_count": len(valid_rows),
