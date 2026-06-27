@@ -29,6 +29,8 @@ python -m flightrecorder schemas --write-dir schema_contracts_check >/dev/null
 test -f schema_contracts_check/manifest.json
 test -f schema_contracts_check/trace.v1.schema.json
 test -f schema_contracts_check/improvement_ledger_gate.v1.schema.json
+test -f schema_contracts_check/rl_episode.v1.schema.json
+test -f schema_contracts_check/rl_reward_model.v1.schema.json
 python -m flightrecorder schemas \
   --check scenarios/prompt_injection_good.json \
   --name scenario >/dev/null
@@ -56,7 +58,17 @@ python -m flightrecorder schemas --check runs/improvement_plan.json >/dev/null
 python -m flightrecorder schemas --check runs/improvement_ledger.json >/dev/null
 python -m flightrecorder schemas --check runs/improvement_ledger_gate.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
+python -m flightrecorder schemas --check runs/training_export/dataset_metrics.json >/dev/null
+python -m flightrecorder schemas --check runs/training_export/curriculum.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/episodes.jsonl >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/rewards.jsonl --name rl_reward >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/step_rewards.jsonl --name rl_step_reward >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/preferences.jsonl --name rl_preference >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/failure_modes.jsonl --name rl_failure_mode >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/sft.jsonl --name rl_sft >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/dpo.jsonl --name rl_dpo >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/training_export/reward_model.jsonl --name rl_reward_model >/dev/null
 rm -rf replay_runs
 python -m flightrecorder replay-bundle \
   --lineage runs/prompt_injection_good/artifact_lineage.json \
@@ -404,6 +416,9 @@ test -f runs/compare_rl_export/manifest.json
 test -f runs/compare_rl_export/improvement_pairs.jsonl
 test -f runs/compare_rl_export/improvement_dpo.jsonl
 test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
+python -m flightrecorder schemas --check runs/compare_rl_export/manifest.json >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/compare_rl_export/improvement_pairs.jsonl --name compare_rl_pair >/dev/null
+python -m flightrecorder schemas --check-jsonl runs/compare_rl_export/improvement_dpo.jsonl --name compare_rl_dpo >/dev/null
 python -m flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --strict >/dev/null
@@ -1292,6 +1307,7 @@ test -f "$INSTALL_DIR/scorecard.schema.json"
   --out "$INSTALL_DIR/normalized.json" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder schemas \
   --check "$INSTALL_DIR/normalized.json" >/dev/null
+assert_help_contains "--check-jsonl" "$VENV_DIR/bin/python" -m flightrecorder schemas --help
 "$VENV_DIR/bin/python" -m flightrecorder replay --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder replay-bundle --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null

@@ -1,0 +1,117 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_step_reward.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Step-level reward attribution row emitted in export-rl step_rewards.jsonl.",
+  "properties": {
+    "allocation_index": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "allocation_weight": {
+      "type": "number"
+    },
+    "attribution_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "critical": {
+      "type": "boolean"
+    },
+    "episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "episode_reward": {
+      "type": "number"
+    },
+    "evidence": {
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "penalty": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reward_delta": {
+      "type": "number"
+    },
+    "reward_scale": {
+      "enum": [
+        "score",
+        "binary",
+        "signed"
+      ]
+    },
+    "rule_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rule_name": {
+      "type": "string"
+    },
+    "rule_reward_delta": {
+      "type": "number"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.rl.step_reward.v1"
+    },
+    "score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_fingerprint_status": {
+      "type": "string"
+    },
+    "source_fingerprints": {
+      "type": "object"
+    },
+    "step_reward_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "target": {
+      "enum": [
+        "event",
+        "final_answer",
+        "episode"
+      ]
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "step_reward_id",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "source_fingerprint_status",
+    "source_fingerprints",
+    "target",
+    "rule_id",
+    "rule_name",
+    "critical",
+    "penalty",
+    "score",
+    "episode_reward",
+    "reward_scale",
+    "reward_delta",
+    "rule_reward_delta",
+    "allocation_weight",
+    "allocation_index",
+    "attribution_count",
+    "passed",
+    "evidence"
+  ],
+  "title": "Hermes Flight Recorder RL Step Reward Row",
+  "type": "object"
+}

@@ -74,7 +74,14 @@ from .reviewed_gate import (
     load_reviewed_gate_policy,
 )
 from .schema import ScenarioError, load_scenario, resolve_trace_path
-from .schema_registry import SchemaRegistryError, check_schema_file, list_schema_records, load_schema, write_schema_bundle
+from .schema_registry import (
+    SchemaRegistryError,
+    check_schema_file,
+    check_schema_jsonl_file,
+    list_schema_records,
+    load_schema,
+    write_schema_bundle,
+)
 from .scenario_check import check_scenarios, discover_scenarios
 from .scenario_draft import draft_scenario, safe_scenario_id, score_draft, title_from_id
 from .scenario_quality import build_scenario_quality
@@ -748,12 +755,28 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_schemas(args: argparse.Namespace) -> int:
+    if args.check and args.check_jsonl:
+        raise SchemaRegistryError("--check cannot be combined with --check-jsonl")
     if args.check:
         if args.write_dir:
             raise SchemaRegistryError("--check cannot be combined with --write-dir")
         if len(args.name) > 1:
             raise SchemaRegistryError("--check accepts at most one --name")
         result = check_schema_file(args.check, args.name[0] if args.name else None)
+        rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+        if args.out:
+            Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.out).write_text(rendered, encoding="utf-8")
+            print(f"wrote {args.out}")
+        else:
+            print(rendered, end="")
+        return 0 if result["passed"] else 1
+    if args.check_jsonl:
+        if args.write_dir:
+            raise SchemaRegistryError("--check-jsonl cannot be combined with --write-dir")
+        if len(args.name) > 1:
+            raise SchemaRegistryError("--check-jsonl accepts at most one --name")
+        result = check_schema_jsonl_file(args.check_jsonl, args.name[0] if args.name else None)
         rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
         if args.out:
             Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -1712,6 +1735,7 @@ def _parser() -> argparse.ArgumentParser:
     schemas = subparsers.add_parser("schemas", help="List or export bundled JSON Schema contracts")
     schemas.add_argument("--name", action="append", default=[], help="Schema name, filename, schema version, or $id; may be repeated with --write-dir")
     schemas.add_argument("--check", help="Check one JSON artifact against a bundled schema; infers by schema_version unless --name is supplied")
+    schemas.add_argument("--check-jsonl", help="Check every non-empty JSONL row against a bundled schema; infers by schema_version unless --name is supplied")
     schemas.add_argument("--out", help="Write exactly one selected schema, or a --check result, to this JSON file")
     schemas.add_argument("--write-dir", help="Write the selected schemas, or all schemas, plus catalog manifest to this directory")
     schemas.add_argument("--force", action="store_true", help="Overwrite existing files when using --write-dir")

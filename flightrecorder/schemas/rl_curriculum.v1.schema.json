@@ -1,0 +1,40 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_curriculum.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Failure-mode curriculum metadata emitted in export-rl curriculum.json.",
+  "properties": {
+    "episode_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "failure_mode_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "recommended_use": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.rl.curriculum.v1"
+    },
+    "task_families": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "episode_count",
+    "failure_mode_count",
+    "task_families",
+    "recommended_use"
+  ],
+  "title": "Hermes Flight Recorder RL Curriculum",
+  "type": "object"
+}

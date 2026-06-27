@@ -1,0 +1,98 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_dataset_metrics.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dataset quality metrics emitted in export-rl dataset_metrics.json.",
+  "properties": {
+    "artifact_counts": {
+      "type": "object"
+    },
+    "average_reward": {
+      "type": "number"
+    },
+    "average_score": {
+      "type": "number"
+    },
+    "dataset_splits": {
+      "type": "object"
+    },
+    "episode_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "failed": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "pass_rate": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+    },
+    "passed": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "quality_flags": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "recommended_checks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "reward_scale": {
+      "enum": [
+        "score",
+        "binary",
+        "signed"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.rl.dataset_metrics.v1"
+    },
+    "source_fingerprint_coverage": {
+      "type": "object"
+    },
+    "task_completion": {
+      "type": "object"
+    },
+    "task_families": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "trace_signal": {
+      "type": "object"
+    },
+    "trainer_view_source_fingerprint_coverage": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "reward_scale",
+    "artifact_counts",
+    "episode_count",
+    "passed",
+    "failed",
+    "pass_rate",
+    "average_score",
+    "average_reward",
+    "source_fingerprint_coverage",
+    "trainer_view_source_fingerprint_coverage",
+    "task_completion",
+    "trace_signal",
+    "dataset_splits",
+    "task_families",
+    "quality_flags",
+    "recommended_checks"
+  ],
+  "title": "Hermes Flight Recorder RL Dataset Metrics",
+  "type": "object"
+}

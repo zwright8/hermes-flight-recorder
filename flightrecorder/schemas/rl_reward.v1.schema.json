@@ -1,0 +1,102 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_reward.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Terminal reward row emitted in export-rl rewards.jsonl.",
+  "properties": {
+    "attribution": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "critical_failures": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "reward": {
+      "type": "number"
+    },
+    "reward_scale": {
+      "enum": [
+        "score",
+        "binary",
+        "signed"
+      ]
+    },
+    "rule_rewards": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.rl.reward.v1"
+    },
+    "score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_fingerprint_status": {
+      "type": "string"
+    },
+    "source_fingerprints": {
+      "type": "object"
+    },
+    "state_change_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "state_changed": {
+      "type": "boolean"
+    },
+    "task_completion_passed": {
+      "type": "boolean"
+    },
+    "task_completion_status": {
+      "type": "string"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "terminal": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "source_fingerprint_status",
+    "source_fingerprints",
+    "reward_scale",
+    "reward",
+    "score",
+    "passed",
+    "task_completion_status",
+    "task_completion_passed",
+    "state_changed",
+    "state_change_count",
+    "terminal",
+    "critical_failures",
+    "rule_rewards",
+    "attribution"
+  ],
+  "title": "Hermes Flight Recorder RL Reward Row",
+  "type": "object"
+}

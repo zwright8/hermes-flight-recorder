@@ -1,0 +1,127 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/compare_rl_pair.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Baseline-vs-candidate improvement pair row emitted in export-compare-rl improvement_pairs.jsonl.",
+  "properties": {
+    "baseline": {
+      "type": "object"
+    },
+    "baseline_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "candidate": {
+      "type": "object"
+    },
+    "candidate_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "candidate_outcome": {
+      "enum": [
+        "improved",
+        "regressed"
+      ]
+    },
+    "candidate_score_delta": {
+      "type": "integer"
+    },
+    "chosen": {
+      "type": "object"
+    },
+    "chosen_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "chosen_score": {
+      "type": "integer"
+    },
+    "chosen_side": {
+      "enum": [
+        "baseline",
+        "candidate"
+      ]
+    },
+    "contract_fingerprint_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "contract_fingerprint_scope": {
+      "type": "string"
+    },
+    "contract_fingerprint_status": {
+      "type": "string"
+    },
+    "pair_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "rejected": {
+      "type": "object"
+    },
+    "rejected_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rejected_score": {
+      "type": "integer"
+    },
+    "rejected_side": {
+      "enum": [
+        "baseline",
+        "candidate"
+      ]
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.compare_rl.pair.v1"
+    },
+    "score_gap": {
+      "type": "integer"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "pair_id",
+    "scenario_id",
+    "task_family",
+    "prompt",
+    "candidate_outcome",
+    "candidate_score_delta",
+    "chosen_side",
+    "rejected_side",
+    "chosen_episode_id",
+    "rejected_episode_id",
+    "baseline_episode_id",
+    "candidate_episode_id",
+    "chosen_score",
+    "rejected_score",
+    "score_gap",
+    "contract_fingerprint_status",
+    "contract_fingerprint_scope",
+    "contract_fingerprint_reasons",
+    "reason",
+    "baseline",
+    "candidate",
+    "chosen",
+    "rejected"
+  ],
+  "title": "Hermes Flight Recorder Compare RL Pair Row",
+  "type": "object"
+}

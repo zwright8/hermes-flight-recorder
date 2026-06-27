@@ -1,0 +1,103 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_dpo.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Trainer-ready direct-preference row emitted in export-rl dpo.jsonl.",
+  "properties": {
+    "chosen": {
+      "type": "string"
+    },
+    "chosen_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "chosen_messages": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "chosen_score": {
+      "type": "integer"
+    },
+    "chosen_source_fingerprint_status": {
+      "type": "string"
+    },
+    "chosen_source_fingerprints": {
+      "type": "object"
+    },
+    "pair_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "preference_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "rejected": {
+      "type": "string"
+    },
+    "rejected_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rejected_messages": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "rejected_score": {
+      "type": "integer"
+    },
+    "rejected_source_fingerprint_status": {
+      "type": "string"
+    },
+    "rejected_source_fingerprints": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.rl.dpo.v1"
+    },
+    "score_gap": {
+      "type": "integer"
+    },
+    "source_artifact": {
+      "const": "preferences.jsonl"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "pair_id",
+    "preference_id",
+    "task_family",
+    "prompt",
+    "chosen",
+    "rejected",
+    "chosen_messages",
+    "rejected_messages",
+    "chosen_episode_id",
+    "rejected_episode_id",
+    "chosen_score",
+    "rejected_score",
+    "score_gap",
+    "reason",
+    "chosen_source_fingerprint_status",
+    "rejected_source_fingerprint_status",
+    "chosen_source_fingerprints",
+    "rejected_source_fingerprints",
+    "source_artifact"
+  ],
+  "title": "Hermes Flight Recorder RL DPO Row",
+  "type": "object"
+}

@@ -111,18 +111,26 @@ flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 flightrecorder schemas --check runs/improvement_ledger_gate.json
+flightrecorder schemas --check runs/training_export/dataset_metrics.json
+flightrecorder schemas --check-jsonl runs/training_export/episodes.jsonl
+flightrecorder schemas --check-jsonl runs/training_export/sft.jsonl --name rl_sft
+flightrecorder schemas --check-jsonl runs/compare_rl_export/improvement_dpo.jsonl --name compare_rl_dpo
 ```
 
 The bundled catalog currently covers scenarios, normalized traces, scorecards,
 task-completion verdicts, state diffs, run digests, evidence bundles, training
-manifests, dataset split manifests, compare-RL manifests, review manifests,
-reviewed-export manifests, improvement plans, improvement ledgers, trainer
-preflights, trainer launch checks, and improvement-ledger gates. These
-schemas are compatibility contracts for artifact shape. `flightrecorder schemas --check` performs a
-dependency-free conformance check for the bundled schema subset; use
-`flightrecorder validate` for deeper integrity checks such as count
-reconciliation, evidence links, replay hashes, symlink rejection,
-artifact-fingerprint verification, and trainer handoff readiness.
+manifests, dataset metrics, dataset split manifests, compare-RL manifests,
+training JSONL rows (`episodes`, `rewards`, `step_rewards`, `preferences`,
+`failure_modes`, `sft`, `dpo`, and `reward_model`), compare-RL JSONL rows,
+review manifests, reviewed-export manifests, improvement plans, improvement
+ledgers, trainer preflights, trainer launch checks, and improvement-ledger
+gates. These schemas are compatibility contracts for artifact shape.
+`flightrecorder schemas --check` validates one JSON artifact;
+`flightrecorder schemas --check-jsonl` validates each non-empty JSONL row,
+inferring by row `schema_version` unless `--name` pins the expected row type.
+Use `flightrecorder validate` for deeper integrity checks such as count
+reconciliation, evidence links, replay hashes, split assignments, symlink
+rejection, artifact-fingerprint verification, and trainer handoff readiness.
 
 ## CLI
 

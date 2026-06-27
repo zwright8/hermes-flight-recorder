@@ -1,0 +1,134 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_episode.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Canonical episode row emitted in export-rl episodes.jsonl.",
+  "properties": {
+    "episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "events": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "final_answer": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/outcome"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.rl.episode.v1"
+    },
+    "source_fingerprint_status": {
+      "type": "string"
+    },
+    "source_fingerprints": {
+      "type": "object"
+    },
+    "source_format": {
+      "type": "string"
+    },
+    "source_run": {
+      "type": "string"
+    },
+    "state_diff": {
+      "type": "object"
+    },
+    "task_completion": {
+      "type": "object"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "trace_signal": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "episode_id",
+    "source_run",
+    "scenario_id",
+    "task_family",
+    "prompt",
+    "events",
+    "final_answer",
+    "trace_signal",
+    "source_fingerprint_status",
+    "source_fingerprints",
+    "task_completion",
+    "state_diff",
+    "outcome"
+  ],
+  "title": "Hermes Flight Recorder RL Episode Row",
+  "type": "object",
+  "$defs": {
+    "outcome": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failures": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "failed_rules": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "reward": {
+          "type": "number"
+        },
+        "score": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state_change_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state_changed": {
+          "type": "boolean"
+        },
+        "task_completion_passed": {
+          "type": "boolean"
+        },
+        "task_completion_status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "passed",
+        "score",
+        "reward",
+        "critical_failures",
+        "failed_rules",
+        "task_completion_status",
+        "task_completion_passed",
+        "state_changed",
+        "state_change_count"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -6,7 +6,14 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
-from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records, load_schema, write_schema_bundle
+from flightrecorder.schema_registry import (
+    check_schema_contract,
+    check_schema_file,
+    check_schema_jsonl_file,
+    list_schema_records,
+    load_schema,
+    write_schema_bundle,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,8 +35,20 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("improvement_ledger", names)
         self.assertIn("improvement_ledger_gate", names)
         self.assertIn("training_manifest", names)
+        self.assertIn("rl_episode", names)
+        self.assertIn("rl_reward", names)
+        self.assertIn("rl_step_reward", names)
+        self.assertIn("rl_preference", names)
+        self.assertIn("rl_failure_mode", names)
+        self.assertIn("rl_curriculum", names)
+        self.assertIn("rl_sft", names)
+        self.assertIn("rl_dpo", names)
+        self.assertIn("rl_reward_model", names)
+        self.assertIn("rl_dataset_metrics", names)
         self.assertIn("dataset_splits", names)
         self.assertIn("compare_rl_manifest", names)
+        self.assertIn("compare_rl_pair", names)
+        self.assertIn("compare_rl_dpo", names)
         self.assertIn("review_manifest", names)
         self.assertIn("reviewed_manifest", names)
         self.assertIn("trainer_preflight", names)
@@ -306,6 +325,41 @@ class SchemaRegistryTests(unittest.TestCase):
             with redirect_stdout(StringIO()):
                 bad_code = main(["schemas", "--check", str(bad_path)])
             self.assertEqual(bad_code, 1)
+
+    def test_cli_checks_training_jsonl_row_schema_contracts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--export-rl"]), 0)
+            # Use the run-suite export so the check exercises real trainer rows.
+            out = runs / "training_export"
+
+            episodes_result = check_schema_jsonl_file(out / "episodes.jsonl")
+            self.assertTrue(episodes_result["passed"], episodes_result["errors"])
+            self.assertEqual(episodes_result["row_schema_counts"], [{"name": "rl_episode", "count": 7}])
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = main(["schemas", "--check-jsonl", str(out / "sft.jsonl"), "--name", "rl_sft"])
+            self.assertEqual(code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["passed"], result["errors"])
+            self.assertEqual(result["schema"]["name"], "rl_sft")
+            self.assertGreater(result["row_count"], 0)
+
+            bad_rows = root / "bad_sft.jsonl"
+            bad_rows.write_text(json.dumps({"schema_version": "hfr.rl.sft.v1", "sample_id": "missing-fields"}) + "\n", encoding="utf-8")
+            with redirect_stdout(StringIO()):
+                bad_code = main(["schemas", "--check-jsonl", str(bad_rows), "--name", "rl_sft"])
+            self.assertEqual(bad_code, 1)
+
+            dataset_metrics_result = check_schema_file(out / "dataset_metrics.json")
+            curriculum_result = check_schema_file(out / "curriculum.json")
+            self.assertTrue(dataset_metrics_result["passed"], dataset_metrics_result["errors"])
+            self.assertEqual(dataset_metrics_result["schema"]["name"], "rl_dataset_metrics")
+            self.assertTrue(curriculum_result["passed"], curriculum_result["errors"])
+            self.assertEqual(curriculum_result["schema"]["name"], "rl_curriculum")
 
     def test_schema_check_passes_trainer_handoff_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:

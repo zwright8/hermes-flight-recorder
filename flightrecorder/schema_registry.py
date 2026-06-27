@@ -9,6 +9,7 @@ from typing import Any
 
 SCHEMA_CATALOG_VERSION = "hfr.schema_catalog.v1"
 SCHEMA_CHECK_VERSION = "hfr.schema_check.v1"
+SCHEMA_JSONL_CHECK_VERSION = "hfr.schema_jsonl_check.v1"
 SCHEMA_PACKAGE_DIR = "schemas"
 
 
@@ -46,6 +47,53 @@ def check_schema_file(path: str | Path, name_or_id: str | None = None) -> dict[s
     artifact_path = Path(path)
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     return check_schema_contract(payload, name_or_id=name_or_id, artifact_path=artifact_path)
+
+
+def check_schema_jsonl_file(path: str | Path, name_or_id: str | None = None) -> dict[str, Any]:
+    """Check each non-empty JSONL row against a bundled schema contract."""
+    artifact_path = Path(path)
+    errors: list[str] = []
+    schema_counts: dict[str, int] = {}
+    row_count = 0
+    selected_schema = _schema_record(name_or_id) if name_or_id is not None else None
+    for line_number, line in enumerate(artifact_path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        row_count += 1
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            errors.append(f"line {line_number}: invalid JSON: {exc.msg}")
+            continue
+        try:
+            result = check_schema_contract(payload, name_or_id=name_or_id)
+        except SchemaRegistryError as exc:
+            errors.append(f"line {line_number}: {exc}")
+            continue
+        schema_name = str(result.get("schema", {}).get("name") or "")
+        if schema_name:
+            schema_counts[schema_name] = schema_counts.get(schema_name, 0) + 1
+        for error in result.get("errors", []):
+            errors.append(f"line {line_number}: {error}")
+    schema_record = (
+        {key: selected_schema[key] for key in ("name", "artifact_schema_version", "filename", "id") if key in selected_schema}
+        if selected_schema is not None
+        else None
+    )
+    return {
+        "schema_version": SCHEMA_JSONL_CHECK_VERSION,
+        "schema": schema_record,
+        "artifact_path": str(artifact_path),
+        "row_count": row_count,
+        "row_schema_counts": [{"name": name, "count": schema_counts[name]} for name in sorted(schema_counts)],
+        "passed": not errors,
+        "error_count": len(errors),
+        "errors": errors,
+        "notes": [
+            "JSONL schema checks validate public row shape only.",
+            "Use flightrecorder validate for semantic integrity checks over counts, hashes, evidence refs, and split assignments.",
+        ],
+    }
 
 
 def check_schema_contract(

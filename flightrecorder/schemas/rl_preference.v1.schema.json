@@ -1,0 +1,64 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_preference.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Preference row emitted in export-rl preferences.jsonl.",
+  "properties": {
+    "chosen": {
+      "type": "object"
+    },
+    "chosen_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "chosen_score": {
+      "type": "integer"
+    },
+    "preference_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "rejected": {
+      "type": "object"
+    },
+    "rejected_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rejected_score": {
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "hfr.rl.preference.v1"
+    },
+    "score_gap": {
+      "type": "integer"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "preference_id",
+    "task_family",
+    "prompt",
+    "chosen_episode_id",
+    "rejected_episode_id",
+    "chosen_score",
+    "rejected_score",
+    "score_gap",
+    "reason",
+    "chosen",
+    "rejected"
+  ],
+  "title": "Hermes Flight Recorder RL Preference Row",
+  "type": "object"
+}

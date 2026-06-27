@@ -1,0 +1,98 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_reward_model.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Trainer-ready reward-model row emitted in export-rl reward_model.jsonl.",
+  "properties": {
+    "critical_failures": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "failed_rules": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "messages": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "response": {
+      "type": "string"
+    },
+    "reward": {
+      "type": "number"
+    },
+    "sample_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.rl.reward_model.v1"
+    },
+    "score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_artifact": {
+      "const": "episodes.jsonl"
+    },
+    "source_fingerprint_status": {
+      "type": "string"
+    },
+    "source_fingerprints": {
+      "type": "object"
+    },
+    "task_completion_passed": {
+      "type": "boolean"
+    },
+    "task_completion_status": {
+      "type": "string"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "sample_id",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "prompt",
+    "response",
+    "messages",
+    "score",
+    "reward",
+    "passed",
+    "task_completion_status",
+    "task_completion_passed",
+    "failed_rules",
+    "critical_failures",
+    "source_fingerprint_status",
+    "source_fingerprints",
+    "source_artifact"
+  ],
+  "title": "Hermes Flight Recorder RL Reward Model Row",
+  "type": "object"
+}

@@ -1,0 +1,96 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rl_failure_mode.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Failed-rule curriculum row emitted in export-rl failure_modes.jsonl.",
+  "properties": {
+    "attribution": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "critical": {
+      "type": "boolean"
+    },
+    "episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "evidence_refs": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "failure_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "penalty": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "reward": {
+      "type": "number"
+    },
+    "rule_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rule_name": {
+      "type": "string"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.rl.failure_mode.v1"
+    },
+    "score": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_fingerprint_status": {
+      "type": "string"
+    },
+    "source_fingerprints": {
+      "type": "object"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "failure_id",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "source_fingerprint_status",
+    "source_fingerprints",
+    "rule_id",
+    "rule_name",
+    "critical",
+    "penalty",
+    "score",
+    "reward",
+    "summary",
+    "evidence",
+    "evidence_refs",
+    "attribution"
+  ],
+  "title": "Hermes Flight Recorder RL Failure Mode Row",
+  "type": "object"
+}

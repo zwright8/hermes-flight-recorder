@@ -90,6 +90,86 @@
       "name": "training_manifest"
     },
     {
+      "artifact": "rl_episode",
+      "artifact_schema_version": "hfr.rl.episode.v1",
+      "description": "Canonical episode row emitted in export-rl episodes.jsonl.",
+      "filename": "rl_episode.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_episode.v1.schema.json",
+      "name": "rl_episode"
+    },
+    {
+      "artifact": "rl_reward",
+      "artifact_schema_version": "hfr.rl.reward.v1",
+      "description": "Terminal reward row emitted in export-rl rewards.jsonl.",
+      "filename": "rl_reward.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_reward.v1.schema.json",
+      "name": "rl_reward"
+    },
+    {
+      "artifact": "rl_step_reward",
+      "artifact_schema_version": "hfr.rl.step_reward.v1",
+      "description": "Step-level reward attribution row emitted in export-rl step_rewards.jsonl.",
+      "filename": "rl_step_reward.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_step_reward.v1.schema.json",
+      "name": "rl_step_reward"
+    },
+    {
+      "artifact": "rl_preference",
+      "artifact_schema_version": "hfr.rl.preference.v1",
+      "description": "Preference row emitted in export-rl preferences.jsonl.",
+      "filename": "rl_preference.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_preference.v1.schema.json",
+      "name": "rl_preference"
+    },
+    {
+      "artifact": "rl_failure_mode",
+      "artifact_schema_version": "hfr.rl.failure_mode.v1",
+      "description": "Failed-rule curriculum row emitted in export-rl failure_modes.jsonl.",
+      "filename": "rl_failure_mode.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_failure_mode.v1.schema.json",
+      "name": "rl_failure_mode"
+    },
+    {
+      "artifact": "rl_curriculum",
+      "artifact_schema_version": "hfr.rl.curriculum.v1",
+      "description": "Failure-mode curriculum metadata emitted in export-rl curriculum.json.",
+      "filename": "rl_curriculum.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_curriculum.v1.schema.json",
+      "name": "rl_curriculum"
+    },
+    {
+      "artifact": "rl_sft",
+      "artifact_schema_version": "hfr.rl.sft.v1",
+      "description": "Trainer-ready supervised fine-tuning row emitted in export-rl sft.jsonl.",
+      "filename": "rl_sft.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_sft.v1.schema.json",
+      "name": "rl_sft"
+    },
+    {
+      "artifact": "rl_dpo",
+      "artifact_schema_version": "hfr.rl.dpo.v1",
+      "description": "Trainer-ready direct-preference row emitted in export-rl dpo.jsonl.",
+      "filename": "rl_dpo.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_dpo.v1.schema.json",
+      "name": "rl_dpo"
+    },
+    {
+      "artifact": "rl_reward_model",
+      "artifact_schema_version": "hfr.rl.reward_model.v1",
+      "description": "Trainer-ready reward-model row emitted in export-rl reward_model.jsonl.",
+      "filename": "rl_reward_model.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_reward_model.v1.schema.json",
+      "name": "rl_reward_model"
+    },
+    {
+      "artifact": "rl_dataset_metrics",
+      "artifact_schema_version": "hfr.rl.dataset_metrics.v1",
+      "description": "Dataset quality metrics emitted in export-rl dataset_metrics.json.",
+      "filename": "rl_dataset_metrics.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rl_dataset_metrics.v1.schema.json",
+      "name": "rl_dataset_metrics"
+    },
+    {
       "artifact": "dataset_splits",
       "artifact_schema_version": "hfr.rl.dataset_splits.v1",
       "description": "Deterministic train/validation/test split metadata emitted by export-rl.",
@@ -104,6 +184,22 @@
       "filename": "compare_rl_manifest.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/compare_rl_manifest.v1.schema.json",
       "name": "compare_rl_manifest"
+    },
+    {
+      "artifact": "compare_rl_pair",
+      "artifact_schema_version": "hfr.compare_rl.pair.v1",
+      "description": "Baseline-vs-candidate improvement pair row emitted in export-compare-rl improvement_pairs.jsonl.",
+      "filename": "compare_rl_pair.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/compare_rl_pair.v1.schema.json",
+      "name": "compare_rl_pair"
+    },
+    {
+      "artifact": "compare_rl_dpo",
+      "artifact_schema_version": "hfr.compare_rl.dpo.v1",
+      "description": "Trainer-ready comparison DPO row emitted in export-compare-rl improvement_dpo.jsonl.",
+      "filename": "compare_rl_dpo.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/compare_rl_dpo.v1.schema.json",
+      "name": "compare_rl_dpo"
     },
     {
       "artifact": "review_manifest",

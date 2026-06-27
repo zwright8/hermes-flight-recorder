@@ -1,0 +1,132 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/compare_rl_dpo.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Trainer-ready comparison DPO row emitted in export-compare-rl improvement_dpo.jsonl.",
+  "properties": {
+    "candidate_outcome": {
+      "enum": [
+        "improved",
+        "regressed"
+      ]
+    },
+    "candidate_score_delta": {
+      "type": "integer"
+    },
+    "chosen": {
+      "type": "string"
+    },
+    "chosen_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "chosen_messages": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "chosen_score": {
+      "type": "integer"
+    },
+    "chosen_side": {
+      "enum": [
+        "baseline",
+        "candidate"
+      ]
+    },
+    "contract_fingerprint_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "contract_fingerprint_scope": {
+      "type": "string"
+    },
+    "contract_fingerprint_status": {
+      "type": "string"
+    },
+    "pair_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "preference_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "rejected": {
+      "type": "string"
+    },
+    "rejected_episode_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "rejected_messages": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "rejected_score": {
+      "type": "integer"
+    },
+    "rejected_side": {
+      "enum": [
+        "baseline",
+        "candidate"
+      ]
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.compare_rl.dpo.v1"
+    },
+    "score_gap": {
+      "type": "integer"
+    },
+    "source_artifact": {
+      "const": "improvement_pairs.jsonl"
+    },
+    "task_family": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "pair_id",
+    "preference_id",
+    "scenario_id",
+    "task_family",
+    "prompt",
+    "chosen",
+    "rejected",
+    "chosen_messages",
+    "rejected_messages",
+    "chosen_side",
+    "rejected_side",
+    "candidate_outcome",
+    "candidate_score_delta",
+    "chosen_episode_id",
+    "rejected_episode_id",
+    "chosen_score",
+    "rejected_score",
+    "score_gap",
+    "contract_fingerprint_status",
+    "contract_fingerprint_scope",
+    "contract_fingerprint_reasons",
+    "reason",
+    "source_artifact"
+  ],
+  "title": "Hermes Flight Recorder Compare RL DPO Row",
+  "type": "object"
+}
