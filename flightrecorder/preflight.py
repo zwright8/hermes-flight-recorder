@@ -8,6 +8,7 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+from .schema_registry import SchemaRegistryError, check_schema_file, check_schema_jsonl_file
 from .training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES
 
 TRAINER_PREFLIGHT_SCHEMA_VERSION = "hfr.trainer_preflight.v1"
@@ -33,11 +34,44 @@ _TRAINING_EXPORT_FILES = _TRAINING_EXPORT_BASE_FILES + tuple(
     for split_name in DATASET_SPLIT_NAMES
     for artifact_name in DATASET_SPLIT_ARTIFACTS
 )
+_TRAINING_ROW_SCHEMA_NAMES = {
+    "episodes": "rl_episode",
+    "rewards": "rl_reward",
+    "step_rewards": "rl_step_reward",
+    "preferences": "rl_preference",
+    "failure_modes": "rl_failure_mode",
+    "sft": "rl_sft",
+    "dpo": "rl_dpo",
+    "reward_model": "rl_reward_model",
+}
+_TRAINING_SCHEMA_CONTRACTS = (
+    ("manifest.json", "training_manifest", False),
+    ("dataset_metrics.json", "rl_dataset_metrics", False),
+    ("curriculum.json", "rl_curriculum", False),
+    ("dataset_splits.json", "dataset_splits", False),
+    ("episodes.jsonl", "rl_episode", True),
+    ("rewards.jsonl", "rl_reward", True),
+    ("step_rewards.jsonl", "rl_step_reward", True),
+    ("preferences.jsonl", "rl_preference", True),
+    ("failure_modes.jsonl", "rl_failure_mode", True),
+    ("sft.jsonl", "rl_sft", True),
+    ("dpo.jsonl", "rl_dpo", True),
+    ("reward_model.jsonl", "rl_reward_model", True),
+) + tuple(
+    (f"splits/{split_name}/{artifact_name}.jsonl", _TRAINING_ROW_SCHEMA_NAMES[artifact_name], True)
+    for split_name in DATASET_SPLIT_NAMES
+    for artifact_name in DATASET_SPLIT_ARTIFACTS
+)
 _COMPARE_EXPORT_FILES = (
     "manifest.json",
     "IMPROVEMENT_CARD.md",
     "improvement_pairs.jsonl",
     "improvement_dpo.jsonl",
+)
+_COMPARE_SCHEMA_CONTRACTS = (
+    ("manifest.json", "compare_rl_manifest", False),
+    ("improvement_pairs.jsonl", "compare_rl_pair", True),
+    ("improvement_dpo.jsonl", "compare_rl_dpo", True),
 )
 _REVIEWED_EXPORT_FILES = (
     "manifest.json",
@@ -47,6 +81,7 @@ _REVIEWED_EXPORT_FILES = (
     "reviewed_preferences.jsonl",
     "reviewed_dpo.jsonl",
 )
+_REVIEWED_SCHEMA_CONTRACTS = (("manifest.json", "reviewed_manifest", False),)
 _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.training_gate.v1",
     "hfr.compare_gate.v1",
@@ -107,15 +142,23 @@ def build_trainer_preflight(
         _add_bool_check(checks, "required_gate_present", gate_id in seen_gate_ids, {"gate": gate_id})
 
     artifacts: dict[str, Any] = {}
+    schema_contracts: dict[str, Any] = {}
     if training_export_dir is not None:
-        _add_export_artifacts(artifacts, checks, "training_export", Path(training_export_dir), _TRAINING_EXPORT_FILES, preserve_paths)
+        training_root = Path(training_export_dir)
+        _add_export_artifacts(artifacts, checks, "training_export", training_root, _TRAINING_EXPORT_FILES, preserve_paths)
+        _add_schema_contracts(schema_contracts, checks, "training_export", training_root, _TRAINING_SCHEMA_CONTRACTS, preserve_paths)
     if compare_export_dir is not None:
-        _add_export_artifacts(artifacts, checks, "compare_export", Path(compare_export_dir), _COMPARE_EXPORT_FILES, preserve_paths)
+        compare_root = Path(compare_export_dir)
+        _add_export_artifacts(artifacts, checks, "compare_export", compare_root, _COMPARE_EXPORT_FILES, preserve_paths)
+        _add_schema_contracts(schema_contracts, checks, "compare_export", compare_root, _COMPARE_SCHEMA_CONTRACTS, preserve_paths)
     if reviewed_export_dir is not None:
-        _add_export_artifacts(artifacts, checks, "reviewed_export", Path(reviewed_export_dir), _REVIEWED_EXPORT_FILES, preserve_paths)
+        reviewed_root = Path(reviewed_export_dir)
+        _add_export_artifacts(artifacts, checks, "reviewed_export", reviewed_root, _REVIEWED_EXPORT_FILES, preserve_paths)
+        _add_schema_contracts(schema_contracts, checks, "reviewed_export", reviewed_root, _REVIEWED_SCHEMA_CONTRACTS, preserve_paths)
     if evidence_bundle_path is not None:
         bundle_path = Path(evidence_bundle_path)
         artifacts["evidence_bundle"] = _file_record(bundle_path, preserve_paths)
+        _add_schema_contract(schema_contracts, checks, "evidence_bundle", bundle_path, "evidence_bundle", False, preserve_paths)
         bundle = _read_json_optional(bundle_path)
         _add_bool_check(checks, "evidence_bundle_exists", bundle_path.exists() and bundle_path.is_file(), {"artifact": "evidence_bundle"})
         _add_bool_check(
@@ -142,6 +185,7 @@ def build_trainer_preflight(
         "checks": checks,
         "gates": gates,
         "validation_summaries": validation_summaries,
+        "schema_contracts": schema_contracts,
         "artifacts": artifacts,
         "trainer_command": command,
         "notes": [
@@ -279,6 +323,87 @@ def _gate_id(gate: dict[str, Any], fallback: str) -> str:
 
 def _gate_requires_validation(gate: dict[str, Any]) -> bool:
     return gate.get("schema_version") in _VALIDATION_REQUIRED_GATE_SCHEMAS
+
+
+def _add_schema_contracts(
+    schema_contracts: dict[str, Any],
+    checks: list[dict[str, Any]],
+    name: str,
+    root: Path,
+    contracts: tuple[tuple[str, str, bool], ...],
+    preserve_paths: bool,
+) -> None:
+    for relative, schema_name, jsonl in contracts:
+        _add_schema_contract(
+            schema_contracts,
+            checks,
+            f"{name}_{_artifact_key(relative)}",
+            root / relative,
+            schema_name,
+            jsonl,
+            preserve_paths,
+        )
+
+
+def _add_schema_contract(
+    schema_contracts: dict[str, Any],
+    checks: list[dict[str, Any]],
+    key: str,
+    path: Path,
+    schema_name: str,
+    jsonl: bool,
+    preserve_paths: bool,
+) -> None:
+    record = _schema_contract_record(path, schema_name, jsonl, preserve_paths)
+    schema_contracts[key] = record
+    _add_bool_check(
+        checks,
+        "schema_contract_passed",
+        record["passed"],
+        {
+            "artifact": key,
+            "schema": schema_name,
+            "path": record["path"],
+        },
+    )
+
+
+def _schema_contract_record(path: Path, schema_name: str, jsonl: bool, preserve_paths: bool) -> dict[str, Any]:
+    regular_file = _is_regular_file(path)
+    record: dict[str, Any] = {
+        "path": _display_path(path, preserve_paths),
+        "exists": path.exists(),
+        "kind": "jsonl" if jsonl else "json",
+        "schema_name": schema_name,
+        "regular_file": regular_file,
+        "symlink": path.is_symlink(),
+        "passed": False,
+        "error_count": 0,
+        "errors": [],
+    }
+    if jsonl:
+        record["row_count"] = 0
+        record["row_schema_counts"] = []
+    if regular_file:
+        record["size_bytes"] = path.stat().st_size
+        record["sha256"] = _sha256(path)
+    else:
+        record["errors"] = ["path is not a regular file"]
+        record["error_count"] = 1
+        return record
+    try:
+        result = check_schema_jsonl_file(path, schema_name) if jsonl else check_schema_file(path, schema_name)
+    except (OSError, json.JSONDecodeError, SchemaRegistryError) as exc:
+        record["errors"] = [str(exc)]
+        record["error_count"] = 1
+        return record
+    record["passed"] = result.get("passed") is True
+    record["error_count"] = _int_value(result.get("error_count"))
+    record["errors"] = [str(error) for error in result.get("errors", []) if isinstance(error, str)][:20]
+    if jsonl:
+        record["row_count"] = _int_value(result.get("row_count"))
+        record["row_schema_counts"] = result.get("row_schema_counts") if isinstance(result.get("row_schema_counts"), list) else []
+    return record
 
 
 def _validation_summary_records(

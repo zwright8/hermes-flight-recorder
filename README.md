@@ -1038,10 +1038,13 @@ Use `flightrecorder trainer-preflight` as the final launch guard before an
 external SFT, DPO, reward-model, or RL job starts. It does not execute the
 trainer. It records the trainer command, fingerprints the trainer-facing
 exports, including `dataset_splits.json` and every `splits/<split>/*.jsonl`
-file, verifies required gates are present and passed, and blocks launch when
+file, checks public schema contracts for trainer-facing JSON/JSONL artifacts,
+verifies required gates are present and passed, and blocks launch when
 training, comparison, reviewed, or calibration handoffs skipped embedded export
-validation. Gates that are validated as standalone artifacts, such as
-`improvement_ledger_gate`, should be paired with a validation summary:
+validation. This catches malformed trainer rows even when the files exist and
+the older gate artifact still says the export passed. Gates that are validated
+as standalone artifacts, such as `improvement_ledger_gate`, should be paired
+with a validation summary:
 
 ```bash
 flightrecorder validate \

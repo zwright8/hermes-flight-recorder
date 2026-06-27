@@ -50,7 +50,26 @@ def make_reviewed_export(root: Path) -> Path:
 
 
 def write_passed_evidence_bundle(path: Path) -> None:
-    path.write_text(json.dumps({"schema_version": "hfr.evidence_bundle.v1", "passed": True}, sort_keys=True) + "\n", encoding="utf-8")
+    bundle = {
+        "schema_version": "hfr.evidence_bundle.v1",
+        "bundle_path": str(path),
+        "passed": True,
+        "readiness": "ready",
+        "decision": {
+            "readiness": "ready",
+            "recommendation": "promote_handoff",
+            "summary": "Minimal test evidence bundle is ready.",
+            "blocking_check_count": 0,
+            "next_actions": [],
+        },
+        "check_count": 0,
+        "failed_check_count": 0,
+        "checks": [],
+        "artifacts": {},
+        "metrics": {},
+        "notes": [],
+    }
+    path.write_text(json.dumps(bundle, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def write_improvement_ledger_gate(path: Path) -> None:
@@ -155,6 +174,10 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(len(result["artifacts"]["training_export_dataset_splits_json"]["sha256"]), 64)
             self.assertIn("training_export_splits_train_episodes_jsonl", result["artifacts"])
             self.assertEqual(len(result["artifacts"]["training_export_splits_train_episodes_jsonl"]["sha256"]), 64)
+            self.assertTrue(result["schema_contracts"]["training_export_manifest_json"]["passed"])
+            self.assertTrue(result["schema_contracts"]["training_export_sft_jsonl"]["passed"])
+            self.assertEqual(result["schema_contracts"]["training_export_sft_jsonl"]["schema_name"], "rl_sft")
+            self.assertGreaterEqual(result["schema_contracts"]["training_export_sft_jsonl"]["row_count"], 1)
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
             launch_check = Path(tmp) / "trainer_launch_check.json"
@@ -535,6 +558,41 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(result["artifacts"]["training_export_sft_jsonl"]["symlink"])
             failed_checks = {check["id"] for check in result["checks"] if not check["passed"]}
             self.assertIn("artifact_file_regular", failed_checks)
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+
+    def test_trainer_preflight_blocks_malformed_training_schema_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            gate = root / "training_gate.json"
+            preflight = root / "trainer_preflight.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(runs / "training_export")])
+            run_cli(["gate-export", "--training-export", str(runs / "training_export"), "--out", str(gate)])
+            sft_path = runs / "training_export" / "sft.jsonl"
+            sft_rows = read_jsonl(sft_path)
+            sft_rows[0].pop("response", None)
+            sft_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in sft_rows), encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--training-export",
+                    str(runs / "training_export"),
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            contract = result["schema_contracts"]["training_export_sft_jsonl"]
+            self.assertFalse(contract["passed"])
+            self.assertEqual(contract["schema_name"], "rl_sft")
+            self.assertIn("missing required property 'response'", "\n".join(contract["errors"]))
+            self.assertIn("schema_contract_passed", {check["id"] for check in result["checks"] if not check["passed"]})
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
     def test_trainer_preflight_blocks_symlinked_training_split_artifact(self):

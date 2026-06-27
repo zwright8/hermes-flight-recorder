@@ -78,6 +78,12 @@
     "schema_version": {
       "const": "hfr.trainer_preflight.v1"
     },
+    "schema_contracts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/schemaContract"
+      },
+      "type": "object"
+    },
     "trainer_command": {
       "$ref": "#/$defs/trainerCommand"
     },
@@ -222,6 +228,95 @@
         "exists",
         "schema_version",
         "passed"
+      ],
+      "type": "object"
+    },
+    "schemaContract": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "json",
+            "jsonl"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "row_schema_counts": {
+          "items": {
+            "$ref": "#/$defs/rowSchemaCount"
+          },
+          "type": "array"
+        },
+        "schema_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symlink": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "kind",
+        "schema_name",
+        "regular_file",
+        "symlink",
+        "passed",
+        "error_count",
+        "errors"
+      ],
+      "type": "object"
+    },
+    "rowSchemaCount": {
+      "additionalProperties": true,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "count"
       ],
       "type": "object"
     },

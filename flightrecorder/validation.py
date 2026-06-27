@@ -6587,6 +6587,10 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
     if not isinstance(artifacts, dict):
         target.errors.append("trainer_preflight.artifacts must be an object.")
         artifacts = {}
+    schema_contracts = preflight.get("schema_contracts", {})
+    if not isinstance(schema_contracts, dict):
+        target.errors.append("trainer_preflight.schema_contracts must be an object when present.")
+        schema_contracts = {}
     if not artifacts:
         target.errors.append("trainer_preflight.artifacts must not be empty.")
     if not _is_string_list(preflight.get("required_gates")):
@@ -6629,6 +6633,8 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
         )
     for name, record in artifacts.items():
         _validate_trainer_preflight_artifact_record(name, record, target, source_path)
+    for name, record in schema_contracts.items():
+        _validate_trainer_preflight_schema_contract_record(name, record, target, source_path)
     _validate_trainer_command(preflight.get("trainer_command"), target)
     target.details.update(
         {
@@ -6636,6 +6642,7 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
             "gate_count": len(gates),
             "failed_check_count": failed_checks,
             "artifact_count": len(artifacts),
+            "schema_contract_count": len(schema_contracts),
             "validation_summary_count": len(validation_summaries) if isinstance(validation_summaries, list) else 0,
         }
     )
@@ -6851,6 +6858,46 @@ def _validate_trainer_preflight_validation_summaries(value: Any, target: Validat
             for field_name in ("error_count", "warning_count"):
                 if not _is_non_negative_int(summary_target.get(field_name)):
                     target.errors.append(f"{target_label}.{field_name} must be a non-negative integer.")
+
+
+def _validate_trainer_preflight_schema_contract_record(name: Any, record: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(name, str) or not name:
+        target.errors.append("trainer_preflight.schema_contracts keys must be non-empty strings.")
+    label = f"trainer_preflight.schema_contracts.{name}"
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("path", "schema_name"):
+        if not isinstance(record.get(field_name), str) or not record.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if record.get("kind") not in {"json", "jsonl"}:
+        target.errors.append(f"{label}.kind must be json or jsonl.")
+    for field_name in ("exists", "regular_file", "symlink", "passed"):
+        if not isinstance(record.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if not _is_non_negative_int(record.get("error_count")):
+        target.errors.append(f"{label}.error_count must be a non-negative integer.")
+    if not _is_string_list(record.get("errors")):
+        target.errors.append(f"{label}.errors must be a list of strings.")
+    elif _is_non_negative_int(record.get("error_count")) and record.get("error_count") < len(record.get("errors", [])):
+        target.errors.append(f"{label}.error_count must be at least the number of retained errors.")
+    if record.get("kind") == "jsonl":
+        if not _is_non_negative_int(record.get("row_count")):
+            target.errors.append(f"{label}.row_count must be a non-negative integer for JSONL contracts.")
+        row_counts = record.get("row_schema_counts")
+        if not isinstance(row_counts, list):
+            target.errors.append(f"{label}.row_schema_counts must be a list for JSONL contracts.")
+        else:
+            for index, row_count in enumerate(row_counts):
+                row_label = f"{label}.row_schema_counts[{index}]"
+                if not isinstance(row_count, dict):
+                    target.errors.append(f"{row_label} must be an object.")
+                    continue
+                if not isinstance(row_count.get("name"), str) or not row_count.get("name"):
+                    target.errors.append(f"{row_label}.name must be a non-empty string.")
+                if not _is_non_negative_int(row_count.get("count")):
+                    target.errors.append(f"{row_label}.count must be a non-negative integer.")
+    _validate_preflight_file_hash(record, target, label, source_path, require_kind=False)
 
 
 def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: ValidationTarget, source_path: Path) -> None:
