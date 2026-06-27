@@ -408,6 +408,12 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(summary["metrics"]["pass_rate"], 0.2857)
             self.assertEqual(summary["metrics"]["average_score"], 50.71)
             self.assertEqual(summary["metrics"]["min_score"], 0)
+            index = (out / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Evidence Artifacts", index)
+            self.assertIn("Suite Summary", index)
+            self.assertIn("Evidence Bundle", index)
+            self.assertIn("Training Export", index)
+            self.assertIn("training_export/manifest.json", index)
             self.assertEqual(summary["metrics"]["max_score"], 100)
             self.assertEqual(summary["metrics"]["failed"], 5)
             self.assertTrue(all(len(run["scenario_sha256"]) == 64 for run in summary["runs"]))
@@ -903,6 +909,30 @@ class CliReportTests(unittest.TestCase):
             runs = Path(tmp) / "runs"
             first = runs / "prompt"
             run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(first)])
+            (runs / "improvement_ledger_gate.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.improvement_ledger_gate.v1",
+                        "passed": True,
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_iteration",
+                            "summary": "Concrete repair pressure is bounded.",
+                        },
+                        "metrics": {
+                            "open_work_item_count": 2,
+                            "recurring_work_item_count": 1,
+                            "resolved_work_item_count": 3,
+                        },
+                        "check_count": 4,
+                        "failed_check_count": 0,
+                        "checks": [],
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             index_path = Path(tmp) / "nested" / "index.html"
 
             code = run_cli(["index", "--runs", str(runs), "--out", str(index_path)])
@@ -911,6 +941,11 @@ class CliReportTests(unittest.TestCase):
             index = index_path.read_text(encoding="utf-8")
             self.assertIn("Hermes Flight Recorder Demo Runs", index)
             self.assertIn("Prompt Injection", index)
+            self.assertIn("Evidence Artifacts", index)
+            self.assertIn("Improvement Ledger Gate", index)
+            self.assertIn("improvement_ledger_gate.json", index)
+            self.assertIn("Concrete repair pressure is bounded.", index)
+            self.assertIn("recurring: 1", index)
 
     def test_compare_command_detects_regression(self):
         with tempfile.TemporaryDirectory() as tmp:

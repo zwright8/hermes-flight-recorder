@@ -427,7 +427,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
     index_path = Path(args.index_out) if args.index_out else out_dir / "index.html"
     if not args.no_index:
         completed_run_dirs = [out_dir / _safe_run_id(str(run["scenario_id"])) for run in runs]
-        write_index(completed_run_dirs, index_path)
+        write_index(completed_run_dirs, index_path, artifacts_dir=out_dir)
         artifacts["index"] = _display_path(index_path, args.preserve_paths)
 
     training_manifest: dict[str, Any] | None = None
@@ -553,6 +553,10 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
         )
         _write_json(handoff_paths["evidence_bundle"], handoff_bundle)
 
+    if not args.no_index:
+        completed_run_dirs = [out_dir / _safe_run_id(str(run["scenario_id"])) for run in runs]
+        write_index(completed_run_dirs, index_path, artifacts_dir=out_dir)
+
     print(
         f"SUITE total={summary['total']} passed={summary['passed']} failed={summary['failed']} "
         f"errors={summary['error_count']} summary={summary_path}"
@@ -572,7 +576,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
 def cmd_index(args: argparse.Namespace) -> int:
     runs_dir = Path(args.runs)
     run_dirs = sorted(path for path in runs_dir.iterdir() if path.is_dir())
-    write_index(run_dirs, args.out)
+    write_index(run_dirs, args.out, artifacts_dir=runs_dir)
     print(f"wrote {args.out}")
     return 0
 

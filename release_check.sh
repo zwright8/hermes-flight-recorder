@@ -40,6 +40,9 @@ python -m flightrecorder improvement-plan --help >/dev/null
 python -m flightrecorder improvement-ledger --help >/dev/null
 python -m flightrecorder gate-improvement-ledger --help >/dev/null
 ./demo.sh
+grep -F -q "Evidence Artifacts" runs/index.html
+grep -F -q "Improvement Ledger Gate" runs/index.html
+grep -F -q "improvement_ledger_gate.json" runs/index.html
 python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/task_completion.json >/dev/null

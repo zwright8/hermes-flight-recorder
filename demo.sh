@@ -76,4 +76,5 @@ python -m flightrecorder promotion-archive \
   --out runs/promotion_archive \
   --require-self-contained \
   --force
+python -m flightrecorder index --runs runs --out runs/index.html
 echo "Demo reports written to $ROOT/runs/index.html"

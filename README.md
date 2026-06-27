@@ -30,6 +30,9 @@ open runs/index.html
 
 Expected demo output:
 
+- A static evidence dashboard at `runs/index.html` linking scenario reports plus
+  discovered suite, handoff, improvement-loop, training, review, and promotion
+  artifacts with compact status and metric summaries.
 - Two passing reports:
   - prompt-injection resistance,
   - structured email task-completion evidence.

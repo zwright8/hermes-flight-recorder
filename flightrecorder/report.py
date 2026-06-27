@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -137,7 +138,41 @@ def render_report(
 """
 
 
-def write_index(run_dirs: list[Path], out_path: str | Path) -> None:
+_INDEX_ARTIFACTS = (
+    ("suite_summary.json", "Suite Summary"),
+    ("scenario_quality.json", "Scenario Quality"),
+    ("evidence_coverage.json", "Evidence Coverage"),
+    ("trace_observability.json", "Trace Observability"),
+    ("repair_queue.json", "Repair Queue"),
+    ("validation.json", "Validation Summary"),
+    ("evidence_bundle.json", "Evidence Bundle"),
+    ("improvement_plan.json", "Improvement Plan"),
+    ("improvement_ledger.json", "Improvement Ledger"),
+    ("improvement_ledger_gate.json", "Improvement Ledger Gate"),
+    ("action_ledger.json", "Action Ledger"),
+    ("action_ledger_gate.json", "Action Ledger Gate"),
+    ("promotion_decision.json", "Promotion Decision"),
+    ("promotion_ledger.json", "Promotion Ledger"),
+    ("promotion_ledger_gate.json", "Promotion Ledger Gate"),
+    ("promotion_archive/promotion_archive.json", "Promotion Archive"),
+    ("suite_gate.json", "Suite Gate"),
+    ("training_gate.json", "Training Export Gate"),
+    ("compare_gate.json", "Comparison Export Gate"),
+    ("reviewed_gate.json", "Reviewed Export Gate"),
+    ("training_export/manifest.json", "Training Export"),
+    ("compare_rl_export/manifest.json", "Comparison RL Export"),
+    ("review_queue/manifest.json", "Review Queue"),
+    ("reviewed_export/manifest.json", "Reviewed Export"),
+    ("review_calibration.json", "Review Calibration"),
+    ("trainer_preflight.json", "Trainer Preflight"),
+    ("trainer_launch_check.json", "Trainer Launch Check"),
+    ("live_smoke_summary.json", "Live Smoke Summary"),
+    ("suite_compare.json", "Suite Compare"),
+    ("suite_trend.json", "Suite Trend"),
+)
+
+
+def write_index(run_dirs: list[Path], out_path: str | Path, artifacts_dir: str | Path | None = None) -> None:
     output = Path(out_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     rows = []
@@ -152,12 +187,22 @@ def write_index(run_dirs: list[Path], out_path: str | Path) -> None:
             f"<tr><td><a href=\"{_esc(run_dir.name)}/report.html\">{_esc(scorecard.get('scenario_title') or run_dir.name)}</a></td>"
             f"<td class=\"{cls}\">{status}</td><td>{scorecard.get('score')}</td><td>{_esc(scorecard.get('summary', ''))}</td></tr>"
         )
+    artifact_rows = _index_artifact_rows(Path(artifacts_dir) if artifacts_dir is not None else output.parent, output.parent)
+    artifact_section = ""
+    if artifact_rows:
+        artifact_section = (
+            "<section><h2>Evidence Artifacts</h2>"
+            "<p class=\"muted\">Generated handoff, improvement-loop, training, review, and promotion artifacts discovered for this run set.</p>"
+            "<table><thead><tr><th>Artifact</th><th>Status</th><th>Key Metrics</th><th>Summary</th></tr></thead><tbody>"
+            + "\n".join(artifact_rows)
+            + "\n</tbody></table></section>"
+        )
     html_doc = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hermes Flight Recorder Demo Runs</title>
-<style>body{font-family:ui-sans-serif,system-ui;margin:32px;color:#17202a}table{border-collapse:collapse;width:100%;max-width:1100px}th,td{border-bottom:1px solid #d6dbdf;text-align:left;padding:12px}.pass{color:#147a3d;font-weight:800}.fail{color:#b42318;font-weight:800}a{color:#1f6feb}</style>
-</head><body><h1>Hermes Flight Recorder Demo Runs</h1><table><thead><tr><th>Scenario</th><th>Status</th><th>Score</th><th>Summary</th></tr></thead><tbody>
-""" + "\n".join(rows) + "\n</tbody></table></body></html>\n"
+<style>body{font-family:ui-sans-serif,system-ui;margin:32px;color:#17202a}main{max-width:1180px}section{margin-top:30px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #d6dbdf;text-align:left;padding:12px;vertical-align:top}.pass{color:#147a3d;font-weight:800}.fail{color:#b42318;font-weight:800}.warn{color:#9a6700;font-weight:800}.neutral{color:#566573;font-weight:800}.muted{color:#566573;max-width:900px}code{background:#eef2f6;border-radius:6px;padding:2px 5px}a{color:#1f6feb}td{overflow-wrap:anywhere}</style>
+</head><body><main><h1>Hermes Flight Recorder Demo Runs</h1><section><h2>Scenario Reports</h2><table><thead><tr><th>Scenario</th><th>Status</th><th>Score</th><th>Summary</th></tr></thead><tbody>
+""" + "\n".join(rows) + f"\n</tbody></table></section>{artifact_section}</main></body></html>\n"
     output.write_text(html_doc, encoding="utf-8")
 
 
@@ -166,6 +211,106 @@ def _render_rule(rule: dict[str, Any]) -> str:
     status = "PASS" if rule.get("passed") else "FAIL"
     evidence = "".join(f"<li>{_esc(item)}</li>" for item in rule.get("evidence", []))
     return f"<article class=\"rule{cls}\"><h3><span>{_esc(rule['name'])}</span><span>{status}</span></h3><ul>{evidence}</ul></article>"
+
+
+def _index_artifact_rows(artifacts_dir: Path, link_base: Path) -> list[str]:
+    rows: list[str] = []
+    for relative_path, title in _INDEX_ARTIFACTS:
+        path = artifacts_dir / relative_path
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        state, cls = _artifact_state(payload)
+        metrics = _artifact_metrics(payload)
+        summary = _artifact_summary(payload)
+        href = os.path.relpath(path, link_base)
+        rows.append(
+            "<tr>"
+            f"<td><a href=\"{_esc(href)}\">{_esc(title)}</a><br><code>{_esc(relative_path)}</code></td>"
+            f"<td class=\"{cls}\">{_esc(state)}</td>"
+            f"<td>{_esc(metrics)}</td>"
+            f"<td>{_esc(summary)}</td>"
+            "</tr>"
+        )
+    return rows
+
+
+def _artifact_state(payload: dict[str, Any]) -> tuple[str, str]:
+    passed = payload.get("passed")
+    if isinstance(passed, bool):
+        return ("PASS" if passed else "FAIL", "pass" if passed else "fail")
+    decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
+    readiness = decision.get("readiness") or payload.get("readiness")
+    if readiness == "blocked":
+        return "BLOCKED", "fail"
+    if readiness == "ready":
+        return "READY", "pass"
+    if payload.get("schema_version"):
+        return "RECORDED", "neutral"
+    return "UNKNOWN", "warn"
+
+
+def _artifact_summary(payload: dict[str, Any]) -> str:
+    decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
+    for source in (decision, payload):
+        summary = source.get("summary") if isinstance(source, dict) else None
+        if isinstance(summary, str) and summary:
+            return summary
+    recommendation = decision.get("recommendation") or payload.get("recommendation")
+    if isinstance(recommendation, str) and recommendation:
+        return recommendation
+    return str(payload.get("schema_version") or "No summary available.")
+
+
+def _artifact_metrics(payload: dict[str, Any]) -> str:
+    metrics = payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {}
+    candidates = (
+        ("run_count", "runs"),
+        ("total", "total"),
+        ("passed", "passed"),
+        ("failed", "failed"),
+        ("pass_rate", "pass_rate"),
+        ("average_score", "avg_score"),
+        ("scenario_count", "scenarios"),
+        ("item_count", "items"),
+        ("work_item_count", "work_items"),
+        ("open_work_item_count", "open"),
+        ("recurring_work_item_count", "recurring"),
+        ("resolved_work_item_count", "resolved"),
+        ("unique_work_item_count", "unique"),
+        ("episode_count", "episodes"),
+        ("preference_count", "preferences"),
+        ("sft_count", "sft"),
+        ("dpo_count", "dpo"),
+        ("candidate_win_count", "candidate_wins"),
+        ("baseline_win_count", "baseline_wins"),
+        ("reviewed_label_count", "labels"),
+        ("agreement_rate", "agreement"),
+        ("check_count", "checks"),
+        ("failed_check_count", "failed_checks"),
+        ("decision_count", "decisions"),
+        ("allowed_count", "allowed"),
+        ("blocked_count", "blocked"),
+        ("artifact_count", "artifacts"),
+        ("missing_count", "missing"),
+    )
+    parts: list[str] = []
+    for field_name, label in candidates:
+        value = payload.get(field_name)
+        if value is None:
+            value = metrics.get(field_name)
+        if isinstance(value, bool) or value is None:
+            continue
+        if isinstance(value, (int, float, str)):
+            parts.append(f"{label}: {value}")
+        if len(parts) >= 5:
+            break
+    return ", ".join(parts) if parts else "schema: " + str(payload.get("schema_version") or "unknown")
 
 
 def _render_violation(rule: dict[str, Any]) -> str:
