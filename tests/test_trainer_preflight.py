@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -321,6 +323,31 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(plan["metrics"]["external_code_file_count"], contract["external_command_path_count"])
             self.assertEqual(run_cli(["schemas", "--check", str(consumer_plan)]), 0)
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
+
+            wrapper_receipt = Path(tmp) / "trainer_wrapper_dry_run.json"
+            wrapper = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "examples" / "trainer-wrapper" / "consume_trainer_plan.py"),
+                    "--plan",
+                    str(consumer_plan),
+                    "--out",
+                    str(wrapper_receipt),
+                    "--strict",
+                ],
+                check=False,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(wrapper.returncode, 0, wrapper.stderr + wrapper.stdout)
+            receipt = json.loads(wrapper_receipt.read_text(encoding="utf-8"))
+            self.assertEqual(receipt["schema_version"], "hfr.example_trainer_wrapper_dry_run.v1")
+            self.assertTrue(receipt["passed"])
+            self.assertEqual(receipt["recommendation"], "dry_run_ready")
+            self.assertEqual(receipt["would_run"]["argv"][:2], ["python", "train.py"])
+            self.assertEqual(receipt["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
+            self.assertEqual(receipt["metrics"]["external_code_file_count"], contract["external_command_path_count"])
 
             missing_check = Path(tmp) / "trainer_archive_check_missing.json"
             self.assertEqual(

@@ -107,5 +107,9 @@ python -m flightrecorder trainer-consumer-plan \
   --archive-check runs/trainer_archive_check.json \
   --out runs/trainer_consumer_plan.json \
   --strict
+python examples/trainer-wrapper/consume_trainer_plan.py \
+  --plan runs/trainer_consumer_plan.json \
+  --out runs/trainer_wrapper_dry_run.json \
+  --strict
 python -m flightrecorder index --runs runs --out runs/index.html
 echo "Demo reports written to $ROOT/runs/index.html"

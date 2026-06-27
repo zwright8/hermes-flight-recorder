@@ -84,8 +84,9 @@ Expected demo output:
   `runs/trainer_launch_check.json`, portable `runs/trainer_archive/`, and
   `runs/trainer_archive_check.json`, plus `runs/trainer_consumer_plan.json`,
   packaging gates, schema contracts, trainer-facing export files, local
-  external-code readiness, and a deterministic non-executing plan for an
-  external training launcher to validate before consuming rows.
+  external-code readiness, a deterministic non-executing plan, and an example
+  wrapper dry-run receipt for an external training launcher to validate before
+  consuming rows.
 
 ## Install
 
@@ -376,6 +377,11 @@ flightrecorder trainer-consumer-plan \
   --archive-check runs/trainer_archive_check.json \
   --out runs/trainer_consumer_plan.json \
   --strict
+
+python examples/trainer-wrapper/consume_trainer_plan.py \
+  --plan runs/trainer_consumer_plan.json \
+  --out runs/trainer_wrapper_dry_run.json \
+  --strict
 ```
 
 The preflight fingerprints trainer-facing files, including split metadata and
@@ -391,6 +397,9 @@ under `--external-code-root` without executing them.
 `trainer-consumer-plan` turns that proof into the exact command, archive root,
 external code files, trainer inputs, and non-execution invariants that an
 external trainer wrapper should require before it runs anything.
+`examples/trainer-wrapper/consume_trainer_plan.py` is a reference wrapper that
+validates the plan and writes `trainer_wrapper_dry_run.json` without executing
+the command.
 
 For production suites, commit a stricter gate policy and point CI at it:
 
@@ -1128,6 +1137,11 @@ flightrecorder trainer-consumer-plan \
   --out runs/trainer_consumer_plan.json \
   --strict
 
+python examples/trainer-wrapper/consume_trainer_plan.py \
+  --plan runs/trainer_consumer_plan.json \
+  --out runs/trainer_wrapper_dry_run.json \
+  --strict
+
 flightrecorder validate --trainer-archive runs/trainer_archive --strict
 
 flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
@@ -1166,6 +1180,11 @@ input hashes, and launcher invariants into one plan with
 `recommendation: ready_for_external_trainer`. A trainer wrapper can validate
 that plan, resolve `execution.command_argv`, and then take responsibility for
 actual training outside Flight Recorder.
+
+The reference wrapper in `examples/trainer-wrapper/consume_trainer_plan.py`
+shows that boundary in executable form. It validates the plan, emits
+`trainer_wrapper_dry_run.json`, and reports the command it would hand off, but
+it never starts a process from `execution.command_argv`.
 
 ## Scoring Rules
 

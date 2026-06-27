@@ -318,6 +318,11 @@ flightrecorder trainer-consumer-plan \
   --out runs/trainer_consumer_plan.json \
   --strict
 
+python examples/trainer-wrapper/consume_trainer_plan.py \
+  --plan runs/trainer_consumer_plan.json \
+  --out runs/trainer_wrapper_dry_run.json \
+  --strict
+
 flightrecorder validate --trainer-archive runs/trainer_archive --strict
 
 flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
@@ -350,6 +355,9 @@ needing the original producer's local paths.
 `trainer-consumer-plan` then records the exact approved command argv, archive
 root, external code file hashes, trainer input hashes, and launcher invariants
 that the external wrapper should require. It is still a plan, not a runner.
+The reference wrapper in `examples/trainer-wrapper/` demonstrates how an
+external launcher can validate that plan and emit a dry-run receipt before a
+real trainer takes over.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
@@ -851,13 +859,15 @@ should also block a training handoff.
 After `gate-export` and any comparison or reviewed gates pass, run
 `trainer-preflight`, build a `trainer-archive`, then have the external launcher
 run `trainer-launch-check`, `trainer-archive-check`, and
-`trainer-consumer-plan`. Require `recommendation: launch_allowed`,
-`recommendation: consumer_ready`, and
-`recommendation: ready_for_external_trainer` before invoking a trainer. This
-closes the handoff loop: the trainer consumes only exports that are tied to
-passed gates, reviewed/calibration validation when applicable, current artifact
-hashes, regular-file export artifacts, local trainer code that the consumer
-explicitly supplied, and a validated command/input plan.
+`trainer-consumer-plan`; an external wrapper can then dry-run that plan with
+`examples/trainer-wrapper/consume_trainer_plan.py`. Require
+`recommendation: launch_allowed`, `recommendation: consumer_ready`,
+`recommendation: ready_for_external_trainer`, and a wrapper receipt with
+`recommendation: dry_run_ready` before invoking a trainer. This closes the
+handoff loop: the trainer consumes only exports that are tied to passed gates,
+reviewed/calibration validation when applicable, current artifact hashes,
+regular-file export artifacts, local trainer code that the consumer explicitly
+supplied, and a validated command/input plan.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

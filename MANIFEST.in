@@ -11,5 +11,5 @@ include scripts/live_hermes_smoke.py
 recursive-include flightrecorder/schemas *.json
 recursive-include scenarios *.json
 recursive-include fixtures *.jsonl *.json
-recursive-include examples *.json
+recursive-include examples *.json *.yml *.py *.md
 recursive-include tests *.py

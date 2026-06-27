@@ -1113,6 +1113,11 @@ python -m flightrecorder trainer-consumer-plan \
   --strict >/dev/null
 test -f runs/trainer_consumer_plan.json
 python -m flightrecorder schemas --check runs/trainer_consumer_plan.json >/dev/null
+python examples/trainer-wrapper/consume_trainer_plan.py \
+  --plan runs/trainer_consumer_plan.json \
+  --out runs/trainer_wrapper_dry_run.json \
+  --strict >/dev/null
+test -f runs/trainer_wrapper_dry_run.json
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
@@ -1421,6 +1426,9 @@ assert_help_contains "--require-self-contained" "$VENV_DIR/bin/python" -m flight
 assert_help_contains "--external-code-root" "$VENV_DIR/bin/python" -m flightrecorder trainer-archive-check --help
 "$VENV_DIR/bin/python" -m flightrecorder trainer-consumer-plan --help >/dev/null
 assert_help_contains "--archive-check" "$VENV_DIR/bin/python" -m flightrecorder trainer-consumer-plan --help
+test -f examples/trainer-wrapper/consume_trainer_plan.py
+"$VENV_DIR/bin/python" examples/trainer-wrapper/consume_trainer_plan.py --help >/dev/null
+assert_help_contains "--print-command" "$VENV_DIR/bin/python" examples/trainer-wrapper/consume_trainer_plan.py --help
 assert_help_contains "--metadata" "$VENV_DIR/bin/python" -m flightrecorder export-rl --help
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null

@@ -169,6 +169,7 @@ _INDEX_ARTIFACTS = (
     ("trainer_archive/trainer_archive.json", "Trainer Archive"),
     ("trainer_archive_check.json", "Trainer Archive Check"),
     ("trainer_consumer_plan.json", "Trainer Consumer Plan"),
+    ("trainer_wrapper_dry_run.json", "Trainer Wrapper Dry Run"),
     ("live_smoke_summary.json", "Live Smoke Summary"),
     ("suite_compare.json", "Suite Compare"),
     ("suite_trend.json", "Suite Trend"),

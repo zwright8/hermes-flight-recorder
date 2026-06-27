@@ -34,6 +34,8 @@ artifacts and turns them into maintainable eval evidence:
   code, and the exact non-executing command/input plan before consuming SFT,
   DPO, reward-model, or RL rows, including archive-local input rewrites and a
   consumer contract that separates copied evidence from external trainer code.
+  A reference wrapper dry-run demonstrates how trainer infrastructure consumes
+  that plan without making Flight Recorder execute training.
 - improvement-plan, improvement-ledger, and improvement-ledger-gate artifacts
   that turn evidence-backed failures into concrete work items, track whether
   they recur across iterations, and give CI a deterministic promote/block
@@ -327,6 +329,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
    copied gates, schema contracts, trainer-facing export files, local trainer
    code, and the exact command/input contract without trusting producer-local
    paths.
+24. Dry-run that plan with `examples/trainer-wrapper/consume_trainer_plan.py`
+   so trainer infrastructure has a receipt proving it parsed the handoff
+   contract before any external training process starts.
 
 That gives the Hermes team a practical improvement loop:
 
