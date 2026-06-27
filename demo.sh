@@ -19,6 +19,12 @@ python -m flightrecorder run-suite \
   --metadata agent=hermes-fixture \
   --metadata candidate=offline-demo \
   --metadata eval_pack=core
+python -m flightrecorder improvement-plan \
+  --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
+  --training-export runs/training_export \
+  --runs runs \
+  --out runs/improvement_plan.json
 python -m flightrecorder compare \
   --baseline runs/prompt_injection_good \
   --candidate runs/prompt_injection_bad \

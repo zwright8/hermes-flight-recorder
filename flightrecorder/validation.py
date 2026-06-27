@@ -18,6 +18,7 @@ from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
 from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
@@ -99,6 +100,7 @@ def validate_artifacts(
     reviewed_export_dir: str | Path | None = None,
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
+    improvement_plan_paths: list[str | Path] | None = None,
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
@@ -138,6 +140,8 @@ def validate_artifacts(
         targets.append(validate_evidence_coverage(evidence_coverage_path))
     for evidence_bundle_path in evidence_bundle_paths or []:
         targets.append(validate_evidence_bundle(evidence_bundle_path))
+    for improvement_plan_path in improvement_plan_paths or []:
+        targets.append(validate_improvement_plan(improvement_plan_path))
     for action_ledger_path in action_ledger_paths or []:
         targets.append(validate_action_ledger(action_ledger_path))
     for action_ledger_gate_path in action_ledger_gate_paths or []:
@@ -546,6 +550,16 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     bundle = _read_object(bundle_path, target, "evidence_bundle.json")
     if bundle is not None:
         _validate_evidence_bundle(bundle, target)
+    return target
+
+
+def validate_improvement_plan(path: str | Path) -> ValidationTarget:
+    """Validate an improvement-plan handoff artifact."""
+    plan_path = Path(path)
+    target = ValidationTarget("improvement_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "improvement_plan.json")
+    if plan is not None:
+        _validate_improvement_plan(plan, target)
     return target
 
 
@@ -4548,6 +4562,292 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
     )
 
 
+def _validate_improvement_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(plan, "schema_version", IMPROVEMENT_PLAN_SCHEMA_VERSION, target)
+    if not isinstance(plan.get("plan_path"), str) or not plan.get("plan_path"):
+        target.errors.append("improvement_plan.plan_path must be a non-empty string.")
+    if plan.get("passed") is not True:
+        target.errors.append("improvement_plan.passed must be true.")
+    if plan.get("readiness") not in {"ready", "blocked"}:
+        target.errors.append("improvement_plan.readiness must be ready or blocked.")
+
+    source_artifacts = plan.get("source_artifacts")
+    if not isinstance(source_artifacts, dict):
+        target.errors.append("improvement_plan.source_artifacts must be an object.")
+        source_artifacts = {}
+    if "evidence_bundle" not in source_artifacts:
+        target.errors.append("improvement_plan.source_artifacts.evidence_bundle is required.")
+    for name, record in source_artifacts.items():
+        _validate_improvement_source_artifact(name, record, target)
+
+    work_items = plan.get("work_items")
+    if not isinstance(work_items, list):
+        target.errors.append("improvement_plan.work_items must be a list.")
+        work_items = []
+    if plan.get("work_item_count") != len(work_items):
+        target.errors.append(f"improvement_plan.work_item_count expected {len(work_items)}, got {plan.get('work_item_count')!r}.")
+
+    totals: dict[str, Any] = {
+        "priority_counts": {},
+        "category_counts": {},
+        "task_family_counts": {},
+        "rule_counts": {},
+        "scenarios": set(),
+        "task_families": set(),
+        "rules": set(),
+        "repair_backed_count": 0,
+        "curriculum_backed_count": 0,
+        "digest_backed_count": 0,
+        "bundle_action_count": 0,
+        "evidence_ref_count": 0,
+    }
+    seen_item_ids: set[str] = set()
+    seen_routing_keys: set[str] = set()
+    seen_fingerprints: set[str] = set()
+    previous_sort_key: tuple[int, int, str, str, str, str] | None = None
+    for index, item in enumerate(work_items):
+        sort_key = _validate_improvement_work_item(
+            item,
+            target,
+            f"improvement_plan.work_items[{index}]",
+            seen_item_ids,
+            seen_routing_keys,
+            seen_fingerprints,
+            totals,
+        )
+        if sort_key is not None:
+            if previous_sort_key is not None and sort_key < previous_sort_key:
+                target.errors.append("improvement_plan.work_items must be sorted by priority, category, task family, scenario, rule, and summary.")
+            previous_sort_key = sort_key
+    _validate_improvement_metrics(plan.get("metrics"), target, totals, len(work_items))
+    _validate_improvement_decision(plan.get("decision"), target, plan.get("readiness"), len(work_items), totals)
+    if "notes" in plan and not _is_string_list(plan.get("notes")):
+        target.errors.append("improvement_plan.notes must be a list of strings when present.")
+    target.details.update(
+        {
+            "readiness": plan.get("readiness"),
+            "work_item_count": len(work_items),
+            "critical_or_high_count": _count_value(totals["priority_counts"], "critical") + _count_value(totals["priority_counts"], "high"),
+        }
+    )
+
+
+def _validate_improvement_source_artifact(name: Any, record: Any, target: ValidationTarget) -> None:
+    if not isinstance(name, str) or not name:
+        target.errors.append("improvement_plan.source_artifacts keys must be non-empty strings.")
+    label = f"improvement_plan.source_artifacts.{name}"
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("kind", "path", "exists"):
+        if field_name not in record:
+            target.errors.append(f"{label}.{field_name} is required.")
+    if record.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be file or directory.")
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    if not isinstance(record.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if record.get("kind") == "file" and record.get("exists") is True:
+        sha = record.get("sha256")
+        if not isinstance(sha, str) or len(sha) != 64 or sha != sha.lower() or any(char not in "0123456789abcdef" for char in sha):
+            target.errors.append(f"{label}.sha256 must be a lowercase 64-character hex digest for existing files.")
+        if not _is_non_negative_int(record.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+    if record.get("kind") == "directory" and record.get("exists") is True and not _is_non_negative_int(record.get("entry_count")):
+        target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
+    if "schema_version" in record and record.get("schema_version") is not None and not isinstance(record.get("schema_version"), str):
+        target.errors.append(f"{label}.schema_version must be a string or null.")
+    if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean or null.")
+
+
+def _validate_improvement_work_item(
+    item: Any,
+    target: ValidationTarget,
+    label: str,
+    seen_item_ids: set[str],
+    seen_routing_keys: set[str],
+    seen_fingerprints: set[str],
+    totals: dict[str, Any],
+) -> tuple[int, int, str, str, str, str] | None:
+    if not isinstance(item, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    for field_name in ("item_id", "category", "priority", "summary", "suggested_action", "fingerprint", "routing_key"):
+        if not isinstance(item.get(field_name), str) or not item.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    item_id = item.get("item_id")
+    if isinstance(item_id, str) and item_id:
+        if item_id in seen_item_ids:
+            target.errors.append(f"{label}.item_id duplicates {item_id!r}.")
+        seen_item_ids.add(item_id)
+    routing_key = item.get("routing_key")
+    if isinstance(routing_key, str) and routing_key:
+        if routing_key in seen_routing_keys:
+            target.errors.append(f"{label}.routing_key duplicates {routing_key!r}.")
+        seen_routing_keys.add(routing_key)
+    category = item.get("category")
+    if category not in {"bundle_action", "repair", "curriculum", "digest_action"}:
+        target.errors.append(f"{label}.category must be bundle_action, repair, curriculum, or digest_action.")
+        category = "digest_action"
+    priority = item.get("priority")
+    if priority not in set(PRIORITIES):
+        target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
+        priority = "low"
+    priority_rank = item.get("priority_rank")
+    expected_rank = list(PRIORITIES).index(priority)
+    if priority_rank != expected_rank:
+        target.errors.append(f"{label}.priority_rank expected {expected_rank}, got {priority_rank!r}.")
+    for field_name in ("scenario_id", "task_family", "rule_id", "rule_name", "task_completion_status"):
+        if item.get(field_name) is not None and not isinstance(item.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string or null.")
+    if item.get("score") is not None and not _is_int_between(item.get("score"), 0, 100):
+        target.errors.append(f"{label}.score must be null or an integer from 0 to 100.")
+    if not isinstance(item.get("sources"), dict):
+        target.errors.append(f"{label}.sources must be an object.")
+    else:
+        _validate_improvement_item_sources(item["sources"], target, f"{label}.sources")
+    _validate_evidence_refs(item.get("evidence_refs"), target, f"{label}.evidence_refs")
+    if not isinstance(item.get("evidence_snippets"), list):
+        target.errors.append(f"{label}.evidence_snippets must be a list.")
+    if not isinstance(item.get("source_artifacts"), dict):
+        target.errors.append(f"{label}.source_artifacts must be an object.")
+    if not isinstance(item.get("replay"), dict):
+        target.errors.append(f"{label}.replay must be an object.")
+
+    fingerprint = item.get("fingerprint")
+    expected_fingerprint = work_item_fingerprint(item)
+    if not isinstance(fingerprint, str) or len(fingerprint) != 64 or fingerprint != fingerprint.lower() or any(
+        char not in "0123456789abcdef" for char in fingerprint
+    ):
+        target.errors.append(f"{label}.fingerprint must be a lowercase 64-character hex digest.")
+    elif fingerprint != expected_fingerprint:
+        target.errors.append(f"{label}.fingerprint does not match item content.")
+    elif fingerprint in seen_fingerprints:
+        target.errors.append(f"{label}.fingerprint duplicates {fingerprint!r}.")
+    elif isinstance(fingerprint, str):
+        seen_fingerprints.add(fingerprint)
+    if isinstance(fingerprint, str) and isinstance(item_id, str) and item_id != f"{category}:{fingerprint[:16]}":
+        target.errors.append(f"{label}.item_id must match category and fingerprint.")
+    if isinstance(fingerprint, str) and isinstance(routing_key, str) and routing_key != f"{category}:{priority}:{fingerprint[:12]}":
+        target.errors.append(f"{label}.routing_key must match category, priority, and fingerprint.")
+
+    _increment_count(totals["priority_counts"], priority)
+    _increment_count(totals["category_counts"], category)
+    _add_total(totals["scenarios"], item.get("scenario_id"))
+    _add_total(totals["task_families"], item.get("task_family"))
+    _add_total(totals["rules"], item.get("rule_id"))
+    _increment_count(totals["task_family_counts"], item.get("task_family"))
+    _increment_count(totals["rule_counts"], item.get("rule_id"))
+    sources = item.get("sources") if isinstance(item.get("sources"), dict) else {}
+    if _list_present(sources.get("repair_item_ids")):
+        totals["repair_backed_count"] += 1
+    if _list_present(sources.get("curriculum_priorities")):
+        totals["curriculum_backed_count"] += 1
+    if isinstance(sources.get("run_digest"), dict):
+        totals["digest_backed_count"] += 1
+    if category == "bundle_action":
+        totals["bundle_action_count"] += 1
+    evidence_refs = item.get("evidence_refs") if isinstance(item.get("evidence_refs"), list) else []
+    totals["evidence_ref_count"] += len(evidence_refs)
+    return (
+        expected_rank,
+        {"bundle_action": 0, "repair": 1, "curriculum": 2, "digest_action": 3}.get(str(category), 99),
+        str(item.get("task_family") or ""),
+        str(item.get("scenario_id") or ""),
+        str(item.get("rule_id") or ""),
+        str(item.get("summary") or ""),
+    )
+
+
+def _validate_improvement_item_sources(value: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for field_name in ("bundle_action_ids", "repair_item_ids", "curriculum_priorities"):
+        if not isinstance(value.get(field_name), list):
+            target.errors.append(f"{label}.{field_name} must be a list.")
+    if value.get("run_digest") is not None and not isinstance(value.get("run_digest"), dict):
+        target.errors.append(f"{label}.run_digest must be an object or null.")
+    for field_name in ("bundle_action_ids", "repair_item_ids"):
+        if isinstance(value.get(field_name), list) and not all(isinstance(item, str) and item for item in value[field_name]):
+            target.errors.append(f"{label}.{field_name} must contain non-empty strings.")
+    if isinstance(value.get("curriculum_priorities"), list):
+        for index, priority in enumerate(value["curriculum_priorities"]):
+            priority_label = f"{label}.curriculum_priorities[{index}]"
+            if not isinstance(priority, dict):
+                target.errors.append(f"{priority_label} must be an object.")
+                continue
+            for field_name in ("task_family", "rule_id", "rule_name", "priority_band"):
+                if not isinstance(priority.get(field_name), str) or not priority.get(field_name):
+                    target.errors.append(f"{priority_label}.{field_name} must be a non-empty string.")
+            for field_name in ("priority_score", "count", "critical_count", "max_penalty"):
+                if not _is_non_negative_int(priority.get(field_name)):
+                    target.errors.append(f"{priority_label}.{field_name} must be a non-negative integer.")
+
+
+def _validate_improvement_metrics(metrics: Any, target: ValidationTarget, totals: dict[str, Any], work_item_count: int) -> None:
+    if not isinstance(metrics, dict):
+        target.errors.append("improvement_plan.metrics must be an object.")
+        return
+    expected_scalars = {
+        "work_item_count": work_item_count,
+        "scenario_count": len(totals["scenarios"]),
+        "task_family_count": len(totals["task_families"]),
+        "rule_count": len(totals["rules"]),
+        "repair_backed_count": totals["repair_backed_count"],
+        "curriculum_backed_count": totals["curriculum_backed_count"],
+        "digest_backed_count": totals["digest_backed_count"],
+        "bundle_action_count": totals["bundle_action_count"],
+        "evidence_ref_count": totals["evidence_ref_count"],
+    }
+    for field_name, expected in expected_scalars.items():
+        if metrics.get(field_name) != expected:
+            target.errors.append(f"improvement_plan.metrics.{field_name} expected {expected!r}, got {metrics.get(field_name)!r}.")
+    expected_lists = {
+        "scenarios": sorted(totals["scenarios"]),
+        "task_families": sorted(totals["task_families"]),
+        "rules": sorted(totals["rules"]),
+    }
+    for field_name, expected in expected_lists.items():
+        if metrics.get(field_name) != expected:
+            target.errors.append(f"improvement_plan.metrics.{field_name} expected {expected!r}, got {metrics.get(field_name)!r}.")
+    for field_name in ("priority_counts", "category_counts", "task_family_counts", "rule_counts"):
+        actual = _count_rows(metrics.get(field_name))
+        if actual != totals[field_name]:
+            target.errors.append(f"improvement_plan.metrics.{field_name} does not match work items.")
+
+
+def _validate_improvement_decision(
+    decision: Any,
+    target: ValidationTarget,
+    readiness: Any,
+    work_item_count: int,
+    totals: dict[str, Any],
+) -> None:
+    if not isinstance(decision, dict):
+        target.errors.append("improvement_plan.decision must be an object.")
+        return
+    if decision.get("readiness") != readiness:
+        target.errors.append("improvement_plan.decision.readiness must match improvement_plan.readiness.")
+    if decision.get("recommendation") not in {"fix_handoff", "run_improvement_iteration", "review_improvement_opportunities", "promote_or_monitor"}:
+        target.errors.append("improvement_plan.decision.recommendation has an unknown value.")
+    if not isinstance(decision.get("summary"), str) or not decision.get("summary"):
+        target.errors.append("improvement_plan.decision.summary must be a non-empty string.")
+    if decision.get("work_item_count") != work_item_count:
+        target.errors.append(f"improvement_plan.decision.work_item_count expected {work_item_count}, got {decision.get('work_item_count')!r}.")
+    critical_or_high = _count_value(totals["priority_counts"], "critical") + _count_value(totals["priority_counts"], "high")
+    if decision.get("critical_or_high_count") != critical_or_high:
+        target.errors.append(
+            f"improvement_plan.decision.critical_or_high_count expected {critical_or_high}, got {decision.get('critical_or_high_count')!r}."
+        )
+    if not _is_non_negative_int(decision.get("source_bundle_next_action_count")):
+        target.errors.append("improvement_plan.decision.source_bundle_next_action_count must be a non-negative integer.")
+    top = decision.get("top_work_items")
+    if not isinstance(top, list):
+        target.errors.append("improvement_plan.decision.top_work_items must be a list.")
+    elif len(top) > 5:
+        target.errors.append("improvement_plan.decision.top_work_items must contain at most five items.")
+
+
 def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget) -> None:
     _require_equal(ledger, "schema_version", ACTION_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
@@ -6181,6 +6481,15 @@ def _add_total(target_set: set[str], value: Any) -> None:
 def _increment_count(target_counts: dict[str, int], value: Any) -> None:
     if isinstance(value, str) and value:
         target_counts[value] = target_counts.get(value, 0) + 1
+
+
+def _count_value(target_counts: dict[str, int], key: str) -> int:
+    value = target_counts.get(key)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _list_present(value: Any) -> bool:
+    return isinstance(value, list) and bool(value)
 
 
 def _validate_replay_bundle(manifest: dict[str, Any], bundle_dir: Path, target: ValidationTarget) -> None:

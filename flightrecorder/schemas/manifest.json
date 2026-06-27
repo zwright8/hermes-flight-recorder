@@ -58,6 +58,14 @@
       "name": "evidence_bundle"
     },
     {
+      "artifact": "improvement_plan",
+      "artifact_schema_version": "hfr.improvement_plan.v1",
+      "description": "Next-iteration improvement plan over evidence bundle, repair queue, curriculum, and run digests.",
+      "filename": "improvement_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/improvement_plan.v1.schema.json",
+      "name": "improvement_plan"
+    },
+    {
       "artifact": "training_manifest",
       "artifact_schema_version": "hfr.rl.manifest.v1",
       "description": "Manifest for export-rl training handoffs.",

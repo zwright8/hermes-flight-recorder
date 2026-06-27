@@ -63,6 +63,9 @@ Expected demo output:
 - An evidence bundle summary in `runs/evidence_bundle.json` that turns the
   generated suite, quality, coverage, observability, validation, and
   training-export artifacts into one readiness/read-only handoff manifest.
+- An improvement plan in `runs/improvement_plan.json` that joins bundle
+  actions, concrete repair items, curriculum priorities, and per-run digests
+  into deterministic next-iteration work items.
 - Promotion evidence in `runs/action_ledger.json`, `runs/action_ledger_gate.json`,
   `runs/promotion_decision.json`, `runs/promotion_ledger.json`, and
   `runs/promotion_ledger_gate.json`, plus a portable `runs/promotion_archive/`
@@ -103,7 +106,8 @@ flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 The bundled catalog currently covers scenarios, normalized traces, scorecards,
 task-completion verdicts, state diffs, run digests, evidence bundles, training
 manifests, dataset split manifests, compare-RL manifests, review manifests,
-reviewed-export manifests, trainer preflights, and trainer launch checks. These
+reviewed-export manifests, improvement plans, trainer preflights, and trainer
+launch checks. These
 schemas are compatibility contracts for artifact shape. `flightrecorder schemas --check` performs a
 dependency-free conformance check for the bundled schema subset; use
 `flightrecorder validate` for deeper integrity checks such as count
@@ -228,6 +232,13 @@ flightrecorder evidence-bundle \
   --training-export runs/training_export \
   --out runs/evidence_bundle.json
 
+flightrecorder improvement-plan \
+  --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
+  --training-export runs/training_export \
+  --runs runs \
+  --out runs/improvement_plan.json
+
 flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -265,6 +276,7 @@ flightrecorder validate \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --improvement-plan runs/improvement_plan.json \
   --repair-queue runs/repair_queue.json \
   --promotion-ledger runs/promotion_ledger.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
@@ -719,6 +731,28 @@ can deduplicate work without scraping prose summaries. When `--training-export`
 is included, the bundle fingerprints `manifest.json`, `dataset_metrics.json`,
 and `curriculum.json`, and carries the top curriculum priorities in
 `decision.key_metrics.training_export`.
+
+Use `flightrecorder improvement-plan` when a repair agent, maintainer, or
+future trainer-support job needs concrete next-iteration work instead of a
+collection of separate summaries. The plan joins `evidence_bundle.json`
+`next_actions`, `repair_queue.json` failed-rule tasks, `training_export`
+curriculum priorities, and each run's `run_digest.json` into one deterministic
+work-item list. It is still read-only: it does not execute repairs, launch
+training, or approve promotion.
+
+```bash
+flightrecorder improvement-plan \
+  --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
+  --training-export runs/training_export \
+  --runs runs \
+  --out runs/improvement_plan.json
+```
+
+Each work item carries a stable `item_id`, `routing_key`, content
+`fingerprint`, priority, category, source links, evidence refs/snippets, and
+optional replay metadata. Validate it before handing it to automation with
+`flightrecorder validate --improvement-plan runs/improvement_plan.json --strict`.
 
 Use `flightrecorder action-ledger` when an improvement loop has multiple bundle
 snapshots and needs a stable view of repeated repair pressure:

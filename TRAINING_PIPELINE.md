@@ -127,6 +127,26 @@ experiment ledgers can deduplicate work across repeated runs. Treat those
 actions as routing guidance for the next improvement iteration, not as a
 substitute for the gates themselves.
 
+Use `flightrecorder improvement-plan` when the next iteration needs concrete,
+deduplicatable work items instead of separate bundle, repair, curriculum, and
+digest summaries:
+
+```bash
+flightrecorder improvement-plan \
+  --evidence-bundle runs/evidence_bundle.json \
+  --repair-queue runs/repair_queue.json \
+  --training-export runs/training_export \
+  --runs runs \
+  --out runs/improvement_plan.json
+
+flightrecorder validate --improvement-plan runs/improvement_plan.json --strict
+```
+
+The plan keeps repairs external and auditable. It joins bundle `next_actions`,
+repair queue items, curriculum priorities, and per-run digests into stable
+`work_items` with priorities, categories, evidence refs/snippets, replay
+metadata, `routing_key`, and content `fingerprint` fields.
+
 Across repeated iterations, use `flightrecorder action-ledger` to fold multiple
 `evidence_bundle.json` files into a stable repair ledger:
 
@@ -404,6 +424,7 @@ flightrecorder validate \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
+  --improvement-plan runs/improvement_plan.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
@@ -503,6 +524,11 @@ flightrecorder digest \
   --out runs/email_reply_completion_good/run_digest.json \
   --markdown-out runs/email_reply_completion_good/run_digest.md
 ```
+
+`improvement_plan.json` is the suite-level companion to those run digests. It
+does not replace the training export; it tells repair agents, reviewers, and
+trainer-support jobs which evidence-backed work items should happen before the
+next eval, review, or promotion attempt.
 
 Validate captured snapshots with `flightrecorder validate --state-snapshot
 <snapshot.json> --strict`; the validator checks the captured schema and

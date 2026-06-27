@@ -1,0 +1,344 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/improvement_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Next-iteration improvement plan over evidence bundle, repair queue, curriculum, and run digests.",
+  "properties": {
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_or_high_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "recommendation": {
+          "enum": [
+            "fix_handoff",
+            "run_improvement_iteration",
+            "review_improvement_opportunities",
+            "promote_or_monitor"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "top_work_items": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "work_item_count",
+        "critical_or_high_count",
+        "top_work_items"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "bundle_action_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "category_counts": {
+          "items": {
+            "$ref": "#/$defs/count_row"
+          },
+          "type": "array"
+        },
+        "curriculum_backed_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "digest_backed_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "priority_counts": {
+          "items": {
+            "$ref": "#/$defs/count_row"
+          },
+          "type": "array"
+        },
+        "repair_backed_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scenario_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task_family_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "work_item_count",
+        "scenario_count",
+        "task_family_count",
+        "rule_count",
+        "priority_counts",
+        "category_counts",
+        "repair_backed_count",
+        "curriculum_backed_count",
+        "digest_backed_count",
+        "bundle_action_count",
+        "evidence_ref_count"
+      ],
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "const": true
+    },
+    "plan_path": {
+      "type": "string"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.improvement_plan.v1"
+    },
+    "source_artifacts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/artifact"
+      },
+      "type": "object"
+    },
+    "work_item_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "work_items": {
+      "items": {
+        "$ref": "#/$defs/work_item"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "plan_path",
+    "passed",
+    "readiness",
+    "decision",
+    "source_artifacts",
+    "metrics",
+    "work_item_count",
+    "work_items",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Improvement Plan",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "entry_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "exists"
+      ],
+      "type": "object"
+    },
+    "count_row": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "count"
+      ],
+      "type": "object"
+    },
+    "work_item": {
+      "additionalProperties": true,
+      "properties": {
+        "category": {
+          "enum": [
+            "bundle_action",
+            "repair",
+            "curriculum",
+            "digest_action"
+          ]
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "evidence_snippets": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "item_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "priority": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "priority_rank": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replay": {
+          "type": "object"
+        },
+        "routing_key": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rule_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenario_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_artifacts": {
+          "type": "object"
+        },
+        "sources": {
+          "type": "object"
+        },
+        "suggested_action": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "task_family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "item_id",
+        "category",
+        "priority",
+        "priority_rank",
+        "fingerprint",
+        "routing_key",
+        "summary",
+        "suggested_action",
+        "sources",
+        "evidence_refs",
+        "evidence_snippets",
+        "source_artifacts",
+        "replay"
+      ],
+      "type": "object"
+    }
+  }
+}

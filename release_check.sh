@@ -36,6 +36,7 @@ python -m flightrecorder schemas \
   --name scenario >/dev/null
 rm -rf schema_contracts_check
 python -m flightrecorder repair-queue --help >/dev/null
+python -m flightrecorder improvement-plan --help >/dev/null
 ./demo.sh
 python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
@@ -45,6 +46,7 @@ python -m flightrecorder schemas --check runs/email_reply_completion_good/task_c
 python -m flightrecorder schemas --check runs/email_reply_completion_good/state_diff.json >/dev/null
 python -m flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json >/dev/null
 python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
+python -m flightrecorder schemas --check runs/improvement_plan.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
 rm -rf replay_runs
@@ -94,6 +96,9 @@ python -m flightrecorder validate \
   --repair-queue runs/repair_queue.json \
   --trace-observability runs/trace_observability.json \
   --trace-observability runs/trace_observability_check.json \
+  --strict >/dev/null
+python -m flightrecorder validate \
+  --improvement-plan runs/improvement_plan.json \
   --strict >/dev/null
 if python -m flightrecorder scenario-quality \
   --scenarios scenarios \
@@ -172,6 +177,7 @@ test -f runs/evidence_coverage.json
 test -f runs/trace_observability.json
 test -f runs/repair_queue.json
 test -f runs/evidence_bundle.json
+test -f runs/improvement_plan.json
 test -f runs/suite_summary.json
 python - <<'PY'
 import json
@@ -183,6 +189,7 @@ evidence_coverage = json.loads(Path("runs/evidence_coverage.json").read_text(enc
 trace_observability = json.loads(Path("runs/trace_observability.json").read_text(encoding="utf-8"))
 repair_queue = json.loads(Path("runs/repair_queue.json").read_text(encoding="utf-8"))
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
+improvement_plan = json.loads(Path("runs/improvement_plan.json").read_text(encoding="utf-8"))
 captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
 email_digest = json.loads(Path("runs/email_reply_completion_good/run_digest.json").read_text(encoding="utf-8"))
 email_digest_regenerated = json.loads(Path("runs/email_reply_completion_good/regenerated_run_digest.json").read_text(encoding="utf-8"))
@@ -281,6 +288,27 @@ assert evidence_bundle["metrics"]["run_digest_coverage"]["task_completion_status
 assert evidence_bundle["metrics"]["repair_queue"]["critical_item_count"] == 14
 assert len(evidence_bundle["artifacts"]["training_export_curriculum"]["sha256"]) == 64
 assert evidence_bundle["failed_check_count"] == 0
+assert improvement_plan["schema_version"] == "hfr.improvement_plan.v1"
+assert improvement_plan["readiness"] == "ready"
+assert improvement_plan["decision"]["recommendation"] == "run_improvement_iteration"
+assert improvement_plan["decision"]["source_bundle_recommendation"] == "promote_handoff"
+assert improvement_plan["metrics"]["repair_backed_count"] == repair_queue["item_count"]
+assert improvement_plan["metrics"]["curriculum_backed_count"] == repair_queue["item_count"]
+assert improvement_plan["metrics"]["digest_backed_count"] == repair_queue["item_count"]
+assert improvement_plan["metrics"]["bundle_action_count"] == evidence_bundle["decision"]["next_action_count"]
+assert improvement_plan["metrics"]["evidence_ref_count"] >= repair_queue["item_count"]
+assert improvement_plan["work_item_count"] == len(improvement_plan["work_items"])
+assert improvement_plan["metrics"]["work_item_count"] == improvement_plan["work_item_count"]
+assert all(len(item["fingerprint"]) == 64 for item in improvement_plan["work_items"])
+assert all(
+    item["routing_key"] == f"{item['category']}:{item['priority']}:{item['fingerprint'][:12]}"
+    for item in improvement_plan["work_items"]
+)
+repair_plan_items = [item for item in improvement_plan["work_items"] if item["category"] == "repair"]
+assert len(repair_plan_items) == repair_queue["item_count"]
+assert all(item["sources"]["curriculum_priorities"] for item in repair_plan_items)
+assert all(item["sources"]["run_digest"] for item in repair_plan_items)
+assert any(item["scenario_id"] == "prompt_injection_bad" and item["rule_id"] == "forbidden_actions" for item in repair_plan_items)
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
 assert email_digest["schema_version"] == "hfr.run_digest.v1"

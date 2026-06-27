@@ -43,6 +43,7 @@ from .compare_gate import (
 from .decision_gate import DecisionGateError, evaluate_decision_gate
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
+from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
@@ -127,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         ActionLedgerError,
         ActionLedgerGateError,
         ActionLedgerGatePolicyError,
+        ImprovementPlanError,
         PromotionLedgerGateError,
         PromotionLedgerGatePolicyError,
         PromotionLedgerError,
@@ -696,6 +698,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
+        improvement_plan_paths=args.improvement_plan,
         action_ledger_paths=args.action_ledger,
         action_ledger_gate_paths=args.action_ledger_gate,
         decision_gate_paths=args.decision_gate,
@@ -842,6 +845,20 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
     _write_json(Path(args.out), bundle)
     print(f"wrote {args.out}")
     return 0 if bundle["passed"] else 1
+
+
+def cmd_improvement_plan(args: argparse.Namespace) -> int:
+    plan = build_improvement_plan(
+        out_path=args.out,
+        evidence_bundle_path=args.evidence_bundle,
+        repair_queue_path=args.repair_queue,
+        training_export_dir=args.training_export,
+        runs_dir=args.runs,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), plan)
+    print(f"wrote {args.out}")
+    return 0
 
 
 def cmd_action_ledger(args: argparse.Namespace) -> int:
@@ -1591,6 +1608,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--reviewed-export", help="Validate an apply-review output directory")
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
+    validate.add_argument("--improvement-plan", action="append", default=[], help="Validate one improvement_plan.json; may be repeated")
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
@@ -1712,6 +1730,18 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)
+
+    improvement_plan = subparsers.add_parser(
+        "improvement-plan",
+        help="Join bundle actions, repair items, curriculum priorities, and run digests into a next-iteration plan",
+    )
+    improvement_plan.add_argument("--evidence-bundle", required=True, help="evidence_bundle.json to summarize")
+    improvement_plan.add_argument("--repair-queue", help="repair_queue.json with concrete failed-rule repair items")
+    improvement_plan.add_argument("--training-export", help="export-rl directory containing curriculum.json")
+    improvement_plan.add_argument("--runs", help="Runs directory containing per-run run_digest.json files")
+    improvement_plan.add_argument("--out", required=True, help="Write improvement plan JSON to this path")
+    improvement_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the plan output")
+    improvement_plan.set_defaults(func=cmd_improvement_plan)
 
     action_ledger = subparsers.add_parser(
         "action-ledger",
