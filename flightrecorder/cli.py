@@ -740,6 +740,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         trainer_archive_paths=args.trainer_archive,
         trainer_archive_check_paths=args.trainer_archive_check,
         trainer_consumer_plan_paths=args.trainer_consumer_plan,
+        trainer_wrapper_dry_run_paths=args.trainer_wrapper_dry_run,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -1792,6 +1793,12 @@ def _parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="Validate one trainer_consumer_plan.json; may be repeated",
+    )
+    validate.add_argument(
+        "--trainer-wrapper-dry-run",
+        action="append",
+        default=[],
+        help="Validate one trainer_wrapper_dry_run.json; may be repeated",
     )
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")

@@ -1,0 +1,241 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trainer_wrapper_dry_run.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run receipt from the reference external trainer wrapper consuming a trainer consumer plan.",
+  "properties": {
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "plan_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "dry_run_ready",
+        "block_dry_run"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.example_trainer_wrapper_dry_run.v1"
+    },
+    "validation": {
+      "$ref": "#/$defs/validation"
+    },
+    "would_run": {
+      "$ref": "#/$defs/wouldRun"
+    },
+    "wrapper": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "wrapper",
+    "plan_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "validation",
+    "would_run",
+    "inputs",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Trainer Wrapper Dry Run",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "scope",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "inputs": {
+      "additionalProperties": true,
+      "properties": {
+        "external_code_files": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "trainer_inputs": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "trainer_inputs",
+        "external_code_files"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "command_arg_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_code_file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_code_ready_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trainer_input_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trainer_input_ready_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "trainer_input_count",
+        "trainer_input_ready_count",
+        "external_code_file_count",
+        "external_code_ready_count",
+        "command_arg_count"
+      ],
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "target_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "passed",
+        "strict",
+        "target_count",
+        "error_count",
+        "warning_count"
+      ],
+      "type": "object"
+    },
+    "wouldRun": {
+      "additionalProperties": true,
+      "properties": {
+        "archive_root": {
+          "type": "string"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "execution_cwd": {
+          "type": "string"
+        },
+        "external_code_root": {
+          "type": "string"
+        },
+        "mode": {
+          "const": "dry_run"
+        },
+        "shell": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "execution_cwd",
+        "archive_root",
+        "external_code_root",
+        "argv",
+        "shell"
+      ],
+      "type": "object"
+    }
+  }
+}

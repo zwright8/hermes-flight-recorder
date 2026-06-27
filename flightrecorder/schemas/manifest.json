@@ -256,6 +256,14 @@
       "filename": "trainer_consumer_plan.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/trainer_consumer_plan.v1.schema.json",
       "name": "trainer_consumer_plan"
+    },
+    {
+      "artifact": "trainer_wrapper_dry_run",
+      "artifact_schema_version": "hfr.example_trainer_wrapper_dry_run.v1",
+      "description": "Dry-run receipt from the reference external trainer wrapper consuming a trainer consumer plan.",
+      "filename": "trainer_wrapper_dry_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trainer_wrapper_dry_run.v1.schema.json",
+      "name": "trainer_wrapper_dry_run"
     }
   ]
 }

@@ -348,6 +348,8 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(receipt["would_run"]["argv"][:2], ["python", "train.py"])
             self.assertEqual(receipt["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
             self.assertEqual(receipt["metrics"]["external_code_file_count"], contract["external_command_path_count"])
+            self.assertEqual(run_cli(["schemas", "--check", str(wrapper_receipt)]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-wrapper-dry-run", str(wrapper_receipt), "--strict"]), 0)
 
             missing_check = Path(tmp) / "trainer_archive_check_missing.json"
             self.assertEqual(

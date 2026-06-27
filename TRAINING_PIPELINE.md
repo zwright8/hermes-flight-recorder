@@ -20,6 +20,7 @@ flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
+flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
 
@@ -328,6 +329,8 @@ flightrecorder validate --trainer-archive runs/trainer_archive --strict
 flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
 
 flightrecorder validate --trainer-consumer-plan runs/trainer_consumer_plan.json --strict
+
+flightrecorder validate --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json --strict
 ```
 
 The preflight manifest and launch check are still evidence plumbing, not a
@@ -357,7 +360,9 @@ root, external code file hashes, trainer input hashes, and launcher invariants
 that the external wrapper should require. It is still a plan, not a runner.
 The reference wrapper in `examples/trainer-wrapper/` demonstrates how an
 external launcher can validate that plan and emit a dry-run receipt before a
-real trainer takes over.
+real trainer takes over. That receipt can also be checked with
+`flightrecorder validate --trainer-wrapper-dry-run`, making the wrapper dry run
+part of the evidence contract rather than an untyped log file.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out

@@ -119,6 +119,7 @@ flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive/trainer_archive.json
 flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
+flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 flightrecorder schemas --check runs/improvement_ledger_gate.json
 flightrecorder schemas --check runs/training_export/dataset_metrics.json
@@ -134,8 +135,9 @@ training JSONL rows (`episodes`, `rewards`, `step_rewards`, `preferences`,
 `failure_modes`, `sft`, `dpo`, and `reward_model`), compare-RL JSONL rows,
 review manifests, reviewed-export manifests, improvement plans, improvement
 ledgers, trainer preflights, trainer launch checks, trainer archives, trainer
-archive checks, trainer consumer plans, and improvement-ledger gates. These
-schemas are compatibility contracts for artifact shape.
+archive checks, trainer consumer plans, trainer wrapper dry-run receipts, and
+improvement-ledger gates. These schemas are compatibility contracts for
+artifact shape.
 `flightrecorder schemas --check` validates one JSON artifact;
 `flightrecorder schemas --check-jsonl` validates each non-empty JSONL row,
 inferring by row `schema_version` unless `--name` pins the expected row type.
@@ -1147,6 +1149,8 @@ flightrecorder validate --trainer-archive runs/trainer_archive --strict
 flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
 
 flightrecorder validate --trainer-consumer-plan runs/trainer_consumer_plan.json --strict
+
+flightrecorder validate --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json --strict
 ```
 
 `trainer-launch-check` is the consumer-side guard for an external trainer
@@ -1185,6 +1189,9 @@ The reference wrapper in `examples/trainer-wrapper/consume_trainer_plan.py`
 shows that boundary in executable form. It validates the plan, emits
 `trainer_wrapper_dry_run.json`, and reports the command it would hand off, but
 it never starts a process from `execution.command_argv`.
+The dry-run receipt is also a schema-checkable and semantically validatable
+artifact, so CI can require `--trainer-wrapper-dry-run` before any separate
+trainer job starts.
 
 ## Scoring Rules
 

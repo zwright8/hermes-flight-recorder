@@ -146,22 +146,30 @@ def build_dry_run_receipt(plan_path: Path, plan: dict[str, Any], validation: dic
 
 
 def _input_record(item: dict[str, Any]) -> dict[str, Any]:
-    return {
+    record: dict[str, Any] = {
         "artifact_name": str(item.get("artifact_name") or ""),
         "archive_path": str(item.get("archive_path") or ""),
+        "resolved_path": str(item.get("resolved_path") or ""),
         "kind": str(item.get("kind") or ""),
         "sha256": str(item.get("sha256") or ""),
         "passed": item.get("passed") is True,
     }
+    for field_name in ("size_bytes", "file_count"):
+        if isinstance(item.get(field_name), int) and not isinstance(item.get(field_name), bool):
+            record[field_name] = item[field_name]
+    return record
 
 
 def _external_code_record(item: dict[str, Any]) -> dict[str, Any]:
-    return {
+    record: dict[str, Any] = {
         "path": str(item.get("path") or ""),
         "resolved_path": str(item.get("resolved_path") or ""),
         "sha256": str(item.get("sha256") or ""),
         "passed": item.get("passed") is True,
     }
+    if isinstance(item.get("size_bytes"), int) and not isinstance(item.get("size_bytes"), bool):
+        record["size_bytes"] = item["size_bytes"]
+    return record
 
 
 def _validation_record(summary: dict[str, Any]) -> dict[str, Any]:
@@ -209,7 +217,16 @@ def _write_error(out: str | None, plan_path: Path, exc: Exception) -> None:
                 "summary": f"plan_readable: {exc}",
             }
         ],
-        "metrics": {},
+        "validation": {"passed": False, "strict": False, "target_count": 0, "error_count": 1, "warning_count": 0},
+        "would_run": {"mode": "dry_run", "execution_cwd": "", "archive_root": "", "external_code_root": "", "argv": [], "shell": ""},
+        "inputs": {"trainer_inputs": [], "external_code_files": []},
+        "metrics": {
+            "trainer_input_count": 0,
+            "trainer_input_ready_count": 0,
+            "external_code_file_count": 0,
+            "external_code_ready_count": 0,
+            "command_arg_count": 0,
+        },
         "notes": ["The wrapper did not execute anything."],
     }
     out_path = Path(out)

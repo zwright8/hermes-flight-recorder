@@ -74,6 +74,7 @@ from .training import (
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
+TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
 _COMPANION_NOT_PROVIDED = object()
 
 
@@ -120,6 +121,7 @@ def validate_artifacts(
     trainer_archive_paths: list[str | Path] | None = None,
     trainer_archive_check_paths: list[str | Path] | None = None,
     trainer_consumer_plan_paths: list[str | Path] | None = None,
+    trainer_wrapper_dry_run_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -179,6 +181,8 @@ def validate_artifacts(
         targets.append(validate_trainer_archive_check(trainer_archive_check_path))
     for trainer_consumer_plan_path in trainer_consumer_plan_paths or []:
         targets.append(validate_trainer_consumer_plan(trainer_consumer_plan_path))
+    for trainer_wrapper_dry_run_path in trainer_wrapper_dry_run_paths or []:
+        targets.append(validate_trainer_wrapper_dry_run(trainer_wrapper_dry_run_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -715,6 +719,16 @@ def validate_trainer_consumer_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "trainer_consumer_plan.json")
     if plan is not None:
         _validate_trainer_consumer_plan(plan, target)
+    return target
+
+
+def validate_trainer_wrapper_dry_run(path: str | Path) -> ValidationTarget:
+    """Validate a reference trainer-wrapper dry-run receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("trainer_wrapper_dry_run", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "trainer_wrapper_dry_run.json")
+    if receipt is not None:
+        _validate_trainer_wrapper_dry_run(receipt, target)
     return target
 
 
@@ -7418,6 +7432,190 @@ def _validate_trainer_consumer_plan_metrics(
     for field_name, expected_value in expected.items():
         if metrics.get(field_name) != expected_value:
             target.errors.append(f"trainer_consumer_plan.metrics.{field_name} expected {expected_value}, got {metrics.get(field_name)!r}.")
+
+
+def _validate_trainer_wrapper_dry_run(receipt: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(receipt, "schema_version", TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION, target)
+    for field_name in ("wrapper", "plan_path", "readiness", "recommendation"):
+        if not isinstance(receipt.get(field_name), str) or not receipt.get(field_name):
+            target.errors.append(f"trainer_wrapper_dry_run.{field_name} must be a non-empty string.")
+    if not isinstance(receipt.get("passed"), bool):
+        target.errors.append("trainer_wrapper_dry_run.passed must be a boolean.")
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("trainer_wrapper_dry_run.checks must be a list.")
+        checks = []
+    validation = receipt.get("validation")
+    if not isinstance(validation, dict):
+        target.errors.append("trainer_wrapper_dry_run.validation must be an object.")
+        validation = {}
+    would_run = receipt.get("would_run")
+    if not isinstance(would_run, dict):
+        target.errors.append("trainer_wrapper_dry_run.would_run must be an object.")
+        would_run = {}
+    inputs = receipt.get("inputs")
+    if not isinstance(inputs, dict):
+        target.errors.append("trainer_wrapper_dry_run.inputs must be an object.")
+        inputs = {}
+    metrics = receipt.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("trainer_wrapper_dry_run.metrics must be an object.")
+        metrics = {}
+    if not _is_string_list(receipt.get("notes")):
+        target.errors.append("trainer_wrapper_dry_run.notes must be a list of strings.")
+
+    failed_checks = _validate_gate_like_checks(checks, target, "trainer_wrapper_dry_run.checks")
+    if receipt.get("check_count") != len(checks):
+        target.errors.append(f"trainer_wrapper_dry_run.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
+    if receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"trainer_wrapper_dry_run.failed_check_count expected {failed_checks}, got {receipt.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(receipt.get("passed"), bool) and receipt.get("passed") != expected_passed:
+        target.errors.append("trainer_wrapper_dry_run.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "dry_run_ready" if expected_passed else "block_dry_run"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(f"trainer_wrapper_dry_run.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}.")
+    if receipt.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"trainer_wrapper_dry_run.recommendation expected {expected_recommendation!r}, got {receipt.get('recommendation')!r}."
+        )
+
+    _validate_trainer_wrapper_validation(validation, target)
+    command_arg_count = _validate_trainer_wrapper_would_run(would_run, target)
+    input_counts = _validate_trainer_wrapper_inputs(inputs, target)
+    _validate_trainer_wrapper_metrics(metrics, command_arg_count, input_counts, target)
+    target.details.update(
+        {
+            "passed": receipt.get("passed"),
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "trainer_input_count": metrics.get("trainer_input_count"),
+            "external_code_file_count": metrics.get("external_code_file_count"),
+        }
+    )
+
+
+def _validate_trainer_wrapper_validation(value: dict[str, Any], target: ValidationTarget) -> None:
+    for field_name in ("passed", "strict"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_wrapper_dry_run.validation.{field_name} must be a boolean.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"trainer_wrapper_dry_run.validation.{field_name} must be a non-negative integer.")
+
+
+def _validate_trainer_wrapper_would_run(value: dict[str, Any], target: ValidationTarget) -> int:
+    for field_name in ("mode", "execution_cwd", "archive_root", "external_code_root", "shell"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"trainer_wrapper_dry_run.would_run.{field_name} must be a string.")
+    if value.get("mode") != "dry_run":
+        target.errors.append("trainer_wrapper_dry_run.would_run.mode must be dry_run.")
+    if value.get("execution_cwd") not in {"", "archive_root"}:
+        target.errors.append("trainer_wrapper_dry_run.would_run.execution_cwd must be archive_root for ready receipts.")
+    argv = value.get("argv")
+    if not _is_string_list(argv):
+        target.errors.append("trainer_wrapper_dry_run.would_run.argv must be a list of strings.")
+        argv = []
+    clean_argv = [item for item in argv if isinstance(item, str)]
+    expected_shell = shlex.join(clean_argv) if clean_argv else ""
+    if value.get("shell") != expected_shell:
+        target.errors.append("trainer_wrapper_dry_run.would_run.shell must match argv.")
+    return len(clean_argv)
+
+
+def _validate_trainer_wrapper_inputs(value: dict[str, Any], target: ValidationTarget) -> dict[str, int]:
+    trainer_inputs = value.get("trainer_inputs")
+    if not isinstance(trainer_inputs, list):
+        target.errors.append("trainer_wrapper_dry_run.inputs.trainer_inputs must be a list.")
+        trainer_inputs = []
+    external_code_files = value.get("external_code_files")
+    if not isinstance(external_code_files, list):
+        target.errors.append("trainer_wrapper_dry_run.inputs.external_code_files must be a list.")
+        external_code_files = []
+    counts = {
+        "trainer_input_count": 0,
+        "trainer_input_ready_count": 0,
+        "external_code_file_count": 0,
+        "external_code_ready_count": 0,
+    }
+    for index, item in enumerate(trainer_inputs):
+        label = f"trainer_wrapper_dry_run.inputs.trainer_inputs[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        counts["trainer_input_count"] += 1
+        _validate_trainer_wrapper_input(item, target, label)
+        if item.get("passed") is True:
+            counts["trainer_input_ready_count"] += 1
+    for index, item in enumerate(external_code_files):
+        label = f"trainer_wrapper_dry_run.inputs.external_code_files[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        counts["external_code_file_count"] += 1
+        _validate_trainer_wrapper_external_code(item, target, label)
+        if item.get("passed") is True:
+            counts["external_code_ready_count"] += 1
+    return counts
+
+
+def _validate_trainer_wrapper_input(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for field_name in ("artifact_name", "archive_path", "resolved_path", "kind", "sha256"):
+        if not isinstance(item.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if item.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be file or directory.")
+    if not isinstance(item.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    if item.get("sha256") and not _is_sha256(item.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when present.")
+    if "size_bytes" in item and not _is_non_negative_int(item.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when present.")
+    if "file_count" in item and not _is_non_negative_int(item.get("file_count")):
+        target.errors.append(f"{label}.file_count must be a non-negative integer when present.")
+
+
+def _validate_trainer_wrapper_external_code(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for field_name in ("path", "resolved_path", "sha256"):
+        if not isinstance(item.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if not isinstance(item.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    if item.get("sha256") and not _is_sha256(item.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when present.")
+    if "size_bytes" in item and not _is_non_negative_int(item.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when present.")
+    path = _visible_local_path(item.get("resolved_path"))
+    if path is None or not path.exists() or item.get("passed") is not True:
+        return
+    if path.is_symlink() or not path.is_file():
+        target.errors.append(f"{label}.resolved_path is not a regular file on disk.")
+        return
+    if "size_bytes" in item and item.get("size_bytes") != path.stat().st_size:
+        target.errors.append(f"{label}.size_bytes does not match resolved_path.")
+    if item.get("sha256") != _sha256(path):
+        target.errors.append(f"{label}.sha256 does not match resolved_path.")
+
+
+def _validate_trainer_wrapper_metrics(
+    metrics: dict[str, Any],
+    command_arg_count: int,
+    input_counts: dict[str, int],
+    target: ValidationTarget,
+) -> None:
+    expected = {
+        "command_arg_count": command_arg_count,
+        "trainer_input_count": input_counts["trainer_input_count"],
+        "trainer_input_ready_count": input_counts["trainer_input_ready_count"],
+        "external_code_file_count": input_counts["external_code_file_count"],
+        "external_code_ready_count": input_counts["external_code_ready_count"],
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"trainer_wrapper_dry_run.metrics.{field_name} expected {expected_value}, got {metrics.get(field_name)!r}.")
 
 
 def _trainer_input_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:

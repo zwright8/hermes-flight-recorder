@@ -34,6 +34,7 @@ test -f schema_contracts_check/rl_reward_model.v1.schema.json
 test -f schema_contracts_check/trainer_archive.v1.schema.json
 test -f schema_contracts_check/trainer_archive_check.v1.schema.json
 test -f schema_contracts_check/trainer_consumer_plan.v1.schema.json
+test -f schema_contracts_check/trainer_wrapper_dry_run.v1.schema.json
 python -m flightrecorder schemas \
   --check scenarios/prompt_injection_good.json \
   --name scenario >/dev/null
@@ -1118,6 +1119,7 @@ python examples/trainer-wrapper/consume_trainer_plan.py \
   --out runs/trainer_wrapper_dry_run.json \
   --strict >/dev/null
 test -f runs/trainer_wrapper_dry_run.json
+python -m flightrecorder schemas --check runs/trainer_wrapper_dry_run.json >/dev/null
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
@@ -1133,6 +1135,7 @@ python -m flightrecorder validate \
   --trainer-archive runs/trainer_archive \
   --trainer-archive-check runs/trainer_archive_check.json \
   --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
@@ -1362,6 +1365,7 @@ assert_help_contains "--trainer-launch-check" "$VENV_DIR/bin/python" -m flightre
 assert_help_contains "--trainer-archive" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--trainer-archive-check" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--trainer-consumer-plan" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--trainer-wrapper-dry-run" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--improvement-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
