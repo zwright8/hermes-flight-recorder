@@ -413,6 +413,30 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("manifest.artifact_fingerprints.episodes.sha256", errors)
 
+    def test_validate_rejects_symlinked_training_export_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            export = root / "training"
+            summary_path = root / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            episodes_path = export / "episodes.jsonl"
+            external_path = root / "external_episodes.jsonl"
+            external_path.write_text(episodes_path.read_text(encoding="utf-8"), encoding="utf-8")
+            episodes_path.unlink()
+            try:
+                episodes_path.symlink_to(external_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("manifest.artifact_fingerprints.episodes file must not be a symlink", errors)
+
     def test_validate_warns_on_legacy_training_export_without_trainer_views(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

@@ -361,7 +361,7 @@ training-loop artifacts:
 Current manifests include SHA-256 fingerprints for every generated JSONL, JSON,
 and Markdown export artifact except the manifest itself. The validate command
 recomputes those hashes so a downstream trainer, reviewer, or CI job can reject
-stale or swapped files before learning from them.
+stale, swapped, or symlinked files before learning from them.
 
 `flightrecorder export-compare-rl` converts paired baseline/candidate run
 directories into improvement-loop preference artifacts:

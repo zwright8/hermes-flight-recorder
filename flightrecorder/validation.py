@@ -1306,8 +1306,16 @@ def _validate_manifest_artifact_fingerprints(
             continue
         if not isinstance(record.get("path"), str) or not record.get("path"):
             target.errors.append(f"{record_label}.path must be a non-empty string.")
+        elif _looks_absolute(record["path"]):
+            target.warnings.append(f"{record_label}.path is absolute; prefer redacted or relative exports for sharing.")
         if record.get("exists") is not True:
             target.errors.append(f"{record_label}.exists must be true for generated export artifacts.")
+        if path.is_symlink():
+            target.errors.append(f"{record_label} file must not be a symlink: {path}")
+            continue
+        if not _path_resolves_inside(path, path.parent):
+            target.errors.append(f"{record_label} file must resolve inside the export directory: {path}")
+            continue
         if not path.exists() or not path.is_file():
             target.errors.append(f"{record_label} file is missing: {path}")
             continue

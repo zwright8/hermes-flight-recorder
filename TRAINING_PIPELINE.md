@@ -441,7 +441,9 @@ use `--preserve-paths` only for private local debugging.
 links, step-reward event indexes, preference references, failure-mode links,
 curriculum counts, trainer-ready view rows, dataset metrics, dataset-card
 sections, lineage hashes, lineage evidence links, and live-smoke summaries are
-internally consistent.
+internally consistent. Trainer-facing export artifacts must be regular files;
+symlinked JSONL, JSON, or Markdown artifacts fail validation even when their
+targets match the recorded hash.
 Run lineage also records `replay.argv`, `replay.command`, input fingerprints,
 and `replay.self_contained` so regression and training loops can tell whether a
 run can be reproduced from the published paths. Use `flightrecorder replay`
