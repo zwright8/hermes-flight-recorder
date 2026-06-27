@@ -298,6 +298,8 @@ def _artifact_metrics(payload: dict[str, Any]) -> str:
         ("allowed_count", "allowed"),
         ("blocked_count", "blocked"),
         ("artifact_count", "artifacts"),
+        ("trainer_input_count", "trainer_inputs"),
+        ("path_rewrite_count", "path_rewrites"),
         ("missing_count", "missing"),
     )
     parts: list[str] = []

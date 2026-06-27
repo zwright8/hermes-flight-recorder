@@ -8,6 +8,9 @@
       "minLength": 1,
       "type": "string"
     },
+    "approved_command": {
+      "$ref": "#/$defs/approvedCommand"
+    },
     "artifacts": {
       "items": {
         "$ref": "#/$defs/artifact"
@@ -39,6 +42,15 @@
     "passed": {
       "type": "boolean"
     },
+    "path_rewrites": {
+      "items": {
+        "$ref": "#/$defs/pathRewrite"
+      },
+      "type": "array"
+    },
+    "portable_command": {
+      "$ref": "#/$defs/portableCommand"
+    },
     "readiness": {
       "enum": [
         "ready",
@@ -68,6 +80,12 @@
     },
     "self_contained": {
       "type": "boolean"
+    },
+    "trainer_inputs": {
+      "items": {
+        "$ref": "#/$defs/trainerInput"
+      },
+      "type": "array"
     }
   },
   "required": [
@@ -81,6 +99,10 @@
     "require_self_contained",
     "ready_for_training",
     "launch_check_included",
+    "approved_command",
+    "trainer_inputs",
+    "path_rewrites",
+    "portable_command",
     "artifacts",
     "missing",
     "relationships",
@@ -90,6 +112,41 @@
   "title": "Hermes Flight Recorder Trainer Archive",
   "type": "object",
   "$defs": {
+    "approvedCommand": {
+      "additionalProperties": true,
+      "properties": {
+        "approved": {
+          "type": "boolean"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "parseable": {
+          "type": "boolean"
+        },
+        "provided": {
+          "type": "boolean"
+        },
+        "raw": {
+          "type": "string"
+        },
+        "shell": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "approved",
+        "provided",
+        "raw",
+        "argv",
+        "parseable",
+        "shell"
+      ],
+      "type": "object"
+    },
     "artifact": {
       "additionalProperties": true,
       "properties": {
@@ -269,6 +326,79 @@
       ],
       "type": "object"
     },
+    "pathRewrite": {
+      "additionalProperties": true,
+      "properties": {
+        "archive_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "artifact_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "original_path": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_name",
+        "kind",
+        "original_path",
+        "archive_path"
+      ],
+      "type": "object"
+    },
+    "portableCommand": {
+      "additionalProperties": true,
+      "properties": {
+        "approved": {
+          "type": "boolean"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path_rewrite_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rewritten": {
+          "type": "boolean"
+        },
+        "shell": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "approved",
+        "available",
+        "rewritten",
+        "path_rewrite_count",
+        "argv",
+        "shell",
+        "notes"
+      ],
+      "type": "object"
+    },
     "relationship": {
       "additionalProperties": true,
       "properties": {
@@ -289,6 +419,58 @@
         "from",
         "to",
         "type"
+      ],
+      "type": "object"
+    },
+    "trainerInput": {
+      "additionalProperties": true,
+      "properties": {
+        "archive_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "artifact_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "artifact_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "original_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tree_hash_algorithm": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_index",
+        "artifact_name",
+        "kind",
+        "original_path",
+        "archive_path",
+        "size_bytes",
+        "sha256"
       ],
       "type": "object"
     }

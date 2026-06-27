@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -6499,6 +6500,14 @@ def _validate_trainer_archive(archive: dict[str, Any], target: ValidationTarget,
         target.errors.append(f"trainer_archive.readiness expected {expected_readiness!r}, got {archive.get('readiness')!r}.")
     if archive.get("recommendation") != expected_recommendation:
         target.errors.append(f"trainer_archive.recommendation expected {expected_recommendation!r}, got {archive.get('recommendation')!r}.")
+    _validate_trainer_archive_inputs(archive.get("trainer_inputs"), valid_artifacts, target)
+    _validate_trainer_archive_rewrites(archive.get("path_rewrites"), archive.get("trainer_inputs"), target)
+    _validate_trainer_archive_commands(
+        archive.get("approved_command"),
+        archive.get("portable_command"),
+        archive.get("path_rewrites"),
+        target,
+    )
     _validate_trainer_archive_metrics(metrics, artifacts, missing, target)
     target.details.update(
         {
@@ -6614,6 +6623,17 @@ def _validate_trainer_archive_metrics(
         "artifact_count": len(artifacts),
         "file_artifact_count": sum(1 for artifact in valid_artifacts if artifact.get("kind") == "file"),
         "directory_artifact_count": sum(1 for artifact in valid_artifacts if artifact.get("kind") == "directory"),
+        "trainer_input_count": sum(1 for artifact in valid_artifacts if artifact.get("role") == "trainer_artifact"),
+        "path_rewrite_count": len(
+            [
+                artifact
+                for artifact in valid_artifacts
+                if artifact.get("role") == "trainer_artifact"
+                and isinstance(artifact.get("original_path"), str)
+                and artifact.get("original_path")
+                and not str(artifact.get("original_path")).startswith("<")
+            ]
+        ),
         "missing_count": len(missing),
         "total_size_bytes": sum(artifact.get("size_bytes", 0) for artifact in valid_artifacts if _is_non_negative_int(artifact.get("size_bytes"))),
         "unique_sha256_count": len({artifact.get("sha256") for artifact in valid_artifacts if isinstance(artifact.get("sha256"), str)}),
@@ -6630,6 +6650,191 @@ def _validate_trainer_archive_metrics(
         target,
         "trainer_archive.metrics.missing_role_counts",
     )
+
+
+def _validate_trainer_archive_inputs(value: Any, artifacts: list[dict[str, Any]], target: ValidationTarget) -> None:
+    if not isinstance(value, list):
+        target.errors.append("trainer_archive.trainer_inputs must be a list.")
+        return
+    expected = [_trainer_input_from_artifact(artifact) for artifact in artifacts if artifact.get("role") == "trainer_artifact"]
+    if len(value) != len(expected):
+        target.errors.append(f"trainer_archive.trainer_inputs expected {len(expected)} item(s), got {len(value)}.")
+    for index, item in enumerate(value):
+        label = f"trainer_archive.trainer_inputs[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("artifact_name", "kind", "original_path", "archive_path", "sha256"):
+            if not isinstance(item.get(field_name), str) or not item.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        for field_name in ("artifact_index", "size_bytes"):
+            if not _is_non_negative_int(item.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+        if item.get("kind") == "directory":
+            if not _is_non_negative_int(item.get("file_count")):
+                target.errors.append(f"{label}.file_count must be a non-negative integer for directories.")
+            if item.get("tree_hash_algorithm") != "sha256(sorted-relative-path-size-file-sha256)":
+                target.errors.append(f"{label}.tree_hash_algorithm is invalid for directories.")
+        if index < len(expected):
+            for field_name, expected_value in expected[index].items():
+                if item.get(field_name) != expected_value:
+                    target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {item.get(field_name)!r}.")
+
+
+def _validate_trainer_archive_rewrites(value: Any, inputs: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, list):
+        target.errors.append("trainer_archive.path_rewrites must be a list.")
+        return
+    expected = _expected_trainer_archive_rewrites(inputs if isinstance(inputs, list) else [])
+    if len(value) != len(expected):
+        target.errors.append(f"trainer_archive.path_rewrites expected {len(expected)} item(s), got {len(value)}.")
+    for index, item in enumerate(value):
+        label = f"trainer_archive.path_rewrites[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("artifact_name", "kind", "original_path", "archive_path"):
+            if not isinstance(item.get(field_name), str) or not item.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if index < len(expected):
+            for field_name, expected_value in expected[index].items():
+                if item.get(field_name) != expected_value:
+                    target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {item.get(field_name)!r}.")
+
+
+def _validate_trainer_archive_commands(
+    approved_command: Any,
+    portable_command: Any,
+    path_rewrites: Any,
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(approved_command, dict):
+        target.errors.append("trainer_archive.approved_command must be an object.")
+        approved_command = {}
+    for field_name in ("approved", "provided", "parseable"):
+        if not isinstance(approved_command.get(field_name), bool):
+            target.errors.append(f"trainer_archive.approved_command.{field_name} must be a boolean.")
+    if not isinstance(approved_command.get("raw"), str):
+        target.errors.append("trainer_archive.approved_command.raw must be a string.")
+    if not isinstance(approved_command.get("shell"), str):
+        target.errors.append("trainer_archive.approved_command.shell must be a string.")
+    argv = approved_command.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+        target.errors.append("trainer_archive.approved_command.argv must be a list of strings.")
+        argv = []
+
+    if not isinstance(portable_command, dict):
+        target.errors.append("trainer_archive.portable_command must be an object.")
+        return
+    for field_name in ("approved", "available", "rewritten"):
+        if not isinstance(portable_command.get(field_name), bool):
+            target.errors.append(f"trainer_archive.portable_command.{field_name} must be a boolean.")
+    if not _is_non_negative_int(portable_command.get("path_rewrite_count")):
+        target.errors.append("trainer_archive.portable_command.path_rewrite_count must be a non-negative integer.")
+    if not isinstance(portable_command.get("shell"), str):
+        target.errors.append("trainer_archive.portable_command.shell must be a string.")
+    if not _is_string_list(portable_command.get("notes")):
+        target.errors.append("trainer_archive.portable_command.notes must be a list of strings.")
+    portable_argv = portable_command.get("argv")
+    if not isinstance(portable_argv, list) or not all(isinstance(item, str) for item in portable_argv):
+        target.errors.append("trainer_archive.portable_command.argv must be a list of strings.")
+        portable_argv = []
+
+    rewrites = path_rewrites if isinstance(path_rewrites, list) else []
+    expected_argv, expected_rewrite_count = _rewrite_trainer_archive_command_argv([item for item in argv if isinstance(item, str)], rewrites)
+    if portable_argv != expected_argv:
+        target.errors.append("trainer_archive.portable_command.argv must match approved_command.argv rewritten through path_rewrites.")
+    if portable_command.get("shell") != (shlex.join(expected_argv) if expected_argv else ""):
+        target.errors.append("trainer_archive.portable_command.shell must match the rewritten argv.")
+    if portable_command.get("path_rewrite_count") != expected_rewrite_count:
+        target.errors.append(
+            f"trainer_archive.portable_command.path_rewrite_count expected {expected_rewrite_count}, got {portable_command.get('path_rewrite_count')!r}."
+        )
+    if portable_command.get("rewritten") != (expected_rewrite_count > 0):
+        target.errors.append("trainer_archive.portable_command.rewritten must match path_rewrite_count.")
+    if portable_command.get("available") != bool(expected_argv):
+        target.errors.append("trainer_archive.portable_command.available must match whether argv is present.")
+    if portable_command.get("approved") != (approved_command.get("approved") is True):
+        target.errors.append("trainer_archive.portable_command.approved must match approved_command.approved.")
+
+
+def _trainer_input_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "artifact_index": artifact.get("index"),
+        "artifact_name": artifact.get("name"),
+        "kind": artifact.get("kind"),
+        "original_path": artifact.get("original_path"),
+        "archive_path": artifact.get("path"),
+        "size_bytes": artifact.get("size_bytes"),
+        "sha256": artifact.get("sha256"),
+    }
+    if artifact.get("kind") == "directory":
+        item["file_count"] = artifact.get("file_count")
+        item["tree_hash_algorithm"] = artifact.get("tree_hash_algorithm")
+    return item
+
+
+def _expected_trainer_archive_rewrites(inputs: list[Any]) -> list[dict[str, Any]]:
+    rewrites: list[dict[str, Any]] = []
+    for item in inputs:
+        if not isinstance(item, dict):
+            continue
+        original = item.get("original_path")
+        archive_path = item.get("archive_path")
+        if not isinstance(original, str) or not original or original.startswith("<"):
+            continue
+        if not isinstance(archive_path, str) or not archive_path:
+            continue
+        rewrites.append(
+            {
+                "artifact_name": str(item.get("artifact_name") or ""),
+                "kind": str(item.get("kind") or ""),
+                "original_path": original,
+                "archive_path": archive_path,
+            }
+        )
+    return rewrites
+
+
+def _rewrite_trainer_archive_command_argv(argv: list[str], rewrites: list[Any]) -> tuple[list[str], int]:
+    valid_rewrites = [item for item in rewrites if isinstance(item, dict)]
+    ordered = sorted(valid_rewrites, key=lambda item: len(str(item.get("original_path") or "")), reverse=True)
+    rewritten: list[str] = []
+    rewrite_count = 0
+    for token in argv:
+        new_token = _rewrite_trainer_archive_command_token(token, ordered)
+        if new_token != token:
+            rewrite_count += 1
+        rewritten.append(new_token)
+    return rewritten, rewrite_count
+
+
+def _rewrite_trainer_archive_command_token(token: str, rewrites: list[dict[str, Any]]) -> str:
+    for item in rewrites:
+        original = item.get("original_path")
+        archive_path = item.get("archive_path")
+        if not isinstance(original, str) or not original:
+            continue
+        if not isinstance(archive_path, str) or not archive_path:
+            continue
+        replacement = _replace_trainer_archive_path_value(token, original, archive_path)
+        if replacement != token:
+            return replacement
+        if "=" in token:
+            key, value = token.split("=", 1)
+            rewritten_value = _replace_trainer_archive_path_value(value, original, archive_path)
+            if rewritten_value != value:
+                return f"{key}={rewritten_value}"
+    return token
+
+
+def _replace_trainer_archive_path_value(value: str, original: str, archive_path: str) -> str:
+    if value == original:
+        return archive_path
+    prefix = original.rstrip("/") + "/"
+    if value.startswith(prefix):
+        return archive_path.rstrip("/") + "/" + value[len(prefix) :]
+    return value
 
 
 def _trainer_archive_count_map(values: Any) -> dict[str, int]:

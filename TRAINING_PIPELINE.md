@@ -318,9 +318,11 @@ regular files at preflight time; symlinked JSONL, JSON, Markdown artifacts, or
 split artifacts block launch even if their targets contain matching bytes.
 `trainer-archive` is the portable handoff after those checks pass: it copies
 the preflight, launch check, gates, validation summaries, trainer-facing
-exports, and schema-contract files into one hash-checked directory. External
-training infrastructure can validate that directory before consuming the rows,
-without needing the original producer's local paths.
+exports, and schema-contract files into one hash-checked directory. It records
+the copied trainer inputs, the original approved command, path rewrites, and an
+advisory portable command that points known input paths at archive-local copies.
+External training infrastructure can validate that directory before consuming
+the rows, without needing the original producer's local paths.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out

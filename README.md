@@ -1106,10 +1106,12 @@ when launch is approved. It still does not execute training.
 `trainer-archive` is the portable handoff for that approved launch contract. It
 copies the preflight, launch check, referenced gates, validation summaries,
 trainer-facing exports, and schema-contract files into `runs/trainer_archive/`
-with file hashes and deterministic directory tree hashes. A downstream trainer
-wrapper can validate the archive without trusting the producer machine's local
-paths. The archive still does not sandbox tools, run training, or update model
-weights.
+with file hashes and deterministic directory tree hashes. It also records
+`trainer_inputs`, `path_rewrites`, the original `approved_command`, and an
+advisory `portable_command` whose known trainer-input paths point at copied
+archive-local paths. A downstream trainer wrapper can validate the archive
+without trusting the producer machine's local paths. The archive still does not
+sandbox tools, run training, or update model weights.
 
 ## Scoring Rules
 

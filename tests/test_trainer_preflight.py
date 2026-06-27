@@ -150,7 +150,7 @@ class TrainerPreflightTests(unittest.TestCase):
                     "--require-gate",
                     "training_gate",
                     "--trainer-command",
-                    "python train.py --dataset runs/training_export",
+                    f"python train.py --dataset {runs / 'training_export'}",
                     "--metadata",
                     "launcher=dry-run",
                     "--preserve-paths",
@@ -218,6 +218,7 @@ class TrainerPreflightTests(unittest.TestCase):
                         "--out",
                         str(archive),
                         "--require-self-contained",
+                        "--preserve-paths",
                     ]
                 ),
                 0,
@@ -235,12 +236,26 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertIn("trainer_artifact", roles)
             self.assertIn("schema_contract", roles)
             self.assertGreater(result["metrics"]["directory_artifact_count"], 0)
+            self.assertGreater(len(result["trainer_inputs"]), 0)
+            self.assertGreater(len(result["path_rewrites"]), 0)
+            self.assertEqual(result["approved_command"]["argv"][:2], ["python", "train.py"])
+            self.assertTrue(result["portable_command"]["approved"])
+            self.assertTrue(result["portable_command"]["rewritten"])
+            self.assertIn("artifacts/trainer_artifacts", " ".join(result["portable_command"]["argv"]))
+            self.assertNotIn(str(runs / "training_export"), " ".join(result["portable_command"]["argv"]))
+            self.assertEqual(result["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
+            self.assertEqual(result["metrics"]["path_rewrite_count"], len(result["path_rewrites"]))
             self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(manifest_path)]), 0)
 
+            result["portable_command"]["argv"][-1] = "stale/training_export"
+            result["portable_command"]["shell"] = "python train.py --dataset stale/training_export"
+            manifest_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 1)
+
             code, output = run_cli_output(["trainer-launch-check", "--preflight", str(preflight), "--print-command"])
             self.assertEqual(code, 0)
-            self.assertEqual(output.strip(), "python train.py --dataset runs/training_export")
+            self.assertEqual(output.strip(), f"python train.py --dataset {runs / 'training_export'}")
 
     def test_trainer_preflight_blocks_failed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:

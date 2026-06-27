@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 import shutil
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,7 @@ def build_trainer_archive(
     missing: list[dict[str, Any]] = []
     relationships: list[dict[str, Any]] = []
 
+    launch_check: dict[str, Any] | None = None
     launch_included = False
     launch_passed = False
     if launch_check_path is None:
@@ -117,6 +119,10 @@ def build_trainer_archive(
     for index, artifact in enumerate(artifacts):
         artifact["index"] = index
 
+    approved_command = _approved_command_record(launch_check)
+    trainer_inputs = _trainer_inputs(artifacts)
+    path_rewrites = _path_rewrites(trainer_inputs)
+    portable_command = _portable_command_record(approved_command, path_rewrites)
     self_contained = not missing
     ready_for_training = preflight.get("passed") is True and launch_included and launch_passed
     passed = ready_for_training and (self_contained or not require_self_contained)
@@ -131,12 +137,17 @@ def build_trainer_archive(
         "require_self_contained": require_self_contained,
         "ready_for_training": ready_for_training,
         "launch_check_included": launch_included,
+        "approved_command": approved_command,
+        "trainer_inputs": trainer_inputs,
+        "path_rewrites": path_rewrites,
+        "portable_command": portable_command,
         "artifacts": artifacts,
         "missing": missing,
         "relationships": relationships,
-        "metrics": _metrics(artifacts, missing),
+        "metrics": _metrics(artifacts, missing, trainer_inputs, path_rewrites),
         "notes": [
             "Trainer archives copy trainer handoff evidence into a portable directory; they do not train models or execute the trainer command.",
+            "The portable command is advisory: it rewrites known trainer-input paths to archive-local paths but does not include trainer code or execute anything.",
             "Archive validation checks copied file hashes and directory tree hashes, so original local source paths are not required after the archive is built.",
         ],
     }
@@ -452,13 +463,139 @@ def _missing(role: str, index: int, reason: str, *, name: str | None = None) -> 
     return item
 
 
-def _metrics(artifacts: list[dict[str, Any]], missing: list[dict[str, Any]]) -> dict[str, Any]:
+def _approved_command_record(launch_check: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(launch_check, dict):
+        return {"approved": False, "provided": False, "raw": "", "argv": [], "parseable": False, "shell": ""}
+    command = launch_check.get("approved_command")
+    if not isinstance(command, dict):
+        return {"approved": False, "provided": False, "raw": "", "argv": [], "parseable": False, "shell": ""}
+    argv = command.get("argv") if isinstance(command.get("argv"), list) else []
+    clean_argv = [str(item) for item in argv if isinstance(item, str)]
+    raw = command.get("raw") if isinstance(command.get("raw"), str) else ""
+    shell = command.get("shell") if isinstance(command.get("shell"), str) else ""
+    return {
+        "approved": command.get("approved") is True,
+        "provided": command.get("provided") is True,
+        "raw": raw,
+        "argv": clean_argv,
+        "parseable": command.get("parseable") is True,
+        "shell": shell if shell else (shlex.join(clean_argv) if clean_argv else raw),
+    }
+
+
+def _trainer_inputs(artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    inputs: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        if artifact.get("role") != "trainer_artifact":
+            continue
+        record: dict[str, Any] = {
+            "artifact_index": artifact.get("index"),
+            "artifact_name": artifact.get("name"),
+            "kind": artifact.get("kind"),
+            "original_path": artifact.get("original_path"),
+            "archive_path": artifact.get("path"),
+            "size_bytes": artifact.get("size_bytes"),
+            "sha256": artifact.get("sha256"),
+        }
+        if artifact.get("kind") == "directory":
+            record["file_count"] = artifact.get("file_count")
+            record["tree_hash_algorithm"] = artifact.get("tree_hash_algorithm")
+        inputs.append(record)
+    return inputs
+
+
+def _path_rewrites(trainer_inputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rewrites: list[dict[str, Any]] = []
+    for item in trainer_inputs:
+        original = item.get("original_path")
+        archive_path = item.get("archive_path")
+        if not isinstance(original, str) or not original or original.startswith("<"):
+            continue
+        if not isinstance(archive_path, str) or not archive_path:
+            continue
+        rewrites.append(
+            {
+                "artifact_name": str(item.get("artifact_name") or ""),
+                "kind": str(item.get("kind") or ""),
+                "original_path": original,
+                "archive_path": archive_path,
+            }
+        )
+    return rewrites
+
+
+def _portable_command_record(approved_command: dict[str, Any], path_rewrites: list[dict[str, Any]]) -> dict[str, Any]:
+    argv = approved_command.get("argv") if isinstance(approved_command.get("argv"), list) else []
+    clean_argv = [item for item in argv if isinstance(item, str)]
+    rewritten_argv, rewrite_count = _rewrite_command_argv(clean_argv, path_rewrites)
+    return {
+        "approved": approved_command.get("approved") is True,
+        "available": bool(rewritten_argv),
+        "rewritten": rewrite_count > 0,
+        "path_rewrite_count": rewrite_count,
+        "argv": rewritten_argv,
+        "shell": shlex.join(rewritten_argv) if rewritten_argv else "",
+        "notes": [
+            "Archive-local command is advisory and rewrites only recognized trainer-input paths.",
+            "Run it from the trainer archive root or resolve archive_path entries explicitly in your launcher.",
+        ],
+    }
+
+
+def _rewrite_command_argv(argv: list[str], path_rewrites: list[dict[str, Any]]) -> tuple[list[str], int]:
+    rewritten: list[str] = []
+    rewrite_count = 0
+    ordered = sorted(path_rewrites, key=lambda item: len(str(item.get("original_path") or "")), reverse=True)
+    for token in argv:
+        new_token = _rewrite_command_token(token, ordered)
+        if new_token != token:
+            rewrite_count += 1
+        rewritten.append(new_token)
+    return rewritten, rewrite_count
+
+
+def _rewrite_command_token(token: str, path_rewrites: list[dict[str, Any]]) -> str:
+    for item in path_rewrites:
+        original = item.get("original_path")
+        archive_path = item.get("archive_path")
+        if not isinstance(original, str) or not original:
+            continue
+        if not isinstance(archive_path, str) or not archive_path:
+            continue
+        replacement = _replace_path_value(token, original, archive_path)
+        if replacement != token:
+            return replacement
+        if "=" in token:
+            key, value = token.split("=", 1)
+            rewritten_value = _replace_path_value(value, original, archive_path)
+            if rewritten_value != value:
+                return f"{key}={rewritten_value}"
+    return token
+
+
+def _replace_path_value(value: str, original: str, archive_path: str) -> str:
+    if value == original:
+        return archive_path
+    prefix = original.rstrip("/") + "/"
+    if value.startswith(prefix):
+        return archive_path.rstrip("/") + "/" + value[len(prefix) :]
+    return value
+
+
+def _metrics(
+    artifacts: list[dict[str, Any]],
+    missing: list[dict[str, Any]],
+    trainer_inputs: list[dict[str, Any]],
+    path_rewrites: list[dict[str, Any]],
+) -> dict[str, Any]:
     role_counts = _count_rows(record.get("role") for record in artifacts)
     missing_role_counts = _count_rows(record.get("role") for record in missing)
     return {
         "artifact_count": len(artifacts),
         "file_artifact_count": sum(1 for record in artifacts if record.get("kind") == "file"),
         "directory_artifact_count": sum(1 for record in artifacts if record.get("kind") == "directory"),
+        "trainer_input_count": len(trainer_inputs),
+        "path_rewrite_count": len(path_rewrites),
         "missing_count": len(missing),
         "total_size_bytes": sum(_int_value(record.get("size_bytes")) for record in artifacts),
         "role_counts": role_counts,
