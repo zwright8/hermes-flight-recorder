@@ -697,6 +697,9 @@ flightrecorder gate-export \
   --max-unverified-trainer-view-source-fingerprints 0 \
   --min-trace-average-events 5 \
   --min-trace-tool-or-api-rate 0.8 \
+  --min-validation-episodes 1 \
+  --min-test-episodes 1 \
+  --require-family-exclusive-splits \
   --require-trace-event-type assistant_message
 ```
 
@@ -706,8 +709,9 @@ task-completion configured/complete counts, maximum incomplete task-completion
 examples, required-check pass rates, source-fingerprint coverage, maximum
 unverified source fingerprints, trainer-view source-fingerprint coverage,
 maximum unverified trainer-ready rows, trace-signal thresholds, required
-normalized event types, and maximum quality-flag counts. `gate-export` validates
-the export and manifest artifact fingerprints by default; set
+normalized event types, minimum train/validation/test split sizes,
+family-exclusive dataset splits, and maximum quality-flag counts.
+`gate-export` validates the export and manifest artifact fingerprints by default; set
 `strict_validation` in policy, or pass `--strict-validation`, when warnings
 should also block a training handoff.
 

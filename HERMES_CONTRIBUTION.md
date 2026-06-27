@@ -300,16 +300,17 @@ Flight Recorder turns Hermes' experience into regression pressure.
    `flightrecorder review-calibration` before trusting reviewed labels as model
    improvement signal.
 20. Export episodes, rewards, step rewards, preference pairs, trainer-ready
-   SFT/DPO/reward-model views, failure modes, dataset metrics, a dataset card,
-   and curriculum metadata with `flightrecorder export-rl` for future SFT, DPO,
-   reward-modeling, or RL pipelines.
+   SFT/DPO/reward-model views, failure modes, task-family split files, dataset
+   metrics, a dataset card, and curriculum metadata with `flightrecorder
+   export-rl` for future SFT, DPO, reward-modeling, or RL pipelines.
 21. Validate the generated artifacts, live-smoke summary, and suite summary with
    `flightrecorder validate --strict` before publishing them or using them
    downstream.
 22. Gate training-export readiness with `flightrecorder gate-export` before
    handing trainer-facing rows to SFT, DPO, reward-modeling, or RL jobs,
-   including source-fingerprint coverage thresholds so unproven labels do not
-   enter the improvement loop.
+   including source-fingerprint coverage, validation/test split size, and
+   family-exclusivity thresholds so unproven or leaky labels do not enter the
+   improvement loop.
 
 That gives the Hermes team a practical improvement loop:
 
@@ -422,7 +423,8 @@ Demo evidence:
 - `flightrecorder gate-reviewed` enforces human-review readiness before
   reviewed labels and trainer-ready views are consumed downstream.
 - `flightrecorder gate-export` enforces dataset-readiness thresholds before
-  trainer-facing rows are consumed downstream.
+  trainer-facing rows are consumed downstream, including split-readiness
+  thresholds for held-out evaluation.
 - `flightrecorder audit --fail-on-leak` confirms generated reports do not leak
   the raw fixture secret.
 - `scripts/live_hermes_smoke.py` has been run against a local Hermes checkout

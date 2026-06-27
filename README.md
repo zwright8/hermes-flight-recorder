@@ -822,10 +822,11 @@ Use `flightrecorder gate-export` to enforce readiness thresholds over
 `dataset_metrics.json` before a training or tuning job consumes the exported
 rows. It can require positives, negatives, preferences, SFT/DPO/reward-model
 views, step attribution, task-family coverage, evidence-backed task completion,
-complete source-fingerprint coverage, enough trace signal, and zero quality
-flags. By default, it also validates the export directory and manifest artifact
-fingerprints before evaluating metrics, so stale or swapped files fail the
-handoff:
+complete source-fingerprint coverage, enough trace signal, populated
+train/validation/test splits, family-exclusive split assignment, and zero
+quality flags. By default, it also validates the export directory and manifest
+artifact fingerprints before evaluating metrics, so stale or swapped files fail
+the handoff:
 
 ```json
 {
@@ -848,6 +849,11 @@ handoff:
   "min_trace_tool_or_api_rate": 0.8,
   "max_trace_empty_final_answers": 0,
   "max_trace_risk_count": 2,
+  "min_split_task_families": 10,
+  "min_train_episodes": 80,
+  "min_validation_episodes": 10,
+  "min_test_episodes": 10,
+  "require_family_exclusive_splits": true,
   "require_trace_event_types": ["assistant_message", "tool_call"],
   "max_quality_flags": 0,
   "forbid_quality_severities": ["warning", "error"],

@@ -628,6 +628,11 @@ assert gate["metrics"]["trace_signal"]["average_event_count"] == 5.67
 assert gate["metrics"]["trace_signal"]["event_type_count"] == 6
 assert gate["metrics"]["trace_signal"]["tool_or_api_episode_rate"] == 0.8333
 assert gate["metrics"]["trace_signal"]["risk_count"] == 2
+assert gate["metrics"]["dataset_splits"]["task_family_count"] == 4
+assert gate["metrics"]["dataset_splits"]["train_episode_count"] == 3
+assert gate["metrics"]["dataset_splits"]["validation_episode_count"] == 2
+assert gate["metrics"]["dataset_splits"]["test_episode_count"] == 1
+assert gate["metrics"]["dataset_splits"]["family_exclusive"] is True
 assert gate["policy"]["effective"]["min_source_fingerprint_rate"] == 1.0
 assert gate["policy"]["effective"]["max_unverified_source_fingerprints"] == 0
 assert gate["policy"]["effective"]["min_trainer_view_source_fingerprint_rate"] == 1.0
@@ -641,6 +646,11 @@ assert gate["policy"]["effective"]["min_trace_final_answer_rate"] == 1.0
 assert gate["policy"]["effective"]["min_trace_tool_or_api_rate"] == 0.8
 assert gate["policy"]["effective"]["max_trace_empty_final_answers"] == 0
 assert gate["policy"]["effective"]["max_trace_risk_count"] == 2
+assert gate["policy"]["effective"]["min_split_task_families"] == 4
+assert gate["policy"]["effective"]["min_train_episodes"] == 3
+assert gate["policy"]["effective"]["min_validation_episodes"] == 2
+assert gate["policy"]["effective"]["min_test_episodes"] == 1
+assert gate["policy"]["effective"]["require_family_exclusive_splits"] is True
 assert gate["policy"]["effective"]["require_trace_event_types"] == ["assistant_message"]
 assert gate["policy"]["effective"]["require_valid_export"] is True
 assert gate["policy"]["effective"]["strict_validation"] is True
@@ -1139,6 +1149,8 @@ grep -q "promotion-archive" examples/github-actions/action-ledger-promotion-gate
 assert_help_contains "--min-task-completion-complete" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 assert_help_contains "--min-trace-average-events" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 assert_help_contains "--min-trainer-view-source-fingerprint-rate" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
+assert_help_contains "--min-validation-episodes" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
+assert_help_contains "--require-family-exclusive-splits" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 assert_help_contains "--strict-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 assert_help_contains "--skip-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null

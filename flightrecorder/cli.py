@@ -981,6 +981,11 @@ def cmd_gate_export(args: argparse.Namespace) -> int:
         min_trace_tool_or_api_rate=options["min_trace_tool_or_api_rate"],
         max_trace_empty_final_answers=options["max_trace_empty_final_answers"],
         max_trace_risk_count=options["max_trace_risk_count"],
+        min_split_task_families=options["min_split_task_families"],
+        min_train_episodes=options["min_train_episodes"],
+        min_validation_episodes=options["min_validation_episodes"],
+        min_test_episodes=options["min_test_episodes"],
+        require_family_exclusive_splits=options["require_family_exclusive_splits"],
         max_quality_flags=options["max_quality_flags"],
         forbid_quality_flags=options["forbid_quality_flags"],
         forbid_quality_severities=options["forbid_quality_severities"],
@@ -1839,6 +1844,15 @@ def _parser() -> argparse.ArgumentParser:
     gate_export.add_argument("--max-trace-empty-final-answers", type=_non_negative_int_arg, help="Maximum exported episodes allowed to have empty final answers")
     gate_export.add_argument("--max-trace-risk-count", type=_non_negative_int_arg, help="Maximum total trace observability risks allowed")
     gate_export.add_argument("--require-trace-event-type", action="append", default=[], help="Fail unless this normalized event type appears in exported traces")
+    gate_export.add_argument("--min-split-task-families", type=_non_negative_int_arg, help="Minimum task families represented in dataset split metadata")
+    gate_export.add_argument("--min-train-episodes", type=_non_negative_int_arg, help="Minimum episodes assigned to the train split")
+    gate_export.add_argument("--min-validation-episodes", type=_non_negative_int_arg, help="Minimum episodes assigned to the validation split")
+    gate_export.add_argument("--min-test-episodes", type=_non_negative_int_arg, help="Minimum episodes assigned to the test split")
+    gate_export.add_argument(
+        "--require-family-exclusive-splits",
+        action="store_true",
+        help="Fail unless dataset split metadata reports task-family-exclusive train/validation/test splits",
+    )
     gate_export.add_argument("--max-quality-flags", type=_non_negative_int_arg, help="Maximum allowed dataset quality flags")
     gate_export.add_argument("--forbid-quality-flag", action="append", default=[], help="Fail if this quality flag id appears")
     gate_export.add_argument(
@@ -2366,6 +2380,21 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
             if args.max_trace_risk_count is not None
             else policy.get("max_trace_risk_count")
         ),
+        "min_split_task_families": (
+            args.min_split_task_families
+            if args.min_split_task_families is not None
+            else policy.get("min_split_task_families")
+        ),
+        "min_train_episodes": args.min_train_episodes if args.min_train_episodes is not None else policy.get("min_train_episodes"),
+        "min_validation_episodes": (
+            args.min_validation_episodes
+            if args.min_validation_episodes is not None
+            else policy.get("min_validation_episodes")
+        ),
+        "min_test_episodes": args.min_test_episodes if args.min_test_episodes is not None else policy.get("min_test_episodes"),
+        "require_family_exclusive_splits": bool(
+            args.require_family_exclusive_splits or policy.get("require_family_exclusive_splits", False)
+        ),
         "max_quality_flags": args.max_quality_flags if args.max_quality_flags is not None else policy.get("max_quality_flags"),
         "forbid_quality_flags": _merge_unique_strings(policy.get("forbid_quality_flags", []), args.forbid_quality_flag),
         "forbid_quality_severities": _merge_unique_strings(
@@ -2402,6 +2431,11 @@ def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_trace_tool_or_api_rate",
         "max_trace_empty_final_answers",
         "max_trace_risk_count",
+        "min_split_task_families",
+        "min_train_episodes",
+        "min_validation_episodes",
+        "min_test_episodes",
+        "require_family_exclusive_splits",
         "max_quality_flags",
         "forbid_quality_flags",
         "forbid_quality_severities",

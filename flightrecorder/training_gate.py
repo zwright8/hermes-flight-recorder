@@ -25,6 +25,10 @@ _COUNT_POLICY_FIELDS = {
     "min_trace_event_type_count",
     "max_trace_empty_final_answers",
     "max_trace_risk_count",
+    "min_split_task_families",
+    "min_train_episodes",
+    "min_validation_episodes",
+    "min_test_episodes",
 }
 _RATE_POLICY_FIELDS = {
     "min_pass_rate",
@@ -37,7 +41,7 @@ _RATE_POLICY_FIELDS = {
 _FLOAT_POLICY_FIELDS = {"min_trace_average_events"}
 _SCALAR_POLICY_FIELDS = {*_RATE_POLICY_FIELDS, *_FLOAT_POLICY_FIELDS, "min_average_score", *_COUNT_POLICY_FIELDS}
 _LIST_POLICY_FIELDS = {"forbid_quality_flags", "forbid_quality_severities", "require_task_families", "require_trace_event_types"}
-_BOOLEAN_POLICY_FIELDS = {"require_valid_export", "strict_validation"}
+_BOOLEAN_POLICY_FIELDS = {"require_valid_export", "strict_validation", "require_family_exclusive_splits"}
 _TASK_FAMILY_SCALAR_POLICY_FIELDS = {
     "min_episodes",
     "min_pass_rate",
@@ -156,6 +160,11 @@ def evaluate_training_gate(
     min_trace_tool_or_api_rate: float | None = None,
     max_trace_empty_final_answers: int | None = None,
     max_trace_risk_count: int | None = None,
+    min_split_task_families: int | None = None,
+    min_train_episodes: int | None = None,
+    min_validation_episodes: int | None = None,
+    min_test_episodes: int | None = None,
+    require_family_exclusive_splits: bool = False,
     max_quality_flags: int | None = None,
     forbid_quality_flags: list[str] | None = None,
     forbid_quality_severities: list[str] | None = None,
@@ -171,6 +180,7 @@ def evaluate_training_gate(
     trainer_view_source_fingerprint_coverage = _trainer_view_source_fingerprint_coverage(dataset_metrics)
     task_completion = _task_completion_metrics(dataset_metrics)
     trace_signal = _trace_signal_metrics(dataset_metrics)
+    dataset_splits = _dataset_split_metrics(dataset_metrics)
     checks: list[dict[str, Any]] = []
 
     if require_valid_export:
@@ -265,6 +275,16 @@ def evaluate_training_gate(
         )
     if max_trace_risk_count is not None:
         _add_max_check(checks, "max_trace_risk_count", _int_value(trace_signal.get("risk_count")), max_trace_risk_count)
+    if min_split_task_families is not None:
+        _add_min_check(checks, "min_split_task_families", _int_value(dataset_splits.get("task_family_count")), min_split_task_families)
+    if min_train_episodes is not None:
+        _add_min_check(checks, "min_train_episodes", _int_value(dataset_splits.get("train_episode_count")), min_train_episodes)
+    if min_validation_episodes is not None:
+        _add_min_check(checks, "min_validation_episodes", _int_value(dataset_splits.get("validation_episode_count")), min_validation_episodes)
+    if min_test_episodes is not None:
+        _add_min_check(checks, "min_test_episodes", _int_value(dataset_splits.get("test_episode_count")), min_test_episodes)
+    if require_family_exclusive_splits:
+        _add_bool_check(checks, "require_family_exclusive_splits", bool(dataset_splits.get("family_exclusive")), True)
     event_type_counts = _count_rows(trace_signal.get("event_type_counts"))
     for event_type in require_trace_event_types or []:
         _add_min_check(
@@ -308,6 +328,7 @@ def evaluate_training_gate(
             "trainer_view_source_fingerprint_coverage": trainer_view_source_fingerprint_coverage,
             "task_completion": task_completion,
             "trace_signal": trace_signal,
+            "dataset_splits": dataset_splits,
             "artifact_counts": artifact_counts,
             "validation": _validation_metrics(validation_summary),
         },
@@ -410,6 +431,18 @@ def _add_presence_check(checks: list[dict[str, Any]], check_id: str, present: bo
         "summary": f"{check_id}: present={present}",
     }
     _append_check(checks, check, scope)
+
+
+def _add_bool_check(checks: list[dict[str, Any]], check_id: str, actual: bool, expected: bool) -> None:
+    checks.append(
+        {
+            "id": check_id,
+            "passed": actual is expected,
+            "actual": {"value": actual},
+            "expected": {"value": expected},
+            "summary": f"{check_id}: actual={actual}, expected={expected}",
+        }
+    )
 
 
 def _append_check(checks: list[dict[str, Any]], check: dict[str, Any], scope: dict[str, str] | None = None) -> None:
@@ -600,6 +633,28 @@ def _trace_signal_metrics(dataset_metrics: dict[str, Any]) -> dict[str, Any]:
         "approval_event_count": _int_value(metrics.get("approval_event_count")),
         "risk_count": _int_value(metrics.get("risk_count")),
         "risk_counts": metrics.get("risk_counts") if isinstance(metrics.get("risk_counts"), list) else [],
+    }
+
+
+def _dataset_split_metrics(dataset_metrics: dict[str, Any]) -> dict[str, Any]:
+    metrics = dataset_metrics.get("dataset_splits")
+    episode_count = _int_value(dataset_metrics.get("episode_count"))
+    if not isinstance(metrics, dict):
+        return {
+            "task_family_count": 0,
+            "episode_count": episode_count,
+            "train_episode_count": episode_count,
+            "validation_episode_count": 0,
+            "test_episode_count": 0,
+            "family_exclusive": False,
+        }
+    return {
+        "task_family_count": _int_value(metrics.get("task_family_count")),
+        "episode_count": _int_value(metrics.get("episode_count")),
+        "train_episode_count": _int_value(metrics.get("train_episode_count")),
+        "validation_episode_count": _int_value(metrics.get("validation_episode_count")),
+        "test_episode_count": _int_value(metrics.get("test_episode_count")),
+        "family_exclusive": bool(metrics.get("family_exclusive")),
     }
 
 

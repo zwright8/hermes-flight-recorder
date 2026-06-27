@@ -207,7 +207,9 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
   task evidence via `--min-task-completion-complete` and
   `--min-task-completion-check-pass-rate`, complete source-fingerprint coverage
   via `--min-source-fingerprint-rate 1.0 --max-unverified-source-fingerprints
-  0`, and no forbidden quality flags.
+  0`, populated validation/test splits via `--min-validation-episodes` and
+  `--min-test-episodes`, family-exclusive splits via
+  `--require-family-exclusive-splits`, and no forbidden quality flags.
 - Use `flightrecorder gate-reviewed --reviewed-export runs/reviewed_export
   --policy <policy.json>` when trainer jobs should wait for enough completed
   human labels, accepted and negative examples, reviewed trainer views,

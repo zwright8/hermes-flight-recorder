@@ -54,6 +54,11 @@ class TrainingGateTests(unittest.TestCase):
             self.assertEqual(result["metrics"]["trace_signal"]["average_event_count"], 5.67)
             self.assertEqual(result["metrics"]["trace_signal"]["tool_or_api_episode_rate"], 0.8333)
             self.assertEqual(result["metrics"]["trace_signal"]["risk_count"], 2)
+            self.assertEqual(result["metrics"]["dataset_splits"]["task_family_count"], 4)
+            self.assertEqual(result["metrics"]["dataset_splits"]["train_episode_count"], 3)
+            self.assertEqual(result["metrics"]["dataset_splits"]["validation_episode_count"], 2)
+            self.assertEqual(result["metrics"]["dataset_splits"]["test_episode_count"], 1)
+            self.assertTrue(result["metrics"]["dataset_splits"]["family_exclusive"])
             self.assertEqual(result["policy"]["effective"]["min_source_fingerprint_rate"], 1.0)
             self.assertEqual(result["policy"]["effective"]["max_unverified_source_fingerprints"], 0)
             self.assertEqual(result["policy"]["effective"]["min_trainer_view_source_fingerprint_rate"], 1.0)
@@ -67,6 +72,11 @@ class TrainingGateTests(unittest.TestCase):
             self.assertEqual(result["policy"]["effective"]["min_trace_tool_or_api_rate"], 0.8)
             self.assertEqual(result["policy"]["effective"]["max_trace_empty_final_answers"], 0)
             self.assertEqual(result["policy"]["effective"]["max_trace_risk_count"], 2)
+            self.assertEqual(result["policy"]["effective"]["min_split_task_families"], 4)
+            self.assertEqual(result["policy"]["effective"]["min_train_episodes"], 3)
+            self.assertEqual(result["policy"]["effective"]["min_validation_episodes"], 2)
+            self.assertEqual(result["policy"]["effective"]["min_test_episodes"], 1)
+            self.assertTrue(result["policy"]["effective"]["require_family_exclusive_splits"])
             self.assertEqual(result["policy"]["effective"]["require_trace_event_types"], ["assistant_message"])
 
     def test_gate_export_fails_thresholds_and_quality_flags(self):
@@ -302,6 +312,52 @@ class TrainingGateTests(unittest.TestCase):
             self.assertIn("max_trace_empty_final_answers", failed_ids)
             self.assertIn("max_trace_risk_count", failed_ids)
             self.assertIn("require_trace_event_type", failed_ids)
+
+    def test_gate_export_fails_dataset_split_thresholds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            gate = Path(tmp) / "training_gate.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--export-rl"])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            metrics_path = export / "dataset_metrics.json"
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+            metrics["dataset_splits"] = {
+                "task_family_count": 1,
+                "episode_count": 6,
+                "train_episode_count": 6,
+                "validation_episode_count": 0,
+                "test_episode_count": 0,
+                "family_exclusive": False,
+            }
+            metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "gate-export",
+                    "--training-export",
+                    str(export),
+                    "--skip-validation",
+                    "--min-split-task-families",
+                    "4",
+                    "--min-validation-episodes",
+                    "1",
+                    "--min-test-episodes",
+                    "1",
+                    "--require-family-exclusive-splits",
+                    "--out",
+                    str(gate),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            failed_ids = [item["id"] for item in result["checks"] if not item["passed"]]
+            self.assertIn("min_split_task_families", failed_ids)
+            self.assertIn("min_validation_episodes", failed_ids)
+            self.assertIn("min_test_episodes", failed_ids)
+            self.assertIn("require_family_exclusive_splits", failed_ids)
+            self.assertEqual(result["metrics"]["dataset_splits"]["family_exclusive"], False)
 
 
 if __name__ == "__main__":
