@@ -300,6 +300,118 @@ class EvidenceBundleTests(unittest.TestCase):
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
 
+    def test_evidence_bundle_summarizes_complete_trainer_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = _write_trainer_handoff_artifacts(root)
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--trainer-preflight",
+                    str(artifacts["trainer_preflight"]),
+                    "--trainer-launch-check",
+                    str(artifacts["trainer_launch_check"]),
+                    "--trainer-archive",
+                    str(artifacts["trainer_archive"]),
+                    "--trainer-archive-check",
+                    str(artifacts["trainer_archive_check"]),
+                    "--trainer-consumer-plan",
+                    str(artifacts["trainer_consumer_plan"]),
+                    "--trainer-wrapper-dry-run",
+                    str(artifacts["trainer_wrapper_dry_run"]),
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertTrue(bundle["passed"])
+            self.assertEqual(bundle["decision"]["recommendation"], "promote_handoff")
+            self.assertIn("trainer_handoff", bundle["decision"]["key_metrics"])
+            trainer = bundle["metrics"]["trainer_handoff"]
+            self.assertEqual(trainer["stage_count"], 6)
+            self.assertEqual(trainer["handoff_ready_count"], 6)
+            self.assertEqual(trainer["blocked_stage_count"], 0)
+            self.assertEqual(trainer["schema_supported_count"], 6)
+            self.assertTrue(trainer["complete_chain"])
+            self.assertTrue(trainer["all_included_ready"])
+            self.assertEqual(trainer["missing_stage_ids"], [])
+            self.assertEqual([stage["id"] for stage in trainer["stages"]], [
+                "trainer_preflight",
+                "trainer_launch_check",
+                "trainer_archive",
+                "trainer_archive_check",
+                "trainer_consumer_plan",
+                "trainer_wrapper_dry_run",
+            ])
+            self.assertEqual(bundle["artifacts"]["trainer_archive"]["kind"], "directory")
+            self.assertEqual(bundle["artifacts"]["trainer_archive_manifest"]["kind"], "file")
+            self.assertEqual(bundle["decision"]["key_metrics"]["trainer_handoff"]["complete_chain"], True)
+            self.assertEqual(bundle["decision"]["key_metrics"]["trainer_handoff"]["all_included_ready"], True)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+            bundle["metrics"]["trainer_handoff"]["blocked_stage_count"] = 1
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
+
+    def test_evidence_bundle_blocks_failed_trainer_handoff_stage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preflight_path = root / "trainer_preflight.json"
+            preflight_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.trainer_preflight.v1",
+                        "passed": False,
+                        "readiness": "blocked",
+                        "recommendation": "block_launch",
+                        "check_count": 2,
+                        "failed_check_count": 1,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--trainer-preflight",
+                    str(preflight_path),
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            trainer = bundle["metrics"]["trainer_handoff"]
+            self.assertEqual(trainer["stage_count"], 1)
+            self.assertEqual(trainer["blocked_stage_count"], 1)
+            self.assertFalse(trainer["complete_chain"])
+            self.assertEqual(
+                trainer["missing_stage_ids"],
+                [
+                    "trainer_launch_check",
+                    "trainer_archive",
+                    "trainer_archive_check",
+                    "trainer_consumer_plan",
+                    "trainer_wrapper_dry_run",
+                ],
+            )
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("trainer_preflight_ready", failed_checks)
+            action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
+            self.assertIn("fix_trainer_handoff", action_ids)
+            self.assertIn("complete_trainer_handoff_chain", action_ids)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
     def test_evidence_bundle_blocks_missing_run_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -492,6 +604,100 @@ class EvidenceBundleTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_fingerprint does not match", errors)
+
+
+def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:
+    artifacts = {
+        "trainer_preflight": root / "trainer_preflight.json",
+        "trainer_launch_check": root / "trainer_launch_check.json",
+        "trainer_archive": root / "trainer_archive",
+        "trainer_archive_check": root / "trainer_archive_check.json",
+        "trainer_consumer_plan": root / "trainer_consumer_plan.json",
+        "trainer_wrapper_dry_run": root / "trainer_wrapper_dry_run.json",
+    }
+    artifacts["trainer_archive"].mkdir()
+    payloads = {
+        artifacts["trainer_preflight"]: {
+            "schema_version": "hfr.trainer_preflight.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "launch_allowed",
+            "check_count": 2,
+            "failed_check_count": 0,
+            "gate_count": 1,
+            "passed_gate_count": 1,
+        },
+        artifacts["trainer_launch_check"]: {
+            "schema_version": "hfr.trainer_launch_check.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "launch_allowed",
+            "check_count": 3,
+            "failed_check_count": 0,
+            "gate_count": 1,
+            "passed_gate_count": 1,
+        },
+        artifacts["trainer_archive"] / "trainer_archive.json": {
+            "schema_version": "hfr.trainer_archive.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "handoff_ready",
+            "metrics": {
+                "artifact_count": 7,
+                "missing_count": 0,
+                "path_rewrite_count": 1,
+                "trainer_input_count": 4,
+            },
+        },
+        artifacts["trainer_archive_check"]: {
+            "schema_version": "hfr.trainer_archive_check.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "consumer_ready",
+            "check_count": 4,
+            "failed_check_count": 0,
+            "metrics": {
+                "external_code_file_count": 1,
+                "missing_external_code_count": 0,
+                "missing_trainer_input_count": 0,
+                "trainer_input_available_count": 4,
+                "trainer_input_count": 4,
+            },
+        },
+        artifacts["trainer_consumer_plan"]: {
+            "schema_version": "hfr.trainer_consumer_plan.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "ready_for_external_trainer",
+            "check_count": 5,
+            "failed_check_count": 0,
+            "metrics": {
+                "command_arg_count": 3,
+                "external_code_file_count": 1,
+                "external_code_ready_count": 1,
+                "trainer_input_count": 4,
+                "trainer_input_ready_count": 4,
+            },
+        },
+        artifacts["trainer_wrapper_dry_run"]: {
+            "schema_version": "hfr.example_trainer_wrapper_dry_run.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "dry_run_ready",
+            "check_count": 6,
+            "failed_check_count": 0,
+            "metrics": {
+                "command_arg_count": 3,
+                "external_code_file_count": 1,
+                "external_code_ready_count": 1,
+                "trainer_input_count": 4,
+                "trainer_input_ready_count": 4,
+            },
+        },
+    }
+    for path, payload in payloads.items():
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return artifacts
 
 
 if __name__ == "__main__":

@@ -8907,6 +8907,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "reviewed_export",
         "review_calibration",
         "live_smoke_summary",
+        "trainer_handoff",
     )
     for section in expected_sections:
         if section in metrics and not isinstance(metrics[section], dict):
@@ -8917,6 +8918,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     run_digest_coverage = metrics.get("run_digest_coverage")
     if isinstance(run_digest_coverage, dict):
         _validate_bundle_run_digest_coverage(run_digest_coverage, target)
+    trainer_handoff = metrics.get("trainer_handoff")
+    if isinstance(trainer_handoff, dict):
+        _validate_bundle_trainer_handoff(trainer_handoff, target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -8986,6 +8990,99 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
     for field_name in ("missing_digest_scenarios", "invalid_digest_scenarios"):
         if not _is_string_list(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a list of strings.")
+
+
+def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "evidence_bundle.metrics.trainer_handoff"
+    expected_stage_ids = (
+        "trainer_preflight",
+        "trainer_launch_check",
+        "trainer_archive",
+        "trainer_archive_check",
+        "trainer_consumer_plan",
+        "trainer_wrapper_dry_run",
+    )
+    for field_name in ("stage_count", "handoff_ready_count", "blocked_stage_count", "schema_supported_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("complete_chain", "all_included_ready"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if not _is_string_list(value.get("missing_stage_ids")):
+        target.errors.append(f"{label}.missing_stage_ids must be a list of strings.")
+    stages = value.get("stages")
+    if not isinstance(stages, list):
+        target.errors.append(f"{label}.stages must be a list.")
+        stages = []
+    if _is_non_negative_int(value.get("stage_count")) and int(value["stage_count"]) != len(stages):
+        target.errors.append(f"{label}.stage_count expected {len(stages)}, got {value.get('stage_count')!r}.")
+
+    ids: list[str] = []
+    handoff_ready_count = 0
+    blocked_count = 0
+    schema_supported_count = 0
+    for index, stage in enumerate(stages):
+        stage_label = f"{label}.stages[{index}]"
+        if not isinstance(stage, dict):
+            target.errors.append(f"{stage_label} must be an object.")
+            continue
+        stage_id = stage.get("id")
+        if not isinstance(stage_id, str) or not stage_id:
+            target.errors.append(f"{stage_label}.id must be a non-empty string.")
+        else:
+            ids.append(stage_id)
+            if stage_id not in expected_stage_ids:
+                target.errors.append(f"{stage_label}.id has unknown trainer handoff stage {stage_id!r}.")
+        for field_name in ("path", "schema_version", "expected_schema_version", "readiness", "recommendation", "expected_recommendation"):
+            if not isinstance(stage.get(field_name), str) or not stage.get(field_name):
+                target.errors.append(f"{stage_label}.{field_name} must be a non-empty string.")
+        for field_name in ("schema_supported", "passed", "handoff_ready"):
+            if not isinstance(stage.get(field_name), bool):
+                target.errors.append(f"{stage_label}.{field_name} must be a boolean.")
+        for field_name in ("check_count", "failed_check_count"):
+            if not _is_non_negative_int(stage.get(field_name)):
+                target.errors.append(f"{stage_label}.{field_name} must be a non-negative integer.")
+        for field_name in (
+            "gate_count",
+            "passed_gate_count",
+            "trainer_input_count",
+            "trainer_input_ready_count",
+            "trainer_input_available_count",
+            "external_code_file_count",
+            "external_code_ready_count",
+            "missing_external_code_count",
+            "missing_trainer_input_count",
+            "command_arg_count",
+            "artifact_count",
+            "missing_count",
+            "path_rewrite_count",
+        ):
+            if field_name in stage and not _is_non_negative_int(stage.get(field_name)):
+                target.errors.append(f"{stage_label}.{field_name} must be a non-negative integer when present.")
+        if stage.get("handoff_ready") is True:
+            handoff_ready_count += 1
+        elif stage.get("handoff_ready") is False:
+            blocked_count += 1
+        if stage.get("schema_supported") is True:
+            schema_supported_count += 1
+
+    expected_missing = [stage_id for stage_id in expected_stage_ids if stage_id not in ids]
+    if value.get("missing_stage_ids") != expected_missing:
+        target.errors.append(f"{label}.missing_stage_ids expected {expected_missing!r}, got {value.get('missing_stage_ids')!r}.")
+    if isinstance(value.get("complete_chain"), bool) and value["complete_chain"] != (not expected_missing):
+        target.errors.append(f"{label}.complete_chain must match missing_stage_ids.")
+    if isinstance(value.get("all_included_ready"), bool) and value["all_included_ready"] != all(
+        isinstance(stage, dict) and stage.get("handoff_ready") is True for stage in stages
+    ):
+        target.errors.append(f"{label}.all_included_ready must match stages[].handoff_ready.")
+    expected_counts = {
+        "handoff_ready_count": handoff_ready_count,
+        "blocked_stage_count": blocked_count,
+        "schema_supported_count": schema_supported_count,
+    }
+    for field_name, expected in expected_counts.items():
+        if _is_non_negative_int(value.get(field_name)) and int(value[field_name]) != expected:
+            target.errors.append(f"{label}.{field_name} expected {expected}, got {value.get(field_name)!r}.")
 
 
 def _validate_bundle_top_curriculum_priorities(value: Any, target: ValidationTarget) -> None:

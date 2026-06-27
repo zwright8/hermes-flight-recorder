@@ -889,6 +889,12 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         review_calibration_path=args.review_calibration,
         live_smoke_summary_path=args.live_smoke_summary,
+        trainer_preflight_path=args.trainer_preflight,
+        trainer_launch_check_path=args.trainer_launch_check,
+        trainer_archive_path=args.trainer_archive,
+        trainer_archive_check_path=args.trainer_archive_check,
+        trainer_consumer_plan_path=args.trainer_consumer_plan,
+        trainer_wrapper_dry_run_path=args.trainer_wrapper_dry_run,
         gate_paths=args.gate,
         preserve_paths=args.preserve_paths,
     )
@@ -1906,6 +1912,12 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--reviewed-export", help="apply-review directory included in the handoff")
     evidence_bundle.add_argument("--review-calibration", help="review_calibration.json included in the handoff")
     evidence_bundle.add_argument("--live-smoke-summary", help="live_smoke_summary.json included in the handoff")
+    evidence_bundle.add_argument("--trainer-preflight", help="trainer_preflight.json included in the handoff")
+    evidence_bundle.add_argument("--trainer-launch-check", help="trainer_launch_check.json included in the handoff")
+    evidence_bundle.add_argument("--trainer-archive", help="Trainer archive directory or trainer_archive.json included in the handoff")
+    evidence_bundle.add_argument("--trainer-archive-check", help="trainer_archive_check.json included in the handoff")
+    evidence_bundle.add_argument("--trainer-consumer-plan", help="trainer_consumer_plan.json included in the handoff")
+    evidence_bundle.add_argument("--trainer-wrapper-dry-run", help="trainer_wrapper_dry_run.json included in the handoff")
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)

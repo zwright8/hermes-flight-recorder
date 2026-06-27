@@ -146,6 +146,7 @@ _INDEX_ARTIFACTS = (
     ("repair_queue.json", "Repair Queue"),
     ("validation.json", "Validation Summary"),
     ("evidence_bundle.json", "Evidence Bundle"),
+    ("evidence_bundle_trainer.json", "Trainer Evidence Bundle"),
     ("improvement_plan.json", "Improvement Plan"),
     ("improvement_ledger.json", "Improvement Ledger"),
     ("improvement_ledger_gate.json", "Improvement Ledger Gate"),

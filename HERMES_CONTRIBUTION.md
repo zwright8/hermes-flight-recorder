@@ -27,7 +27,9 @@ artifacts and turns them into maintainable eval evidence:
   future training loops.
 - a compact evidence-bundle manifest that tells CI, reviewers, or future
   trainers which artifacts and gates were included in a handoff and whether the
-  package is ready to consume.
+  package is ready to consume, including a trainer-handoff summary when
+  preflight, launch-check, archive, archive-check, consumer-plan, and wrapper
+  dry-run artifacts are present.
 - trainer preflight, launch-check, portable trainer-archive,
   trainer-archive-check, and trainer-consumer-plan artifacts that let external
   training infrastructure validate copied evidence, local external trainer
@@ -332,6 +334,10 @@ Flight Recorder turns Hermes' experience into regression pressure.
 24. Dry-run that plan with `examples/trainer-wrapper/consume_trainer_plan.py`
    so trainer infrastructure has a receipt proving it parsed the handoff
    contract before any external training process starts.
+25. Regenerate `flightrecorder evidence-bundle` with those trainer handoff
+   artifacts so CI, reviewers, and trainer launchers can read
+   `metrics.trainer_handoff` from one central manifest before external training
+   starts.
 
 That gives the Hermes team a practical improvement loop:
 

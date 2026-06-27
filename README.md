@@ -87,6 +87,9 @@ Expected demo output:
   external-code readiness, a deterministic non-executing plan, and an example
   wrapper dry-run receipt for an external training launcher to validate before
   consuming rows.
+- A trainer-ready top-level bundle in `runs/evidence_bundle_trainer.json` that
+  summarizes the full preflight, launch-check, archive, archive-check,
+  consumer-plan, and wrapper dry-run chain in one auditable manifest.
 
 ## Install
 
@@ -476,7 +479,10 @@ handoff manifest over existing suite artifacts. It records included paths,
 file hashes, readiness checks, pass/fail state, summarized metrics, gate
 results, and a compact `decision` block so a reviewer, CI job, or future trainer
 can consume one compact artifact before deciding whether to trust the underlying
-evidence package.
+evidence package. When trainer handoff artifacts are included, the bundle also
+emits `metrics.trainer_handoff` and `decision.key_metrics.trainer_handoff`, so
+external trainer automation can see whether the preflight through wrapper
+dry-run chain is complete and ready.
 
 `flightrecorder repair-queue` writes `repair_queue.json`, a deterministic queue
 with one item per failed scorecard rule. Each repair item carries the failed
@@ -803,6 +809,32 @@ their embedded export validation. When `--runs` is supplied, it also checks
 whose per-run improvement summaries are missing or malformed. Validate it
 before publishing with
 `flightrecorder validate --evidence-bundle runs/evidence_bundle.json --strict`.
+After trainer handoff artifacts exist, create the trainer-facing bundle with:
+
+```bash
+flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
+  --repair-queue runs/repair_queue.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --trainer-preflight runs/trainer_preflight.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --trainer-archive runs/trainer_archive \
+  --trainer-archive-check runs/trainer_archive_check.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
+  --out runs/evidence_bundle_trainer.json
+```
+
+Included trainer stages block the bundle when their schema, `passed`,
+readiness, or expected recommendation no longer matches the handoff contract.
+Missing trainer stages are reported in
+`metrics.trainer_handoff.missing_stage_ids` and as a deterministic next action,
+which keeps partial handoffs visible without breaking non-training bundle uses.
 The generated `decision` block carries the handoff recommendation
 (`promote_handoff` or `block_handoff`), blocking checks, blocking gates,
 deterministic `next_actions`, included evidence artifact names,

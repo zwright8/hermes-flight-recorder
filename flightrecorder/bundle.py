@@ -14,6 +14,39 @@ _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.reviewed_gate.v1",
     "hfr.review_calibration.v1",
 }
+_TRAINER_HANDOFF_STAGES: tuple[dict[str, str], ...] = (
+    {
+        "id": "trainer_preflight",
+        "schema_version": "hfr.trainer_preflight.v1",
+        "recommendation": "launch_allowed",
+    },
+    {
+        "id": "trainer_launch_check",
+        "schema_version": "hfr.trainer_launch_check.v1",
+        "recommendation": "launch_allowed",
+    },
+    {
+        "id": "trainer_archive",
+        "schema_version": "hfr.trainer_archive.v1",
+        "recommendation": "handoff_ready",
+        "manifest": "trainer_archive.json",
+    },
+    {
+        "id": "trainer_archive_check",
+        "schema_version": "hfr.trainer_archive_check.v1",
+        "recommendation": "consumer_ready",
+    },
+    {
+        "id": "trainer_consumer_plan",
+        "schema_version": "hfr.trainer_consumer_plan.v1",
+        "recommendation": "ready_for_external_trainer",
+    },
+    {
+        "id": "trainer_wrapper_dry_run",
+        "schema_version": "hfr.example_trainer_wrapper_dry_run.v1",
+        "recommendation": "dry_run_ready",
+    },
+)
 
 
 class EvidenceBundleError(ValueError):
@@ -36,6 +69,12 @@ def build_evidence_bundle(
     reviewed_export_dir: str | Path | None = None,
     review_calibration_path: str | Path | None = None,
     live_smoke_summary_path: str | Path | None = None,
+    trainer_preflight_path: str | Path | None = None,
+    trainer_launch_check_path: str | Path | None = None,
+    trainer_archive_path: str | Path | None = None,
+    trainer_archive_check_path: str | Path | None = None,
+    trainer_consumer_plan_path: str | Path | None = None,
+    trainer_wrapper_dry_run_path: str | Path | None = None,
     gate_paths: list[str | Path] | None = None,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
@@ -239,6 +278,19 @@ def build_evidence_bundle(
         live_smoke_summary = _read_json_artifact(Path(live_smoke_summary_path), artifacts, "live_smoke_summary", preserve_paths)
         _summarize_live_smoke_summary(live_smoke_summary, metrics, checks)
 
+    _summarize_trainer_handoff(
+        artifacts,
+        metrics,
+        checks,
+        preserve_paths=preserve_paths,
+        trainer_preflight_path=trainer_preflight_path,
+        trainer_launch_check_path=trainer_launch_check_path,
+        trainer_archive_path=trainer_archive_path,
+        trainer_archive_check_path=trainer_archive_check_path,
+        trainer_consumer_plan_path=trainer_consumer_plan_path,
+        trainer_wrapper_dry_run_path=trainer_wrapper_dry_run_path,
+    )
+
     gate_rows: list[dict[str, Any]] = []
     for index, gate_path in enumerate(gate_paths or []):
         gate_name = f"gate_{index + 1}"
@@ -410,6 +462,15 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "hermes_git_dirty",
             "flight_recorder_git_commit",
             "flight_recorder_git_dirty",
+        ),
+        "trainer_handoff": (
+            "stage_count",
+            "handoff_ready_count",
+            "blocked_stage_count",
+            "schema_supported_count",
+            "complete_chain",
+            "all_included_ready",
+            "missing_stage_ids",
         ),
     }
     summary: dict[str, Any] = {}
@@ -667,6 +728,35 @@ def _next_actions(
                 },
             )
         )
+    trainer = metrics.get("trainer_handoff") if isinstance(metrics.get("trainer_handoff"), dict) else {}
+    blocked_trainer_stages = _non_negative_int(trainer.get("blocked_stage_count"))
+    missing_trainer_stages = _bounded_string_list(trainer.get("missing_stage_ids"), len(_TRAINER_HANDOFF_STAGES))
+    if blocked_trainer_stages:
+        actions.append(
+            _action(
+                "fix_trainer_handoff",
+                "critical",
+                "trainer_handoff",
+                f"Fix {blocked_trainer_stages} blocked trainer handoff stage(s) before external training consumes this package.",
+                {
+                    "blocked_stage_count": blocked_trainer_stages,
+                    "stages": trainer.get("stages") if isinstance(trainer.get("stages"), list) else [],
+                },
+            )
+        )
+    if trainer and missing_trainer_stages:
+        actions.append(
+            _action(
+                "complete_trainer_handoff_chain",
+                "medium",
+                "trainer_handoff",
+                "Include the full trainer preflight, launch-check, archive, archive-check, consumer-plan, and wrapper receipt chain before treating the bundle as trainer-ready.",
+                {
+                    "missing_stage_ids": missing_trainer_stages,
+                    "stage_count": _non_negative_int(trainer.get("stage_count")),
+                },
+            )
+        )
     return actions
 
 
@@ -920,6 +1010,135 @@ def _live_smoke_environment_metrics(environment: Any) -> dict[str, Any]:
     return {field: environment.get(field) for field in fields if field in environment}
 
 
+def _summarize_trainer_handoff(
+    artifacts: dict[str, Any],
+    metrics: dict[str, Any],
+    checks: list[dict[str, Any]],
+    *,
+    preserve_paths: bool,
+    trainer_preflight_path: str | Path | None,
+    trainer_launch_check_path: str | Path | None,
+    trainer_archive_path: str | Path | None,
+    trainer_archive_check_path: str | Path | None,
+    trainer_consumer_plan_path: str | Path | None,
+    trainer_wrapper_dry_run_path: str | Path | None,
+) -> None:
+    paths = {
+        "trainer_preflight": trainer_preflight_path,
+        "trainer_launch_check": trainer_launch_check_path,
+        "trainer_archive": trainer_archive_path,
+        "trainer_archive_check": trainer_archive_check_path,
+        "trainer_consumer_plan": trainer_consumer_plan_path,
+        "trainer_wrapper_dry_run": trainer_wrapper_dry_run_path,
+    }
+    stages: list[dict[str, Any]] = []
+    for spec in _TRAINER_HANDOFF_STAGES:
+        stage_id = spec["id"]
+        raw_path = paths.get(stage_id)
+        if raw_path is None:
+            continue
+        path = Path(raw_path)
+        if "manifest" in spec:
+            artifact = _read_json_manifest_artifact(path, artifacts, stage_id, spec["manifest"], preserve_paths)
+        else:
+            artifact = _read_json_artifact(path, artifacts, stage_id, preserve_paths)
+        stage = _trainer_stage_metrics(stage_id, artifact, artifacts[stage_id], spec)
+        stages.append(stage)
+        _add_presence_check(
+            checks,
+            f"{stage_id}_schema_supported",
+            bool(stage["schema_supported"]),
+            {
+                "artifact": stage_id,
+                "expected_schema_version": stage["expected_schema_version"],
+                "schema_version": stage["schema_version"],
+            },
+        )
+        _add_presence_check(
+            checks,
+            f"{stage_id}_ready",
+            bool(stage["handoff_ready"]),
+            {
+                "artifact": stage_id,
+                "readiness": stage["readiness"],
+                "recommendation": stage["recommendation"],
+                "expected_recommendation": stage["expected_recommendation"],
+            },
+        )
+    if not stages:
+        return
+
+    included_stage_ids = {stage["id"] for stage in stages}
+    expected_stage_ids = [spec["id"] for spec in _TRAINER_HANDOFF_STAGES]
+    missing_stage_ids = [stage_id for stage_id in expected_stage_ids if stage_id not in included_stage_ids]
+    metrics["trainer_handoff"] = {
+        "stage_count": len(stages),
+        "handoff_ready_count": sum(1 for stage in stages if stage["handoff_ready"] is True),
+        "blocked_stage_count": sum(1 for stage in stages if stage["handoff_ready"] is False),
+        "schema_supported_count": sum(1 for stage in stages if stage["schema_supported"] is True),
+        "complete_chain": not missing_stage_ids,
+        "all_included_ready": all(stage["handoff_ready"] is True for stage in stages),
+        "missing_stage_ids": missing_stage_ids,
+        "stages": stages,
+    }
+
+
+def _trainer_stage_metrics(
+    stage_id: str,
+    artifact: dict[str, Any],
+    record: dict[str, Any],
+    spec: dict[str, str],
+) -> dict[str, Any]:
+    schema_version = str(artifact.get("schema_version") or "")
+    readiness = str(artifact.get("readiness") or "")
+    recommendation = str(artifact.get("recommendation") or "")
+    expected_schema = spec["schema_version"]
+    expected_recommendation = spec["recommendation"]
+    schema_supported = schema_version == expected_schema
+    handoff_ready = (
+        schema_supported
+        and artifact.get("passed") is True
+        and readiness == "ready"
+        and recommendation == expected_recommendation
+    )
+    metrics = artifact.get("metrics") if isinstance(artifact.get("metrics"), dict) else {}
+    stage: dict[str, Any] = {
+        "id": stage_id,
+        "path": str(record.get("path") or ""),
+        "schema_version": schema_version,
+        "expected_schema_version": expected_schema,
+        "schema_supported": schema_supported,
+        "passed": artifact.get("passed") is True,
+        "readiness": readiness,
+        "recommendation": recommendation,
+        "expected_recommendation": expected_recommendation,
+        "handoff_ready": handoff_ready,
+        "check_count": _non_negative_int(artifact.get("check_count")),
+        "failed_check_count": _non_negative_int(artifact.get("failed_check_count")),
+    }
+    for field_name in (
+        "gate_count",
+        "passed_gate_count",
+        "trainer_input_count",
+        "trainer_input_ready_count",
+        "trainer_input_available_count",
+        "external_code_file_count",
+        "external_code_ready_count",
+        "missing_external_code_count",
+        "missing_trainer_input_count",
+        "command_arg_count",
+        "artifact_count",
+        "missing_count",
+        "path_rewrite_count",
+    ):
+        value = artifact.get(field_name)
+        if value is None and isinstance(metrics, dict):
+            value = metrics.get(field_name)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            stage[field_name] = value
+    return stage
+
+
 def _summarize_boolean_artifact(
     artifact: dict[str, Any],
     metrics: dict[str, Any],
@@ -942,6 +1161,23 @@ def _read_json_artifact(path: Path, artifacts: dict[str, Any], name: str, preser
     value = _read_optional_json(path)
     if not isinstance(value, dict):
         raise EvidenceBundleError(f"Evidence artifact must contain a JSON object: {path}")
+    artifacts[name]["schema_version"] = value.get("schema_version")
+    artifacts[name]["passed"] = value.get("passed") if isinstance(value.get("passed"), bool) else None
+    return value
+
+
+def _read_json_manifest_artifact(
+    path: Path,
+    artifacts: dict[str, Any],
+    name: str,
+    manifest_name: str,
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    if not path.is_dir():
+        return _read_json_artifact(path, artifacts, name, preserve_paths)
+    artifacts[name] = _dir_record(path, preserve_paths)
+    manifest_path = path / manifest_name
+    value = _read_json_artifact(manifest_path, artifacts, f"{name}_manifest", preserve_paths)
     artifacts[name]["schema_version"] = value.get("schema_version")
     artifacts[name]["passed"] = value.get("passed") if isinstance(value.get("passed"), bool) else None
     return value

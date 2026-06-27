@@ -110,6 +110,33 @@ metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
 useful for provenance and job routing, but it should not be read as permission
 to train unless the included scenario, evidence-coverage, validation, review,
 and gate policies are also appropriate for the target job.
+When trainer handoff artifacts are available, include them in a second
+trainer-facing bundle so the final preflight, launch-check, archive,
+archive-check, consumer-plan, and wrapper dry-run chain is visible in one
+validated manifest:
+
+```bash
+flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --trainer-preflight runs/trainer_preflight.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --trainer-archive runs/trainer_archive \
+  --trainer-archive-check runs/trainer_archive_check.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
+  --out runs/evidence_bundle_trainer.json
+```
+
+The resulting `metrics.trainer_handoff` section records included stages,
+readiness counts, missing stage ids, and whether all included trainer artifacts
+match their expected recommendation. It blocks only included stages that are no
+longer ready, while partial chains remain visible as advisory next actions.
 When included gates can validate trainer-facing exports, such as training,
 compare, reviewed, and review-calibration gates, the bundle blocks handoff if
 those gates skipped validation.
@@ -363,6 +390,10 @@ external launcher can validate that plan and emit a dry-run receipt before a
 real trainer takes over. That receipt can also be checked with
 `flightrecorder validate --trainer-wrapper-dry-run`, making the wrapper dry run
 part of the evidence contract rather than an untyped log file.
+After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
+it with `flightrecorder validate --evidence-bundle
+runs/evidence_bundle_trainer.json --strict` before handing the package to an
+external trainer.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out

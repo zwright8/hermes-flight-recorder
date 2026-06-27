@@ -1120,9 +1120,32 @@ python examples/trainer-wrapper/consume_trainer_plan.py \
   --strict >/dev/null
 test -f runs/trainer_wrapper_dry_run.json
 python -m flightrecorder schemas --check runs/trainer_wrapper_dry_run.json >/dev/null
+python -m flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
+  --repair-queue runs/repair_queue.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --compare-export runs/compare_rl_export \
+  --review-export runs/review_queue \
+  --reviewed-export runs/reviewed_export \
+  --review-calibration runs/review_calibration.json \
+  --live-smoke-summary runs/live_smoke_summary.json \
+  --trainer-preflight runs/trainer_preflight.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --trainer-archive runs/trainer_archive \
+  --trainer-archive-check runs/trainer_archive_check.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
+  --out runs/evidence_bundle_trainer.json >/dev/null
+test -f runs/evidence_bundle_trainer.json
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
+  --evidence-bundle runs/evidence_bundle_trainer.json \
   --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --action-ledger runs/action_ledger.json \
   --action-ledger-gate runs/action_ledger_gate.json \
@@ -1145,6 +1168,7 @@ import json
 from pathlib import Path
 
 bundle = json.loads(Path("runs/evidence_bundle_full.json").read_text(encoding="utf-8"))
+trainer_bundle = json.loads(Path("runs/evidence_bundle_trainer.json").read_text(encoding="utf-8"))
 action_ledger = json.loads(Path("runs/action_ledger.json").read_text(encoding="utf-8"))
 action_ledger_gate = json.loads(Path("runs/action_ledger_gate.json").read_text(encoding="utf-8"))
 promotion_decision = json.loads(Path("runs/promotion_decision.json").read_text(encoding="utf-8"))
@@ -1157,6 +1181,14 @@ launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encod
 assert bundle["passed"] is True
 assert bundle["readiness"] == "ready"
 assert bundle["decision"]["recommendation"] == "promote_handoff"
+assert trainer_bundle["passed"] is True
+assert trainer_bundle["readiness"] == "ready"
+assert trainer_bundle["metrics"]["trainer_handoff"]["complete_chain"] is True
+assert trainer_bundle["metrics"]["trainer_handoff"]["all_included_ready"] is True
+assert trainer_bundle["metrics"]["trainer_handoff"]["stage_count"] == 6
+assert trainer_bundle["metrics"]["trainer_handoff"]["handoff_ready_count"] == 6
+assert trainer_bundle["metrics"]["trainer_handoff"]["blocked_stage_count"] == 0
+assert trainer_bundle["decision"]["key_metrics"]["trainer_handoff"]["complete_chain"] is True
 assert bundle["decision"]["gate_count"] == 4
 assert bundle["decision"]["passed_gate_count"] == 4
 assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
@@ -1383,6 +1415,12 @@ assert_help_contains "--promotion-archive" "$VENV_DIR/bin/python" -m flightrecor
 "$VENV_DIR/bin/python" -m flightrecorder trace-observability --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help >/dev/null
 assert_help_contains "--live-smoke-summary" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--trainer-preflight" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--trainer-launch-check" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--trainer-archive" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--trainer-archive-check" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--trainer-consumer-plan" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--trainer-wrapper-dry-run" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
 "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help >/dev/null
 assert_help_contains "--bundle" "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-improvement-ledger --help >/dev/null

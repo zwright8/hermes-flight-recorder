@@ -111,5 +111,21 @@ python examples/trainer-wrapper/consume_trainer_plan.py \
   --plan runs/trainer_consumer_plan.json \
   --out runs/trainer_wrapper_dry_run.json \
   --strict
+python -m flightrecorder evidence-bundle \
+  --runs runs \
+  --suite-summary runs/suite_summary.json \
+  --scenario-quality runs/scenario_quality.json \
+  --evidence-coverage runs/evidence_coverage.json \
+  --trace-observability runs/trace_observability.json \
+  --repair-queue runs/repair_queue.json \
+  --validation runs/validation.json \
+  --training-export runs/training_export \
+  --trainer-preflight runs/trainer_preflight.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --trainer-archive runs/trainer_archive \
+  --trainer-archive-check runs/trainer_archive_check.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
+  --out runs/evidence_bundle_trainer.json
 python -m flightrecorder index --runs runs --out runs/index.html
 echo "Demo reports written to $ROOT/runs/index.html"
