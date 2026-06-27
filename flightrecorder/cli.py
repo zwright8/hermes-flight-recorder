@@ -45,6 +45,7 @@ from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
+from .promotion_archive import PromotionArchiveError, build_promotion_archive
 from .promotion_gate import (
     PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
     PromotionLedgerGateError,
@@ -118,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionLedgerGateError,
         PromotionLedgerGatePolicyError,
         PromotionLedgerError,
+        PromotionArchiveError,
         ReplayError,
         OSError,
         json.JSONDecodeError,
@@ -640,6 +642,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         decision_gate_paths=args.decision_gate,
         promotion_ledger_paths=args.promotion_ledger,
         promotion_ledger_gate_paths=args.promotion_ledger_gate,
+        promotion_archive_paths=args.promotion_archive,
         trainer_preflight_paths=args.trainer_preflight,
         trainer_launch_check_paths=args.trainer_launch_check,
         repair_queue_paths=args.repair_queue,
@@ -774,6 +777,24 @@ def cmd_promotion_ledger(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0
+
+
+def cmd_promotion_archive(args: argparse.Namespace) -> int:
+    archive = build_promotion_archive(
+        out_dir=args.out,
+        promotion_ledger_path=args.promotion_ledger,
+        promotion_ledger_gate_path=args.promotion_ledger_gate,
+        decision_gate_paths=args.decision_gate,
+        require_self_contained=args.require_self_contained,
+        force=args.force,
+        preserve_paths=args.preserve_paths,
+    )
+    print(
+        f"{'READY' if archive['passed'] else 'INCOMPLETE'} promotion-archive "
+        f"artifacts={archive['metrics']['artifact_count']} "
+        f"missing={archive['metrics']['missing_count']} out={args.out}"
+    )
+    return 0 if archive["passed"] else 1
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -1429,6 +1450,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
+    validate.add_argument("--promotion-archive", action="append", default=[], help="Validate one promotion archive directory or manifest; may be repeated")
     validate.add_argument("--trainer-preflight", action="append", default=[], help="Validate one trainer_preflight.json; may be repeated")
     validate.add_argument(
         "--trainer-launch-check",
@@ -1557,6 +1579,27 @@ def _parser() -> argparse.ArgumentParser:
     promotion_ledger.add_argument("--out", help="Write promotion ledger JSON to this path")
     promotion_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
     promotion_ledger.set_defaults(func=cmd_promotion_ledger)
+
+    promotion_archive = subparsers.add_parser(
+        "promotion-archive",
+        help="Copy promotion-history evidence into a portable hash-checked archive",
+    )
+    promotion_archive.add_argument("--promotion-ledger", required=True, help="Path to promotion_ledger.json")
+    promotion_archive.add_argument("--promotion-ledger-gate", help="Optional path to promotion_ledger_gate.json")
+    promotion_archive.add_argument("--decision-gate", action="append", default=[], help="Decision gate JSON to include; may be repeated")
+    promotion_archive.add_argument("--out", required=True, help="Output directory for the portable promotion archive")
+    promotion_archive.add_argument(
+        "--require-self-contained",
+        action="store_true",
+        help="Return nonzero unless all referenced decision gates and source artifacts were copied",
+    )
+    promotion_archive.add_argument("--force", action="store_true", help="Replace an existing non-empty archive directory")
+    promotion_archive.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Allow absolute original paths in the archive manifest; use only for private local debugging",
+    )
+    promotion_archive.set_defaults(func=cmd_promotion_archive)
 
     gate_promotion_ledger = subparsers.add_parser(
         "gate-promotion-ledger",

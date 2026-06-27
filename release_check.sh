@@ -10,10 +10,18 @@ cleanup_local_artifacts() {
 }
 trap cleanup_local_artifacts EXIT
 
+assert_help_contains() {
+  local expected="$1"
+  shift
+  local output
+  output="$("$@" 2>&1)"
+  grep -F -q -- "$expected" <<<"$output"
+}
+
 python -m unittest discover
 python -m compileall -q flightrecorder scripts tests
 python scripts/live_hermes_smoke.py --help >/dev/null
-python -m flightrecorder run-suite --help | grep -- --evidence-handoff >/dev/null
+assert_help_contains "--evidence-handoff" python -m flightrecorder run-suite --help
 python -m flightrecorder repair-queue --help >/dev/null
 ./demo.sh
 rm -rf replay_runs
@@ -801,6 +809,14 @@ python -m flightrecorder gate-promotion-ledger \
   --policy examples/promotion_ledger_gate_policy.demo.json \
   --out runs/promotion_ledger_gate.json >/dev/null
 test -f runs/promotion_ledger_gate.json
+python -m flightrecorder promotion-archive \
+  --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_archive \
+  --require-self-contained \
+  --force >/dev/null
+test -f runs/promotion_archive/promotion_archive.json
 python -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
@@ -835,6 +851,7 @@ python -m flightrecorder validate \
   --decision-gate runs/promotion_decision.json \
   --promotion-ledger runs/promotion_ledger.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --promotion-archive runs/promotion_archive \
   --trainer-preflight runs/trainer_preflight.json \
   --trainer-launch-check runs/trainer_launch_check.json \
   --repair-queue runs/repair_queue.json \
@@ -851,6 +868,7 @@ action_ledger_gate = json.loads(Path("runs/action_ledger_gate.json").read_text(e
 promotion_decision = json.loads(Path("runs/promotion_decision.json").read_text(encoding="utf-8"))
 promotion_ledger = json.loads(Path("runs/promotion_ledger.json").read_text(encoding="utf-8"))
 promotion_ledger_gate = json.loads(Path("runs/promotion_ledger_gate.json").read_text(encoding="utf-8"))
+promotion_archive = json.loads(Path("runs/promotion_archive/promotion_archive.json").read_text(encoding="utf-8"))
 preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
@@ -938,6 +956,18 @@ assert promotion_ledger_gate["metrics"]["failed_decision_count"] == 0
 assert promotion_ledger_gate["policy"]["schema_version"] == "hfr.promotion_ledger_gate.policy.v1"
 assert promotion_ledger_gate["policy"]["effective"]["require_latest_recommendation"] == "allow_promotion"
 assert promotion_ledger_gate["policy"]["effective"]["require_latest_passed"] is True
+assert promotion_archive["schema_version"] == "hfr.promotion_archive.v1"
+assert promotion_archive["passed"] is True
+assert promotion_archive["self_contained"] is True
+assert promotion_archive["require_self_contained"] is True
+assert promotion_archive["metrics"]["missing_count"] == 0
+assert promotion_archive["metrics"]["decision_gate_count"] == 1
+assert promotion_archive["metrics"]["source_artifact_count"] == 1
+archive_roles = {artifact["role"] for artifact in promotion_archive["artifacts"]}
+assert archive_roles == {"promotion_ledger", "promotion_ledger_gate", "decision_gate", "source_artifact"}
+assert all(len(artifact["sha256"]) == 64 for artifact in promotion_archive["artifacts"])
+assert all(not artifact["original_path"].startswith("/") for artifact in promotion_archive["artifacts"])
+assert all(not (len(artifact["original_path"]) > 2 and artifact["original_path"][1:3] == ":\\") for artifact in promotion_archive["artifacts"])
 assert len(bundle["metrics"]["gates"]) == 4
 assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "suite_gate",
@@ -1004,15 +1034,16 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder replay --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder replay-bundle --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--replay-bundle"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--state-snapshot"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--live-smoke-summary"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--trainer-launch-check"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--action-ledger-gate"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--decision-gate"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--promotion-ledger"
-"$VENV_DIR/bin/python" -m flightrecorder validate --help | grep -q -- "--promotion-ledger-gate"
+assert_help_contains "--replay-bundle" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--state-snapshot" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--live-smoke-summary" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--trainer-launch-check" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--action-ledger" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--action-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--decision-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--promotion-ledger" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--promotion-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--promotion-archive" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 "$VENV_DIR/bin/python" -m flightrecorder observer-template \
   --out "$INSTALL_DIR/flight_recorder_plugin.py" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder run-suite --help >/dev/null
@@ -1022,41 +1053,44 @@ PY
 "$VENV_DIR/bin/python" -m flightrecorder evidence-coverage --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trace-observability --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help | grep -q -- "--live-smoke-summary"
+assert_help_contains "--live-smoke-summary" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
 "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder action-ledger --help | grep -q -- "--bundle"
+assert_help_contains "--bundle" "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help | grep -q -- "--max-recurring-actions"
+assert_help_contains "--max-recurring-actions" "$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-decision --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder gate-decision --help | grep -q -- "--expect-recommendation"
+assert_help_contains "--expect-recommendation" "$VENV_DIR/bin/python" -m flightrecorder gate-decision --help
 "$VENV_DIR/bin/python" -m flightrecorder promotion-ledger --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder promotion-ledger --help | grep -q -- "--decision-gate"
+assert_help_contains "--decision-gate" "$VENV_DIR/bin/python" -m flightrecorder promotion-ledger --help
+"$VENV_DIR/bin/python" -m flightrecorder promotion-archive --help >/dev/null
+assert_help_contains "--require-self-contained" "$VENV_DIR/bin/python" -m flightrecorder promotion-archive --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-promotion-ledger --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder gate-promotion-ledger --help | grep -q -- "--max-blocked-rate"
+assert_help_contains "--max-blocked-rate" "$VENV_DIR/bin/python" -m flightrecorder gate-promotion-ledger --help
 test -f examples/promotion_ledger_gate_policy.demo.json
 test -f examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "gate-decision" examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "decision-gate" examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "promotion-ledger" examples/github-actions/action-ledger-promotion-gate.yml
 grep -q "gate-promotion-ledger" examples/github-actions/action-ledger-promotion-gate.yml
+grep -q "promotion-archive" examples/github-actions/action-ledger-promotion-gate.yml
 "$VENV_DIR/bin/python" -m flightrecorder gate-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder trend-suite --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-export --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-task-completion-complete"
-"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-trace-average-events"
-"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--min-trainer-view-source-fingerprint-rate"
-"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--strict-validation"
-"$VENV_DIR/bin/python" -m flightrecorder gate-export --help | grep -q -- "--skip-validation"
+assert_help_contains "--min-task-completion-complete" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
+assert_help_contains "--min-trace-average-events" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
+assert_help_contains "--min-trainer-view-source-fingerprint-rate" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
+assert_help_contains "--strict-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
+assert_help_contains "--skip-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--min-task-completion-improvements"
-"$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--strict-validation"
-"$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help | grep -q -- "--skip-validation"
+assert_help_contains "--min-task-completion-improvements" "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help
+assert_help_contains "--strict-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help
+assert_help_contains "--skip-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help
 "$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help | grep -q -- "--allow-unvalidated-gates"
+assert_help_contains "--allow-unvalidated-gates" "$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help
 "$VENV_DIR/bin/python" -m flightrecorder trainer-launch-check --help >/dev/null
-"$VENV_DIR/bin/python" -m flightrecorder trainer-launch-check --help | grep -q -- "--print-command"
-"$VENV_DIR/bin/python" -m flightrecorder export-rl --help | grep -q -- "--metadata"
+assert_help_contains "--print-command" "$VENV_DIR/bin/python" -m flightrecorder trainer-launch-check --help
+assert_help_contains "--metadata" "$VENV_DIR/bin/python" -m flightrecorder export-rl --help
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder apply-review --help >/dev/null

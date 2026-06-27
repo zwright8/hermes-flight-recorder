@@ -77,6 +77,20 @@ jobs:
             --promotion-ledger-gate runs/promotion_ledger_gate.json \
             --strict
 
+      - name: Archive promotion evidence
+        run: |
+          python -m flightrecorder promotion-archive \
+            --promotion-ledger runs/promotion_ledger.json \
+            --promotion-ledger-gate runs/promotion_ledger_gate.json \
+            --decision-gate runs/promotion_decision.json \
+            --out runs/promotion_archive \
+            --require-self-contained \
+            --force
+
+          python -m flightrecorder validate \
+            --promotion-archive runs/promotion_archive \
+            --strict
+
       - name: Write promotion summary
         if: always()
         run: |
@@ -93,6 +107,8 @@ jobs:
           ledger = json.loads(ledger_path.read_text(encoding="utf-8")) if ledger_path.exists() else {}
           ledger_gate_path = Path("runs/promotion_ledger_gate.json")
           ledger_gate = json.loads(ledger_gate_path.read_text(encoding="utf-8")) if ledger_gate_path.exists() else {}
+          archive_path = Path("runs/promotion_archive/promotion_archive.json")
+          archive = json.loads(archive_path.read_text(encoding="utf-8")) if archive_path.exists() else {}
           metrics = ledger.get("metrics", {})
           source = gate.get("source_decision", {})
           source_artifact = gate.get("source_artifact", {})
@@ -107,6 +123,7 @@ jobs:
               f"- Promotion history decisions: `{metrics.get('decision_count')}`",
               f"- Consecutive blocks: `{metrics.get('consecutive_blocked_count')}`",
               f"- History gate: `{ledger_gate.get('recommendation') or ledger_gate.get('decision', {}).get('recommendation')}`",
+              f"- Promotion archive self-contained: `{archive.get('self_contained')}`",
           ]
           Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(summary) + "\n", encoding="utf-8")
           PY

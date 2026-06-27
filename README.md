@@ -63,8 +63,9 @@ Expected demo output:
   training-export artifacts into one readiness/read-only handoff manifest.
 - Promotion evidence in `runs/action_ledger.json`, `runs/action_ledger_gate.json`,
   `runs/promotion_decision.json`, `runs/promotion_ledger.json`, and
-  `runs/promotion_ledger_gate.json`, showing how repeated repair pressure
-  becomes a validatable promotion history and policy decision.
+  `runs/promotion_ledger_gate.json`, plus a portable `runs/promotion_archive/`
+  directory, showing how repeated repair pressure becomes a validatable
+  promotion history, policy decision, and movable evidence handoff.
 
 ## Install
 
@@ -209,6 +210,13 @@ flightrecorder gate-promotion-ledger \
   --promotion-ledger runs/promotion_ledger.json \
   --policy examples/promotion_ledger_gate_policy.demo.json
 
+flightrecorder promotion-archive \
+  --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_archive \
+  --require-self-contained
+
 flightrecorder review-calibration \
   --reviewed-export runs/reviewed_export \
   --out runs/review_calibration.json \
@@ -225,6 +233,7 @@ flightrecorder validate \
   --repair-queue runs/repair_queue.json \
   --promotion-ledger runs/promotion_ledger.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --promotion-archive runs/promotion_archive \
   --replay-bundle replay_bundles/prompt_injection_good \
   --review-calibration runs/review_calibration.json \
   --scenario-quality runs/scenario_quality.json \
@@ -681,6 +690,15 @@ flightrecorder gate-promotion-ledger \
   --out runs/promotion_ledger_gate.json
 
 flightrecorder validate --promotion-ledger-gate runs/promotion_ledger_gate.json --strict
+
+flightrecorder promotion-archive \
+  --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_archive \
+  --require-self-contained
+
+flightrecorder validate --promotion-archive runs/promotion_archive --strict
 ```
 
 The gate can enforce minimum bundle history, maximum open/new/recurring
@@ -704,7 +722,14 @@ train, or repair anything by itself. `flightrecorder gate-promotion-ledger`
 then turns that history into another deterministic decision artifact, allowing
 CI to require enough promotion history, a passed/latest allow decision, bounded
 blocked streaks, a maximum blocked rate, and required or forbidden source
-recommendations. A copyable GitHub Actions example lives at
+recommendations. `flightrecorder promotion-archive` copies the promotion
+ledger, optional promotion-ledger gate, decision gates, and resolvable source
+gate artifacts into a hash-checked directory so CI can upload or move the
+promotion evidence without preserving original local paths. Recorded artifact
+references are copied only when they resolve as safe relative paths, and archive
+validation rejects symlinked artifact files. Keep promotion archives in the
+default redacted mode for shared CI artifacts; use `--preserve-paths` only for
+private local debugging. A copyable GitHub Actions example lives at
 `examples/github-actions/action-ledger-promotion-gate.yml`.
 
 Use `flightrecorder gate-suite` to enforce absolute CI thresholds over

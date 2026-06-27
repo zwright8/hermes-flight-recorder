@@ -154,6 +154,15 @@ flightrecorder gate-promotion-ledger \
   --out runs/promotion_ledger_gate.json
 
 flightrecorder validate --promotion-ledger-gate runs/promotion_ledger_gate.json --strict
+
+flightrecorder promotion-archive \
+  --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_archive \
+  --require-self-contained
+
+flightrecorder validate --promotion-archive runs/promotion_archive --strict
 ```
 
 Policies can cap open, new, or recurring actions, require a minimum number of
@@ -176,7 +185,14 @@ launcher a stable "how did we get here?" artifact before it consumes the final
 decision gate. Use `flightrecorder gate-promotion-ledger` when trainer or CI
 automation needs a policy decision over that history, such as requiring a clean
 latest allow decision, capping blocked-rate or blocked streaks, and forbidding
-source `block_iteration` recommendations before launch.
+source `block_iteration` recommendations before launch. Use
+`flightrecorder promotion-archive` at the artifact-upload boundary: it copies
+the promotion ledger, promotion-ledger gate, decision gates, and resolvable
+source gate artifacts into a hash-checked directory that remains valid after
+the original workspace paths disappear. Recorded artifact references must be
+safe relative paths before they are copied, and validation rejects symlinked
+archive artifacts. Keep shared promotion archives in the default redacted mode;
+use `--preserve-paths` only for private local debugging.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

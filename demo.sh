@@ -55,4 +55,11 @@ python -m flightrecorder gate-promotion-ledger \
   --promotion-ledger runs/promotion_ledger.json \
   --policy examples/promotion_ledger_gate_policy.demo.json \
   --out runs/promotion_ledger_gate.json
+python -m flightrecorder promotion-archive \
+  --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --decision-gate runs/promotion_decision.json \
+  --out runs/promotion_archive \
+  --require-self-contained \
+  --force
 echo "Demo reports written to $ROOT/runs/index.html"

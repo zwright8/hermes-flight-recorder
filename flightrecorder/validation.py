@@ -19,6 +19,7 @@ from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
+from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
@@ -96,6 +97,7 @@ def validate_artifacts(
     decision_gate_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
     promotion_ledger_gate_paths: list[str | Path] | None = None,
+    promotion_archive_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
@@ -137,6 +139,8 @@ def validate_artifacts(
         targets.append(validate_promotion_ledger(promotion_ledger_path))
     for promotion_ledger_gate_path in promotion_ledger_gate_paths or []:
         targets.append(validate_promotion_ledger_gate(promotion_ledger_gate_path))
+    for promotion_archive_path in promotion_archive_paths or []:
+        targets.append(validate_promotion_archive(promotion_archive_path))
     for trainer_preflight_path in trainer_preflight_paths or []:
         targets.append(validate_trainer_preflight(trainer_preflight_path))
     for trainer_launch_check_path in trainer_launch_check_paths or []:
@@ -523,6 +527,18 @@ def validate_promotion_ledger_gate(path: str | Path) -> ValidationTarget:
     gate = _read_object(gate_path, target, "promotion_ledger_gate.json")
     if gate is not None:
         _validate_promotion_ledger_gate(gate, target)
+    return target
+
+
+def validate_promotion_archive(path: str | Path) -> ValidationTarget:
+    """Validate a portable promotion archive directory or manifest."""
+    archive_path = Path(path)
+    manifest_path = archive_path / "promotion_archive.json" if archive_path.is_dir() else archive_path
+    archive_root = manifest_path.parent
+    target = ValidationTarget("promotion_archive", str(archive_path))
+    archive = _read_object(manifest_path, target, "promotion_archive.json")
+    if archive is not None:
+        _validate_promotion_archive(archive, target, archive_root)
     return target
 
 
@@ -4469,6 +4485,180 @@ def _validate_promotion_ledger_gate_policy_summary(value: Any, target: Validatio
     for field_name in ("require_source_recommendations", "forbid_source_recommendations"):
         if field_name in effective and not _is_string_list(effective.get(field_name)):
             target.errors.append(f"promotion_ledger_gate.policy.effective.{field_name} must be a list of strings.")
+
+
+def _validate_promotion_archive(archive: dict[str, Any], target: ValidationTarget, archive_root: Path) -> None:
+    _require_equal(archive, "schema_version", PROMOTION_ARCHIVE_SCHEMA_VERSION, target)
+    for field_name in ("archive_path", "manifest_path"):
+        if not isinstance(archive.get(field_name), str) or not archive.get(field_name):
+            target.errors.append(f"promotion_archive.{field_name} must be a non-empty string.")
+    for field_name in ("passed", "self_contained", "require_self_contained"):
+        if not isinstance(archive.get(field_name), bool):
+            target.errors.append(f"promotion_archive.{field_name} must be a boolean.")
+    artifacts = archive.get("artifacts")
+    if not isinstance(artifacts, list):
+        target.errors.append("promotion_archive.artifacts must be a list.")
+        artifacts = []
+    missing = archive.get("missing")
+    if not isinstance(missing, list):
+        target.errors.append("promotion_archive.missing must be a list.")
+        missing = []
+    relationships = archive.get("relationships")
+    if not isinstance(relationships, list):
+        target.errors.append("promotion_archive.relationships must be a list.")
+        relationships = []
+    metrics = archive.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("promotion_archive.metrics must be an object.")
+        metrics = {}
+    if not _is_string_list(archive.get("notes")):
+        target.errors.append("promotion_archive.notes must be a list of strings.")
+
+    for index, artifact in enumerate(artifacts):
+        _validate_promotion_archive_artifact(artifact, target, f"promotion_archive.artifacts[{index}]", index, archive_root)
+    for index, item in enumerate(missing):
+        _validate_promotion_archive_missing(item, target, f"promotion_archive.missing[{index}]")
+    for index, relationship in enumerate(relationships):
+        _validate_promotion_archive_relationship(relationship, target, f"promotion_archive.relationships[{index}]")
+
+    self_contained = len(missing) == 0
+    if isinstance(archive.get("self_contained"), bool) and archive["self_contained"] != self_contained:
+        target.errors.append(f"promotion_archive.self_contained expected {self_contained}, got {archive.get('self_contained')!r}.")
+    expected_passed = self_contained or archive.get("require_self_contained") is not True
+    if isinstance(archive.get("passed"), bool) and archive["passed"] != expected_passed:
+        target.errors.append(f"promotion_archive.passed expected {expected_passed}, got {archive.get('passed')!r}.")
+    _validate_promotion_archive_metrics(metrics, artifacts, missing, target)
+    roles = {artifact.get("role") for artifact in artifacts if isinstance(artifact, dict)}
+    for required_role in ("promotion_ledger",):
+        if required_role not in roles:
+            target.errors.append(f"promotion_archive.artifacts must include role {required_role}.")
+    target.details.update(
+        {
+            "artifact_count": len(artifacts),
+            "missing_count": len(missing),
+            "self_contained": archive.get("self_contained"),
+            "passed": archive.get("passed"),
+        }
+    )
+
+
+def _validate_promotion_archive_artifact(
+    artifact: Any,
+    target: ValidationTarget,
+    label: str,
+    expected_index: int,
+    archive_root: Path,
+) -> None:
+    if not isinstance(artifact, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if artifact.get("index") != expected_index:
+        target.errors.append(f"{label}.index expected {expected_index}, got {artifact.get('index')!r}.")
+    for field_name in ("name", "role", "path", "original_path", "schema_version"):
+        if not isinstance(artifact.get(field_name), str) or not artifact.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if artifact.get("role") not in {"promotion_ledger", "promotion_ledger_gate", "decision_gate", "source_artifact"}:
+        target.errors.append(f"{label}.role is invalid.")
+    if artifact.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if not _is_non_negative_int(artifact.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    if not _is_sha256(artifact.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+        return
+    artifact_path = _archive_artifact_path(artifact.get("path"), archive_root)
+    if artifact_path is None:
+        target.errors.append(f"{label}.path must be a relative archive path.")
+        return
+    if not _path_resolves_inside(artifact_path, archive_root):
+        target.errors.append(f"{label}.path must resolve inside the archive.")
+        return
+    if artifact_path.is_symlink():
+        target.errors.append(f"{label}.path must not be a symlink.")
+        return
+    if not artifact_path.exists() or not artifact_path.is_file():
+        target.errors.append(f"{label}.path does not exist inside the archive.")
+        return
+    if artifact_path.stat().st_size != artifact.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the archived file.")
+    if _sha256(artifact_path) != artifact.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the archived file.")
+
+
+def _validate_promotion_archive_missing(item: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(item, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if item.get("role") not in {"decision_gate", "source_artifact"}:
+        target.errors.append(f"{label}.role must be decision_gate or source_artifact.")
+    if not _is_non_negative_int(item.get("index")):
+        target.errors.append(f"{label}.index must be a non-negative integer.")
+    if not isinstance(item.get("reason"), str) or not item.get("reason"):
+        target.errors.append(f"{label}.reason must be a non-empty string.")
+
+
+def _validate_promotion_archive_relationship(relationship: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(relationship, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("from", "to", "type"):
+        if not isinstance(relationship.get(field_name), str) or not relationship.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+
+
+def _validate_promotion_archive_metrics(
+    metrics: dict[str, Any],
+    artifacts: list[Any],
+    missing: list[Any],
+    target: ValidationTarget,
+) -> None:
+    valid_artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
+    valid_missing = [item for item in missing if isinstance(item, dict)]
+    expected = {
+        "artifact_count": len(artifacts),
+        "decision_gate_count": sum(1 for artifact in valid_artifacts if artifact.get("role") == "decision_gate"),
+        "source_artifact_count": sum(1 for artifact in valid_artifacts if artifact.get("role") == "source_artifact"),
+        "missing_count": len(missing),
+        "unique_sha256_count": len({artifact.get("sha256") for artifact in valid_artifacts if isinstance(artifact.get("sha256"), str)}),
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"promotion_archive.metrics.{field_name} expected {expected_value}, got {metrics.get(field_name)!r}.")
+    role_counts = _promotion_archive_count_map(artifact.get("role") for artifact in valid_artifacts)
+    missing_role_counts = _promotion_archive_count_map(item.get("role") for item in valid_missing)
+    _validate_action_ledger_count_rows(metrics.get("role_counts"), role_counts, target, "promotion_archive.metrics.role_counts")
+    _validate_action_ledger_count_rows(
+        metrics.get("missing_role_counts"),
+        missing_role_counts,
+        target,
+        "promotion_archive.metrics.missing_role_counts",
+    )
+
+
+def _promotion_archive_count_map(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        key = str(value or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _archive_artifact_path(value: Any, archive_root: Path) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<"):
+        return None
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return archive_root / path
+
+
+def _path_resolves_inside(path: Path, root: Path) -> bool:
+    try:
+        root_resolved = root.resolve()
+        path_resolved = path.resolve(strict=False)
+    except OSError:
+        return False
+    return path_resolved == root_resolved or path_resolved.is_relative_to(root_resolved)
 
 
 def _validate_action_ledger_bundle(bundle: Any, target: ValidationTarget, label: str, expected_index: int) -> None:

@@ -320,6 +320,389 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertIn("forbid_source_recommendation", failed_checks)
             self.assertEqual(run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict"]), 0)
 
+    def test_promotion_archive_remains_valid_after_source_paths_are_removed(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            gate_path = root / "promotion_ledger_gate.json"
+            archive_dir = root / "promotion_archive"
+            source_ref = str(source.relative_to(ROOT))
+            decision_gate_ref = str(decision_gate.relative_to(ROOT))
+            source.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger_gate.v1",
+                        "passed": True,
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_iteration",
+                            "summary": "ok",
+                            "blocking_check_count": 0,
+                            "key_metrics": {"recurring_action_count": 0},
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            run_cli(
+                [
+                    "gate-decision",
+                    "--artifact",
+                    source_ref,
+                    "--expect-recommendation",
+                    "promote_iteration",
+                    "--expect-readiness",
+                    "ready",
+                    "--require-passed",
+                    "--out",
+                    str(decision_gate),
+                ]
+            )
+            run_cli(
+                [
+                    "promotion-ledger",
+                    "--decision-gate",
+                    decision_gate_ref,
+                    "--out",
+                    str(ledger_path),
+                ]
+            )
+            run_cli(
+                [
+                    "gate-promotion-ledger",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--policy",
+                    str(ROOT / "examples" / "promotion_ledger_gate_policy.demo.json"),
+                    "--out",
+                    str(gate_path),
+                ]
+            )
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--promotion-ledger-gate",
+                    str(gate_path),
+                    "--decision-gate",
+                    str(decision_gate),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            manifest_path = archive_dir / "promotion_archive.json"
+            archive = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(archive["schema_version"], "hfr.promotion_archive.v1")
+            self.assertTrue(archive["passed"])
+            self.assertTrue(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["missing_count"], 0)
+            roles = {artifact["role"] for artifact in archive["artifacts"]}
+            self.assertEqual(roles, {"promotion_ledger", "promotion_ledger_gate", "decision_gate", "source_artifact"})
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+            source.unlink()
+            decision_gate.unlink()
+            ledger_path.unlink()
+            gate_path.unlink()
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_requires_self_contained_sources_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            source.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger_gate.v1",
+                        "passed": True,
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_iteration",
+                            "summary": "ok",
+                            "blocking_check_count": 0,
+                            "key_metrics": {},
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            run_cli(
+                [
+                    "gate-decision",
+                    "--artifact",
+                    str(source),
+                    "--expect-recommendation",
+                    "promote_iteration",
+                    "--expect-readiness",
+                    "ready",
+                    "--require-passed",
+                    "--out",
+                    str(decision_gate),
+                ]
+            )
+            run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)])
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(archive["passed"])
+            self.assertFalse(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["missing_count"], 1)
+            self.assertEqual(archive["metrics"]["missing_role_counts"], [{"count": 1, "id": "decision_gate"}])
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_force_refuses_non_archive_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            protected_dir = root / "not_an_archive"
+            protected_file = protected_dir / "keep.txt"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            protected_dir.mkdir()
+            protected_file.write_text("do not delete\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "promotion-archive",
+                        "--promotion-ledger",
+                        str(ledger_path),
+                        "--out",
+                        str(protected_dir),
+                        "--force",
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertTrue(protected_file.exists())
+            self.assertFalse((protected_dir / "promotion_archive.json").exists())
+
+    def test_promotion_archive_missing_source_indexes_reference_decision_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            first_gate = root / "first_decision_gate.json"
+            second_gate = root / "second_decision_gate.json"
+            archive_dir = root / "promotion_archive"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            for gate_path in (first_gate, second_gate):
+                gate_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "hfr.decision_gate.v1",
+                            "id": gate_path.stem,
+                            "source_artifact": {"path": f"<redacted:{gate_path.stem}.json>"},
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--decision-gate",
+                    str(first_gate),
+                    "--decision-gate",
+                    str(second_gate),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertEqual([item["index"] for item in archive["missing"]], [1, 2])
+            self.assertEqual([item["role"] for item in archive["missing"]], ["source_artifact", "source_artifact"])
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_does_not_copy_traversing_recorded_source_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            evidence_dir = root / "evidence"
+            secret_dir = root / "secret"
+            evidence_dir.mkdir()
+            secret_dir.mkdir()
+            ledger_path = root / "promotion_ledger.json"
+            decision_gate = evidence_dir / "decision_gate.json"
+            secret_source = secret_dir / "secret.json"
+            archive_dir = root / "promotion_archive"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            secret_source.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger_gate.v1",
+                        "passed": True,
+                        "decision": {"recommendation": "promote_iteration"},
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            decision_gate.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.decision_gate.v1",
+                        "source_artifact": {"path": "../secret/secret.json"},
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--decision-gate",
+                    str(decision_gate),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["source_artifact_count"], 0)
+            self.assertEqual(archive["missing"][0]["role"], "source_artifact")
+            self.assertIn("parent traversal", archive["missing"][0]["reason"])
+            archived_text = "\n".join(path.read_text(encoding="utf-8") for path in (archive_dir / "artifacts").glob("*.json"))
+            self.assertNotIn("hfr.action_ledger_gate.v1", archived_text)
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_does_not_copy_absolute_recorded_source_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            decision_gate = root / "decision_gate.json"
+            secret_source = root / "secret.json"
+            archive_dir = root / "promotion_archive"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            secret_source.write_text(
+                json.dumps({"schema_version": "hfr.action_ledger_gate.v1", "passed": True}) + "\n",
+                encoding="utf-8",
+            )
+            decision_gate.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.decision_gate.v1",
+                        "source_artifact": {"path": str(secret_source)},
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--decision-gate",
+                    str(decision_gate),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertEqual(archive["metrics"]["source_artifact_count"], 0)
+            self.assertIn("absolute recorded paths", archive["missing"][0]["reason"])
+            archived_text = "\n".join(path.read_text(encoding="utf-8") for path in (archive_dir / "artifacts").glob("*.json"))
+            self.assertNotIn("hfr.action_ledger_gate.v1", archived_text)
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_validation_rejects_symlinked_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(["promotion-archive", "--promotion-ledger", str(ledger_path), "--out", str(archive_dir)]),
+                0,
+            )
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            artifact_path = archive_dir / archive["artifacts"][0]["path"]
+            external_path = root / "external_ledger.json"
+            external_path.write_text(artifact_path.read_text(encoding="utf-8"), encoding="utf-8")
+            artifact_path.unlink()
+            try:
+                artifact_path.symlink_to(external_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 1)
+
+    def test_promotion_archive_redacts_original_paths_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                run_cli(["promotion-archive", "--promotion-ledger", str(ledger_path), "--out", str(archive_dir)]),
+                0,
+            )
+
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertEqual(archive["artifacts"][0]["original_path"], "<redacted:promotion_ledger.json>")
+
     def test_promotion_ledger_rejects_wrong_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
