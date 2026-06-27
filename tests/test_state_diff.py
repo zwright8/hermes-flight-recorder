@@ -127,6 +127,7 @@ class StateDiffTests(unittest.TestCase):
 
             report = report_path.read_text(encoding="utf-8")
             self.assertIn("State Changes", report)
+            self.assertIn('data-label="Before"', report)
             self.assertIn("gmail.threads.email-123.last_sent_message_id", report)
             self.assertIn("msg-email-123-001", report)
 

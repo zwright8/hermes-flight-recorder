@@ -90,6 +90,8 @@ class CliReportTests(unittest.TestCase):
             report = (out / "report.html").read_text(encoding="utf-8")
             self.assertIn("Task Completion", report)
             self.assertIn("State Changes", report)
+            self.assertIn('data-label="Path"', report)
+            self.assertIn('data-label="After"', report)
             self.assertIn("gmail.threads.email-123.last_sent_message_id", report)
             self.assertIn("gmail.threads.email-123.sent_replies.0", report)
             self.assertIn("Task completion complete: 6/6 evidence checks passed.", report)

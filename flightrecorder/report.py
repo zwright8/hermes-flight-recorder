@@ -71,26 +71,39 @@ def render_report(
     .badge.fail {{ background:#fee4e2; color:var(--bad); }}
     .grid {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:16px; }}
     .panel, .rule, .event {{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; box-shadow:0 1px 2px rgba(16,24,40,.04); }}
+    .panel, .rule, .event, .grid {{ min-width:0; }}
     h1, h2, h3 {{ margin:0 0 10px; }}
     .metric {{ font-size:40px; line-height:1; font-weight:800; }}
     .muted {{ color:var(--muted); }}
-	    .rule {{ border-left:5px solid var(--ok); margin-bottom:12px; }}
-	    .rule.fail {{ border-left-color:var(--bad); }}
-	    .rule h3 {{ display:flex; justify-content:space-between; gap:12px; }}
-	    .checklist {{ display:grid; gap:10px; }}
+    .rule {{ border-left:5px solid var(--ok); margin-bottom:12px; }}
+    .rule.fail {{ border-left-color:var(--bad); }}
+    .rule h3 {{ display:flex; justify-content:space-between; gap:12px; }}
+    .checklist {{ display:grid; gap:10px; }}
     .check {{ border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px; background:#fff; }}
-	    .check.fail {{ border-left-color:var(--bad); }}
-	    .check strong {{ display:flex; justify-content:space-between; gap:12px; }}
-	    .timeline {{ display:grid; gap:10px; }}
-    .diff-table {{ width:100%; border-collapse:collapse; margin-top:12px; }}
+    .check.fail {{ border-left-color:var(--bad); }}
+    .check strong {{ display:flex; justify-content:space-between; gap:12px; }}
+    .timeline {{ display:grid; gap:10px; }}
+    .diff-table {{ width:100%; border-collapse:collapse; margin-top:12px; table-layout:fixed; }}
     .diff-table th, .diff-table td {{ border-bottom:1px solid var(--line); text-align:left; padding:10px; vertical-align:top; }}
+    .diff-table th:nth-child(1) {{ width:32%; }}
+    .diff-table th:nth-child(2) {{ width:12%; }}
     .diff-table pre {{ margin:0; max-height:180px; }}
     .event {{ display:grid; grid-template-columns:72px 160px 1fr; gap:12px; align-items:start; }}
     code, pre {{ background:#eef2f6; border-radius:6px; padding:2px 5px; }}
+    code, pre, p {{ overflow-wrap:anywhere; word-break:break-word; }}
     pre {{ overflow:auto; padding:12px; white-space:pre-wrap; }}
     ul {{ margin:8px 0 0; padding-left:20px; }}
     .violations .rule {{ border-left-color:var(--bad); }}
-    @media (max-width: 720px) {{ .hero, .event {{ grid-template-columns:1fr; }} header {{ padding:22px; }} main {{ padding:16px; }} }}
+    @media (max-width: 720px) {{
+      .hero, .event {{ grid-template-columns:1fr; }}
+      header {{ padding:22px; }}
+      main {{ padding:16px; }}
+      .diff-table, .diff-table tbody, .diff-table tr, .diff-table td {{ display:block; width:100%; box-sizing:border-box; }}
+      .diff-table thead {{ display:none; }}
+      .diff-table tr {{ border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }}
+      .diff-table td {{ border-bottom:0; padding:6px 0; }}
+      .diff-table td::before {{ content:attr(data-label); display:block; margin-bottom:4px; color:var(--muted); font-weight:800; font-size:12px; text-transform:uppercase; }}
+    }}
   </style>
 </head>
 <body>
@@ -108,12 +121,12 @@ def render_report(
       <div class="panel"><h2>Score</h2><div class="metric">{scorecard['score']}</div><p class="muted">Threshold: {scorecard['pass_threshold']}</p></div>
       <div class="panel"><h2>Scenario</h2><p><code>{_esc(scenario['id'])}</code></p><p class="muted">{_esc(scenario['prompt'])}</p></div>
       <div class="panel"><h2>Source Trace</h2><p><code>{source_trace}</code></p><p class="muted">Format: {_esc(trace.get('session', {}).get('source_format', 'unknown'))}</p></div>
-	    </section>
-	    <section class="panel"><h2>Summary</h2><p>{_esc(scorecard['summary'])}</p></section>
-	    {task_completion}
-	    {state_changes}
-	    {action_checklist}
-	    <section class="panel"><h2>Final Answer</h2><pre>{final_answer}</pre></section>
+    </section>
+    <section class="panel"><h2>Summary</h2><p>{_esc(scorecard['summary'])}</p></section>
+    {task_completion}
+    {state_changes}
+    {action_checklist}
+    <section class="panel"><h2>Final Answer</h2><pre>{final_answer}</pre></section>
     <section class="panel"><h2>Scorecard</h2>{rules}</section>
     <section class="panel violations"><h2>Violations</h2>{violations}</section>
     {regression}
@@ -197,10 +210,10 @@ def _render_state_diff(state_diff: dict[str, Any] | None, secret_patterns: list[
             continue
         rows.append(
             "<tr>"
-            f"<td><code>{_esc(change.get('path') or '')}</code></td>"
-            f"<td>{_esc(change.get('kind') or '')}</td>"
-            f"<td><pre>{_esc(redact_text(change.get('before'), secret_patterns))}</pre></td>"
-            f"<td><pre>{_esc(redact_text(change.get('after'), secret_patterns))}</pre></td>"
+            f"<td data-label=\"Path\"><code>{_esc(change.get('path') or '')}</code></td>"
+            f"<td data-label=\"Kind\">{_esc(change.get('kind') or '')}</td>"
+            f"<td data-label=\"Before\"><pre>{_esc(_render_diff_value(change.get('before'), secret_patterns))}</pre></td>"
+            f"<td data-label=\"After\"><pre>{_esc(_render_diff_value(change.get('after'), secret_patterns))}</pre></td>"
             "</tr>"
         )
     body = (
@@ -217,6 +230,16 @@ def _render_state_diff(state_diff: dict[str, Any] | None, secret_patterns: list[
         f"<span>{_esc(state_diff.get('change_count', 0))}</span></h3>"
         f"<p>{_esc(state_diff.get('summary', ''))}</p></article>{body}</section>"
     )
+
+
+def _render_diff_value(value: Any, secret_patterns: list[str]) -> str:
+    if value is None:
+        rendered = "null"
+    elif isinstance(value, (dict, list)):
+        rendered = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+    else:
+        rendered = str(value)
+    return redact_text(rendered, secret_patterns)
 
 
 def _render_action_checklist(scorecard: dict[str, Any]) -> str:
