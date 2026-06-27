@@ -321,6 +321,9 @@ the preflight, launch check, gates, validation summaries, trainer-facing
 exports, and schema-contract files into one hash-checked directory. It records
 the copied trainer inputs, the original approved command, path rewrites, and an
 advisory portable command that points known input paths at archive-local copies.
+Its `consumer_contract` states that the portable command should be resolved
+from the archive root and flags path-like command tokens, such as trainer
+scripts, that still must be supplied by external training infrastructure.
 External training infrastructure can validate that directory before consuming
 the rows, without needing the original producer's local paths.
 

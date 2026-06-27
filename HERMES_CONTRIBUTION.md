@@ -31,7 +31,8 @@ artifacts and turns them into maintainable eval evidence:
 - trainer preflight, launch-check, and portable trainer-archive artifacts that
   let external training infrastructure validate copied evidence before
   consuming SFT, DPO, reward-model, or RL rows, including archive-local input
-  rewrites for the approved trainer command.
+  rewrites and a consumer contract that separates copied evidence from external
+  trainer code.
 - improvement-plan, improvement-ledger, and improvement-ledger-gate artifacts
   that turn evidence-backed failures into concrete work items, track whether
   they recur across iterations, and give CI a deterministic promote/block

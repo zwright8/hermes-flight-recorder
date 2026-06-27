@@ -17,6 +17,9 @@
       },
       "type": "array"
     },
+    "consumer_contract": {
+      "$ref": "#/$defs/consumerContract"
+    },
     "launch_check_included": {
       "type": "boolean"
     },
@@ -103,6 +106,7 @@
     "trainer_inputs",
     "path_rewrites",
     "portable_command",
+    "consumer_contract",
     "artifacts",
     "missing",
     "relationships",
@@ -254,6 +258,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "external_command_path_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "file_artifact_count": {
           "minimum": 0,
           "type": "integer"
@@ -278,6 +286,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "path_rewrite_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trainer_input_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "unique_sha256_count": {
           "minimum": 0,
           "type": "integer"
@@ -287,11 +303,99 @@
         "artifact_count",
         "file_artifact_count",
         "directory_artifact_count",
+        "trainer_input_count",
+        "path_rewrite_count",
+        "external_command_path_count",
         "missing_count",
         "total_size_bytes",
         "role_counts",
         "missing_role_counts",
         "unique_sha256_count"
+      ],
+      "type": "object"
+    },
+    "consumerContract": {
+      "additionalProperties": true,
+      "properties": {
+        "command_kind": {
+          "const": "advisory_portable_command"
+        },
+        "execution_cwd": {
+          "const": "archive_root"
+        },
+        "external_code_required": {
+          "type": "boolean"
+        },
+        "external_command_path_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_command_paths": {
+          "items": {
+            "$ref": "#/$defs/externalCommandPath"
+          },
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path_rewrite_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "portable_command_available": {
+          "type": "boolean"
+        },
+        "portable_command_rewritten": {
+          "type": "boolean"
+        },
+        "trainer_input_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "execution_cwd",
+        "command_kind",
+        "portable_command_available",
+        "portable_command_rewritten",
+        "trainer_input_count",
+        "path_rewrite_count",
+        "external_code_required",
+        "external_command_path_count",
+        "external_command_paths",
+        "notes"
+      ],
+      "type": "object"
+    },
+    "externalCommandPath": {
+      "additionalProperties": true,
+      "properties": {
+        "argv_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "token": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "argv_index",
+        "token",
+        "path",
+        "reason"
       ],
       "type": "object"
     },

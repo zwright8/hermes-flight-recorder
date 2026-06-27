@@ -6508,7 +6508,14 @@ def _validate_trainer_archive(archive: dict[str, Any], target: ValidationTarget,
         archive.get("path_rewrites"),
         target,
     )
-    _validate_trainer_archive_metrics(metrics, artifacts, missing, target)
+    _validate_trainer_archive_consumer_contract(
+        archive.get("consumer_contract"),
+        archive.get("portable_command"),
+        archive.get("trainer_inputs"),
+        archive.get("path_rewrites"),
+        target,
+    )
+    _validate_trainer_archive_metrics(metrics, artifacts, missing, archive.get("consumer_contract"), target)
     target.details.update(
         {
             "artifact_count": len(artifacts),
@@ -6615,6 +6622,7 @@ def _validate_trainer_archive_metrics(
     metrics: dict[str, Any],
     artifacts: list[Any],
     missing: list[Any],
+    consumer_contract: Any,
     target: ValidationTarget,
 ) -> None:
     valid_artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
@@ -6634,6 +6642,7 @@ def _validate_trainer_archive_metrics(
                 and not str(artifact.get("original_path")).startswith("<")
             ]
         ),
+        "external_command_path_count": consumer_contract.get("external_command_path_count", 0) if isinstance(consumer_contract, dict) else 0,
         "missing_count": len(missing),
         "total_size_bytes": sum(artifact.get("size_bytes", 0) for artifact in valid_artifacts if _is_non_negative_int(artifact.get("size_bytes"))),
         "unique_sha256_count": len({artifact.get("sha256") for artifact in valid_artifacts if isinstance(artifact.get("sha256"), str)}),
@@ -6758,6 +6767,70 @@ def _validate_trainer_archive_commands(
         target.errors.append("trainer_archive.portable_command.approved must match approved_command.approved.")
 
 
+def _validate_trainer_archive_consumer_contract(
+    contract: Any,
+    portable_command: Any,
+    trainer_inputs: Any,
+    path_rewrites: Any,
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(contract, dict):
+        target.errors.append("trainer_archive.consumer_contract must be an object.")
+        return
+    if contract.get("execution_cwd") != "archive_root":
+        target.errors.append("trainer_archive.consumer_contract.execution_cwd must be archive_root.")
+    if contract.get("command_kind") != "advisory_portable_command":
+        target.errors.append("trainer_archive.consumer_contract.command_kind must be advisory_portable_command.")
+    for field_name in ("portable_command_available", "portable_command_rewritten", "external_code_required"):
+        if not isinstance(contract.get(field_name), bool):
+            target.errors.append(f"trainer_archive.consumer_contract.{field_name} must be a boolean.")
+    for field_name in ("trainer_input_count", "path_rewrite_count", "external_command_path_count"):
+        if not _is_non_negative_int(contract.get(field_name)):
+            target.errors.append(f"trainer_archive.consumer_contract.{field_name} must be a non-negative integer.")
+    if not _is_string_list(contract.get("notes")):
+        target.errors.append("trainer_archive.consumer_contract.notes must be a list of strings.")
+    inputs = trainer_inputs if isinstance(trainer_inputs, list) else []
+    rewrites = path_rewrites if isinstance(path_rewrites, list) else []
+    portable = portable_command if isinstance(portable_command, dict) else {}
+    portable_argv = portable.get("argv") if isinstance(portable.get("argv"), list) else []
+    clean_portable_argv = [item for item in portable_argv if isinstance(item, str)]
+    expected_external = _trainer_archive_external_command_paths(clean_portable_argv, inputs)
+    expected = {
+        "portable_command_available": portable.get("available") is True,
+        "portable_command_rewritten": portable.get("rewritten") is True,
+        "trainer_input_count": len(inputs),
+        "path_rewrite_count": len(rewrites),
+        "external_code_required": bool(expected_external),
+        "external_command_path_count": len(expected_external),
+    }
+    for field_name, expected_value in expected.items():
+        if contract.get(field_name) != expected_value:
+            target.errors.append(f"trainer_archive.consumer_contract.{field_name} expected {expected_value!r}, got {contract.get(field_name)!r}.")
+
+    external_paths = contract.get("external_command_paths")
+    if not isinstance(external_paths, list):
+        target.errors.append("trainer_archive.consumer_contract.external_command_paths must be a list.")
+        return
+    if len(external_paths) != len(expected_external):
+        target.errors.append(
+            f"trainer_archive.consumer_contract.external_command_paths expected {len(expected_external)} item(s), got {len(external_paths)}."
+        )
+    for index, item in enumerate(external_paths):
+        label = f"trainer_archive.consumer_contract.external_command_paths[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not _is_non_negative_int(item.get("argv_index")):
+            target.errors.append(f"{label}.argv_index must be a non-negative integer.")
+        for field_name in ("token", "path", "reason"):
+            if not isinstance(item.get(field_name), str) or not item.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if index < len(expected_external):
+            for field_name, expected_value in expected_external[index].items():
+                if item.get(field_name) != expected_value:
+                    target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {item.get(field_name)!r}.")
+
+
 def _trainer_input_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
     item: dict[str, Any] = {
         "artifact_index": artifact.get("index"),
@@ -6835,6 +6908,60 @@ def _replace_trainer_archive_path_value(value: str, original: str, archive_path:
     if value.startswith(prefix):
         return archive_path.rstrip("/") + "/" + value[len(prefix) :]
     return value
+
+
+def _trainer_archive_external_command_paths(argv: list[str], trainer_inputs: list[Any]) -> list[dict[str, Any]]:
+    archive_paths = [
+        str(item.get("archive_path") or "")
+        for item in trainer_inputs
+        if isinstance(item, dict) and isinstance(item.get("archive_path"), str)
+    ]
+    external: list[dict[str, Any]] = []
+    for index, token in enumerate(argv):
+        if not token or token.startswith("-"):
+            if "=" in token:
+                key, value = token.split("=", 1)
+                if _trainer_archive_is_external_command_path(value, archive_paths):
+                    external.append({"argv_index": index, "token": token, "path": value, "reason": f"{key} references a path outside archive inputs"})
+            continue
+        if _trainer_archive_is_external_command_path(token, archive_paths):
+            external.append({"argv_index": index, "token": token, "path": token, "reason": "path-like token is not one of the copied trainer inputs"})
+    return external
+
+
+def _trainer_archive_is_external_command_path(value: str, archive_paths: list[str]) -> bool:
+    if not _trainer_archive_looks_like_path(value):
+        return False
+    normalized = value.replace("\\", "/")
+    for archive_path in archive_paths:
+        clean = archive_path.replace("\\", "/").rstrip("/")
+        if normalized == clean or normalized.startswith(clean + "/"):
+            return False
+    return True
+
+
+def _trainer_archive_looks_like_path(value: str) -> bool:
+    if not value or value.startswith("-"):
+        return False
+    normalized = value.replace("\\", "/")
+    if normalized.startswith(("./", "../", "/", "~")) or "/" in normalized:
+        return True
+    return Path(normalized).suffix.lower() in {
+        ".py",
+        ".sh",
+        ".bash",
+        ".js",
+        ".mjs",
+        ".ts",
+        ".ipynb",
+        ".json",
+        ".jsonl",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".csv",
+        ".txt",
+    }
 
 
 def _trainer_archive_count_map(values: Any) -> dict[str, int]:

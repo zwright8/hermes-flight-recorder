@@ -123,6 +123,7 @@ def build_trainer_archive(
     trainer_inputs = _trainer_inputs(artifacts)
     path_rewrites = _path_rewrites(trainer_inputs)
     portable_command = _portable_command_record(approved_command, path_rewrites)
+    consumer_contract = _consumer_contract(portable_command, trainer_inputs, path_rewrites)
     self_contained = not missing
     ready_for_training = preflight.get("passed") is True and launch_included and launch_passed
     passed = ready_for_training and (self_contained or not require_self_contained)
@@ -141,10 +142,11 @@ def build_trainer_archive(
         "trainer_inputs": trainer_inputs,
         "path_rewrites": path_rewrites,
         "portable_command": portable_command,
+        "consumer_contract": consumer_contract,
         "artifacts": artifacts,
         "missing": missing,
         "relationships": relationships,
-        "metrics": _metrics(artifacts, missing, trainer_inputs, path_rewrites),
+        "metrics": _metrics(artifacts, missing, trainer_inputs, path_rewrites, consumer_contract),
         "notes": [
             "Trainer archives copy trainer handoff evidence into a portable directory; they do not train models or execute the trainer command.",
             "The portable command is advisory: it rewrites known trainer-input paths to archive-local paths but does not include trainer code or execute anything.",
@@ -542,6 +544,81 @@ def _portable_command_record(approved_command: dict[str, Any], path_rewrites: li
     }
 
 
+def _consumer_contract(
+    portable_command: dict[str, Any],
+    trainer_inputs: list[dict[str, Any]],
+    path_rewrites: list[dict[str, Any]],
+) -> dict[str, Any]:
+    argv = portable_command.get("argv") if isinstance(portable_command.get("argv"), list) else []
+    external_paths = _external_command_paths([item for item in argv if isinstance(item, str)], trainer_inputs)
+    return {
+        "execution_cwd": "archive_root",
+        "command_kind": "advisory_portable_command",
+        "portable_command_available": portable_command.get("available") is True,
+        "portable_command_rewritten": portable_command.get("rewritten") is True,
+        "trainer_input_count": len(trainer_inputs),
+        "path_rewrite_count": len(path_rewrites),
+        "external_code_required": bool(external_paths),
+        "external_command_path_count": len(external_paths),
+        "external_command_paths": external_paths,
+        "notes": [
+            "Validate this archive before consuming trainer inputs.",
+            "Run portable_command from the archive root or resolve trainer_inputs.archive_path explicitly.",
+            "External command paths are not copied by trainer-archive; provide trainer code separately.",
+        ],
+    }
+
+
+def _external_command_paths(argv: list[str], trainer_inputs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    external: list[dict[str, Any]] = []
+    archive_paths = [str(item.get("archive_path") or "") for item in trainer_inputs if isinstance(item.get("archive_path"), str)]
+    for index, token in enumerate(argv):
+        if not token or token.startswith("-"):
+            if "=" in token:
+                key, value = token.split("=", 1)
+                if _is_external_command_path(value, archive_paths):
+                    external.append({"argv_index": index, "token": token, "path": value, "reason": f"{key} references a path outside archive inputs"})
+            continue
+        if _is_external_command_path(token, archive_paths):
+            external.append({"argv_index": index, "token": token, "path": token, "reason": "path-like token is not one of the copied trainer inputs"})
+    return external
+
+
+def _is_external_command_path(value: str, archive_paths: list[str]) -> bool:
+    if not _looks_like_path(value):
+        return False
+    normalized = value.replace("\\", "/")
+    for archive_path in archive_paths:
+        clean = archive_path.replace("\\", "/").rstrip("/")
+        if normalized == clean or normalized.startswith(clean + "/"):
+            return False
+    return True
+
+
+def _looks_like_path(value: str) -> bool:
+    if not value or value.startswith("-"):
+        return False
+    normalized = value.replace("\\", "/")
+    if normalized.startswith(("./", "../", "/", "~")) or "/" in normalized:
+        return True
+    return Path(normalized).suffix.lower() in {
+        ".py",
+        ".sh",
+        ".bash",
+        ".js",
+        ".mjs",
+        ".ts",
+        ".ipynb",
+        ".json",
+        ".jsonl",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".csv",
+        ".txt",
+    }
+
+
 def _rewrite_command_argv(argv: list[str], path_rewrites: list[dict[str, Any]]) -> tuple[list[str], int]:
     rewritten: list[str] = []
     rewrite_count = 0
@@ -587,6 +664,7 @@ def _metrics(
     missing: list[dict[str, Any]],
     trainer_inputs: list[dict[str, Any]],
     path_rewrites: list[dict[str, Any]],
+    consumer_contract: dict[str, Any],
 ) -> dict[str, Any]:
     role_counts = _count_rows(record.get("role") for record in artifacts)
     missing_role_counts = _count_rows(record.get("role") for record in missing)
@@ -596,6 +674,7 @@ def _metrics(
         "directory_artifact_count": sum(1 for record in artifacts if record.get("kind") == "directory"),
         "trainer_input_count": len(trainer_inputs),
         "path_rewrite_count": len(path_rewrites),
+        "external_command_path_count": _int_value(consumer_contract.get("external_command_path_count")),
         "missing_count": len(missing),
         "total_size_bytes": sum(_int_value(record.get("size_bytes")) for record in artifacts),
         "role_counts": role_counts,
