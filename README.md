@@ -698,7 +698,11 @@ flightrecorder evidence-bundle \
 
 The bundle returns exit code 0 only when every included check passes. It also
 blocks training, compare, reviewed, and review-calibration gates that skipped
-their embedded export validation. Validate it before publishing with
+their embedded export validation. When `--runs` is supplied, it also checks
+`run_digest.json` coverage for every completed run and exposes
+`metrics.run_digest_coverage`, so downstream automation can reject a handoff
+whose per-run improvement summaries are missing or malformed. Validate it
+before publishing with
 `flightrecorder validate --evidence-bundle runs/evidence_bundle.json --strict`.
 The generated `decision` block carries the handoff recommendation
 (`promote_handoff` or `block_handoff`), blocking checks, blocking gates,

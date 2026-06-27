@@ -241,6 +241,9 @@ assert evidence_bundle["readiness"] == "ready"
 assert evidence_bundle["decision"]["recommendation"] == "promote_handoff"
 assert evidence_bundle["decision"]["blocking_check_count"] == 0
 assert evidence_bundle["decision"]["key_metrics"]["suite_summary"]["total"] == 7
+assert evidence_bundle["decision"]["key_metrics"]["run_digest_coverage"]["digest_coverage_rate"] == 1.0
+assert evidence_bundle["decision"]["key_metrics"]["run_digest_coverage"]["missing_digest_count"] == 0
+assert evidence_bundle["decision"]["key_metrics"]["run_digest_coverage"]["invalid_digest_count"] == 0
 assert evidence_bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"] == 0.8571
 assert evidence_bundle["decision"]["key_metrics"]["repair_queue"]["item_count"] == 14
 assert evidence_bundle["decision"]["key_metrics"]["training_export"]["episode_count"] == 7
@@ -267,6 +270,14 @@ assert evidence_bundle["metrics"]["training_export"]["curriculum_failure_mode_co
 assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 90.71
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["metrics"]["trace_observability"]["event_type_count"] == 6
+assert evidence_bundle["metrics"]["run_digest_coverage"]["run_count"] == 7
+assert evidence_bundle["metrics"]["run_digest_coverage"]["digest_count"] == 7
+assert evidence_bundle["metrics"]["run_digest_coverage"]["digest_coverage_rate"] == 1.0
+assert evidence_bundle["metrics"]["run_digest_coverage"]["task_completion_status_counts"] == [
+    {"id": "complete", "count": 2},
+    {"id": "incomplete", "count": 4},
+    {"id": "not_applicable", "count": 1},
+]
 assert evidence_bundle["metrics"]["repair_queue"]["critical_item_count"] == 14
 assert len(evidence_bundle["artifacts"]["training_export_curriculum"]["sha256"]) == 64
 assert evidence_bundle["failed_check_count"] == 0

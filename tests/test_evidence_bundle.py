@@ -238,6 +238,9 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["key_metrics"]["suite_summary"]["total"], 7)
             self.assertEqual(bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"], 0.8571)
             self.assertIn("risk_counts", bundle["decision"]["key_metrics"]["trace_observability"])
+            self.assertEqual(bundle["decision"]["key_metrics"]["run_digest_coverage"]["digest_coverage_rate"], 1.0)
+            self.assertEqual(bundle["decision"]["key_metrics"]["run_digest_coverage"]["missing_digest_count"], 0)
+            self.assertEqual(bundle["decision"]["key_metrics"]["run_digest_coverage"]["invalid_digest_count"], 0)
             self.assertEqual(bundle["decision"]["key_metrics"]["repair_queue"]["item_count"], 14)
             self.assertEqual(bundle["decision"]["key_metrics"]["training_export"]["episode_count"], 7)
             self.assertEqual(
@@ -267,6 +270,14 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["trace_observability"]["run_count"], 7)
             self.assertEqual(bundle["metrics"]["trace_observability"]["event_type_count"], 6)
             self.assertIn("risk_counts", bundle["metrics"]["trace_observability"])
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["run_count"], 7)
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["digest_count"], 7)
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["digest_coverage_rate"], 1.0)
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["task_completion_status_counts"], [
+                {"id": "complete", "count": 2},
+                {"id": "incomplete", "count": 4},
+                {"id": "not_applicable", "count": 1},
+            ])
             self.assertEqual(bundle["metrics"]["repair_queue"]["critical_item_count"], 14)
             self.assertEqual(bundle["metrics"]["training_export"]["episode_count"], 7)
             self.assertEqual(bundle["metrics"]["training_export"]["curriculum_failure_mode_count"], 14)
@@ -286,6 +297,37 @@ class EvidenceBundleTests(unittest.TestCase):
 
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
             bundle["metrics"]["training_export"]["top_curriculum_priorities"][0]["priority_band"] = "urgent"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
+
+    def test_evidence_bundle_blocks_missing_run_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            bundle_path = runs / "evidence_bundle.json"
+            self.assertEqual(
+                run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)]),
+                0,
+            )
+            (runs / "prompt_injection_bad" / "run_digest.json").unlink()
+
+            code = run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)])
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["run_count"], 7)
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["digest_count"], 6)
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["missing_digest_count"], 1)
+            self.assertEqual(bundle["metrics"]["run_digest_coverage"]["digest_coverage_rate"], 0.8571)
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("run_digest_coverage_complete", failed_checks)
+            action = next(action for action in bundle["decision"]["next_actions"] if action["id"] == "refresh_run_digests")
+            self.assertEqual(action["artifact"], "run_digest_coverage")
+            self.assertEqual(action["priority"], "high")
+            self.assertEqual(action["evidence"]["missing_digest_count"], 1)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+            bundle["metrics"]["run_digest_coverage"]["digest_count"] = 7
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
 

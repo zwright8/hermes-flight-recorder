@@ -48,6 +48,7 @@ def build_evidence_bundle(
         runs_path = Path(runs_dir)
         artifacts["runs_dir"] = _dir_record(runs_path, preserve_paths)
         _add_presence_check(checks, "runs_dir_exists", runs_path.exists() and runs_path.is_dir(), {"artifact": "runs_dir"})
+        _summarize_run_digest_coverage(runs_path, metrics, checks, preserve_paths)
 
     if suite_summary_path is not None:
         summary_path = Path(suite_summary_path)
@@ -368,6 +369,17 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "tool_or_api_run_rate",
             "risk_counts",
         ),
+        "run_digest_coverage": (
+            "run_count",
+            "digest_count",
+            "missing_digest_count",
+            "invalid_digest_count",
+            "digest_coverage_rate",
+            "passed_digest_count",
+            "failed_digest_count",
+            "task_completion_status_counts",
+            "recommended_action_counts",
+        ),
         "repair_queue": ("item_count", "critical_item_count", "scenario_count", "task_family_count", "priority_counts", "rule_counts"),
         "validation": ("target_count", "error_count", "warning_count"),
         "training_export": (
@@ -539,6 +551,34 @@ def _next_actions(
             )
         )
 
+    digest_coverage = metrics.get("run_digest_coverage") if isinstance(metrics.get("run_digest_coverage"), dict) else {}
+    missing_digests = _non_negative_int(digest_coverage.get("missing_digest_count"))
+    invalid_digests = _non_negative_int(digest_coverage.get("invalid_digest_count"))
+    if missing_digests or invalid_digests:
+        actions.append(
+            _action(
+                "refresh_run_digests",
+                "high",
+                "run_digest_coverage",
+                "Regenerate missing or invalid run_digest.json files before routing this bundle to CI, review, repair, or training loops.",
+                {
+                    "missing_digest_count": missing_digests,
+                    "invalid_digest_count": invalid_digests,
+                    "digest_coverage_rate": digest_coverage.get("digest_coverage_rate"),
+                    "missing_digest_scenarios": (
+                        digest_coverage.get("missing_digest_scenarios")
+                        if isinstance(digest_coverage.get("missing_digest_scenarios"), list)
+                        else []
+                    ),
+                    "invalid_digest_scenarios": (
+                        digest_coverage.get("invalid_digest_scenarios")
+                        if isinstance(digest_coverage.get("invalid_digest_scenarios"), list)
+                        else []
+                    ),
+                },
+            )
+        )
+
     repair_queue = metrics.get("repair_queue") if isinstance(metrics.get("repair_queue"), dict) else {}
     repair_items = _non_negative_int(repair_queue.get("item_count"))
     critical_repair_items = _non_negative_int(repair_queue.get("critical_item_count"))
@@ -668,6 +708,10 @@ def _count_rows(value: Any) -> dict[str, int]:
     return counts
 
 
+def _count_map_rows(counts: dict[str, int]) -> list[dict[str, int | str]]:
+    return [{"id": key, "count": counts[key]} for key in sorted(counts)]
+
+
 def _count_total(value: Any) -> int:
     return sum(_count_rows(value).values())
 
@@ -733,6 +777,12 @@ def _non_negative_int(value: Any) -> int:
     return 0
 
 
+def _ratio(numerator: int, denominator: int) -> float:
+    if denominator <= 0:
+        return 1.0
+    return round(numerator / denominator, 4)
+
+
 def _summarize_suite_summary(suite_summary: dict[str, Any], metrics: dict[str, Any], checks: list[dict[str, Any]]) -> None:
     suite_metrics = suite_summary.get("metrics") if isinstance(suite_summary.get("metrics"), dict) else {}
     metrics["suite_summary"] = {
@@ -746,6 +796,79 @@ def _summarize_suite_summary(suite_summary: dict[str, Any], metrics: dict[str, A
         "failed_rule_counts": suite_metrics.get("failed_rule_counts"),
     }
     _add_presence_check(checks, "suite_summary_no_errors", suite_summary.get("error_count") == 0, {"artifact": "suite_summary"})
+
+
+def _summarize_run_digest_coverage(
+    runs_path: Path,
+    metrics: dict[str, Any],
+    checks: list[dict[str, Any]],
+    preserve_paths: bool,
+) -> None:
+    completed_runs = sorted(path for path in runs_path.iterdir() if path.is_dir() and (path / "scorecard.json").exists()) if runs_path.is_dir() else []
+    digest_count = 0
+    passed_digest_count = 0
+    failed_digest_count = 0
+    missing_scenarios: list[str] = []
+    invalid_scenarios: list[str] = []
+    task_status_counts: dict[str, int] = {}
+    action_counts: dict[str, int] = {}
+    for run_dir in completed_runs:
+        digest_path = run_dir / "run_digest.json"
+        scenario_id = run_dir.name
+        if not digest_path.exists():
+            missing_scenarios.append(scenario_id)
+            continue
+        try:
+            digest = _read_optional_json(digest_path)
+        except json.JSONDecodeError:
+            invalid_scenarios.append(scenario_id)
+            continue
+        if not isinstance(digest, dict) or digest.get("schema_version") != "hfr.run_digest.v1":
+            invalid_scenarios.append(scenario_id)
+            continue
+        digest_count += 1
+        scenario = digest.get("scenario") if isinstance(digest.get("scenario"), dict) else {}
+        scenario_id = str(scenario.get("id") or scenario_id)
+        outcome = digest.get("outcome") if isinstance(digest.get("outcome"), dict) else {}
+        if outcome.get("passed") is True:
+            passed_digest_count += 1
+        elif outcome.get("passed") is False:
+            failed_digest_count += 1
+        task_status = str(outcome.get("task_completion_status") or "unknown")
+        task_status_counts[task_status] = task_status_counts.get(task_status, 0) + 1
+        actions = digest.get("recommended_actions") if isinstance(digest.get("recommended_actions"), list) else []
+        for action in actions:
+            if isinstance(action, dict) and isinstance(action.get("id"), str) and action.get("id"):
+                action_id = action["id"]
+                action_counts[action_id] = action_counts.get(action_id, 0) + 1
+    run_count = len(completed_runs)
+    missing_count = len(missing_scenarios)
+    invalid_count = len(invalid_scenarios)
+    metrics["run_digest_coverage"] = {
+        "runs_dir": _display_path(runs_path, preserve_paths),
+        "run_count": run_count,
+        "digest_count": digest_count,
+        "missing_digest_count": missing_count,
+        "invalid_digest_count": invalid_count,
+        "digest_coverage_rate": _ratio(digest_count, run_count),
+        "passed_digest_count": passed_digest_count,
+        "failed_digest_count": failed_digest_count,
+        "task_completion_status_counts": _count_map_rows(task_status_counts),
+        "recommended_action_counts": _count_map_rows(action_counts),
+        "missing_digest_scenarios": missing_scenarios[:20],
+        "invalid_digest_scenarios": invalid_scenarios[:20],
+    }
+    _add_presence_check(
+        checks,
+        "run_digest_coverage_complete",
+        missing_count == 0 and invalid_count == 0,
+        {
+            "artifact": "runs_dir",
+            "completed_runs": str(run_count),
+            "missing_digest_count": str(missing_count),
+            "invalid_digest_count": str(invalid_count),
+        },
+    )
 
 
 def _summarize_live_smoke_summary(summary: dict[str, Any], metrics: dict[str, Any], checks: list[dict[str, Any]]) -> None:

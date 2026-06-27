@@ -512,7 +512,8 @@ use `--preserve-paths` only for private local debugging.
 `flightrecorder validate --strict` checks that counts, episode ids, reward
 links, step-reward event indexes, preference references, failure-mode links,
 curriculum counts, trainer-ready view rows, dataset splits, dataset metrics,
-dataset-card sections, lineage hashes, lineage evidence links, and live-smoke summaries are
+dataset-card sections, lineage hashes, lineage evidence links, digest coverage
+inside evidence bundles, and live-smoke summaries are
 internally consistent. Trainer-facing export artifacts must be regular files;
 symlinked JSONL, JSON, or Markdown artifacts fail validation even when their
 targets match the recorded hash.

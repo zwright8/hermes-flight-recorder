@@ -6541,6 +6541,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "scenario_quality",
         "evidence_coverage",
         "trace_observability",
+        "run_digest_coverage",
         "repair_queue",
         "validation",
         "training_export",
@@ -6556,6 +6557,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     training = metrics.get("training_export")
     if isinstance(training, dict):
         _validate_bundle_top_curriculum_priorities(training.get("top_curriculum_priorities"), target)
+    run_digest_coverage = metrics.get("run_digest_coverage")
+    if isinstance(run_digest_coverage, dict):
+        _validate_bundle_run_digest_coverage(run_digest_coverage, target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -6586,6 +6590,45 @@ def _validate_bundle_gate_validation(value: Any, target: ValidationTarget, label
     for field_name in ("target_count", "error_count", "warning_count"):
         if not _is_non_negative_int(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+
+
+def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "evidence_bundle.metrics.run_digest_coverage"
+    if not isinstance(value.get("runs_dir"), str) or not value.get("runs_dir"):
+        target.errors.append(f"{label}.runs_dir must be a non-empty string.")
+    for field_name in (
+        "run_count",
+        "digest_count",
+        "missing_digest_count",
+        "invalid_digest_count",
+        "passed_digest_count",
+        "failed_digest_count",
+    ):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    if not _is_number_between(value.get("digest_coverage_rate"), 0.0, 1.0):
+        target.errors.append(f"{label}.digest_coverage_rate must be numeric from 0.0 to 1.0.")
+
+    run_count = value.get("run_count")
+    digest_count = value.get("digest_count")
+    missing_count = value.get("missing_digest_count")
+    invalid_count = value.get("invalid_digest_count")
+    if (
+        _is_non_negative_int(run_count)
+        and _is_non_negative_int(digest_count)
+        and _is_non_negative_int(missing_count)
+        and _is_non_negative_int(invalid_count)
+    ):
+        if int(digest_count) + int(missing_count) + int(invalid_count) != int(run_count):
+            target.errors.append(f"{label}.digest_count + missing_digest_count + invalid_digest_count must equal run_count.")
+        expected_rate = 1.0 if int(run_count) == 0 else round(int(digest_count) / int(run_count), 4)
+        if value.get("digest_coverage_rate") != expected_rate:
+            target.errors.append(f"{label}.digest_coverage_rate expected {expected_rate!r}, got {value.get('digest_coverage_rate')!r}.")
+    for field_name in ("task_completion_status_counts", "recommended_action_counts"):
+        _validate_count_rows(value.get(field_name), target, f"{label}.{field_name}")
+    for field_name in ("missing_digest_scenarios", "invalid_digest_scenarios"):
+        if not _is_string_list(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a list of strings.")
 
 
 def _validate_bundle_top_curriculum_priorities(value: Any, target: ValidationTarget) -> None:
@@ -7619,6 +7662,34 @@ def _validate_count_map_object(value: Any, target: ValidationTarget, label: str)
             target.errors.append(f"{label}.{key} must be a non-negative integer.")
             continue
         counts[key] = count
+    return counts
+
+
+def _validate_count_rows(value: Any, target: ValidationTarget, label: str) -> dict[str, int]:
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list.")
+        return {}
+    counts: dict[str, int] = {}
+    previous_id = ""
+    for index, row in enumerate(value):
+        row_label = f"{label}[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        row_id = row.get("id")
+        if not isinstance(row_id, str) or not row_id:
+            target.errors.append(f"{row_label}.id must be a non-empty string.")
+            continue
+        if row_id in counts:
+            target.errors.append(f"{row_label}.id duplicates {row_id!r}.")
+        if previous_id and row_id < previous_id:
+            target.errors.append(f"{label} must be sorted by id.")
+        previous_id = row_id
+        count = row.get("count")
+        if not _is_non_negative_int(count):
+            target.errors.append(f"{row_label}.count must be a non-negative integer.")
+            continue
+        counts[row_id] = count
     return counts
 
 
