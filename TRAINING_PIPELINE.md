@@ -88,6 +88,9 @@ metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
 useful for provenance and job routing, but it should not be read as permission
 to train unless the included scenario, evidence-coverage, validation, review,
 and gate policies are also appropriate for the target job.
+When included gates can validate trainer-facing exports, such as training,
+compare, reviewed, and review-calibration gates, the bundle blocks handoff if
+those gates skipped validation.
 When a `live_smoke_summary.json` is included, current v2 summaries also carry
 Python/platform details and Hermes plus Flight Recorder git provenance so
 runtime-integration evidence can be tied back to the exact code that produced

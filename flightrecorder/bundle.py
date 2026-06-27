@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Any
 
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "hfr.evidence_bundle.v1"
+_VALIDATION_REQUIRED_GATE_SCHEMAS = {
+    "hfr.training_gate.v1",
+    "hfr.compare_gate.v1",
+    "hfr.reviewed_gate.v1",
+    "hfr.review_calibration.v1",
+}
 
 
 class EvidenceBundleError(ValueError):
@@ -237,9 +243,30 @@ def build_evidence_bundle(
         gate_name = f"gate_{index + 1}"
         gate = _read_json_artifact(Path(gate_path), artifacts, gate_name, preserve_paths)
         gate_id = _gate_id(gate, gate_name)
+        schema_version = str(gate.get("schema_version") or "")
         passed = bool(gate.get("passed")) if isinstance(gate, dict) else False
-        gate_rows.append({"id": gate_id, "path": artifacts[gate_name]["path"], "passed": passed})
+        validation = _gate_validation_metrics(gate)
+        gate_row: dict[str, Any] = {
+            "id": gate_id,
+            "path": artifacts[gate_name]["path"],
+            "schema_version": schema_version,
+            "passed": passed,
+        }
+        if validation["available"] or _gate_requires_validation(gate):
+            gate_row["validation"] = validation
+        gate_rows.append(gate_row)
         _add_presence_check(checks, "gate_passed", passed, {"gate": gate_id})
+        if _gate_requires_validation(gate):
+            _add_presence_check(
+                checks,
+                "gate_validation_passed",
+                bool(validation["available"] and validation["passed"]),
+                {
+                    "gate": gate_id,
+                    "validation_available": str(validation["available"]).lower(),
+                    "validation_error_count": str(validation["error_count"]),
+                },
+            )
     if gate_rows:
         metrics["gates"] = gate_rows
 
@@ -819,6 +846,33 @@ def _add_presence_check(checks: list[dict[str, Any]], check_id: str, passed: boo
 def _gate_id(gate: dict[str, Any], fallback: str) -> str:
     schema = str(gate.get("schema_version") or fallback)
     return schema.removeprefix("hfr.").removesuffix(".v1")
+
+
+def _gate_requires_validation(gate: dict[str, Any]) -> bool:
+    return gate.get("schema_version") in _VALIDATION_REQUIRED_GATE_SCHEMAS
+
+
+def _gate_validation_metrics(gate: dict[str, Any]) -> dict[str, Any]:
+    metrics = gate.get("metrics") if isinstance(gate.get("metrics"), dict) else {}
+    validation = metrics.get("validation") if isinstance(metrics.get("validation"), dict) else {}
+    if not validation:
+        return {
+            "available": False,
+            "passed": False,
+            "strict": False,
+            "target_count": 0,
+            "error_count": 0,
+            "warning_count": 0,
+        }
+    available = validation.get("available") is True
+    return {
+        "available": available,
+        "passed": bool(available and validation.get("passed")),
+        "strict": bool(validation.get("strict")),
+        "target_count": _non_negative_int(validation.get("target_count")),
+        "error_count": _non_negative_int(validation.get("error_count")),
+        "warning_count": _non_negative_int(validation.get("warning_count")),
+    }
 
 
 def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:

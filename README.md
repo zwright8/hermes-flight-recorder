@@ -641,11 +641,13 @@ flightrecorder evidence-bundle \
   --out runs/evidence_bundle.json
 ```
 
-The bundle returns exit code 0 only when every included check passes. Validate it
-before publishing with `flightrecorder validate --evidence-bundle
-runs/evidence_bundle.json --strict`. The generated `decision` block carries the
-handoff recommendation (`promote_handoff` or `block_handoff`), blocking checks,
-blocking gates, deterministic `next_actions`, included evidence artifact names,
+The bundle returns exit code 0 only when every included check passes. It also
+blocks training, compare, reviewed, and review-calibration gates that skipped
+their embedded export validation. Validate it before publishing with
+`flightrecorder validate --evidence-bundle runs/evidence_bundle.json --strict`.
+The generated `decision` block carries the handoff recommendation
+(`promote_handoff` or `block_handoff`), blocking checks, blocking gates,
+deterministic `next_actions`, included evidence artifact names,
 and key metrics for automation that should not scrape the full check list.
 `next_actions` is advisory repair guidance for improvement loops: a bundle can
 be ready to hand off while still recommending that the agent repair failing

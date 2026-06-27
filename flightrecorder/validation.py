@@ -5807,8 +5807,24 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
             for field_name in ("id", "path"):
                 if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
                     target.errors.append(f"evidence_bundle.metrics.gates[{index}].{field_name} must be a non-empty string.")
+            if "schema_version" in gate and not isinstance(gate.get("schema_version"), str):
+                target.errors.append(f"evidence_bundle.metrics.gates[{index}].schema_version must be a string when present.")
             if not isinstance(gate.get("passed"), bool):
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
+            if "validation" in gate:
+                _validate_bundle_gate_validation(gate.get("validation"), target, f"evidence_bundle.metrics.gates[{index}].validation")
+
+
+def _validate_bundle_gate_validation(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object when present.")
+        return
+    for field_name in ("available", "passed", "strict"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
 
 
 def _validate_bundle_top_curriculum_priorities(value: Any, target: ValidationTarget) -> None:

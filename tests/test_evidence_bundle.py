@@ -336,6 +336,69 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(failed_checks[0]["scope"]["gate"], "test_gate")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
+    def test_evidence_bundle_blocks_validation_skipped_gates(self):
+        validation_required_schemas = (
+            "hfr.training_gate.v1",
+            "hfr.compare_gate.v1",
+            "hfr.reviewed_gate.v1",
+            "hfr.review_calibration.v1",
+        )
+        for schema_version in validation_required_schemas:
+            with self.subTest(schema_version=schema_version), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                runs = root / "runs"
+                runs.mkdir()
+                gate_path = root / "gate.json"
+                bundle_path = root / "evidence_bundle.json"
+                gate_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": schema_version,
+                            "passed": True,
+                            "metrics": {
+                                "validation": {
+                                    "available": False,
+                                    "passed": False,
+                                    "strict": False,
+                                    "target_count": 0,
+                                    "error_count": 0,
+                                    "warning_count": 0,
+                                }
+                            },
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+                code = run_cli(
+                    [
+                        "evidence-bundle",
+                        "--runs",
+                        str(runs),
+                        "--gate",
+                        str(gate_path),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                )
+
+                self.assertEqual(code, 1)
+                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+                self.assertFalse(bundle["passed"])
+                self.assertEqual(bundle["decision"]["recommendation"], "block_handoff")
+                failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+                self.assertIn("gate_validation_passed", failed_checks)
+                gate_metrics = bundle["metrics"]["gates"][0]
+                self.assertEqual(gate_metrics["schema_version"], schema_version)
+                self.assertTrue(gate_metrics["passed"])
+                self.assertFalse(gate_metrics["validation"]["available"])
+                self.assertFalse(gate_metrics["validation"]["passed"])
+                blocking_checks = {check["id"] for check in bundle["decision"]["blocking_checks"]}
+                self.assertIn("gate_validation_passed", blocking_checks)
+                self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
     def test_validate_rejects_stale_bundle_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
