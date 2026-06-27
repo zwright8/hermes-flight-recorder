@@ -42,6 +42,14 @@
       "name": "state_diff"
     },
     {
+      "artifact": "run_digest",
+      "artifact_schema_version": "hfr.run_digest.v1",
+      "description": "Compact per-run evidence digest emitted as run_digest.json.",
+      "filename": "run_digest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/run_digest.v1.schema.json",
+      "name": "run_digest"
+    },
+    {
       "artifact": "evidence_bundle",
       "artifact_schema_version": "hfr.evidence_bundle.v1",
       "description": "Evidence handoff manifest emitted by evidence-bundle.",

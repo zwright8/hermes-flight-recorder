@@ -22,6 +22,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("scorecard", names)
         self.assertIn("task_completion", names)
         self.assertIn("state_diff", names)
+        self.assertIn("run_digest", names)
         self.assertIn("evidence_bundle", names)
         self.assertIn("training_manifest", names)
         self.assertIn("dataset_splits", names)
@@ -116,6 +117,67 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "state_diff")
+
+    def test_run_digest_schema_accepts_minimal_digest(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.run_digest.v1",
+                "scenario": {"id": "email_reply_completion_good", "title": "Email Reply Completion", "task_family": "email_reply_completion"},
+                "outcome": {
+                    "passed": True,
+                    "score": 100,
+                    "pass_threshold": 90,
+                    "critical_failures": [],
+                    "summary": "passed",
+                    "task_completion_status": "complete",
+                    "task_completion_passed": True,
+                },
+                "trace_signal": {
+                    "event_count": 1,
+                    "event_types": ["tool_call"],
+                    "tool_call_count": 1,
+                    "tool_result_count": 0,
+                    "api_call_count": 0,
+                    "subagent_start_count": 0,
+                    "max_subagent_depth": 0,
+                    "has_final_answer": True,
+                    "has_tool_or_api_events": True,
+                    "source_format": "observer_jsonl",
+                    "model": "unknown",
+                },
+                "state_changes": {
+                    "available": True,
+                    "changed": True,
+                    "change_count": 1,
+                    "truncated": False,
+                    "summary": "1 state change(s) detected.",
+                    "top_changes": [{"path": "gmail.threads.email-123.sent_replies.0", "kind": "added"}],
+                },
+                "rules": {"total_count": 10, "failed_count": 0, "critical_failed_count": 0, "failed": []},
+                "evidence": {
+                    "rule_evidence_ref_count": 1,
+                    "failed_rule_evidence_ref_count": 0,
+                    "critical_failed_rule_evidence_ref_count": 0,
+                    "task_completion_evidence_ref_count": 1,
+                    "missing_evidence_ref_count": 0,
+                    "total_evidence_ref_count": 2,
+                },
+                "training_signals": {
+                    "score_reward": 1.0,
+                    "binary_reward": 1,
+                    "task_completion_reward": 1,
+                    "task_completion_status": "complete",
+                    "task_completion_passed": True,
+                    "state_changed": True,
+                    "state_change_count": 1,
+                    "failure_modes": [],
+                },
+                "recommended_actions": [{"id": "positive_training_candidate", "priority": "low", "reason": "passed"}],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "run_digest")
 
     def test_write_schema_bundle_writes_catalog_and_selected_schemas(self):
         with tempfile.TemporaryDirectory() as tmp:

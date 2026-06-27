@@ -97,11 +97,12 @@ flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json
 flightrecorder schemas --check scenarios/prompt_injection_good.json --name scenario
 flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
+flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
 
 The bundled catalog currently covers scenarios, normalized traces, scorecards,
-task-completion verdicts, state diffs, evidence bundles, training manifests,
-dataset split manifests, compare-RL manifests, review manifests,
+task-completion verdicts, state diffs, run digests, evidence bundles, training
+manifests, dataset split manifests, compare-RL manifests, review manifests,
 reviewed-export manifests, trainer preflights, and trainer launch checks. These
 schemas are compatibility contracts for artifact shape. `flightrecorder schemas --check` performs a
 dependency-free conformance check for the bundled schema subset; use
@@ -354,6 +355,11 @@ Each run directory contains:
   required state checks, and before/after state transitions. This file answers
   "did the assigned task complete with observable evidence?" without requiring a
   downstream script to parse every rule.
+- `run_digest.json`: compact per-run evidence handoff derived from the
+  scenario, normalized trace, scorecard, task-completion verdict, and optional
+  state diff. It summarizes outcome, failed rules, evidence-ref counts, trace
+  signal, state changes, reward hints, and recommended next actions for CI bots,
+  reviewers, repair agents, and future training jobs.
 - `report.html`: self-contained static flight-recorder report. When
   `state_diff.json` is present, the report includes a State Changes table with
   changed paths and redacted before/after values.
@@ -985,6 +991,22 @@ value. When both snapshots are available, `run` also emits `state_diff.json`,
 which gives humans, CI, and future training jobs a compact list of changed state
 paths. The diff is explanatory evidence; the scenario assertions and scorecard
 still decide whether the task actually passed.
+Every run also emits `run_digest.json`, the smallest machine-readable answer to
+"what happened, what proves it, what changed, and what should improve next?"
+Regenerate or render it from an existing run directory with:
+
+```bash
+flightrecorder digest \
+  --run runs/email_reply_completion_good \
+  --out runs/email_reply_completion_good/run_digest.json \
+  --markdown-out runs/email_reply_completion_good/run_digest.md
+```
+
+Use the digest when an automation needs quick routing, reward hints, or repair
+signals without scraping `report.html` or re-implementing the full scorecard
+parser. Treat it as a derived index, not the source of truth: validation checks
+that it still matches `scorecard.json`, `task_completion.json`,
+`normalized_trace.json`, and `state_diff.json` when present.
 For local artifacts or connector wrappers that already know the observed facts,
 `capture-state` can build the JSON snapshot:
 
@@ -1293,6 +1315,9 @@ scenario directory or single scenario + trace artifact
   redactor -> normalized_trace.json
           |
           v
+  evidence digest -> run_digest.json
+          |
+          v
 	  static report renderer -> report.html
 	          |
 	          v
@@ -1406,6 +1431,8 @@ Successful output includes:
 - `normalized_trace.json`: canonical `hfr.trace.v1` observer trace.
 - `scorecard.json`: deterministic pass/fail evidence for the live run.
 - `task_completion.json`: standalone task-completion verdict for the live run.
+- `run_digest.json`: compact per-run handoff for CI, review, repair, and
+  future training loops.
 - `report.html`: static report suitable for a maintainer demo.
 - `artifact_lineage.json`: file-hash and evidence-ref provenance for the run.
 
@@ -1419,9 +1446,10 @@ flightrecorder validate \
 
 Current live-smoke summaries use `hfr.live_smoke.summary.v2`, which requires
 runtime provenance such as Python version, platform, Hermes git commit, Hermes
-dirty state, Flight Recorder git commit, and Flight Recorder dirty state. Legacy
-v1 summaries still validate in non-strict mode, but strict validation warns that
-they are weaker evidence because they cannot identify the exact runtime origin.
+dirty state, Flight Recorder git commit, Flight Recorder dirty state, and the
+generated `run_digest.json` path. Legacy v1 summaries still validate in
+non-strict mode, but strict validation warns that they are weaker evidence
+because they cannot identify the exact runtime origin.
 
 ## Release Check
 

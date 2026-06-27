@@ -18,6 +18,7 @@ flightrecorder schemas --name training_manifest --out training_manifest.schema.j
 flightrecorder schemas --check runs/training_export/manifest.json
 flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
+flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
 
 Treat those JSON Schemas as shape contracts. `flightrecorder schemas --check`
@@ -489,6 +490,20 @@ paths. Exported episodes carry a compact `state_diff` summary plus
 `state_changed` and `state_change_count` fields so trainer pipelines can filter
 or weight examples by observed task-state change without reading full
 snapshots.
+Runs also emit `run_digest.json`, a compact per-run handoff for automation and
+future trainers. It indexes the useful derived signals in one small object:
+outcome, task-completion status, trace signal, state-change summary, failed
+rules, evidence-ref counts, reward hints, failure modes, and recommended
+actions. Use it to route repair jobs, prioritize human review, or attach
+run-level metadata to an RL pipeline without scraping HTML reports:
+
+```bash
+flightrecorder digest \
+  --run runs/email_reply_completion_good \
+  --out runs/email_reply_completion_good/run_digest.json \
+  --markdown-out runs/email_reply_completion_good/run_digest.md
+```
+
 Validate captured snapshots with `flightrecorder validate --state-snapshot
 <snapshot.json> --strict`; the validator checks the captured schema and
 recomputes file hashes when the captured paths are still available.

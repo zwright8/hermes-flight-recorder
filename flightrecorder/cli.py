@@ -41,6 +41,7 @@ from .compare_gate import (
     load_compare_gate_policy,
 )
 from .decision_gate import DecisionGateError, evaluate_decision_gate
+from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
@@ -118,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         TrainingGatePolicyError,
         CompareGatePolicyError,
         DecisionGateError,
+        RunDigestError,
         EvidenceCoverageError,
         EvidenceBundleError,
         ReviewCalibrationError,
@@ -170,6 +172,21 @@ def cmd_report(args: argparse.Namespace) -> int:
     state_diff = _read_json(Path(args.state_diff)) if args.state_diff else None
     write_report(scenario, trace, scorecard, args.out, state_diff=state_diff)
     print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_digest(args: argparse.Namespace) -> int:
+    scenario, trace, scorecard, state_diff = _load_digest_inputs(args)
+    digest = build_run_digest(scenario, trace, scorecard, state_diff=state_diff)
+    out_path = Path(args.out) if args.out else _default_digest_out(args)
+    if out_path is None:
+        raise RunDigestError("--out is required when --run is not supplied")
+    _write_json(out_path, digest)
+    if args.markdown_out:
+        markdown_path = Path(args.markdown_out)
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(render_run_digest_markdown(digest), encoding="utf-8")
+    print(f"wrote {out_path}")
     return 0
 
 
@@ -377,6 +394,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                     "run_dir": _display_path(run_dir, args.preserve_paths),
                     "report": _display_path(result["paths"]["report"], args.preserve_paths),
                     "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
+                    "run_digest": _display_path(result["paths"]["run_digest"], args.preserve_paths),
                     "lineage": _display_path(result["paths"]["lineage"], args.preserve_paths),
                     "passed": bool(scorecard["passed"]),
                     "score": scorecard["score"],
@@ -695,6 +713,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         suite_trend_paths=args.suite_trend,
         state_snapshot_paths=args.state_snapshot,
         state_diff_paths=args.state_diff,
+        run_digest_paths=args.run_digest,
         live_smoke_summary_paths=args.live_smoke_summary,
         strict=args.strict,
     )
@@ -1334,6 +1353,16 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--out", required=True)
     report.set_defaults(func=cmd_report)
 
+    digest = subparsers.add_parser("digest", help="Write a compact per-run evidence digest")
+    digest.add_argument("--run", help="Existing run directory containing normalized_trace.json and scorecard.json")
+    digest.add_argument("--scenario", help="Scenario JSON; optional with --run when lineage/scorecard metadata is enough")
+    digest.add_argument("--trace", help="Normalized trace JSON; defaults to <run>/normalized_trace.json with --run")
+    digest.add_argument("--score", help="Scorecard JSON; defaults to <run>/scorecard.json with --run")
+    digest.add_argument("--state-diff", help="Optional hfr.state_diff.v1 JSON; defaults to <run>/state_diff.json if present")
+    digest.add_argument("--out", help="Digest JSON output path; defaults to <run>/run_digest.json with --run")
+    digest.add_argument("--markdown-out", help="Optional Markdown digest output path")
+    digest.set_defaults(func=cmd_digest)
+
     capture_state = subparsers.add_parser(
         "capture-state",
         help="Capture a JSON state snapshot from local evidence sources",
@@ -1584,6 +1613,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
     validate.add_argument("--state-snapshot", action="append", default=[], help="Validate one hfr.state_snapshot.v1 JSON file; may be repeated")
     validate.add_argument("--state-diff", action="append", default=[], help="Validate one hfr.state_diff.v1 JSON file; may be repeated")
+    validate.add_argument("--run-digest", action="append", default=[], help="Validate one hfr.run_digest.v1 JSON file; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
@@ -2800,6 +2830,72 @@ def _merge_unique_strings(policy_values: Any, cli_values: list[str]) -> list[str
     return merged
 
 
+def _load_digest_inputs(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+    run_dir = Path(args.run) if args.run else None
+    trace_path = Path(args.trace) if args.trace else (run_dir / "normalized_trace.json" if run_dir is not None else None)
+    score_path = Path(args.score) if args.score else (run_dir / "scorecard.json" if run_dir is not None else None)
+    state_diff_path = Path(args.state_diff) if args.state_diff else None
+    if state_diff_path is None and run_dir is not None and (run_dir / "state_diff.json").exists():
+        state_diff_path = run_dir / "state_diff.json"
+    if trace_path is None or score_path is None:
+        raise RunDigestError("--trace and --score are required when --run is not supplied")
+    trace = _read_json(trace_path)
+    scorecard = _read_json(score_path)
+    state_diff = _read_json(state_diff_path) if state_diff_path is not None else None
+    if args.scenario:
+        scenario = load_scenario(args.scenario)
+    elif run_dir is not None:
+        scenario = _scenario_stub_from_run(run_dir, scorecard)
+    else:
+        raise RunDigestError("--scenario is required when --run is not supplied")
+    return scenario, trace, scorecard, state_diff
+
+
+def _scenario_stub_from_run(run_dir: Path, scorecard: dict[str, Any]) -> dict[str, Any]:
+    lineage_path = run_dir / "artifact_lineage.json"
+    if lineage_path.exists():
+        lineage = _read_json(lineage_path)
+        scenario_path = _lineage_record_path(lineage, "inputs", "scenario")
+        if scenario_path is not None and not _looks_redacted_path(scenario_path):
+            candidate = Path(scenario_path)
+            if not candidate.is_absolute():
+                candidate = (lineage_path.parent / candidate).resolve()
+            if candidate.exists():
+                return load_scenario(candidate)
+        scenario = lineage.get("scenario") if isinstance(lineage.get("scenario"), dict) else {}
+        if scenario.get("id") or scenario.get("title"):
+            return {
+                "id": str(scenario.get("id") or scorecard.get("scenario_id") or "unknown"),
+                "title": str(scenario.get("title") or scorecard.get("scenario_title") or scenario.get("id") or "unknown"),
+                "policy": {"secret_patterns": []},
+                "assertions": {},
+            }
+    return {
+        "id": str(scorecard.get("scenario_id") or "unknown"),
+        "title": str(scorecard.get("scenario_title") or scorecard.get("scenario_id") or "unknown"),
+        "policy": {"secret_patterns": []},
+        "assertions": {},
+    }
+
+
+def _lineage_record_path(lineage: dict[str, Any], collection_name: str, record_name: str) -> str | None:
+    records = lineage.get(collection_name)
+    if not isinstance(records, list):
+        return None
+    for record in records:
+        if isinstance(record, dict) and record.get("name") == record_name and isinstance(record.get("path"), str):
+            return record["path"]
+    return None
+
+
+def _looks_redacted_path(value: str) -> bool:
+    return value.startswith("<redacted:") or value.startswith("<missing-")
+
+
+def _default_digest_out(args: argparse.Namespace) -> Path | None:
+    return Path(args.run) / "run_digest.json" if args.run else None
+
+
 def _run_scenario_artifacts(
     scenario_path: str | Path,
     out_dir: str | Path,
@@ -2852,6 +2948,7 @@ def _run_scenario_artifacts(
         else None
     )
     state_diff_path = run_dir / "state_diff.json" if state_diff is not None else None
+    run_digest_path = run_dir / "run_digest.json"
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     _write_json(normalized_path, trace)
@@ -2863,6 +2960,8 @@ def _run_scenario_artifacts(
         _write_json(state_diff_path, state_diff)
     _write_json(score_path, scorecard)
     _write_json(task_completion_path, scorecard["task_completion"])
+    run_digest = build_run_digest(scenario, trace, scorecard, state_diff=state_diff)
+    _write_json(run_digest_path, run_digest)
     raw_trace_path = None
     if write_sensitive_trace:
         raw_trace_path = run_dir / "raw_trace.sensitive.json"
@@ -2895,6 +2994,7 @@ def _run_scenario_artifacts(
             "state_diff": state_diff_path,
             "scorecard": score_path,
             "task_completion": task_completion_path,
+            "run_digest": run_digest_path,
             "report": report_path,
             "regression_scenario": regression_path,
             "junit": junit_out,
@@ -2919,6 +3019,7 @@ def _run_scenario_artifacts(
             "state_diff": state_diff_path,
             "scorecard": score_path,
             "task_completion": task_completion_path,
+            "run_digest": run_digest_path,
             "report": report_path,
             "lineage": lineage_path,
         },

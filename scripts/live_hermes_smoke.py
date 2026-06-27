@@ -276,6 +276,7 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
         "report": str(report_path),
         "lineage": str(run_result["paths"]["lineage"]),
         "task_completion": str(run_result["paths"]["task_completion"]),
+        "run_digest": str(run_result["paths"]["run_digest"]),
         "environment": _environment_summary(hermes_root, flight_root),
     }
 

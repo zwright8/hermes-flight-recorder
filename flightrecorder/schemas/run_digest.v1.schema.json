@@ -1,0 +1,448 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/run_digest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Compact per-run evidence digest emitted as run_digest.json.",
+  "properties": {
+    "evidence": {
+      "$ref": "#/$defs/evidence"
+    },
+    "outcome": {
+      "$ref": "#/$defs/outcome"
+    },
+    "recommended_actions": {
+      "items": {
+        "$ref": "#/$defs/recommended_action"
+      },
+      "type": "array"
+    },
+    "rules": {
+      "$ref": "#/$defs/rules"
+    },
+    "scenario": {
+      "$ref": "#/$defs/scenario"
+    },
+    "schema_version": {
+      "const": "hfr.run_digest.v1"
+    },
+    "state_changes": {
+      "$ref": "#/$defs/state_changes"
+    },
+    "trace_signal": {
+      "$ref": "#/$defs/trace_signal"
+    },
+    "training_signals": {
+      "$ref": "#/$defs/training_signals"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scenario",
+    "outcome",
+    "trace_signal",
+    "state_changes",
+    "rules",
+    "evidence",
+    "training_signals",
+    "recommended_actions"
+  ],
+  "title": "Hermes Flight Recorder Run Digest",
+  "type": "object",
+  "$defs": {
+    "evidence": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failed_rule_evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed_rule_evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule_evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task_completion_evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rule_evidence_ref_count",
+        "failed_rule_evidence_ref_count",
+        "critical_failed_rule_evidence_ref_count",
+        "task_completion_evidence_ref_count",
+        "missing_evidence_ref_count",
+        "total_evidence_ref_count"
+      ],
+      "type": "object"
+    },
+    "failed_rule": {
+      "additionalProperties": true,
+      "properties": {
+        "critical": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "penalty": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "critical",
+        "penalty",
+        "evidence",
+        "evidence_ref_count",
+        "evidence_refs"
+      ],
+      "type": "object"
+    },
+    "failure_mode": {
+      "additionalProperties": true,
+      "properties": {
+        "critical": {
+          "type": "boolean"
+        },
+        "evidence_ref_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rule_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "critical",
+        "evidence_ref_count"
+      ],
+      "type": "object"
+    },
+    "outcome": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failures": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pass_threshold": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "score": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "task_completion_passed": {
+          "type": "boolean"
+        },
+        "task_completion_status": {
+          "enum": [
+            "complete",
+            "incomplete",
+            "not_applicable"
+          ]
+        }
+      },
+      "required": [
+        "passed",
+        "score",
+        "pass_threshold",
+        "critical_failures",
+        "summary",
+        "task_completion_status",
+        "task_completion_passed"
+      ],
+      "type": "object"
+    },
+    "recommended_action": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "priority": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "priority",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "rules": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failed_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed": {
+          "items": {
+            "$ref": "#/$defs/failed_rule"
+          },
+          "type": "array"
+        },
+        "failed_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_count",
+        "failed_count",
+        "critical_failed_count",
+        "failed"
+      ],
+      "type": "object"
+    },
+    "scenario": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "task_family": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "task_family"
+      ],
+      "type": "object"
+    },
+    "state_change": {
+      "additionalProperties": true,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "state_changes": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "change_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "top_changes": {
+          "items": {
+            "$ref": "#/$defs/state_change"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "available",
+        "changed",
+        "change_count",
+        "truncated",
+        "summary",
+        "top_changes"
+      ],
+      "type": "object"
+    },
+    "trace_signal": {
+      "additionalProperties": true,
+      "properties": {
+        "api_call_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "event_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "event_types": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "has_final_answer": {
+          "type": "boolean"
+        },
+        "has_tool_or_api_events": {
+          "type": "boolean"
+        },
+        "max_subagent_depth": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "source_format": {
+          "type": "string"
+        },
+        "subagent_start_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_call_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_result_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "event_count",
+        "event_types",
+        "tool_call_count",
+        "tool_result_count",
+        "api_call_count",
+        "subagent_start_count",
+        "max_subagent_depth",
+        "has_final_answer",
+        "has_tool_or_api_events",
+        "source_format",
+        "model"
+      ],
+      "type": "object"
+    },
+    "training_signals": {
+      "additionalProperties": true,
+      "properties": {
+        "binary_reward": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_modes": {
+          "items": {
+            "$ref": "#/$defs/failure_mode"
+          },
+          "type": "array"
+        },
+        "score_reward": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "state_change_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state_changed": {
+          "type": "boolean"
+        },
+        "task_completion_passed": {
+          "type": "boolean"
+        },
+        "task_completion_reward": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task_completion_status": {
+          "enum": [
+            "complete",
+            "incomplete",
+            "not_applicable"
+          ]
+        }
+      },
+      "required": [
+        "score_reward",
+        "binary_reward",
+        "task_completion_reward",
+        "task_completion_status",
+        "task_completion_passed",
+        "state_changed",
+        "state_change_count",
+        "failure_modes"
+      ],
+      "type": "object"
+    }
+  }
+}

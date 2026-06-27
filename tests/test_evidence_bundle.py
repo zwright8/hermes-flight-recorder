@@ -146,6 +146,7 @@ class EvidenceBundleTests(unittest.TestCase):
                         "report": "report.html",
                         "lineage": "artifact_lineage.json",
                         "task_completion": "task_completion.json",
+                        "run_digest": "run_digest.json",
                         "environment": {
                             "python_version": "3.11.0",
                             "python_implementation": "CPython",

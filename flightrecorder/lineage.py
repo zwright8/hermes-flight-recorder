@@ -118,6 +118,7 @@ def _artifact_graph(artifacts: dict[str, str | Path | None]) -> list[dict[str, A
         _edge(["scenario", "source_trace"], "normalized_trace", "normalize"),
         _edge(_score_inputs(present), "scorecard", "score"),
         _edge(["scorecard"], "task_completion", "summarize_task_completion"),
+        _edge(_run_digest_inputs(present), "run_digest", "summarize_run_evidence"),
         _edge(["scenario", "normalized_trace", "scorecard"], "report", "render"),
     ]
     if "junit" in present:
@@ -139,6 +140,13 @@ def _score_inputs(present: set[str]) -> list[str]:
         inputs.append("before_state_snapshot")
     if "state_snapshot" in present:
         inputs.append("state_snapshot")
+    return inputs
+
+
+def _run_digest_inputs(present: set[str]) -> list[str]:
+    inputs = ["scenario", "normalized_trace", "scorecard", "task_completion"]
+    if "state_diff" in present:
+        inputs.append("state_diff")
     return inputs
 
 

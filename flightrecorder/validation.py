@@ -15,6 +15,7 @@ from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
+from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
@@ -66,6 +67,7 @@ from .training import (
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
+_COMPANION_NOT_PROVIDED = object()
 
 
 @dataclass
@@ -114,6 +116,7 @@ def validate_artifacts(
     suite_trend_paths: list[str | Path] | None = None,
     state_snapshot_paths: list[str | Path] | None = None,
     state_diff_paths: list[str | Path] | None = None,
+    run_digest_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
@@ -169,6 +172,8 @@ def validate_artifacts(
         targets.append(validate_state_snapshot(state_snapshot_path))
     for state_diff_path in state_diff_paths or []:
         targets.append(validate_state_diff(state_diff_path))
+    for run_digest_path in run_digest_paths or []:
+        targets.append(validate_run_digest(run_digest_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     if not targets:
@@ -222,6 +227,7 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     trace_path = run_dir / "normalized_trace.json"
     score_path = run_dir / "scorecard.json"
     task_completion_path = run_dir / "task_completion.json"
+    run_digest_path = run_dir / "run_digest.json"
     state_snapshot_path = run_dir / "state_snapshot.json"
     state_diff_path = run_dir / "state_diff.json"
     report_path = run_dir / "report.html"
@@ -234,6 +240,12 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
         "task_completion.json",
         "rerun the run to emit the standalone task-completion verdict",
     )
+    run_digest = _read_object_optional(
+        run_digest_path,
+        target,
+        "run_digest.json",
+        "rerun the run to emit the compact per-run evidence digest",
+    )
     lineage = _read_object_optional(lineage_path, target, "artifact_lineage.json", "rerun the run to emit provenance metadata")
     state_snapshot = _read_object(state_snapshot_path, target, "state_snapshot.json") if state_snapshot_path.exists() else None
     state_diff = _read_object(state_diff_path, target, "state_diff.json") if state_diff_path.exists() else None
@@ -245,6 +257,16 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
         _validate_task_completion(task_completion, target, "task_completion")
         if isinstance(scorecard, dict) and scorecard.get("task_completion") != task_completion:
             target.errors.append("task_completion.json must match scorecard.task_completion.")
+    if run_digest is not None:
+        _validate_run_digest(
+            run_digest,
+            target,
+            "run_digest",
+            trace=trace,
+            scorecard=scorecard,
+            task_completion=task_completion,
+            state_diff=state_diff,
+        )
     if lineage is not None:
         _validate_lineage(lineage, target, run_dir, trace, scorecard)
     if isinstance(state_snapshot, dict) and state_snapshot.get("schema_version") == STATE_SNAPSHOT_SCHEMA_VERSION:
@@ -671,6 +693,16 @@ def validate_state_diff(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_run_digest(path: str | Path) -> ValidationTarget:
+    """Validate a compact per-run evidence digest artifact."""
+    digest_path = Path(path)
+    target = ValidationTarget("run_digest", str(digest_path))
+    digest = _read_object(digest_path, target, "run_digest.json")
+    if digest is not None:
+        _validate_run_digest(digest, target, "run_digest")
+    return target
+
+
 def validate_review_calibration(path: str | Path) -> ValidationTarget:
     """Validate a review-calibration report."""
     calibration_path = Path(path)
@@ -711,7 +743,10 @@ def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarg
     for field_name in ("hermes_exit_code", "mock_request_count", "chat_completion_request_count"):
         if not _is_non_negative_int(summary.get(field_name)):
             target.errors.append(f"live_smoke_summary.{field_name} must be a non-negative integer.")
-    for field_name in ("observer_file", "report", "lineage", "task_completion", "summary"):
+    required_paths = ["observer_file", "report", "lineage", "task_completion", "summary"]
+    if schema_version == LIVE_SMOKE_SUMMARY_SCHEMA_VERSION:
+        required_paths.append("run_digest")
+    for field_name in required_paths:
         if not isinstance(summary.get(field_name), str) or not summary.get(field_name):
             target.errors.append(f"live_smoke_summary.{field_name} must be a non-empty string.")
     hooks = summary.get("hooks")
@@ -926,6 +961,309 @@ def _validate_state_diff_summary(summary: Any, target: ValidationTarget, label: 
             target.errors.append(f"{label}.changes[{index}].path must be a string.")
         if change.get("kind") not in {"", "added", "removed", "changed"}:
             target.errors.append(f"{label}.changes[{index}].kind must be added, removed, changed, or empty.")
+
+
+def _validate_run_digest(
+    digest: Any,
+    target: ValidationTarget,
+    label: str,
+    *,
+    trace: dict[str, Any] | None = None,
+    scorecard: dict[str, Any] | None = None,
+    task_completion: dict[str, Any] | None = None,
+    state_diff: Any = _COMPANION_NOT_PROVIDED,
+) -> None:
+    if not isinstance(digest, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _require_equal(digest, "schema_version", RUN_DIGEST_SCHEMA_VERSION, target, prefix=f"{label}.")
+
+    scenario = digest.get("scenario")
+    if not isinstance(scenario, dict):
+        target.errors.append(f"{label}.scenario must be an object.")
+        scenario = {}
+    for field_name in ("id", "title", "task_family"):
+        if not isinstance(scenario.get(field_name), str) or not scenario.get(field_name):
+            target.errors.append(f"{label}.scenario.{field_name} must be a non-empty string.")
+    if scorecard is not None:
+        if scenario.get("id") != scorecard.get("scenario_id"):
+            target.errors.append(f"{label}.scenario.id must match scorecard.scenario_id.")
+        if scenario.get("title") != scorecard.get("scenario_title"):
+            target.errors.append(f"{label}.scenario.title must match scorecard.scenario_title.")
+
+    outcome = digest.get("outcome")
+    if not isinstance(outcome, dict):
+        target.errors.append(f"{label}.outcome must be an object.")
+        outcome = {}
+    _validate_run_digest_outcome(outcome, target, f"{label}.outcome", scorecard, task_completion)
+
+    trace_signal = digest.get("trace_signal")
+    if not isinstance(trace_signal, dict):
+        target.errors.append(f"{label}.trace_signal must be an object.")
+        trace_signal = {}
+    _validate_run_digest_trace_signal(trace_signal, target, f"{label}.trace_signal", trace)
+
+    state_changes = digest.get("state_changes")
+    if not isinstance(state_changes, dict):
+        target.errors.append(f"{label}.state_changes must be an object.")
+        state_changes = {}
+    _validate_run_digest_state_changes(state_changes, target, f"{label}.state_changes", state_diff)
+
+    rules = digest.get("rules")
+    if not isinstance(rules, dict):
+        target.errors.append(f"{label}.rules must be an object.")
+        rules = {}
+    _validate_run_digest_rules(rules, target, f"{label}.rules", scorecard)
+
+    evidence = digest.get("evidence")
+    if not isinstance(evidence, dict):
+        target.errors.append(f"{label}.evidence must be an object.")
+        evidence = {}
+    _validate_run_digest_evidence(evidence, target, f"{label}.evidence", scorecard, task_completion)
+
+    training = digest.get("training_signals")
+    if not isinstance(training, dict):
+        target.errors.append(f"{label}.training_signals must be an object.")
+        training = {}
+    _validate_run_digest_training(training, target, f"{label}.training_signals", outcome, state_changes, rules)
+
+    actions = digest.get("recommended_actions")
+    if not isinstance(actions, list):
+        target.errors.append(f"{label}.recommended_actions must be a list.")
+    else:
+        for index, action in enumerate(actions):
+            if not isinstance(action, dict):
+                target.errors.append(f"{label}.recommended_actions[{index}] must be an object.")
+                continue
+            for field_name in ("id", "priority", "reason"):
+                if not isinstance(action.get(field_name), str) or not action.get(field_name):
+                    target.errors.append(f"{label}.recommended_actions[{index}].{field_name} must be a non-empty string.")
+
+
+def _validate_run_digest_outcome(
+    outcome: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    scorecard: dict[str, Any] | None,
+    task_completion: dict[str, Any] | None,
+) -> None:
+    if not isinstance(outcome.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    if not _is_int_between(outcome.get("score"), 0, 100):
+        target.errors.append(f"{label}.score must be an integer from 0 to 100.")
+    if not _is_int_between(outcome.get("pass_threshold"), 0, 100):
+        target.errors.append(f"{label}.pass_threshold must be an integer from 0 to 100.")
+    if not _is_string_list(outcome.get("critical_failures")):
+        target.errors.append(f"{label}.critical_failures must be a list of strings.")
+    if not isinstance(outcome.get("summary"), str):
+        target.errors.append(f"{label}.summary must be a string.")
+    if outcome.get("task_completion_status") not in {"complete", "incomplete", "not_applicable"}:
+        target.errors.append(f"{label}.task_completion_status must be complete, incomplete, or not_applicable.")
+    if not isinstance(outcome.get("task_completion_passed"), bool):
+        target.errors.append(f"{label}.task_completion_passed must be a boolean.")
+    if scorecard is not None:
+        for field_name in ("passed", "score", "pass_threshold", "critical_failures", "summary"):
+            if outcome.get(field_name) != scorecard.get(field_name):
+                target.errors.append(f"{label}.{field_name} must match scorecard.{field_name}.")
+    task = task_completion
+    if task is None and isinstance(scorecard, dict) and isinstance(scorecard.get("task_completion"), dict):
+        task = scorecard["task_completion"]
+    if isinstance(task, dict):
+        if outcome.get("task_completion_status") != task.get("status"):
+            target.errors.append(f"{label}.task_completion_status must match task_completion.status.")
+        if outcome.get("task_completion_passed") != task.get("passed"):
+            target.errors.append(f"{label}.task_completion_passed must match task_completion.passed.")
+
+
+def _validate_run_digest_trace_signal(
+    signal: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    trace: dict[str, Any] | None,
+) -> None:
+    for field_name in (
+        "event_count",
+        "tool_call_count",
+        "tool_result_count",
+        "api_call_count",
+        "subagent_start_count",
+        "max_subagent_depth",
+    ):
+        if not _is_non_negative_int(signal.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    if not _is_string_list(signal.get("event_types")):
+        target.errors.append(f"{label}.event_types must be a list of strings.")
+    for field_name in ("has_final_answer", "has_tool_or_api_events"):
+        if not isinstance(signal.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    for field_name in ("source_format", "model"):
+        if not isinstance(signal.get(field_name), str) or not signal.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if trace is None:
+        return
+    expected = _run_digest_trace_signal(trace)
+    for field_name, expected_value in expected.items():
+        if signal.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {signal.get(field_name)!r}.")
+
+
+def _validate_run_digest_state_changes(
+    state_changes: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    state_diff: Any,
+) -> None:
+    for field_name in ("available", "changed", "truncated"):
+        if not isinstance(state_changes.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if not _is_non_negative_int(state_changes.get("change_count")):
+        target.errors.append(f"{label}.change_count must be a non-negative integer.")
+    if not isinstance(state_changes.get("summary"), str):
+        target.errors.append(f"{label}.summary must be a string.")
+    top_changes = state_changes.get("top_changes")
+    if not isinstance(top_changes, list):
+        target.errors.append(f"{label}.top_changes must be a list.")
+        top_changes = []
+    for index, change in enumerate(top_changes):
+        if not isinstance(change, dict):
+            target.errors.append(f"{label}.top_changes[{index}] must be an object.")
+            continue
+        if not isinstance(change.get("path"), str):
+            target.errors.append(f"{label}.top_changes[{index}].path must be a string.")
+        if not isinstance(change.get("kind"), str):
+            target.errors.append(f"{label}.top_changes[{index}].kind must be a string.")
+    if state_diff is _COMPANION_NOT_PROVIDED:
+        return
+    if state_diff is None:
+        if state_changes.get("available") is not False:
+            target.errors.append(f"{label}.available must be false when state_diff.json is absent.")
+        return
+    if state_changes.get("available") is not True:
+        target.errors.append(f"{label}.available must be true when state_diff.json is present.")
+    expected_fields = {
+        "changed": state_diff.get("changed"),
+        "change_count": state_diff.get("change_count"),
+        "truncated": state_diff.get("truncated"),
+        "summary": state_diff.get("summary"),
+    }
+    for field_name, expected_value in expected_fields.items():
+        if state_changes.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match state_diff.{field_name}.")
+    expected_top = [
+        {"path": str(change.get("path") or ""), "kind": str(change.get("kind") or "")}
+        for change in (state_diff.get("changes") if isinstance(state_diff.get("changes"), list) else [])[:10]
+        if isinstance(change, dict)
+    ]
+    if top_changes != expected_top:
+        target.errors.append(f"{label}.top_changes must match the first state_diff changes by path/kind.")
+
+
+def _validate_run_digest_rules(
+    rules: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    scorecard: dict[str, Any] | None,
+) -> None:
+    for field_name in ("total_count", "failed_count", "critical_failed_count"):
+        if not _is_non_negative_int(rules.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    failed = rules.get("failed")
+    if not isinstance(failed, list):
+        target.errors.append(f"{label}.failed must be a list.")
+        failed = []
+    for index, rule in enumerate(failed):
+        if not isinstance(rule, dict):
+            target.errors.append(f"{label}.failed[{index}] must be an object.")
+            continue
+        for field_name in ("id", "name"):
+            if not isinstance(rule.get(field_name), str) or not rule.get(field_name):
+                target.errors.append(f"{label}.failed[{index}].{field_name} must be a non-empty string.")
+        if not isinstance(rule.get("critical"), bool):
+            target.errors.append(f"{label}.failed[{index}].critical must be a boolean.")
+        if not _is_int_between(rule.get("penalty"), 0, 100):
+            target.errors.append(f"{label}.failed[{index}].penalty must be an integer from 0 to 100.")
+        if not _is_non_negative_int(rule.get("evidence_ref_count")):
+            target.errors.append(f"{label}.failed[{index}].evidence_ref_count must be a non-negative integer.")
+        if not isinstance(rule.get("evidence"), list):
+            target.errors.append(f"{label}.failed[{index}].evidence must be a list.")
+        if not isinstance(rule.get("evidence_refs"), list):
+            target.errors.append(f"{label}.failed[{index}].evidence_refs must be a list.")
+    if scorecard is None:
+        return
+    score_rules = [rule for rule in scorecard.get("rules", []) if isinstance(rule, dict)]
+    failed_score_rules = [rule for rule in score_rules if rule.get("passed") is False]
+    if rules.get("total_count") != len(score_rules):
+        target.errors.append(f"{label}.total_count must match scorecard.rules length.")
+    if rules.get("failed_count") != len(failed_score_rules):
+        target.errors.append(f"{label}.failed_count must match failed scorecard rules.")
+    critical_failed = sum(1 for rule in failed_score_rules if rule.get("critical") is True)
+    if rules.get("critical_failed_count") != critical_failed:
+        target.errors.append(f"{label}.critical_failed_count must match failed critical scorecard rules.")
+    expected_failed_ids = [str(rule.get("id") or "unknown") for rule in failed_score_rules]
+    actual_failed_ids = [str(rule.get("id") or "unknown") for rule in failed if isinstance(rule, dict)]
+    if actual_failed_ids != expected_failed_ids:
+        target.errors.append(f"{label}.failed ids must match scorecard failed rule order.")
+
+
+def _validate_run_digest_evidence(
+    evidence: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    scorecard: dict[str, Any] | None,
+    task_completion: dict[str, Any] | None,
+) -> None:
+    for field_name in (
+        "rule_evidence_ref_count",
+        "failed_rule_evidence_ref_count",
+        "critical_failed_rule_evidence_ref_count",
+        "task_completion_evidence_ref_count",
+        "missing_evidence_ref_count",
+        "total_evidence_ref_count",
+    ):
+        if not _is_non_negative_int(evidence.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    if scorecard is None:
+        return
+    expected = _run_digest_evidence_counts(scorecard, task_completion)
+    for field_name, expected_value in expected.items():
+        if evidence.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} expected {expected_value}, got {evidence.get(field_name)!r}.")
+
+
+def _validate_run_digest_training(
+    training: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    outcome: dict[str, Any],
+    state_changes: dict[str, Any],
+    rules: dict[str, Any],
+) -> None:
+    reward = training.get("score_reward")
+    if not isinstance(reward, (int, float)) or isinstance(reward, bool) or not 0 <= float(reward) <= 1:
+        target.errors.append(f"{label}.score_reward must be numeric from 0 to 1.")
+    if training.get("binary_reward") not in {0, 1}:
+        target.errors.append(f"{label}.binary_reward must be 0 or 1.")
+    if training.get("task_completion_reward") not in {0, 1}:
+        target.errors.append(f"{label}.task_completion_reward must be 0 or 1.")
+    if training.get("task_completion_status") != outcome.get("task_completion_status"):
+        target.errors.append(f"{label}.task_completion_status must match outcome.task_completion_status.")
+    if training.get("task_completion_passed") != outcome.get("task_completion_passed"):
+        target.errors.append(f"{label}.task_completion_passed must match outcome.task_completion_passed.")
+    if training.get("state_changed") != state_changes.get("changed"):
+        target.errors.append(f"{label}.state_changed must match state_changes.changed.")
+    if training.get("state_change_count") != state_changes.get("change_count"):
+        target.errors.append(f"{label}.state_change_count must match state_changes.change_count.")
+    expected_binary = 1 if outcome.get("passed") is True else 0
+    if training.get("binary_reward") != expected_binary:
+        target.errors.append(f"{label}.binary_reward must match outcome.passed.")
+    expected_task_reward = 1 if outcome.get("task_completion_passed") is True else 0
+    if training.get("task_completion_reward") != expected_task_reward:
+        target.errors.append(f"{label}.task_completion_reward must match outcome.task_completion_passed.")
+    failure_modes = training.get("failure_modes")
+    if not isinstance(failure_modes, list):
+        target.errors.append(f"{label}.failure_modes must be a list.")
+    elif _is_non_negative_int(rules.get("failed_count")) and len(failure_modes) != rules.get("failed_count"):
+        target.errors.append(f"{label}.failure_modes length must match rules.failed_count.")
 
 
 def _validate_snapshot_file_record(
@@ -1229,6 +1567,10 @@ def _validate_lineage(
             target.errors.append(f"artifact_lineage.outputs missing {output_name!r}.")
             continue
         _validate_lineage_file_record(outputs[output_name], run_dir, target, f"artifact_lineage.outputs.{output_name}")
+    if "run_digest" in outputs:
+        _validate_lineage_file_record(outputs["run_digest"], run_dir, target, "artifact_lineage.outputs.run_digest")
+    else:
+        target.warnings.append("artifact_lineage.outputs missing 'run_digest'; rerun the run to fingerprint the evidence digest.")
     if "before_state_snapshot" in outputs:
         _validate_lineage_file_record(outputs["before_state_snapshot"], run_dir, target, "artifact_lineage.outputs.before_state_snapshot")
     if "state_snapshot" in outputs:
@@ -7013,6 +7355,98 @@ def _lineage_basename(path_label: str) -> str:
     if path_label.startswith("<redacted:") and path_label.endswith(">"):
         return path_label[len("<redacted:") : -1]
     return path_label.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+
+
+def _run_digest_trace_signal(trace: dict[str, Any]) -> dict[str, Any]:
+    events = trace.get("events") if isinstance(trace.get("events"), list) else []
+    typed_events = [event for event in events if isinstance(event, dict)]
+    event_types = sorted({str(event.get("type")) for event in typed_events if event.get("type")})
+    tool_call_count = sum(1 for event in typed_events if event.get("type") == "tool_call")
+    api_call_count = _run_digest_api_call_count(trace, typed_events)
+    final_answer = trace.get("final_answer")
+    session = trace.get("session") if isinstance(trace.get("session"), dict) else {}
+    return {
+        "event_count": len(typed_events),
+        "event_types": event_types,
+        "tool_call_count": tool_call_count,
+        "tool_result_count": sum(1 for event in typed_events if event.get("type") == "tool_result"),
+        "api_call_count": api_call_count,
+        "subagent_start_count": sum(1 for event in typed_events if event.get("type") == "subagent_start"),
+        "max_subagent_depth": _run_digest_max_subagent_depth(typed_events),
+        "has_final_answer": isinstance(final_answer, str) and bool(final_answer.strip()),
+        "has_tool_or_api_events": tool_call_count > 0 or api_call_count > 0,
+        "source_format": str(session.get("source_format") or "unknown"),
+        "model": str(session.get("model") or "unknown"),
+    }
+
+
+def _run_digest_api_call_count(trace: dict[str, Any], events: list[dict[str, Any]]) -> int:
+    metadata = trace.get("metadata") if isinstance(trace.get("metadata"), dict) else {}
+    api_calls = metadata.get("api_calls")
+    if isinstance(api_calls, int) and not isinstance(api_calls, bool) and api_calls >= 0:
+        return api_calls
+    return sum(1 for event in events if event.get("type") == "api_call")
+
+
+def _run_digest_max_subagent_depth(events: list[dict[str, Any]]) -> int:
+    parent_by_session: dict[str, str | None] = {}
+    for event in events:
+        if event.get("type") != "subagent_start":
+            continue
+        session_id = event.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            parent = event.get("parent_session_id")
+            parent_by_session[session_id] = parent if isinstance(parent, str) and parent else None
+    max_depth = 0
+    for session_id in parent_by_session:
+        seen: set[str] = set()
+        depth = 1
+        parent = parent_by_session.get(session_id)
+        while parent and parent not in seen:
+            seen.add(parent)
+            if parent in parent_by_session:
+                depth += 1
+                parent = parent_by_session[parent]
+            else:
+                break
+        max_depth = max(max_depth, depth)
+    return max_depth
+
+
+def _run_digest_evidence_counts(
+    scorecard: dict[str, Any],
+    task_completion: dict[str, Any] | None,
+) -> dict[str, int]:
+    rules = [rule for rule in scorecard.get("rules", []) if isinstance(rule, dict)]
+    failed_rules = [rule for rule in rules if rule.get("passed") is False]
+    critical_failed_rules = [rule for rule in failed_rules if rule.get("critical") is True]
+    task = task_completion
+    if task is None and isinstance(scorecard.get("task_completion"), dict):
+        task = scorecard["task_completion"]
+    task_refs = task.get("evidence_refs") if isinstance(task, dict) and isinstance(task.get("evidence_refs"), list) else []
+    missing_refs = (
+        task.get("missing_evidence_refs")
+        if isinstance(task, dict) and isinstance(task.get("missing_evidence_refs"), list)
+        else []
+    )
+    rule_ref_count = _run_digest_rule_ref_count(rules)
+    return {
+        "rule_evidence_ref_count": rule_ref_count,
+        "failed_rule_evidence_ref_count": _run_digest_rule_ref_count(failed_rules),
+        "critical_failed_rule_evidence_ref_count": _run_digest_rule_ref_count(critical_failed_rules),
+        "task_completion_evidence_ref_count": len(task_refs),
+        "missing_evidence_ref_count": len(missing_refs),
+        "total_evidence_ref_count": rule_ref_count + len(task_refs) + len(missing_refs),
+    }
+
+
+def _run_digest_rule_ref_count(rules: list[dict[str, Any]]) -> int:
+    count = 0
+    for rule in rules:
+        refs = rule.get("evidence_refs")
+        if isinstance(refs, list):
+            count += len(refs)
+    return count
 
 
 def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, Any] | None:

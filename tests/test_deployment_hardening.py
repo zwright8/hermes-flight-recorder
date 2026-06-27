@@ -96,6 +96,7 @@ class DeploymentHardeningTests(unittest.TestCase):
             self.assertTrue((out / "normalized_trace.json").exists())
             self.assertTrue((out / "scorecard.json").exists())
             self.assertTrue((out / "task_completion.json").exists())
+            self.assertTrue((out / "run_digest.json").exists())
             self.assertTrue((out / "artifact_lineage.json").exists())
             self.assertTrue((out / "report.html").exists())
             self.assertEqual(_run_cli(["validate", "--run", str(out), "--strict"]), 0)
@@ -118,6 +119,7 @@ class DeploymentHardeningTests(unittest.TestCase):
                     "report": str(out / "report.html"),
                     "lineage": str(out / "artifact_lineage.json"),
                     "task_completion": str(out / "task_completion.json"),
+                    "run_digest": str(out / "run_digest.json"),
                     "environment": _sample_environment(),
                 },
             )

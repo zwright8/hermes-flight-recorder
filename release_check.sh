@@ -40,8 +40,10 @@ python -m flightrecorder repair-queue --help >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/task_completion.json >/dev/null
+python -m flightrecorder schemas --check runs/prompt_injection_good/run_digest.json >/dev/null
 python -m flightrecorder schemas --check runs/email_reply_completion_good/task_completion.json >/dev/null
 python -m flightrecorder schemas --check runs/email_reply_completion_good/state_diff.json >/dev/null
+python -m flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json >/dev/null
 python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
@@ -128,6 +130,13 @@ python -m flightrecorder validate \
 python -m flightrecorder validate \
   --state-diff runs/email_reply_completion_good/state_diff.json \
   --strict >/dev/null
+python -m flightrecorder validate \
+  --run-digest runs/email_reply_completion_good/run_digest.json \
+  --strict >/dev/null
+python -m flightrecorder digest \
+  --run runs/email_reply_completion_good \
+  --out runs/email_reply_completion_good/regenerated_run_digest.json \
+  --markdown-out runs/email_reply_completion_good/run_digest.md >/dev/null
 python -m flightrecorder report \
   --scenario scenarios/email_reply_completion_good.json \
   --trace runs/email_reply_completion_good/normalized_trace.json \
@@ -145,6 +154,9 @@ test -f runs/email_reply_completion_good/state_snapshot.json
 test -f runs/email_reply_completion_good/before_state_snapshot.json
 test -f runs/email_reply_completion_good/state_diff.json
 test -f runs/email_reply_completion_good/task_completion.json
+test -f runs/email_reply_completion_good/run_digest.json
+test -f runs/email_reply_completion_good/run_digest.md
+test -f runs/email_reply_completion_good/regenerated_run_digest.json
 test -f runs/email_reply_completion_good/artifact_lineage.json
 test -f runs/email_reply_completion_good/standalone_state_report.html
 test -f replay_runs/moved_prompt_injection_good_bundle/replay_bundle.json
@@ -172,6 +184,8 @@ trace_observability = json.loads(Path("runs/trace_observability.json").read_text
 repair_queue = json.loads(Path("runs/repair_queue.json").read_text(encoding="utf-8"))
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
 captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
+email_digest = json.loads(Path("runs/email_reply_completion_good/run_digest.json").read_text(encoding="utf-8"))
+email_digest_regenerated = json.loads(Path("runs/email_reply_completion_good/regenerated_run_digest.json").read_text(encoding="utf-8"))
 replay_source_score = json.loads(Path("runs/prompt_injection_good/scorecard.json").read_text(encoding="utf-8"))
 replay_score = json.loads(Path("replay_runs/prompt_injection_good_replay/scorecard.json").read_text(encoding="utf-8"))
 replay_bundle = json.loads(Path("replay_runs/moved_prompt_injection_good_bundle/replay_bundle.json").read_text(encoding="utf-8"))
@@ -258,6 +272,13 @@ assert len(evidence_bundle["artifacts"]["training_export_curriculum"]["sha256"])
 assert evidence_bundle["failed_check_count"] == 0
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
+assert email_digest["schema_version"] == "hfr.run_digest.v1"
+assert email_digest["outcome"]["task_completion_status"] == "complete"
+assert email_digest["state_changes"]["available"] is True
+assert email_digest["state_changes"]["change_count"] == 2
+assert email_digest["training_signals"]["state_changed"] is True
+assert "stateful_success_reward" in {item["id"] for item in email_digest["recommended_actions"]}
+assert email_digest_regenerated == email_digest
 assert captured_state["json"]["task_completion"]["status"] == "complete"
 assert captured_state["observations"]["gmail"]["threads"]["email-123"]["sent_replies"][0]["status"] == "sent"
 assert metrics["pass_rate"] == 0.2857
@@ -852,6 +873,7 @@ summary = {
     "report": "report.html",
     "lineage": "artifact_lineage.json",
     "task_completion": "task_completion.json",
+    "run_digest": "run_digest.json",
     "environment": {
         "python_version": "3.11.0",
         "python_implementation": "CPython",
