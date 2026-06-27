@@ -25,6 +25,10 @@ python -m flightrecorder improvement-plan \
   --training-export runs/training_export \
   --runs runs \
   --out runs/improvement_plan.json
+python -m flightrecorder improvement-ledger \
+  --plan runs/improvement_plan.json \
+  --plan runs/improvement_plan.json \
+  --out runs/improvement_ledger.json
 python -m flightrecorder compare \
   --baseline runs/prompt_injection_good \
   --candidate runs/prompt_injection_bad \

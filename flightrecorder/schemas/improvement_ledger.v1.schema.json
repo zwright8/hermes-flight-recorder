@@ -1,0 +1,299 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/improvement_ledger.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Longitudinal ledger over concrete improvement-plan work items.",
+  "properties": {
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_or_high_open_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "recommendation": {
+          "enum": [
+            "fix_handoff",
+            "continue_improvement",
+            "review_remaining_work",
+            "promote_or_monitor"
+          ]
+        },
+        "resolved_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "top_open_work_items": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "open_work_item_count",
+        "critical_or_high_open_count",
+        "resolved_work_item_count",
+        "top_open_work_items"
+      ],
+      "type": "object"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/entry"
+      },
+      "type": "array"
+    },
+    "ledger_path": {
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_open_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "high_open_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "plan_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "recurring_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resolved_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unique_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "plan_count",
+        "work_item_count",
+        "unique_work_item_count",
+        "open_work_item_count",
+        "recurring_work_item_count",
+        "resolved_work_item_count",
+        "critical_open_work_item_count",
+        "high_open_work_item_count"
+      ],
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "const": true
+    },
+    "plan_count": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "plans": {
+      "items": {
+        "$ref": "#/$defs/plan"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.improvement_ledger.v1"
+    },
+    "unique_work_item_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "work_item_count": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "ledger_path",
+    "passed",
+    "plan_count",
+    "work_item_count",
+    "unique_work_item_count",
+    "decision",
+    "plans",
+    "metrics",
+    "entries",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Improvement Ledger",
+  "type": "object",
+  "$defs": {
+    "entry": {
+      "additionalProperties": true,
+      "properties": {
+        "category": {
+          "enum": [
+            "bundle_action",
+            "repair",
+            "curriculum",
+            "digest_action"
+          ]
+        },
+        "latest_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "occurrence_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "occurrences": {
+          "items": {
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "open": {
+          "type": "boolean"
+        },
+        "plan_indexes": {
+          "items": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "priority": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "rule_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenario_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "new",
+            "recurring",
+            "open",
+            "resolved"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "task_family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "work_key": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "work_key",
+        "category",
+        "priority",
+        "summary",
+        "status",
+        "open",
+        "occurrence_count",
+        "plan_indexes",
+        "latest_fingerprint",
+        "occurrences"
+      ],
+      "type": "object"
+    },
+    "plan": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "hfr.improvement_plan.v1"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "path",
+        "exists",
+        "schema_version",
+        "readiness",
+        "recommendation",
+        "work_item_count"
+      ],
+      "type": "object"
+    }
+  }
+}

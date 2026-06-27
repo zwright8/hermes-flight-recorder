@@ -66,6 +66,14 @@
       "name": "improvement_plan"
     },
     {
+      "artifact": "improvement_ledger",
+      "artifact_schema_version": "hfr.improvement_ledger.v1",
+      "description": "Longitudinal ledger over concrete improvement-plan work items.",
+      "filename": "improvement_ledger.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/improvement_ledger.v1.schema.json",
+      "name": "improvement_ledger"
+    },
+    {
       "artifact": "training_manifest",
       "artifact_schema_version": "hfr.rl.manifest.v1",
       "description": "Manifest for export-rl training handoffs.",

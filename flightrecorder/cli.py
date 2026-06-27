@@ -43,6 +43,7 @@ from .compare_gate import (
 from .decision_gate import DecisionGateError, evaluate_decision_gate
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
+from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
@@ -128,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         ActionLedgerError,
         ActionLedgerGateError,
         ActionLedgerGatePolicyError,
+        ImprovementLedgerError,
         ImprovementPlanError,
         PromotionLedgerGateError,
         PromotionLedgerGatePolicyError,
@@ -699,6 +701,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         evidence_coverage_paths=args.evidence_coverage,
         evidence_bundle_paths=args.evidence_bundle,
         improvement_plan_paths=args.improvement_plan,
+        improvement_ledger_paths=args.improvement_ledger,
         action_ledger_paths=args.action_ledger,
         action_ledger_gate_paths=args.action_ledger_gate,
         decision_gate_paths=args.decision_gate,
@@ -858,6 +861,22 @@ def cmd_improvement_plan(args: argparse.Namespace) -> int:
     )
     _write_json(Path(args.out), plan)
     print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_improvement_ledger(args: argparse.Namespace) -> int:
+    ledger = build_improvement_ledger(
+        args.plan,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+    )
+    rendered = json.dumps(ledger, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
     return 0
 
 
@@ -1609,6 +1628,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--evidence-coverage", action="append", default=[], help="Validate one evidence_coverage.json; may be repeated")
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
     validate.add_argument("--improvement-plan", action="append", default=[], help="Validate one improvement_plan.json; may be repeated")
+    validate.add_argument("--improvement-ledger", action="append", default=[], help="Validate one improvement_ledger.json; may be repeated")
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
@@ -1742,6 +1762,15 @@ def _parser() -> argparse.ArgumentParser:
     improvement_plan.add_argument("--out", required=True, help="Write improvement plan JSON to this path")
     improvement_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the plan output")
     improvement_plan.set_defaults(func=cmd_improvement_plan)
+
+    improvement_ledger = subparsers.add_parser(
+        "improvement-ledger",
+        help="Summarize improvement-plan work items across improvement iterations",
+    )
+    improvement_ledger.add_argument("--plan", action="append", required=True, help="Improvement plan JSON in chronological order; may be repeated")
+    improvement_ledger.add_argument("--out", help="Write improvement ledger JSON to this path")
+    improvement_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
+    improvement_ledger.set_defaults(func=cmd_improvement_ledger)
 
     action_ledger = subparsers.add_parser(
         "action-ledger",

@@ -18,6 +18,7 @@ from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
@@ -101,6 +102,7 @@ def validate_artifacts(
     evidence_coverage_paths: list[str | Path] | None = None,
     evidence_bundle_paths: list[str | Path] | None = None,
     improvement_plan_paths: list[str | Path] | None = None,
+    improvement_ledger_paths: list[str | Path] | None = None,
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
@@ -142,6 +144,8 @@ def validate_artifacts(
         targets.append(validate_evidence_bundle(evidence_bundle_path))
     for improvement_plan_path in improvement_plan_paths or []:
         targets.append(validate_improvement_plan(improvement_plan_path))
+    for improvement_ledger_path in improvement_ledger_paths or []:
+        targets.append(validate_improvement_ledger(improvement_ledger_path))
     for action_ledger_path in action_ledger_paths or []:
         targets.append(validate_action_ledger(action_ledger_path))
     for action_ledger_gate_path in action_ledger_gate_paths or []:
@@ -560,6 +564,16 @@ def validate_improvement_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "improvement_plan.json")
     if plan is not None:
         _validate_improvement_plan(plan, target)
+    return target
+
+
+def validate_improvement_ledger(path: str | Path) -> ValidationTarget:
+    """Validate a longitudinal improvement-ledger artifact."""
+    ledger_path = Path(path)
+    target = ValidationTarget("improvement_ledger", str(ledger_path))
+    ledger = _read_object(ledger_path, target, "improvement_ledger.json")
+    if ledger is not None:
+        _validate_improvement_ledger(ledger, target)
     return target
 
 
@@ -4846,6 +4860,338 @@ def _validate_improvement_decision(
         target.errors.append("improvement_plan.decision.top_work_items must be a list.")
     elif len(top) > 5:
         target.errors.append("improvement_plan.decision.top_work_items must contain at most five items.")
+
+
+def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(ledger, "schema_version", IMPROVEMENT_LEDGER_SCHEMA_VERSION, target)
+    if not isinstance(ledger.get("ledger_path"), str):
+        target.errors.append("improvement_ledger.ledger_path must be a string.")
+    if ledger.get("passed") is not True:
+        target.errors.append("improvement_ledger.passed must be true.")
+
+    plans = ledger.get("plans")
+    if not isinstance(plans, list):
+        target.errors.append("improvement_ledger.plans must be a list.")
+        plans = []
+    entries = ledger.get("entries")
+    if not isinstance(entries, list):
+        target.errors.append("improvement_ledger.entries must be a list.")
+        entries = []
+    metrics = ledger.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("improvement_ledger.metrics must be an object.")
+        metrics = {}
+    if "notes" in ledger and not _is_string_list(ledger.get("notes")):
+        target.errors.append("improvement_ledger.notes must be a list of strings when present.")
+
+    for index, plan in enumerate(plans):
+        _validate_improvement_ledger_plan(plan, target, f"improvement_ledger.plans[{index}]", index)
+    latest_index = len(plans) - 1
+    totals: dict[str, Any] = {
+        "work_item_count": 0,
+        "open_work_item_count": 0,
+        "new_work_item_count": 0,
+        "recurring_work_item_count": 0,
+        "resolved_work_item_count": 0,
+        "critical_open_work_item_count": 0,
+        "high_open_work_item_count": 0,
+        "status_counts": {},
+        "priority_counts": {},
+        "open_priority_counts": {},
+        "category_counts": {},
+        "open_category_counts": {},
+        "task_family_counts": {},
+        "rule_counts": {},
+    }
+    seen_keys: set[str] = set()
+    previous_sort_key: tuple[int, int, str, str, str, str] | None = None
+    for index, entry in enumerate(entries):
+        sort_key = _validate_improvement_ledger_entry(
+            entry,
+            target,
+            f"improvement_ledger.entries[{index}]",
+            latest_index,
+            seen_keys,
+            totals,
+        )
+        if sort_key is not None:
+            if previous_sort_key is not None and sort_key < previous_sort_key:
+                target.errors.append("improvement_ledger.entries must be sorted by status, priority, category, task family, rule, and key.")
+            previous_sort_key = sort_key
+
+    expected_plan_work_items = sum(
+        plan.get("work_item_count") for plan in plans if isinstance(plan, dict) and _is_non_negative_int(plan.get("work_item_count"))
+    )
+    if ledger.get("plan_count") != len(plans):
+        target.errors.append(f"improvement_ledger.plan_count expected {len(plans)}, got {ledger.get('plan_count')!r}.")
+    if ledger.get("work_item_count") != expected_plan_work_items:
+        target.errors.append(
+            f"improvement_ledger.work_item_count expected {expected_plan_work_items}, got {ledger.get('work_item_count')!r}."
+        )
+    if totals["work_item_count"] != expected_plan_work_items:
+        target.errors.append(
+            f"improvement_ledger.entries occurrence total expected {expected_plan_work_items}, got {totals['work_item_count']}."
+        )
+    if ledger.get("unique_work_item_count") != len(entries):
+        target.errors.append(f"improvement_ledger.unique_work_item_count expected {len(entries)}, got {ledger.get('unique_work_item_count')!r}.")
+    _validate_improvement_ledger_metrics(metrics, target, totals, plans, len(entries))
+    _validate_improvement_ledger_decision(ledger.get("decision"), target, plans, totals)
+    target.details.update(
+        {
+            "plan_count": len(plans),
+            "unique_work_item_count": len(entries),
+            "open_work_item_count": totals["open_work_item_count"],
+            "resolved_work_item_count": totals["resolved_work_item_count"],
+        }
+    )
+
+
+def _validate_improvement_ledger_plan(value: Any, target: ValidationTarget, label: str, expected_index: int) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if value.get("index") != expected_index:
+        target.errors.append(f"{label}.index expected {expected_index}, got {value.get('index')!r}.")
+    for field_name in ("path", "schema_version", "readiness", "recommendation"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if value.get("schema_version") != IMPROVEMENT_PLAN_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {IMPROVEMENT_PLAN_SCHEMA_VERSION}.")
+    if value.get("readiness") not in {"ready", "blocked"}:
+        target.errors.append(f"{label}.readiness must be ready or blocked.")
+    if not isinstance(value.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if not isinstance(value.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    for field_name in ("work_item_count", "critical_or_high_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    if value.get("exists") is True:
+        sha = value.get("sha256")
+        if not isinstance(sha, str) or len(sha) != 64 or sha != sha.lower() or any(char not in "0123456789abcdef" for char in sha):
+            target.errors.append(f"{label}.sha256 must be a lowercase 64-character hex digest for existing files.")
+
+
+def _validate_improvement_ledger_entry(
+    entry: Any,
+    target: ValidationTarget,
+    label: str,
+    latest_index: int,
+    seen_keys: set[str],
+    totals: dict[str, Any],
+) -> tuple[int, int, str, str, str, str] | None:
+    if not isinstance(entry, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    work_key = entry.get("work_key")
+    if not isinstance(work_key, str) or not work_key:
+        target.errors.append(f"{label}.work_key must be a non-empty string.")
+        work_key = ""
+    elif work_key in seen_keys:
+        target.errors.append(f"{label}.work_key duplicates {work_key!r}.")
+    seen_keys.add(work_key)
+    category = entry.get("category")
+    if category not in {"bundle_action", "repair", "curriculum", "digest_action"}:
+        target.errors.append(f"{label}.category must be bundle_action, repair, curriculum, or digest_action.")
+        category = "digest_action"
+    priority = entry.get("priority")
+    if priority not in set(PRIORITIES):
+        target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
+        priority = "low"
+    if entry.get("status") not in {"new", "recurring", "open", "resolved"}:
+        target.errors.append(f"{label}.status must be new, recurring, open, or resolved.")
+    if not isinstance(entry.get("open"), bool):
+        target.errors.append(f"{label}.open must be a boolean.")
+    for field_name in ("summary", "suggested_action", "first_seen_path", "last_seen_path", "latest_item_id", "latest_routing_key", "latest_fingerprint"):
+        if not isinstance(entry.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    for field_name in ("scenario_id", "task_family", "rule_id", "rule_name", "task_completion_status"):
+        if entry.get(field_name) is not None and not isinstance(entry.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string or null.")
+    if entry.get("score") is not None and not _is_int_between(entry.get("score"), 0, 100):
+        target.errors.append(f"{label}.score must be null or an integer from 0 to 100.")
+    if not _is_non_negative_int(entry.get("evidence_ref_count")):
+        target.errors.append(f"{label}.evidence_ref_count must be a non-negative integer.")
+    occurrences = entry.get("occurrences")
+    if not isinstance(occurrences, list) or not occurrences:
+        target.errors.append(f"{label}.occurrences must be a non-empty list.")
+        occurrences = []
+    indexes: list[int] = []
+    for index, occurrence in enumerate(occurrences):
+        occurrence_index = _validate_improvement_ledger_occurrence(occurrence, target, f"{label}.occurrences[{index}]", category, priority)
+        if occurrence_index is not None:
+            indexes.append(occurrence_index)
+    plan_indexes = sorted(set(indexes))
+    if entry.get("occurrence_count") != len(occurrences):
+        target.errors.append(f"{label}.occurrence_count expected {len(occurrences)}, got {entry.get('occurrence_count')!r}.")
+    if entry.get("plan_indexes") != plan_indexes:
+        target.errors.append(f"{label}.plan_indexes expected {plan_indexes!r}, got {entry.get('plan_indexes')!r}.")
+    if plan_indexes:
+        first_seen = plan_indexes[0]
+        last_seen = plan_indexes[-1]
+        expected_open = latest_index in plan_indexes
+        if entry.get("first_seen_index") != first_seen:
+            target.errors.append(f"{label}.first_seen_index expected {first_seen}, got {entry.get('first_seen_index')!r}.")
+        if entry.get("last_seen_index") != last_seen:
+            target.errors.append(f"{label}.last_seen_index expected {last_seen}, got {entry.get('last_seen_index')!r}.")
+        if entry.get("open") != expected_open:
+            target.errors.append(f"{label}.open expected {expected_open}, got {entry.get('open')!r}.")
+        expected_status = _expected_improvement_ledger_status(plan_indexes, latest_index)
+        if entry.get("status") != expected_status:
+            target.errors.append(f"{label}.status expected {expected_status!r}, got {entry.get('status')!r}.")
+    latest_fingerprint = entry.get("latest_fingerprint")
+    if not isinstance(latest_fingerprint, str) or len(latest_fingerprint) != 64 or latest_fingerprint != latest_fingerprint.lower() or any(
+        char not in "0123456789abcdef" for char in latest_fingerprint
+    ):
+        target.errors.append(f"{label}.latest_fingerprint must be a lowercase 64-character hex digest.")
+
+    stable_probe = {
+        "category": category,
+        "scenario_id": entry.get("scenario_id"),
+        "task_family": entry.get("task_family"),
+        "rule_id": entry.get("rule_id"),
+        "summary": entry.get("summary"),
+        "sources": {},
+    }
+    if work_key and category in {"repair", "curriculum"} and stable_work_key(stable_probe) != work_key:
+        target.errors.append(f"{label}.work_key does not match entry content.")
+
+    totals["work_item_count"] += len(occurrences)
+    _increment_count(totals["status_counts"], entry.get("status"))
+    _increment_count(totals["priority_counts"], priority)
+    _increment_count(totals["category_counts"], category)
+    if entry.get("open") is True:
+        totals["open_work_item_count"] += 1
+        if entry.get("status") == "new":
+            totals["new_work_item_count"] += 1
+        if entry.get("status") == "recurring":
+            totals["recurring_work_item_count"] += 1
+        if priority == "critical":
+            totals["critical_open_work_item_count"] += 1
+        if priority == "high":
+            totals["high_open_work_item_count"] += 1
+        _increment_count(totals["open_priority_counts"], priority)
+        _increment_count(totals["open_category_counts"], category)
+        _increment_count(totals["task_family_counts"], entry.get("task_family"))
+        _increment_count(totals["rule_counts"], entry.get("rule_id"))
+    if entry.get("status") == "resolved":
+        totals["resolved_work_item_count"] += 1
+    return (
+        {"recurring": 0, "new": 1, "open": 2, "resolved": 3}.get(str(entry.get("status")), 99),
+        list(PRIORITIES).index(priority),
+        str(category or ""),
+        str(entry.get("task_family") or ""),
+        str(entry.get("rule_id") or ""),
+        str(work_key or ""),
+    )
+
+
+def _validate_improvement_ledger_occurrence(
+    occurrence: Any,
+    target: ValidationTarget,
+    label: str,
+    expected_category: str,
+    expected_priority: str,
+) -> int | None:
+    if not isinstance(occurrence, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    for field_name in ("plan_path", "item_id", "routing_key", "fingerprint", "priority", "category", "summary"):
+        if not isinstance(occurrence.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if occurrence.get("category") != expected_category:
+        target.errors.append(f"{label}.category must match entry category.")
+    if occurrence.get("priority") != expected_priority:
+        target.errors.append(f"{label}.priority must match entry priority.")
+    if not _is_non_negative_int(occurrence.get("plan_index")):
+        target.errors.append(f"{label}.plan_index must be a non-negative integer.")
+        return None
+    fingerprint = occurrence.get("fingerprint")
+    if not isinstance(fingerprint, str) or len(fingerprint) != 64 or fingerprint != fingerprint.lower() or any(
+        char not in "0123456789abcdef" for char in fingerprint
+    ):
+        target.errors.append(f"{label}.fingerprint must be a lowercase 64-character hex digest.")
+    return occurrence.get("plan_index")
+
+
+def _validate_improvement_ledger_metrics(
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+    totals: dict[str, Any],
+    plans: list[Any],
+    unique_count: int,
+) -> None:
+    expected_scalars = {
+        "plan_count": len(plans),
+        "work_item_count": totals["work_item_count"],
+        "unique_work_item_count": unique_count,
+        "open_work_item_count": totals["open_work_item_count"],
+        "new_work_item_count": totals["new_work_item_count"],
+        "recurring_work_item_count": totals["recurring_work_item_count"],
+        "resolved_work_item_count": totals["resolved_work_item_count"],
+        "critical_open_work_item_count": totals["critical_open_work_item_count"],
+        "high_open_work_item_count": totals["high_open_work_item_count"],
+    }
+    for field_name, expected in expected_scalars.items():
+        if metrics.get(field_name) != expected:
+            target.errors.append(f"improvement_ledger.metrics.{field_name} expected {expected!r}, got {metrics.get(field_name)!r}.")
+    for field_name in (
+        "status_counts",
+        "priority_counts",
+        "open_priority_counts",
+        "category_counts",
+        "open_category_counts",
+        "task_family_counts",
+        "rule_counts",
+    ):
+        actual = _count_rows(metrics.get(field_name))
+        if actual != totals[field_name]:
+            target.errors.append(f"improvement_ledger.metrics.{field_name} does not match ledger entries.")
+    plan_counts = metrics.get("plan_work_item_counts")
+    expected_counts = [
+        {"index": plan.get("index"), "path": plan.get("path"), "work_item_count": plan.get("work_item_count")}
+        for plan in plans
+        if isinstance(plan, dict)
+    ]
+    if plan_counts != expected_counts:
+        target.errors.append("improvement_ledger.metrics.plan_work_item_counts does not match plans.")
+
+
+def _validate_improvement_ledger_decision(decision: Any, target: ValidationTarget, plans: list[Any], totals: dict[str, Any]) -> None:
+    if not isinstance(decision, dict):
+        target.errors.append("improvement_ledger.decision must be an object.")
+        return
+    if decision.get("readiness") not in {"ready", "blocked"}:
+        target.errors.append("improvement_ledger.decision.readiness must be ready or blocked.")
+    if decision.get("recommendation") not in {"fix_handoff", "continue_improvement", "review_remaining_work", "promote_or_monitor"}:
+        target.errors.append("improvement_ledger.decision.recommendation has an unknown value.")
+    if not isinstance(decision.get("summary"), str) or not decision.get("summary"):
+        target.errors.append("improvement_ledger.decision.summary must be a non-empty string.")
+    latest_index = len(plans) - 1
+    if decision.get("latest_plan_index") != latest_index:
+        target.errors.append(f"improvement_ledger.decision.latest_plan_index expected {latest_index}, got {decision.get('latest_plan_index')!r}.")
+    if decision.get("open_work_item_count") != totals["open_work_item_count"]:
+        target.errors.append("improvement_ledger.decision.open_work_item_count must match metrics.")
+    critical_or_high = totals["critical_open_work_item_count"] + totals["high_open_work_item_count"]
+    if decision.get("critical_or_high_open_count") != critical_or_high:
+        target.errors.append("improvement_ledger.decision.critical_or_high_open_count must match open priority counts.")
+    if decision.get("resolved_work_item_count") != totals["resolved_work_item_count"]:
+        target.errors.append("improvement_ledger.decision.resolved_work_item_count must match resolved count.")
+    top = decision.get("top_open_work_items")
+    if not isinstance(top, list):
+        target.errors.append("improvement_ledger.decision.top_open_work_items must be a list.")
+    elif len(top) > 5:
+        target.errors.append("improvement_ledger.decision.top_open_work_items must contain at most five items.")
+
+
+def _expected_improvement_ledger_status(plan_indexes: list[int], latest_index: int) -> str:
+    if latest_index in plan_indexes and plan_indexes[0] == latest_index:
+        return "new"
+    if latest_index in plan_indexes and len(plan_indexes) > 1:
+        return "recurring"
+    if latest_index in plan_indexes:
+        return "open"
+    return "resolved"
 
 
 def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget) -> None:

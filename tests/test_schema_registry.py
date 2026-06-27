@@ -25,6 +25,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("run_digest", names)
         self.assertIn("evidence_bundle", names)
         self.assertIn("improvement_plan", names)
+        self.assertIn("improvement_ledger", names)
         self.assertIn("training_manifest", names)
         self.assertIn("dataset_splits", names)
         self.assertIn("compare_rl_manifest", names)

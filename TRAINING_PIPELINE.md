@@ -147,6 +147,23 @@ repair queue items, curriculum priorities, and per-run digests into stable
 `work_items` with priorities, categories, evidence refs/snippets, replay
 metadata, `routing_key`, and content `fingerprint` fields.
 
+Across repeated plan snapshots, use `flightrecorder improvement-ledger` to
+measure concrete work-item pressure:
+
+```bash
+flightrecorder improvement-ledger \
+  --plan runs/previous/improvement_plan.json \
+  --plan runs/current/improvement_plan.json \
+  --out runs/improvement_ledger.json
+
+flightrecorder validate --improvement-ledger runs/improvement_ledger.json --strict
+```
+
+The improvement ledger marks concrete scenario/rule work as `new`,
+`recurring`, `open`, or `resolved` relative to the latest plan. It is a useful
+convergence signal before trainer handoff because it can show whether the
+evidence-backed repair queue is shrinking across eval iterations.
+
 Across repeated iterations, use `flightrecorder action-ledger` to fold multiple
 `evidence_bundle.json` files into a stable repair ledger:
 
@@ -425,6 +442,7 @@ flightrecorder validate \
   --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
   --improvement-plan runs/improvement_plan.json \
+  --improvement-ledger runs/improvement_ledger.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \

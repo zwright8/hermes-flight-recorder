@@ -37,6 +37,7 @@ python -m flightrecorder schemas \
 rm -rf schema_contracts_check
 python -m flightrecorder repair-queue --help >/dev/null
 python -m flightrecorder improvement-plan --help >/dev/null
+python -m flightrecorder improvement-ledger --help >/dev/null
 ./demo.sh
 python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
@@ -47,6 +48,7 @@ python -m flightrecorder schemas --check runs/email_reply_completion_good/state_
 python -m flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json >/dev/null
 python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
 python -m flightrecorder schemas --check runs/improvement_plan.json >/dev/null
+python -m flightrecorder schemas --check runs/improvement_ledger.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
 rm -rf replay_runs
@@ -99,6 +101,7 @@ python -m flightrecorder validate \
   --strict >/dev/null
 python -m flightrecorder validate \
   --improvement-plan runs/improvement_plan.json \
+  --improvement-ledger runs/improvement_ledger.json \
   --strict >/dev/null
 if python -m flightrecorder scenario-quality \
   --scenarios scenarios \
@@ -178,6 +181,7 @@ test -f runs/trace_observability.json
 test -f runs/repair_queue.json
 test -f runs/evidence_bundle.json
 test -f runs/improvement_plan.json
+test -f runs/improvement_ledger.json
 test -f runs/suite_summary.json
 python - <<'PY'
 import json
@@ -190,6 +194,7 @@ trace_observability = json.loads(Path("runs/trace_observability.json").read_text
 repair_queue = json.loads(Path("runs/repair_queue.json").read_text(encoding="utf-8"))
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
 improvement_plan = json.loads(Path("runs/improvement_plan.json").read_text(encoding="utf-8"))
+improvement_ledger = json.loads(Path("runs/improvement_ledger.json").read_text(encoding="utf-8"))
 captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
 email_digest = json.loads(Path("runs/email_reply_completion_good/run_digest.json").read_text(encoding="utf-8"))
 email_digest_regenerated = json.loads(Path("runs/email_reply_completion_good/regenerated_run_digest.json").read_text(encoding="utf-8"))
@@ -309,6 +314,16 @@ assert len(repair_plan_items) == repair_queue["item_count"]
 assert all(item["sources"]["curriculum_priorities"] for item in repair_plan_items)
 assert all(item["sources"]["run_digest"] for item in repair_plan_items)
 assert any(item["scenario_id"] == "prompt_injection_bad" and item["rule_id"] == "forbidden_actions" for item in repair_plan_items)
+assert improvement_ledger["schema_version"] == "hfr.improvement_ledger.v1"
+assert improvement_ledger["plan_count"] == 2
+assert improvement_ledger["work_item_count"] == improvement_plan["work_item_count"] * 2
+assert improvement_ledger["unique_work_item_count"] == improvement_plan["work_item_count"]
+assert improvement_ledger["metrics"]["open_work_item_count"] == improvement_plan["work_item_count"]
+assert improvement_ledger["metrics"]["recurring_work_item_count"] == improvement_plan["work_item_count"]
+assert improvement_ledger["metrics"]["resolved_work_item_count"] == 0
+assert improvement_ledger["decision"]["recommendation"] == "continue_improvement"
+assert all(entry["status"] == "recurring" for entry in improvement_ledger["entries"])
+assert any(entry["work_key"] == "repair:prompt_injection_bad:forbidden_actions" for entry in improvement_ledger["entries"])
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
 assert email_digest["schema_version"] == "hfr.run_digest.v1"

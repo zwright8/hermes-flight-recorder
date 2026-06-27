@@ -66,6 +66,9 @@ Expected demo output:
 - An improvement plan in `runs/improvement_plan.json` that joins bundle
   actions, concrete repair items, curriculum priorities, and per-run digests
   into deterministic next-iteration work items.
+- An improvement ledger in `runs/improvement_ledger.json` that tracks whether
+  concrete work items are new, recurring, open, or resolved across plan
+  snapshots.
 - Promotion evidence in `runs/action_ledger.json`, `runs/action_ledger_gate.json`,
   `runs/promotion_decision.json`, `runs/promotion_ledger.json`, and
   `runs/promotion_ledger_gate.json`, plus a portable `runs/promotion_archive/`
@@ -106,8 +109,8 @@ flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 The bundled catalog currently covers scenarios, normalized traces, scorecards,
 task-completion verdicts, state diffs, run digests, evidence bundles, training
 manifests, dataset split manifests, compare-RL manifests, review manifests,
-reviewed-export manifests, improvement plans, trainer preflights, and trainer
-launch checks. These
+reviewed-export manifests, improvement plans, improvement ledgers, trainer
+preflights, and trainer launch checks. These
 schemas are compatibility contracts for artifact shape. `flightrecorder schemas --check` performs a
 dependency-free conformance check for the bundled schema subset; use
 `flightrecorder validate` for deeper integrity checks such as count
@@ -239,6 +242,11 @@ flightrecorder improvement-plan \
   --runs runs \
   --out runs/improvement_plan.json
 
+flightrecorder improvement-ledger \
+  --plan runs/previous/improvement_plan.json \
+  --plan runs/current/improvement_plan.json \
+  --out runs/improvement_ledger.json
+
 flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -277,6 +285,7 @@ flightrecorder validate \
   --trace-observability runs/trace_observability.json \
   --evidence-bundle runs/evidence_bundle.json \
   --improvement-plan runs/improvement_plan.json \
+  --improvement-ledger runs/improvement_ledger.json \
   --repair-queue runs/repair_queue.json \
   --promotion-ledger runs/promotion_ledger.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
@@ -753,6 +762,24 @@ Each work item carries a stable `item_id`, `routing_key`, content
 `fingerprint`, priority, category, source links, evidence refs/snippets, and
 optional replay metadata. Validate it before handing it to automation with
 `flightrecorder validate --improvement-plan runs/improvement_plan.json --strict`.
+
+Use `flightrecorder improvement-ledger` when an improvement loop has multiple
+plan snapshots and needs to prove whether concrete work is shrinking. Unlike
+`action-ledger`, which tracks high-level bundle actions, this ledger groups
+plan work items by stable category/scenario/rule keys and marks each entry as
+`new`, `recurring`, `open`, or `resolved` relative to the latest plan.
+
+```bash
+flightrecorder improvement-ledger \
+  --plan runs/previous/improvement_plan.json \
+  --plan runs/current/improvement_plan.json \
+  --out runs/improvement_ledger.json
+```
+
+Validate it with
+`flightrecorder validate --improvement-ledger runs/improvement_ledger.json --strict`.
+The ledger is useful for dashboards, repair-agent queues, and release notes
+that need to show concrete repair pressure going down over repeated eval runs.
 
 Use `flightrecorder action-ledger` when an improvement loop has multiple bundle
 snapshots and needs a stable view of repeated repair pressure:
