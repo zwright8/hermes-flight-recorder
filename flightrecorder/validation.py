@@ -15,6 +15,7 @@ from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
+from .compare_gate import compare_movement_summary
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
@@ -1829,16 +1830,22 @@ def _validate_compare_manifest(
     for field_name, expected in expected_counts.items():
         if manifest.get(field_name) != expected:
             target.errors.append(f"compare_manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
+    expected_movement = compare_movement_summary(pairs)
+    for field_name, expected in expected_movement.items():
+        if field_name not in manifest:
+            target.errors.append(f"compare_manifest.{field_name} is missing.")
+        elif manifest.get(field_name) != expected:
+            target.errors.append(f"compare_manifest.{field_name} expected {expected!r}, got {manifest.get(field_name)!r}.")
     for field_name in ("baseline_run_count", "candidate_run_count", "paired_scenario_count", "skipped_pair_count", "min_score_gap"):
         if not _is_non_negative_int(manifest.get(field_name)):
             target.errors.append(f"compare_manifest.{field_name} must be a non-negative integer.")
     expected_contract_drift_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "drifted")
     expected_unverified_contract_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "unverified")
-    if "contract_drift_count" in manifest and manifest.get("contract_drift_count") != expected_contract_drift_count:
+    if manifest.get("contract_drift_count") != expected_contract_drift_count:
         target.errors.append(
             f"compare_manifest.contract_drift_count expected {expected_contract_drift_count}, got {manifest.get('contract_drift_count')!r}."
         )
-    if "unverified_contract_count" in manifest and manifest.get("unverified_contract_count") != expected_unverified_contract_count:
+    if manifest.get("unverified_contract_count") != expected_unverified_contract_count:
         target.errors.append(
             "compare_manifest.unverified_contract_count "
             f"expected {expected_unverified_contract_count}, got {manifest.get('unverified_contract_count')!r}."

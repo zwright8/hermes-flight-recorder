@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import CONTRACT_SCOPES, compare_scorecards
+from .compare_gate import compare_movement_summary
 from .scorers import TASK_COMPLETION_SCHEMA_VERSION
 from .trace_observability import build_trace_signal
 
@@ -275,6 +276,7 @@ def export_compare_rl_dataset(
     baseline_win_count = sum(1 for pair in pairs if pair.get("chosen_side") == "baseline")
     contract_drift_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "drifted")
     unverified_contract_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "unverified")
+    movement = compare_movement_summary(pairs)
     manifest: dict[str, Any] = {
         "schema_version": COMPARE_RL_MANIFEST_SCHEMA_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -291,6 +293,15 @@ def export_compare_rl_dataset(
         "dpo_count": len(dpo),
         "candidate_win_count": candidate_win_count,
         "baseline_win_count": baseline_win_count,
+        "candidate_win_scenarios": movement["candidate_win_scenarios"],
+        "baseline_win_scenarios": movement["baseline_win_scenarios"],
+        "task_completion_improvement_count": movement["task_completion_improvement_count"],
+        "task_completion_regression_count": movement["task_completion_regression_count"],
+        "task_completion_improvement_scenarios": movement["task_completion_improvement_scenarios"],
+        "task_completion_regression_scenarios": movement["task_completion_regression_scenarios"],
+        "fixed_rule_counts": movement["fixed_rule_counts"],
+        "regressed_rule_counts": movement["regressed_rule_counts"],
+        "new_critical_failure_counts": movement["new_critical_failure_counts"],
         "contract_drift_count": contract_drift_count,
         "unverified_contract_count": unverified_contract_count,
         "skipped_pair_count": len(skipped),
@@ -302,6 +313,7 @@ def export_compare_rl_dataset(
             "Comparison exports are built from paired baseline/candidate normalized_trace.json and scorecard.json files.",
             "The chosen side is whichever paired run has the higher deterministic scorecard score.",
             "Candidate wins describe measurable improvements; baseline wins describe regressions to avoid.",
+            "Manifest movement fields summarize task-completion, scenario, and rule deltas so exports remain comparable without a separate gate artifact.",
             "Pairs include contract_fingerprint_status so trainer handoffs can reject drifted or unverified comparisons.",
             "Use these artifacts as preference/eval data, not as a complete trainer.",
         ],

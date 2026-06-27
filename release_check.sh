@@ -432,6 +432,23 @@ python -m flightrecorder gate-compare-export \
   --out runs/compare_gate.json >/dev/null
 test -f runs/compare_gate.json
 test -f examples/compare_gate_policy.demo.json
+python -m flightrecorder export-compare-rl \
+  --baseline runs/compare_rl_candidate \
+  --candidate runs/compare_rl_baseline \
+  --out runs/compare_rl_regression_export >/dev/null
+python -m flightrecorder schemas --check runs/compare_rl_regression_export/manifest.json >/dev/null
+python -m flightrecorder validate \
+  --compare-export runs/compare_rl_regression_export \
+  --strict >/dev/null
+if python -m flightrecorder gate-compare-export \
+  --compare-export runs/compare_rl_regression_export \
+  --max-baseline-wins 0 \
+  --max-task-completion-regressions 0 \
+  --forbid-rule-regression required_actions \
+  --forbid-new-critical-failure required_actions >/dev/null; then
+  echo "gate-compare-export did not fail regression movement" >&2
+  exit 1
+fi
 if python -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --min-candidate-wins 999 >/dev/null; then
@@ -475,8 +492,19 @@ pair = json.loads(Path("runs/compare_rl_export/improvement_pairs.jsonl").read_te
 dpo = json.loads(Path("runs/compare_rl_export/improvement_dpo.jsonl").read_text(encoding="utf-8").splitlines()[0])
 card = Path("runs/compare_rl_export/IMPROVEMENT_CARD.md").read_text(encoding="utf-8")
 gate = json.loads(Path("runs/compare_gate.json").read_text(encoding="utf-8"))
+regression_manifest = json.loads(Path("runs/compare_rl_regression_export/manifest.json").read_text(encoding="utf-8"))
+regression_pair = json.loads(Path("runs/compare_rl_regression_export/improvement_pairs.jsonl").read_text(encoding="utf-8").splitlines()[0])
 assert manifest["pair_count"] == 1
 assert manifest["candidate_win_count"] == 1
+assert manifest["candidate_win_scenarios"] == ["email_reply_completion"]
+assert manifest["baseline_win_scenarios"] == []
+assert manifest["task_completion_improvement_count"] == 1
+assert manifest["task_completion_regression_count"] == 0
+assert manifest["task_completion_improvement_scenarios"] == ["email_reply_completion"]
+assert manifest["task_completion_regression_scenarios"] == []
+assert manifest["fixed_rule_counts"]["required_actions"] == 1
+assert manifest["regressed_rule_counts"] == {}
+assert manifest["new_critical_failure_counts"] == {}
 assert manifest["contract_scope"] == "scenario"
 assert manifest["contract_drift_count"] == 1
 assert manifest["unverified_contract_count"] == 0
@@ -498,6 +526,22 @@ assert dpo["contract_fingerprint_status"] == "drifted"
 assert dpo["contract_fingerprint_scope"] == "scenario"
 assert pair["chosen"]["task_completion"]["status"] == "complete"
 assert pair["rejected"]["task_completion"]["status"] == "incomplete"
+assert regression_manifest["candidate_win_count"] == 0
+assert regression_manifest["baseline_win_count"] == 1
+assert regression_manifest["candidate_win_scenarios"] == []
+assert regression_manifest["baseline_win_scenarios"] == ["email_reply_completion"]
+assert regression_manifest["task_completion_improvement_count"] == 0
+assert regression_manifest["task_completion_regression_count"] == 1
+assert regression_manifest["task_completion_improvement_scenarios"] == []
+assert regression_manifest["task_completion_regression_scenarios"] == ["email_reply_completion"]
+assert regression_manifest["fixed_rule_counts"] == {}
+assert regression_manifest["regressed_rule_counts"]["required_actions"] == 1
+assert regression_manifest["new_critical_failure_counts"]["required_actions"] == 1
+assert regression_pair["chosen_side"] == "baseline"
+assert regression_pair["rejected_side"] == "candidate"
+assert regression_pair["candidate_score_delta"] == -100
+assert "required_actions" in regression_pair["rule_regressions"]
+assert "required_actions" in regression_pair["new_critical_failures"]
 assert dpo["chosen_task_completion_status"] == "complete"
 assert dpo["rejected_task_completion_status"] == "incomplete"
 assert "task_completion complete checks=6/6" in dpo["chosen"]
@@ -1194,6 +1238,14 @@ assert bundle["decision"]["gate_count"] == 4
 assert bundle["decision"]["passed_gate_count"] == 4
 assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["decision"]["key_metrics"]["compare_export"]["task_completion_improvement_count"] == 1
+assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_scenarios"] == ["email_reply_completion"]
+assert bundle["decision"]["key_metrics"]["compare_export"]["baseline_win_scenarios"] == []
+assert bundle["decision"]["key_metrics"]["compare_export"]["task_completion_improvement_scenarios"] == ["email_reply_completion"]
+assert bundle["decision"]["key_metrics"]["compare_export"]["task_completion_regression_scenarios"] == []
+assert bundle["decision"]["key_metrics"]["compare_export"]["fixed_rule_counts"]["required_actions"] == 1
+assert bundle["decision"]["key_metrics"]["compare_export"]["regressed_rule_counts"] == {}
+assert bundle["decision"]["key_metrics"]["compare_export"]["new_critical_failure_counts"] == {}
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["passed"] is True
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["consistent"] is True
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["score"] == 100
@@ -1292,6 +1344,12 @@ assert {gate["id"] for gate in bundle["metrics"]["gates"]} == {
     "reviewed_gate",
 }
 assert bundle["metrics"]["compare_export"]["candidate_win_count"] == 1
+assert bundle["metrics"]["compare_export"]["task_completion_improvement_count"] == 1
+assert bundle["metrics"]["compare_export"]["task_completion_regression_count"] == 0
+assert bundle["metrics"]["compare_export"]["task_completion_improvement_scenarios"] == ["email_reply_completion"]
+assert bundle["metrics"]["compare_export"]["task_completion_regression_scenarios"] == []
+assert bundle["metrics"]["compare_export"]["regressed_rule_counts"] == {}
+assert bundle["metrics"]["compare_export"]["new_critical_failure_counts"] == {}
 assert bundle["metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["unverified"] == 0
 assert bundle["metrics"]["live_smoke_summary"]["chat_completion_request_count"] == 1
 assert bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"] == str(Path.cwd())

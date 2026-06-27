@@ -537,13 +537,17 @@ directories into improvement-loop preference artifacts:
   `improvement_pairs.jsonl`, including tool-call/tool-result evidence instead
   of final-answer text alone.
 - `manifest.json`: counts, source directories, metadata, skipped pairs,
-  contract-drift counts, output paths, and artifact fingerprints.
+  candidate/baseline win scenarios, task-completion movement scenarios, rule
+  movement counts, contract-drift counts, output paths, and artifact
+  fingerprints.
 - `IMPROVEMENT_CARD.md`: human-readable summary of candidate wins, baseline
   wins, contract status, and pair rationale.
 
 Comparison manifests carry the same artifact-fingerprint block for the pair,
-DPO, and improvement-card files, giving promotion gates a compact integrity
-check over the exact improvement evidence handed to a trainer.
+DPO, and improvement-card files, plus movement summaries recomputed by
+`flightrecorder validate`. Promotion gates and trainer wrappers can inspect one
+manifest to see which scenarios improved, which regressed, and which rule
+classes moved before reading the full pair rows.
 
 Use `flightrecorder gate-compare-export` after `export-compare-rl` when CI or a
 training handoff should require concrete candidate wins, expected scenario

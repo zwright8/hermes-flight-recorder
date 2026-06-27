@@ -793,14 +793,18 @@ The export contains:
   sides, score deltas, rule fixes, rule regressions, and rationale.
 - `improvement_dpo.jsonl`: DPO-shaped rows whose `chosen` and `rejected` fields
   are compact behavior transcripts with tool-call/tool-result evidence.
-- `manifest.json`: counts, metadata, skipped pairs, contract-drift counts,
-  source directories, output paths, and artifact fingerprints.
+- `manifest.json`: counts, metadata, skipped pairs, candidate/baseline win
+  scenarios, task-completion movement scenarios, rule movement counts,
+  contract-drift counts, source directories, output paths, and artifact
+  fingerprints.
 - `IMPROVEMENT_CARD.md`: a human-readable summary of candidate wins and
   baseline wins.
 
 Comparison manifests include SHA-256 fingerprints for the pair, DPO, and card
-artifacts, so a promotion gate can verify the exact improvement evidence before
-passing it into a training job.
+artifacts, plus movement summaries that `flightrecorder validate` recomputes
+from `improvement_pairs.jsonl`. A promotion gate or trainer wrapper can inspect
+one manifest to see which scenarios improved, which regressed, and which rule
+classes moved before passing the full evidence into a training job.
 
 This is important for autonomous agents because two runs can produce the same
 final answer while only one actually performed the required tool action. The

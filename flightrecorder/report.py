@@ -294,6 +294,8 @@ def _artifact_metrics(payload: dict[str, Any]) -> str:
         ("dpo_count", "dpo"),
         ("candidate_win_count", "candidate_wins"),
         ("baseline_win_count", "baseline_wins"),
+        ("task_completion_improvement_count", "task_improvements"),
+        ("task_completion_regression_count", "task_regressions"),
         ("reviewed_label_count", "labels"),
         ("agreement_rate", "agreement"),
         ("check_count", "checks"),

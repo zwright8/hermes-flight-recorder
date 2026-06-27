@@ -109,6 +109,35 @@ def load_compare_gate_policy(path: str | Path) -> dict[str, Any]:
     return policy
 
 
+def compare_movement_summary(pairs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize scenario, task-completion, and rule movement across compare pairs."""
+    candidate_win_scenarios = {
+        str(pair.get("scenario_id"))
+        for pair in pairs
+        if pair.get("chosen_side") == "candidate" and isinstance(pair.get("scenario_id"), str)
+    }
+    baseline_win_scenarios = {
+        str(pair.get("scenario_id"))
+        for pair in pairs
+        if pair.get("chosen_side") == "baseline" and isinstance(pair.get("scenario_id"), str)
+    }
+    task_completion_improvement_scenarios = _task_completion_improvement_scenarios(pairs)
+    task_completion_regression_scenarios = _task_completion_regression_scenarios(pairs)
+    return {
+        "candidate_win_scenarios": sorted(candidate_win_scenarios),
+        "baseline_win_scenarios": sorted(baseline_win_scenarios),
+        "task_completion_improvement_count": len(task_completion_improvement_scenarios),
+        "task_completion_regression_count": len(task_completion_regression_scenarios),
+        "task_completion_improvement_scenarios": sorted(task_completion_improvement_scenarios),
+        "task_completion_regression_scenarios": sorted(task_completion_regression_scenarios),
+        "fixed_rule_counts": _count_values(rule for pair in pairs for rule in _string_list(pair.get("rule_fixes"))),
+        "regressed_rule_counts": _count_values(rule for pair in pairs for rule in _string_list(pair.get("rule_regressions"))),
+        "new_critical_failure_counts": _count_values(
+            rule for pair in pairs for rule in _string_list(pair.get("new_critical_failures"))
+        ),
+    }
+
+
 def evaluate_compare_gate(
     manifest: dict[str, Any],
     pairs: list[dict[str, Any]],
@@ -154,8 +183,9 @@ def evaluate_compare_gate(
         _add_min_check(checks, "min_dpo", dpo_count, min_dpo)
     if min_candidate_wins is not None:
         _add_min_check(checks, "min_candidate_wins", candidate_win_count, min_candidate_wins)
-    task_completion_improvement_scenarios = _task_completion_improvement_scenarios(pairs)
-    task_completion_regression_scenarios = _task_completion_regression_scenarios(pairs)
+    movement = compare_movement_summary(pairs)
+    task_completion_improvement_scenarios = movement["task_completion_improvement_scenarios"]
+    task_completion_regression_scenarios = movement["task_completion_regression_scenarios"]
     if min_task_completion_improvements is not None:
         _add_min_check(
             checks,
@@ -180,19 +210,11 @@ def evaluate_compare_gate(
         _add_max_check(checks, "max_unverified_contracts", unverified_contract_count, max_unverified_contracts)
 
     pairs_by_scenario = _pairs_by_scenario(pairs)
-    candidate_win_scenarios = {
-        str(pair.get("scenario_id"))
-        for pair in pairs
-        if pair.get("chosen_side") == "candidate" and isinstance(pair.get("scenario_id"), str)
-    }
-    baseline_win_scenarios = {
-        str(pair.get("scenario_id"))
-        for pair in pairs
-        if pair.get("chosen_side") == "baseline" and isinstance(pair.get("scenario_id"), str)
-    }
-    fixed_rules = _count_values(rule for pair in pairs for rule in _string_list(pair.get("rule_fixes")))
-    regressed_rules = _count_values(rule for pair in pairs for rule in _string_list(pair.get("rule_regressions")))
-    new_critical = _count_values(rule for pair in pairs for rule in _string_list(pair.get("new_critical_failures")))
+    candidate_win_scenarios = movement["candidate_win_scenarios"]
+    baseline_win_scenarios = movement["baseline_win_scenarios"]
+    fixed_rules = movement["fixed_rule_counts"]
+    regressed_rules = movement["regressed_rule_counts"]
+    new_critical = movement["new_critical_failure_counts"]
     task_family_rows = _task_family_rows(pairs)
 
     for scenario_id in require_scenarios or []:
@@ -252,15 +274,7 @@ def evaluate_compare_gate(
             "skipped_pair_count": skipped_pair_count,
             "contract_drift_count": contract_drift_count,
             "unverified_contract_count": unverified_contract_count,
-            "candidate_win_scenarios": sorted(candidate_win_scenarios),
-            "baseline_win_scenarios": sorted(baseline_win_scenarios),
-            "task_completion_improvement_count": len(task_completion_improvement_scenarios),
-            "task_completion_regression_count": len(task_completion_regression_scenarios),
-            "task_completion_improvement_scenarios": sorted(task_completion_improvement_scenarios),
-            "task_completion_regression_scenarios": sorted(task_completion_regression_scenarios),
-            "fixed_rule_counts": fixed_rules,
-            "regressed_rule_counts": regressed_rules,
-            "new_critical_failure_counts": new_critical,
+            **movement,
             "task_families": [task_family_rows[family] for family in sorted(task_family_rows)],
             "validation": _validation_metrics(validation_summary),
         },

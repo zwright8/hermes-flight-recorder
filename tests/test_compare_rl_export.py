@@ -48,6 +48,15 @@ class CompareRlExportTests(unittest.TestCase):
             self.assertEqual(manifest["pair_count"], 1)
             self.assertEqual(manifest["candidate_win_count"], 1)
             self.assertEqual(manifest["baseline_win_count"], 0)
+            self.assertEqual(manifest["candidate_win_scenarios"], ["email_reply_completion"])
+            self.assertEqual(manifest["baseline_win_scenarios"], [])
+            self.assertEqual(manifest["task_completion_improvement_count"], 1)
+            self.assertEqual(manifest["task_completion_regression_count"], 0)
+            self.assertEqual(manifest["task_completion_improvement_scenarios"], ["email_reply_completion"])
+            self.assertEqual(manifest["task_completion_regression_scenarios"], [])
+            self.assertEqual(manifest["fixed_rule_counts"]["required_actions"], 1)
+            self.assertEqual(manifest["regressed_rule_counts"], {})
+            self.assertEqual(manifest["new_critical_failure_counts"], {})
             self.assertEqual(manifest["contract_scope"], "scenario")
             self.assertEqual(manifest["contract_drift_count"], 1)
             self.assertEqual(manifest["unverified_contract_count"], 0)
@@ -86,6 +95,76 @@ class CompareRlExportTests(unittest.TestCase):
             self.assertNotIn("tool_result gmail_send ok", dpo[0]["rejected"])
             self.assertNotEqual(dpo[0]["chosen"], dpo[0]["rejected"])
             self.assertIn("# Flight Recorder Improvement Pair Card", card)
+
+    def test_export_compare_rl_writes_baseline_regression_movement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            out = Path(tmp) / "compare_rl"
+            gate_path = Path(tmp) / "gate.json"
+
+            code = run_cli(
+                [
+                    "export-compare-rl",
+                    "--baseline",
+                    str(candidate),
+                    "--candidate",
+                    str(baseline),
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--compare-export", str(out), "--strict"])
+            gate_code = run_cli(
+                [
+                    "gate-compare-export",
+                    "--compare-export",
+                    str(out),
+                    "--max-baseline-wins",
+                    "0",
+                    "--max-task-completion-regressions",
+                    "0",
+                    "--forbid-rule-regression",
+                    "required_actions",
+                    "--forbid-new-critical-failure",
+                    "required_actions",
+                    "--out",
+                    str(gate_path),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(validate_code, 0)
+            self.assertEqual(gate_code, 1)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            pair = self._read_jsonl(out / "improvement_pairs.jsonl")[0]
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+
+            self.assertEqual(manifest["candidate_win_count"], 0)
+            self.assertEqual(manifest["baseline_win_count"], 1)
+            self.assertEqual(manifest["candidate_win_scenarios"], [])
+            self.assertEqual(manifest["baseline_win_scenarios"], ["email_reply_completion"])
+            self.assertEqual(manifest["task_completion_improvement_count"], 0)
+            self.assertEqual(manifest["task_completion_regression_count"], 1)
+            self.assertEqual(manifest["task_completion_improvement_scenarios"], [])
+            self.assertEqual(manifest["task_completion_regression_scenarios"], ["email_reply_completion"])
+            self.assertEqual(manifest["fixed_rule_counts"], {})
+            self.assertEqual(manifest["regressed_rule_counts"]["required_actions"], 1)
+            self.assertEqual(manifest["new_critical_failure_counts"]["required_actions"], 1)
+            self.assertEqual(pair["chosen_side"], "baseline")
+            self.assertEqual(pair["rejected_side"], "candidate")
+            self.assertEqual(pair["candidate_score_delta"], -100)
+            self.assertEqual(pair["rule_fixes"], [])
+            self.assertIn("required_actions", pair["rule_regressions"])
+            self.assertIn("required_actions", pair["new_critical_failures"])
+            self.assertEqual(gate["metrics"]["baseline_win_scenarios"], ["email_reply_completion"])
+            self.assertEqual(gate["metrics"]["task_completion_regression_scenarios"], ["email_reply_completion"])
+            self.assertEqual(gate["metrics"]["regressed_rule_counts"]["required_actions"], 1)
+            self.assertEqual(gate["metrics"]["new_critical_failure_counts"]["required_actions"], 1)
+            failed_ids = {check["id"] for check in gate["checks"] if not check["passed"]}
+            self.assertIn("max_baseline_wins", failed_ids)
+            self.assertIn("max_task_completion_regressions", failed_ids)
+            self.assertIn("forbid_rule_regression", failed_ids)
+            self.assertIn("forbid_new_critical_failure", failed_ids)
 
     def test_export_compare_rl_can_require_strict_trace_fixture_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -148,6 +227,30 @@ class CompareRlExportTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("compare_manifest.artifact_fingerprints.improvement_pairs.sha256", errors)
+
+    def test_validate_rejects_stale_compare_movement_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            out = Path(tmp) / "compare_rl"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["export-compare-rl", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(out)])
+            manifest_path = out / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["task_completion_improvement_count"] = 0
+            manifest["task_completion_improvement_scenarios"] = []
+            manifest["fixed_rule_counts"] = {}
+            manifest.pop("contract_drift_count")
+            manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--compare-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("compare_manifest.task_completion_improvement_count expected 1", errors)
+            self.assertIn("compare_manifest.task_completion_improvement_scenarios expected", errors)
+            self.assertIn("compare_manifest.fixed_rule_counts expected", errors)
+            self.assertIn("compare_manifest.contract_drift_count expected 1", errors)
 
     def _paired_email_dirs(self, root: Path) -> tuple[Path, Path]:
         baseline = root / "baseline"
