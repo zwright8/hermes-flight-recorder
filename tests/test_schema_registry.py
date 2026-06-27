@@ -27,6 +27,8 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("compare_rl_manifest", names)
         self.assertIn("review_manifest", names)
         self.assertIn("reviewed_manifest", names)
+        self.assertIn("trainer_preflight", names)
+        self.assertIn("trainer_launch_check", names)
         for record in records:
             schema = load_schema(record["name"])
             self.assertEqual(schema["$id"], record["id"])
@@ -137,6 +139,83 @@ class SchemaRegistryTests(unittest.TestCase):
             with redirect_stdout(StringIO()):
                 bad_code = main(["schemas", "--check", str(bad_path)])
             self.assertEqual(bad_code, 1)
+
+    def test_schema_check_passes_trainer_handoff_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            gate = root / "training_gate.json"
+            preflight = root / "trainer_preflight.json"
+            launch_check = root / "trainer_launch_check.json"
+
+            with redirect_stdout(StringIO()):
+                self.assertEqual(
+                    main(
+                        [
+                            "run-suite",
+                            "--scenarios",
+                            str(ROOT / "scenarios"),
+                            "--out",
+                            str(runs),
+                            "--export-rl",
+                        ]
+                    ),
+                    0,
+                )
+                self.assertEqual(
+                    main(
+                        [
+                            "gate-export",
+                            "--training-export",
+                            str(runs / "training_export"),
+                            "--policy",
+                            str(ROOT / "examples" / "training_gate_policy.demo.json"),
+                            "--out",
+                            str(gate),
+                        ]
+                    ),
+                    0,
+                )
+                self.assertEqual(
+                    main(
+                        [
+                            "trainer-preflight",
+                            "--gate",
+                            str(gate),
+                            "--training-export",
+                            str(runs / "training_export"),
+                            "--require-gate",
+                            "training_gate",
+                            "--trainer-command",
+                            "python train.py --dataset runs/training_export",
+                            "--out",
+                            str(preflight),
+                        ]
+                    ),
+                    0,
+                )
+                self.assertEqual(
+                    main(
+                        [
+                            "trainer-launch-check",
+                            "--preflight",
+                            str(preflight),
+                            "--require-gate",
+                            "training_gate",
+                            "--out",
+                            str(launch_check),
+                        ]
+                    ),
+                    0,
+                )
+
+            preflight_result = check_schema_file(preflight)
+            launch_result = check_schema_file(launch_check)
+
+            self.assertTrue(preflight_result["passed"], preflight_result["errors"])
+            self.assertEqual(preflight_result["schema"]["name"], "trainer_preflight")
+            self.assertTrue(launch_result["passed"], launch_result["errors"])
+            self.assertEqual(launch_result["schema"]["name"], "trainer_launch_check")
 
 
 if __name__ == "__main__":

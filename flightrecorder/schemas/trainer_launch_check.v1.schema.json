@@ -1,0 +1,262 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trainer_launch_check.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Consumer-side trainer launch decision over a validated trainer preflight.",
+  "properties": {
+    "approved_command": {
+      "$ref": "#/$defs/approvedCommand"
+    },
+    "artifacts": {
+      "$ref": "#/$defs/artifactSummary"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "gate_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "gates": {
+      "items": {
+        "$ref": "#/$defs/launchGate"
+      },
+      "type": "array"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "passed_gate_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "preflight_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "launch_allowed",
+        "block_launch"
+      ]
+    },
+    "required_gates": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "required_metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.trainer_launch_check.v1"
+    },
+    "validation": {
+      "$ref": "#/$defs/validation"
+    }
+  },
+  "required": [
+    "schema_version",
+    "preflight_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "validation",
+    "required_gates",
+    "required_metadata",
+    "gates",
+    "gate_count",
+    "passed_gate_count",
+    "artifacts",
+    "approved_command",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Trainer Launch Check",
+  "type": "object",
+  "$defs": {
+    "approvedCommand": {
+      "additionalProperties": true,
+      "properties": {
+        "approved": {
+          "type": "boolean"
+        },
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "parseable": {
+          "type": "boolean"
+        },
+        "provided": {
+          "type": "boolean"
+        },
+        "raw": {
+          "type": "string"
+        },
+        "shell": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "approved",
+        "provided",
+        "raw",
+        "argv",
+        "parseable",
+        "shell"
+      ],
+      "type": "object"
+    },
+    "artifactSummary": {
+      "additionalProperties": true,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "count",
+        "names"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "launchGate": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "schema_version",
+        "passed"
+      ],
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "target_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "passed",
+        "strict",
+        "target_count",
+        "error_count",
+        "warning_count",
+        "errors",
+        "warnings"
+      ],
+      "type": "object"
+    }
+  }
+}

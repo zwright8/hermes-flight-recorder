@@ -80,6 +80,22 @@
       "filename": "reviewed_manifest.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/reviewed_manifest.v1.schema.json",
       "name": "reviewed_manifest"
+    },
+    {
+      "artifact": "trainer_preflight",
+      "artifact_schema_version": "hfr.trainer_preflight.v1",
+      "description": "Trainer preflight launch guard over passed gates and trainer-facing artifacts.",
+      "filename": "trainer_preflight.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trainer_preflight.v1.schema.json",
+      "name": "trainer_preflight"
+    },
+    {
+      "artifact": "trainer_launch_check",
+      "artifact_schema_version": "hfr.trainer_launch_check.v1",
+      "description": "Consumer-side trainer launch decision over a validated trainer preflight.",
+      "filename": "trainer_launch_check.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trainer_launch_check.v1.schema.json",
+      "name": "trainer_launch_check"
     }
   ]
 }

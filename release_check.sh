@@ -899,6 +899,7 @@ python -m flightrecorder trainer-preflight \
   --metadata candidate=offline-demo \
   --out runs/trainer_preflight.json >/dev/null
 test -f runs/trainer_preflight.json
+python -m flightrecorder schemas --check runs/trainer_preflight.json >/dev/null
 python -m flightrecorder trainer-launch-check \
   --preflight runs/trainer_preflight.json \
   --require-gate training_gate \
@@ -908,6 +909,7 @@ python -m flightrecorder trainer-launch-check \
   --require-metadata candidate=offline-demo \
   --out runs/trainer_launch_check.json >/dev/null
 test -f runs/trainer_launch_check.json
+python -m flightrecorder schemas --check runs/trainer_launch_check.json >/dev/null
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \

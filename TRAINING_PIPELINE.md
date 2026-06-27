@@ -16,13 +16,15 @@ training jobs:
 flightrecorder schemas --write-dir artifact_schemas
 flightrecorder schemas --name training_manifest --out training_manifest.schema.json
 flightrecorder schemas --check runs/training_export/manifest.json
+flightrecorder schemas --check runs/trainer_preflight.json
+flightrecorder schemas --check runs/trainer_launch_check.json
 ```
 
 Treat those JSON Schemas as shape contracts. `flightrecorder schemas --check`
 can gate manifest shape without installing a third-party JSON Schema validator.
-Use `flightrecorder validate --strict` and the relevant gates for stronger
+Use `flightrecorder validate --strict` and the relevant gates for semantic
 readiness checks over artifact hashes, evidence references, replay lineage,
-reviewed labels, and trainer preflight handoffs.
+reviewed labels, and trainer handoff approvals.
 
 ## Export
 

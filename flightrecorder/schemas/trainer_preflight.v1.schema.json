@@ -1,0 +1,279 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trainer_preflight.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Trainer preflight launch guard over passed gates and trainer-facing evidence artifacts.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/artifact"
+      },
+      "type": "object"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "gate_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "gates": {
+      "items": {
+        "$ref": "#/$defs/preflightGate"
+      },
+      "type": "array"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "passed_gate_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "preflight_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "launch_allowed",
+        "block_launch"
+      ]
+    },
+    "required_gates": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.trainer_preflight.v1"
+    },
+    "trainer_command": {
+      "$ref": "#/$defs/trainerCommand"
+    }
+  },
+  "required": [
+    "schema_version",
+    "preflight_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "gate_count",
+    "passed_gate_count",
+    "required_gates",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "gates",
+    "artifacts",
+    "trainer_command",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Trainer Preflight",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "entry_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_directory": {
+          "type": "boolean"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symlink": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "preflightGate": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "validation": {
+          "$ref": "#/$defs/validation"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "exists",
+        "schema_version",
+        "passed"
+      ],
+      "type": "object"
+    },
+    "trainerCommand": {
+      "additionalProperties": true,
+      "properties": {
+        "argv": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "parseable": {
+          "type": "boolean"
+        },
+        "provided": {
+          "type": "boolean"
+        },
+        "raw": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provided",
+        "raw",
+        "argv"
+      ],
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "available",
+        "passed",
+        "strict",
+        "error_count",
+        "warning_count"
+      ],
+      "type": "object"
+    }
+  }
+}
