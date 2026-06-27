@@ -43,6 +43,13 @@ from .compare_gate import (
 from .decision_gate import DecisionGateError, evaluate_decision_gate
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
+from .improvement_gate import (
+    IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION,
+    ImprovementLedgerGateError,
+    ImprovementLedgerGatePolicyError,
+    evaluate_improvement_ledger_gate,
+    load_improvement_ledger_gate_policy,
+)
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
@@ -129,6 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         ActionLedgerError,
         ActionLedgerGateError,
         ActionLedgerGatePolicyError,
+        ImprovementLedgerGateError,
+        ImprovementLedgerGatePolicyError,
         ImprovementLedgerError,
         ImprovementPlanError,
         PromotionLedgerGateError,
@@ -702,6 +711,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         evidence_bundle_paths=args.evidence_bundle,
         improvement_plan_paths=args.improvement_plan,
         improvement_ledger_paths=args.improvement_ledger,
+        improvement_ledger_gate_paths=args.improvement_ledger_gate,
         action_ledger_paths=args.action_ledger,
         action_ledger_gate_paths=args.action_ledger_gate,
         decision_gate_paths=args.decision_gate,
@@ -1213,6 +1223,37 @@ def cmd_gate_action_ledger(args: argparse.Namespace) -> int:
     return 0 if result["passed"] else 1
 
 
+def cmd_gate_improvement_ledger(args: argparse.Namespace) -> int:
+    ledger = _read_json(Path(args.improvement_ledger))
+    options = _improvement_ledger_gate_options(args)
+    result = evaluate_improvement_ledger_gate(
+        ledger,
+        improvement_ledger_path=_display_path(Path(args.improvement_ledger), args.preserve_paths),
+        min_plans=options["min_plans"],
+        max_open_work_items=options["max_open_work_items"],
+        max_new_work_items=options["max_new_work_items"],
+        max_recurring_work_items=options["max_recurring_work_items"],
+        min_resolved_work_items=options["min_resolved_work_items"],
+        max_critical_open_work_items=options["max_critical_open_work_items"],
+        max_high_open_work_items=options["max_high_open_work_items"],
+        forbid_open_priorities=options["forbid_open_priorities"],
+        forbid_open_categories=options["forbid_open_categories"],
+        forbid_open_work_keys=options["forbid_open_work_keys"],
+        require_open_work_keys=options["require_open_work_keys"],
+        require_resolved_work_keys=options["require_resolved_work_keys"],
+    )
+    if options["policy_path"]:
+        result["policy"] = _improvement_ledger_gate_policy_summary(options)
+    rendered = json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if result["passed"] else 1
+
+
 def cmd_gate_promotion_ledger(args: argparse.Namespace) -> int:
     ledger = _read_json(Path(args.promotion_ledger))
     options = _promotion_ledger_gate_options(args)
@@ -1629,6 +1670,12 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--evidence-bundle", action="append", default=[], help="Validate one evidence_bundle.json; may be repeated")
     validate.add_argument("--improvement-plan", action="append", default=[], help="Validate one improvement_plan.json; may be repeated")
     validate.add_argument("--improvement-ledger", action="append", default=[], help="Validate one improvement_ledger.json; may be repeated")
+    validate.add_argument(
+        "--improvement-ledger-gate",
+        action="append",
+        default=[],
+        help="Validate one improvement_ledger_gate.json; may be repeated",
+    )
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
@@ -1771,6 +1818,79 @@ def _parser() -> argparse.ArgumentParser:
     improvement_ledger.add_argument("--out", help="Write improvement ledger JSON to this path")
     improvement_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
     improvement_ledger.set_defaults(func=cmd_improvement_ledger)
+
+    gate_improvement_ledger = subparsers.add_parser(
+        "gate-improvement-ledger",
+        help="Evaluate concrete improvement-work thresholds against an improvement ledger",
+    )
+    gate_improvement_ledger.add_argument("--improvement-ledger", required=True, help="Path to improvement_ledger.json")
+    gate_improvement_ledger.add_argument("--policy", help="Versioned improvement-ledger gate policy JSON file")
+    gate_improvement_ledger.add_argument("--out", help="Write improvement-ledger gate JSON to this path")
+    gate_improvement_ledger.add_argument("--min-plans", type=_non_negative_int_arg, help="Minimum improvement plans required")
+    gate_improvement_ledger.add_argument(
+        "--max-open-work-items",
+        type=_non_negative_int_arg,
+        help="Maximum concrete work items still open in the latest plan",
+    )
+    gate_improvement_ledger.add_argument(
+        "--max-new-work-items",
+        type=_non_negative_int_arg,
+        help="Maximum work items first seen in the latest plan",
+    )
+    gate_improvement_ledger.add_argument(
+        "--max-recurring-work-items",
+        type=_non_negative_int_arg,
+        help="Maximum work items recurring from earlier plans",
+    )
+    gate_improvement_ledger.add_argument(
+        "--min-resolved-work-items",
+        type=_non_negative_int_arg,
+        help="Minimum work items resolved before the latest plan",
+    )
+    gate_improvement_ledger.add_argument(
+        "--max-critical-open-work-items",
+        type=_non_negative_int_arg,
+        help="Maximum critical-priority work items still open",
+    )
+    gate_improvement_ledger.add_argument(
+        "--max-high-open-work-items",
+        type=_non_negative_int_arg,
+        help="Maximum high-priority work items still open",
+    )
+    gate_improvement_ledger.add_argument(
+        "--forbid-open-priority",
+        action="append",
+        default=[],
+        choices=["critical", "high", "medium", "low"],
+        help="Fail if any open work item has this priority; may be repeated",
+    )
+    gate_improvement_ledger.add_argument(
+        "--forbid-open-category",
+        action="append",
+        default=[],
+        choices=["bundle_action", "repair", "curriculum", "digest_action"],
+        help="Fail if any open work item has this category; may be repeated",
+    )
+    gate_improvement_ledger.add_argument(
+        "--forbid-open-work-key",
+        action="append",
+        default=[],
+        help="Fail if this work key, routing key, item id, or fingerprint is open; may be repeated",
+    )
+    gate_improvement_ledger.add_argument(
+        "--require-open-work-key",
+        action="append",
+        default=[],
+        help="Fail unless this work key, routing key, item id, or fingerprint is open; may be repeated",
+    )
+    gate_improvement_ledger.add_argument(
+        "--require-resolved-work-key",
+        action="append",
+        default=[],
+        help="Fail unless this work key, routing key, item id, or fingerprint is resolved; may be repeated",
+    )
+    gate_improvement_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute ledger paths in gate output")
+    gate_improvement_ledger.set_defaults(func=cmd_gate_improvement_ledger)
 
     action_ledger = subparsers.add_parser(
         "action-ledger",
@@ -2801,6 +2921,79 @@ def _action_ledger_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any
     }
     summary: dict[str, Any] = {
         "schema_version": ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION,
+        "path": options["policy_path"],
+        "effective": effective,
+    }
+    if options.get("policy_description"):
+        summary["description"] = options["policy_description"]
+    return summary
+
+
+def _improvement_ledger_gate_options(args: argparse.Namespace) -> dict[str, Any]:
+    policy = load_improvement_ledger_gate_policy(args.policy) if args.policy else {}
+    return {
+        "policy_path": _display_path(Path(args.policy), args.preserve_paths) if args.policy else None,
+        "policy_description": policy.get("description"),
+        "min_plans": args.min_plans if args.min_plans is not None else policy.get("min_plans"),
+        "max_open_work_items": (
+            args.max_open_work_items if args.max_open_work_items is not None else policy.get("max_open_work_items")
+        ),
+        "max_new_work_items": (
+            args.max_new_work_items if args.max_new_work_items is not None else policy.get("max_new_work_items")
+        ),
+        "max_recurring_work_items": (
+            args.max_recurring_work_items
+            if args.max_recurring_work_items is not None
+            else policy.get("max_recurring_work_items")
+        ),
+        "min_resolved_work_items": (
+            args.min_resolved_work_items
+            if args.min_resolved_work_items is not None
+            else policy.get("min_resolved_work_items")
+        ),
+        "max_critical_open_work_items": (
+            args.max_critical_open_work_items
+            if args.max_critical_open_work_items is not None
+            else policy.get("max_critical_open_work_items")
+        ),
+        "max_high_open_work_items": (
+            args.max_high_open_work_items
+            if args.max_high_open_work_items is not None
+            else policy.get("max_high_open_work_items")
+        ),
+        "forbid_open_priorities": _merge_unique_strings(policy.get("forbid_open_priorities", []), args.forbid_open_priority),
+        "forbid_open_categories": _merge_unique_strings(policy.get("forbid_open_categories", []), args.forbid_open_category),
+        "forbid_open_work_keys": _merge_unique_strings(policy.get("forbid_open_work_keys", []), args.forbid_open_work_key),
+        "require_open_work_keys": _merge_unique_strings(policy.get("require_open_work_keys", []), args.require_open_work_key),
+        "require_resolved_work_keys": _merge_unique_strings(
+            policy.get("require_resolved_work_keys", []),
+            args.require_resolved_work_key,
+        ),
+    }
+
+
+def _improvement_ledger_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
+    effective_fields = (
+        "min_plans",
+        "max_open_work_items",
+        "max_new_work_items",
+        "max_recurring_work_items",
+        "min_resolved_work_items",
+        "max_critical_open_work_items",
+        "max_high_open_work_items",
+        "forbid_open_priorities",
+        "forbid_open_categories",
+        "forbid_open_work_keys",
+        "require_open_work_keys",
+        "require_resolved_work_keys",
+    )
+    effective = {
+        field: options[field]
+        for field in effective_fields
+        if options.get(field) is not None and options.get(field) != []
+    }
+    summary: dict[str, Any] = {
+        "schema_version": IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION,
         "path": options["policy_path"],
         "effective": effective,
     }

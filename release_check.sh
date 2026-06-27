@@ -38,6 +38,7 @@ rm -rf schema_contracts_check
 python -m flightrecorder repair-queue --help >/dev/null
 python -m flightrecorder improvement-plan --help >/dev/null
 python -m flightrecorder improvement-ledger --help >/dev/null
+python -m flightrecorder gate-improvement-ledger --help >/dev/null
 ./demo.sh
 python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
@@ -102,7 +103,14 @@ python -m flightrecorder validate \
 python -m flightrecorder validate \
   --improvement-plan runs/improvement_plan.json \
   --improvement-ledger runs/improvement_ledger.json \
+  --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --strict >/dev/null
+if python -m flightrecorder gate-improvement-ledger \
+  --improvement-ledger runs/improvement_ledger.json \
+  --max-recurring-work-items 0 >/dev/null; then
+  echo "gate-improvement-ledger did not fail a too-strict recurring work-item threshold" >&2
+  exit 1
+fi
 if python -m flightrecorder scenario-quality \
   --scenarios scenarios \
   --require-traces \
@@ -182,6 +190,7 @@ test -f runs/repair_queue.json
 test -f runs/evidence_bundle.json
 test -f runs/improvement_plan.json
 test -f runs/improvement_ledger.json
+test -f runs/improvement_ledger_gate.json
 test -f runs/suite_summary.json
 python - <<'PY'
 import json
@@ -195,6 +204,7 @@ repair_queue = json.loads(Path("runs/repair_queue.json").read_text(encoding="utf
 evidence_bundle = json.loads(Path("runs/evidence_bundle.json").read_text(encoding="utf-8"))
 improvement_plan = json.loads(Path("runs/improvement_plan.json").read_text(encoding="utf-8"))
 improvement_ledger = json.loads(Path("runs/improvement_ledger.json").read_text(encoding="utf-8"))
+improvement_ledger_gate = json.loads(Path("runs/improvement_ledger_gate.json").read_text(encoding="utf-8"))
 captured_state = json.loads(Path("runs/captured_state.json").read_text(encoding="utf-8"))
 email_digest = json.loads(Path("runs/email_reply_completion_good/run_digest.json").read_text(encoding="utf-8"))
 email_digest_regenerated = json.loads(Path("runs/email_reply_completion_good/regenerated_run_digest.json").read_text(encoding="utf-8"))
@@ -324,6 +334,17 @@ assert improvement_ledger["metrics"]["resolved_work_item_count"] == 0
 assert improvement_ledger["decision"]["recommendation"] == "continue_improvement"
 assert all(entry["status"] == "recurring" for entry in improvement_ledger["entries"])
 assert any(entry["work_key"] == "repair:prompt_injection_bad:forbidden_actions" for entry in improvement_ledger["entries"])
+assert improvement_ledger_gate["schema_version"] == "hfr.improvement_ledger_gate.v1"
+assert improvement_ledger_gate["passed"] is True
+assert improvement_ledger_gate["decision"]["readiness"] == "ready"
+assert improvement_ledger_gate["decision"]["recommendation"] == "promote_iteration"
+assert improvement_ledger_gate["metrics"]["plan_count"] == 2
+assert improvement_ledger_gate["metrics"]["open_work_item_count"] == improvement_plan["work_item_count"]
+assert improvement_ledger_gate["metrics"]["recurring_work_item_count"] == improvement_plan["work_item_count"]
+assert improvement_ledger_gate["metrics"]["resolved_work_item_count"] == 0
+assert improvement_ledger_gate["policy"]["schema_version"] == "hfr.improvement_ledger_gate.policy.v1"
+assert improvement_ledger_gate["policy"]["effective"]["min_plans"] == 2
+assert improvement_ledger_gate["policy"]["effective"]["max_recurring_work_items"] == improvement_plan["work_item_count"]
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
 assert email_digest["schema_version"] == "hfr.run_digest.v1"
@@ -1039,6 +1060,7 @@ python -m flightrecorder schemas --check runs/trainer_launch_check.json >/dev/nu
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
+  --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --action-ledger runs/action_ledger.json \
   --action-ledger-gate runs/action_ledger_gate.json \
   --decision-gate runs/promotion_decision.json \
@@ -1241,6 +1263,7 @@ assert_help_contains "--state-snapshot" "$VENV_DIR/bin/python" -m flightrecorder
 assert_help_contains "--live-smoke-summary" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--trainer-launch-check" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--improvement-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--decision-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--promotion-ledger" "$VENV_DIR/bin/python" -m flightrecorder validate --help
@@ -1258,6 +1281,8 @@ assert_help_contains "--promotion-archive" "$VENV_DIR/bin/python" -m flightrecor
 assert_help_contains "--live-smoke-summary" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
 "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help >/dev/null
 assert_help_contains "--bundle" "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help
+"$VENV_DIR/bin/python" -m flightrecorder gate-improvement-ledger --help >/dev/null
+assert_help_contains "--max-recurring-work-items" "$VENV_DIR/bin/python" -m flightrecorder gate-improvement-ledger --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help >/dev/null
 assert_help_contains "--max-recurring-actions" "$VENV_DIR/bin/python" -m flightrecorder gate-action-ledger --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-decision --help >/dev/null

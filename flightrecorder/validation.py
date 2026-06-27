@@ -18,6 +18,7 @@ from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
@@ -103,6 +104,7 @@ def validate_artifacts(
     evidence_bundle_paths: list[str | Path] | None = None,
     improvement_plan_paths: list[str | Path] | None = None,
     improvement_ledger_paths: list[str | Path] | None = None,
+    improvement_ledger_gate_paths: list[str | Path] | None = None,
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
@@ -146,6 +148,8 @@ def validate_artifacts(
         targets.append(validate_improvement_plan(improvement_plan_path))
     for improvement_ledger_path in improvement_ledger_paths or []:
         targets.append(validate_improvement_ledger(improvement_ledger_path))
+    for improvement_ledger_gate_path in improvement_ledger_gate_paths or []:
+        targets.append(validate_improvement_ledger_gate(improvement_ledger_gate_path))
     for action_ledger_path in action_ledger_paths or []:
         targets.append(validate_action_ledger(action_ledger_path))
     for action_ledger_gate_path in action_ledger_gate_paths or []:
@@ -574,6 +578,16 @@ def validate_improvement_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "improvement_ledger.json")
     if ledger is not None:
         _validate_improvement_ledger(ledger, target)
+    return target
+
+
+def validate_improvement_ledger_gate(path: str | Path) -> ValidationTarget:
+    """Validate an improvement-ledger gate artifact."""
+    gate_path = Path(path)
+    target = ValidationTarget("improvement_ledger_gate", str(gate_path))
+    gate = _read_object(gate_path, target, "improvement_ledger_gate.json")
+    if gate is not None:
+        _validate_improvement_ledger_gate(gate, target)
     return target
 
 
@@ -5462,7 +5476,249 @@ def _validate_action_ledger_gate_policy_summary(value: Any, target: ValidationTa
         unknown_priorities = sorted({item for item in priorities if isinstance(item, str)} - {"critical", "high", "medium", "low"})
         if unknown_priorities:
             target.errors.append(
-                f"action_ledger_gate.policy.effective.forbid_open_priorities has invalid priority value(s): {', '.join(unknown_priorities)}."
+                "action_ledger_gate.policy.effective.forbid_open_priorities has invalid priority value(s): "
+                f"{', '.join(unknown_priorities)}."
+            )
+
+
+def _validate_improvement_ledger_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(gate, "schema_version", IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION, target)
+    if not isinstance(gate.get("improvement_ledger"), str) or not gate.get("improvement_ledger"):
+        target.errors.append("improvement_ledger_gate.improvement_ledger must be a non-empty string.")
+    if not isinstance(gate.get("passed"), bool):
+        target.errors.append("improvement_ledger_gate.passed must be a boolean.")
+    checks = gate.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("improvement_ledger_gate.checks must be a list.")
+        checks = []
+    metrics = gate.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("improvement_ledger_gate.metrics must be an object.")
+        metrics = {}
+    if "policy" in gate:
+        _validate_improvement_ledger_gate_policy_summary(gate.get("policy"), target)
+
+    failed_checks = _validate_gate_like_checks(checks, target, "improvement_ledger_gate.checks")
+    if gate.get("check_count") != len(checks):
+        target.errors.append(f"improvement_ledger_gate.check_count expected {len(checks)}, got {gate.get('check_count')!r}.")
+    if gate.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"improvement_ledger_gate.failed_check_count expected {failed_checks}, got {gate.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(gate.get("passed"), bool) and gate.get("passed") != expected_passed:
+        target.errors.append("improvement_ledger_gate.passed must match failed_check_count.")
+    _validate_improvement_ledger_gate_metrics(metrics, target)
+    _validate_improvement_ledger_gate_decision(gate.get("decision"), expected_passed, failed_checks, metrics, target)
+    target.details.update(
+        {
+            "passed": gate.get("passed"),
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "open_work_item_count": metrics.get("open_work_item_count"),
+            "recurring_work_item_count": metrics.get("recurring_work_item_count"),
+        }
+    )
+
+
+def _validate_improvement_ledger_gate_decision(
+    value: Any,
+    expected_passed: bool,
+    failed_checks: int,
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("improvement_ledger_gate.decision must be an object.")
+        return
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "promote_iteration" if expected_passed else "block_iteration"
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"improvement_ledger_gate.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}."
+        )
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            "improvement_ledger_gate.decision.recommendation expected "
+            f"{expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("improvement_ledger_gate.decision.summary must be a non-empty string.")
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("improvement_ledger_gate.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            "improvement_ledger_gate.decision.blocking_check_count expected "
+            f"{failed_checks}, got {value.get('blocking_check_count')!r}."
+        )
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(
+            f"improvement_ledger_gate.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}."
+        )
+    for index, check in enumerate(blocking_checks):
+        label = f"improvement_ledger_gate.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    key_metrics = value.get("key_metrics")
+    if not isinstance(key_metrics, dict):
+        target.errors.append("improvement_ledger_gate.decision.key_metrics must be an object.")
+        return
+    for field_name in (
+        "plan_count",
+        "unique_work_item_count",
+        "open_work_item_count",
+        "new_work_item_count",
+        "recurring_work_item_count",
+        "resolved_work_item_count",
+        "critical_open_work_item_count",
+        "high_open_work_item_count",
+        "open_priority_counts",
+        "open_category_counts",
+    ):
+        if key_metrics.get(field_name) != metrics.get(field_name):
+            target.errors.append(
+                "improvement_ledger_gate.decision.key_metrics."
+                f"{field_name} must match improvement_ledger_gate.metrics.{field_name}."
+            )
+
+
+def _validate_improvement_ledger_gate_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
+    count_fields = (
+        "plan_count",
+        "unique_work_item_count",
+        "open_work_item_count",
+        "new_work_item_count",
+        "recurring_work_item_count",
+        "resolved_work_item_count",
+        "critical_open_work_item_count",
+        "high_open_work_item_count",
+    )
+    for field_name in count_fields:
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"improvement_ledger_gate.metrics.{field_name} must be a non-negative integer.")
+    if all(_is_non_negative_int(metrics.get(field_name)) for field_name in count_fields):
+        if metrics["unique_work_item_count"] != metrics["open_work_item_count"] + metrics["resolved_work_item_count"]:
+            target.errors.append(
+                "improvement_ledger_gate.metrics.unique_work_item_count must equal open_work_item_count + resolved_work_item_count."
+            )
+        if metrics["open_work_item_count"] < metrics["new_work_item_count"] + metrics["recurring_work_item_count"]:
+            target.errors.append(
+                "improvement_ledger_gate.metrics.open_work_item_count must be at least new_work_item_count + recurring_work_item_count."
+            )
+        critical_high = metrics["critical_open_work_item_count"] + metrics["high_open_work_item_count"]
+        if critical_high > metrics["open_work_item_count"]:
+            target.errors.append(
+                "improvement_ledger_gate.metrics critical/high open counts must not exceed open_work_item_count."
+            )
+        if metrics["plan_count"] == 0 and metrics["unique_work_item_count"] > 0:
+            target.errors.append("improvement_ledger_gate.metrics.plan_count must be positive when work items are present.")
+
+    priority_counts = _count_rows(metrics.get("open_priority_counts"))
+    if priority_counts is None:
+        target.errors.append("improvement_ledger_gate.metrics.open_priority_counts must be a list of {id, count} objects.")
+    else:
+        unknown = sorted(set(priority_counts) - set(PRIORITIES))
+        if unknown:
+            target.errors.append(
+                f"improvement_ledger_gate.metrics.open_priority_counts has invalid priority value(s): {', '.join(unknown)}."
+            )
+        if _is_non_negative_int(metrics.get("open_work_item_count")) and sum(priority_counts.values()) > metrics["open_work_item_count"]:
+            target.errors.append("improvement_ledger_gate.metrics.open_priority_counts total must not exceed open_work_item_count.")
+
+    category_counts = _count_rows(metrics.get("open_category_counts"))
+    if category_counts is None:
+        target.errors.append("improvement_ledger_gate.metrics.open_category_counts must be a list of {id, count} objects.")
+    else:
+        unknown = sorted(set(category_counts) - {"bundle_action", "repair", "curriculum", "digest_action"})
+        if unknown:
+            target.errors.append(
+                f"improvement_ledger_gate.metrics.open_category_counts has invalid category value(s): {', '.join(unknown)}."
+            )
+        if _is_non_negative_int(metrics.get("open_work_item_count")) and sum(category_counts.values()) > metrics["open_work_item_count"]:
+            target.errors.append("improvement_ledger_gate.metrics.open_category_counts total must not exceed open_work_item_count.")
+
+
+def _validate_improvement_ledger_gate_policy_summary(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("improvement_ledger_gate.policy must be an object when present.")
+        return
+    _require_equal(
+        value,
+        "schema_version",
+        IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION,
+        target,
+        prefix="improvement_ledger_gate.policy.",
+    )
+    if not isinstance(value.get("path"), str) or not value.get("path"):
+        target.errors.append("improvement_ledger_gate.policy.path must be a non-empty string.")
+    if "description" in value and not isinstance(value.get("description"), str):
+        target.errors.append("improvement_ledger_gate.policy.description must be a string when present.")
+    effective = value.get("effective")
+    if not isinstance(effective, dict):
+        target.errors.append("improvement_ledger_gate.policy.effective must be an object.")
+        return
+    allowed_fields = {
+        "min_plans",
+        "max_open_work_items",
+        "max_new_work_items",
+        "max_recurring_work_items",
+        "min_resolved_work_items",
+        "max_critical_open_work_items",
+        "max_high_open_work_items",
+        "forbid_open_priorities",
+        "forbid_open_categories",
+        "forbid_open_work_keys",
+        "require_open_work_keys",
+        "require_resolved_work_keys",
+    }
+    unknown = sorted(set(effective) - allowed_fields)
+    if unknown:
+        target.errors.append(f"improvement_ledger_gate.policy.effective has unknown field(s): {', '.join(unknown)}.")
+    for field_name in (
+        "min_plans",
+        "max_open_work_items",
+        "max_new_work_items",
+        "max_recurring_work_items",
+        "min_resolved_work_items",
+        "max_critical_open_work_items",
+        "max_high_open_work_items",
+    ):
+        if field_name in effective and not _is_non_negative_int(effective.get(field_name)):
+            target.errors.append(f"improvement_ledger_gate.policy.effective.{field_name} must be a non-negative integer.")
+    for field_name in (
+        "forbid_open_priorities",
+        "forbid_open_categories",
+        "forbid_open_work_keys",
+        "require_open_work_keys",
+        "require_resolved_work_keys",
+    ):
+        if field_name in effective and not _is_string_list(effective.get(field_name)):
+            target.errors.append(f"improvement_ledger_gate.policy.effective.{field_name} must be a list of strings.")
+    priorities = effective.get("forbid_open_priorities")
+    if isinstance(priorities, list):
+        unknown_priorities = sorted({item for item in priorities if isinstance(item, str)} - set(PRIORITIES))
+        if unknown_priorities:
+            target.errors.append(
+                "improvement_ledger_gate.policy.effective.forbid_open_priorities has invalid priority value(s): "
+                f"{', '.join(unknown_priorities)}."
+            )
+    categories = effective.get("forbid_open_categories")
+    if isinstance(categories, list):
+        unknown_categories = sorted(
+            {item for item in categories if isinstance(item, str)} - {"bundle_action", "repair", "curriculum", "digest_action"}
+        )
+        if unknown_categories:
+            target.errors.append(
+                "improvement_ledger_gate.policy.effective.forbid_open_categories has invalid category value(s): "
+                f"{', '.join(unknown_categories)}."
             )
 
 

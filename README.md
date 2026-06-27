@@ -69,6 +69,9 @@ Expected demo output:
 - An improvement ledger in `runs/improvement_ledger.json` that tracks whether
   concrete work items are new, recurring, open, or resolved across plan
   snapshots.
+- An improvement-ledger gate in `runs/improvement_ledger_gate.json` that turns
+  recurring concrete work-item pressure into a deterministic promote/block
+  decision for CI and repair loops.
 - Promotion evidence in `runs/action_ledger.json`, `runs/action_ledger_gate.json`,
   `runs/promotion_decision.json`, `runs/promotion_ledger.json`, and
   `runs/promotion_ledger_gate.json`, plus a portable `runs/promotion_archive/`
@@ -247,6 +250,11 @@ flightrecorder improvement-ledger \
   --plan runs/current/improvement_plan.json \
   --out runs/improvement_ledger.json
 
+flightrecorder gate-improvement-ledger \
+  --improvement-ledger runs/improvement_ledger.json \
+  --policy examples/improvement_ledger_gate_policy.demo.json \
+  --out runs/improvement_ledger_gate.json
+
 flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -286,6 +294,7 @@ flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --improvement-plan runs/improvement_plan.json \
   --improvement-ledger runs/improvement_ledger.json \
+  --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --repair-queue runs/repair_queue.json \
   --promotion-ledger runs/promotion_ledger.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
@@ -780,6 +789,26 @@ Validate it with
 `flightrecorder validate --improvement-ledger runs/improvement_ledger.json --strict`.
 The ledger is useful for dashboards, repair-agent queues, and release notes
 that need to show concrete repair pressure going down over repeated eval runs.
+
+Use `flightrecorder gate-improvement-ledger` when CI should require concrete
+improvement work to be visible and bounded before promotion. The gate can
+enforce minimum plan history, maximum open/new/recurring work items, maximum
+critical/high open work, forbidden open priorities or categories, explicit
+open work keys that must remain tracked, and resolved work keys that must be
+closed before the next handoff.
+
+```bash
+flightrecorder gate-improvement-ledger \
+  --improvement-ledger runs/improvement_ledger.json \
+  --policy examples/improvement_ledger_gate_policy.demo.json \
+  --out runs/improvement_ledger_gate.json
+
+flightrecorder validate --improvement-ledger-gate runs/improvement_ledger_gate.json --strict
+```
+
+This is the concrete-work counterpart to `gate-action-ledger`: it gates the
+work items that repair agents and maintainers actually need to burn down,
+while `gate-action-ledger` gates higher-level evidence-bundle actions.
 
 Use `flightrecorder action-ledger` when an improvement loop has multiple bundle
 snapshots and needs a stable view of repeated repair pressure:

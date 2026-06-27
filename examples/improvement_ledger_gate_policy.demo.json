@@ -1,0 +1,13 @@
+{
+  "schema_version": "hfr.improvement_ledger_gate.policy.v1",
+  "description": "Demo policy that requires recurring concrete improvement work to be visible and bounded before promotion.",
+  "min_plans": 2,
+  "max_open_work_items": 20,
+  "max_new_work_items": 0,
+  "max_recurring_work_items": 20,
+  "max_critical_open_work_items": 15,
+  "max_high_open_work_items": 3,
+  "require_open_work_keys": [
+    "repair:prompt_injection_bad:forbidden_actions"
+  ]
+}

@@ -28,6 +28,10 @@ artifacts and turns them into maintainable eval evidence:
 - a compact evidence-bundle manifest that tells CI, reviewers, or future
   trainers which artifacts and gates were included in a handoff and whether the
   package is ready to consume.
+- improvement-plan, improvement-ledger, and improvement-ledger-gate artifacts
+  that turn evidence-backed failures into concrete work items, track whether
+  they recur across iterations, and give CI a deterministic promote/block
+  decision over that repair pressure.
 - a review-calibration report that measures whether deterministic scorecards
   agree with human labels before those labels become training signal.
 
@@ -337,6 +341,9 @@ That gives the Hermes team a practical improvement loop:
 - connector wrappers or CI jobs can use `flightrecorder capture-state` to turn
   local artifacts, connector JSON, and explicit observed facts into that
   post-run snapshot without adding live API dependencies to the scorer,
+- improvement plans and ledgers can show whether concrete scenario/rule repair
+  work is new, recurring, open, or resolved, and improvement-ledger gates can
+  block promotion while recurring critical work remains over policy,
 - deterministic scorecards can become terminal rewards, step-level reward
   attribution, preference pairs, failure taxonomies, and curriculum metadata,
 - artifact lineage can connect every scorecard and training episode back to the

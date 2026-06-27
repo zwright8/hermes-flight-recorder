@@ -164,6 +164,22 @@ The improvement ledger marks concrete scenario/rule work as `new`,
 convergence signal before trainer handoff because it can show whether the
 evidence-backed repair queue is shrinking across eval iterations.
 
+Use `flightrecorder gate-improvement-ledger` to turn that convergence signal
+into a CI decision before promotion or trainer launch:
+
+```bash
+flightrecorder gate-improvement-ledger \
+  --improvement-ledger runs/improvement_ledger.json \
+  --policy examples/improvement_ledger_gate_policy.demo.json \
+  --out runs/improvement_ledger_gate.json
+
+flightrecorder validate --improvement-ledger-gate runs/improvement_ledger_gate.json --strict
+```
+
+The gate checks bounded open/new/recurring work, critical/high repair pressure,
+required open work keys for tracked regressions, and required resolved work
+keys for fixes that must land before the next improvement handoff.
+
 Across repeated iterations, use `flightrecorder action-ledger` to fold multiple
 `evidence_bundle.json` files into a stable repair ledger:
 
@@ -443,6 +459,7 @@ flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --improvement-plan runs/improvement_plan.json \
   --improvement-ledger runs/improvement_ledger.json \
+  --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
