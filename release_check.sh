@@ -28,6 +28,7 @@ rm -rf schema_contracts_check
 python -m flightrecorder schemas --write-dir schema_contracts_check >/dev/null
 test -f schema_contracts_check/manifest.json
 test -f schema_contracts_check/trace.v1.schema.json
+test -f schema_contracts_check/improvement_ledger_gate.v1.schema.json
 python -m flightrecorder schemas \
   --check scenarios/prompt_injection_good.json \
   --name scenario >/dev/null
@@ -53,6 +54,7 @@ python -m flightrecorder schemas --check runs/email_reply_completion_good/run_di
 python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
 python -m flightrecorder schemas --check runs/improvement_plan.json >/dev/null
 python -m flightrecorder schemas --check runs/improvement_ledger.json >/dev/null
+python -m flightrecorder schemas --check runs/improvement_ledger_gate.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
 rm -rf replay_runs

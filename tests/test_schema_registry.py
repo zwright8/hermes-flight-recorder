@@ -26,6 +26,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("evidence_bundle", names)
         self.assertIn("improvement_plan", names)
         self.assertIn("improvement_ledger", names)
+        self.assertIn("improvement_ledger_gate", names)
         self.assertIn("training_manifest", names)
         self.assertIn("dataset_splits", names)
         self.assertIn("compare_rl_manifest", names)
@@ -180,6 +181,65 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "run_digest")
+
+    def test_improvement_ledger_gate_schema_accepts_minimal_gate(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.improvement_ledger_gate.v1",
+                "improvement_ledger": "runs/improvement_ledger.json",
+                "passed": True,
+                "decision": {
+                    "readiness": "ready",
+                    "recommendation": "promote_iteration",
+                    "summary": "Improvement-ledger gate is ready.",
+                    "blocking_check_count": 0,
+                    "blocking_checks": [],
+                    "key_metrics": {
+                        "plan_count": 2,
+                        "unique_work_item_count": 1,
+                        "open_work_item_count": 1,
+                        "new_work_item_count": 0,
+                        "recurring_work_item_count": 1,
+                        "resolved_work_item_count": 0,
+                        "critical_open_work_item_count": 0,
+                        "high_open_work_item_count": 1,
+                        "open_priority_counts": [{"id": "high", "count": 1}],
+                        "open_category_counts": [{"id": "repair", "count": 1}],
+                    },
+                },
+                "check_count": 1,
+                "failed_check_count": 0,
+                "checks": [
+                    {
+                        "id": "max_recurring_work_items",
+                        "passed": True,
+                        "actual": 1,
+                        "expected": {"max": 1},
+                        "summary": "max_recurring_work_items: actual=1, max=1",
+                    }
+                ],
+                "metrics": {
+                    "plan_count": 2,
+                    "unique_work_item_count": 1,
+                    "open_work_item_count": 1,
+                    "new_work_item_count": 0,
+                    "recurring_work_item_count": 1,
+                    "resolved_work_item_count": 0,
+                    "critical_open_work_item_count": 0,
+                    "high_open_work_item_count": 1,
+                    "open_priority_counts": [{"id": "high", "count": 1}],
+                    "open_category_counts": [{"id": "repair", "count": 1}],
+                },
+                "policy": {
+                    "schema_version": "hfr.improvement_ledger_gate.policy.v1",
+                    "path": "examples/improvement_ledger_gate_policy.demo.json",
+                    "effective": {"max_recurring_work_items": 1},
+                },
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "improvement_ledger_gate")
 
     def test_write_schema_bundle_writes_catalog_and_selected_schemas(self):
         with tempfile.TemporaryDirectory() as tmp:

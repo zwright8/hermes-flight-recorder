@@ -1,0 +1,253 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/improvement_ledger_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Policy gate over concrete improvement-ledger repair pressure.",
+  "properties": {
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "blocking_checks": {
+          "items": {
+            "$ref": "#/$defs/blocking_check"
+          },
+          "type": "array"
+        },
+        "key_metrics": {
+          "$ref": "#/$defs/metrics"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "recommendation": {
+          "enum": [
+            "promote_iteration",
+            "block_iteration"
+          ]
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "improvement_ledger": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "schema_version": {
+      "const": "hfr.improvement_ledger_gate.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "improvement_ledger",
+    "passed",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics"
+  ],
+  "title": "Hermes Flight Recorder Improvement Ledger Gate",
+  "type": "object",
+  "$defs": {
+    "blocking_check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "summary",
+        "scope"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "count_row": {
+      "additionalProperties": true,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "count"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_open_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "high_open_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "new_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open_category_counts": {
+          "items": {
+            "$ref": "#/$defs/count_row"
+          },
+          "type": "array"
+        },
+        "open_priority_counts": {
+          "items": {
+            "$ref": "#/$defs/count_row"
+          },
+          "type": "array"
+        },
+        "open_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "plan_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recurring_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resolved_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unique_work_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "plan_count",
+        "unique_work_item_count",
+        "open_work_item_count",
+        "new_work_item_count",
+        "recurring_work_item_count",
+        "resolved_work_item_count",
+        "critical_open_work_item_count",
+        "high_open_work_item_count",
+        "open_priority_counts",
+        "open_category_counts"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "effective": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "hfr.improvement_ledger_gate.policy.v1"
+        }
+      },
+      "required": [
+        "schema_version",
+        "path",
+        "effective"
+      ],
+      "type": "object"
+    }
+  }
+}

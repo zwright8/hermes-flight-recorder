@@ -74,6 +74,14 @@
       "name": "improvement_ledger"
     },
     {
+      "artifact": "improvement_ledger_gate",
+      "artifact_schema_version": "hfr.improvement_ledger_gate.v1",
+      "description": "Policy gate over concrete improvement-ledger repair pressure.",
+      "filename": "improvement_ledger_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/improvement_ledger_gate.v1.schema.json",
+      "name": "improvement_ledger_gate"
+    },
+    {
       "artifact": "training_manifest",
       "artifact_schema_version": "hfr.rl.manifest.v1",
       "description": "Manifest for export-rl training handoffs.",

@@ -110,13 +110,14 @@ flightrecorder schemas --check scenarios/prompt_injection_good.json --name scena
 flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
+flightrecorder schemas --check runs/improvement_ledger_gate.json
 ```
 
 The bundled catalog currently covers scenarios, normalized traces, scorecards,
 task-completion verdicts, state diffs, run digests, evidence bundles, training
 manifests, dataset split manifests, compare-RL manifests, review manifests,
 reviewed-export manifests, improvement plans, improvement ledgers, trainer
-preflights, and trainer launch checks. These
+preflights, trainer launch checks, and improvement-ledger gates. These
 schemas are compatibility contracts for artifact shape. `flightrecorder schemas --check` performs a
 dependency-free conformance check for the bundled schema subset; use
 `flightrecorder validate` for deeper integrity checks such as count
