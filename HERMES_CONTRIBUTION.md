@@ -28,12 +28,12 @@ artifacts and turns them into maintainable eval evidence:
 - a compact evidence-bundle manifest that tells CI, reviewers, or future
   trainers which artifacts and gates were included in a handoff and whether the
   package is ready to consume.
-- trainer preflight, launch-check, portable trainer-archive, and
-  trainer-archive-check artifacts that let external training infrastructure
-  validate copied evidence and local external trainer code before consuming
-  SFT, DPO, reward-model, or RL rows, including archive-local input rewrites
-  and a consumer contract that separates copied evidence from external trainer
-  code.
+- trainer preflight, launch-check, portable trainer-archive,
+  trainer-archive-check, and trainer-consumer-plan artifacts that let external
+  training infrastructure validate copied evidence, local external trainer
+  code, and the exact non-executing command/input plan before consuming SFT,
+  DPO, reward-model, or RL rows, including archive-local input rewrites and a
+  consumer contract that separates copied evidence from external trainer code.
 - improvement-plan, improvement-ledger, and improvement-ledger-gate artifacts
   that turn evidence-backed failures into concrete work items, track whether
   they recur across iterations, and give CI a deterministic promote/block
@@ -321,11 +321,12 @@ Flight Recorder turns Hermes' experience into regression pressure.
    including source-fingerprint coverage, validation/test split size, and
    family-exclusivity thresholds so unproven or leaky labels do not enter the
    improvement loop.
-23. Package the approved handoff with `flightrecorder trainer-archive` and
-   prove consumer readiness with `flightrecorder trainer-archive-check` so the
-   external trainer can validate copied gates, schema contracts,
-   trainer-facing export files, and local trainer code without trusting
-   producer-local paths.
+23. Package the approved handoff with `flightrecorder trainer-archive`, prove
+   consumer readiness with `flightrecorder trainer-archive-check`, and emit a
+   `flightrecorder trainer-consumer-plan` so the external trainer can validate
+   copied gates, schema contracts, trainer-facing export files, local trainer
+   code, and the exact command/input contract without trusting producer-local
+   paths.
 
 That gives the Hermes team a practical improvement loop:
 

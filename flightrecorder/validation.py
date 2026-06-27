@@ -49,6 +49,7 @@ from .state_diff import STATE_DIFF_SCHEMA_VERSION
 from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION, build_trace_signal
 from .trainer_archive import TRAINER_ARCHIVE_SCHEMA_VERSION
 from .trainer_archive_check import TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION
+from .trainer_consumer_plan import TRAINER_CONSUMER_PLAN_SCHEMA_VERSION
 from .training import (
     DATASET_SPLIT_ARTIFACTS,
     DATASET_SPLIT_NAMES,
@@ -118,6 +119,7 @@ def validate_artifacts(
     trainer_launch_check_paths: list[str | Path] | None = None,
     trainer_archive_paths: list[str | Path] | None = None,
     trainer_archive_check_paths: list[str | Path] | None = None,
+    trainer_consumer_plan_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -175,6 +177,8 @@ def validate_artifacts(
         targets.append(validate_trainer_archive(trainer_archive_path))
     for trainer_archive_check_path in trainer_archive_check_paths or []:
         targets.append(validate_trainer_archive_check(trainer_archive_check_path))
+    for trainer_consumer_plan_path in trainer_consumer_plan_paths or []:
+        targets.append(validate_trainer_consumer_plan(trainer_consumer_plan_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -701,6 +705,16 @@ def validate_trainer_archive_check(path: str | Path) -> ValidationTarget:
     check = _read_object(check_path, target, "trainer_archive_check.json")
     if check is not None:
         _validate_trainer_archive_check(check, target)
+    return target
+
+
+def validate_trainer_consumer_plan(path: str | Path) -> ValidationTarget:
+    """Validate a trainer consumer plan artifact."""
+    plan_path = Path(path)
+    target = ValidationTarget("trainer_consumer_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "trainer_consumer_plan.json")
+    if plan is not None:
+        _validate_trainer_consumer_plan(plan, target)
     return target
 
 
@@ -7144,6 +7158,266 @@ def _visible_local_path(value: Any) -> Path | None:
     if not isinstance(value, str) or not value or value.startswith("<") or _is_windows_absolute(value):
         return None
     return Path(value)
+
+
+def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(plan, "schema_version", TRAINER_CONSUMER_PLAN_SCHEMA_VERSION, target)
+    for field_name in ("plan_path", "archive_check_path", "readiness", "recommendation"):
+        if not isinstance(plan.get(field_name), str) or not plan.get(field_name):
+            target.errors.append(f"trainer_consumer_plan.{field_name} must be a non-empty string.")
+    if not isinstance(plan.get("passed"), bool):
+        target.errors.append("trainer_consumer_plan.passed must be a boolean.")
+    checks = plan.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("trainer_consumer_plan.checks must be a list.")
+        checks = []
+    validation = plan.get("validation")
+    if not isinstance(validation, dict):
+        target.errors.append("trainer_consumer_plan.validation must be an object.")
+        validation = {}
+    metrics = plan.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("trainer_consumer_plan.metrics must be an object.")
+        metrics = {}
+    if not _is_string_list(plan.get("notes")):
+        target.errors.append("trainer_consumer_plan.notes must be a list of strings.")
+    if not _is_string_list(plan.get("blocked_reasons")):
+        target.errors.append("trainer_consumer_plan.blocked_reasons must be a list of strings.")
+
+    failed_checks = _validate_gate_like_checks(checks, target, "trainer_consumer_plan.checks")
+    if plan.get("check_count") != len(checks):
+        target.errors.append(f"trainer_consumer_plan.check_count expected {len(checks)}, got {plan.get('check_count')!r}.")
+    if plan.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"trainer_consumer_plan.failed_check_count expected {failed_checks}, got {plan.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(plan.get("passed"), bool) and plan.get("passed") != expected_passed:
+        target.errors.append("trainer_consumer_plan.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "ready_for_external_trainer" if expected_passed else "block_external_trainer"
+    if plan.get("readiness") != expected_readiness:
+        target.errors.append(f"trainer_consumer_plan.readiness expected {expected_readiness!r}, got {plan.get('readiness')!r}.")
+    if plan.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"trainer_consumer_plan.recommendation expected {expected_recommendation!r}, got {plan.get('recommendation')!r}."
+        )
+
+    _validate_trainer_consumer_plan_validation(validation, target)
+    _validate_trainer_consumer_plan_source(plan.get("source_archive_check"), target)
+    execution_counts = _validate_trainer_consumer_plan_execution(plan.get("execution"), target)
+    _validate_trainer_consumer_plan_handoff(plan.get("handoff_contract"), execution_counts, target)
+    _validate_trainer_consumer_plan_metrics(metrics, validation, execution_counts, len(checks), failed_checks, target)
+    target.details.update(
+        {
+            "passed": plan.get("passed"),
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "trainer_input_count": metrics.get("trainer_input_count"),
+            "external_code_file_count": metrics.get("external_code_file_count"),
+        }
+    )
+
+
+def _validate_trainer_consumer_plan_validation(value: dict[str, Any], target: ValidationTarget) -> None:
+    for field_name in ("available", "passed", "strict"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_consumer_plan.validation.{field_name} must be a boolean.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"trainer_consumer_plan.validation.{field_name} must be a non-negative integer.")
+    if not _is_string_list(value.get("errors")):
+        target.errors.append("trainer_consumer_plan.validation.errors must be a list of strings.")
+    if not _is_string_list(value.get("warnings")):
+        target.errors.append("trainer_consumer_plan.validation.warnings must be a list of strings.")
+
+
+def _validate_trainer_consumer_plan_source(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_consumer_plan.source_archive_check must be an object.")
+        return
+    for field_name in ("path", "schema_version", "readiness", "recommendation"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"trainer_consumer_plan.source_archive_check.{field_name} must be a non-empty string.")
+    if value.get("schema_version") != TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION:
+        target.errors.append(f"trainer_consumer_plan.source_archive_check.schema_version must be {TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION}.")
+    if not isinstance(value.get("passed"), bool):
+        target.errors.append("trainer_consumer_plan.source_archive_check.passed must be a boolean.")
+    if "size_bytes" in value and not _is_non_negative_int(value.get("size_bytes")):
+        target.errors.append("trainer_consumer_plan.source_archive_check.size_bytes must be a non-negative integer when present.")
+    if "sha256" in value and not _is_sha256(value.get("sha256")):
+        target.errors.append("trainer_consumer_plan.source_archive_check.sha256 must be a SHA-256 hex string when present.")
+    path = _visible_local_path(value.get("path"))
+    if path is None or not path.exists():
+        return
+    if path.is_symlink() or not path.is_file():
+        target.errors.append("trainer_consumer_plan.source_archive_check.path must resolve to a regular file.")
+        return
+    if value.get("size_bytes") != path.stat().st_size:
+        target.errors.append("trainer_consumer_plan.source_archive_check.size_bytes does not match path.")
+    if value.get("sha256") != _sha256(path):
+        target.errors.append("trainer_consumer_plan.source_archive_check.sha256 does not match path.")
+
+
+def _validate_trainer_consumer_plan_execution(value: Any, target: ValidationTarget) -> dict[str, int]:
+    counts = {
+        "command_arg_count": 0,
+        "trainer_input_count": 0,
+        "trainer_input_ready_count": 0,
+        "external_code_file_count": 0,
+        "external_code_ready_count": 0,
+    }
+    if not isinstance(value, dict):
+        target.errors.append("trainer_consumer_plan.execution must be an object.")
+        return counts
+    for field_name in ("execution_cwd", "archive_root", "external_code_root", "command_shell"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"trainer_consumer_plan.execution.{field_name} must be a string.")
+    if value.get("execution_cwd") != "archive_root":
+        target.errors.append("trainer_consumer_plan.execution.execution_cwd must be archive_root.")
+    for field_name in ("command_approved", "command_available"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_consumer_plan.execution.{field_name} must be a boolean.")
+    argv = value.get("command_argv")
+    if not _is_string_list(argv):
+        target.errors.append("trainer_consumer_plan.execution.command_argv must be a list of strings.")
+        argv = []
+    clean_argv = [item for item in argv if isinstance(item, str)]
+    counts["command_arg_count"] = len(clean_argv)
+    expected_shell = shlex.join(clean_argv) if clean_argv else ""
+    if value.get("command_shell") != expected_shell:
+        target.errors.append("trainer_consumer_plan.execution.command_shell must match command_argv.")
+    external_code_files = value.get("external_code_files")
+    if not isinstance(external_code_files, list):
+        target.errors.append("trainer_consumer_plan.execution.external_code_files must be a list.")
+        external_code_files = []
+    trainer_inputs = value.get("trainer_inputs")
+    if not isinstance(trainer_inputs, list):
+        target.errors.append("trainer_consumer_plan.execution.trainer_inputs must be a list.")
+        trainer_inputs = []
+    counts["external_code_file_count"] = len([item for item in external_code_files if isinstance(item, dict)])
+    counts["trainer_input_count"] = len([item for item in trainer_inputs if isinstance(item, dict)])
+    for index, item in enumerate(external_code_files):
+        label = f"trainer_consumer_plan.execution.external_code_files[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        _validate_trainer_consumer_plan_external_code_file(item, target, label)
+        if item.get("passed") is True:
+            counts["external_code_ready_count"] += 1
+    for index, item in enumerate(trainer_inputs):
+        label = f"trainer_consumer_plan.execution.trainer_inputs[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        _validate_trainer_consumer_plan_trainer_input(item, target, label)
+        if item.get("passed") is True:
+            counts["trainer_input_ready_count"] += 1
+    return counts
+
+
+def _validate_trainer_consumer_plan_external_code_file(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for field_name in ("index", "argv_index"):
+        if not _is_non_negative_int(item.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("token", "path", "resolved_path", "reason"):
+        if not isinstance(item.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    for field_name in ("exists", "regular_file", "symlink", "passed"):
+        if not isinstance(item.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if item.get("passed") is True:
+        if item.get("exists") is not True or item.get("regular_file") is not True or item.get("symlink") is True:
+            target.errors.append(f"{label}.passed cannot be true unless the file is present, regular, and non-symlink.")
+        if not _is_non_negative_int(item.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
+        if not _is_sha256(item.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
+        _validate_visible_file_hash(item, target, label)
+
+
+def _validate_trainer_consumer_plan_trainer_input(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for field_name in ("index", "artifact_index"):
+        if not _is_non_negative_int(item.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("artifact_name", "archive_path", "resolved_path", "kind", "expected_sha256", "reason"):
+        if not isinstance(item.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if item.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be file or directory.")
+    for field_name in ("exists", "regular_file", "regular_directory", "symlink", "passed"):
+        if not isinstance(item.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if item.get("expected_sha256") and not _is_sha256(item.get("expected_sha256")):
+        target.errors.append(f"{label}.expected_sha256 must be a SHA-256 hex string when present.")
+    if item.get("passed") is True:
+        if not _is_non_negative_int(item.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
+        if not _is_sha256(item.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
+        if item.get("kind") == "file":
+            _validate_visible_file_hash(item, target, label)
+        else:
+            if not _is_non_negative_int(item.get("file_count")):
+                target.errors.append(f"{label}.file_count must be a non-negative integer when passed.")
+            _validate_visible_directory_hash(item, target, label)
+
+
+def _validate_trainer_consumer_plan_handoff(value: Any, counts: dict[str, int], target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_consumer_plan.handoff_contract must be an object.")
+        return
+    if value.get("flight_recorder_executed_command") is not False:
+        target.errors.append("trainer_consumer_plan.handoff_contract.flight_recorder_executed_command must be false.")
+    if value.get("runner_owns_execution") is not True:
+        target.errors.append("trainer_consumer_plan.handoff_contract.runner_owns_execution must be true.")
+    for field_name in ("runner_must_run_from", "runner_must_require_recommendation"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"trainer_consumer_plan.handoff_contract.{field_name} must be a non-empty string.")
+    if value.get("runner_must_run_from") != "archive_root":
+        target.errors.append("trainer_consumer_plan.handoff_contract.runner_must_run_from must be archive_root.")
+    if value.get("runner_must_require_recommendation") != "ready_for_external_trainer":
+        target.errors.append(
+            "trainer_consumer_plan.handoff_contract.runner_must_require_recommendation must be ready_for_external_trainer."
+        )
+    if value.get("trainer_input_count") != counts["trainer_input_count"]:
+        target.errors.append(
+            f"trainer_consumer_plan.handoff_contract.trainer_input_count expected {counts['trainer_input_count']}, "
+            f"got {value.get('trainer_input_count')!r}."
+        )
+    if value.get("external_code_file_count") != counts["external_code_file_count"]:
+        target.errors.append(
+            f"trainer_consumer_plan.handoff_contract.external_code_file_count expected {counts['external_code_file_count']}, "
+            f"got {value.get('external_code_file_count')!r}."
+        )
+    if not _is_string_list(value.get("allowed_input_sets")):
+        target.errors.append("trainer_consumer_plan.handoff_contract.allowed_input_sets must be a list of strings.")
+    if not _is_string_list(value.get("notes")):
+        target.errors.append("trainer_consumer_plan.handoff_contract.notes must be a list of strings.")
+
+
+def _validate_trainer_consumer_plan_metrics(
+    metrics: dict[str, Any],
+    validation: dict[str, Any],
+    counts: dict[str, int],
+    check_count: int,
+    failed_check_count: int,
+    target: ValidationTarget,
+) -> None:
+    expected = {
+        "check_count": check_count,
+        "failed_check_count": failed_check_count,
+        "command_arg_count": counts["command_arg_count"],
+        "trainer_input_count": counts["trainer_input_count"],
+        "trainer_input_ready_count": counts["trainer_input_ready_count"],
+        "external_code_file_count": counts["external_code_file_count"],
+        "external_code_ready_count": counts["external_code_ready_count"],
+        "archive_check_error_count": _non_negative_int_value(validation.get("error_count")),
+        "archive_check_warning_count": _non_negative_int_value(validation.get("warning_count")),
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"trainer_consumer_plan.metrics.{field_name} expected {expected_value}, got {metrics.get(field_name)!r}.")
 
 
 def _trainer_input_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:

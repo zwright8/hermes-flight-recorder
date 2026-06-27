@@ -168,6 +168,7 @@ _INDEX_ARTIFACTS = (
     ("trainer_launch_check.json", "Trainer Launch Check"),
     ("trainer_archive/trainer_archive.json", "Trainer Archive"),
     ("trainer_archive_check.json", "Trainer Archive Check"),
+    ("trainer_consumer_plan.json", "Trainer Consumer Plan"),
     ("live_smoke_summary.json", "Live Smoke Summary"),
     ("suite_compare.json", "Suite Compare"),
     ("suite_trend.json", "Suite Trend"),
@@ -304,6 +305,9 @@ def _artifact_metrics(payload: dict[str, Any]) -> str:
         ("external_command_path_count", "external_paths"),
         ("missing_external_code_count", "missing_external"),
         ("trainer_input_available_count", "inputs_available"),
+        ("trainer_input_ready_count", "inputs_ready"),
+        ("external_code_ready_count", "external_ready"),
+        ("command_arg_count", "command_args"),
         ("missing_count", "missing"),
     )
     parts: list[str] = []

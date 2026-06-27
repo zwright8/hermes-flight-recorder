@@ -248,6 +248,14 @@
       "filename": "trainer_archive_check.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/trainer_archive_check.v1.schema.json",
       "name": "trainer_archive_check"
+    },
+    {
+      "artifact": "trainer_consumer_plan",
+      "artifact_schema_version": "hfr.trainer_consumer_plan.v1",
+      "description": "Side-effect-free trainer consumer plan derived from a trainer archive readiness check.",
+      "filename": "trainer_consumer_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trainer_consumer_plan.v1.schema.json",
+      "name": "trainer_consumer_plan"
     }
   ]
 }

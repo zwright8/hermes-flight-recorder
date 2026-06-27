@@ -19,6 +19,7 @@ flightrecorder schemas --check runs/training_export/manifest.json
 flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive_check.json
+flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
 
@@ -312,9 +313,16 @@ flightrecorder trainer-archive-check \
   --out runs/trainer_archive_check.json \
   --strict
 
+flightrecorder trainer-consumer-plan \
+  --archive-check runs/trainer_archive_check.json \
+  --out runs/trainer_consumer_plan.json \
+  --strict
+
 flightrecorder validate --trainer-archive runs/trainer_archive --strict
 
 flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
+
+flightrecorder validate --trainer-consumer-plan runs/trainer_consumer_plan.json --strict
 ```
 
 The preflight manifest and launch check are still evidence plumbing, not a
@@ -339,6 +347,9 @@ match their recorded hashes, and checks that caller-provided trainer code paths
 such as `train.py` exist under `--external-code-root`. External training
 infrastructure can validate that directory before consuming the rows, without
 needing the original producer's local paths.
+`trainer-consumer-plan` then records the exact approved command argv, archive
+root, external code file hashes, trainer input hashes, and launcher invariants
+that the external wrapper should require. It is still a plan, not a runner.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
@@ -839,12 +850,14 @@ should also block a training handoff.
 
 After `gate-export` and any comparison or reviewed gates pass, run
 `trainer-preflight`, build a `trainer-archive`, then have the external launcher
-run `trainer-launch-check` and `trainer-archive-check`. Require
-`recommendation: launch_allowed` and `recommendation: consumer_ready` before
-invoking a trainer. This closes the handoff loop: the trainer consumes only
-exports that are tied to passed gates, reviewed/calibration validation when
-applicable, current artifact hashes, regular-file export artifacts, and local
-trainer code that the consumer explicitly supplied.
+run `trainer-launch-check`, `trainer-archive-check`, and
+`trainer-consumer-plan`. Require `recommendation: launch_allowed`,
+`recommendation: consumer_ready`, and
+`recommendation: ready_for_external_trainer` before invoking a trainer. This
+closes the handoff loop: the trainer consumes only exports that are tied to
+passed gates, reviewed/calibration validation when applicable, current artifact
+hashes, regular-file export artifacts, local trainer code that the consumer
+explicitly supplied, and a validated command/input plan.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

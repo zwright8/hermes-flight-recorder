@@ -293,6 +293,35 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["schemas", "--check", str(archive_check)]), 0)
             self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check), "--strict"]), 0)
 
+            consumer_plan = Path(tmp) / "trainer_consumer_plan.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-consumer-plan",
+                        "--archive-check",
+                        str(archive_check),
+                        "--out",
+                        str(consumer_plan),
+                        "--strict",
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            plan = json.loads(consumer_plan.read_text(encoding="utf-8"))
+            self.assertEqual(plan["schema_version"], "hfr.trainer_consumer_plan.v1")
+            self.assertTrue(plan["passed"])
+            self.assertEqual(plan["recommendation"], "ready_for_external_trainer")
+            self.assertFalse(plan["handoff_contract"]["flight_recorder_executed_command"])
+            self.assertTrue(plan["handoff_contract"]["runner_owns_execution"])
+            self.assertEqual(plan["execution"]["execution_cwd"], "archive_root")
+            self.assertEqual(plan["execution"]["command_argv"][:2], ["python", "train.py"])
+            self.assertIn("train.py", {item["path"] for item in plan["execution"]["external_code_files"]})
+            self.assertEqual(plan["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
+            self.assertEqual(plan["metrics"]["external_code_file_count"], contract["external_command_path_count"])
+            self.assertEqual(run_cli(["schemas", "--check", str(consumer_plan)]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
+
             missing_check = Path(tmp) / "trainer_archive_check_missing.json"
             self.assertEqual(
                 run_cli(
@@ -315,6 +344,27 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(missing["recommendation"], "block_consumer_launch")
             self.assertGreater(missing["metrics"]["missing_external_code_count"], 0)
             self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(missing_check), "--strict"]), 0)
+
+            blocked_plan = Path(tmp) / "trainer_consumer_plan_blocked.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-consumer-plan",
+                        "--archive-check",
+                        str(missing_check),
+                        "--out",
+                        str(blocked_plan),
+                        "--strict",
+                        "--preserve-paths",
+                    ]
+                ),
+                1,
+            )
+            blocked = json.loads(blocked_plan.read_text(encoding="utf-8"))
+            self.assertFalse(blocked["passed"])
+            self.assertEqual(blocked["recommendation"], "block_external_trainer")
+            self.assertIn("archive_check_passed: passed=False", blocked["blocked_reasons"])
+            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(blocked_plan), "--strict"]), 0)
 
             result["portable_command"]["argv"][-1] = "stale/training_export"
             result["portable_command"]["shell"] = "python train.py --dataset stale/training_export"

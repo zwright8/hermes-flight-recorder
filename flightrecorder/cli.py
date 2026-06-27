@@ -99,6 +99,7 @@ from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, 
 from .trace_observability import TraceObservabilityError, build_trace_observability
 from .trainer_archive import TrainerArchiveError, build_trainer_archive
 from .trainer_archive_check import TrainerArchiveCheckError, build_trainer_archive_check
+from .trainer_consumer_plan import TrainerConsumerPlanError, build_trainer_consumer_plan
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
     TRAINING_GATE_POLICY_SCHEMA_VERSION,
@@ -135,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         TrainerPreflightError,
         TrainerArchiveError,
         TrainerArchiveCheckError,
+        TrainerConsumerPlanError,
         TrainingExportError,
         TrainingGatePolicyError,
         CompareGatePolicyError,
@@ -737,6 +739,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         trainer_launch_check_paths=args.trainer_launch_check,
         trainer_archive_paths=args.trainer_archive,
         trainer_archive_check_paths=args.trainer_archive_check,
+        trainer_consumer_plan_paths=args.trainer_consumer_plan,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -1005,6 +1008,26 @@ def cmd_trainer_archive_check(args: argparse.Namespace) -> int:
         f"missing_external={check['metrics']['missing_external_code_count']} out={args.out}"
     )
     return 0 if check["passed"] else 1
+
+
+def cmd_trainer_consumer_plan(args: argparse.Namespace) -> int:
+    archive_check_path = Path(args.archive_check)
+    archive_check = _read_json(archive_check_path)
+    validation_summary = validate_artifacts(trainer_archive_check_paths=[archive_check_path], strict=args.strict)
+    plan = build_trainer_consumer_plan(
+        out_path=args.out,
+        archive_check_path=archive_check_path,
+        archive_check=archive_check,
+        validation_summary=validation_summary,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), plan)
+    print(
+        f"{'READY' if plan['passed'] else 'BLOCKED'} trainer-consumer-plan "
+        f"inputs={plan['metrics']['trainer_input_count']} "
+        f"external_code={plan['metrics']['external_code_file_count']} out={args.out}"
+    )
+    return 0 if plan["passed"] else 1
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -1764,6 +1787,12 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one trainer_archive_check.json; may be repeated",
     )
+    validate.add_argument(
+        "--trainer-consumer-plan",
+        action="append",
+        default=[],
+        help="Validate one trainer_consumer_plan.json; may be repeated",
+    )
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -2412,6 +2441,20 @@ def _parser() -> argparse.ArgumentParser:
         help="Allow absolute local paths in trainer archive check output; use only for private local debugging",
     )
     trainer_archive_check.set_defaults(func=cmd_trainer_archive_check)
+
+    trainer_consumer_plan = subparsers.add_parser(
+        "trainer-consumer-plan",
+        help="Build a side-effect-free execution plan for an external trainer wrapper",
+    )
+    trainer_consumer_plan.add_argument("--archive-check", required=True, help="trainer_archive_check.json to convert into a consumer plan")
+    trainer_consumer_plan.add_argument("--out", required=True, help="Write trainer consumer plan JSON to this path")
+    trainer_consumer_plan.add_argument("--strict", action="store_true", help="Treat archive-check validation warnings as plan blockers")
+    trainer_consumer_plan.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Allow absolute local paths in trainer consumer plan output; use only for private local debugging",
+    )
+    trainer_consumer_plan.set_defaults(func=cmd_trainer_consumer_plan)
 
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")

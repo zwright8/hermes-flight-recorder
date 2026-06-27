@@ -82,8 +82,9 @@ Expected demo output:
   promotion history, policy decision, and movable evidence handoff.
 - Trainer launch evidence in `runs/trainer_preflight.json`,
   `runs/trainer_launch_check.json`, portable `runs/trainer_archive/`, and
-  `runs/trainer_archive_check.json`, packaging gates, schema contracts,
-  trainer-facing export files, and local external-code readiness for an
+  `runs/trainer_archive_check.json`, plus `runs/trainer_consumer_plan.json`,
+  packaging gates, schema contracts, trainer-facing export files, local
+  external-code readiness, and a deterministic non-executing plan for an
   external training launcher to validate before consuming rows.
 
 ## Install
@@ -116,6 +117,7 @@ flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive/trainer_archive.json
 flightrecorder schemas --check runs/trainer_archive_check.json
+flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 flightrecorder schemas --check runs/improvement_ledger_gate.json
 flightrecorder schemas --check runs/training_export/dataset_metrics.json
@@ -131,8 +133,8 @@ training JSONL rows (`episodes`, `rewards`, `step_rewards`, `preferences`,
 `failure_modes`, `sft`, `dpo`, and `reward_model`), compare-RL JSONL rows,
 review manifests, reviewed-export manifests, improvement plans, improvement
 ledgers, trainer preflights, trainer launch checks, trainer archives, trainer
-archive checks, and improvement-ledger gates. These schemas are compatibility
-contracts for artifact shape.
+archive checks, trainer consumer plans, and improvement-ledger gates. These
+schemas are compatibility contracts for artifact shape.
 `flightrecorder schemas --check` validates one JSON artifact;
 `flightrecorder schemas --check-jsonl` validates each non-empty JSONL row,
 inferring by row `schema_version` unless `--name` pins the expected row type.
@@ -369,6 +371,11 @@ flightrecorder trainer-archive-check \
   --external-code-root path/to/trainer-code \
   --out runs/trainer_archive_check.json \
   --strict
+
+flightrecorder trainer-consumer-plan \
+  --archive-check runs/trainer_archive_check.json \
+  --out runs/trainer_consumer_plan.json \
+  --strict
 ```
 
 The preflight fingerprints trainer-facing files, including split metadata and
@@ -381,6 +388,9 @@ schema/semantic validation rather than embedded export-validation metrics.
 archive, confirms copied trainer inputs are still hash-matched inside the
 archive, and verifies local external command paths such as `train.py` exist
 under `--external-code-root` without executing them.
+`trainer-consumer-plan` turns that proof into the exact command, archive root,
+external code files, trainer inputs, and non-execution invariants that an
+external trainer wrapper should require before it runs anything.
 
 For production suites, commit a stricter gate policy and point CI at it:
 
@@ -1113,9 +1123,16 @@ flightrecorder trainer-archive-check \
   --out runs/trainer_archive_check.json \
   --strict
 
+flightrecorder trainer-consumer-plan \
+  --archive-check runs/trainer_archive_check.json \
+  --out runs/trainer_consumer_plan.json \
+  --strict
+
 flightrecorder validate --trainer-archive runs/trainer_archive --strict
 
 flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
+
+flightrecorder validate --trainer-consumer-plan runs/trainer_consumer_plan.json --strict
 ```
 
 `trainer-launch-check` is the consumer-side guard for an external trainer
@@ -1142,6 +1159,13 @@ inputs still match their file or directory hashes, and checks that external
 trainer code paths referenced by the portable command exist under
 `--external-code-root`. It returns `consumer_ready` only when those checks pass,
 and it still does not execute the trainer command.
+
+`trainer-consumer-plan` is the final non-executing handoff artifact. It copies
+the approved portable command, archive root, external code file hashes, trainer
+input hashes, and launcher invariants into one plan with
+`recommendation: ready_for_external_trainer`. A trainer wrapper can validate
+that plan, resolve `execution.command_argv`, and then take responsibility for
+actual training outside Flight Recorder.
 
 ## Scoring Rules
 

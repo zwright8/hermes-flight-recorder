@@ -103,5 +103,9 @@ python -m flightrecorder trainer-archive-check \
   --external-code-root runs/trainer_code \
   --out runs/trainer_archive_check.json \
   --strict
+python -m flightrecorder trainer-consumer-plan \
+  --archive-check runs/trainer_archive_check.json \
+  --out runs/trainer_consumer_plan.json \
+  --strict
 python -m flightrecorder index --runs runs --out runs/index.html
 echo "Demo reports written to $ROOT/runs/index.html"
