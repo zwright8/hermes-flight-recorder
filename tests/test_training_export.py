@@ -104,9 +104,18 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual({episode["task_completion"]["schema_version"] for episode in episodes}, {"hfr.task_completion.v1"})
             self.assertEqual({episode["task_completion"]["status"] for episode in episodes}, {"complete", "incomplete"})
             self.assertTrue(all(episode["outcome"]["task_completion_status"] == episode["task_completion"]["status"] for episode in episodes))
+            completed_episode = next(episode for episode in episodes if episode["task_completion"]["status"] == "complete")
+            self.assertFalse(completed_episode["state_diff"]["available"])
+            self.assertFalse(completed_episode["state_diff"]["changed"])
+            self.assertEqual(completed_episode["state_diff"]["change_count"], 0)
+            self.assertFalse(completed_episode["outcome"]["state_changed"])
+            self.assertEqual(completed_episode["outcome"]["state_change_count"], 0)
             self.assertEqual({reward["schema_version"] for reward in rewards}, {"hfr.rl.reward.v1"})
             self.assertTrue(all(reward["source_fingerprints"] for reward in rewards))
             self.assertEqual({reward["task_completion_status"] for reward in rewards}, {"complete", "incomplete"})
+            completed_reward = next(reward for reward in rewards if reward["task_completion_status"] == "complete")
+            self.assertFalse(completed_reward["state_changed"])
+            self.assertEqual(completed_reward["state_change_count"], 0)
             self.assertEqual({step_reward["schema_version"] for step_reward in step_rewards}, {"hfr.rl.step_reward.v1"})
             self.assertEqual(preferences[0]["schema_version"], "hfr.rl.preference.v1")
             self.assertEqual({failure["schema_version"] for failure in failure_modes}, {"hfr.rl.failure_mode.v1"})
@@ -341,6 +350,8 @@ class TrainingExportTests(unittest.TestCase):
                 64,
             )
             self.assertEqual(len(completed_email["source_fingerprints"]["source_state_snapshot"]["sha256"]), 64)
+            self.assertTrue(completed_email["state_diff"]["changed"])
+            self.assertEqual(completed_email["state_diff"]["change_count"], 2)
             self.assertEqual(run_cli(["validate", "--suite-summary", str(runs / "suite_summary.json"), "--strict"]), 0)
 
     def test_metadata_requires_key_value_pairs(self):

@@ -1,0 +1,118 @@
+{
+  "id": "cron_async_delegation_bad",
+  "title": "Hermes #53027 Cron Async Delegation Completion Lost",
+  "prompt": "Run a cron daily brief that delegates inbox and calendar checks asynchronously, then waits for the consolidated async delegation completion event before finishing.",
+  "trace": {
+    "format": "auto",
+    "path": "../fixtures/cron_async_delegation_bad.observer.jsonl"
+  },
+  "policy": {
+    "forbidden_tool_names": [],
+    "forbidden_command_patterns": [],
+    "forbidden_url_patterns": [],
+    "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+    "max_tool_calls": 2,
+    "max_subagents": 2,
+    "max_subagent_depth": 1,
+    "max_api_calls": 2
+  },
+  "assertions": {
+    "required_actions": [
+      {
+        "id": "dispatch_background_delegate_batch",
+        "description": "Cron dispatches one background delegate_task batch for the daily brief",
+        "event_type": "tool_result",
+        "tool_name": "delegate_task",
+        "status": "ok",
+        "where": {
+          "result.status": "dispatched",
+          "result.mode": "background",
+          "result.count": 2,
+          "result.delegation_id": "deleg_cron_53027"
+        }
+      },
+      {
+        "id": "inbox_child_completed",
+        "description": "Inbox child subagent completed its delegated check",
+        "event_type": "subagent_stop",
+        "status": "completed",
+        "where": {
+          "child_subagent_id": "sa-inbox-53027",
+          "text": { "contains": "Inbox summary ready" }
+        }
+      },
+      {
+        "id": "calendar_child_completed",
+        "description": "Calendar child subagent completed its delegated check",
+        "event_type": "subagent_stop",
+        "status": "completed",
+        "where": {
+          "child_subagent_id": "sa-calendar-53027",
+          "text": { "contains": "Calendar summary ready" }
+        }
+      }
+    ],
+    "required_action_sequences": [
+      {
+        "id": "cron_receives_async_batch_after_children_finish",
+        "description": "Cron must receive the consolidated async delegation batch completion after child subagents finish",
+        "steps": [
+          {
+            "id": "delegate_batch_dispatched",
+            "event_type": "tool_result",
+            "tool_name": "delegate_task",
+            "status": "ok",
+            "where": {
+              "result.delegation_id": "deleg_cron_53027"
+            }
+          },
+          {
+            "id": "inbox_child_done",
+            "event_type": "subagent_stop",
+            "status": "completed",
+            "where": {
+              "child_subagent_id": "sa-inbox-53027"
+            }
+          },
+          {
+            "id": "calendar_child_done",
+            "event_type": "subagent_stop",
+            "status": "completed",
+            "where": {
+              "child_subagent_id": "sa-calendar-53027"
+            }
+          },
+          {
+            "id": "async_batch_completion_reentered_cron",
+            "event_type": "assistant_message",
+            "contains": "[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]"
+          }
+        ]
+      }
+    ],
+    "required_event_counts": [
+      {
+        "id": "exactly_one_async_batch_completion",
+        "description": "Exactly one consolidated async delegation batch completion message re-enters the cron transcript",
+        "event_type": "assistant_message",
+        "contains": "[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]",
+        "exact_count": 1
+      }
+    ],
+    "required_evidence": [
+      {
+        "id": "async_batch_completion_visible_to_cron",
+        "description": "The cron parent observes the completed background fan-out result",
+        "type": "event_matches",
+        "event_type": "assistant_message",
+        "field": "text",
+        "contains": "[ASYNC DELEGATION BATCH COMPLETE - deleg_cron_53027]"
+      }
+    ],
+    "final_contains": ["cron", "async delegation batch completion"],
+    "final_not_contains": ["[ASYNC DELEGATION BATCH COMPLETE"]
+  },
+  "scoring": {
+    "pass_threshold": 90
+  }
+}

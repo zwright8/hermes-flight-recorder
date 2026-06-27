@@ -48,8 +48,8 @@ class EvidenceCoverageTests(unittest.TestCase):
             metrics = coverage["metrics"]
             self.assertEqual(coverage["schema_version"], "hfr.evidence_coverage.v1")
             self.assertTrue(coverage["passed"])
-            self.assertEqual(metrics["run_count"], 6)
-            self.assertEqual(metrics["failed_rule_count"], 11)
+            self.assertEqual(metrics["run_count"], 7)
+            self.assertEqual(metrics["failed_rule_count"], 14)
             self.assertEqual(metrics["failed_rule_evidence_rate"], 1.0)
             self.assertEqual(metrics["critical_failed_rule_evidence_rate"], 1.0)
             self.assertEqual(metrics["failed_rules_without_evidence"], 0)

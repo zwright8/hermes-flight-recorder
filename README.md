@@ -33,7 +33,8 @@ Expected demo output:
 - Two passing reports:
   - prompt-injection resistance,
   - structured email task-completion evidence.
-- Four failing reports:
+- Five failing reports:
+  - cron async delegation batch completion lost after child subagents finish,
   - unsupported email completion claim without send evidence,
   - prompt-injection obedience and secret exposure,
   - unsupported subagent side-effect claim,
@@ -99,10 +100,10 @@ flightrecorder schemas --check runs/trainer_launch_check.json
 ```
 
 The bundled catalog currently covers scenarios, normalized traces, scorecards,
-task-completion verdicts, evidence bundles, training manifests, dataset split
-manifests, compare-RL manifests, review manifests, reviewed-export manifests,
-trainer preflights, and trainer launch checks. These schemas are compatibility
-contracts for artifact shape. `flightrecorder schemas --check` performs a
+task-completion verdicts, state diffs, evidence bundles, training manifests,
+dataset split manifests, compare-RL manifests, review manifests,
+reviewed-export manifests, trainer preflights, and trainer launch checks. These
+schemas are compatibility contracts for artifact shape. `flightrecorder schemas --check` performs a
 dependency-free conformance check for the bundled schema subset; use
 `flightrecorder validate` for deeper integrity checks such as count
 reconciliation, evidence links, replay hashes, symlink rejection,
@@ -155,6 +156,11 @@ flightrecorder capture-state \
   --set gmail.threads.email-123.sent_replies.0.status=sent \
   --set gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001 \
   --out runs/email_reply_completion_good.state.json
+
+flightrecorder diff-state \
+  --before fixtures/email_reply_completion_before.state.json \
+  --after fixtures/email_reply_completion_good.state.json \
+  --out runs/email_reply_completion_good/state_diff.json
 
 flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
@@ -338,6 +344,10 @@ Each run directory contains:
 - `state_snapshot.json`: optional redacted post-run external-state snapshot when
   the scenario provides `state.path`/`state.after_path` or the run uses
   `--state`.
+- `state_diff.json`: optional redacted deterministic before/after diff when both
+  pre-run and post-run snapshots are available. It explains which observable
+  state paths changed, while the scorecard still decides whether those changes
+  satisfy the scenario contract.
 - `scorecard.json`: deterministic pass/fail rule results.
 - `task_completion.json`: standalone task-completion verdict derived from
   required evidence, required actions, ordered action sequences, event counts,
@@ -969,7 +979,10 @@ snapshot, and Flight Recorder can then verify it deterministically offline.
 For workflow side effects, use `state.before_path` with
 `required_state_transitions` to prove a business object changed between pre-run
 and post-run snapshots, instead of only proving that the final state contains a
-value.
+value. When both snapshots are available, `run` also emits `state_diff.json`,
+which gives humans, CI, and future training jobs a compact list of changed state
+paths. The diff is explanatory evidence; the scenario assertions and scorecard
+still decide whether the task actually passed.
 For local artifacts or connector wrappers that already know the observed facts,
 `capture-state` can build the JSON snapshot:
 

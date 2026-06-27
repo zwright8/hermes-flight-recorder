@@ -34,6 +34,14 @@
       "name": "task_completion"
     },
     {
+      "artifact": "state_diff",
+      "artifact_schema_version": "hfr.state_diff.v1",
+      "description": "Deterministic before/after state diff emitted as state_diff.json.",
+      "filename": "state_diff.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/state_diff.v1.schema.json",
+      "name": "state_diff"
+    },
+    {
       "artifact": "evidence_bundle",
       "artifact_schema_version": "hfr.evidence_bundle.v1",
       "description": "Evidence handoff manifest emitted by evidence-bundle.",

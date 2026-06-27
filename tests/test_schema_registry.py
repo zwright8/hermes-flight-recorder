@@ -21,6 +21,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("trace", names)
         self.assertIn("scorecard", names)
         self.assertIn("task_completion", names)
+        self.assertIn("state_diff", names)
         self.assertIn("evidence_bundle", names)
         self.assertIn("training_manifest", names)
         self.assertIn("dataset_splits", names)
@@ -92,6 +93,29 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "task_completion")
+
+    def test_state_diff_schema_accepts_minimal_diff(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.state_diff.v1",
+                "changed": True,
+                "change_count": 1,
+                "truncated": False,
+                "max_changes": 200,
+                "changes": [
+                    {
+                        "path": "gmail.threads.email-123.sent_replies.0",
+                        "kind": "added",
+                        "before": None,
+                        "after": {"status": "sent"},
+                    }
+                ],
+                "summary": "1 state change(s) detected.",
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "state_diff")
 
     def test_write_schema_bundle_writes_catalog_and_selected_schemas(self):
         with tempfile.TemporaryDirectory() as tmp:

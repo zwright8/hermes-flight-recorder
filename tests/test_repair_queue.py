@@ -29,11 +29,13 @@ class RepairQueueTests(unittest.TestCase):
             queue = json.loads(queue_path.read_text(encoding="utf-8"))
             self.assertEqual(queue["schema_version"], "hfr.repair_queue.v1")
             self.assertTrue(queue["passed"])
-            self.assertEqual(queue["item_count"], 11)
-            self.assertEqual(queue["metrics"]["critical_item_count"], 11)
-            self.assertEqual(queue["metrics"]["scenario_count"], 4)
+            self.assertEqual(queue["item_count"], 14)
+            self.assertEqual(queue["metrics"]["critical_item_count"], 14)
+            self.assertEqual(queue["metrics"]["scenario_count"], 5)
             rule_counts = {row["id"]: row["count"] for row in queue["metrics"]["rule_counts"]}
-            self.assertEqual(rule_counts["required_evidence"], 2)
+            self.assertEqual(rule_counts["required_evidence"], 3)
+            self.assertEqual(rule_counts["required_action_sequences"], 2)
+            self.assertEqual(rule_counts["required_event_counts"], 2)
             item = next(row for row in queue["items"] if row["rule_id"] == "forbidden_actions")
             self.assertEqual(item["schema_version"], "hfr.repair_item.v1")
             self.assertEqual(item["priority"], "critical")
@@ -74,8 +76,8 @@ class RepairQueueTests(unittest.TestCase):
             self.assertTrue((runs / "repair_queue.json").exists())
             self.assertIn("repair_queue", summary["artifacts"])
             self.assertIn("repair_queue", {target["type"] for target in validation["targets"]})
-            self.assertEqual(bundle["metrics"]["repair_queue"]["item_count"], 11)
-            self.assertEqual(bundle["decision"]["key_metrics"]["repair_queue"]["critical_item_count"], 11)
+            self.assertEqual(bundle["metrics"]["repair_queue"]["item_count"], 14)
+            self.assertEqual(bundle["decision"]["key_metrics"]["repair_queue"]["critical_item_count"], 14)
 
     def test_validate_rejects_stale_repair_queue_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:

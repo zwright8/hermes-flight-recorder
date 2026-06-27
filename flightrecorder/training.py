@@ -51,6 +51,7 @@ class RunRecord:
     scorecard: dict[str, Any]
     lineage_path: Path | None = None
     lineage: dict[str, Any] | None = None
+    state_diff: dict[str, Any] | None = None
 
 
 def export_rl_dataset(
@@ -328,6 +329,7 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
         trace_path = run_dir / "normalized_trace.json"
         score_path = run_dir / "scorecard.json"
         lineage_path = run_dir / "artifact_lineage.json"
+        state_diff_path = run_dir / "state_diff.json"
         if not trace_path.exists() or not score_path.exists():
             continue
         trace = _read_json(trace_path)
@@ -339,6 +341,12 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
             raw_lineage = _read_json(lineage_path)
             if isinstance(raw_lineage, dict):
                 lineage = raw_lineage
+        state_diff: dict[str, Any] | None = None
+        if state_diff_path.exists():
+            raw_state_diff = _read_json(state_diff_path)
+            if not isinstance(raw_state_diff, dict):
+                raise TrainingExportError(f"Run {run_dir} state_diff.json must contain a JSON object")
+            state_diff = raw_state_diff
         records.append(
             RunRecord(
                 run_id=run_dir.name,
@@ -347,6 +355,7 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
                 scorecard=scorecard,
                 lineage_path=lineage_path if lineage_path.exists() else None,
                 lineage=lineage,
+                state_diff=state_diff,
             )
         )
 
@@ -368,6 +377,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
     source_fingerprints = _source_fingerprints(record)
     source_fingerprint_status = _source_fingerprint_status(source_fingerprints)
     task_completion = _task_completion(scorecard)
+    state_diff = _state_diff_summary(record.state_diff)
     episode = {
         "schema_version": RL_EPISODE_SCHEMA_VERSION,
         "episode_id": record.run_id,
@@ -384,6 +394,7 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
         "source_fingerprint_status": source_fingerprint_status,
         "source_fingerprints": source_fingerprints,
         "task_completion": task_completion,
+        "state_diff": state_diff,
         "outcome": {
             "passed": passed,
             "score": score,
@@ -393,6 +404,8 @@ def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) 
             "failed_rules": failed_rules,
             "task_completion_status": task_completion["status"],
             "task_completion_passed": task_completion["passed"],
+            "state_changed": state_diff["changed"],
+            "state_change_count": state_diff["change_count"],
             "summary": scorecard.get("summary", ""),
         },
     }
@@ -425,12 +438,43 @@ def _default_task_completion() -> dict[str, Any]:
     }
 
 
+def _state_diff_summary(diff: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(diff, dict):
+        return {
+            "schema_version": "hfr.state_diff.summary.v1",
+            "available": False,
+            "changed": False,
+            "change_count": 0,
+            "truncated": False,
+            "summary": "No state diff artifact was available.",
+            "changes": [],
+        }
+    changes = diff.get("changes") if isinstance(diff.get("changes"), list) else []
+    return {
+        "schema_version": "hfr.state_diff.summary.v1",
+        "available": True,
+        "changed": bool(diff.get("changed")),
+        "change_count": _int_value(diff.get("change_count")),
+        "truncated": bool(diff.get("truncated")),
+        "summary": str(diff.get("summary") or ""),
+        "changes": [
+            {
+                "path": str(change.get("path") or ""),
+                "kind": str(change.get("kind") or ""),
+            }
+            for change in changes
+            if isinstance(change, dict)
+        ],
+    }
+
+
 def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
     scorecard = record.scorecard
     scenario_id = str(scorecard.get("scenario_id") or record.run_id)
     rule_rewards = [_rule_reward(rule) for rule in scorecard.get("rules", []) if isinstance(rule, dict)]
     source_fingerprints = _source_fingerprints(record)
     task_completion = _task_completion(scorecard)
+    state_diff = _state_diff_summary(record.state_diff)
     return {
         "schema_version": RL_REWARD_SCHEMA_VERSION,
         "episode_id": record.run_id,
@@ -444,6 +488,8 @@ def _reward_record(record: RunRecord, reward_scale: str) -> dict[str, Any]:
         "passed": bool(scorecard.get("passed")),
         "task_completion_status": task_completion["status"],
         "task_completion_passed": task_completion["passed"],
+        "state_changed": state_diff["changed"],
+        "state_change_count": state_diff["change_count"],
         "terminal": True,
         "critical_failures": scorecard.get("critical_failures", []),
         "rule_rewards": rule_rewards,
@@ -583,6 +629,7 @@ def _preference_view(episode: dict[str, Any]) -> dict[str, Any]:
         "reward": episode["outcome"]["reward"],
         "failed_rules": episode["outcome"]["failed_rules"],
         "task_completion": episode.get("task_completion", _default_task_completion()),
+        "state_diff": episode.get("state_diff", _state_diff_summary(None)),
         "source_fingerprint_status": episode.get("source_fingerprint_status", "unverified"),
         "source_fingerprints": episode.get("source_fingerprints", {}),
         "events": episode["events"],
@@ -770,6 +817,8 @@ def _sft_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "quality_gate": "passed_scorecard",
                 "task_completion_status": str((episode.get("task_completion") or {}).get("status") or "not_applicable"),
                 "task_completion_passed": bool((episode.get("task_completion") or {}).get("passed", True)),
+                "state_changed": bool((episode.get("state_diff") or {}).get("changed", False)),
+                "state_change_count": _int_value((episode.get("state_diff") or {}).get("change_count")),
                 "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),
                 "source_fingerprints": episode.get("source_fingerprints", {}),
                 "source_artifact": "episodes.jsonl",
@@ -999,6 +1048,8 @@ def _reward_model_records(episodes: list[dict[str, Any]]) -> list[dict[str, Any]
                 "passed": bool(outcome.get("passed")),
                 "task_completion_status": str((episode.get("task_completion") or {}).get("status") or "not_applicable"),
                 "task_completion_passed": bool((episode.get("task_completion") or {}).get("passed", True)),
+                "state_changed": bool((episode.get("state_diff") or {}).get("changed", False)),
+                "state_change_count": _int_value((episode.get("state_diff") or {}).get("change_count")),
                 "failed_rules": _string_list(outcome.get("failed_rules")),
                 "critical_failures": _string_list(outcome.get("critical_failures")),
                 "source_fingerprint_status": str(episode.get("source_fingerprint_status") or "unverified"),

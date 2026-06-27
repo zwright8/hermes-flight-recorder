@@ -40,6 +40,7 @@ from .review import (
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
+from .state_diff import STATE_DIFF_SCHEMA_VERSION
 from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION, build_trace_signal
 from .training import (
     DATASET_SPLIT_ARTIFACTS,
@@ -112,6 +113,7 @@ def validate_artifacts(
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
     state_snapshot_paths: list[str | Path] | None = None,
+    state_diff_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
@@ -165,6 +167,8 @@ def validate_artifacts(
         targets.append(validate_suite_trend(suite_trend_path))
     for state_snapshot_path in state_snapshot_paths or []:
         targets.append(validate_state_snapshot(state_snapshot_path))
+    for state_diff_path in state_diff_paths or []:
+        targets.append(validate_state_diff(state_diff_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     if not targets:
@@ -219,6 +223,7 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     score_path = run_dir / "scorecard.json"
     task_completion_path = run_dir / "task_completion.json"
     state_snapshot_path = run_dir / "state_snapshot.json"
+    state_diff_path = run_dir / "state_diff.json"
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     trace = _read_object(trace_path, target, "normalized_trace.json")
@@ -231,6 +236,7 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
     )
     lineage = _read_object_optional(lineage_path, target, "artifact_lineage.json", "rerun the run to emit provenance metadata")
     state_snapshot = _read_object(state_snapshot_path, target, "state_snapshot.json") if state_snapshot_path.exists() else None
+    state_diff = _read_object(state_diff_path, target, "state_diff.json") if state_diff_path.exists() else None
     if trace is not None:
         _validate_trace(trace, target)
     if scorecard is not None:
@@ -243,6 +249,8 @@ def validate_run_dir(path: str | Path) -> ValidationTarget:
         _validate_lineage(lineage, target, run_dir, trace, scorecard)
     if isinstance(state_snapshot, dict) and state_snapshot.get("schema_version") == STATE_SNAPSHOT_SCHEMA_VERSION:
         _validate_state_snapshot(state_snapshot, target, "state_snapshot")
+    if state_diff is not None:
+        _validate_state_diff(state_diff, target, "state_diff")
     if trace is not None and scorecard is not None:
         target.details.update(
             {
@@ -653,6 +661,16 @@ def validate_state_snapshot(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_state_diff(path: str | Path) -> ValidationTarget:
+    """Validate a before/after state diff artifact."""
+    diff_path = Path(path)
+    target = ValidationTarget("state_diff", str(diff_path))
+    diff = _read_object(diff_path, target, "state_diff.json")
+    if diff is not None:
+        _validate_state_diff(diff, target, "state_diff")
+    return target
+
+
 def validate_review_calibration(path: str | Path) -> ValidationTarget:
     """Validate a review-calibration report."""
     calibration_path = Path(path)
@@ -824,6 +842,90 @@ def _validate_state_snapshot(
     observations = snapshot.get("observations")
     if not isinstance(observations, dict):
         target.errors.append(f"{label}.observations must be an object.")
+
+
+def _validate_state_diff(diff: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(diff, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _require_equal(diff, "schema_version", STATE_DIFF_SCHEMA_VERSION, target, prefix=f"{label}.")
+    changed = diff.get("changed")
+    if not isinstance(changed, bool):
+        target.errors.append(f"{label}.changed must be a boolean.")
+        changed = False
+    change_count = diff.get("change_count")
+    if not _is_non_negative_int(change_count):
+        target.errors.append(f"{label}.change_count must be a non-negative integer.")
+        change_count = 0
+    max_changes = diff.get("max_changes")
+    if not _is_non_negative_int(max_changes):
+        target.errors.append(f"{label}.max_changes must be a non-negative integer.")
+        max_changes = 0
+    truncated = diff.get("truncated")
+    if not isinstance(truncated, bool):
+        target.errors.append(f"{label}.truncated must be a boolean.")
+        truncated = False
+    changes = diff.get("changes")
+    if not isinstance(changes, list):
+        target.errors.append(f"{label}.changes must be a list.")
+        changes = []
+    if changed != bool(change_count):
+        target.errors.append(f"{label}.changed must match whether change_count is greater than zero.")
+    if isinstance(change_count, int) and isinstance(max_changes, int):
+        if len(changes) > max_changes:
+            target.errors.append(f"{label}.changes length must not exceed max_changes.")
+        expected_truncated = change_count > len(changes)
+        if truncated != expected_truncated:
+            target.errors.append(f"{label}.truncated must match whether change_count exceeds emitted changes.")
+        if not truncated and len(changes) != change_count:
+            target.errors.append(f"{label}.changes length must equal change_count when not truncated.")
+    for index, change in enumerate(changes):
+        _validate_state_diff_change(change, target, f"{label}.changes[{index}]")
+    if not isinstance(diff.get("summary"), str) or not diff.get("summary"):
+        target.errors.append(f"{label}.summary must be a non-empty string.")
+
+
+def _validate_state_diff_change(change: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(change, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(change.get("path"), str) or not change.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    if change.get("kind") not in {"added", "removed", "changed"}:
+        target.errors.append(f"{label}.kind must be added, removed, or changed.")
+    if "before" not in change:
+        target.errors.append(f"{label}.before is required.")
+    if "after" not in change:
+        target.errors.append(f"{label}.after is required.")
+
+
+def _validate_state_diff_summary(summary: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(summary, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _require_equal(summary, "schema_version", "hfr.state_diff.summary.v1", target, prefix=f"{label}.")
+    if not isinstance(summary.get("available"), bool):
+        target.errors.append(f"{label}.available must be a boolean.")
+    if not isinstance(summary.get("changed"), bool):
+        target.errors.append(f"{label}.changed must be a boolean.")
+    if not _is_non_negative_int(summary.get("change_count")):
+        target.errors.append(f"{label}.change_count must be a non-negative integer.")
+    if not isinstance(summary.get("truncated"), bool):
+        target.errors.append(f"{label}.truncated must be a boolean.")
+    if not isinstance(summary.get("summary"), str):
+        target.errors.append(f"{label}.summary must be a string.")
+    changes = summary.get("changes")
+    if not isinstance(changes, list):
+        target.errors.append(f"{label}.changes must be a list.")
+        return
+    for index, change in enumerate(changes):
+        if not isinstance(change, dict):
+            target.errors.append(f"{label}.changes[{index}] must be an object.")
+            continue
+        if not isinstance(change.get("path"), str):
+            target.errors.append(f"{label}.changes[{index}].path must be a string.")
+        if change.get("kind") not in {"", "added", "removed", "changed"}:
+            target.errors.append(f"{label}.changes[{index}].kind must be added, removed, changed, or empty.")
 
 
 def _validate_snapshot_file_record(
@@ -1127,8 +1229,12 @@ def _validate_lineage(
             target.errors.append(f"artifact_lineage.outputs missing {output_name!r}.")
             continue
         _validate_lineage_file_record(outputs[output_name], run_dir, target, f"artifact_lineage.outputs.{output_name}")
+    if "before_state_snapshot" in outputs:
+        _validate_lineage_file_record(outputs["before_state_snapshot"], run_dir, target, "artifact_lineage.outputs.before_state_snapshot")
     if "state_snapshot" in outputs:
         _validate_lineage_file_record(outputs["state_snapshot"], run_dir, target, "artifact_lineage.outputs.state_snapshot")
+    if "state_diff" in outputs:
+        _validate_lineage_file_record(outputs["state_diff"], run_dir, target, "artifact_lineage.outputs.state_diff")
     evidence_links = lineage.get("evidence_links")
     if not isinstance(evidence_links, list):
         target.errors.append("artifact_lineage.evidence_links must be a list.")
@@ -2343,6 +2449,8 @@ def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget)
             _validate_task_completion(episode.get("task_completion"), target, f"episodes[{index}].task_completion")
         else:
             target.warnings.append(f"episodes[{index}].task_completion is missing; rerun export-rl to refresh task evidence fields.")
+        if "state_diff" in episode:
+            _validate_state_diff_summary(episode.get("state_diff"), target, f"episodes[{index}].state_diff")
         outcome = episode.get("outcome")
         if not isinstance(outcome, dict):
             target.errors.append(f"episodes[{index}].outcome must be an object.")
@@ -2358,6 +2466,11 @@ def _validate_episodes(episodes: list[dict[str, Any]], target: ValidationTarget)
                 target.errors.append(f"episodes[{index}].outcome.task_completion_status must match task_completion.status.")
             if outcome.get("task_completion_passed") != episode["task_completion"].get("passed"):
                 target.errors.append(f"episodes[{index}].outcome.task_completion_passed must match task_completion.passed.")
+        if isinstance(episode.get("state_diff"), dict):
+            if outcome.get("state_changed") != episode["state_diff"].get("changed"):
+                target.errors.append(f"episodes[{index}].outcome.state_changed must match state_diff.changed.")
+            if outcome.get("state_change_count") != episode["state_diff"].get("change_count"):
+                target.errors.append(f"episodes[{index}].outcome.state_change_count must match state_diff.change_count.")
 
 
 def _validate_rewards(rewards: list[dict[str, Any]], target: ValidationTarget, episodes: list[dict[str, Any]]) -> None:
@@ -2386,6 +2499,10 @@ def _validate_rewards(rewards: list[dict[str, Any]], target: ValidationTarget, e
                 target.errors.append(f"rewards[{index}].task_completion_status does not match episode {episode_id!r} outcome.")
             if "task_completion_passed" in reward and reward.get("task_completion_passed") != outcome.get("task_completion_passed"):
                 target.errors.append(f"rewards[{index}].task_completion_passed does not match episode {episode_id!r} outcome.")
+            if "state_changed" in reward and reward.get("state_changed") != outcome.get("state_changed"):
+                target.errors.append(f"rewards[{index}].state_changed does not match episode {episode_id!r} outcome.")
+            if "state_change_count" in reward and reward.get("state_change_count") != outcome.get("state_change_count"):
+                target.errors.append(f"rewards[{index}].state_change_count does not match episode {episode_id!r} outcome.")
             _validate_matching_source_fingerprints(reward, episode, target, f"rewards[{index}]")
         _validate_source_fingerprint_fields(reward, target, f"rewards[{index}]", warn_if_missing=False)
         if not isinstance(reward.get("rule_rewards"), list):
@@ -6794,7 +6911,7 @@ def _validate_lineage_input_record(name: str, record: dict[str, Any], target: Va
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing inputs.")
     if "sensitive" in record and not isinstance(record.get("sensitive"), bool):
         target.errors.append(f"{label}.sensitive must be a boolean when present.")
-    if name in {"scenario", "source_trace", "source_state_snapshot"} and record.get("exists") is not True:
+    if name in {"scenario", "source_trace", "source_before_state_snapshot", "source_state_snapshot"} and record.get("exists") is not True:
         target.warnings.append(f"{label}.exists is not true; replay may require restoring this input.")
 
 

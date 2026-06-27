@@ -77,6 +77,7 @@ from .state import (
     sanitize_state_snapshot,
 )
 from .state_capture import StateCaptureError, capture_state_snapshot
+from .state_diff import StateDiffError, build_state_diff
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .trace_observability import TraceObservabilityError, build_trace_observability
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
@@ -106,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         ArtifactError,
         ScenarioError,
         StateCaptureError,
+        StateDiffError,
         StateSnapshotError,
         SuiteGatePolicyError,
         ReviewExportError,
@@ -183,6 +185,15 @@ def cmd_capture_state(args: argparse.Namespace) -> int:
         secret_patterns=args.secret_pattern,
     )
     _write_json(Path(args.out), snapshot)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_diff_state(args: argparse.Namespace) -> int:
+    before = sanitize_state_snapshot(load_state_snapshot(args.before), args.secret_pattern)
+    after = sanitize_state_snapshot(load_state_snapshot(args.after), args.secret_pattern)
+    diff = build_state_diff(before, after, max_changes=args.max_changes)
+    _write_json(Path(args.out), diff)
     print(f"wrote {args.out}")
     return 0
 
@@ -682,6 +693,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
         state_snapshot_paths=args.state_snapshot,
+        state_diff_paths=args.state_diff,
         live_smoke_summary_paths=args.live_smoke_summary,
         strict=args.strict,
     )
@@ -1377,6 +1389,22 @@ def _parser() -> argparse.ArgumentParser:
     capture_state.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in the snapshot")
     capture_state.set_defaults(func=cmd_capture_state)
 
+    diff_state = subparsers.add_parser(
+        "diff-state",
+        help="Write a deterministic hfr.state_diff.v1 artifact from before/after state snapshots",
+    )
+    diff_state.add_argument("--before", required=True, help="Pre-run state snapshot JSON")
+    diff_state.add_argument("--after", required=True, help="Post-run state snapshot JSON")
+    diff_state.add_argument("--out", required=True)
+    diff_state.add_argument(
+        "--max-changes",
+        type=_non_negative_int_arg,
+        default=200,
+        help="Maximum number of changed paths to include while still counting all changes",
+    )
+    diff_state.add_argument("--secret-pattern", action="append", default=[], help="Additional regex to redact from the diff")
+    diff_state.set_defaults(func=cmd_diff_state)
+
     run = subparsers.add_parser("run", help="Normalize, score, and report in one command")
     run.add_argument("--scenario", required=True)
     run.add_argument("--trace")
@@ -1553,6 +1581,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
     validate.add_argument("--state-snapshot", action="append", default=[], help="Validate one hfr.state_snapshot.v1 JSON file; may be repeated")
+    validate.add_argument("--state-diff", action="append", default=[], help="Validate one hfr.state_diff.v1 JSON file; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
@@ -2815,6 +2844,12 @@ def _run_scenario_artifacts(
     task_completion_path = run_dir / "task_completion.json"
     before_state_snapshot_path = run_dir / "before_state_snapshot.json" if before_state_snapshot is not None else None
     state_snapshot_path = run_dir / "state_snapshot.json" if state_snapshot is not None else None
+    state_diff = (
+        build_state_diff(before_state_snapshot, state_snapshot)
+        if before_state_snapshot is not None and state_snapshot is not None
+        else None
+    )
+    state_diff_path = run_dir / "state_diff.json" if state_diff is not None else None
     report_path = run_dir / "report.html"
     lineage_path = run_dir / "artifact_lineage.json"
     _write_json(normalized_path, trace)
@@ -2822,6 +2857,8 @@ def _run_scenario_artifacts(
         _write_json(before_state_snapshot_path, before_state_snapshot)
     if state_snapshot_path is not None:
         _write_json(state_snapshot_path, state_snapshot)
+    if state_diff_path is not None and state_diff is not None:
+        _write_json(state_diff_path, state_diff)
     _write_json(score_path, scorecard)
     _write_json(task_completion_path, scorecard["task_completion"])
     raw_trace_path = None
@@ -2853,6 +2890,7 @@ def _run_scenario_artifacts(
             "normalized_trace": normalized_path,
             "before_state_snapshot": before_state_snapshot_path,
             "state_snapshot": state_snapshot_path,
+            "state_diff": state_diff_path,
             "scorecard": score_path,
             "task_completion": task_completion_path,
             "report": report_path,
@@ -2876,6 +2914,7 @@ def _run_scenario_artifacts(
             "normalized_trace": normalized_path,
             "before_state_snapshot": before_state_snapshot_path,
             "state_snapshot": state_snapshot_path,
+            "state_diff": state_diff_path,
             "scorecard": score_path,
             "task_completion": task_completion_path,
             "report": report_path,

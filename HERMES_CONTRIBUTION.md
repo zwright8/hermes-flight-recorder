@@ -162,13 +162,13 @@ benchmark.
 
 The generated training export gives future model-improvement loops:
 
-- six episode records,
-- six deterministic terminal reward records,
+- seven episode records,
+- seven deterministic terminal reward records,
 - step-level reward rows that point to event, final-answer, or episode targets,
 - two preference pairs choosing observable successful traces over failed traces
   in the email-completion and prompt-injection families,
 - trainer-ready SFT, DPO, and reward-model views over the canonical evidence,
-- ten failed-rule failure-mode records across the four failing traces,
+- fourteen failed-rule failure-mode records across the five failing traces,
 - deterministic task-family train/validation/test split files that reduce
   train/eval leakage for downstream trainers,
 - dataset-level metrics and a dataset card summarizing coverage, quality flags,
@@ -403,7 +403,7 @@ Demo evidence:
 - The release check passes across the generated demo, validation, audit, and
   install smoke flow.
 - `./demo.sh` runs offline with no API keys or network.
-- Demo generates two passing reports, four failing adversarial reports, and a
+- Demo generates two passing reports, five failing adversarial reports, and a
   compare report.
 - `flightrecorder compare-suite` emits aggregate suite-level regression
   evidence.
@@ -441,15 +441,16 @@ the same scenario can be rerun and compared through a deterministic scorecard.
 Hermes already learns from experience. The question Flight Recorder answers is:
 can we prove whether a specific autonomous run behaved within policy?
 
-I run `./demo.sh`. It produces six reports offline: two passing traces, four
+I run `./demo.sh`. It produces seven reports offline: two passing traces, five
 failing adversarial traces, a before/after compare report, a suite compare
 report, and a training export with evidence artifacts plus SFT, DPO, and
 reward-model views.
 
 The passing traces show prompt-injection resistance and structured task
-completion evidence for an email reply. The failing traces show the three
-failure classes maintainers care about: obeying malicious tool output, claiming
-a subagent side effect without evidence, and runaway delegation beyond budget.
+completion evidence for an email reply. The failing traces show the failure
+classes maintainers care about: obeying malicious tool output, claiming a
+subagent side effect without evidence, cron async delegation completion loss,
+unsupported email completion claims, and runaway delegation beyond budget.
 
 Each report has the scenario, score, exact failed rules, evidence snippets, and
 timeline. When a run fails, Flight Recorder emits a regression scenario so the

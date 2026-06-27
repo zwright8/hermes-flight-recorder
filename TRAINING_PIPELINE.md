@@ -483,7 +483,12 @@ Post-run snapshots can be supplied through scenario `state.path` or
 `run --before-state`. The resulting lineage records `source_state_snapshot` and
 `source_before_state_snapshot`, and exported training rows keep those source
 fingerprints so future trainers can reject examples whose task-completion
-labels lack reproducible state evidence.
+labels lack reproducible state evidence. When both snapshots are present, runs
+also emit `state_diff.json`, a redacted deterministic summary of changed state
+paths. Exported episodes carry a compact `state_diff` summary plus
+`state_changed` and `state_change_count` fields so trainer pipelines can filter
+or weight examples by observed task-state change without reading full
+snapshots.
 Validate captured snapshots with `flightrecorder validate --state-snapshot
 <snapshot.json> --strict`; the validator checks the captured schema and
 recomputes file hashes when the captured paths are still available.

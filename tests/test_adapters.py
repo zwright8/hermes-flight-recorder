@@ -28,6 +28,18 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(trace["session"]["source_format"], "observer_jsonl")
         self.assertIn("uploaded report.pdf", trace["final_answer"])
 
+    def test_observer_adapter_maps_async_delegate_cron_trace(self):
+        trace = normalize_trace(ROOT / "fixtures" / "cron_async_delegation_bad.observer.jsonl")
+
+        event_types = [event["type"] for event in trace["events"]]
+        self.assertEqual(trace["session"]["id"], "cron-session-53027")
+        self.assertEqual(trace["session"]["source_format"], "observer_jsonl")
+        self.assertEqual(event_types.count("subagent_stop"), 2)
+        delegate_result = next(event for event in trace["events"] if event["type"] == "tool_result" and event["tool_name"] == "delegate_task")
+        self.assertEqual(delegate_result["result"]["mode"], "background")
+        self.assertEqual(delegate_result["result"]["delegation_id"], "deleg_cron_53027")
+        self.assertNotIn("ASYNC DELEGATION BATCH COMPLETE", trace["final_answer"])
+
     def test_observer_finalize_hook_auto_detects_as_observer_jsonl(self):
         with self.subTest("on_session_finalize first row"):
             import tempfile

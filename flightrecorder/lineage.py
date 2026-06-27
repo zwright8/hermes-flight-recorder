@@ -124,6 +124,8 @@ def _artifact_graph(artifacts: dict[str, str | Path | None]) -> list[dict[str, A
         edges.append(_edge(["scorecard"], "junit", "ci_report"))
     if "markdown" in present:
         edges.append(_edge(["scorecard"], "markdown", "markdown_summary"))
+    if "state_diff" in present:
+        edges.append(_edge(["before_state_snapshot", "state_snapshot"], "state_diff", "diff_state"))
     if "regression_scenario" in present:
         edges.append(_edge(["scenario", "source_trace", "scorecard"], "regression_scenario", "regression_capture"))
     if "raw_trace_sensitive" in present:

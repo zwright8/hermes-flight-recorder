@@ -41,6 +41,7 @@ python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_t
 python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
 python -m flightrecorder schemas --check runs/prompt_injection_good/task_completion.json >/dev/null
 python -m flightrecorder schemas --check runs/email_reply_completion_good/task_completion.json >/dev/null
+python -m flightrecorder schemas --check runs/email_reply_completion_good/state_diff.json >/dev/null
 python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
 python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
@@ -124,6 +125,9 @@ python -m flightrecorder capture-state \
 python -m flightrecorder validate \
   --state-snapshot runs/captured_state.json \
   --strict >/dev/null
+python -m flightrecorder validate \
+  --state-diff runs/email_reply_completion_good/state_diff.json \
+  --strict >/dev/null
 test -f runs/draft_email_reply.scenario.json
 test -f runs/draft_email_reply/scorecard.json
 test -f runs/draft_email_reply/task_completion.json
@@ -133,6 +137,7 @@ test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/email_reply_completion_good/state_snapshot.json
 test -f runs/email_reply_completion_good/before_state_snapshot.json
+test -f runs/email_reply_completion_good/state_diff.json
 test -f runs/email_reply_completion_good/task_completion.json
 test -f runs/email_reply_completion_good/artifact_lineage.json
 test -f replay_runs/moved_prompt_injection_good_bundle/replay_bundle.json
@@ -193,37 +198,38 @@ assert suite_trend["points"][1]["delta_from_previous"]["average_score_delta"] ==
 assert all(item["delta"] == 0 for item in suite_trend["failed_rule_trends"])
 assert "Flight Recorder Suite Trend" in suite_trend_html
 assert scenario_quality["passed"] is True
-assert scenario_quality["metrics"]["average_contract_score"] == 89.17
+assert scenario_quality["metrics"]["average_contract_score"] == 90.71
 assert scenario_quality["metrics"]["min_contract_score"] == 65
-assert scenario_quality["metrics"]["observable_scenario_rate"] == 0.8333
+assert scenario_quality["metrics"]["observable_scenario_rate"] == 0.8571
 assert scenario_quality["metrics"]["weak_scenario_count"] == 0
 assert evidence_coverage["passed"] is True
 assert evidence_coverage["metrics"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["critical_failed_rule_evidence_rate"] == 1.0
 assert evidence_coverage["metrics"]["failed_rules_without_evidence"] == 0
 assert trace_observability["passed"] is True
-assert trace_observability["metrics"]["run_count"] == 6
-assert trace_observability["metrics"]["average_event_count"] == 5.67
+assert trace_observability["metrics"]["run_count"] == 7
+assert trace_observability["metrics"]["average_event_count"] == 6.0
 assert trace_observability["metrics"]["event_type_count"] == 6
-assert trace_observability["metrics"]["tool_or_api_run_rate"] == 0.8333
+assert trace_observability["metrics"]["tool_or_api_run_rate"] == 0.8571
 assert repair_queue["passed"] is True
-assert repair_queue["item_count"] == 11
-assert repair_queue["metrics"]["critical_item_count"] == 11
-assert repair_queue["metrics"]["scenario_count"] == 4
+assert repair_queue["item_count"] == 14
+assert repair_queue["metrics"]["critical_item_count"] == 14
+assert repair_queue["metrics"]["scenario_count"] == 5
 assert evidence_bundle["passed"] is True
 assert evidence_bundle["readiness"] == "ready"
 assert evidence_bundle["decision"]["recommendation"] == "promote_handoff"
 assert evidence_bundle["decision"]["blocking_check_count"] == 0
-assert evidence_bundle["decision"]["key_metrics"]["suite_summary"]["total"] == 6
-assert evidence_bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"] == 0.8333
-assert evidence_bundle["decision"]["key_metrics"]["repair_queue"]["item_count"] == 11
-assert evidence_bundle["decision"]["key_metrics"]["training_export"]["episode_count"] == 6
-assert evidence_bundle["decision"]["key_metrics"]["training_export"]["curriculum_failure_mode_count"] == 11
+assert evidence_bundle["decision"]["key_metrics"]["suite_summary"]["total"] == 7
+assert evidence_bundle["decision"]["key_metrics"]["trace_observability"]["tool_or_api_run_rate"] == 0.8571
+assert evidence_bundle["decision"]["key_metrics"]["repair_queue"]["item_count"] == 14
+assert evidence_bundle["decision"]["key_metrics"]["training_export"]["episode_count"] == 7
+assert evidence_bundle["decision"]["key_metrics"]["training_export"]["curriculum_failure_mode_count"] == 14
 top_curriculum = evidence_bundle["decision"]["key_metrics"]["training_export"]["top_curriculum_priorities"]
 assert len(top_curriculum) == 5
 assert top_curriculum[0]["priority_score"] >= top_curriculum[-1]["priority_score"]
 assert any(item["rule_id"] == "forbidden_actions" for item in top_curriculum)
 assert any("prompt_injection_bad" in item["scenario_ids"] for item in top_curriculum)
+assert any("cron_async_delegation_bad" in item["scenario_ids"] for item in top_curriculum)
 action_ids = {item["id"] for item in evidence_bundle["decision"]["next_actions"]}
 assert "prioritize_curriculum_failures" in action_ids
 assert all(len(item["action_fingerprint"]) == 64 for item in evidence_bundle["decision"]["next_actions"])
@@ -234,27 +240,27 @@ assert all(
 assert len({item["routing_key"] for item in evidence_bundle["decision"]["next_actions"]}) == len(
     evidence_bundle["decision"]["next_actions"]
 )
-assert evidence_bundle["metrics"]["suite_summary"]["total"] == 6
-assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 6
-assert evidence_bundle["metrics"]["training_export"]["curriculum_failure_mode_count"] == 11
-assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 89.17
+assert evidence_bundle["metrics"]["suite_summary"]["total"] == 7
+assert evidence_bundle["metrics"]["training_export"]["episode_count"] == 7
+assert evidence_bundle["metrics"]["training_export"]["curriculum_failure_mode_count"] == 14
+assert evidence_bundle["metrics"]["scenario_quality"]["average_contract_score"] == 90.71
 assert evidence_bundle["metrics"]["evidence_coverage"]["failed_rule_evidence_rate"] == 1.0
 assert evidence_bundle["metrics"]["trace_observability"]["event_type_count"] == 6
-assert evidence_bundle["metrics"]["repair_queue"]["critical_item_count"] == 11
+assert evidence_bundle["metrics"]["repair_queue"]["critical_item_count"] == 14
 assert len(evidence_bundle["artifacts"]["training_export_curriculum"]["sha256"]) == 64
 assert evidence_bundle["failed_check_count"] == 0
 assert captured_state["schema_version"] == "hfr.state_snapshot.v1"
 assert captured_state["filesystem"]["files"]["task_completion"]["exists"] is True
 assert captured_state["json"]["task_completion"]["status"] == "complete"
 assert captured_state["observations"]["gmail"]["threads"]["email-123"]["sent_replies"][0]["status"] == "sent"
-assert metrics["pass_rate"] == 0.3333
-assert metrics["average_score"] == 57.5
-assert metrics["failed"] == 4
+assert metrics["pass_rate"] == 0.2857
+assert metrics["average_score"] == 50.71
+assert metrics["failed"] == 5
 failed_rules = {item["id"]: item["count"] for item in metrics["failed_rule_counts"]}
-assert failed_rules["required_evidence"] == 2
+assert failed_rules["required_evidence"] == 3
 assert failed_rules["required_actions"] == 1
-assert failed_rules["required_action_sequences"] == 1
-assert failed_rules["required_event_counts"] == 1
+assert failed_rules["required_action_sequences"] == 2
+assert failed_rules["required_event_counts"] == 2
 assert failed_rules["required_state"] == 1
 PY
 python -m flightrecorder gate-suite \
@@ -463,8 +469,22 @@ assert lineage["replay"]["input_fingerprints"]["scenario"]["sha256"]
 assert lineage["replay"]["input_fingerprints"]["source_trace"]["sha256"]
 assert lineage["summary"]["self_contained_replay"] == lineage["replay"]["self_contained"]
 email_lineage = json.loads(Path("runs/email_reply_completion_good/artifact_lineage.json").read_text(encoding="utf-8"))
+state_diff = json.loads(Path("runs/email_reply_completion_good/state_diff.json").read_text(encoding="utf-8"))
 assert email_lineage["replay"]["input_fingerprints"]["source_before_state_snapshot"]["sha256"]
 assert email_lineage["replay"]["input_fingerprints"]["source_state_snapshot"]["sha256"]
+assert state_diff["schema_version"] == "hfr.state_diff.v1"
+assert state_diff["changed"] is True
+assert state_diff["change_count"] == 2
+assert [change["path"] for change in state_diff["changes"]] == [
+    "gmail.threads.email-123.last_sent_message_id",
+    "gmail.threads.email-123.sent_replies.0",
+]
+assert any(item["name"] == "state_diff" and item.get("sha256") for item in email_lineage["outputs"])
+assert {
+    "from": ["before_state_snapshot", "state_snapshot"],
+    "to": "state_diff",
+    "operation": "diff_state",
+} in email_lineage["graph"]
 
 training_manifest = json.loads(Path("runs/training_export/manifest.json").read_text(encoding="utf-8"))
 rewards = [
@@ -524,6 +544,11 @@ assert all(len(item["source_fingerprints"]["source_trace"]["sha256"]) == 64 for 
 email_episode = next(item for item in episodes if item["scenario_id"] == "email_reply_completion_good")
 assert len(email_episode["source_fingerprints"]["source_before_state_snapshot"]["sha256"]) == 64
 assert len(email_episode["source_fingerprints"]["source_state_snapshot"]["sha256"]) == 64
+assert email_episode["state_diff"]["available"] is True
+assert email_episode["state_diff"]["changed"] is True
+assert email_episode["state_diff"]["change_count"] == 2
+assert email_episode["outcome"]["state_changed"] is True
+assert email_episode["outcome"]["state_change_count"] == 2
 assert set(training_manifest["artifact_fingerprints"]) == {
     "curriculum",
     "dataset_card",
@@ -543,12 +568,12 @@ assert all(len(record["sha256"]) == 64 for record in training_manifest["artifact
 assert dataset_splits["schema_version"] == "hfr.rl.dataset_splits.v1"
 assert dataset_splits["split_names"] == list(split_names)
 assert dataset_splits["artifact_names"] == list(split_artifacts)
-assert dataset_splits["summary"]["episode_count"] == 6
+assert dataset_splits["summary"]["episode_count"] == 7
 assert dataset_splits["summary"]["task_family_count"] == len({item["task_family"] for item in episodes})
 assert dataset_splits["summary"]["family_exclusive"] is True
 assert dataset_splits["leakage_checks"]["family_exclusive"] is True
 assert dataset_splits["leakage_checks"]["cross_split_task_families"] == []
-assert dataset_splits["summary"]["train_episode_count"] + dataset_splits["summary"]["validation_episode_count"] + dataset_splits["summary"]["test_episode_count"] == 6
+assert dataset_splits["summary"]["train_episode_count"] + dataset_splits["summary"]["validation_episode_count"] + dataset_splits["summary"]["test_episode_count"] == 7
 assert dataset_splits["summary"]["validation_episode_count"] >= 1
 assert dataset_splits["summary"]["test_episode_count"] >= 1
 assert dataset_metrics["dataset_splits"] == dataset_splits["summary"]
@@ -572,26 +597,27 @@ for split in split_names:
 assert any(item["chosen_episode_id"] == "prompt_injection_good" and item["rejected_episode_id"] == "prompt_injection_bad" for item in dpo)
 assert any(item["chosen_episode_id"] == "email_reply_completion_good" and item["rejected_episode_id"] == "email_reply_completion_bad" for item in dpo)
 assert {item["episode_id"] for item in reward_model} >= {
+    "cron_async_delegation_bad",
     "email_reply_completion_bad",
     "email_reply_completion_good",
     "prompt_injection_good",
     "prompt_injection_bad",
 }
-assert dataset_metrics["artifact_counts"]["episodes"] == 6
-assert dataset_metrics["pass_rate"] == 0.3333
-assert dataset_metrics["artifact_counts"]["reward_model"] == 6
-assert dataset_metrics["source_fingerprint_coverage"]["fully_verified"] == 6
+assert dataset_metrics["artifact_counts"]["episodes"] == 7
+assert dataset_metrics["pass_rate"] == 0.2857
+assert dataset_metrics["artifact_counts"]["reward_model"] == 7
+assert dataset_metrics["source_fingerprint_coverage"]["fully_verified"] == 7
 assert dataset_metrics["source_fingerprint_coverage"]["unverified"] == 0
-assert dataset_metrics["task_completion"]["configured_count"] == 5
+assert dataset_metrics["task_completion"]["configured_count"] == 6
 assert dataset_metrics["task_completion"]["complete_count"] == 2
-assert dataset_metrics["task_completion"]["incomplete_count"] == 3
+assert dataset_metrics["task_completion"]["incomplete_count"] == 4
 assert dataset_metrics["task_completion"]["not_applicable_count"] == 1
-assert dataset_metrics["task_completion"]["required_check_count"] == 15
-assert dataset_metrics["task_completion"]["passed_check_count"] == 8
-assert dataset_metrics["trace_signal"]["average_event_count"] == 5.67
+assert dataset_metrics["task_completion"]["required_check_count"] == 21
+assert dataset_metrics["task_completion"]["passed_check_count"] == 11
+assert dataset_metrics["trace_signal"]["average_event_count"] == 6.0
 assert dataset_metrics["trace_signal"]["event_type_count"] == 6
 assert dataset_metrics["trace_signal"]["final_answer_rate"] == 1.0
-assert dataset_metrics["trace_signal"]["tool_or_api_episode_rate"] == 0.8333
+assert dataset_metrics["trace_signal"]["tool_or_api_episode_rate"] == 0.8571
 assert dataset_metrics["trace_signal"]["risk_count"] == 2
 assert dataset_metrics["metadata"]["candidate"] == "offline-demo"
 assert "# Flight Recorder Dataset Card" in dataset_card
@@ -629,18 +655,18 @@ assert gate["metrics"]["validation"]["passed"] is True
 assert gate["metrics"]["validation"]["error_count"] == 0
 assert gate["metrics"]["source_fingerprint_coverage"]["rate"] == 1.0
 assert gate["metrics"]["source_fingerprint_coverage"]["unverified"] == 0
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 10
-assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 10
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["rows"] == 11
+assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified"] == 11
 assert gate["metrics"]["trainer_view_source_fingerprint_coverage"]["fully_verified_rate"] == 1.0
 assert gate["metrics"]["task_completion"]["complete_count"] == 2
-assert gate["metrics"]["task_completion"]["incomplete_count"] == 3
-assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5333
-assert gate["metrics"]["trace_signal"]["average_event_count"] == 5.67
+assert gate["metrics"]["task_completion"]["incomplete_count"] == 4
+assert gate["metrics"]["task_completion"]["check_pass_rate"] == 0.5238
+assert gate["metrics"]["trace_signal"]["average_event_count"] == 6.0
 assert gate["metrics"]["trace_signal"]["event_type_count"] == 6
-assert gate["metrics"]["trace_signal"]["tool_or_api_episode_rate"] == 0.8333
+assert gate["metrics"]["trace_signal"]["tool_or_api_episode_rate"] == 0.8571
 assert gate["metrics"]["trace_signal"]["risk_count"] == 2
-assert gate["metrics"]["dataset_splits"]["task_family_count"] == 4
-assert gate["metrics"]["dataset_splits"]["train_episode_count"] == 3
+assert gate["metrics"]["dataset_splits"]["task_family_count"] == 5
+assert gate["metrics"]["dataset_splits"]["train_episode_count"] == 4
 assert gate["metrics"]["dataset_splits"]["validation_episode_count"] == 2
 assert gate["metrics"]["dataset_splits"]["test_episode_count"] == 1
 assert gate["metrics"]["dataset_splits"]["family_exclusive"] is True
@@ -649,16 +675,16 @@ assert gate["policy"]["effective"]["max_unverified_source_fingerprints"] == 0
 assert gate["policy"]["effective"]["min_trainer_view_source_fingerprint_rate"] == 1.0
 assert gate["policy"]["effective"]["max_unverified_trainer_view_source_fingerprints"] == 0
 assert gate["policy"]["effective"]["min_task_completion_complete"] == 2
-assert gate["policy"]["effective"]["max_task_completion_incomplete"] == 3
-assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5333
-assert gate["policy"]["effective"]["min_trace_average_events"] == 5.0
+assert gate["policy"]["effective"]["max_task_completion_incomplete"] == 4
+assert gate["policy"]["effective"]["min_task_completion_check_pass_rate"] == 0.5238
+assert gate["policy"]["effective"]["min_trace_average_events"] == 6.0
 assert gate["policy"]["effective"]["min_trace_event_type_count"] == 4
 assert gate["policy"]["effective"]["min_trace_final_answer_rate"] == 1.0
 assert gate["policy"]["effective"]["min_trace_tool_or_api_rate"] == 0.8
 assert gate["policy"]["effective"]["max_trace_empty_final_answers"] == 0
 assert gate["policy"]["effective"]["max_trace_risk_count"] == 2
-assert gate["policy"]["effective"]["min_split_task_families"] == 4
-assert gate["policy"]["effective"]["min_train_episodes"] == 3
+assert gate["policy"]["effective"]["min_split_task_families"] == 5
+assert gate["policy"]["effective"]["min_train_episodes"] == 4
 assert gate["policy"]["effective"]["min_validation_episodes"] == 2
 assert gate["policy"]["effective"]["min_test_episodes"] == 1
 assert gate["policy"]["effective"]["require_family_exclusive_splits"] is True
@@ -964,7 +990,7 @@ assert bundle["decision"]["key_metrics"]["training_export"]["trainer_view_source
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["platform"] == "Linux-release-check"
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["hermes_git_commit"] == "abcdef123456"
 assert bundle["decision"]["key_metrics"]["live_smoke_summary"]["flight_recorder_git_commit"] == "123456abcdef"
-assert bundle["decision"]["key_metrics"]["trace_observability"]["run_count"] == 6
+assert bundle["decision"]["key_metrics"]["trace_observability"]["run_count"] == 7
 assert all(len(item["action_fingerprint"]) == 64 for item in bundle["decision"]["next_actions"])
 assert all(
     item["routing_key"] == f"{item['artifact']}:{item['id']}:{item['action_fingerprint'][:12]}"

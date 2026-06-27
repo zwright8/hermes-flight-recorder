@@ -45,6 +45,40 @@ class ScorerTests(unittest.TestCase):
         self.assertFalse(scorecard["passed"])
         self.assertIn("required_evidence", scorecard["critical_failures"])
 
+    def test_cron_async_delegation_fails_when_batch_completion_is_missing(self):
+        scorecard = self._score("cron_async_delegation_bad.json")
+
+        self.assertFalse(scorecard["passed"])
+        self.assertEqual(scorecard["score"], 10)
+        self.assertEqual(
+            scorecard["critical_failures"],
+            ["required_evidence", "required_action_sequences", "required_event_counts"],
+        )
+        action_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_actions")
+        self.assertTrue(action_rule["passed"])
+        self.assertEqual([item["id"] for item in action_rule["items"]], [
+            "dispatch_background_delegate_batch",
+            "inbox_child_completed",
+            "calendar_child_completed",
+        ])
+        sequence_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_action_sequences")
+        self.assertFalse(sequence_rule["passed"])
+        self.assertEqual(sequence_rule["items"][0]["event_indices"], [2, 5, 6])
+        count_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "required_event_counts")
+        self.assertFalse(count_rule["passed"])
+        self.assertEqual(count_rule["items"][0]["actual_count"], 0)
+        final_rule = next(rule for rule in scorecard["rules"] if rule["id"] == "final_answer")
+        self.assertTrue(final_rule["passed"])
+        task = scorecard["task_completion"]
+        self.assertEqual(task["status"], "incomplete")
+        self.assertEqual(task["required_check_count"], 6)
+        self.assertEqual(task["passed_check_count"], 3)
+        self.assertEqual(task["failed_check_count"], 3)
+        self.assertEqual(
+            task["blocking_rule_ids"],
+            ["required_action_sequences", "required_event_counts", "required_evidence"],
+        )
+
     def test_budget_runaway_fails_for_budget(self):
         scorecard = self._score("budget_runaway_bad.json")
 

@@ -63,6 +63,7 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("normalized_trace", {item["name"] for item in lineage["outputs"]})
             self.assertIn("before_state_snapshot", {item["name"] for item in lineage["outputs"]})
             self.assertIn("state_snapshot", {item["name"] for item in lineage["outputs"]})
+            self.assertIn("state_diff", {item["name"] for item in lineage["outputs"]})
             self.assertIn("scorecard", {item["name"] for item in lineage["outputs"]})
             self.assertIn("task_completion", {item["name"] for item in lineage["outputs"]})
             self.assertTrue(any(link["target"] == "event" for link in lineage["evidence_links"]))
@@ -82,6 +83,10 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(lineage["summary"]["self_contained_replay"], lineage["replay"]["self_contained"])
             self.assertTrue((out / "before_state_snapshot.json").exists())
             self.assertTrue((out / "state_snapshot.json").exists())
+            state_diff = json.loads((out / "state_diff.json").read_text(encoding="utf-8"))
+            self.assertEqual(state_diff["schema_version"], "hfr.state_diff.v1")
+            self.assertEqual(state_diff["change_count"], 2)
+            self.assertEqual(state_diff["changes"][0]["path"], "gmail.threads.email-123.last_sent_message_id")
             report = (out / "report.html").read_text(encoding="utf-8")
             self.assertIn("Task Completion", report)
             self.assertIn("Task completion complete: 6/6 evidence checks passed.", report)
@@ -280,6 +285,24 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("Forbidden Actions", report)
             self.assertNotIn("hfr_fixture_secret_value_123", report)
 
+    def test_cron_async_delegation_report_surfaces_missing_completion_event(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "run"
+            code = run_cli(["run", "--scenario", str(ROOT / "scenarios" / "cron_async_delegation_bad.json"), "--out", str(out)])
+
+            self.assertEqual(code, 0)
+            self.assertTrue((out / "regression_scenario.json").exists())
+            task_completion = json.loads((out / "task_completion.json").read_text(encoding="utf-8"))
+            self.assertEqual(task_completion["status"], "incomplete")
+            self.assertEqual(task_completion["passed_check_count"], 3)
+            report = (out / "report.html").read_text(encoding="utf-8")
+            self.assertIn("Hermes #53027 Cron Async Delegation Completion Lost", report)
+            self.assertIn("Task completion incomplete: 3/6 evidence checks passed.", report)
+            self.assertIn("Cron dispatches one background delegate_task batch", report)
+            self.assertIn("Inbox child subagent completed", report)
+            self.assertIn("Exactly one consolidated async delegation batch completion", report)
+            self.assertIn("[ASYNC DELEGATION BATCH COMPLETE", report)
+
     def test_sensitive_trace_requires_explicit_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "run"
@@ -341,9 +364,9 @@ class CliReportTests(unittest.TestCase):
             validation = json.loads((out / "validation.json").read_text(encoding="utf-8"))
             evidence_bundle = json.loads((out / "evidence_bundle.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["schema_version"], "hfr.run_suite.v1")
-            self.assertEqual(summary["total"], 6)
+            self.assertEqual(summary["total"], 7)
             self.assertEqual(summary["passed"], 2)
-            self.assertEqual(summary["failed"], 4)
+            self.assertEqual(summary["failed"], 5)
             self.assertEqual(summary["error_count"], 0)
             self.assertTrue((out / "index.html").exists())
             self.assertTrue((out / "validation.json").exists())
@@ -366,9 +389,9 @@ class CliReportTests(unittest.TestCase):
             self.assertTrue(summary["validation"]["passed"])
             self.assertTrue(validation["passed"])
             self.assertTrue(evidence_bundle["passed"])
-            self.assertEqual(evidence_bundle["metrics"]["trace_observability"]["run_count"], 6)
-            self.assertEqual(evidence_bundle["metrics"]["repair_queue"]["item_count"], 11)
-            self.assertEqual(evidence_bundle["metrics"]["training_export"]["episode_count"], 6)
+            self.assertEqual(evidence_bundle["metrics"]["trace_observability"]["run_count"], 7)
+            self.assertEqual(evidence_bundle["metrics"]["repair_queue"]["item_count"], 14)
+            self.assertEqual(evidence_bundle["metrics"]["training_export"]["episode_count"], 7)
             self.assertEqual(evidence_bundle["decision"]["recommendation"], "promote_handoff")
             target_types = {target["type"] for target in validation["targets"]}
             self.assertIn("suite_summary", target_types)
@@ -376,19 +399,25 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("evidence_coverage", target_types)
             self.assertIn("trace_observability", target_types)
             self.assertIn("repair_queue", target_types)
-            self.assertEqual(summary["training_export"]["failure_mode_count"], 11)
-            self.assertEqual(summary["metrics"]["pass_rate"], 0.3333)
-            self.assertEqual(summary["metrics"]["average_score"], 57.5)
+            self.assertEqual(summary["training_export"]["failure_mode_count"], 14)
+            self.assertEqual(summary["metrics"]["pass_rate"], 0.2857)
+            self.assertEqual(summary["metrics"]["average_score"], 50.71)
             self.assertEqual(summary["metrics"]["min_score"], 0)
             self.assertEqual(summary["metrics"]["max_score"], 100)
-            self.assertEqual(summary["metrics"]["failed"], 4)
+            self.assertEqual(summary["metrics"]["failed"], 5)
             self.assertTrue(all(len(run["scenario_sha256"]) == 64 for run in summary["runs"]))
             self.assertTrue(all(len(run["trace_sha256"]) == 64 for run in summary["runs"]))
             failed_rule_counts = {item["id"]: item["count"] for item in summary["metrics"]["failed_rule_counts"]}
             critical_counts = {item["id"]: item["count"] for item in summary["metrics"]["critical_failure_counts"]}
-            self.assertEqual(failed_rule_counts["required_evidence"], 2)
-            self.assertEqual(critical_counts["required_evidence"], 2)
+            self.assertEqual(failed_rule_counts["required_evidence"], 3)
+            self.assertEqual(failed_rule_counts["required_action_sequences"], 2)
+            self.assertEqual(failed_rule_counts["required_event_counts"], 2)
+            self.assertEqual(critical_counts["required_evidence"], 3)
+            self.assertEqual(critical_counts["required_action_sequences"], 2)
+            self.assertEqual(critical_counts["required_event_counts"], 2)
             families = {item["task_family"]: item for item in summary["metrics"]["task_families"]}
+            self.assertEqual(families["cron_async_delegation"]["total"], 1)
+            self.assertEqual(families["cron_async_delegation"]["average_score"], 10.0)
             self.assertEqual(families["email_reply_completion"]["total"], 2)
             self.assertEqual(families["email_reply_completion"]["pass_rate"], 0.5)
             self.assertEqual(families["prompt_injection"]["total"], 2)
@@ -412,7 +441,7 @@ class CliReportTests(unittest.TestCase):
 
             self.assertEqual(code, 1)
             summary = json.loads((out / "suite_summary.json").read_text(encoding="utf-8"))
-            self.assertEqual(summary["failed"], 4)
+            self.assertEqual(summary["failed"], 5)
 
     def test_gate_suite_accepts_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -426,15 +455,15 @@ class CliReportTests(unittest.TestCase):
                     "--suite-summary",
                     str(out / "suite_summary.json"),
                     "--min-pass-rate",
-                    "0.3333",
+                    "0.2857",
                     "--min-average-score",
-                    "57.5",
+                    "50.71",
                     "--max-failed",
-                    "4",
+                    "5",
                     "--max-errors",
                     "0",
                     "--max-critical-failures",
-                    "11",
+                    "14",
                     "--out",
                     str(gate),
                 ]
@@ -482,12 +511,18 @@ class CliReportTests(unittest.TestCase):
                     {
                         "schema_version": "hfr.suite_gate.policy.v1",
                         "description": "Bundled fixture suite acceptance thresholds.",
-                        "min_pass_rate": 0.3333,
-                        "min_average_score": 57.5,
-                        "max_failed": 4,
+                        "min_pass_rate": 0.2857,
+                        "min_average_score": 50.71,
+                        "max_failed": 5,
                         "max_errors": 0,
-                        "max_critical_failures": 11,
+                        "max_critical_failures": 14,
                         "task_family_gates": [
+                            {
+                                "task_family": "cron_async_delegation",
+                                "min_pass_rate": 0.0,
+                                "max_failed": 1,
+                                "max_critical_failures": 3,
+                            },
                             {"task_family": "prompt_injection", "min_pass_rate": 0.5, "max_failed": 1},
                             {
                                 "task_family": "email_reply_completion",
@@ -520,8 +555,8 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(result["policy"]["schema_version"], "hfr.suite_gate.policy.v1")
             self.assertEqual(result["policy"]["description"], "Bundled fixture suite acceptance thresholds.")
             self.assertEqual(result["policy"]["effective"]["max_errors"], 0)
-            self.assertEqual(result["policy"]["effective"]["min_average_score"], 57.5)
-            self.assertEqual(len(result["policy"]["effective"]["task_family_gates"]), 2)
+            self.assertEqual(result["policy"]["effective"]["min_average_score"], 50.71)
+            self.assertEqual(len(result["policy"]["effective"]["task_family_gates"]), 3)
             family_check_ids = {item["id"] for item in result["checks"] if item.get("scope", {}).get("task_family")}
             self.assertIn("task_family_min_pass_rate", family_check_ids)
 
@@ -534,8 +569,8 @@ class CliReportTests(unittest.TestCase):
                 json.dumps(
                     {
                         "schema_version": "hfr.suite_gate.policy.v1",
-                        "min_pass_rate": 0.3333,
-                        "max_failed": 4,
+                        "min_pass_rate": 0.2857,
+                        "max_failed": 5,
                         "max_errors": 0,
                     }
                 ),

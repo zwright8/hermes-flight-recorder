@@ -1,0 +1,72 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/state_diff.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Deterministic before/after state diff emitted as state_diff.json when a run has both pre-run and post-run state snapshots.",
+  "properties": {
+    "changed": {
+      "type": "boolean"
+    },
+    "change_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "changes": {
+      "items": {
+        "$ref": "#/$defs/change"
+      },
+      "type": "array"
+    },
+    "max_changes": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "hfr.state_diff.v1"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "changed",
+    "change_count",
+    "truncated",
+    "max_changes",
+    "changes",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder State Diff",
+  "type": "object",
+  "$defs": {
+    "change": {
+      "additionalProperties": true,
+      "properties": {
+        "after": true,
+        "before": true,
+        "kind": {
+          "enum": [
+            "added",
+            "removed",
+            "changed"
+          ]
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "before",
+        "after"
+      ],
+      "type": "object"
+    }
+  }
+}

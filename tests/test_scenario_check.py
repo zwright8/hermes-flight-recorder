@@ -37,7 +37,7 @@ class ScenarioCheckTests(unittest.TestCase):
             self.assertEqual(code, 0)
             summary = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(summary["schema_version"], "hfr.scenario_check.v1")
-            self.assertEqual(summary["total"], 6)
+            self.assertEqual(summary["total"], 7)
             self.assertEqual(summary["error_count"], 0)
             self.assertEqual(summary["warning_count"], 0)
             self.assertTrue(summary["passed"])
