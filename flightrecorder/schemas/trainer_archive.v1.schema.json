@@ -1,0 +1,296 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trainer_archive.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Portable trainer handoff archive manifest with copied evidence artifact hashes.",
+  "properties": {
+    "archive_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "type": "array"
+    },
+    "launch_check_included": {
+      "type": "boolean"
+    },
+    "manifest_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "missing": {
+      "items": {
+        "$ref": "#/$defs/missing"
+      },
+      "type": "array"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "ready_for_training": {
+      "type": "boolean"
+    },
+    "recommendation": {
+      "enum": [
+        "handoff_ready",
+        "block_handoff"
+      ]
+    },
+    "relationships": {
+      "items": {
+        "$ref": "#/$defs/relationship"
+      },
+      "type": "array"
+    },
+    "require_self_contained": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "hfr.trainer_archive.v1"
+    },
+    "self_contained": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "archive_path",
+    "manifest_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "self_contained",
+    "require_self_contained",
+    "ready_for_training",
+    "launch_check_included",
+    "artifacts",
+    "missing",
+    "relationships",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Trainer Archive",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "original_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "trainer_preflight",
+            "trainer_launch_check",
+            "gate",
+            "validation_summary",
+            "trainer_artifact",
+            "schema_contract"
+          ]
+        },
+        "schema_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tree_hash_algorithm": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "name",
+        "role",
+        "kind",
+        "path",
+        "original_path",
+        "exists",
+        "size_bytes",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "countRow": {
+      "additionalProperties": true,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "count"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "directory_artifact_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file_artifact_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_role_counts": {
+          "items": {
+            "$ref": "#/$defs/countRow"
+          },
+          "type": "array"
+        },
+        "role_counts": {
+          "items": {
+            "$ref": "#/$defs/countRow"
+          },
+          "type": "array"
+        },
+        "total_size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unique_sha256_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifact_count",
+        "file_artifact_count",
+        "directory_artifact_count",
+        "missing_count",
+        "total_size_bytes",
+        "role_counts",
+        "missing_role_counts",
+        "unique_sha256_count"
+      ],
+      "type": "object"
+    },
+    "missing": {
+      "additionalProperties": true,
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "trainer_launch_check",
+            "gate",
+            "validation_summary",
+            "trainer_artifact",
+            "schema_contract"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "index",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "relationship": {
+      "additionalProperties": true,
+      "properties": {
+        "from": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "to": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "type"
+      ],
+      "type": "object"
+    }
+  }
+}

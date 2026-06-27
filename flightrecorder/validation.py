@@ -46,6 +46,7 @@ from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
 from .state_diff import STATE_DIFF_SCHEMA_VERSION
 from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION, build_trace_signal
+from .trainer_archive import TRAINER_ARCHIVE_SCHEMA_VERSION
 from .training import (
     DATASET_SPLIT_ARTIFACTS,
     DATASET_SPLIT_NAMES,
@@ -113,6 +114,7 @@ def validate_artifacts(
     promotion_archive_paths: list[str | Path] | None = None,
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
+    trainer_archive_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -166,6 +168,8 @@ def validate_artifacts(
         targets.append(validate_trainer_preflight(trainer_preflight_path))
     for trainer_launch_check_path in trainer_launch_check_paths or []:
         targets.append(validate_trainer_launch_check(trainer_launch_check_path))
+    for trainer_archive_path in trainer_archive_paths or []:
+        targets.append(validate_trainer_archive(trainer_archive_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -670,6 +674,18 @@ def validate_trainer_launch_check(path: str | Path) -> ValidationTarget:
     launch_check = _read_object(launch_check_path, target, "trainer_launch_check.json")
     if launch_check is not None:
         _validate_trainer_launch_check(launch_check, target)
+    return target
+
+
+def validate_trainer_archive(path: str | Path) -> ValidationTarget:
+    """Validate a portable trainer handoff archive directory or manifest."""
+    archive_path = Path(path)
+    manifest_path = archive_path / "trainer_archive.json" if archive_path.is_dir() else archive_path
+    archive_root = manifest_path.parent
+    target = ValidationTarget("trainer_archive", str(archive_path))
+    archive = _read_object(manifest_path, target, "trainer_archive.json")
+    if archive is not None:
+        _validate_trainer_archive(archive, target, archive_root)
     return target
 
 
@@ -6422,6 +6438,225 @@ def _promotion_archive_count_map(values: Any) -> dict[str, int]:
         key = str(value or "unknown")
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def _validate_trainer_archive(archive: dict[str, Any], target: ValidationTarget, archive_root: Path) -> None:
+    _require_equal(archive, "schema_version", TRAINER_ARCHIVE_SCHEMA_VERSION, target)
+    for field_name in ("archive_path", "manifest_path", "readiness", "recommendation"):
+        if not isinstance(archive.get(field_name), str) or not archive.get(field_name):
+            target.errors.append(f"trainer_archive.{field_name} must be a non-empty string.")
+    for field_name in ("passed", "self_contained", "require_self_contained", "ready_for_training", "launch_check_included"):
+        if not isinstance(archive.get(field_name), bool):
+            target.errors.append(f"trainer_archive.{field_name} must be a boolean.")
+    artifacts = archive.get("artifacts")
+    if not isinstance(artifacts, list):
+        target.errors.append("trainer_archive.artifacts must be a list.")
+        artifacts = []
+    missing = archive.get("missing")
+    if not isinstance(missing, list):
+        target.errors.append("trainer_archive.missing must be a list.")
+        missing = []
+    relationships = archive.get("relationships")
+    if not isinstance(relationships, list):
+        target.errors.append("trainer_archive.relationships must be a list.")
+        relationships = []
+    metrics = archive.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("trainer_archive.metrics must be an object.")
+        metrics = {}
+    if not _is_string_list(archive.get("notes")):
+        target.errors.append("trainer_archive.notes must be a list of strings.")
+
+    for index, artifact in enumerate(artifacts):
+        _validate_trainer_archive_artifact(artifact, target, f"trainer_archive.artifacts[{index}]", index, archive_root)
+    for index, item in enumerate(missing):
+        _validate_trainer_archive_missing(item, target, f"trainer_archive.missing[{index}]")
+    for index, relationship in enumerate(relationships):
+        _validate_promotion_archive_relationship(relationship, target, f"trainer_archive.relationships[{index}]")
+
+    valid_artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
+    roles = {artifact.get("role") for artifact in valid_artifacts}
+    for required_role in ("trainer_preflight", "trainer_launch_check"):
+        if required_role not in roles:
+            target.errors.append(f"trainer_archive.artifacts must include role {required_role}.")
+    preflight = next((artifact for artifact in valid_artifacts if artifact.get("role") == "trainer_preflight"), {})
+    launch_check = next((artifact for artifact in valid_artifacts if artifact.get("role") == "trainer_launch_check"), {})
+    launch_included = bool(launch_check)
+    ready_for_training = preflight.get("source_passed") is True and launch_check.get("source_passed") is True
+    self_contained = len(missing) == 0
+    expected_passed = ready_for_training and (self_contained or archive.get("require_self_contained") is not True)
+    if isinstance(archive.get("launch_check_included"), bool) and archive["launch_check_included"] != launch_included:
+        target.errors.append(f"trainer_archive.launch_check_included expected {launch_included}, got {archive.get('launch_check_included')!r}.")
+    if isinstance(archive.get("ready_for_training"), bool) and archive["ready_for_training"] != ready_for_training:
+        target.errors.append(f"trainer_archive.ready_for_training expected {ready_for_training}, got {archive.get('ready_for_training')!r}.")
+    if isinstance(archive.get("self_contained"), bool) and archive["self_contained"] != self_contained:
+        target.errors.append(f"trainer_archive.self_contained expected {self_contained}, got {archive.get('self_contained')!r}.")
+    if isinstance(archive.get("passed"), bool) and archive["passed"] != expected_passed:
+        target.errors.append(f"trainer_archive.passed expected {expected_passed}, got {archive.get('passed')!r}.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "handoff_ready" if expected_passed else "block_handoff"
+    if archive.get("readiness") != expected_readiness:
+        target.errors.append(f"trainer_archive.readiness expected {expected_readiness!r}, got {archive.get('readiness')!r}.")
+    if archive.get("recommendation") != expected_recommendation:
+        target.errors.append(f"trainer_archive.recommendation expected {expected_recommendation!r}, got {archive.get('recommendation')!r}.")
+    _validate_trainer_archive_metrics(metrics, artifacts, missing, target)
+    target.details.update(
+        {
+            "artifact_count": len(artifacts),
+            "missing_count": len(missing),
+            "self_contained": archive.get("self_contained"),
+            "ready_for_training": archive.get("ready_for_training"),
+            "passed": archive.get("passed"),
+        }
+    )
+
+
+def _validate_trainer_archive_artifact(
+    artifact: Any,
+    target: ValidationTarget,
+    label: str,
+    expected_index: int,
+    archive_root: Path,
+) -> None:
+    if not isinstance(artifact, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if artifact.get("index") != expected_index:
+        target.errors.append(f"{label}.index expected {expected_index}, got {artifact.get('index')!r}.")
+    for field_name in ("name", "role", "kind", "path", "original_path"):
+        if not isinstance(artifact.get(field_name), str) or not artifact.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    valid_roles = {"trainer_preflight", "trainer_launch_check", "gate", "validation_summary", "trainer_artifact", "schema_contract"}
+    if artifact.get("role") not in valid_roles:
+        target.errors.append(f"{label}.role is invalid.")
+    if artifact.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be file or directory.")
+    if artifact.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if not _is_non_negative_int(artifact.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    if not _is_sha256(artifact.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+        return
+    if artifact.get("source_passed") is not None and not isinstance(artifact.get("source_passed"), bool):
+        target.errors.append(f"{label}.source_passed must be a boolean or null.")
+    if artifact.get("role") == "trainer_preflight":
+        if artifact.get("schema_version") != TRAINER_PREFLIGHT_SCHEMA_VERSION:
+            target.errors.append(f"{label}.schema_version must be {TRAINER_PREFLIGHT_SCHEMA_VERSION}.")
+    if artifact.get("role") == "trainer_launch_check":
+        if artifact.get("schema_version") != TRAINER_LAUNCH_CHECK_SCHEMA_VERSION:
+            target.errors.append(f"{label}.schema_version must be {TRAINER_LAUNCH_CHECK_SCHEMA_VERSION}.")
+
+    artifact_path = _archive_artifact_path(artifact.get("path"), archive_root)
+    if artifact_path is None:
+        target.errors.append(f"{label}.path must be a relative archive path.")
+        return
+    if not _path_resolves_inside(artifact_path, archive_root):
+        target.errors.append(f"{label}.path must resolve inside the archive.")
+        return
+    if artifact_path.is_symlink():
+        target.errors.append(f"{label}.path must not be a symlink.")
+        return
+    if artifact.get("kind") == "file":
+        if not artifact_path.exists() or not artifact_path.is_file():
+            target.errors.append(f"{label}.path does not exist as a file inside the archive.")
+            return
+        if artifact_path.stat().st_size != artifact.get("size_bytes"):
+            target.errors.append(f"{label}.size_bytes does not match the archived file.")
+        if _sha256(artifact_path) != artifact.get("sha256"):
+            target.errors.append(f"{label}.sha256 does not match the archived file.")
+        return
+    if not artifact_path.exists() or not artifact_path.is_dir():
+        target.errors.append(f"{label}.path does not exist as a directory inside the archive.")
+        return
+    for child in artifact_path.rglob("*"):
+        if child.is_symlink():
+            target.errors.append(f"{label}.path contains symlink {child}.")
+            return
+    if artifact.get("tree_hash_algorithm") != "sha256(sorted-relative-path-size-file-sha256)":
+        target.errors.append(f"{label}.tree_hash_algorithm is invalid.")
+    if not _is_non_negative_int(artifact.get("file_count")):
+        target.errors.append(f"{label}.file_count must be a non-negative integer for directories.")
+        return
+    tree = _trainer_archive_tree_fingerprint(artifact_path)
+    if artifact.get("file_count") != tree["file_count"]:
+        target.errors.append(f"{label}.file_count does not match the archived directory.")
+    if artifact.get("size_bytes") != tree["size_bytes"]:
+        target.errors.append(f"{label}.size_bytes does not match the archived directory.")
+    if artifact.get("sha256") != tree["sha256"]:
+        target.errors.append(f"{label}.sha256 does not match the archived directory tree.")
+
+
+def _validate_trainer_archive_missing(item: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(item, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    valid_roles = {"trainer_launch_check", "gate", "validation_summary", "trainer_artifact", "schema_contract"}
+    if item.get("role") not in valid_roles:
+        target.errors.append(f"{label}.role is invalid.")
+    if not _is_non_negative_int(item.get("index")):
+        target.errors.append(f"{label}.index must be a non-negative integer.")
+    if "name" in item and not isinstance(item.get("name"), str):
+        target.errors.append(f"{label}.name must be a string when present.")
+    if not isinstance(item.get("reason"), str) or not item.get("reason"):
+        target.errors.append(f"{label}.reason must be a non-empty string.")
+
+
+def _validate_trainer_archive_metrics(
+    metrics: dict[str, Any],
+    artifacts: list[Any],
+    missing: list[Any],
+    target: ValidationTarget,
+) -> None:
+    valid_artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
+    valid_missing = [item for item in missing if isinstance(item, dict)]
+    expected = {
+        "artifact_count": len(artifacts),
+        "file_artifact_count": sum(1 for artifact in valid_artifacts if artifact.get("kind") == "file"),
+        "directory_artifact_count": sum(1 for artifact in valid_artifacts if artifact.get("kind") == "directory"),
+        "missing_count": len(missing),
+        "total_size_bytes": sum(artifact.get("size_bytes", 0) for artifact in valid_artifacts if _is_non_negative_int(artifact.get("size_bytes"))),
+        "unique_sha256_count": len({artifact.get("sha256") for artifact in valid_artifacts if isinstance(artifact.get("sha256"), str)}),
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"trainer_archive.metrics.{field_name} expected {expected_value}, got {metrics.get(field_name)!r}.")
+    role_counts = _trainer_archive_count_map(artifact.get("role") for artifact in valid_artifacts)
+    missing_role_counts = _trainer_archive_count_map(item.get("role") for item in valid_missing)
+    _validate_action_ledger_count_rows(metrics.get("role_counts"), role_counts, target, "trainer_archive.metrics.role_counts")
+    _validate_action_ledger_count_rows(
+        metrics.get("missing_role_counts"),
+        missing_role_counts,
+        target,
+        "trainer_archive.metrics.missing_role_counts",
+    )
+
+
+def _trainer_archive_count_map(values: Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        key = str(value or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _trainer_archive_tree_fingerprint(root: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    file_count = 0
+    size_bytes = 0
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        relative = path.relative_to(root).as_posix()
+        file_hash = _sha256(path)
+        size = path.stat().st_size
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(size).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\0")
+        file_count += 1
+        size_bytes += size
+    return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
 
 
 def _archive_artifact_path(value: Any, archive_root: Path) -> Path | None:

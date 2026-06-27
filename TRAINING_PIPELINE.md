@@ -298,6 +298,14 @@ flightrecorder trainer-launch-check \
   --out runs/trainer_launch_check.json
 
 flightrecorder validate --trainer-launch-check runs/trainer_launch_check.json --strict
+
+flightrecorder trainer-archive \
+  --preflight runs/trainer_preflight.json \
+  --launch-check runs/trainer_launch_check.json \
+  --out runs/trainer_archive \
+  --require-self-contained
+
+flightrecorder validate --trainer-archive runs/trainer_archive --strict
 ```
 
 The preflight manifest and launch check are still evidence plumbing, not a
@@ -308,6 +316,11 @@ runs. It re-validates the preflight hashes and prints the approved command only
 when the launch contract still passes. Trainer-facing export files must be
 regular files at preflight time; symlinked JSONL, JSON, Markdown artifacts, or
 split artifacts block launch even if their targets contain matching bytes.
+`trainer-archive` is the portable handoff after those checks pass: it copies
+the preflight, launch check, gates, validation summaries, trainer-facing
+exports, and schema-contract files into one hash-checked directory. External
+training infrastructure can validate that directory before consuming the rows,
+without needing the original producer's local paths.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out

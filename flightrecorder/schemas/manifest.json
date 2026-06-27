@@ -232,6 +232,14 @@
       "filename": "trainer_launch_check.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/trainer_launch_check.v1.schema.json",
       "name": "trainer_launch_check"
+    },
+    {
+      "artifact": "trainer_archive",
+      "artifact_schema_version": "hfr.trainer_archive.v1",
+      "description": "Portable trainer handoff archive manifest with copied evidence artifact hashes.",
+      "filename": "trainer_archive.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trainer_archive.v1.schema.json",
+      "name": "trainer_archive"
     }
   ]
 }

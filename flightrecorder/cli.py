@@ -97,6 +97,7 @@ from .state_capture import StateCaptureError, capture_state_snapshot
 from .state_diff import StateDiffError, build_state_diff
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .trace_observability import TraceObservabilityError, build_trace_observability
+from .trainer_archive import TrainerArchiveError, build_trainer_archive
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
     TRAINING_GATE_POLICY_SCHEMA_VERSION,
@@ -131,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         ReviewedGatePolicyError,
         RepairQueueError,
         TrainerPreflightError,
+        TrainerArchiveError,
         TrainingExportError,
         TrainingGatePolicyError,
         CompareGatePolicyError,
@@ -731,6 +733,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         promotion_archive_paths=args.promotion_archive,
         trainer_preflight_paths=args.trainer_preflight,
         trainer_launch_check_paths=args.trainer_launch_check,
+        trainer_archive_paths=args.trainer_archive,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -961,6 +964,23 @@ def cmd_promotion_archive(args: argparse.Namespace) -> int:
     )
     print(
         f"{'READY' if archive['passed'] else 'INCOMPLETE'} promotion-archive "
+        f"artifacts={archive['metrics']['artifact_count']} "
+        f"missing={archive['metrics']['missing_count']} out={args.out}"
+    )
+    return 0 if archive["passed"] else 1
+
+
+def cmd_trainer_archive(args: argparse.Namespace) -> int:
+    archive = build_trainer_archive(
+        out_dir=args.out,
+        preflight_path=args.preflight,
+        launch_check_path=args.launch_check,
+        require_self_contained=args.require_self_contained,
+        force=args.force,
+        preserve_paths=args.preserve_paths,
+    )
+    print(
+        f"{'READY' if archive['passed'] else 'BLOCKED'} trainer-archive "
         f"artifacts={archive['metrics']['artifact_count']} "
         f"missing={archive['metrics']['missing_count']} out={args.out}"
     )
@@ -1717,6 +1737,7 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one trainer_launch_check.json; may be repeated",
     )
+    validate.add_argument("--trainer-archive", action="append", default=[], help="Validate one trainer archive directory or manifest; may be repeated")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -2330,6 +2351,26 @@ def _parser() -> argparse.ArgumentParser:
     trainer_launch_check.add_argument("--print-command", action="store_true", help="Print only the shell-escaped approved command when launch is allowed")
     trainer_launch_check.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in launch-check output")
     trainer_launch_check.set_defaults(func=cmd_trainer_launch_check)
+
+    trainer_archive = subparsers.add_parser(
+        "trainer-archive",
+        help="Copy trainer handoff evidence into a portable hash-checked archive",
+    )
+    trainer_archive.add_argument("--preflight", required=True, help="trainer_preflight.json to include")
+    trainer_archive.add_argument("--launch-check", required=True, help="trainer_launch_check.json to include")
+    trainer_archive.add_argument("--out", required=True, help="Output directory for the portable trainer archive")
+    trainer_archive.add_argument(
+        "--require-self-contained",
+        action="store_true",
+        help="Return nonzero unless all preflight-referenced gates, validations, exports, and schema contracts were copied",
+    )
+    trainer_archive.add_argument("--force", action="store_true", help="Replace an existing non-empty trainer archive directory")
+    trainer_archive.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Allow absolute original paths in the archive manifest; use only for private local debugging",
+    )
+    trainer_archive.set_defaults(func=cmd_trainer_archive)
 
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")

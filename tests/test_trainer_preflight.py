@@ -153,6 +153,7 @@ class TrainerPreflightTests(unittest.TestCase):
                     "python train.py --dataset runs/training_export",
                     "--metadata",
                     "launcher=dry-run",
+                    "--preserve-paths",
                     "--out",
                     str(preflight),
                 ]
@@ -204,6 +205,38 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(launch["approved_command"]["argv"][:2], ["python", "train.py"])
             self.assertTrue(launch["approved_command"]["approved"])
             self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(launch_check), "--strict"]), 0)
+
+            archive = Path(tmp) / "trainer_archive"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-archive",
+                        "--preflight",
+                        str(preflight),
+                        "--launch-check",
+                        str(launch_check),
+                        "--out",
+                        str(archive),
+                        "--require-self-contained",
+                    ]
+                ),
+                0,
+            )
+            manifest_path = archive / "trainer_archive.json"
+            result = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(result["schema_version"], "hfr.trainer_archive.v1")
+            self.assertTrue(result["passed"])
+            self.assertTrue(result["self_contained"])
+            self.assertTrue(result["ready_for_training"])
+            roles = {artifact["role"] for artifact in result["artifacts"]}
+            self.assertIn("trainer_preflight", roles)
+            self.assertIn("trainer_launch_check", roles)
+            self.assertIn("gate", roles)
+            self.assertIn("trainer_artifact", roles)
+            self.assertIn("schema_contract", roles)
+            self.assertGreater(result["metrics"]["directory_artifact_count"], 0)
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(manifest_path)]), 0)
 
             code, output = run_cli_output(["trainer-launch-check", "--preflight", str(preflight), "--print-command"])
             self.assertEqual(code, 0)

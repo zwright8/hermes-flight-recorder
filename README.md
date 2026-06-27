@@ -80,6 +80,10 @@ Expected demo output:
   `runs/promotion_ledger_gate.json`, plus a portable `runs/promotion_archive/`
   directory, showing how repeated repair pressure becomes a validatable
   promotion history, policy decision, and movable evidence handoff.
+- Trainer launch evidence in `runs/trainer_preflight.json`,
+  `runs/trainer_launch_check.json`, and portable `runs/trainer_archive/`,
+  packaging gates, schema contracts, and trainer-facing export files for an
+  external training launcher to validate before consuming rows.
 
 ## Install
 
@@ -109,6 +113,7 @@ flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json
 flightrecorder schemas --check scenarios/prompt_injection_good.json --name scenario
 flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
+flightrecorder schemas --check runs/trainer_archive/trainer_archive.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 flightrecorder schemas --check runs/improvement_ledger_gate.json
 flightrecorder schemas --check runs/training_export/dataset_metrics.json
@@ -123,8 +128,9 @@ manifests, dataset metrics, dataset split manifests, compare-RL manifests,
 training JSONL rows (`episodes`, `rewards`, `step_rewards`, `preferences`,
 `failure_modes`, `sft`, `dpo`, and `reward_model`), compare-RL JSONL rows,
 review manifests, reviewed-export manifests, improvement plans, improvement
-ledgers, trainer preflights, trainer launch checks, and improvement-ledger
-gates. These schemas are compatibility contracts for artifact shape.
+ledgers, trainer preflights, trainer launch checks, trainer archives, and
+improvement-ledger gates. These schemas are compatibility contracts for
+artifact shape.
 `flightrecorder schemas --check` validates one JSON artifact;
 `flightrecorder schemas --check-jsonl` validates each non-empty JSONL row,
 inferring by row `schema_version` unless `--name` pins the expected row type.
@@ -332,7 +338,8 @@ flightrecorder gate-export \
   --min-source-fingerprint-rate 1.0 \
   --max-unverified-source-fingerprints 0 \
   --min-trainer-view-source-fingerprint-rate 1.0 \
-  --max-unverified-trainer-view-source-fingerprints 0
+  --max-unverified-trainer-view-source-fingerprints 0 \
+  --out runs/training_gate.json
 
 flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
@@ -347,7 +354,13 @@ flightrecorder trainer-preflight \
 flightrecorder trainer-launch-check \
   --preflight runs/trainer_preflight.json \
   --require-gate training_gate \
-  --print-command
+  --out runs/trainer_launch_check.json
+
+flightrecorder trainer-archive \
+  --preflight runs/trainer_preflight.json \
+  --launch-check runs/trainer_launch_check.json \
+  --out runs/trainer_archive \
+  --require-self-contained
 ```
 
 The preflight fingerprints trainer-facing files, including split metadata and
@@ -1075,12 +1088,28 @@ flightrecorder trainer-launch-check \
   --out runs/trainer_launch_check.json
 
 flightrecorder validate --trainer-launch-check runs/trainer_launch_check.json --strict
+
+flightrecorder trainer-archive \
+  --preflight runs/trainer_preflight.json \
+  --launch-check runs/trainer_launch_check.json \
+  --out runs/trainer_archive \
+  --require-self-contained
+
+flightrecorder validate --trainer-archive runs/trainer_archive --strict
 ```
 
 `trainer-launch-check` is the consumer-side guard for an external trainer
 wrapper. It re-validates the preflight, checks current artifact hashes, enforces
 required gates and metadata, and prints the shell-escaped trainer command only
 when launch is approved. It still does not execute training.
+
+`trainer-archive` is the portable handoff for that approved launch contract. It
+copies the preflight, launch check, referenced gates, validation summaries,
+trainer-facing exports, and schema-contract files into `runs/trainer_archive/`
+with file hashes and deterministic directory tree hashes. A downstream trainer
+wrapper can validate the archive without trusting the producer machine's local
+paths. The archive still does not sandbox tools, run training, or update model
+weights.
 
 ## Scoring Rules
 

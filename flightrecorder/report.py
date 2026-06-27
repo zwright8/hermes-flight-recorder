@@ -166,6 +166,7 @@ _INDEX_ARTIFACTS = (
     ("review_calibration.json", "Review Calibration"),
     ("trainer_preflight.json", "Trainer Preflight"),
     ("trainer_launch_check.json", "Trainer Launch Check"),
+    ("trainer_archive/trainer_archive.json", "Trainer Archive"),
     ("live_smoke_summary.json", "Live Smoke Summary"),
     ("suite_compare.json", "Suite Compare"),
     ("suite_trend.json", "Suite Trend"),

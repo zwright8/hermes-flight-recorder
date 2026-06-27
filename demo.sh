@@ -76,5 +76,25 @@ python -m flightrecorder promotion-archive \
   --out runs/promotion_archive \
   --require-self-contained \
   --force
+python -m flightrecorder gate-export \
+  --training-export runs/training_export \
+  --policy examples/training_gate_policy.demo.json \
+  --out runs/training_gate.json
+python -m flightrecorder trainer-preflight \
+  --gate runs/training_gate.json \
+  --training-export runs/training_export \
+  --require-gate training_gate \
+  --trainer-command "python train.py --dataset runs/training_export" \
+  --out runs/trainer_preflight.json
+python -m flightrecorder trainer-launch-check \
+  --preflight runs/trainer_preflight.json \
+  --require-gate training_gate \
+  --out runs/trainer_launch_check.json
+python -m flightrecorder trainer-archive \
+  --preflight runs/trainer_preflight.json \
+  --launch-check runs/trainer_launch_check.json \
+  --out runs/trainer_archive \
+  --require-self-contained \
+  --force
 python -m flightrecorder index --runs runs --out runs/index.html
 echo "Demo reports written to $ROOT/runs/index.html"

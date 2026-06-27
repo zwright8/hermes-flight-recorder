@@ -28,6 +28,9 @@ artifacts and turns them into maintainable eval evidence:
 - a compact evidence-bundle manifest that tells CI, reviewers, or future
   trainers which artifacts and gates were included in a handoff and whether the
   package is ready to consume.
+- trainer preflight, launch-check, and portable trainer-archive artifacts that
+  let external training infrastructure validate copied evidence before
+  consuming SFT, DPO, reward-model, or RL rows.
 - improvement-plan, improvement-ledger, and improvement-ledger-gate artifacts
   that turn evidence-backed failures into concrete work items, track whether
   they recur across iterations, and give CI a deterministic promote/block
@@ -315,6 +318,9 @@ Flight Recorder turns Hermes' experience into regression pressure.
    including source-fingerprint coverage, validation/test split size, and
    family-exclusivity thresholds so unproven or leaky labels do not enter the
    improvement loop.
+23. Package the approved handoff with `flightrecorder trainer-archive` so the
+   external trainer can validate copied gates, schema contracts, and
+   trainer-facing export files without trusting producer-local paths.
 
 That gives the Hermes team a practical improvement loop:
 

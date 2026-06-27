@@ -31,6 +31,7 @@ test -f schema_contracts_check/trace.v1.schema.json
 test -f schema_contracts_check/improvement_ledger_gate.v1.schema.json
 test -f schema_contracts_check/rl_episode.v1.schema.json
 test -f schema_contracts_check/rl_reward_model.v1.schema.json
+test -f schema_contracts_check/trainer_archive.v1.schema.json
 python -m flightrecorder schemas \
   --check scenarios/prompt_injection_good.json \
   --name scenario >/dev/null
@@ -1087,6 +1088,14 @@ python -m flightrecorder trainer-launch-check \
   --out runs/trainer_launch_check.json >/dev/null
 test -f runs/trainer_launch_check.json
 python -m flightrecorder schemas --check runs/trainer_launch_check.json >/dev/null
+python -m flightrecorder trainer-archive \
+  --preflight runs/trainer_preflight.json \
+  --launch-check runs/trainer_launch_check.json \
+  --out runs/trainer_archive \
+  --require-self-contained \
+  --force >/dev/null
+test -f runs/trainer_archive/trainer_archive.json
+python -m flightrecorder schemas --check runs/trainer_archive/trainer_archive.json >/dev/null
 python -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
@@ -1099,6 +1108,7 @@ python -m flightrecorder validate \
   --promotion-archive runs/promotion_archive \
   --trainer-preflight runs/trainer_preflight.json \
   --trainer-launch-check runs/trainer_launch_check.json \
+  --trainer-archive runs/trainer_archive \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
@@ -1325,6 +1335,7 @@ assert_help_contains "--replay-bundle" "$VENV_DIR/bin/python" -m flightrecorder 
 assert_help_contains "--state-snapshot" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--live-smoke-summary" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--trainer-launch-check" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--trainer-archive" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--improvement-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
@@ -1383,6 +1394,8 @@ assert_help_contains "--validation" "$VENV_DIR/bin/python" -m flightrecorder tra
 assert_help_contains "--allow-unvalidated-gates" "$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help
 "$VENV_DIR/bin/python" -m flightrecorder trainer-launch-check --help >/dev/null
 assert_help_contains "--print-command" "$VENV_DIR/bin/python" -m flightrecorder trainer-launch-check --help
+"$VENV_DIR/bin/python" -m flightrecorder trainer-archive --help >/dev/null
+assert_help_contains "--require-self-contained" "$VENV_DIR/bin/python" -m flightrecorder trainer-archive --help
 assert_help_contains "--metadata" "$VENV_DIR/bin/python" -m flightrecorder export-rl --help
 "$VENV_DIR/bin/python" -m flightrecorder export-compare-rl --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder export-review --help >/dev/null
