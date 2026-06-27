@@ -354,7 +354,9 @@ Each run directory contains:
   required state checks, and before/after state transitions. This file answers
   "did the assigned task complete with observable evidence?" without requiring a
   downstream script to parse every rule.
-- `report.html`: self-contained static flight-recorder report.
+- `report.html`: self-contained static flight-recorder report. When
+  `state_diff.json` is present, the report includes a State Changes table with
+  changed paths and redacted before/after values.
 - `artifact_lineage.json`: provenance graph linking inputs, outputs, file
   hashes, scorecard evidence refs, and a `replay` command contract for rerunning
   the same scenario/trace/state inputs. `replay.self_contained` is false when

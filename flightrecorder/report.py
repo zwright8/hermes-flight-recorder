@@ -16,10 +16,11 @@ def write_report(
     scorecard: dict[str, Any],
     out_path: str | Path,
     regression_path: str | Path | None = None,
+    state_diff: dict[str, Any] | None = None,
 ) -> None:
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_report(scenario, trace, scorecard, regression_path), encoding="utf-8")
+    path.write_text(render_report(scenario, trace, scorecard, regression_path, state_diff), encoding="utf-8")
 
 
 def render_report(
@@ -27,12 +28,14 @@ def render_report(
     trace: dict[str, Any],
     scorecard: dict[str, Any],
     regression_path: str | Path | None = None,
+    state_diff: dict[str, Any] | None = None,
 ) -> str:
     secret_patterns = scenario.get("policy", {}).get("secret_patterns") or []
     status = "PASS" if scorecard.get("passed") else "FAIL"
     status_class = "pass" if scorecard.get("passed") else "fail"
     rules = "\n".join(_render_rule(rule) for rule in scorecard.get("rules", []))
     task_completion = _render_task_completion(scorecard)
+    state_changes = _render_state_diff(state_diff, secret_patterns)
     action_checklist = "" if task_completion else _render_action_checklist(scorecard)
     timeline = "\n".join(_render_event(i, event, secret_patterns) for i, event in enumerate(trace.get("events", [])))
     violations = "\n".join(_render_violation(rule) for rule in scorecard.get("rules", []) if not rule.get("passed"))
@@ -75,10 +78,13 @@ def render_report(
 	    .rule.fail {{ border-left-color:var(--bad); }}
 	    .rule h3 {{ display:flex; justify-content:space-between; gap:12px; }}
 	    .checklist {{ display:grid; gap:10px; }}
-	    .check {{ border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px; background:#fff; }}
+    .check {{ border:1px solid var(--line); border-left:5px solid var(--ok); border-radius:8px; padding:12px; background:#fff; }}
 	    .check.fail {{ border-left-color:var(--bad); }}
 	    .check strong {{ display:flex; justify-content:space-between; gap:12px; }}
 	    .timeline {{ display:grid; gap:10px; }}
+    .diff-table {{ width:100%; border-collapse:collapse; margin-top:12px; }}
+    .diff-table th, .diff-table td {{ border-bottom:1px solid var(--line); text-align:left; padding:10px; vertical-align:top; }}
+    .diff-table pre {{ margin:0; max-height:180px; }}
     .event {{ display:grid; grid-template-columns:72px 160px 1fr; gap:12px; align-items:start; }}
     code, pre {{ background:#eef2f6; border-radius:6px; padding:2px 5px; }}
     pre {{ overflow:auto; padding:12px; white-space:pre-wrap; }}
@@ -105,6 +111,7 @@ def render_report(
 	    </section>
 	    <section class="panel"><h2>Summary</h2><p>{_esc(scorecard['summary'])}</p></section>
 	    {task_completion}
+	    {state_changes}
 	    {action_checklist}
 	    <section class="panel"><h2>Final Answer</h2><pre>{final_answer}</pre></section>
     <section class="panel"><h2>Scorecard</h2>{rules}</section>
@@ -175,6 +182,40 @@ def _render_task_completion(scorecard: dict[str, Any]) -> str:
         f"<article class=\"rule{cls}\"><h3><span>{_esc(status.replace('_', ' ').title())}</span>"
         f"<span>{'PASS' if passed else 'FAIL'}</span></h3><p>{_esc(task.get('summary', ''))}</p></article>"
         f"<div class=\"checklist\">{body}</div></section>"
+    )
+
+
+def _render_state_diff(state_diff: dict[str, Any] | None, secret_patterns: list[str]) -> str:
+    if not isinstance(state_diff, dict):
+        return ""
+    changes = state_diff.get("changes")
+    if not isinstance(changes, list):
+        changes = []
+    rows = []
+    for change in changes:
+        if not isinstance(change, dict):
+            continue
+        rows.append(
+            "<tr>"
+            f"<td><code>{_esc(change.get('path') or '')}</code></td>"
+            f"<td>{_esc(change.get('kind') or '')}</td>"
+            f"<td><pre>{_esc(redact_text(change.get('before'), secret_patterns))}</pre></td>"
+            f"<td><pre>{_esc(redact_text(change.get('after'), secret_patterns))}</pre></td>"
+            "</tr>"
+        )
+    body = (
+        "<table class=\"diff-table\"><thead><tr><th>Path</th><th>Kind</th><th>Before</th><th>After</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+        if rows
+        else "<p class=\"muted\">No changed state paths were emitted.</p>"
+    )
+    changed = bool(state_diff.get("changed"))
+    status = "CHANGED" if changed else "UNCHANGED"
+    return (
+        f"<section class=\"panel\"><h2>State Changes</h2>"
+        f"<article class=\"rule\"><h3><span>{status}</span>"
+        f"<span>{_esc(state_diff.get('change_count', 0))}</span></h3>"
+        f"<p>{_esc(state_diff.get('summary', ''))}</p></article>{body}</section>"
     )
 
 

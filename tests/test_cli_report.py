@@ -89,6 +89,9 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(state_diff["changes"][0]["path"], "gmail.threads.email-123.last_sent_message_id")
             report = (out / "report.html").read_text(encoding="utf-8")
             self.assertIn("Task Completion", report)
+            self.assertIn("State Changes", report)
+            self.assertIn("gmail.threads.email-123.last_sent_message_id", report)
+            self.assertIn("gmail.threads.email-123.sent_replies.0", report)
             self.assertIn("Task completion complete: 6/6 evidence checks passed.", report)
             self.assertIn("Send a reply to assigned thread email-123", report)
             self.assertIn("Read assigned thread email-123 before sending the reply", report)
@@ -1381,6 +1384,44 @@ class CliReportTests(unittest.TestCase):
 
         self.assertIn("&lt;redacted:trace.json&gt;", report)
         self.assertNotIn("server\\share", report)
+
+    def test_report_redacts_state_diff_values(self):
+        scenario = {
+            "id": "state_secret",
+            "title": "State Secret",
+            "prompt": "x",
+            "trace": {"path": "trace.json"},
+            "policy": {"secret_patterns": ["live-secret"]},
+        }
+        trace = {
+            "session": {"source_format": "normalized_json"},
+            "events": [],
+            "final_answer": "",
+        }
+        scorecard = {
+            "passed": True,
+            "score": 100,
+            "pass_threshold": 90,
+            "summary": "PASS",
+            "rules": [],
+        }
+        state_diff = {
+            "schema_version": "hfr.state_diff.v1",
+            "changed": True,
+            "change_count": 1,
+            "truncated": False,
+            "max_changes": 200,
+            "summary": "1 state change(s) detected.",
+            "changes": [
+                {"path": "credentials.token", "kind": "added", "before": None, "after": "api_key=live-secret"}
+            ],
+        }
+
+        report = render_report(scenario, trace, scorecard, state_diff=state_diff)
+
+        self.assertIn("State Changes", report)
+        self.assertIn("[REDACTED]", report)
+        self.assertNotIn("live-secret", report)
 
     def test_observer_template_command_writes_bootstrap(self):
         with tempfile.TemporaryDirectory() as tmp:

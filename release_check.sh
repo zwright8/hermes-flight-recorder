@@ -128,6 +128,12 @@ python -m flightrecorder validate \
 python -m flightrecorder validate \
   --state-diff runs/email_reply_completion_good/state_diff.json \
   --strict >/dev/null
+python -m flightrecorder report \
+  --scenario scenarios/email_reply_completion_good.json \
+  --trace runs/email_reply_completion_good/normalized_trace.json \
+  --score runs/email_reply_completion_good/scorecard.json \
+  --state-diff runs/email_reply_completion_good/state_diff.json \
+  --out runs/email_reply_completion_good/standalone_state_report.html >/dev/null
 test -f runs/draft_email_reply.scenario.json
 test -f runs/draft_email_reply/scorecard.json
 test -f runs/draft_email_reply/task_completion.json
@@ -140,6 +146,7 @@ test -f runs/email_reply_completion_good/before_state_snapshot.json
 test -f runs/email_reply_completion_good/state_diff.json
 test -f runs/email_reply_completion_good/task_completion.json
 test -f runs/email_reply_completion_good/artifact_lineage.json
+test -f runs/email_reply_completion_good/standalone_state_report.html
 test -f replay_runs/moved_prompt_injection_good_bundle/replay_bundle.json
 test -f replay_runs/prompt_injection_good_replay/artifact_lineage.json
 test -f runs/prompt_injection_compare.json
@@ -470,6 +477,8 @@ assert lineage["replay"]["input_fingerprints"]["source_trace"]["sha256"]
 assert lineage["summary"]["self_contained_replay"] == lineage["replay"]["self_contained"]
 email_lineage = json.loads(Path("runs/email_reply_completion_good/artifact_lineage.json").read_text(encoding="utf-8"))
 state_diff = json.loads(Path("runs/email_reply_completion_good/state_diff.json").read_text(encoding="utf-8"))
+email_report = Path("runs/email_reply_completion_good/report.html").read_text(encoding="utf-8")
+standalone_state_report = Path("runs/email_reply_completion_good/standalone_state_report.html").read_text(encoding="utf-8")
 assert email_lineage["replay"]["input_fingerprints"]["source_before_state_snapshot"]["sha256"]
 assert email_lineage["replay"]["input_fingerprints"]["source_state_snapshot"]["sha256"]
 assert state_diff["schema_version"] == "hfr.state_diff.v1"
@@ -485,6 +494,10 @@ assert {
     "to": "state_diff",
     "operation": "diff_state",
 } in email_lineage["graph"]
+assert "State Changes" in email_report
+assert "gmail.threads.email-123.last_sent_message_id" in email_report
+assert "State Changes" in standalone_state_report
+assert "gmail.threads.email-123.sent_replies.0" in standalone_state_report
 
 training_manifest = json.loads(Path("runs/training_export/manifest.json").read_text(encoding="utf-8"))
 rewards = [

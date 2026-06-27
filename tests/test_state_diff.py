@@ -100,6 +100,36 @@ class StateDiffTests(unittest.TestCase):
             )
             self.assertEqual(run_cli(["validate", "--run", str(out), "--strict"]), 0)
 
+    def test_report_command_renders_state_diff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            report_path = Path(tmp) / "standalone_report.html"
+            self.assertEqual(run_cli(["run", "--scenario", str(ROOT / "scenarios" / "email_reply_completion_good.json"), "--out", str(run_dir)]), 0)
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "report",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "email_reply_completion_good.json"),
+                        "--trace",
+                        str(run_dir / "normalized_trace.json"),
+                        "--score",
+                        str(run_dir / "scorecard.json"),
+                        "--state-diff",
+                        str(run_dir / "state_diff.json"),
+                        "--out",
+                        str(report_path),
+                    ]
+                ),
+                0,
+            )
+
+            report = report_path.read_text(encoding="utf-8")
+            self.assertIn("State Changes", report)
+            self.assertIn("gmail.threads.email-123.last_sent_message_id", report)
+            self.assertIn("msg-email-123-001", report)
+
     def test_validate_rejects_inconsistent_state_diff(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "run"

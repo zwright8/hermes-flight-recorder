@@ -167,7 +167,8 @@ def cmd_report(args: argparse.Namespace) -> int:
     scenario = load_scenario(args.scenario)
     trace = _read_json(Path(args.trace))
     scorecard = _read_json(Path(args.score))
-    write_report(scenario, trace, scorecard, args.out)
+    state_diff = _read_json(Path(args.state_diff)) if args.state_diff else None
+    write_report(scenario, trace, scorecard, args.out, state_diff=state_diff)
     print(f"wrote {args.out}")
     return 0
 
@@ -1329,6 +1330,7 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--scenario", required=True)
     report.add_argument("--trace", required=True)
     report.add_argument("--score", required=True)
+    report.add_argument("--state-diff", help="Optional hfr.state_diff.v1 JSON to render as a state-change table")
     report.add_argument("--out", required=True)
     report.set_defaults(func=cmd_report)
 
@@ -2878,7 +2880,7 @@ def _run_scenario_artifacts(
         write_junit(scorecard, junit_out)
     if markdown_out:
         write_markdown_summary(scorecard, markdown_out)
-    write_report(scenario, trace, scorecard, report_path, regression_display)
+    write_report(scenario, trace, scorecard, report_path, regression_display, state_diff)
     lineage = write_run_lineage(
         scenario=scenario,
         trace=trace,
