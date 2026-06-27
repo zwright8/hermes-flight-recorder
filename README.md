@@ -290,9 +290,9 @@ flightrecorder trainer-launch-check \
   --print-command
 ```
 
-The preflight fingerprints trainer-facing files and blocks symlinked export
-artifacts, so the approved command points at regular files captured by the
-evidence contract.
+The preflight fingerprints trainer-facing files, including split metadata and
+split JSONL files, and blocks symlinked export artifacts, so the approved
+command points at regular files captured by the evidence contract.
 
 For production suites, commit a stricter gate policy and point CI at it:
 
@@ -895,7 +895,8 @@ flightrecorder gate-compare-export \
 Use `flightrecorder trainer-preflight` as the final launch guard before an
 external SFT, DPO, reward-model, or RL job starts. It does not execute the
 trainer. It records the trainer command, fingerprints the trainer-facing
-exports, verifies required gates are present and passed, and blocks launch when
+exports, including `dataset_splits.json` and every `splits/<split>/*.jsonl`
+file, verifies required gates are present and passed, and blocks launch when
 training, comparison, reviewed, or calibration handoffs skipped embedded export
 validation:
 

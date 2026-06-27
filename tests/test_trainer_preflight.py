@@ -101,6 +101,10 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["trainer_command"]["argv"][:2], ["python", "train.py"])
             self.assertIn("training_export_sft_jsonl", result["artifacts"])
             self.assertEqual(len(result["artifacts"]["training_export_sft_jsonl"]["sha256"]), 64)
+            self.assertIn("training_export_dataset_splits_json", result["artifacts"])
+            self.assertEqual(len(result["artifacts"]["training_export_dataset_splits_json"]["sha256"]), 64)
+            self.assertIn("training_export_splits_train_episodes_jsonl", result["artifacts"])
+            self.assertEqual(len(result["artifacts"]["training_export_splits_train_episodes_jsonl"]["sha256"]), 64)
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
             launch_check = Path(tmp) / "trainer_launch_check.json"
@@ -334,6 +338,46 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["recommendation"], "block_launch")
             self.assertFalse(result["artifacts"]["training_export_sft_jsonl"]["regular_file"])
             self.assertTrue(result["artifacts"]["training_export_sft_jsonl"]["symlink"])
+            failed_checks = {check["id"] for check in result["checks"] if not check["passed"]}
+            self.assertIn("artifact_file_regular", failed_checks)
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+
+    def test_trainer_preflight_blocks_symlinked_training_split_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            gate = root / "training_gate.json"
+            preflight = root / "trainer_preflight.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(runs / "training_export")])
+            run_cli(["gate-export", "--training-export", str(runs / "training_export"), "--out", str(gate)])
+            split_path = runs / "training_export" / "splits" / "train" / "episodes.jsonl"
+            external_path = root / "external_split_episodes.jsonl"
+            external_path.write_text(split_path.read_text(encoding="utf-8"), encoding="utf-8")
+            split_path.unlink()
+            try:
+                split_path.symlink_to(external_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--training-export",
+                    str(runs / "training_export"),
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertEqual(result["recommendation"], "block_launch")
+            split_record = result["artifacts"]["training_export_splits_train_episodes_jsonl"]
+            self.assertFalse(split_record["regular_file"])
+            self.assertTrue(split_record["symlink"])
             failed_checks = {check["id"] for check in result["checks"] if not check["passed"]}
             self.assertIn("artifact_file_regular", failed_checks)
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)

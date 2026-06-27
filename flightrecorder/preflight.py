@@ -8,12 +8,15 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+from .training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES
+
 TRAINER_PREFLIGHT_SCHEMA_VERSION = "hfr.trainer_preflight.v1"
 TRAINER_LAUNCH_CHECK_SCHEMA_VERSION = "hfr.trainer_launch_check.v1"
 
-_TRAINING_EXPORT_FILES = (
+_TRAINING_EXPORT_BASE_FILES = (
     "manifest.json",
     "dataset_metrics.json",
+    "dataset_splits.json",
     "DATASET_CARD.md",
     "episodes.jsonl",
     "rewards.jsonl",
@@ -24,6 +27,11 @@ _TRAINING_EXPORT_FILES = (
     "sft.jsonl",
     "dpo.jsonl",
     "reward_model.jsonl",
+)
+_TRAINING_EXPORT_FILES = _TRAINING_EXPORT_BASE_FILES + tuple(
+    f"splits/{split_name}/{artifact_name}.jsonl"
+    for split_name in DATASET_SPLIT_NAMES
+    for artifact_name in DATASET_SPLIT_ARTIFACTS
 )
 _COMPARE_EXPORT_FILES = (
     "manifest.json",
@@ -415,7 +423,7 @@ def _is_regular_dir(path: Path) -> bool:
 
 
 def _artifact_key(value: str) -> str:
-    return value.lower().replace(".", "_").replace("-", "_")
+    return value.lower().replace("\\", "_").replace("/", "_").replace(".", "_").replace("-", "_")
 
 
 def _metadata(value: dict[str, str] | None) -> dict[str, str]:

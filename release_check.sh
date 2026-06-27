@@ -1057,6 +1057,10 @@ assert {gate["id"] for gate in preflight["gates"]} == {"training_gate", "compare
 assert all(gate["passed"] is True for gate in preflight["gates"])
 assert preflight["trainer_command"]["argv"][:2] == ["python", "train.py"]
 assert len(preflight["artifacts"]["training_export_sft_jsonl"]["sha256"]) == 64
+assert len(preflight["artifacts"]["training_export_dataset_splits_json"]["sha256"]) == 64
+assert len(preflight["artifacts"]["training_export_splits_train_episodes_jsonl"]["sha256"]) == 64
+assert len(preflight["artifacts"]["training_export_splits_validation_episodes_jsonl"]["sha256"]) == 64
+assert len(preflight["artifacts"]["training_export_splits_test_episodes_jsonl"]["sha256"]) == 64
 assert len(preflight["artifacts"]["compare_export_improvement_pairs_jsonl"]["sha256"]) == 64
 assert launch_check["passed"] is True
 assert launch_check["recommendation"] == "launch_allowed"

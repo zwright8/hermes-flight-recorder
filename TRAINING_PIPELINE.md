@@ -215,9 +215,11 @@ use `--preserve-paths` only for private local debugging.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the
-trainer-facing export files, verifies required gates are present and passed, and
-refuses training, compare, reviewed, or review-calibration handoffs that skipped
-embedded export validation unless `--allow-unvalidated-gates` is explicitly set:
+trainer-facing export files, including `dataset_splits.json` and every
+`splits/<split>/*.jsonl` file, verifies required gates are present and passed,
+and refuses training, compare, reviewed, or review-calibration handoffs that
+skipped embedded export validation unless `--allow-unvalidated-gates` is
+explicitly set:
 
 ```bash
 flightrecorder trainer-preflight \
@@ -248,8 +250,8 @@ creates the signed-off evidence contract; `trainer-launch-check` is the
 consumer-side check an external training launcher can call immediately before it
 runs. It re-validates the preflight hashes and prints the approved command only
 when the launch contract still passes. Trainer-facing export files must be
-regular files at preflight time; symlinked JSONL, JSON, or Markdown artifacts
-block launch even if their targets contain matching bytes.
+regular files at preflight time; symlinked JSONL, JSON, Markdown artifacts, or
+split artifacts block launch even if their targets contain matching bytes.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
