@@ -28,9 +28,17 @@ rm -rf schema_contracts_check
 python -m flightrecorder schemas --write-dir schema_contracts_check >/dev/null
 test -f schema_contracts_check/manifest.json
 test -f schema_contracts_check/trace.v1.schema.json
+python -m flightrecorder schemas \
+  --check scenarios/prompt_injection_good.json \
+  --name scenario >/dev/null
 rm -rf schema_contracts_check
 python -m flightrecorder repair-queue --help >/dev/null
 ./demo.sh
+python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
+python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
+python -m flightrecorder schemas --check runs/prompt_injection_good/task_completion.json >/dev/null
+python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
+python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
 rm -rf replay_runs
 python -m flightrecorder replay-bundle \
   --lineage runs/prompt_injection_good/artifact_lineage.json \
@@ -1041,6 +1049,8 @@ test -f "$INSTALL_DIR/scorecard.schema.json"
 "$VENV_DIR/bin/python" -m flightrecorder normalize \
   --trace fixtures/prompt_injection_good.trajectory.jsonl \
   --out "$INSTALL_DIR/normalized.json" >/dev/null
+"$VENV_DIR/bin/python" -m flightrecorder schemas \
+  --check "$INSTALL_DIR/normalized.json" >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder replay --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder replay-bundle --help >/dev/null
 "$VENV_DIR/bin/python" -m flightrecorder capture-state --help >/dev/null

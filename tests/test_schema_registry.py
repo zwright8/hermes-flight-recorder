@@ -6,7 +6,10 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
-from flightrecorder.schema_registry import list_schema_records, load_schema, write_schema_bundle
+from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records, load_schema, write_schema_bundle
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class SchemaRegistryTests(unittest.TestCase):
@@ -37,6 +40,36 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertEqual(by_name, by_version)
         self.assertEqual(by_name, by_filename)
         self.assertEqual(by_name["properties"]["schema_version"]["const"], "hfr.trace.v1")
+
+    def test_schema_check_passes_real_scenario_and_minimal_trace(self):
+        scenario_result = check_schema_file(ROOT / "scenarios" / "prompt_injection_good.json", "scenario")
+        self.assertTrue(scenario_result["passed"], scenario_result["errors"])
+
+        trace = {
+            "schema_version": "hfr.trace.v1",
+            "session": {"id": "session-1", "source_format": "observer_jsonl", "model": "unknown"},
+            "events": [{"type": "assistant_message", "session_id": "session-1", "text": "ok"}],
+            "final_answer": "ok",
+        }
+        trace_result = check_schema_contract(trace)
+        self.assertTrue(trace_result["passed"], trace_result["errors"])
+        self.assertEqual(trace_result["schema"]["name"], "trace")
+
+    def test_schema_check_reports_contract_errors(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.trace.v1",
+                "session": {"id": "session-1", "source_format": "observer_jsonl"},
+                "events": [{"session_id": "session-1"}],
+            }
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertGreaterEqual(result["error_count"], 3)
+        errors = "\n".join(result["errors"])
+        self.assertIn("missing required property 'final_answer'", errors)
+        self.assertIn("$.session: missing required property 'model'", errors)
+        self.assertIn("$.events[0]: missing required property 'type'", errors)
 
     def test_write_schema_bundle_writes_catalog_and_selected_schemas(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,6 +106,36 @@ class SchemaRegistryTests(unittest.TestCase):
                 with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                     main(["schemas", "--name", "task_completion", "--write-dir", str(bundle_dir)])
             self.assertEqual(raised.exception.code, 2)
+
+    def test_cli_checks_artifact_schema_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace_path = Path(tmp) / "trace.json"
+            trace_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.trace.v1",
+                        "session": {"id": "session-1", "source_format": "observer_jsonl", "model": "unknown"},
+                        "events": [],
+                        "final_answer": "",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = main(["schemas", "--check", str(trace_path)])
+            self.assertEqual(code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["passed"])
+            self.assertEqual(result["schema"]["artifact_schema_version"], "hfr.trace.v1")
+
+            bad_path = Path(tmp) / "bad.json"
+            bad_path.write_text(json.dumps({"schema_version": "hfr.trace.v1"}) + "\n", encoding="utf-8")
+            with redirect_stdout(StringIO()):
+                bad_code = main(["schemas", "--check", str(bad_path)])
+            self.assertEqual(bad_code, 1)
 
 
 if __name__ == "__main__":

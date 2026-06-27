@@ -91,14 +91,18 @@ exported from an installed copy of the tool:
 flightrecorder schemas
 flightrecorder schemas --name trace --out trace.v1.schema.json
 flightrecorder schemas --write-dir artifact_schemas
+flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json
+flightrecorder schemas --check scenarios/prompt_injection_good.json --name scenario
 ```
 
 The bundled catalog currently covers scenarios, normalized traces, scorecards,
 task-completion verdicts, evidence bundles, training manifests, compare-RL
 manifests, review manifests, and reviewed-export manifests. These schemas are
-compatibility contracts for artifact shape; use `flightrecorder validate` for
-deeper integrity checks such as count reconciliation, evidence links, replay
-hashes, symlink rejection, and artifact-fingerprint verification.
+compatibility contracts for artifact shape. `flightrecorder schemas --check`
+performs a dependency-free conformance check for the bundled schema subset; use
+`flightrecorder validate` for deeper integrity checks such as count
+reconciliation, evidence links, replay hashes, symlink rejection, and
+artifact-fingerprint verification.
 
 ## CLI
 
