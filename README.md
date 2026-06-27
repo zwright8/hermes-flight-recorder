@@ -451,6 +451,9 @@ trainer jobs until human-reviewed labels meet policy. It reads
 `runs/reviewed_export/manifest.json` and can require enough completed labels,
 accepted rows, negative rows, SFT/reward-model/preference/DPO views, task-family
 coverage, and zero unresolved `needs_review` labels.
+By default it also validates the reviewed export structure and artifact
+fingerprints before evaluating thresholds; use `--skip-validation` only for
+explicit legacy handoffs.
 
 Use `flightrecorder review-calibration` after `apply-review` when maintainers
 need to measure whether deterministic scorecards agree with human labels before
@@ -469,6 +472,10 @@ The report tracks agreement rate, false positives, false negatives, skipped
 `needs_review` rows, and concrete disagreement rows with source report and
 lineage pointers. Disagreements are prompts for scenario or label review; they
 do not automatically prove that the scorecard or the reviewer is right.
+Calibration also validates the reviewed export by default and records the
+validation summary under `metrics.validation`, so a stale or tampered reviewed
+label file cannot produce a passing calibration report unless validation is
+explicitly skipped.
 
 `flightrecorder run` and `flightrecorder score` can also emit CI-friendly
 artifacts:
@@ -827,7 +834,8 @@ flightrecorder gate-reviewed \
 
 The reviewed gate is intentionally separate from `gate-export`: it checks human
 label completion and reviewed trainer views, while `gate-export` checks the
-deterministic raw training export.
+deterministic raw training export. Both gates validate their source export by
+default before producing a passing handoff signal.
 
 Use `flightrecorder gate-compare-export` for the baseline/candidate improvement
 path after `export-compare-rl`. It checks that comparison preference rows are

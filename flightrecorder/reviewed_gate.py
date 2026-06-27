@@ -22,7 +22,8 @@ _COUNT_POLICY_FIELDS = {
     "max_needs_review",
 }
 _LIST_POLICY_FIELDS = {"forbid_labels", "require_task_families"}
-_POLICY_FIELDS = {"schema_version", "description", *_COUNT_POLICY_FIELDS, *_LIST_POLICY_FIELDS}
+_BOOLEAN_POLICY_FIELDS = {"require_valid_export", "strict_validation"}
+_POLICY_FIELDS = {"schema_version", "description", *_COUNT_POLICY_FIELDS, *_LIST_POLICY_FIELDS, *_BOOLEAN_POLICY_FIELDS}
 _REVIEW_LABEL_SET = set(REVIEW_LABELS)
 
 
@@ -73,6 +74,13 @@ def load_reviewed_gate_policy(path: str | Path) -> dict[str, Any]:
                 )
         policy[field] = values
 
+    for field in _BOOLEAN_POLICY_FIELDS:
+        if field not in raw or raw[field] is None:
+            continue
+        if not isinstance(raw[field], bool):
+            raise ReviewedGatePolicyError(f"reviewed gate policy field {field} must be a boolean")
+        policy[field] = raw[field]
+
     return policy
 
 
@@ -90,6 +98,8 @@ def evaluate_reviewed_gate(
     max_needs_review: int | None = None,
     forbid_labels: list[str] | None = None,
     require_task_families: list[str] | None = None,
+    validation_summary: dict[str, Any] | None = None,
+    require_valid_export: bool = True,
 ) -> dict[str, Any]:
     """Evaluate readiness checks against an apply-review manifest."""
     label_counts = _label_counts(manifest.get("label_counts"))
@@ -97,6 +107,9 @@ def evaluate_reviewed_gate(
     accepted_count = label_counts.get("accept", 0)
     rejected_count = sum(label_counts.get(label, 0) for label in TRAINING_NEGATIVE_LABELS)
     checks: list[dict[str, Any]] = []
+
+    if require_valid_export:
+        _add_validation_check(checks, "valid_reviewed_export", validation_summary)
 
     if min_reviewed_labels is not None:
         _add_min_check(checks, "min_reviewed_labels", _int_value(manifest.get("reviewed_label_count")), min_reviewed_labels)
@@ -138,6 +151,7 @@ def evaluate_reviewed_gate(
             "dpo_count": _int_value(manifest.get("dpo_count")),
             "label_counts": label_counts,
             "task_families": sorted(task_families),
+            "validation": _validation_metrics(validation_summary),
         },
     }
 
@@ -208,6 +222,42 @@ def _append_check(checks: list[dict[str, Any]], check: dict[str, Any], scope: di
     if scope:
         check["scope"] = scope
     checks.append(check)
+
+
+def _add_validation_check(checks: list[dict[str, Any]], check_id: str, validation_summary: dict[str, Any] | None) -> None:
+    metrics = _validation_metrics(validation_summary)
+    checks.append(
+        {
+            "id": check_id,
+            "passed": bool(metrics.get("available") and metrics.get("passed")),
+            "actual": metrics,
+            "expected": {"passed": True, "error_count": 0},
+            "summary": (
+                f"{check_id}: passed={metrics['passed']}, "
+                f"errors={metrics['error_count']}, warnings={metrics['warning_count']}"
+            ),
+        }
+    )
+
+
+def _validation_metrics(validation_summary: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(validation_summary, dict):
+        return {
+            "available": False,
+            "passed": False,
+            "strict": False,
+            "target_count": 0,
+            "error_count": 0,
+            "warning_count": 0,
+        }
+    return {
+        "available": True,
+        "passed": bool(validation_summary.get("passed")),
+        "strict": bool(validation_summary.get("strict")),
+        "target_count": _int_value(validation_summary.get("target_count")),
+        "error_count": _int_value(validation_summary.get("error_count")),
+        "warning_count": _int_value(validation_summary.get("warning_count")),
+    }
 
 
 def _label_counts(value: Any) -> dict[str, int]:

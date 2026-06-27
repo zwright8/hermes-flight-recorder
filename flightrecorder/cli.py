@@ -821,13 +821,21 @@ def cmd_apply_review(args: argparse.Namespace) -> int:
 
 
 def cmd_review_calibration(args: argparse.Namespace) -> int:
+    reviewed_dir = Path(args.reviewed_export)
+    validation_summary = (
+        validate_artifacts(reviewed_export_dir=reviewed_dir, strict=args.strict_validation)
+        if not args.skip_validation
+        else None
+    )
     calibration = build_review_calibration(
-        args.reviewed_export,
+        reviewed_dir,
         min_agreement_rate=args.min_agreement_rate,
         max_disagreements=args.max_disagreements,
         max_false_positives=args.max_false_positives,
         max_false_negatives=args.max_false_negatives,
         min_comparable_labels=args.min_comparable_labels,
+        validation_summary=validation_summary,
+        require_valid_export=not args.skip_validation,
         preserve_paths=args.preserve_paths,
     )
     _write_json(Path(args.out), calibration)
@@ -960,6 +968,11 @@ def cmd_gate_reviewed(args: argparse.Namespace) -> int:
     reviewed_dir = Path(args.reviewed_export)
     manifest = _read_json(reviewed_dir / "manifest.json")
     options = _reviewed_gate_options(args)
+    validation_summary = (
+        validate_artifacts(reviewed_export_dir=reviewed_dir, strict=options["strict_validation"])
+        if options["require_valid_export"]
+        else None
+    )
     result = evaluate_reviewed_gate(
         manifest,
         reviewed_export_path=_display_path(reviewed_dir, args.preserve_paths),
@@ -973,6 +986,8 @@ def cmd_gate_reviewed(args: argparse.Namespace) -> int:
         max_needs_review=options["max_needs_review"],
         forbid_labels=options["forbid_labels"],
         require_task_families=options["require_task_families"],
+        validation_summary=validation_summary,
+        require_valid_export=options["require_valid_export"],
     )
     if options["policy_path"]:
         result["policy"] = _reviewed_gate_policy_summary(options)
@@ -1795,6 +1810,16 @@ def _parser() -> argparse.ArgumentParser:
     gate_reviewed.add_argument("--reviewed-export", required=True, help="Directory containing apply-review artifacts")
     gate_reviewed.add_argument("--policy", help="Versioned reviewed gate policy JSON file with committed threshold defaults")
     gate_reviewed.add_argument("--out", help="Write gate result JSON to this path")
+    gate_reviewed.add_argument(
+        "--strict-validation",
+        action="store_true",
+        help="Fail reviewed-export validation on warnings as well as errors",
+    )
+    gate_reviewed.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Skip reviewed export structure and artifact-fingerprint validation before gating",
+    )
     gate_reviewed.add_argument("--min-reviewed-labels", type=_non_negative_int_arg, help="Minimum completed human label count")
     gate_reviewed.add_argument("--min-accepted", type=_non_negative_int_arg, help="Minimum accepted human label count")
     gate_reviewed.add_argument(
@@ -2031,6 +2056,16 @@ def _parser() -> argparse.ArgumentParser:
     review_calibration.add_argument("--max-false-positives", type=_non_negative_int_arg, help="Maximum scorecard-pass/human-negative rows")
     review_calibration.add_argument("--max-false-negatives", type=_non_negative_int_arg, help="Maximum scorecard-fail/human-accept rows")
     review_calibration.add_argument("--min-comparable-labels", type=_non_negative_int_arg, help="Minimum labels excluding needs_review")
+    review_calibration.add_argument(
+        "--strict-validation",
+        action="store_true",
+        help="Fail reviewed-export validation on warnings as well as errors",
+    )
+    review_calibration.add_argument(
+        "--skip-validation",
+        action="store_true",
+        help="Skip reviewed export structure and artifact-fingerprint validation before calibration",
+    )
     review_calibration.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in calibration output")
     review_calibration.set_defaults(func=cmd_review_calibration)
 
@@ -2362,6 +2397,8 @@ def _reviewed_gate_options(args: argparse.Namespace) -> dict[str, Any]:
         "max_needs_review": args.max_needs_review if args.max_needs_review is not None else policy.get("max_needs_review"),
         "forbid_labels": _merge_unique_strings(policy.get("forbid_labels", []), args.forbid_label),
         "require_task_families": _merge_unique_strings(policy.get("require_task_families", []), args.require_task_family),
+        "require_valid_export": False if args.skip_validation else policy.get("require_valid_export", True),
+        "strict_validation": bool(args.strict_validation or policy.get("strict_validation", False)),
     }
 
 
@@ -2377,6 +2414,8 @@ def _reviewed_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "max_needs_review",
         "forbid_labels",
         "require_task_families",
+        "require_valid_export",
+        "strict_validation",
     )
     effective = {
         field: options[field]

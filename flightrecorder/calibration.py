@@ -26,6 +26,8 @@ def build_review_calibration(
     max_false_positives: int | None = None,
     max_false_negatives: int | None = None,
     min_comparable_labels: int | None = None,
+    validation_summary: dict[str, Any] | None = None,
+    require_valid_export: bool = True,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Compare reviewed human labels with deterministic scorecard outcomes."""
@@ -38,7 +40,10 @@ def build_review_calibration(
     labels_path = export_dir / "reviewed_labels.jsonl"
     rows = _read_jsonl(labels_path, "reviewed_labels.jsonl")
     metrics, disagreements = _calibration_metrics(rows)
+    metrics["validation"] = _validation_metrics(validation_summary)
     checks: list[dict[str, Any]] = []
+    if require_valid_export:
+        _add_validation_check(checks, "valid_reviewed_export", validation_summary)
     if min_comparable_labels is not None:
         _add_min_check(checks, "min_comparable_labels", metrics["comparable_label_count"], min_comparable_labels)
     if min_agreement_rate is not None:
@@ -65,6 +70,7 @@ def build_review_calibration(
         "disagreements": disagreements,
         "notes": [
             "Calibration compares deterministic scorecard pass/fail outcomes with human review labels.",
+            "By default, calibration fails when the reviewed export no longer passes artifact validation.",
             "Disagreements are evidence for scenario-policy review; they are not automatic proof that either side is correct.",
             "Rows labeled needs_review are tracked but excluded from agreement-rate denominators.",
         ],
@@ -199,6 +205,42 @@ def _add_max_check(checks: list[dict[str, Any]], check_id: str, actual: int | fl
     )
 
 
+def _add_validation_check(checks: list[dict[str, Any]], check_id: str, validation_summary: dict[str, Any] | None) -> None:
+    metrics = _validation_metrics(validation_summary)
+    checks.append(
+        {
+            "id": check_id,
+            "passed": bool(metrics.get("available") and metrics.get("passed")),
+            "actual": metrics,
+            "expected": {"passed": True, "error_count": 0},
+            "summary": (
+                f"{check_id}: passed={metrics['passed']}, "
+                f"errors={metrics['error_count']}, warnings={metrics['warning_count']}"
+            ),
+        }
+    )
+
+
+def _validation_metrics(validation_summary: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(validation_summary, dict):
+        return {
+            "available": False,
+            "passed": False,
+            "strict": False,
+            "target_count": 0,
+            "error_count": 0,
+            "warning_count": 0,
+        }
+    return {
+        "available": True,
+        "passed": bool(validation_summary.get("passed")),
+        "strict": bool(validation_summary.get("strict")),
+        "target_count": _int_value(validation_summary.get("target_count")),
+        "error_count": _int_value(validation_summary.get("error_count")),
+        "warning_count": _int_value(validation_summary.get("warning_count")),
+    }
+
+
 def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
     if not path.exists():
         raise ReviewCalibrationError(f"{label} not found: {path}")
@@ -228,6 +270,14 @@ def _scorecard_score(scorecard: dict[str, Any]) -> int:
         return max(0, min(100, int(scorecard.get("score", 0))))
     except (TypeError, ValueError):
         return 0
+
+
+def _int_value(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    return 0
 
 
 def _rate(numerator: int, denominator: int) -> float:

@@ -1,6 +1,8 @@
 {
   "schema_version": "hfr.reviewed_gate.policy.v1",
   "description": "Demo reviewed-export readiness gate for CI and trainer handoff checks.",
+  "require_valid_export": true,
+  "strict_validation": false,
   "min_reviewed_labels": 6,
   "min_accepted": 2,
   "min_rejected": 2,

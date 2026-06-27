@@ -332,14 +332,19 @@ review evidence that authorized it.
 `gate-reviewed` is the CI handoff for human-curated training signal. Use it to
 require completed labels, enough accepted and negative examples, reviewed
 SFT/reward-model/preference/DPO views, task-family coverage, and no unresolved
-review labels before a trainer consumes `runs/reviewed_export`.
+review labels before a trainer consumes `runs/reviewed_export`. It validates
+the reviewed export by default, including artifact fingerprints, before it
+evaluates curation thresholds.
 
 `review-calibration` is the agreement check between deterministic scorecards and
 human labels. It reports agreement rate, false positives, false negatives,
 skipped `needs_review` rows, and concrete disagreement rows with source report
 and lineage pointers. Use this before model updates when deterministic labels
 need human calibration; a disagreement should trigger scenario-policy or label
-review rather than automatic training.
+review rather than automatic training. Calibration also validates the reviewed
+export by default and records the result under `metrics.validation`, so stale
+reviewed labels cannot produce a passing calibration report unless validation
+is explicitly skipped.
 
 `demo.sh` already runs the training export for the included scenarios, and
 `release_check.sh` also exercises review export, reviewed-label ingestion, and
@@ -694,7 +699,8 @@ Reviewed-gate policies can require minimum reviewed-label counts, accepted and
 negative examples, SFT/reward-model/preference/DPO rows, task families, and a
 maximum number of unresolved `needs_review` labels. Keep this gate separate from
 `gate-export`: the reviewed gate proves curation readiness; the export gate
-proves deterministic dataset readiness.
+proves deterministic dataset readiness. Both gates validate their source
+exports by default; use `--skip-validation` only for explicit legacy handoffs.
 
 Use `review-calibration` alongside `gate-reviewed` when humans have labeled the
 same runs. Calibration proves whether deterministic pass/fail labels and human
@@ -712,6 +718,9 @@ flightrecorder review-calibration \
 False positives mean the scorecard passed a run that humans rejected. False
 negatives mean the scorecard failed a run that humans accepted. Both are useful
 signals for scenario repair, evaluator calibration, or reviewer adjudication.
+The calibration command validates the reviewed export by default before
+reporting agreement, so artifact drift remains a failed handoff even if the
+agreement-rate thresholds would otherwise pass.
 
 ## Failure Modes And Curriculum
 

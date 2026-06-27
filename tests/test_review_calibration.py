@@ -124,6 +124,25 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertEqual(disagreement["disagreement_type"], "scorecard_passed_human_rejected")
             self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
 
+    def test_review_calibration_fails_invalid_reviewed_export_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            labels_path = reviewed / "reviewed_labels.jsonl"
+            rows = read_jsonl(labels_path)
+            rows[0]["notes"] = "tampered before calibration"
+            labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+            out = Path(tmp) / "review_calibration.json"
+
+            code = run_cli(["review-calibration", "--reviewed-export", str(reviewed), "--out", str(out)])
+
+            self.assertEqual(code, 1)
+            calibration = json.loads(out.read_text(encoding="utf-8"))
+            failed_checks = {check["id"] for check in calibration["checks"] if not check["passed"]}
+            self.assertIn("valid_reviewed_export", failed_checks)
+            self.assertFalse(calibration["metrics"]["validation"]["passed"])
+            self.assertGreater(calibration["metrics"]["validation"]["error_count"], 0)
+            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

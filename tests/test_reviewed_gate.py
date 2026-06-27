@@ -95,6 +95,40 @@ class ReviewedGateTests(unittest.TestCase):
             self.assertIn("min_reviewed_labels", failed_checks)
             self.assertIn("forbid_label", failed_checks)
 
+    def test_gate_reviewed_fails_invalid_reviewed_export_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            gate = Path(tmp) / "reviewed_gate.json"
+            labels_path = reviewed / "reviewed_labels.jsonl"
+            rows = read_jsonl(labels_path)
+            rows[0]["notes"] = "tampered after reviewed export"
+            labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+            code = run_cli(["gate-reviewed", "--reviewed-export", str(reviewed), "--out", str(gate)])
+
+            self.assertEqual(code, 1)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
+            self.assertIn("valid_reviewed_export", failed_checks)
+            self.assertFalse(result["metrics"]["validation"]["passed"])
+            self.assertGreater(result["metrics"]["validation"]["error_count"], 0)
+
+    def test_gate_reviewed_can_explicitly_skip_validation_for_legacy_handoffs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp)
+            gate = Path(tmp) / "reviewed_gate.json"
+            labels_path = reviewed / "reviewed_labels.jsonl"
+            rows = read_jsonl(labels_path)
+            rows[0]["notes"] = "tampered legacy reviewed export"
+            labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+            code = run_cli(["gate-reviewed", "--reviewed-export", str(reviewed), "--skip-validation", "--out", str(gate)])
+
+            self.assertEqual(code, 0)
+            result = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertEqual(result["checks"], [])
+            self.assertFalse(result["metrics"]["validation"]["available"])
+
     def test_gate_reviewed_rejects_unknown_policy_label(self):
         with tempfile.TemporaryDirectory() as tmp:
             reviewed = make_reviewed_export(tmp)

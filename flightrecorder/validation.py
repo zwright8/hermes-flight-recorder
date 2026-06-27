@@ -5982,7 +5982,21 @@ def _validate_review_calibration_metrics(metrics: dict[str, Any], disagreement_c
             target.errors.append("review_calibration.metrics scorecard positive/negative counts must sum to comparable_label_count.")
     if not _is_string_list(metrics.get("task_families")):
         target.errors.append("review_calibration.metrics.task_families must be a list of strings.")
+    if "validation" in metrics:
+        _validate_review_calibration_validation_metrics(metrics.get("validation"), target)
     _validate_mean_score_by_human_label(metrics.get("mean_score_by_human_label"), label_counts, target)
+
+
+def _validate_review_calibration_validation_metrics(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("review_calibration.metrics.validation must be an object when present.")
+        return
+    for field_name in ("available", "passed", "strict"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"review_calibration.metrics.validation.{field_name} must be a boolean.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"review_calibration.metrics.validation.{field_name} must be a non-negative integer.")
 
 
 def _label_count_rows(value: Any, target: ValidationTarget) -> dict[str, int]:
