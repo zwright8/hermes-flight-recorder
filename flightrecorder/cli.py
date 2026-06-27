@@ -1317,6 +1317,7 @@ def cmd_trainer_preflight(args: argparse.Namespace) -> int:
         compare_export_dir=args.compare_export,
         reviewed_export_dir=args.reviewed_export,
         evidence_bundle_path=args.evidence_bundle,
+        validation_summary_paths=args.validation,
         require_gates=args.require_gate,
         trainer_command=args.trainer_command,
         allow_unvalidated_gates=args.allow_unvalidated_gates,
@@ -2262,12 +2263,18 @@ def _parser() -> argparse.ArgumentParser:
     trainer_preflight.add_argument("--compare-export", help="export-compare-rl directory to fingerprint for the trainer handoff")
     trainer_preflight.add_argument("--reviewed-export", help="apply-review directory to fingerprint for the trainer handoff")
     trainer_preflight.add_argument("--evidence-bundle", help="evidence_bundle.json that must pass before launch")
+    trainer_preflight.add_argument(
+        "--validation",
+        action="append",
+        default=[],
+        help="flightrecorder validate --out summary that proves non-embedded gate artifacts; may be repeated",
+    )
     trainer_preflight.add_argument("--require-gate", action="append", default=[], help="Require this gate id to be present")
     trainer_preflight.add_argument("--trainer-command", help="Trainer command to record but not execute")
     trainer_preflight.add_argument(
         "--allow-unvalidated-gates",
         action="store_true",
-        help="Allow training/compare gates that skipped embedded export validation",
+        help="Allow gates that skipped embedded or external validation proof",
     )
     trainer_preflight.add_argument("--preserve-paths", action="store_true", help="Allow absolute artifact paths in preflight output")
     trainer_preflight.add_argument(

@@ -49,6 +49,56 @@ def make_reviewed_export(root: Path) -> Path:
     return reviewed
 
 
+def write_passed_evidence_bundle(path: Path) -> None:
+    path.write_text(json.dumps({"schema_version": "hfr.evidence_bundle.v1", "passed": True}, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def write_improvement_ledger_gate(path: Path) -> None:
+    metrics = {
+        "plan_count": 2,
+        "unique_work_item_count": 1,
+        "open_work_item_count": 1,
+        "new_work_item_count": 0,
+        "recurring_work_item_count": 1,
+        "resolved_work_item_count": 0,
+        "critical_open_work_item_count": 0,
+        "high_open_work_item_count": 1,
+        "open_priority_counts": [{"id": "high", "count": 1}],
+        "open_category_counts": [{"id": "repair", "count": 1}],
+    }
+    gate = {
+        "schema_version": "hfr.improvement_ledger_gate.v1",
+        "improvement_ledger": "runs/improvement_ledger.json",
+        "passed": True,
+        "decision": {
+            "readiness": "ready",
+            "recommendation": "promote_iteration",
+            "summary": "Improvement-ledger gate is ready.",
+            "blocking_check_count": 0,
+            "blocking_checks": [],
+            "key_metrics": metrics,
+        },
+        "check_count": 1,
+        "failed_check_count": 0,
+        "checks": [
+            {
+                "id": "max_recurring_work_items",
+                "passed": True,
+                "actual": 1,
+                "expected": {"max": 1},
+                "summary": "max_recurring_work_items: actual=1, max=1",
+            }
+        ],
+        "metrics": metrics,
+        "policy": {
+            "schema_version": "hfr.improvement_ledger_gate.policy.v1",
+            "path": "examples/improvement_ledger_gate_policy.demo.json",
+            "effective": {"max_recurring_work_items": 1},
+        },
+    }
+    path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 class TrainerPreflightTests(unittest.TestCase):
     def test_trainer_preflight_accepts_passed_training_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -265,6 +315,151 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(code, 1)
             result = json.loads(preflight.read_text(encoding="utf-8"))
             self.assertIn("gate_validation_passed", {check["id"] for check in result["checks"] if not check["passed"]})
+
+    def test_trainer_preflight_blocks_unvalidated_improvement_gate_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "improvement_ledger_gate.json"
+            evidence_bundle = root / "evidence_bundle.json"
+            preflight = root / "trainer_preflight.json"
+            write_improvement_ledger_gate(gate)
+            write_passed_evidence_bundle(evidence_bundle)
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--evidence-bundle",
+                    str(evidence_bundle),
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertEqual(result["gates"][0]["id"], "improvement_ledger_gate")
+            self.assertIn("gate_validation_passed", {check["id"] for check in result["checks"] if not check["passed"]})
+
+    def test_trainer_preflight_accepts_external_validation_for_improvement_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "improvement_ledger_gate.json"
+            evidence_bundle = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            preflight = root / "trainer_preflight.json"
+            write_improvement_ledger_gate(gate)
+            write_passed_evidence_bundle(evidence_bundle)
+            self.assertEqual(run_cli(["validate", "--improvement-ledger-gate", str(gate), "--strict", "--out", str(validation)]), 0)
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--validation",
+                    str(validation),
+                    "--evidence-bundle",
+                    str(evidence_bundle),
+                    "--require-gate",
+                    "improvement_ledger_gate",
+                    "--trainer-command",
+                    "python train.py --dataset runs/training_export",
+                    "--preserve-paths",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertTrue(result["passed"])
+            self.assertEqual(result["gate_count"], 1)
+            self.assertEqual(result["passed_gate_count"], 1)
+            gate_validation = result["gates"][0]["validation"]
+            self.assertTrue(gate_validation["available"])
+            self.assertTrue(gate_validation["passed"])
+            self.assertTrue(gate_validation["summary_passed"])
+            self.assertEqual(gate_validation["target_type"], "improvement_ledger_gate")
+            self.assertEqual(gate_validation["source"], str(validation))
+            self.assertEqual(result["validation_summaries"][0]["path"], str(validation))
+            self.assertEqual(result["validation_summaries"][0]["targets"][0]["type"], "improvement_ledger_gate")
+            self.assertEqual(len(result["validation_summaries"][0]["sha256"]), 64)
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+
+    def test_trainer_preflight_rejects_failed_external_validation_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "improvement_ledger_gate.json"
+            evidence_bundle = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            preflight = root / "trainer_preflight.json"
+            write_improvement_ledger_gate(gate)
+            write_passed_evidence_bundle(evidence_bundle)
+            run_cli(["validate", "--improvement-ledger-gate", str(gate), "--strict", "--out", str(validation)])
+            validation_payload = json.loads(validation.read_text(encoding="utf-8"))
+            validation_payload["passed"] = False
+            validation_payload["error_count"] = 1
+            validation.write_text(json.dumps(validation_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--validation",
+                    str(validation),
+                    "--evidence-bundle",
+                    str(evidence_bundle),
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            gate_validation = result["gates"][0]["validation"]
+            self.assertTrue(gate_validation["available"])
+            self.assertFalse(gate_validation["passed"])
+            self.assertFalse(gate_validation["summary_passed"])
+            self.assertIn("gate_validation_passed", {check["id"] for check in result["checks"] if not check["passed"]})
+
+    def test_validate_rejects_stale_external_validation_summary_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "improvement_ledger_gate.json"
+            evidence_bundle = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            preflight = root / "trainer_preflight.json"
+            summary = root / "preflight_validation.json"
+            write_improvement_ledger_gate(gate)
+            write_passed_evidence_bundle(evidence_bundle)
+            run_cli(["validate", "--improvement-ledger-gate", str(gate), "--strict", "--out", str(validation)])
+            run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--validation",
+                    str(validation),
+                    "--evidence-bundle",
+                    str(evidence_bundle),
+                    "--preserve-paths",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+            validation_payload = json.loads(validation.read_text(encoding="utf-8"))
+            validation_payload["warning_count"] = 1
+            validation.write_text(json.dumps(validation_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--trainer-preflight", str(preflight), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            validation_result = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation_result["targets"] for error in target["errors"])
+            self.assertIn("trainer_preflight.validation_summaries[0].sha256", errors)
 
     def test_trainer_preflight_accepts_validated_reviewed_gate_and_calibration(self):
         with tempfile.TemporaryDirectory() as tmp:

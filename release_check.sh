@@ -1034,11 +1034,19 @@ python -m flightrecorder promotion-archive \
   --require-self-contained \
   --force >/dev/null
 test -f runs/promotion_archive/promotion_archive.json
+python -m flightrecorder validate \
+  --improvement-ledger-gate runs/improvement_ledger_gate.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --strict \
+  --out runs/gate_validation.json >/dev/null
+test -f runs/gate_validation.json
 python -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
   --gate runs/reviewed_gate.json \
+  --gate runs/improvement_ledger_gate.json \
   --gate runs/promotion_ledger_gate.json \
+  --validation runs/gate_validation.json \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --reviewed-export runs/reviewed_export \
@@ -1046,6 +1054,7 @@ python -m flightrecorder trainer-preflight \
   --require-gate training_gate \
   --require-gate compare_gate \
   --require-gate reviewed_gate \
+  --require-gate improvement_ledger_gate \
   --require-gate promotion_ledger_gate \
   --trainer-command "python train.py --dry-run --dataset runs/training_export" \
   --metadata candidate=offline-demo \
@@ -1057,6 +1066,7 @@ python -m flightrecorder trainer-launch-check \
   --require-gate training_gate \
   --require-gate compare_gate \
   --require-gate reviewed_gate \
+  --require-gate improvement_ledger_gate \
   --require-gate promotion_ledger_gate \
   --require-metadata candidate=offline-demo \
   --out runs/trainer_launch_check.json >/dev/null
@@ -1089,6 +1099,7 @@ promotion_decision = json.loads(Path("runs/promotion_decision.json").read_text(e
 promotion_ledger = json.loads(Path("runs/promotion_ledger.json").read_text(encoding="utf-8"))
 promotion_ledger_gate = json.loads(Path("runs/promotion_ledger_gate.json").read_text(encoding="utf-8"))
 promotion_archive = json.loads(Path("runs/promotion_archive/promotion_archive.json").read_text(encoding="utf-8"))
+gate_validation = json.loads(Path("runs/gate_validation.json").read_text(encoding="utf-8"))
 preflight = json.loads(Path("runs/trainer_preflight.json").read_text(encoding="utf-8"))
 launch_check = json.loads(Path("runs/trainer_launch_check.json").read_text(encoding="utf-8"))
 assert bundle["passed"] is True
@@ -1207,9 +1218,24 @@ assert bundle["metrics"]["review_calibration"]["disagreement_count"] == 0
 assert preflight["passed"] is True
 assert preflight["recommendation"] == "launch_allowed"
 assert preflight["metadata"]["candidate"] == "offline-demo"
-assert preflight["passed_gate_count"] == 4
-assert {gate["id"] for gate in preflight["gates"]} == {"training_gate", "compare_gate", "reviewed_gate", "promotion_ledger_gate"}
+assert gate_validation["passed"] is True
+assert {target["type"] for target in gate_validation["targets"]} == {"improvement_ledger_gate", "promotion_ledger_gate"}
+assert preflight["passed_gate_count"] == 5
+assert {gate["id"] for gate in preflight["gates"]} == {
+    "training_gate",
+    "compare_gate",
+    "reviewed_gate",
+    "improvement_ledger_gate",
+    "promotion_ledger_gate",
+}
 assert all(gate["passed"] is True for gate in preflight["gates"])
+improvement_preflight_gate = next(gate for gate in preflight["gates"] if gate["id"] == "improvement_ledger_gate")
+assert improvement_preflight_gate["validation"]["available"] is True
+assert improvement_preflight_gate["validation"]["passed"] is True
+assert improvement_preflight_gate["validation"]["target_type"] == "improvement_ledger_gate"
+assert preflight["validation_summaries"][0]["path"] == "runs/gate_validation.json"
+assert preflight["validation_summaries"][0]["target_count"] == 2
+assert len(preflight["validation_summaries"][0]["sha256"]) == 64
 assert preflight["trainer_command"]["argv"][:2] == ["python", "train.py"]
 assert len(preflight["artifacts"]["training_export_sft_jsonl"]["sha256"]) == 64
 assert len(preflight["artifacts"]["training_export_dataset_splits_json"]["sha256"]) == 64
@@ -1222,7 +1248,13 @@ assert launch_check["recommendation"] == "launch_allowed"
 assert launch_check["validation"]["passed"] is True
 assert launch_check["approved_command"]["approved"] is True
 assert launch_check["approved_command"]["argv"][:2] == ["python", "train.py"]
-assert {gate["id"] for gate in launch_check["gates"]} == {"training_gate", "compare_gate", "reviewed_gate", "promotion_ledger_gate"}
+assert {gate["id"] for gate in launch_check["gates"]} == {
+    "training_gate",
+    "compare_gate",
+    "reviewed_gate",
+    "improvement_ledger_gate",
+    "promotion_ledger_gate",
+}
 PY
 python -m flightrecorder compare-suite \
   --baseline runs \
@@ -1321,6 +1353,7 @@ assert_help_contains "--min-task-completion-improvements" "$VENV_DIR/bin/python"
 assert_help_contains "--strict-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help
 assert_help_contains "--skip-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help
 "$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help >/dev/null
+assert_help_contains "--validation" "$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help
 assert_help_contains "--allow-unvalidated-gates" "$VENV_DIR/bin/python" -m flightrecorder trainer-preflight --help
 "$VENV_DIR/bin/python" -m flightrecorder trainer-launch-check --help >/dev/null
 assert_help_contains "--print-command" "$VENV_DIR/bin/python" -m flightrecorder trainer-launch-check --help

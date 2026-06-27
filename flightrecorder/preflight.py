@@ -50,6 +50,7 @@ _REVIEWED_EXPORT_FILES = (
 _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.training_gate.v1",
     "hfr.compare_gate.v1",
+    "hfr.improvement_ledger_gate.v1",
     "hfr.reviewed_gate.v1",
     "hfr.review_calibration.v1",
 }
@@ -67,6 +68,7 @@ def build_trainer_preflight(
     compare_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
     evidence_bundle_path: str | Path | None = None,
+    validation_summary_paths: list[str | Path] | None = None,
     require_gates: list[str] | None = None,
     trainer_command: str | None = None,
     allow_unvalidated_gates: bool = False,
@@ -83,7 +85,8 @@ def build_trainer_preflight(
         )
 
     checks: list[dict[str, Any]] = []
-    gates = [_gate_record(Path(path), preserve_paths) for path in gate_paths]
+    validation_summaries, validation_targets = _validation_summary_records(validation_summary_paths or [], preserve_paths)
+    gates = [_gate_record(Path(path), preserve_paths, validation_targets) for path in gate_paths]
     seen_gate_ids = {gate["id"] for gate in gates}
     for gate in gates:
         _add_bool_check(checks, "gate_passed", gate["passed"], {"gate": gate["id"], "path": gate["path"]})
@@ -138,6 +141,7 @@ def build_trainer_preflight(
         "failed_check_count": failed_checks,
         "checks": checks,
         "gates": gates,
+        "validation_summaries": validation_summaries,
         "artifacts": artifacts,
         "trainer_command": command,
         "notes": [
@@ -239,11 +243,12 @@ def build_trainer_launch_check(
     }
 
 
-def _gate_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _gate_record(path: Path, preserve_paths: bool, validation_targets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     gate = _read_json_required(path, "gate")
     schema_version = gate.get("schema_version") if isinstance(gate.get("schema_version"), str) else "unknown"
     metrics = gate.get("metrics") if isinstance(gate.get("metrics"), dict) else {}
     validation = metrics.get("validation") if isinstance(metrics.get("validation"), dict) else {}
+    external_validation = _validation_target_for_path(path, validation_targets)
     record: dict[str, Any] = {
         "id": _gate_id(gate, path.stem),
         "path": _display_path(path, preserve_paths),
@@ -262,6 +267,8 @@ def _gate_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
             "error_count": _int_value(validation.get("error_count")),
             "warning_count": _int_value(validation.get("warning_count")),
         }
+    elif external_validation:
+        record["validation"] = external_validation
     return record
 
 
@@ -272,6 +279,93 @@ def _gate_id(gate: dict[str, Any], fallback: str) -> str:
 
 def _gate_requires_validation(gate: dict[str, Any]) -> bool:
     return gate.get("schema_version") in _VALIDATION_REQUIRED_GATE_SCHEMAS
+
+
+def _validation_summary_records(
+    paths: list[str | Path],
+    preserve_paths: bool,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    records: list[dict[str, Any]] = []
+    targets_by_path: dict[str, dict[str, Any]] = {}
+    for raw_path in paths:
+        path = Path(raw_path)
+        summary = _read_json_required(path, "validation summary")
+        record: dict[str, Any] = {
+            "path": _display_path(path, preserve_paths),
+            "exists": path.exists(),
+            "kind": "file",
+            "regular_file": _is_regular_file(path),
+            "symlink": path.is_symlink(),
+            "schema_version": str(summary.get("schema_version") or "unknown"),
+            "passed": summary.get("passed") is True,
+            "strict": summary.get("strict") is True,
+            "target_count": _int_value(summary.get("target_count")),
+            "error_count": _int_value(summary.get("error_count")),
+            "warning_count": _int_value(summary.get("warning_count")),
+            "targets": [],
+        }
+        if _is_regular_file(path):
+            record["size_bytes"] = path.stat().st_size
+            record["sha256"] = _sha256(path)
+        targets = summary.get("targets") if isinstance(summary.get("targets"), list) else []
+        for target in targets:
+            if not isinstance(target, dict):
+                continue
+            target_path = target.get("path") if isinstance(target.get("path"), str) else ""
+            errors = [str(error) for error in target.get("errors", []) if isinstance(error, str)]
+            warnings = [str(warning) for warning in target.get("warnings", []) if isinstance(warning, str)]
+            target_record = {
+                "type": str(target.get("type") or ""),
+                "path": _display_target_path(target_path, preserve_paths),
+                "passed": target.get("passed") is True,
+                "error_count": len(errors),
+                "warning_count": len(warnings),
+            }
+            record["targets"].append(target_record)
+            target_passed = target.get("passed") is True
+            summary_passed = summary.get("passed") is True
+            validation_record = {
+                "available": True,
+                "passed": target_passed and summary_passed,
+                "strict": summary.get("strict") is True,
+                "error_count": len(errors),
+                "warning_count": len(warnings),
+                "source": record["path"],
+                "target_type": target_record["type"],
+                "summary_passed": summary_passed,
+            }
+            for key in _path_match_keys(target_path):
+                targets_by_path.setdefault(key, validation_record)
+        records.append(record)
+    return records, targets_by_path
+
+
+def _validation_target_for_path(path: Path, targets_by_path: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    for key in _path_match_keys(path):
+        if key in targets_by_path:
+            return dict(targets_by_path[key])
+    return None
+
+
+def _path_match_keys(value: str | Path) -> tuple[str, ...]:
+    raw = str(value)
+    keys = [raw]
+    try:
+        path = Path(raw)
+    except (OSError, ValueError):
+        return tuple(dict.fromkeys(key for key in keys if key))
+    keys.append(str(path))
+    try:
+        keys.append(str(path.resolve()))
+    except (OSError, RuntimeError):
+        pass
+    return tuple(dict.fromkeys(key for key in keys if key))
+
+
+def _display_target_path(value: str, preserve_paths: bool) -> str:
+    if not value:
+        return ""
+    return _display_path(Path(value), preserve_paths)
 
 
 def _add_export_artifacts(

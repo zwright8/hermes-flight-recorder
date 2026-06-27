@@ -6595,6 +6595,8 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
         target.errors.append("trainer_preflight.notes must be a list of strings.")
     if "metadata" in preflight:
         _validate_metadata(preflight.get("metadata"), target, "trainer_preflight.metadata")
+    validation_summaries = preflight.get("validation_summaries", [])
+    _validate_trainer_preflight_validation_summaries(validation_summaries, target, source_path)
 
     failed_checks = _validate_handoff_checks(checks, target, "trainer_preflight.checks")
     if preflight.get("check_count") != len(checks):
@@ -6634,6 +6636,7 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
             "gate_count": len(gates),
             "failed_check_count": failed_checks,
             "artifact_count": len(artifacts),
+            "validation_summary_count": len(validation_summaries) if isinstance(validation_summaries, list) else 0,
         }
     )
 
@@ -6806,6 +6809,48 @@ def _validate_trainer_preflight_gate(gate: Any, target: ValidationTarget, label:
                 if not _is_non_negative_int(validation.get(field_name)):
                     target.errors.append(f"{label}.validation.{field_name} must be a non-negative integer.")
     return gate.get("passed") is True
+
+
+def _validate_trainer_preflight_validation_summaries(value: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(value, list):
+        target.errors.append("trainer_preflight.validation_summaries must be a list when present.")
+        return
+    for index, summary in enumerate(value):
+        label = f"trainer_preflight.validation_summaries[{index}]"
+        if not isinstance(summary, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("path", "schema_version"):
+            if not isinstance(summary.get(field_name), str) or not summary.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if summary.get("kind") != "file":
+            target.errors.append(f"{label}.kind must be file.")
+        for field_name in ("exists", "regular_file", "symlink", "passed", "strict"):
+            if not isinstance(summary.get(field_name), bool):
+                target.errors.append(f"{label}.{field_name} must be a boolean.")
+        for field_name in ("target_count", "error_count", "warning_count"):
+            if not _is_non_negative_int(summary.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+        _validate_preflight_file_hash(summary, target, label, source_path)
+        targets = summary.get("targets")
+        if not isinstance(targets, list):
+            target.errors.append(f"{label}.targets must be a list.")
+            targets = []
+        if _is_non_negative_int(summary.get("target_count")) and summary.get("target_count") != len(targets):
+            target.errors.append(f"{label}.target_count expected {len(targets)}, got {summary.get('target_count')!r}.")
+        for target_index, summary_target in enumerate(targets):
+            target_label = f"{label}.targets[{target_index}]"
+            if not isinstance(summary_target, dict):
+                target.errors.append(f"{target_label} must be an object.")
+                continue
+            for field_name in ("type", "path"):
+                if not isinstance(summary_target.get(field_name), str) or not summary_target.get(field_name):
+                    target.errors.append(f"{target_label}.{field_name} must be a non-empty string.")
+            if not isinstance(summary_target.get("passed"), bool):
+                target.errors.append(f"{target_label}.passed must be a boolean.")
+            for field_name in ("error_count", "warning_count"):
+                if not _is_non_negative_int(summary_target.get(field_name)):
+                    target.errors.append(f"{target_label}.{field_name} must be a non-negative integer.")
 
 
 def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: ValidationTarget, source_path: Path) -> None:

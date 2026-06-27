@@ -80,6 +80,12 @@
     },
     "trainer_command": {
       "$ref": "#/$defs/trainerCommand"
+    },
+    "validation_summaries": {
+      "items": {
+        "$ref": "#/$defs/validationSummary"
+      },
+      "type": "array"
     }
   },
   "required": [
@@ -258,8 +264,18 @@
         "passed": {
           "type": "boolean"
         },
+        "source": {
+          "minLength": 1,
+          "type": "string"
+        },
         "strict": {
           "type": "boolean"
+        },
+        "summary_passed": {
+          "type": "boolean"
+        },
+        "target_type": {
+          "type": "string"
         },
         "warning_count": {
           "minimum": 0,
@@ -270,6 +286,110 @@
         "available",
         "passed",
         "strict",
+        "error_count",
+        "warning_count"
+      ],
+      "type": "object"
+    },
+    "validationSummary": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "file"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "symlink": {
+          "type": "boolean"
+        },
+        "target_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/validationTarget"
+          },
+          "type": "array"
+        },
+        "warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "kind",
+        "regular_file",
+        "symlink",
+        "schema_version",
+        "passed",
+        "strict",
+        "target_count",
+        "error_count",
+        "warning_count",
+        "targets"
+      ],
+      "type": "object"
+    },
+    "validationTarget": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "path",
+        "passed",
         "error_count",
         "warning_count"
       ],

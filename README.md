@@ -259,6 +259,11 @@ flightrecorder gate-improvement-ledger \
   --policy examples/improvement_ledger_gate_policy.demo.json \
   --out runs/improvement_ledger_gate.json
 
+flightrecorder validate \
+  --improvement-ledger-gate runs/improvement_ledger_gate.json \
+  --strict \
+  --out runs/gate_validation.json
+
 flightrecorder export-rl \
   --runs runs \
   --out runs/training_export
@@ -323,8 +328,11 @@ flightrecorder gate-export \
 
 flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
+  --gate runs/improvement_ledger_gate.json \
+  --validation runs/gate_validation.json \
   --training-export runs/training_export \
   --require-gate training_gate \
+  --require-gate improvement_ledger_gate \
   --trainer-command "python train.py --dataset runs/training_export" \
   --out runs/trainer_preflight.json
 
@@ -337,6 +345,9 @@ flightrecorder trainer-launch-check \
 The preflight fingerprints trainer-facing files, including split metadata and
 split JSONL files, and blocks symlinked export artifacts, so the approved
 command points at regular files captured by the evidence contract.
+Pass `--validation` summaries from `flightrecorder validate --out ...` when a
+required gate, such as `improvement_ledger_gate`, is proved by standalone
+schema/semantic validation rather than embedded export-validation metrics.
 
 For production suites, commit a stricter gate policy and point CI at it:
 
@@ -1021,17 +1032,26 @@ trainer. It records the trainer command, fingerprints the trainer-facing
 exports, including `dataset_splits.json` and every `splits/<split>/*.jsonl`
 file, verifies required gates are present and passed, and blocks launch when
 training, comparison, reviewed, or calibration handoffs skipped embedded export
-validation:
+validation. Gates that are validated as standalone artifacts, such as
+`improvement_ledger_gate`, should be paired with a validation summary:
 
 ```bash
+flightrecorder validate \
+  --improvement-ledger-gate runs/improvement_ledger_gate.json \
+  --strict \
+  --out runs/gate_validation.json
+
 flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
+  --gate runs/improvement_ledger_gate.json \
+  --validation runs/gate_validation.json \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
   --evidence-bundle runs/evidence_bundle.json \
   --require-gate training_gate \
   --require-gate compare_gate \
+  --require-gate improvement_ledger_gate \
   --trainer-command "python train.py --dry-run --dataset runs/training_export" \
   --out runs/trainer_preflight.json
 
