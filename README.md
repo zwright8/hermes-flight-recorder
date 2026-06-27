@@ -81,8 +81,9 @@ Expected demo output:
   directory, showing how repeated repair pressure becomes a validatable
   promotion history, policy decision, and movable evidence handoff.
 - Trainer launch evidence in `runs/trainer_preflight.json`,
-  `runs/trainer_launch_check.json`, and portable `runs/trainer_archive/`,
-  packaging gates, schema contracts, and trainer-facing export files for an
+  `runs/trainer_launch_check.json`, portable `runs/trainer_archive/`, and
+  `runs/trainer_archive_check.json`, packaging gates, schema contracts,
+  trainer-facing export files, and local external-code readiness for an
   external training launcher to validate before consuming rows.
 
 ## Install
@@ -114,6 +115,7 @@ flightrecorder schemas --check scenarios/prompt_injection_good.json --name scena
 flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive/trainer_archive.json
+flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 flightrecorder schemas --check runs/improvement_ledger_gate.json
 flightrecorder schemas --check runs/training_export/dataset_metrics.json
@@ -128,9 +130,9 @@ manifests, dataset metrics, dataset split manifests, compare-RL manifests,
 training JSONL rows (`episodes`, `rewards`, `step_rewards`, `preferences`,
 `failure_modes`, `sft`, `dpo`, and `reward_model`), compare-RL JSONL rows,
 review manifests, reviewed-export manifests, improvement plans, improvement
-ledgers, trainer preflights, trainer launch checks, trainer archives, and
-improvement-ledger gates. These schemas are compatibility contracts for
-artifact shape.
+ledgers, trainer preflights, trainer launch checks, trainer archives, trainer
+archive checks, and improvement-ledger gates. These schemas are compatibility
+contracts for artifact shape.
 `flightrecorder schemas --check` validates one JSON artifact;
 `flightrecorder schemas --check-jsonl` validates each non-empty JSONL row,
 inferring by row `schema_version` unless `--name` pins the expected row type.
@@ -361,6 +363,12 @@ flightrecorder trainer-archive \
   --launch-check runs/trainer_launch_check.json \
   --out runs/trainer_archive \
   --require-self-contained
+
+flightrecorder trainer-archive-check \
+  --archive runs/trainer_archive \
+  --external-code-root path/to/trainer-code \
+  --out runs/trainer_archive_check.json \
+  --strict
 ```
 
 The preflight fingerprints trainer-facing files, including split metadata and
@@ -369,6 +377,10 @@ command points at regular files captured by the evidence contract.
 Pass `--validation` summaries from `flightrecorder validate --out ...` when a
 required gate, such as `improvement_ledger_gate`, is proved by standalone
 schema/semantic validation rather than embedded export-validation metrics.
+`trainer-archive-check` is the downstream consumer proof: it validates the
+archive, confirms copied trainer inputs are still hash-matched inside the
+archive, and verifies local external command paths such as `train.py` exist
+under `--external-code-root` without executing them.
 
 For production suites, commit a stricter gate policy and point CI at it:
 
@@ -1095,7 +1107,15 @@ flightrecorder trainer-archive \
   --out runs/trainer_archive \
   --require-self-contained
 
+flightrecorder trainer-archive-check \
+  --archive runs/trainer_archive \
+  --external-code-root path/to/trainer-code \
+  --out runs/trainer_archive_check.json \
+  --strict
+
 flightrecorder validate --trainer-archive runs/trainer_archive --strict
+
+flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
 ```
 
 `trainer-launch-check` is the consumer-side guard for an external trainer
@@ -1115,6 +1135,13 @@ lists path-like command tokens such as `train.py` that remain external trainer
 code. A downstream trainer wrapper can validate the archive without trusting
 the producer machine's local paths. The archive still does not sandbox tools,
 run training, or update model weights.
+
+`trainer-archive-check` is the consumer-side readiness artifact for that
+portable archive. It re-validates the archive manifest, verifies copied trainer
+inputs still match their file or directory hashes, and checks that external
+trainer code paths referenced by the portable command exist under
+`--external-code-root`. It returns `consumer_ready` only when those checks pass,
+and it still does not execute the trainer command.
 
 ## Scoring Rules
 

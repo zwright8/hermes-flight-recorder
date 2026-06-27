@@ -259,6 +259,63 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(manifest_path)]), 0)
 
+            trainer_code = Path(tmp) / "trainer_code"
+            trainer_code.mkdir()
+            (trainer_code / "train.py").write_text("print('dry run only')\n", encoding="utf-8")
+            archive_check = Path(tmp) / "trainer_archive_check.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-archive-check",
+                        "--archive",
+                        str(archive),
+                        "--external-code-root",
+                        str(trainer_code),
+                        "--out",
+                        str(archive_check),
+                        "--strict",
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            check = json.loads(archive_check.read_text(encoding="utf-8"))
+            self.assertEqual(check["schema_version"], "hfr.trainer_archive_check.v1")
+            self.assertTrue(check["passed"])
+            self.assertEqual(check["recommendation"], "consumer_ready")
+            self.assertEqual(check["metrics"]["missing_external_code_count"], 0)
+            self.assertEqual(check["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
+            self.assertEqual(check["metrics"]["trainer_input_available_count"], len(result["trainer_inputs"]))
+            external = check["external_code_checks"]
+            self.assertEqual(len(external), contract["external_command_path_count"])
+            self.assertIn("train.py", {item["path"] for item in external})
+            self.assertTrue(all(len(item["sha256"]) == 64 for item in external if item["passed"]))
+            self.assertEqual(run_cli(["schemas", "--check", str(archive_check)]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check), "--strict"]), 0)
+
+            missing_check = Path(tmp) / "trainer_archive_check_missing.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-archive-check",
+                        "--archive",
+                        str(archive),
+                        "--external-code-root",
+                        str(Path(tmp) / "missing_trainer_code"),
+                        "--out",
+                        str(missing_check),
+                        "--strict",
+                        "--preserve-paths",
+                    ]
+                ),
+                1,
+            )
+            missing = json.loads(missing_check.read_text(encoding="utf-8"))
+            self.assertFalse(missing["passed"])
+            self.assertEqual(missing["recommendation"], "block_consumer_launch")
+            self.assertGreater(missing["metrics"]["missing_external_code_count"], 0)
+            self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(missing_check), "--strict"]), 0)
+
             result["portable_command"]["argv"][-1] = "stale/training_export"
             result["portable_command"]["shell"] = "python train.py --dataset stale/training_export"
             manifest_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")

@@ -98,6 +98,7 @@ from .state_diff import StateDiffError, build_state_diff
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .trace_observability import TraceObservabilityError, build_trace_observability
 from .trainer_archive import TrainerArchiveError, build_trainer_archive
+from .trainer_archive_check import TrainerArchiveCheckError, build_trainer_archive_check
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
     TRAINING_GATE_POLICY_SCHEMA_VERSION,
@@ -133,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         RepairQueueError,
         TrainerPreflightError,
         TrainerArchiveError,
+        TrainerArchiveCheckError,
         TrainingExportError,
         TrainingGatePolicyError,
         CompareGatePolicyError,
@@ -734,6 +736,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         trainer_preflight_paths=args.trainer_preflight,
         trainer_launch_check_paths=args.trainer_launch_check,
         trainer_archive_paths=args.trainer_archive,
+        trainer_archive_check_paths=args.trainer_archive_check,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -985,6 +988,23 @@ def cmd_trainer_archive(args: argparse.Namespace) -> int:
         f"missing={archive['metrics']['missing_count']} out={args.out}"
     )
     return 0 if archive["passed"] else 1
+
+
+def cmd_trainer_archive_check(args: argparse.Namespace) -> int:
+    validation_summary = validate_artifacts(trainer_archive_paths=[args.archive], strict=args.strict)
+    check = build_trainer_archive_check(
+        archive_path=args.archive,
+        external_code_root=args.external_code_root,
+        validation_summary=validation_summary,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), check)
+    print(
+        f"{'READY' if check['passed'] else 'BLOCKED'} trainer-archive-check "
+        f"external_paths={check['metrics']['external_command_path_count']} "
+        f"missing_external={check['metrics']['missing_external_code_count']} out={args.out}"
+    )
+    return 0 if check["passed"] else 1
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -1738,6 +1758,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one trainer_launch_check.json; may be repeated",
     )
     validate.add_argument("--trainer-archive", action="append", default=[], help="Validate one trainer archive directory or manifest; may be repeated")
+    validate.add_argument(
+        "--trainer-archive-check",
+        action="append",
+        default=[],
+        help="Validate one trainer_archive_check.json; may be repeated",
+    )
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -2371,6 +2397,21 @@ def _parser() -> argparse.ArgumentParser:
         help="Allow absolute original paths in the archive manifest; use only for private local debugging",
     )
     trainer_archive.set_defaults(func=cmd_trainer_archive)
+
+    trainer_archive_check = subparsers.add_parser(
+        "trainer-archive-check",
+        help="Validate a trainer archive plus local external trainer code without executing it",
+    )
+    trainer_archive_check.add_argument("--archive", required=True, help="trainer archive directory or trainer_archive.json to verify")
+    trainer_archive_check.add_argument("--external-code-root", default=".", help="Directory containing external trainer code paths such as train.py")
+    trainer_archive_check.add_argument("--out", required=True, help="Write trainer archive check JSON to this path")
+    trainer_archive_check.add_argument("--strict", action="store_true", help="Treat archive validation warnings as consumer-readiness blockers")
+    trainer_archive_check.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Allow absolute local paths in trainer archive check output; use only for private local debugging",
+    )
+    trainer_archive_check.set_defaults(func=cmd_trainer_archive_check)
 
     export_rl = subparsers.add_parser("export-rl", help="Export completed runs as future RL training artifacts")
     export_rl.add_argument("--runs", required=True, help="Directory containing Flight Recorder run subdirectories")

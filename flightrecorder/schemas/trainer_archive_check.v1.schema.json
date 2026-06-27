@@ -1,0 +1,393 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trainer_archive_check.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Consumer-side readiness check over a portable trainer archive and local external trainer code paths.",
+  "properties": {
+    "archive": {
+      "type": "object"
+    },
+    "archive_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "consumer_contract": {
+      "type": "object"
+    },
+    "external_code_checks": {
+      "items": {
+        "$ref": "#/$defs/externalCodeCheck"
+      },
+      "type": "array"
+    },
+    "external_code_root": {
+      "type": "object"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "manifest_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "portable_command": {
+      "type": "object"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "consumer_ready",
+        "block_consumer_launch"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.trainer_archive_check.v1"
+    },
+    "trainer_input_checks": {
+      "items": {
+        "$ref": "#/$defs/trainerInputCheck"
+      },
+      "type": "array"
+    },
+    "validation": {
+      "$ref": "#/$defs/validation"
+    }
+  },
+  "required": [
+    "schema_version",
+    "archive_path",
+    "manifest_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "validation",
+    "archive",
+    "external_code_root",
+    "portable_command",
+    "consumer_contract",
+    "external_code_checks",
+    "trainer_input_checks",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Trainer Archive Check",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "scope",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "externalCodeCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "argv_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "file"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "resolved_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symlink": {
+          "type": "boolean"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "argv_index",
+        "token",
+        "path",
+        "resolved_path",
+        "exists",
+        "kind",
+        "regular_file",
+        "symlink",
+        "passed",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "archive_validation_error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "archive_validation_passed": {
+          "type": "boolean"
+        },
+        "archive_validation_warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_code_file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "external_command_path_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failed_check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_external_code_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missing_trainer_input_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "relative_external_command_path_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trainer_input_available_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "trainer_input_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "archive_validation_passed",
+        "archive_validation_error_count",
+        "archive_validation_warning_count",
+        "external_command_path_count",
+        "relative_external_command_path_count",
+        "external_code_file_count",
+        "missing_external_code_count",
+        "trainer_input_count",
+        "trainer_input_available_count",
+        "missing_trainer_input_count",
+        "check_count",
+        "failed_check_count"
+      ],
+      "type": "object"
+    },
+    "trainerInputCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "archive_path": {
+          "type": "string"
+        },
+        "artifact_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "artifact_name": {
+          "type": "string"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "expected_sha256": {
+          "type": "string"
+        },
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "regular_directory": {
+          "type": "boolean"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "resolved_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symlink": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "index",
+        "artifact_index",
+        "artifact_name",
+        "archive_path",
+        "resolved_path",
+        "kind",
+        "exists",
+        "regular_file",
+        "regular_directory",
+        "symlink",
+        "expected_sha256",
+        "passed",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "target_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "available",
+        "passed",
+        "strict",
+        "target_count",
+        "error_count",
+        "warning_count",
+        "errors",
+        "warnings"
+      ],
+      "type": "object"
+    }
+  }
+}

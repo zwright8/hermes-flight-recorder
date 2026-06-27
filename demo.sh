@@ -96,5 +96,12 @@ python -m flightrecorder trainer-archive \
   --out runs/trainer_archive \
   --require-self-contained \
   --force
+mkdir -p runs/trainer_code
+printf "print('trainer placeholder; Flight Recorder never executes this file')\n" > runs/trainer_code/train.py
+python -m flightrecorder trainer-archive-check \
+  --archive runs/trainer_archive \
+  --external-code-root runs/trainer_code \
+  --out runs/trainer_archive_check.json \
+  --strict
 python -m flightrecorder index --runs runs --out runs/index.html
 echo "Demo reports written to $ROOT/runs/index.html"

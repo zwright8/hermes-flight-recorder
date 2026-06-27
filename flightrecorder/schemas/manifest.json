@@ -240,6 +240,14 @@
       "filename": "trainer_archive.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/trainer_archive.v1.schema.json",
       "name": "trainer_archive"
+    },
+    {
+      "artifact": "trainer_archive_check",
+      "artifact_schema_version": "hfr.trainer_archive_check.v1",
+      "description": "Consumer-side readiness check over a trainer archive and local external trainer code paths.",
+      "filename": "trainer_archive_check.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trainer_archive_check.v1.schema.json",
+      "name": "trainer_archive_check"
     }
   ]
 }

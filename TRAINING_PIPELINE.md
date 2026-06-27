@@ -18,6 +18,7 @@ flightrecorder schemas --name training_manifest --out training_manifest.schema.j
 flightrecorder schemas --check runs/training_export/manifest.json
 flightrecorder schemas --check runs/trainer_preflight.json
 flightrecorder schemas --check runs/trainer_launch_check.json
+flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
 
@@ -305,7 +306,15 @@ flightrecorder trainer-archive \
   --out runs/trainer_archive \
   --require-self-contained
 
+flightrecorder trainer-archive-check \
+  --archive runs/trainer_archive \
+  --external-code-root path/to/trainer-code \
+  --out runs/trainer_archive_check.json \
+  --strict
+
 flightrecorder validate --trainer-archive runs/trainer_archive --strict
+
+flightrecorder validate --trainer-archive-check runs/trainer_archive_check.json --strict
 ```
 
 The preflight manifest and launch check are still evidence plumbing, not a
@@ -324,8 +333,12 @@ advisory portable command that points known input paths at archive-local copies.
 Its `consumer_contract` states that the portable command should be resolved
 from the archive root and flags path-like command tokens, such as trainer
 scripts, that still must be supplied by external training infrastructure.
-External training infrastructure can validate that directory before consuming
-the rows, without needing the original producer's local paths.
+`trainer-archive-check` is the next non-executing proof for that external
+launcher: it validates the archive, confirms archive-local trainer inputs still
+match their recorded hashes, and checks that caller-provided trainer code paths
+such as `train.py` exist under `--external-code-root`. External training
+infrastructure can validate that directory before consuming the rows, without
+needing the original producer's local paths.
 
 For concrete rule-level repair work, use the generated `repair_queue.json` or
 regenerate it with `flightrecorder repair-queue --runs runs --out
@@ -825,11 +838,13 @@ family-exclusive dataset splits, and maximum quality-flag counts.
 should also block a training handoff.
 
 After `gate-export` and any comparison or reviewed gates pass, run
-`trainer-preflight`, then have the external launcher run `trainer-launch-check`
-and require `recommendation: launch_allowed` before invoking a trainer. This
-closes the handoff loop: the trainer consumes only exports that are tied to
-passed gates, reviewed/calibration validation when applicable, current artifact
-hashes, and regular-file export artifacts.
+`trainer-preflight`, build a `trainer-archive`, then have the external launcher
+run `trainer-launch-check` and `trainer-archive-check`. Require
+`recommendation: launch_allowed` and `recommendation: consumer_ready` before
+invoking a trainer. This closes the handoff loop: the trainer consumes only
+exports that are tied to passed gates, reviewed/calibration validation when
+applicable, current artifact hashes, regular-file export artifacts, and local
+trainer code that the consumer explicitly supplied.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:

@@ -48,6 +48,7 @@ from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
 from .state_diff import STATE_DIFF_SCHEMA_VERSION
 from .trace_observability import TRACE_OBSERVABILITY_SCHEMA_VERSION, build_trace_signal
 from .trainer_archive import TRAINER_ARCHIVE_SCHEMA_VERSION
+from .trainer_archive_check import TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION
 from .training import (
     DATASET_SPLIT_ARTIFACTS,
     DATASET_SPLIT_NAMES,
@@ -116,6 +117,7 @@ def validate_artifacts(
     trainer_preflight_paths: list[str | Path] | None = None,
     trainer_launch_check_paths: list[str | Path] | None = None,
     trainer_archive_paths: list[str | Path] | None = None,
+    trainer_archive_check_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -171,6 +173,8 @@ def validate_artifacts(
         targets.append(validate_trainer_launch_check(trainer_launch_check_path))
     for trainer_archive_path in trainer_archive_paths or []:
         targets.append(validate_trainer_archive(trainer_archive_path))
+    for trainer_archive_check_path in trainer_archive_check_paths or []:
+        targets.append(validate_trainer_archive_check(trainer_archive_check_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -687,6 +691,16 @@ def validate_trainer_archive(path: str | Path) -> ValidationTarget:
     archive = _read_object(manifest_path, target, "trainer_archive.json")
     if archive is not None:
         _validate_trainer_archive(archive, target, archive_root)
+    return target
+
+
+def validate_trainer_archive_check(path: str | Path) -> ValidationTarget:
+    """Validate a trainer archive consumer-readiness artifact."""
+    check_path = Path(path)
+    target = ValidationTarget("trainer_archive_check", str(check_path))
+    check = _read_object(check_path, target, "trainer_archive_check.json")
+    if check is not None:
+        _validate_trainer_archive_check(check, target)
     return target
 
 
@@ -6829,6 +6843,307 @@ def _validate_trainer_archive_consumer_contract(
             for field_name, expected_value in expected_external[index].items():
                 if item.get(field_name) != expected_value:
                     target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {item.get(field_name)!r}.")
+
+
+def _validate_trainer_archive_check(check: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(check, "schema_version", TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION, target)
+    for field_name in ("archive_path", "manifest_path", "readiness", "recommendation"):
+        if not isinstance(check.get(field_name), str) or not check.get(field_name):
+            target.errors.append(f"trainer_archive_check.{field_name} must be a non-empty string.")
+    if not isinstance(check.get("passed"), bool):
+        target.errors.append("trainer_archive_check.passed must be a boolean.")
+    checks = check.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("trainer_archive_check.checks must be a list.")
+        checks = []
+    validation = check.get("validation")
+    if not isinstance(validation, dict):
+        target.errors.append("trainer_archive_check.validation must be an object.")
+        validation = {}
+    metrics = check.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("trainer_archive_check.metrics must be an object.")
+        metrics = {}
+    if not _is_string_list(check.get("notes")):
+        target.errors.append("trainer_archive_check.notes must be a list of strings.")
+
+    failed_checks = _validate_gate_like_checks(checks, target, "trainer_archive_check.checks")
+    if check.get("check_count") != len(checks):
+        target.errors.append(f"trainer_archive_check.check_count expected {len(checks)}, got {check.get('check_count')!r}.")
+    if check.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"trainer_archive_check.failed_check_count expected {failed_checks}, got {check.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(check.get("passed"), bool) and check.get("passed") != expected_passed:
+        target.errors.append("trainer_archive_check.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "consumer_ready" if expected_passed else "block_consumer_launch"
+    if check.get("readiness") != expected_readiness:
+        target.errors.append(f"trainer_archive_check.readiness expected {expected_readiness!r}, got {check.get('readiness')!r}.")
+    if check.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"trainer_archive_check.recommendation expected {expected_recommendation!r}, got {check.get('recommendation')!r}."
+        )
+
+    _validate_trainer_archive_check_validation(validation, target)
+    _validate_trainer_archive_check_archive(check.get("archive"), target)
+    _validate_trainer_archive_check_external_root(check.get("external_code_root"), target)
+    _validate_trainer_archive_check_portable_command(check.get("portable_command"), target)
+    _validate_trainer_archive_check_consumer_contract(check.get("consumer_contract"), target)
+    external_code_checks = _validate_trainer_archive_check_external_code(check.get("external_code_checks"), target)
+    trainer_input_checks = _validate_trainer_archive_check_inputs(check.get("trainer_input_checks"), target)
+    _validate_trainer_archive_check_metrics(metrics, validation, external_code_checks, trainer_input_checks, len(checks), failed_checks, target)
+    target.details.update(
+        {
+            "passed": check.get("passed"),
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "external_command_path_count": metrics.get("external_command_path_count"),
+            "missing_external_code_count": metrics.get("missing_external_code_count"),
+            "trainer_input_count": metrics.get("trainer_input_count"),
+        }
+    )
+
+
+def _validate_trainer_archive_check_validation(value: dict[str, Any], target: ValidationTarget) -> None:
+    for field_name in ("available", "passed", "strict"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_archive_check.validation.{field_name} must be a boolean.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"trainer_archive_check.validation.{field_name} must be a non-negative integer.")
+    if not _is_string_list(value.get("errors")):
+        target.errors.append("trainer_archive_check.validation.errors must be a list of strings.")
+    if not _is_string_list(value.get("warnings")):
+        target.errors.append("trainer_archive_check.validation.warnings must be a list of strings.")
+
+
+def _validate_trainer_archive_check_archive(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_archive_check.archive must be an object.")
+        return
+    for field_name in ("path", "manifest_path", "schema_version"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"trainer_archive_check.archive.{field_name} must be a non-empty string.")
+    if value.get("schema_version") != TRAINER_ARCHIVE_SCHEMA_VERSION:
+        target.errors.append(f"trainer_archive_check.archive.schema_version must be {TRAINER_ARCHIVE_SCHEMA_VERSION}.")
+    for field_name in ("passed", "self_contained", "ready_for_training"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_archive_check.archive.{field_name} must be a boolean.")
+    for field_name in ("trainer_input_count", "external_command_path_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"trainer_archive_check.archive.{field_name} must be a non-negative integer.")
+
+
+def _validate_trainer_archive_check_external_root(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_archive_check.external_code_root must be an object.")
+        return
+    for field_name in ("path", "kind"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"trainer_archive_check.external_code_root.{field_name} must be a non-empty string.")
+    if value.get("kind") != "directory":
+        target.errors.append("trainer_archive_check.external_code_root.kind must be directory.")
+    for field_name in ("exists", "regular_directory", "symlink"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_archive_check.external_code_root.{field_name} must be a boolean.")
+
+
+def _validate_trainer_archive_check_portable_command(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_archive_check.portable_command must be an object.")
+        return
+    for field_name in ("approved", "available", "rewritten"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_archive_check.portable_command.{field_name} must be a boolean.")
+    if not _is_non_negative_int(value.get("path_rewrite_count")):
+        target.errors.append("trainer_archive_check.portable_command.path_rewrite_count must be a non-negative integer.")
+    if not isinstance(value.get("shell"), str):
+        target.errors.append("trainer_archive_check.portable_command.shell must be a string.")
+    if not _is_string_list(value.get("argv")):
+        target.errors.append("trainer_archive_check.portable_command.argv must be a list of strings.")
+
+
+def _validate_trainer_archive_check_consumer_contract(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("trainer_archive_check.consumer_contract must be an object.")
+        return
+    for field_name in ("execution_cwd", "command_kind"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"trainer_archive_check.consumer_contract.{field_name} must be a string.")
+    for field_name in ("portable_command_available", "external_code_required"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"trainer_archive_check.consumer_contract.{field_name} must be a boolean.")
+    for field_name in ("trainer_input_count", "path_rewrite_count", "external_command_path_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"trainer_archive_check.consumer_contract.{field_name} must be a non-negative integer.")
+    external_paths = value.get("external_command_paths")
+    if not isinstance(external_paths, list):
+        target.errors.append("trainer_archive_check.consumer_contract.external_command_paths must be a list.")
+        return
+    for index, item in enumerate(external_paths):
+        label = f"trainer_archive_check.consumer_contract.external_command_paths[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not _is_non_negative_int(item.get("argv_index")):
+            target.errors.append(f"{label}.argv_index must be a non-negative integer.")
+        for field_name in ("token", "path", "reason"):
+            if not isinstance(item.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+
+
+def _validate_trainer_archive_check_external_code(value: Any, target: ValidationTarget) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        target.errors.append("trainer_archive_check.external_code_checks must be a list.")
+        return []
+    records = [item for item in value if isinstance(item, dict)]
+    for index, item in enumerate(value):
+        label = f"trainer_archive_check.external_code_checks[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if item.get("index") != index:
+            target.errors.append(f"{label}.index expected {index}, got {item.get('index')!r}.")
+        if not _is_non_negative_int(item.get("argv_index")):
+            target.errors.append(f"{label}.argv_index must be a non-negative integer.")
+        for field_name in ("token", "path", "resolved_path", "kind", "reason"):
+            if not isinstance(item.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+        if item.get("kind") != "file":
+            target.errors.append(f"{label}.kind must be file.")
+        for field_name in ("exists", "regular_file", "symlink", "passed"):
+            if not isinstance(item.get(field_name), bool):
+                target.errors.append(f"{label}.{field_name} must be a boolean.")
+        expected_passed = item.get("exists") is True and item.get("regular_file") is True and item.get("symlink") is False
+        if item.get("passed") is True and not expected_passed:
+            target.errors.append(f"{label}.passed cannot be true unless the resolved path is a regular non-symlink file.")
+        if item.get("passed") is True:
+            if not _is_non_negative_int(item.get("size_bytes")):
+                target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
+            if not _is_sha256(item.get("sha256")):
+                target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
+            _validate_visible_file_hash(item, target, label)
+    return records
+
+
+def _validate_trainer_archive_check_inputs(value: Any, target: ValidationTarget) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        target.errors.append("trainer_archive_check.trainer_input_checks must be a list.")
+        return []
+    records = [item for item in value if isinstance(item, dict)]
+    for index, item in enumerate(value):
+        label = f"trainer_archive_check.trainer_input_checks[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if item.get("index") != index:
+            target.errors.append(f"{label}.index expected {index}, got {item.get('index')!r}.")
+        if not _is_non_negative_int(item.get("artifact_index")):
+            target.errors.append(f"{label}.artifact_index must be a non-negative integer.")
+        for field_name in ("artifact_name", "archive_path", "resolved_path", "kind", "expected_sha256", "reason"):
+            if not isinstance(item.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+        if item.get("kind") not in {"file", "directory"}:
+            target.errors.append(f"{label}.kind must be file or directory.")
+        for field_name in ("exists", "regular_file", "regular_directory", "symlink", "passed"):
+            if not isinstance(item.get(field_name), bool):
+                target.errors.append(f"{label}.{field_name} must be a boolean.")
+        if item.get("expected_sha256") and not _is_sha256(item.get("expected_sha256")):
+            target.errors.append(f"{label}.expected_sha256 must be a SHA-256 hex string when present.")
+        if item.get("passed") is True:
+            if item.get("kind") == "file":
+                if item.get("regular_file") is not True or item.get("symlink") is True:
+                    target.errors.append(f"{label}.passed file checks must be regular non-symlink files.")
+                if not _is_non_negative_int(item.get("size_bytes")):
+                    target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
+                if not _is_sha256(item.get("sha256")):
+                    target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
+                _validate_visible_file_hash(item, target, label)
+            else:
+                if item.get("regular_directory") is not True or item.get("symlink") is True:
+                    target.errors.append(f"{label}.passed directory checks must be regular non-symlink directories.")
+                if not _is_non_negative_int(item.get("size_bytes")):
+                    target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
+                if not _is_non_negative_int(item.get("file_count")):
+                    target.errors.append(f"{label}.file_count must be a non-negative integer when passed.")
+                if not _is_sha256(item.get("sha256")):
+                    target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
+                _validate_visible_directory_hash(item, target, label)
+    return records
+
+
+def _validate_trainer_archive_check_metrics(
+    metrics: dict[str, Any],
+    validation: dict[str, Any],
+    external_code_checks: list[dict[str, Any]],
+    trainer_input_checks: list[dict[str, Any]],
+    check_count: int,
+    failed_check_count: int,
+    target: ValidationTarget,
+) -> None:
+    external_count = len(external_code_checks)
+    external_available = sum(1 for item in external_code_checks if item.get("passed") is True)
+    input_count = len(trainer_input_checks)
+    inputs_available = sum(1 for item in trainer_input_checks if item.get("passed") is True)
+    expected = {
+        "archive_validation_passed": validation.get("passed") is True,
+        "archive_validation_error_count": _non_negative_int_value(validation.get("error_count")),
+        "archive_validation_warning_count": _non_negative_int_value(validation.get("warning_count")),
+        "external_command_path_count": external_count,
+        "external_code_file_count": external_available,
+        "missing_external_code_count": external_count - external_available,
+        "trainer_input_count": input_count,
+        "trainer_input_available_count": inputs_available,
+        "missing_trainer_input_count": input_count - inputs_available,
+        "check_count": check_count,
+        "failed_check_count": failed_check_count,
+    }
+    for field_name, expected_value in expected.items():
+        if metrics.get(field_name) != expected_value:
+            target.errors.append(f"trainer_archive_check.metrics.{field_name} expected {expected_value}, got {metrics.get(field_name)!r}.")
+    if not _is_non_negative_int(metrics.get("relative_external_command_path_count")):
+        target.errors.append("trainer_archive_check.metrics.relative_external_command_path_count must be a non-negative integer.")
+
+
+def _validate_visible_file_hash(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    path = _visible_local_path(item.get("resolved_path"))
+    if path is None or not path.exists():
+        return
+    if path.is_symlink() or not path.is_file():
+        target.errors.append(f"{label}.resolved_path is not a regular file on disk.")
+        return
+    if item.get("size_bytes") != path.stat().st_size:
+        target.errors.append(f"{label}.size_bytes does not match resolved_path.")
+    if item.get("sha256") != _sha256(path):
+        target.errors.append(f"{label}.sha256 does not match resolved_path.")
+
+
+def _validate_visible_directory_hash(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    path = _visible_local_path(item.get("resolved_path"))
+    if path is None or not path.exists():
+        return
+    if path.is_symlink() or not path.is_dir():
+        target.errors.append(f"{label}.resolved_path is not a regular directory on disk.")
+        return
+    for child in path.rglob("*"):
+        if child.is_symlink():
+            target.errors.append(f"{label}.resolved_path contains symlink {child}.")
+            return
+    tree = _trainer_archive_tree_fingerprint(path)
+    if item.get("file_count") != tree["file_count"]:
+        target.errors.append(f"{label}.file_count does not match resolved_path.")
+    if item.get("size_bytes") != tree["size_bytes"]:
+        target.errors.append(f"{label}.size_bytes does not match resolved_path.")
+    if item.get("sha256") != tree["sha256"]:
+        target.errors.append(f"{label}.sha256 does not match resolved_path.")
+
+
+def _visible_local_path(value: Any) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<") or _is_windows_absolute(value):
+        return None
+    return Path(value)
 
 
 def _trainer_input_from_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
