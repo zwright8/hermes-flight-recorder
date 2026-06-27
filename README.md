@@ -585,8 +585,8 @@ human-curation queue:
   evidence, source report, lineage pointers, and a `review_item_sha256`
   content fingerprint.
 - `label_template.jsonl`: editable label rows with `human_label`, reviewer,
-  notes, accepted/rejected evidence-ref fields, and the matching
-  `review_item_sha256`.
+  `reviewer_confidence` (`high`, `medium`, `low`, or `unknown`), notes,
+  accepted/rejected evidence-ref fields, and the matching `review_item_sha256`.
 - `REVIEW_INSTRUCTIONS.md`: short reviewer guidance.
 - `manifest.json`: review export counts, label options, output paths, and
   artifact fingerprints.
@@ -603,17 +603,22 @@ completed human labels into reviewed training views:
 - `reviewed_reward_model.jsonl`: human-labeled prompt/response reward rows.
 - `reviewed_preferences.jsonl`: accepted-vs-rejected pairs inside task families.
 - `reviewed_dpo.jsonl`: DPO-shaped rows derived from reviewed preferences.
-- `manifest.json`: reviewed export counts, provenance, and artifact
-  fingerprints.
+- `manifest.json`: reviewed export counts, reviewer-confidence counts,
+  provenance, and artifact fingerprints.
 
 Use `flightrecorder gate-reviewed` after `apply-review` when CI should block
 trainer jobs until human-reviewed labels meet policy. It reads
 `runs/reviewed_export/manifest.json` and can require enough completed labels,
 accepted rows, negative rows, SFT/reward-model/preference/DPO views, task-family
-coverage, and zero unresolved `needs_review` labels.
+coverage, enough medium/high-confidence labels, and zero unresolved
+`needs_review`, low-confidence, or unknown-confidence labels.
 By default it also validates the reviewed export structure and artifact
 fingerprints before evaluating thresholds; use `--skip-validation` only for
 explicit legacy handoffs.
+Current reviewed exports must include confidence fields. If an explicit legacy
+handoff uses `--skip-validation`, missing confidence is treated as `unknown` by
+the gate, so legacy artifacts cannot accidentally satisfy a policy that forbids
+unknown confidence.
 
 Use `flightrecorder review-calibration` after `apply-review` when maintainers
 need to measure whether deterministic scorecards agree with human labels before
@@ -1091,9 +1096,10 @@ flightrecorder gate-reviewed \
 ```
 
 The reviewed gate is intentionally separate from `gate-export`: it checks human
-label completion and reviewed trainer views, while `gate-export` checks the
-deterministic raw training export. Both gates validate their source export by
-default before producing a passing handoff signal.
+label completion, reviewer-confidence quality, and reviewed trainer views,
+while `gate-export` checks the deterministic raw training export. Both gates
+validate their source export by default before producing a passing handoff
+signal.
 
 Use `flightrecorder gate-compare-export` for the baseline/candidate improvement
 path after `export-compare-rl`. It checks that comparison preference rows are

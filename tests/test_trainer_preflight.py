@@ -34,6 +34,7 @@ def write_completed_labels(review_dir: Path, labels_path: Path) -> None:
     for row in rows:
         row["human_label"] = row["suggested_human_label"]
         row["reviewer"] = "trainer-preflight-test"
+        row["reviewer_confidence"] = "high"
         row["reviewed_at"] = "2026-06-26T00:00:00Z"
         row["notes"] = "Accepted suggested label for trainer-preflight coverage."
     labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")

@@ -29,6 +29,7 @@ from .promotion_gate import PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, PROMOTI
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
 from .review import (
+    REVIEW_CONFIDENCE_LEVELS,
     REVIEW_ITEM_SCHEMA_VERSION,
     REVIEW_LABEL_SCHEMA_VERSION,
     REVIEW_LABELS,
@@ -2503,6 +2504,8 @@ def _validate_review_manifest(
         target.errors.append(f"label_template row count expected {len(items)}, got {len(labels)}.")
     if manifest.get("label_options") != list(REVIEW_LABELS):
         target.errors.append(f"manifest.label_options must be {list(REVIEW_LABELS)!r}.")
+    if manifest.get("confidence_options") != list(REVIEW_CONFIDENCE_LEVELS):
+        target.errors.append(f"manifest.confidence_options must be {list(REVIEW_CONFIDENCE_LEVELS)!r}.")
     outputs = manifest.get("outputs")
     if not isinstance(outputs, dict):
         target.errors.append("manifest.outputs must be an object.")
@@ -2605,6 +2608,15 @@ def _validate_review_labels(labels: list[dict[str, Any]], target: ValidationTarg
         human_label = label.get("human_label")
         if human_label is not None and human_label not in REVIEW_LABELS:
             target.errors.append(f"label_template[{index}].human_label must be null or one of {list(REVIEW_LABELS)!r}.")
+        reviewer_confidence = label.get("reviewer_confidence")
+        if human_label is not None and reviewer_confidence is None:
+            target.errors.append(
+                f"label_template[{index}].reviewer_confidence is required when human_label is set."
+            )
+        elif reviewer_confidence is not None and reviewer_confidence not in REVIEW_CONFIDENCE_LEVELS:
+            target.errors.append(
+                f"label_template[{index}].reviewer_confidence must be null or one of {list(REVIEW_CONFIDENCE_LEVELS)!r}."
+            )
         corrected_score = label.get("corrected_score")
         if corrected_score is not None and not _is_int_between(corrected_score, 0, 100):
             target.errors.append(f"label_template[{index}].corrected_score must be null or an integer from 0 to 100.")
@@ -2646,6 +2658,25 @@ def _validate_reviewed_manifest(
     expected_label_counts = _reviewed_label_counts(labels)
     if manifest.get("label_counts") != expected_label_counts:
         target.errors.append(f"manifest.label_counts expected {expected_label_counts!r}, got {manifest.get('label_counts')!r}.")
+    expected_confidence_counts = _reviewed_confidence_counts(labels)
+    manifest_confidence_counts = manifest.get("confidence_counts")
+    if not isinstance(manifest_confidence_counts, dict):
+        target.errors.append("manifest.confidence_counts must be an object.")
+    elif manifest_confidence_counts != expected_confidence_counts:
+        target.errors.append(
+            f"manifest.confidence_counts expected {expected_confidence_counts!r}, got {manifest_confidence_counts!r}."
+        )
+    expected_confidence_fields = {
+        "high_confidence_label_count": expected_confidence_counts["high"],
+        "medium_or_high_confidence_label_count": expected_confidence_counts["high"] + expected_confidence_counts["medium"],
+        "low_confidence_label_count": expected_confidence_counts["low"],
+        "unknown_confidence_label_count": expected_confidence_counts["unknown"],
+    }
+    for field_name, expected in expected_confidence_fields.items():
+        if field_name not in manifest:
+            target.errors.append(f"manifest.{field_name} is missing.")
+        elif manifest.get(field_name) != expected:
+            target.errors.append(f"manifest.{field_name} expected {expected}, got {manifest.get(field_name)!r}.")
     outputs = manifest.get("outputs")
     if not isinstance(outputs, dict):
         target.errors.append("manifest.outputs must be an object.")
@@ -2683,6 +2714,12 @@ def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTa
             target.errors.append(f"reviewed_labels[{index}].human_label must be one of {list(REVIEW_LABELS)!r}.")
         if row.get("suggested_human_label") is not None and row.get("suggested_human_label") not in REVIEW_LABELS:
             target.errors.append(f"reviewed_labels[{index}].suggested_human_label must be null or one of {list(REVIEW_LABELS)!r}.")
+        if "reviewer_confidence" not in row:
+            target.errors.append(f"reviewed_labels[{index}].reviewer_confidence is required.")
+        elif row.get("reviewer_confidence") not in REVIEW_CONFIDENCE_LEVELS:
+            target.errors.append(
+                f"reviewed_labels[{index}].reviewer_confidence must be one of {list(REVIEW_CONFIDENCE_LEVELS)!r}."
+            )
         if not _is_int_between(row.get("score"), 0, 100):
             target.errors.append(f"reviewed_labels[{index}].score must be an integer from 0 to 100.")
         if not isinstance(row.get("reward"), (int, float)):
@@ -2706,6 +2743,7 @@ def _validate_reviewed_sft(sft: list[dict[str, Any]], target: ValidationTarget, 
             target.errors.append(f"reviewed_sft[{index}] must reference a reviewed label with human_label 'accept'.")
         if item is not None:
             _validate_review_item_hash_link(row, item, target, f"reviewed_sft[{index}]")
+            _validate_review_confidence_link(row, item, target, f"reviewed_sft[{index}]")
         for field_name in ("prompt", "response", "source_artifact"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_sft[{index}].{field_name} must be a string.")
@@ -2722,6 +2760,7 @@ def _validate_reviewed_reward_model(rows: list[dict[str, Any]], target: Validati
             target.errors.append(f"reviewed_reward_model[{index}] must not reference a needs_review label.")
         if item is not None:
             _validate_review_item_hash_link(row, item, target, f"reviewed_reward_model[{index}]")
+            _validate_review_confidence_link(row, item, target, f"reviewed_reward_model[{index}]")
         for field_name in ("prompt", "response", "human_label", "source_artifact"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_reward_model[{index}].{field_name} must be a string.")
@@ -2753,12 +2792,14 @@ def _validate_reviewed_preferences(preferences: list[dict[str, Any]], target: Va
             target.errors.append(f"reviewed_preferences[{index}].chosen_episode_id must reference an accepted label.")
         else:
             _validate_pref_side_hash(row, chosen, "chosen", target, f"reviewed_preferences[{index}]")
+            _validate_pref_side_confidence(row, chosen, "chosen", target, f"reviewed_preferences[{index}]")
         if rejected is None:
             target.errors.append(f"reviewed_preferences[{index}].rejected_episode_id does not reference a reviewed label.")
         elif rejected.get("human_label") not in {"reject", "unsafe", "incomplete"}:
             target.errors.append(f"reviewed_preferences[{index}].rejected_episode_id must reference a rejected/unsafe/incomplete label.")
         else:
             _validate_pref_side_hash(row, rejected, "rejected", target, f"reviewed_preferences[{index}]")
+            _validate_pref_side_confidence(row, rejected, "rejected", target, f"reviewed_preferences[{index}]")
         if row.get("source_artifact") != "reviewed_labels.jsonl":
             target.errors.append(f"reviewed_preferences[{index}].source_artifact must be 'reviewed_labels.jsonl'.")
 
@@ -2781,6 +2822,13 @@ def _validate_reviewed_dpo(dpo: list[dict[str, Any]], target: ValidationTarget, 
             elif preference is not None:
                 if row.get(field_name) != preference.get(field_name):
                     target.errors.append(f"reviewed_dpo[{index}].{field_name} does not match reviewed preference.")
+            confidence_field = f"{side}_reviewer_confidence"
+            if confidence_field not in row:
+                target.errors.append(f"reviewed_dpo[{index}].{confidence_field} is required.")
+            else:
+                _validate_confidence_value(row.get(confidence_field), target, f"reviewed_dpo[{index}].{confidence_field}")
+                if preference is not None and row.get(confidence_field) != preference.get(confidence_field):
+                    target.errors.append(f"reviewed_dpo[{index}].{confidence_field} does not match reviewed preference.")
         for field_name in ("prompt", "chosen", "rejected", "source_artifact"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_dpo[{index}].{field_name} must be a string.")
@@ -2816,6 +2864,21 @@ def _validate_review_item_hash_link(
         target.errors.append(f"{label}.review_item_sha256 does not match reviewed label.")
 
 
+def _validate_review_confidence_link(
+    row: dict[str, Any],
+    item: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if "reviewer_confidence" not in row:
+        target.errors.append(f"{label}.reviewer_confidence is required.")
+        return
+    _validate_confidence_value(row.get("reviewer_confidence"), target, f"{label}.reviewer_confidence")
+    expected = item.get("reviewer_confidence", "unknown")
+    if row.get("reviewer_confidence") != expected:
+        target.errors.append(f"{label}.reviewer_confidence does not match reviewed label.")
+
+
 def _validate_pref_side_hash(
     row: dict[str, Any],
     item: dict[str, Any],
@@ -2837,6 +2900,36 @@ def _validate_pref_side_hash(
             target.errors.append(f"{label}.{side}.review_item_sha256 does not match reviewed label.")
 
 
+def _validate_pref_side_confidence(
+    row: dict[str, Any],
+    item: dict[str, Any],
+    side: str,
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    expected = item.get("reviewer_confidence", "unknown")
+    field_name = f"{side}_reviewer_confidence"
+    if field_name not in row:
+        target.errors.append(f"{label}.{field_name} is required.")
+    else:
+        _validate_confidence_value(row.get(field_name), target, f"{label}.{field_name}")
+        if row.get(field_name) != expected:
+            target.errors.append(f"{label}.{field_name} does not match reviewed label.")
+    nested = row.get(side)
+    if isinstance(nested, dict):
+        if "reviewer_confidence" not in nested:
+            target.errors.append(f"{label}.{side}.reviewer_confidence is required.")
+        else:
+            _validate_confidence_value(nested.get("reviewer_confidence"), target, f"{label}.{side}.reviewer_confidence")
+            if nested.get("reviewer_confidence") != expected:
+                target.errors.append(f"{label}.{side}.reviewer_confidence does not match reviewed label.")
+
+
+def _validate_confidence_value(value: Any, target: ValidationTarget, label: str) -> None:
+    if value not in REVIEW_CONFIDENCE_LEVELS:
+        target.errors.append(f"{label} must be one of {list(REVIEW_CONFIDENCE_LEVELS)!r}.")
+
+
 def _reviewed_label_map(labels: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {
         str(row["review_item_id"]): row
@@ -2855,6 +2948,16 @@ def _reviewed_label_counts(labels: list[dict[str, Any]]) -> dict[str, int]:
         label = row.get("human_label")
         if isinstance(label, str):
             counts[label] = counts.get(label, 0) + 1
+    return counts
+
+
+def _reviewed_confidence_counts(labels: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {level: 0 for level in REVIEW_CONFIDENCE_LEVELS}
+    for row in labels:
+        confidence = row.get("reviewer_confidence")
+        if confidence not in REVIEW_CONFIDENCE_LEVELS:
+            confidence = "unknown"
+        counts[str(confidence)] += 1
     return counts
 
 

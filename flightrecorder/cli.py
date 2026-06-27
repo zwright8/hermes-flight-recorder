@@ -1228,7 +1228,11 @@ def cmd_gate_reviewed(args: argparse.Namespace) -> int:
         min_reward_model=options["min_reward_model"],
         min_preferences=options["min_preferences"],
         min_dpo=options["min_dpo"],
+        min_high_confidence_labels=options["min_high_confidence_labels"],
+        min_medium_or_high_confidence_labels=options["min_medium_or_high_confidence_labels"],
         max_needs_review=options["max_needs_review"],
+        max_low_confidence_labels=options["max_low_confidence_labels"],
+        max_unknown_confidence_labels=options["max_unknown_confidence_labels"],
         forbid_labels=options["forbid_labels"],
         require_task_families=options["require_task_families"],
         validation_summary=validation_summary,
@@ -2284,7 +2288,27 @@ def _parser() -> argparse.ArgumentParser:
     gate_reviewed.add_argument("--min-reward-model", type=_non_negative_int_arg, help="Minimum reviewed reward-model row count")
     gate_reviewed.add_argument("--min-preferences", type=_non_negative_int_arg, help="Minimum reviewed preference pair count")
     gate_reviewed.add_argument("--min-dpo", type=_non_negative_int_arg, help="Minimum reviewed DPO row count")
+    gate_reviewed.add_argument(
+        "--min-high-confidence-labels",
+        type=_non_negative_int_arg,
+        help="Minimum reviewed labels marked reviewer_confidence='high'",
+    )
+    gate_reviewed.add_argument(
+        "--min-medium-or-high-confidence-labels",
+        type=_non_negative_int_arg,
+        help="Minimum reviewed labels marked reviewer_confidence='medium' or 'high'",
+    )
     gate_reviewed.add_argument("--max-needs-review", type=_non_negative_int_arg, help="Maximum allowed needs_review labels")
+    gate_reviewed.add_argument(
+        "--max-low-confidence-labels",
+        type=_non_negative_int_arg,
+        help="Maximum reviewed labels marked reviewer_confidence='low'",
+    )
+    gate_reviewed.add_argument(
+        "--max-unknown-confidence-labels",
+        type=_non_negative_int_arg,
+        help="Maximum reviewed labels with missing or unknown reviewer_confidence",
+    )
     gate_reviewed.add_argument(
         "--forbid-label",
         action="append",
@@ -2922,7 +2946,27 @@ def _reviewed_gate_options(args: argparse.Namespace) -> dict[str, Any]:
         "min_reward_model": args.min_reward_model if args.min_reward_model is not None else policy.get("min_reward_model"),
         "min_preferences": args.min_preferences if args.min_preferences is not None else policy.get("min_preferences"),
         "min_dpo": args.min_dpo if args.min_dpo is not None else policy.get("min_dpo"),
+        "min_high_confidence_labels": (
+            args.min_high_confidence_labels
+            if args.min_high_confidence_labels is not None
+            else policy.get("min_high_confidence_labels")
+        ),
+        "min_medium_or_high_confidence_labels": (
+            args.min_medium_or_high_confidence_labels
+            if args.min_medium_or_high_confidence_labels is not None
+            else policy.get("min_medium_or_high_confidence_labels")
+        ),
         "max_needs_review": args.max_needs_review if args.max_needs_review is not None else policy.get("max_needs_review"),
+        "max_low_confidence_labels": (
+            args.max_low_confidence_labels
+            if args.max_low_confidence_labels is not None
+            else policy.get("max_low_confidence_labels")
+        ),
+        "max_unknown_confidence_labels": (
+            args.max_unknown_confidence_labels
+            if args.max_unknown_confidence_labels is not None
+            else policy.get("max_unknown_confidence_labels")
+        ),
         "forbid_labels": _merge_unique_strings(policy.get("forbid_labels", []), args.forbid_label),
         "require_task_families": _merge_unique_strings(policy.get("require_task_families", []), args.require_task_family),
         "require_valid_export": False if args.skip_validation else policy.get("require_valid_export", True),
@@ -2939,7 +2983,11 @@ def _reviewed_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
         "min_reward_model",
         "min_preferences",
         "min_dpo",
+        "min_high_confidence_labels",
+        "min_medium_or_high_confidence_labels",
         "max_needs_review",
+        "max_low_confidence_labels",
+        "max_unknown_confidence_labels",
         "forbid_labels",
         "require_task_families",
         "require_valid_export",

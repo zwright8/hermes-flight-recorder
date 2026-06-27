@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .review import REVIEW_LABELS, TRAINING_NEGATIVE_LABELS
+from .review import REVIEW_CONFIDENCE_LEVELS, REVIEW_LABELS, TRAINING_NEGATIVE_LABELS
 
 REVIEWED_GATE_SCHEMA_VERSION = "hfr.reviewed_gate.v1"
 REVIEWED_GATE_POLICY_SCHEMA_VERSION = "hfr.reviewed_gate.policy.v1"
@@ -19,12 +19,17 @@ _COUNT_POLICY_FIELDS = {
     "min_reward_model",
     "min_preferences",
     "min_dpo",
+    "min_high_confidence_labels",
+    "min_medium_or_high_confidence_labels",
     "max_needs_review",
+    "max_low_confidence_labels",
+    "max_unknown_confidence_labels",
 }
 _LIST_POLICY_FIELDS = {"forbid_labels", "require_task_families"}
 _BOOLEAN_POLICY_FIELDS = {"require_valid_export", "strict_validation"}
 _POLICY_FIELDS = {"schema_version", "description", *_COUNT_POLICY_FIELDS, *_LIST_POLICY_FIELDS, *_BOOLEAN_POLICY_FIELDS}
 _REVIEW_LABEL_SET = set(REVIEW_LABELS)
+_REVIEW_CONFIDENCE_SET = set(REVIEW_CONFIDENCE_LEVELS)
 
 
 class ReviewedGatePolicyError(ValueError):
@@ -95,7 +100,11 @@ def evaluate_reviewed_gate(
     min_reward_model: int | None = None,
     min_preferences: int | None = None,
     min_dpo: int | None = None,
+    min_high_confidence_labels: int | None = None,
+    min_medium_or_high_confidence_labels: int | None = None,
     max_needs_review: int | None = None,
+    max_low_confidence_labels: int | None = None,
+    max_unknown_confidence_labels: int | None = None,
     forbid_labels: list[str] | None = None,
     require_task_families: list[str] | None = None,
     validation_summary: dict[str, Any] | None = None,
@@ -106,6 +115,12 @@ def evaluate_reviewed_gate(
     task_families = _task_families(manifest.get("task_families"))
     accepted_count = label_counts.get("accept", 0)
     rejected_count = sum(label_counts.get(label, 0) for label in TRAINING_NEGATIVE_LABELS)
+    reviewed_label_count = _int_value(manifest.get("reviewed_label_count"))
+    confidence_counts = _confidence_counts(manifest.get("confidence_counts"), reviewed_label_count)
+    high_confidence_count = confidence_counts.get("high", 0)
+    medium_or_high_confidence_count = high_confidence_count + confidence_counts.get("medium", 0)
+    low_confidence_count = confidence_counts.get("low", 0)
+    unknown_confidence_count = confidence_counts.get("unknown", 0)
     checks: list[dict[str, Any]] = []
 
     if require_valid_export:
@@ -125,8 +140,31 @@ def evaluate_reviewed_gate(
         _add_min_check(checks, "min_preferences", _int_value(manifest.get("preference_count")), min_preferences)
     if min_dpo is not None:
         _add_min_check(checks, "min_dpo", _int_value(manifest.get("dpo_count")), min_dpo)
+    if min_high_confidence_labels is not None:
+        _add_min_check(
+            checks,
+            "min_high_confidence_labels",
+            high_confidence_count,
+            min_high_confidence_labels,
+        )
+    if min_medium_or_high_confidence_labels is not None:
+        _add_min_check(
+            checks,
+            "min_medium_or_high_confidence_labels",
+            medium_or_high_confidence_count,
+            min_medium_or_high_confidence_labels,
+        )
     if max_needs_review is not None:
         _add_max_check(checks, "max_needs_review", label_counts.get("needs_review", 0), max_needs_review)
+    if max_low_confidence_labels is not None:
+        _add_max_check(checks, "max_low_confidence_labels", low_confidence_count, max_low_confidence_labels)
+    if max_unknown_confidence_labels is not None:
+        _add_max_check(
+            checks,
+            "max_unknown_confidence_labels",
+            unknown_confidence_count,
+            max_unknown_confidence_labels,
+        )
 
     for label in forbid_labels or []:
         _add_absence_check(checks, "forbid_label", label, label_counts.get(label, 0))
@@ -142,7 +180,7 @@ def evaluate_reviewed_gate(
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "checks": checks,
         "metrics": {
-            "reviewed_label_count": _int_value(manifest.get("reviewed_label_count")),
+            "reviewed_label_count": reviewed_label_count,
             "accepted_count": accepted_count,
             "rejected_count": rejected_count,
             "sft_count": _int_value(manifest.get("sft_count")),
@@ -150,6 +188,11 @@ def evaluate_reviewed_gate(
             "preference_count": _int_value(manifest.get("preference_count")),
             "dpo_count": _int_value(manifest.get("dpo_count")),
             "label_counts": label_counts,
+            "confidence_counts": confidence_counts,
+            "high_confidence_label_count": high_confidence_count,
+            "medium_or_high_confidence_label_count": medium_or_high_confidence_count,
+            "low_confidence_label_count": low_confidence_count,
+            "unknown_confidence_label_count": unknown_confidence_count,
             "task_families": sorted(task_families),
             "validation": _validation_metrics(validation_summary),
         },
@@ -271,6 +314,21 @@ def _label_counts(value: Any) -> dict[str, int]:
     return counts
 
 
+def _confidence_counts(value: Any, total_labels: int) -> dict[str, int]:
+    counts = {level: 0 for level in REVIEW_CONFIDENCE_LEVELS}
+    if not isinstance(value, dict):
+        counts["unknown"] = total_labels
+        return counts
+    for key, count in value.items():
+        if not isinstance(key, str) or key not in _REVIEW_CONFIDENCE_SET:
+            continue
+        counts[key] = _int_value(count)
+    counted = sum(counts.values())
+    if counted < total_labels:
+        counts["unknown"] += total_labels - counted
+    return counts
+
+
 def _task_families(value: Any) -> set[str]:
     if not isinstance(value, list):
         return set()
@@ -280,7 +338,7 @@ def _task_families(value: Any) -> set[str]:
 def _int_value(value: Any) -> int:
     if isinstance(value, bool):
         return 0
-    if isinstance(value, int):
+    if isinstance(value, int) and value >= 0:
         return value
     return 0
 

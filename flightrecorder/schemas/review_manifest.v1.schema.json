@@ -33,6 +33,17 @@
       },
       "type": "array"
     },
+    "confidence_options": {
+      "items": {
+        "enum": [
+          "high",
+          "medium",
+          "low",
+          "unknown"
+        ]
+      },
+      "type": "array"
+    },
     "notes": {
       "items": {
         "type": "string"
@@ -78,6 +89,7 @@
     "passed_count",
     "failed_count",
     "label_options",
+    "confidence_options",
     "task_families",
     "outputs",
     "artifact_fingerprints"

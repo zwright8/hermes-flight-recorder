@@ -21,6 +21,7 @@ REVIEWED_REWARD_MODEL_SCHEMA_VERSION = "hfr.reviewed.reward_model.v1"
 REVIEWED_PREFERENCE_SCHEMA_VERSION = "hfr.reviewed.preference.v1"
 REVIEWED_DPO_SCHEMA_VERSION = "hfr.reviewed.dpo.v1"
 REVIEW_LABELS = ("accept", "reject", "needs_review", "unsafe", "incomplete")
+REVIEW_CONFIDENCE_LEVELS = ("high", "medium", "low", "unknown")
 TRAINING_NEGATIVE_LABELS = {"reject", "unsafe", "incomplete"}
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 
@@ -72,6 +73,7 @@ def export_review_queue(
         "passed_count": sum(1 for item in items if item["scorecard"]["passed"] is True),
         "failed_count": sum(1 for item in items if item["scorecard"]["passed"] is False),
         "label_options": list(REVIEW_LABELS),
+        "confidence_options": list(REVIEW_CONFIDENCE_LEVELS),
         "task_families": sorted({str(item["task_family"]) for item in items}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "notes": [
@@ -126,6 +128,7 @@ def apply_review_labels(
     _write_jsonl(paths["reviewed_reward_model"], reward_model)
     _write_jsonl(paths["reviewed_preferences"], preferences)
     _write_jsonl(paths["reviewed_dpo"], dpo)
+    confidence_counts = _confidence_counts(reviewed_labels)
 
     manifest = {
         "schema_version": REVIEWED_MANIFEST_SCHEMA_VERSION,
@@ -140,6 +143,11 @@ def apply_review_labels(
         "preference_count": len(preferences),
         "dpo_count": len(dpo),
         "label_counts": _label_counts(reviewed_labels),
+        "confidence_counts": confidence_counts,
+        "high_confidence_label_count": confidence_counts["high"],
+        "medium_or_high_confidence_label_count": confidence_counts["high"] + confidence_counts["medium"],
+        "low_confidence_label_count": confidence_counts["low"],
+        "unknown_confidence_label_count": confidence_counts["unknown"],
         "task_families": sorted({str(row["task_family"]) for row in reviewed_labels}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "source_review_artifacts": _artifact_fingerprints(
@@ -159,6 +167,7 @@ def apply_review_labels(
             "Reviewed SFT rows include only human_label='accept'.",
             "Reviewed reward-model rows include accept/reject/unsafe/incomplete labels.",
             "Reviewed preferences pair accepted rows against rejected/unsafe/incomplete rows in the same task family.",
+            "reviewer_confidence is human-entered evidence quality metadata; gate-reviewed can reject low or unknown confidence.",
         ],
     }
     manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest"})
@@ -224,6 +233,7 @@ def _label_template(item: dict[str, Any]) -> dict[str, Any]:
         "human_label": None,
         "corrected_score": None,
         "reviewer": None,
+        "reviewer_confidence": None,
         "reviewed_at": None,
         "notes": "",
         "accepted_evidence_refs": [],
@@ -278,6 +288,15 @@ def _reviewed_labels(
             continue
         if human_label not in REVIEW_LABELS:
             raise ReviewExportError(f"label row {index + 1} has unsupported human_label {human_label!r}")
+        reviewer_confidence = label.get("reviewer_confidence")
+        if reviewer_confidence is None:
+            raise ReviewExportError(
+                f"label row {index + 1} missing reviewer_confidence; use one of {list(REVIEW_CONFIDENCE_LEVELS)!r}"
+            )
+        if reviewer_confidence not in REVIEW_CONFIDENCE_LEVELS:
+            raise ReviewExportError(
+                f"label row {index + 1} has unsupported reviewer_confidence {reviewer_confidence!r}"
+            )
         corrected_score = label.get("corrected_score")
         if corrected_score is not None and (
             not isinstance(corrected_score, int) or isinstance(corrected_score, bool) or corrected_score < 0 or corrected_score > 100
@@ -313,6 +332,7 @@ def _reviewed_label_row(
         "score": score,
         "reward": round(score / 100.0, 6),
         "reviewer": label.get("reviewer"),
+        "reviewer_confidence": _reviewer_confidence(label),
         "reviewed_at": label.get("reviewed_at"),
         "notes": str(label.get("notes") or ""),
         "accepted_evidence_refs": label.get("accepted_evidence_refs", []),
@@ -342,6 +362,7 @@ def _reviewed_sft(reviewed_labels: list[dict[str, Any]]) -> list[dict[str, Any]]
             "prompt": row["prompt"],
             "response": row["response"],
             "human_label": row["human_label"],
+            "reviewer_confidence": row["reviewer_confidence"],
             "quality_gate": "human_reviewed_accept",
             "source_artifact": "reviewed_labels.jsonl",
         }
@@ -368,6 +389,7 @@ def _reviewed_reward_model(reviewed_labels: list[dict[str, Any]]) -> list[dict[s
                 "human_label": row["human_label"],
                 "score": row["score"],
                 "reward": row["reward"],
+                "reviewer_confidence": row["reviewer_confidence"],
                 "source_artifact": "reviewed_labels.jsonl",
             }
         )
@@ -414,6 +436,8 @@ def _reviewed_preference(family: str, chosen: dict[str, Any], rejected: dict[str
         "rejected_label": rejected["human_label"],
         "chosen_score": chosen["score"],
         "rejected_score": rejected["score"],
+        "chosen_reviewer_confidence": chosen["reviewer_confidence"],
+        "rejected_reviewer_confidence": rejected["reviewer_confidence"],
         "reason": "Human review accepted the chosen episode and rejected the comparison episode.",
         "chosen": {
             "episode_id": chosen["episode_id"],
@@ -422,6 +446,7 @@ def _reviewed_preference(family: str, chosen: dict[str, Any], rejected: dict[str
             "response": chosen["response"],
             "score": chosen["score"],
             "human_label": chosen["human_label"],
+            "reviewer_confidence": chosen["reviewer_confidence"],
         },
         "rejected": {
             "episode_id": rejected["episode_id"],
@@ -430,6 +455,7 @@ def _reviewed_preference(family: str, chosen: dict[str, Any], rejected: dict[str
             "response": rejected["response"],
             "score": rejected["score"],
             "human_label": rejected["human_label"],
+            "reviewer_confidence": rejected["reviewer_confidence"],
         },
         "source_artifact": "reviewed_labels.jsonl",
     }
@@ -448,6 +474,8 @@ def _reviewed_dpo(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "rejected_episode_id": preference["rejected_episode_id"],
             "chosen_review_item_sha256": preference["chosen_review_item_sha256"],
             "rejected_review_item_sha256": preference["rejected_review_item_sha256"],
+            "chosen_reviewer_confidence": preference["chosen_reviewer_confidence"],
+            "rejected_reviewer_confidence": preference["rejected_reviewer_confidence"],
             "reason": preference["reason"],
             "source_artifact": "reviewed_preferences.jsonl",
         }
@@ -461,6 +489,23 @@ def _label_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
         label = str(row.get("human_label") or "unknown")
         counts[label] = counts.get(label, 0) + 1
     return counts
+
+
+def _confidence_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {level: 0 for level in REVIEW_CONFIDENCE_LEVELS}
+    for row in rows:
+        confidence = row.get("reviewer_confidence")
+        if confidence not in REVIEW_CONFIDENCE_LEVELS:
+            confidence = "unknown"
+        counts[str(confidence)] += 1
+    return counts
+
+
+def _reviewer_confidence(label: dict[str, Any]) -> str:
+    confidence = label.get("reviewer_confidence")
+    if confidence is None:
+        return "unknown"
+    return str(confidence)
 
 
 def _label_score(label: str, fallback_score: int) -> int:
@@ -534,7 +579,7 @@ def _instructions(manifest: dict[str, Any]) -> str:
             f"- Label options: {labels}",
             "",
             "Review `review_items.jsonl` alongside each item report and lineage file.",
-            "Fill `label_template.jsonl` with `human_label`, `reviewer`, `reviewed_at`, and notes.",
+            "Fill `label_template.jsonl` with `human_label`, `reviewer_confidence`, `reviewer`, `reviewed_at`, and notes.",
             "Human labels should be grounded in observable trace events, scorecard evidence, reports, and lineage.",
             "A suggested label is only a starting point; prefer observable trace evidence over final-answer claims.",
             "",

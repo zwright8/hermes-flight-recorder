@@ -454,6 +454,9 @@ flightrecorder validate \
 report path, and lineage pointer for each run. `label_template.jsonl` is an
 editable starting point for human labels such as `accept`, `reject`,
 `needs_review`, `unsafe`, and `incomplete`.
+Reviewers can also set `reviewer_confidence` to `high`, `medium`, `low`, or
+`unknown` so downstream gates can distinguish strongly grounded labels from
+labels that need another pass.
 Every review item and label template row carries `review_item_sha256`, a stable
 content fingerprint over the exact review item. `apply-review` refuses
 completed labels when that fingerprint no longer matches the current review
@@ -490,14 +493,21 @@ The reviewed export writes `reviewed_labels.jsonl`, `reviewed_sft.jsonl`,
 `reviewed_labels.jsonl` but are excluded from trainer-ready views.
 Trainer-ready reviewed rows preserve the originating `review_item_sha256`, so
 SFT, reward-model, preference, and DPO consumers can trace each row back to the
-review evidence that authorized it.
+review evidence that authorized it. They also preserve `reviewer_confidence`,
+letting trainers or CI jobs filter low-confidence labels without losing
+provenance.
 
 `gate-reviewed` is the CI handoff for human-curated training signal. Use it to
 require completed labels, enough accepted and negative examples, reviewed
-SFT/reward-model/preference/DPO views, task-family coverage, and no unresolved
-review labels before a trainer consumes `runs/reviewed_export`. It validates
-the reviewed export by default, including artifact fingerprints, before it
-evaluates curation thresholds.
+SFT/reward-model/preference/DPO views, task-family coverage, enough
+medium/high-confidence labels, and no unresolved review labels before a trainer
+consumes `runs/reviewed_export`. It can also cap low-confidence and
+unknown-confidence labels. Current reviewed exports must include confidence
+fields; when an explicit legacy handoff uses `--skip-validation`, missing
+confidence is treated as `unknown`, which keeps older artifacts from
+accidentally passing a strict confidence policy. The gate validates the reviewed
+export by default, including artifact fingerprints, before it evaluates
+curation thresholds.
 
 `review-calibration` is the agreement check between deterministic scorecards and
 human labels. It reports agreement rate, false positives, false negatives,
@@ -915,8 +925,9 @@ flightrecorder gate-reviewed \
 ```
 
 Reviewed-gate policies can require minimum reviewed-label counts, accepted and
-negative examples, SFT/reward-model/preference/DPO rows, task families, and a
-maximum number of unresolved `needs_review` labels. Keep this gate separate from
+negative examples, SFT/reward-model/preference/DPO rows, task families,
+reviewer-confidence minimums, and maximum counts for unresolved `needs_review`,
+low-confidence, or unknown-confidence labels. Keep this gate separate from
 `gate-export`: the reviewed gate proves curation readiness; the export gate
 proves deterministic dataset readiness. Both gates validate their source
 exports by default; use `--skip-validation` only for explicit legacy handoffs.

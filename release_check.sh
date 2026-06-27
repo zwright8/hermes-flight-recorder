@@ -849,6 +849,7 @@ rows = [
 for row in rows:
     row["human_label"] = row["suggested_human_label"]
     row["reviewer"] = "release-check"
+    row["reviewer_confidence"] = "high"
     row["reviewed_at"] = "2026-06-26T00:00:00Z"
     row["notes"] = "Fixture label accepted for release-check coverage."
 target.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
@@ -1453,6 +1454,10 @@ assert_help_contains "--require-family-exclusive-splits" "$VENV_DIR/bin/python" 
 assert_help_contains "--strict-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 assert_help_contains "--skip-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-export --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help >/dev/null
+assert_help_contains "--min-high-confidence-labels" "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help
+assert_help_contains "--min-medium-or-high-confidence-labels" "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help
+assert_help_contains "--max-low-confidence-labels" "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help
+assert_help_contains "--max-unknown-confidence-labels" "$VENV_DIR/bin/python" -m flightrecorder gate-reviewed --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help >/dev/null
 assert_help_contains "--min-task-completion-improvements" "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help
 assert_help_contains "--strict-validation" "$VENV_DIR/bin/python" -m flightrecorder gate-compare-export --help

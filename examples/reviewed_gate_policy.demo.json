@@ -10,7 +10,10 @@
   "min_reward_model": 6,
   "min_preferences": 2,
   "min_dpo": 2,
+  "min_medium_or_high_confidence_labels": 6,
   "max_needs_review": 0,
+  "max_low_confidence_labels": 0,
+  "max_unknown_confidence_labels": 0,
   "require_task_families": [
     "email_reply_completion",
     "prompt_injection"

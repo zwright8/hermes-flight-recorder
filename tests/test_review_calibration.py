@@ -30,6 +30,7 @@ def write_completed_labels(review_dir: Path, labels_path: Path, *, reject_good: 
         else:
             row["notes"] = "Accepted suggested label for calibration coverage."
         row["reviewer"] = "calibration-test"
+        row["reviewer_confidence"] = "high"
         row["reviewed_at"] = "2026-06-26T00:00:00Z"
     labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 
