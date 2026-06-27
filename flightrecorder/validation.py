@@ -29,6 +29,7 @@ from .review import (
     REVIEW_LABELS,
     REVIEW_MANIFEST_SCHEMA_VERSION,
     TRAINING_NEGATIVE_LABELS,
+    review_item_sha256,
     REVIEWED_DPO_SCHEMA_VERSION,
     REVIEWED_LABEL_SCHEMA_VERSION,
     REVIEWED_MANIFEST_SCHEMA_VERSION,
@@ -407,6 +408,12 @@ def validate_review_export(path: str | Path) -> ValidationTarget:
         target.warnings.append("REVIEW_INSTRUCTIONS.md is missing; review workflow is less self-documenting.")
     if manifest is not None:
         _validate_review_manifest(manifest, target, items, labels)
+        _validate_manifest_artifact_fingerprints(
+            manifest.get("artifact_fingerprints"),
+            target,
+            "manifest.artifact_fingerprints",
+            _review_export_artifact_paths(export_dir),
+        )
     _validate_review_items(items, target)
     _validate_review_labels(labels, target, items)
     target.details.update({"item_count": len(items), "label_count": len(labels)})
@@ -432,6 +439,12 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
     dpo = _read_jsonl_objects(export_dir / "reviewed_dpo.jsonl", target, "reviewed_dpo.jsonl")
     if manifest is not None:
         _validate_reviewed_manifest(manifest, target, labels, sft, reward_model, preferences, dpo)
+        _validate_manifest_artifact_fingerprints(
+            manifest.get("artifact_fingerprints"),
+            target,
+            "manifest.artifact_fingerprints",
+            _reviewed_export_artifact_paths(export_dir),
+        )
     _validate_reviewed_labels(labels, target)
     _validate_reviewed_sft(sft, target, labels)
     _validate_reviewed_reward_model(reward_model, target, labels)
@@ -1355,6 +1368,24 @@ def _compare_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
     }
 
 
+def _review_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
+    return {
+        "instructions": export_dir / "REVIEW_INSTRUCTIONS.md",
+        "label_template": export_dir / "label_template.jsonl",
+        "review_items": export_dir / "review_items.jsonl",
+    }
+
+
+def _reviewed_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
+    return {
+        "reviewed_dpo": export_dir / "reviewed_dpo.jsonl",
+        "reviewed_labels": export_dir / "reviewed_labels.jsonl",
+        "reviewed_preferences": export_dir / "reviewed_preferences.jsonl",
+        "reviewed_reward_model": export_dir / "reviewed_reward_model.jsonl",
+        "reviewed_sft": export_dir / "reviewed_sft.jsonl",
+    }
+
+
 def _validate_compare_pairs(pairs: list[dict[str, Any]], target: ValidationTarget) -> None:
     seen: set[str] = set()
     for index, pair in enumerate(pairs):
@@ -1654,6 +1685,11 @@ def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget
         if item_id in seen:
             target.errors.append(f"review_items[{index}].review_item_id duplicates {item_id!r}.")
         seen.add(item_id)
+        item_hash = item.get("review_item_sha256")
+        if not _is_sha256(item_hash):
+            target.errors.append(f"review_items[{index}].review_item_sha256 must be a SHA-256 hex string.")
+        elif item_hash != review_item_sha256(item):
+            target.errors.append(f"review_items[{index}].review_item_sha256 does not match review item contents.")
         for field_name in ("episode_id", "scenario_id", "scenario_title", "task_family", "prompt", "final_answer", "suggested_human_label"):
             if not isinstance(item.get(field_name), str):
                 target.errors.append(f"review_items[{index}].{field_name} must be a string.")
@@ -1691,7 +1727,12 @@ def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget
 
 
 def _validate_review_labels(labels: list[dict[str, Any]], target: ValidationTarget, items: list[dict[str, Any]]) -> None:
-    item_ids = {item.get("review_item_id") for item in items if isinstance(item.get("review_item_id"), str)}
+    item_by_id = {
+        item.get("review_item_id"): item
+        for item in items
+        if isinstance(item.get("review_item_id"), str)
+    }
+    item_ids = set(item_by_id)
     seen: set[str] = set()
     for index, label in enumerate(labels):
         _require_equal(label, "schema_version", REVIEW_LABEL_SCHEMA_VERSION, target, prefix=f"label_template[{index}].")
@@ -1704,6 +1745,18 @@ def _validate_review_labels(labels: list[dict[str, Any]], target: ValidationTarg
         seen.add(item_id)
         if item_id not in item_ids:
             target.errors.append(f"label_template[{index}].review_item_id does not reference a review item.")
+            item = None
+        else:
+            item = item_by_id[item_id]
+        label_hash = label.get("review_item_sha256")
+        if not _is_sha256(label_hash):
+            target.errors.append(f"label_template[{index}].review_item_sha256 must be a SHA-256 hex string.")
+        elif item is not None and label_hash != review_item_sha256(item):
+            target.errors.append(f"label_template[{index}].review_item_sha256 does not match referenced review item.")
+        if item is not None:
+            for field_name in ("episode_id", "scenario_id", "suggested_human_label"):
+                if label.get(field_name) != item.get(field_name):
+                    target.errors.append(f"label_template[{index}].{field_name} does not match referenced review item.")
         suggested = label.get("suggested_human_label")
         if suggested not in REVIEW_LABELS:
             target.errors.append(f"label_template[{index}].suggested_human_label must be one of {list(REVIEW_LABELS)!r}.")
@@ -1780,6 +1833,10 @@ def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTa
         for field_name in ("episode_id", "scenario_id", "task_family", "prompt", "response", "human_label", "source_label_file"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_labels[{index}].{field_name} must be a string.")
+        if not _is_sha256(row.get("review_item_sha256")):
+            target.errors.append(f"reviewed_labels[{index}].review_item_sha256 must be a SHA-256 hex string.")
+        if not _is_sha256(row.get("source_label_sha256")):
+            target.errors.append(f"reviewed_labels[{index}].source_label_sha256 must be a SHA-256 hex string.")
         if row.get("human_label") not in REVIEW_LABELS:
             target.errors.append(f"reviewed_labels[{index}].human_label must be one of {list(REVIEW_LABELS)!r}.")
         if row.get("suggested_human_label") is not None and row.get("suggested_human_label") not in REVIEW_LABELS:
@@ -1805,6 +1862,8 @@ def _validate_reviewed_sft(sft: list[dict[str, Any]], target: ValidationTarget, 
         item = _reviewed_source_label(row, label_map, target, f"reviewed_sft[{index}]")
         if item is not None and item.get("human_label") != "accept":
             target.errors.append(f"reviewed_sft[{index}] must reference a reviewed label with human_label 'accept'.")
+        if item is not None:
+            _validate_review_item_hash_link(row, item, target, f"reviewed_sft[{index}]")
         for field_name in ("prompt", "response", "source_artifact"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_sft[{index}].{field_name} must be a string.")
@@ -1819,6 +1878,8 @@ def _validate_reviewed_reward_model(rows: list[dict[str, Any]], target: Validati
         item = _reviewed_source_label(row, label_map, target, f"reviewed_reward_model[{index}]")
         if item is not None and item.get("human_label") == "needs_review":
             target.errors.append(f"reviewed_reward_model[{index}] must not reference a needs_review label.")
+        if item is not None:
+            _validate_review_item_hash_link(row, item, target, f"reviewed_reward_model[{index}]")
         for field_name in ("prompt", "response", "human_label", "source_artifact"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_reward_model[{index}].{field_name} must be a string.")
@@ -1848,20 +1909,36 @@ def _validate_reviewed_preferences(preferences: list[dict[str, Any]], target: Va
             target.errors.append(f"reviewed_preferences[{index}].chosen_episode_id does not reference a reviewed label.")
         elif chosen.get("human_label") != "accept":
             target.errors.append(f"reviewed_preferences[{index}].chosen_episode_id must reference an accepted label.")
+        else:
+            _validate_pref_side_hash(row, chosen, "chosen", target, f"reviewed_preferences[{index}]")
         if rejected is None:
             target.errors.append(f"reviewed_preferences[{index}].rejected_episode_id does not reference a reviewed label.")
         elif rejected.get("human_label") not in {"reject", "unsafe", "incomplete"}:
             target.errors.append(f"reviewed_preferences[{index}].rejected_episode_id must reference a rejected/unsafe/incomplete label.")
+        else:
+            _validate_pref_side_hash(row, rejected, "rejected", target, f"reviewed_preferences[{index}]")
         if row.get("source_artifact") != "reviewed_labels.jsonl":
             target.errors.append(f"reviewed_preferences[{index}].source_artifact must be 'reviewed_labels.jsonl'.")
 
 
 def _validate_reviewed_dpo(dpo: list[dict[str, Any]], target: ValidationTarget, preferences: list[dict[str, Any]]) -> None:
-    preference_ids = {row.get("preference_id") for row in preferences if isinstance(row.get("preference_id"), str)}
+    preference_by_id = {
+        row.get("preference_id"): row
+        for row in preferences
+        if isinstance(row.get("preference_id"), str)
+    }
     for index, row in enumerate(dpo):
         _require_equal(row, "schema_version", REVIEWED_DPO_SCHEMA_VERSION, target, prefix=f"reviewed_dpo[{index}].")
-        if row.get("preference_id") not in preference_ids:
+        preference = preference_by_id.get(row.get("preference_id"))
+        if preference is None:
             target.errors.append(f"reviewed_dpo[{index}].preference_id does not reference a reviewed preference.")
+        for side in ("chosen", "rejected"):
+            field_name = f"{side}_review_item_sha256"
+            if not _is_sha256(row.get(field_name)):
+                target.errors.append(f"reviewed_dpo[{index}].{field_name} must be a SHA-256 hex string.")
+            elif preference is not None:
+                if row.get(field_name) != preference.get(field_name):
+                    target.errors.append(f"reviewed_dpo[{index}].{field_name} does not match reviewed preference.")
         for field_name in ("prompt", "chosen", "rejected", "source_artifact"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"reviewed_dpo[{index}].{field_name} must be a string.")
@@ -1883,6 +1960,39 @@ def _reviewed_source_label(
     if item is None:
         target.errors.append(f"{label}.review_item_id does not reference a reviewed label.")
     return item
+
+
+def _validate_review_item_hash_link(
+    row: dict[str, Any],
+    item: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if not _is_sha256(row.get("review_item_sha256")):
+        target.errors.append(f"{label}.review_item_sha256 must be a SHA-256 hex string.")
+    elif row.get("review_item_sha256") != item.get("review_item_sha256"):
+        target.errors.append(f"{label}.review_item_sha256 does not match reviewed label.")
+
+
+def _validate_pref_side_hash(
+    row: dict[str, Any],
+    item: dict[str, Any],
+    side: str,
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    field_name = f"{side}_review_item_sha256"
+    if not _is_sha256(row.get(field_name)):
+        target.errors.append(f"{label}.{field_name} must be a SHA-256 hex string.")
+    elif row.get(field_name) != item.get("review_item_sha256"):
+        target.errors.append(f"{label}.{field_name} does not match reviewed label.")
+    nested = row.get(side)
+    if isinstance(nested, dict):
+        nested_hash = nested.get("review_item_sha256")
+        if not _is_sha256(nested_hash):
+            target.errors.append(f"{label}.{side}.review_item_sha256 must be a SHA-256 hex string.")
+        elif nested_hash != item.get("review_item_sha256"):
+            target.errors.append(f"{label}.{side}.review_item_sha256 does not match reviewed label.")
 
 
 def _reviewed_label_map(labels: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

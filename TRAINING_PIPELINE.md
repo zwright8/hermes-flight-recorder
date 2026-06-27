@@ -291,6 +291,12 @@ flightrecorder validate \
 report path, and lineage pointer for each run. `label_template.jsonl` is an
 editable starting point for human labels such as `accept`, `reject`,
 `needs_review`, `unsafe`, and `incomplete`.
+Every review item and label template row carries `review_item_sha256`, a stable
+content fingerprint over the exact review item. `apply-review` refuses
+completed labels when that fingerprint no longer matches the current review
+queue, so a stale or swapped review item cannot silently become training data.
+Review and reviewed manifests also fingerprint their generated JSONL/Markdown
+artifacts, and `flightrecorder validate --strict` recomputes those hashes.
 
 After review, apply the completed labels:
 
@@ -319,6 +325,9 @@ The reviewed export writes `reviewed_labels.jsonl`, `reviewed_sft.jsonl`,
 `reviewed_reward_model.jsonl`, `reviewed_preferences.jsonl`,
 `reviewed_dpo.jsonl`, and a manifest. Labels marked `needs_review` remain in
 `reviewed_labels.jsonl` but are excluded from trainer-ready views.
+Trainer-ready reviewed rows preserve the originating `review_item_sha256`, so
+SFT, reward-model, preference, and DPO consumers can trace each row back to the
+review evidence that authorized it.
 
 `gate-reviewed` is the CI handoff for human-curated training signal. Use it to
 require completed labels, enough accepted and negative examples, reviewed

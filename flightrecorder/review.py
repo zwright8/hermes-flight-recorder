@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -49,6 +50,8 @@ def export_review_queue(
 
     target.mkdir(parents=True, exist_ok=True)
     items = [_review_item(record, preserve_paths) for record in records]
+    for item in items:
+        item["review_item_sha256"] = review_item_sha256(item)
     labels = [_label_template(item) for item in items]
     paths = {
         "review_items": target / "review_items.jsonl",
@@ -78,6 +81,7 @@ def export_review_queue(
         ],
     }
     _write_text(paths["instructions"], _instructions(manifest))
+    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest"})
     _write_json(paths["manifest"], manifest)
     return manifest
 
@@ -96,6 +100,8 @@ def apply_review_labels(
     source = Path(review_export_dir)
     target = Path(out_dir)
     label_file = Path(labels_path) if labels_path is not None else source / "label_template.jsonl"
+    _require_regular_file(source / "review_items.jsonl", "review_items.jsonl")
+    _require_regular_file(label_file, "review labels")
     items = _review_items_by_id(source / "review_items.jsonl")
     labels = _read_jsonl(label_file, "review labels")
     reviewed_labels = _reviewed_labels(items, labels, label_file, preserve_paths)
@@ -136,14 +142,26 @@ def apply_review_labels(
         "label_counts": _label_counts(reviewed_labels),
         "task_families": sorted({str(row["task_family"]) for row in reviewed_labels}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
+        "source_review_artifacts": _artifact_fingerprints(
+            {
+                "review_items": source / "review_items.jsonl",
+                "label_template": source / "label_template.jsonl",
+                "review_manifest": source / "manifest.json",
+            },
+            preserve_paths,
+            exclude=set(),
+        ),
+        "labels_artifact": _file_fingerprint(label_file, preserve_paths),
         "notes": [
             "Reviewed exports are derived from review_items.jsonl plus completed human labels.",
+            "Completed labels are bound to review_item_sha256 so stale labels cannot silently attach to changed review items.",
             "Rows with human_label='needs_review' are kept in reviewed_labels.jsonl but excluded from trainer-ready views.",
             "Reviewed SFT rows include only human_label='accept'.",
             "Reviewed reward-model rows include accept/reject/unsafe/incomplete labels.",
             "Reviewed preferences pair accepted rows against rejected/unsafe/incomplete rows in the same task family.",
         ],
     }
+    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest"})
     _write_json(paths["manifest"], manifest)
     return manifest
 
@@ -199,6 +217,7 @@ def _label_template(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": REVIEW_LABEL_SCHEMA_VERSION,
         "review_item_id": item["review_item_id"],
+        "review_item_sha256": item["review_item_sha256"],
         "episode_id": item["episode_id"],
         "scenario_id": item["scenario_id"],
         "suggested_human_label": item["suggested_human_label"],
@@ -243,6 +262,17 @@ def _reviewed_labels(
         item = items.get(item_id)
         if item is None:
             raise ReviewExportError(f"label row {index + 1} references missing review item {item_id!r}")
+        expected_hash = review_item_sha256(item)
+        label_hash = label.get("review_item_sha256")
+        if not isinstance(label_hash, str) or not label_hash:
+            raise ReviewExportError(f"label row {index + 1} missing review_item_sha256; rerun export-review before labeling")
+        if label_hash != expected_hash:
+            raise ReviewExportError(
+                f"label row {index + 1} review_item_sha256 does not match current review item {item_id!r}"
+            )
+        for field_name in ("episode_id", "scenario_id", "suggested_human_label"):
+            if label.get(field_name) != item.get(field_name):
+                raise ReviewExportError(f"label row {index + 1} {field_name} does not match review item {item_id!r}")
         human_label = label.get("human_label")
         if human_label is None:
             continue
@@ -270,6 +300,7 @@ def _reviewed_label_row(
     return {
         "schema_version": REVIEWED_LABEL_SCHEMA_VERSION,
         "review_item_id": item["review_item_id"],
+        "review_item_sha256": review_item_sha256(item),
         "episode_id": item.get("episode_id"),
         "scenario_id": item.get("scenario_id"),
         "scenario_title": item.get("scenario_title"),
@@ -287,6 +318,7 @@ def _reviewed_label_row(
         "accepted_evidence_refs": label.get("accepted_evidence_refs", []),
         "rejected_evidence_refs": label.get("rejected_evidence_refs", []),
         "source_label_file": _display_path(labels_path, preserve_paths),
+        "source_label_sha256": _canonical_sha256(label),
         "source_artifacts": item.get("source_artifacts", {}),
         "scorecard": {
             "passed": bool(scorecard.get("passed")),
@@ -303,6 +335,7 @@ def _reviewed_sft(reviewed_labels: list[dict[str, Any]]) -> list[dict[str, Any]]
         {
             "schema_version": REVIEWED_SFT_SCHEMA_VERSION,
             "review_item_id": row["review_item_id"],
+            "review_item_sha256": row["review_item_sha256"],
             "episode_id": row["episode_id"],
             "scenario_id": row["scenario_id"],
             "task_family": row["task_family"],
@@ -326,6 +359,7 @@ def _reviewed_reward_model(reviewed_labels: list[dict[str, Any]]) -> list[dict[s
             {
                 "schema_version": REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
                 "review_item_id": row["review_item_id"],
+                "review_item_sha256": row["review_item_sha256"],
                 "episode_id": row["episode_id"],
                 "scenario_id": row["scenario_id"],
                 "task_family": row["task_family"],
@@ -374,6 +408,8 @@ def _reviewed_preference(family: str, chosen: dict[str, Any], rejected: dict[str
         "prompt": chosen.get("prompt") or rejected.get("prompt") or "",
         "chosen_episode_id": chosen["episode_id"],
         "rejected_episode_id": rejected["episode_id"],
+        "chosen_review_item_sha256": chosen["review_item_sha256"],
+        "rejected_review_item_sha256": rejected["review_item_sha256"],
         "chosen_label": chosen["human_label"],
         "rejected_label": rejected["human_label"],
         "chosen_score": chosen["score"],
@@ -382,6 +418,7 @@ def _reviewed_preference(family: str, chosen: dict[str, Any], rejected: dict[str
         "chosen": {
             "episode_id": chosen["episode_id"],
             "scenario_id": chosen["scenario_id"],
+            "review_item_sha256": chosen["review_item_sha256"],
             "response": chosen["response"],
             "score": chosen["score"],
             "human_label": chosen["human_label"],
@@ -389,6 +426,7 @@ def _reviewed_preference(family: str, chosen: dict[str, Any], rejected: dict[str
         "rejected": {
             "episode_id": rejected["episode_id"],
             "scenario_id": rejected["scenario_id"],
+            "review_item_sha256": rejected["review_item_sha256"],
             "response": rejected["response"],
             "score": rejected["score"],
             "human_label": rejected["human_label"],
@@ -408,6 +446,8 @@ def _reviewed_dpo(preferences: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "rejected": preference["rejected"]["response"],
             "chosen_episode_id": preference["chosen_episode_id"],
             "rejected_episode_id": preference["rejected_episode_id"],
+            "chosen_review_item_sha256": preference["chosen_review_item_sha256"],
+            "rejected_review_item_sha256": preference["rejected_review_item_sha256"],
             "reason": preference["reason"],
             "source_artifact": "reviewed_preferences.jsonl",
         }
@@ -550,6 +590,27 @@ def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
     return rows
 
 
+def review_item_sha256(item: dict[str, Any]) -> str:
+    """Return the stable content fingerprint for a review item."""
+    payload = dict(item)
+    payload.pop("review_item_sha256", None)
+    return _canonical_sha256(payload)
+
+
+def _canonical_sha256(value: Any) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _require_regular_file(path: Path, label: str) -> None:
+    if not path.exists():
+        raise ReviewExportError(f"{label} not found: {path}")
+    if path.is_symlink():
+        raise ReviewExportError(f"{label} must be a regular file, not a symlink: {path}")
+    if not path.is_file():
+        raise ReviewExportError(f"{label} must be a file: {path}")
+
+
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
@@ -558,6 +619,38 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 def _write_text(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(value, encoding="utf-8")
+
+
+def _artifact_fingerprints(paths: dict[str, Path], preserve_paths: bool, *, exclude: set[str]) -> dict[str, Any]:
+    fingerprints: dict[str, Any] = {}
+    for name, path in sorted(paths.items()):
+        if name in exclude:
+            continue
+        fingerprints[name] = _file_fingerprint(path, preserve_paths)
+    return fingerprints
+
+
+def _file_fingerprint(path: Path, preserve_paths: bool) -> dict[str, Any]:
+    regular_file = path.exists() and path.is_file() and not path.is_symlink()
+    record: dict[str, Any] = {
+        "path": _display_path(path, preserve_paths),
+        "exists": path.exists(),
+        "regular_file": regular_file,
+        "symlink": path.is_symlink(),
+    }
+    if regular_file:
+        stat = path.stat()
+        record["size_bytes"] = stat.st_size
+        record["sha256"] = _sha256_file(path)
+    return record
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _display_path(path: Path, preserve_paths: bool = False) -> str:

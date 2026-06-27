@@ -422,11 +422,18 @@ A compare policy can scope thresholds to a derived task family:
 human-curation queue:
 
 - `review_items.jsonl`: one review item per run with scorecard summary, task
-  evidence, source report, and lineage pointers.
+  evidence, source report, lineage pointers, and a `review_item_sha256`
+  content fingerprint.
 - `label_template.jsonl`: editable label rows with `human_label`, reviewer,
-  notes, and accepted/rejected evidence-ref fields.
+  notes, accepted/rejected evidence-ref fields, and the matching
+  `review_item_sha256`.
 - `REVIEW_INSTRUCTIONS.md`: short reviewer guidance.
-- `manifest.json`: review export counts, label options, and output paths.
+- `manifest.json`: review export counts, label options, output paths, and
+  artifact fingerprints.
+
+`apply-review` refuses completed labels whose `review_item_sha256` no longer
+matches the current review item. This keeps human labels attached to the exact
+evidence the reviewer saw instead of only to a mutable row id.
 
 After reviewers fill a labels JSONL file, `flightrecorder apply-review` converts
 completed human labels into reviewed training views:
@@ -436,7 +443,8 @@ completed human labels into reviewed training views:
 - `reviewed_reward_model.jsonl`: human-labeled prompt/response reward rows.
 - `reviewed_preferences.jsonl`: accepted-vs-rejected pairs inside task families.
 - `reviewed_dpo.jsonl`: DPO-shaped rows derived from reviewed preferences.
-- `manifest.json`: reviewed export counts and provenance.
+- `manifest.json`: reviewed export counts, provenance, and artifact
+  fingerprints.
 
 Use `flightrecorder gate-reviewed` after `apply-review` when CI should block
 trainer jobs until human-reviewed labels meet policy. It reads
