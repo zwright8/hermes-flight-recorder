@@ -23,6 +23,32 @@ def run_cli_output(args):
     return code, output.getvalue()
 
 
+def read_jsonl(path: Path):
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def write_completed_labels(review_dir: Path, labels_path: Path) -> None:
+    rows = read_jsonl(review_dir / "label_template.jsonl")
+    for row in rows:
+        row["human_label"] = row["suggested_human_label"]
+        row["reviewer"] = "trainer-preflight-test"
+        row["reviewed_at"] = "2026-06-26T00:00:00Z"
+        row["notes"] = "Accepted suggested label for trainer-preflight coverage."
+    labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
+def make_reviewed_export(root: Path) -> Path:
+    runs = root / "runs"
+    review = root / "review"
+    labels = root / "completed_labels.jsonl"
+    reviewed = root / "reviewed"
+    run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)])
+    run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+    write_completed_labels(review, labels)
+    run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels), "--out", str(reviewed)])
+    return reviewed
+
+
 class TrainerPreflightTests(unittest.TestCase):
     def test_trainer_preflight_accepts_passed_training_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,6 +207,97 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(code, 1)
             result = json.loads(preflight.read_text(encoding="utf-8"))
             self.assertIn("gate_validation_passed", {check["id"] for check in result["checks"] if not check["passed"]})
+
+    def test_trainer_preflight_blocks_unvalidated_reviewed_gate_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(root)
+            gate = root / "reviewed_gate.json"
+            preflight = root / "trainer_preflight.json"
+            self.assertEqual(
+                run_cli(["gate-reviewed", "--reviewed-export", str(reviewed), "--skip-validation", "--out", str(gate)]),
+                0,
+            )
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertIn("gate_validation_passed", {check["id"] for check in result["checks"] if not check["passed"]})
+
+    def test_trainer_preflight_blocks_unvalidated_review_calibration_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(root)
+            calibration = root / "review_calibration.json"
+            preflight = root / "trainer_preflight.json"
+            self.assertEqual(
+                run_cli(["review-calibration", "--reviewed-export", str(reviewed), "--skip-validation", "--out", str(calibration)]),
+                0,
+            )
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(calibration),
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertIn("gate_validation_passed", {check["id"] for check in result["checks"] if not check["passed"]})
+
+    def test_trainer_preflight_accepts_validated_reviewed_gate_and_calibration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reviewed = make_reviewed_export(root)
+            gate = root / "reviewed_gate.json"
+            calibration = root / "review_calibration.json"
+            preflight = root / "trainer_preflight.json"
+            self.assertEqual(run_cli(["gate-reviewed", "--reviewed-export", str(reviewed), "--out", str(gate)]), 0)
+            self.assertEqual(run_cli(["review-calibration", "--reviewed-export", str(reviewed), "--out", str(calibration)]), 0)
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--gate",
+                    str(calibration),
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--require-gate",
+                    "reviewed_gate",
+                    "--require-gate",
+                    "review_calibration",
+                    "--trainer-command",
+                    "python train.py --dataset runs/reviewed_export",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertTrue(result["passed"])
+            self.assertEqual({gate["id"] for gate in result["gates"]}, {"reviewed_gate", "review_calibration"})
+            self.assertTrue(all(gate["validation"]["passed"] for gate in result["gates"]))
+            self.assertIn("reviewed_export_reviewed_labels_jsonl", result["artifacts"])
 
     def test_trainer_preflight_blocks_symlinked_training_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:

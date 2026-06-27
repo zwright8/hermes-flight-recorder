@@ -39,7 +39,12 @@ _REVIEWED_EXPORT_FILES = (
     "reviewed_preferences.jsonl",
     "reviewed_dpo.jsonl",
 )
-_VALIDATION_REQUIRED_GATE_SCHEMAS = {"hfr.training_gate.v1", "hfr.compare_gate.v1"}
+_VALIDATION_REQUIRED_GATE_SCHEMAS = {
+    "hfr.training_gate.v1",
+    "hfr.compare_gate.v1",
+    "hfr.reviewed_gate.v1",
+    "hfr.review_calibration.v1",
+}
 
 
 class TrainerPreflightError(ValueError):

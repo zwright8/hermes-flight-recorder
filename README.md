@@ -858,7 +858,8 @@ Use `flightrecorder trainer-preflight` as the final launch guard before an
 external SFT, DPO, reward-model, or RL job starts. It does not execute the
 trainer. It records the trainer command, fingerprints the trainer-facing
 exports, verifies required gates are present and passed, and blocks launch when
-training or comparison gates skipped embedded export validation:
+training, comparison, reviewed, or calibration handoffs skipped embedded export
+validation:
 
 ```bash
 flightrecorder trainer-preflight \

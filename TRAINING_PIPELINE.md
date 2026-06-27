@@ -197,8 +197,8 @@ use `--preserve-paths` only for private local debugging.
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the
 trainer-facing export files, verifies required gates are present and passed, and
-refuses training/compare gates that skipped embedded export validation unless
-`--allow-unvalidated-gates` is explicitly set:
+refuses training, compare, reviewed, or review-calibration handoffs that skipped
+embedded export validation unless `--allow-unvalidated-gates` is explicitly set:
 
 ```bash
 flightrecorder trainer-preflight \
@@ -684,7 +684,8 @@ After `gate-export` and any comparison or reviewed gates pass, run
 `trainer-preflight`, then have the external launcher run `trainer-launch-check`
 and require `recommendation: launch_allowed` before invoking a trainer. This
 closes the handoff loop: the trainer consumes only exports that are tied to
-passed gates, current artifact hashes, and regular-file export artifacts.
+passed gates, reviewed/calibration validation when applicable, current artifact
+hashes, and regular-file export artifacts.
 
 Use `gate-reviewed` when downstream jobs should consume human-reviewed exports
 instead of deterministic labels:
