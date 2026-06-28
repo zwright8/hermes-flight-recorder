@@ -4,6 +4,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
+if [[ -z "${PYTHON:-}" ]]; then
+  if command -v python >/dev/null 2>&1; then
+    PYTHON=python
+  elif command -v python3.11 >/dev/null 2>&1; then
+    PYTHON=python3.11
+  else
+    PYTHON=python3
+  fi
+fi
+export PYTHON
+
 cleanup_local_artifacts() {
   find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
   rm -rf hermes_flight_recorder.egg-info build dist
@@ -18,14 +29,14 @@ assert_help_contains() {
   grep -F -q -- "$expected" <<<"$output"
 }
 
-python -m unittest discover
-python -m compileall -q flightrecorder scripts tests
-python scripts/live_hermes_smoke.py --help >/dev/null
-assert_help_contains "--evidence-handoff" python -m flightrecorder run-suite --help
-python -m flightrecorder schemas --help >/dev/null
-python -m flightrecorder schemas --name trace >/dev/null
+"$PYTHON" -m unittest discover
+"$PYTHON" -m compileall -q flightrecorder scripts tests
+"$PYTHON" scripts/live_hermes_smoke.py --help >/dev/null
+assert_help_contains "--evidence-handoff" "$PYTHON" -m flightrecorder run-suite --help
+"$PYTHON" -m flightrecorder schemas --help >/dev/null
+"$PYTHON" -m flightrecorder schemas --name trace >/dev/null
 rm -rf schema_contracts_check
-python -m flightrecorder schemas --write-dir schema_contracts_check >/dev/null
+"$PYTHON" -m flightrecorder schemas --write-dir schema_contracts_check >/dev/null
 test -f schema_contracts_check/manifest.json
 test -f schema_contracts_check/trace.v1.schema.json
 test -f schema_contracts_check/improvement_ledger_gate.v1.schema.json
@@ -35,65 +46,65 @@ test -f schema_contracts_check/trainer_archive.v1.schema.json
 test -f schema_contracts_check/trainer_archive_check.v1.schema.json
 test -f schema_contracts_check/trainer_consumer_plan.v1.schema.json
 test -f schema_contracts_check/trainer_wrapper_dry_run.v1.schema.json
-python -m flightrecorder schemas \
+"$PYTHON" -m flightrecorder schemas \
   --check scenarios/prompt_injection_good.json \
   --name scenario >/dev/null
-python -m flightrecorder schemas \
+"$PYTHON" -m flightrecorder schemas \
   --check scenarios/email_reply_completion_good.json \
   --name scenario >/dev/null
 rm -rf schema_contracts_check
-python -m flightrecorder repair-queue --help >/dev/null
-python -m flightrecorder improvement-plan --help >/dev/null
-python -m flightrecorder improvement-ledger --help >/dev/null
-python -m flightrecorder gate-improvement-ledger --help >/dev/null
+"$PYTHON" -m flightrecorder repair-queue --help >/dev/null
+"$PYTHON" -m flightrecorder improvement-plan --help >/dev/null
+"$PYTHON" -m flightrecorder improvement-ledger --help >/dev/null
+"$PYTHON" -m flightrecorder gate-improvement-ledger --help >/dev/null
 ./demo.sh
 grep -F -q "Evidence Artifacts" runs/index.html
 grep -F -q "Improvement Ledger Gate" runs/index.html
 grep -F -q "improvement_ledger_gate.json" runs/index.html
-python -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
-python -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
-python -m flightrecorder schemas --check runs/prompt_injection_good/task_completion.json >/dev/null
-python -m flightrecorder schemas --check runs/prompt_injection_good/run_digest.json >/dev/null
-python -m flightrecorder schemas --check runs/email_reply_completion_good/task_completion.json >/dev/null
-python -m flightrecorder schemas --check runs/email_reply_completion_good/state_diff.json >/dev/null
-python -m flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json >/dev/null
-python -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
-python -m flightrecorder schemas --check runs/improvement_plan.json >/dev/null
-python -m flightrecorder schemas --check runs/improvement_ledger.json >/dev/null
-python -m flightrecorder schemas --check runs/improvement_ledger_gate.json >/dev/null
-python -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
-python -m flightrecorder schemas --check runs/training_export/dataset_metrics.json >/dev/null
-python -m flightrecorder schemas --check runs/training_export/curriculum.json >/dev/null
-python -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/episodes.jsonl >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/rewards.jsonl --name rl_reward >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/step_rewards.jsonl --name rl_step_reward >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/preferences.jsonl --name rl_preference >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/failure_modes.jsonl --name rl_failure_mode >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/sft.jsonl --name rl_sft >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/dpo.jsonl --name rl_dpo >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/training_export/reward_model.jsonl --name rl_reward_model >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/prompt_injection_good/scorecard.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/prompt_injection_good/task_completion.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/prompt_injection_good/run_digest.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/email_reply_completion_good/task_completion.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/email_reply_completion_good/state_diff.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/evidence_bundle.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/improvement_plan.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/improvement_ledger.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/improvement_ledger_gate.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/training_export/manifest.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/training_export/dataset_metrics.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/training_export/curriculum.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/training_export/dataset_splits.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/episodes.jsonl >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/rewards.jsonl --name rl_reward >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/step_rewards.jsonl --name rl_step_reward >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/preferences.jsonl --name rl_preference >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/failure_modes.jsonl --name rl_failure_mode >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/sft.jsonl --name rl_sft >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/dpo.jsonl --name rl_dpo >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/training_export/reward_model.jsonl --name rl_reward_model >/dev/null
 rm -rf replay_runs
-python -m flightrecorder replay-bundle \
+"$PYTHON" -m flightrecorder replay-bundle \
   --lineage runs/prompt_injection_good/artifact_lineage.json \
   --out replay_runs/prompt_injection_good_bundle >/dev/null
 mv replay_runs/prompt_injection_good_bundle replay_runs/moved_prompt_injection_good_bundle
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --replay-bundle replay_runs/moved_prompt_injection_good_bundle \
   --strict >/dev/null
-python -m flightrecorder replay \
+"$PYTHON" -m flightrecorder replay \
   --lineage replay_runs/moved_prompt_injection_good_bundle/artifact_lineage.json \
   --out replay_runs/prompt_injection_good_replay >/dev/null
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --run replay_runs/prompt_injection_good_replay \
   --strict >/dev/null
-python -m flightrecorder check-scenarios \
+"$PYTHON" -m flightrecorder check-scenarios \
   --scenarios scenarios \
   --require-traces \
   --strict \
   --out runs/scenario_check.json >/dev/null
 test -f runs/scenario_check.json
-python -m flightrecorder scenario-quality \
+"$PYTHON" -m flightrecorder scenario-quality \
   --scenarios scenarios \
   --require-traces \
   --out runs/scenario_quality_check.json \
@@ -104,7 +115,7 @@ python -m flightrecorder scenario-quality \
   --max-final-only-scenarios 0 \
   --max-missing-traces 0 >/dev/null
 test -f runs/scenario_quality_check.json
-python -m flightrecorder trace-observability \
+"$PYTHON" -m flightrecorder trace-observability \
   --runs runs \
   --out runs/trace_observability_check.json \
   --min-average-events 2 \
@@ -113,7 +124,7 @@ python -m flightrecorder trace-observability \
   --max-empty-final-answers 0 \
   --require-event-type assistant_message >/dev/null
 test -f runs/trace_observability_check.json
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --scenario-quality runs/scenario_quality.json \
   --scenario-quality runs/scenario_quality_check.json \
   --evidence-bundle runs/evidence_bundle.json \
@@ -121,60 +132,60 @@ python -m flightrecorder validate \
   --trace-observability runs/trace_observability.json \
   --trace-observability runs/trace_observability_check.json \
   --strict >/dev/null
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --improvement-plan runs/improvement_plan.json \
   --improvement-ledger runs/improvement_ledger.json \
   --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --strict >/dev/null
-if python -m flightrecorder gate-improvement-ledger \
+if "$PYTHON" -m flightrecorder gate-improvement-ledger \
   --improvement-ledger runs/improvement_ledger.json \
   --max-recurring-work-items 0 >/dev/null; then
   echo "gate-improvement-ledger did not fail a too-strict recurring work-item threshold" >&2
   exit 1
 fi
-if python -m flightrecorder scenario-quality \
+if "$PYTHON" -m flightrecorder scenario-quality \
   --scenarios scenarios \
   --require-traces \
   --min-scenario-score 90 >/dev/null; then
   echo "scenario-quality did not fail a too-high minimum scenario score" >&2
   exit 1
 fi
-if python -m flightrecorder trace-observability \
+if "$PYTHON" -m flightrecorder trace-observability \
   --runs runs \
   --min-average-events 999 >/dev/null; then
   echo "trace-observability did not fail a too-high average event threshold" >&2
   exit 1
 fi
-python -m flightrecorder draft-scenario \
+"$PYTHON" -m flightrecorder draft-scenario \
   --trace fixtures/email_reply_completion_good.observer.jsonl \
   --id draft_email_reply \
   --title "Draft Email Reply" \
   --prompt "Reply to email-123." \
   --out runs/draft_email_reply.scenario.json >/dev/null
-python -m flightrecorder run \
+"$PYTHON" -m flightrecorder run \
   --scenario runs/draft_email_reply.scenario.json \
   --out runs/draft_email_reply \
   --fail-on-score >/dev/null
-python -m flightrecorder capture-state \
+"$PYTHON" -m flightrecorder capture-state \
   --file task_completion=runs/email_reply_completion_good/task_completion.json \
   --json task_completion=runs/email_reply_completion_good/task_completion.json \
   --set gmail.threads.email-123.sent_replies.0.status=sent \
   --set gmail.threads.email-123.sent_replies.0.message_id=msg-email-123-001 \
   --out runs/captured_state.json >/dev/null
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --state-snapshot runs/captured_state.json \
   --strict >/dev/null
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --state-diff runs/email_reply_completion_good/state_diff.json \
   --strict >/dev/null
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --run-digest runs/email_reply_completion_good/run_digest.json \
   --strict >/dev/null
-python -m flightrecorder digest \
+"$PYTHON" -m flightrecorder digest \
   --run runs/email_reply_completion_good \
   --out runs/email_reply_completion_good/regenerated_run_digest.json \
   --markdown-out runs/email_reply_completion_good/run_digest.md >/dev/null
-python -m flightrecorder report \
+"$PYTHON" -m flightrecorder report \
   --scenario scenarios/email_reply_completion_good.json \
   --trace runs/email_reply_completion_good/normalized_trace.json \
   --score runs/email_reply_completion_good/scorecard.json \
@@ -213,7 +224,7 @@ test -f runs/improvement_plan.json
 test -f runs/improvement_ledger.json
 test -f runs/improvement_ledger_gate.json
 test -f runs/suite_summary.json
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -387,13 +398,13 @@ assert failed_rules["required_action_sequences"] == 2
 assert failed_rules["required_event_counts"] == 2
 assert failed_rules["required_state"] == 1
 PY
-python -m flightrecorder gate-suite \
+"$PYTHON" -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
   --policy examples/suite_gate_policy.demo.json \
   --out runs/suite_gate.json >/dev/null
 test -f runs/suite_gate.json
 test -f examples/suite_gate_policy.demo.json
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 import shutil
 from pathlib import Path
@@ -411,7 +422,7 @@ for score_path in (baseline / "scorecard.json", candidate / "scorecard.json"):
     scorecard["scenario_title"] = "Email Reply Completion"
     score_path.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
-python -m flightrecorder export-compare-rl \
+"$PYTHON" -m flightrecorder export-compare-rl \
   --baseline runs/compare_rl_baseline \
   --candidate runs/compare_rl_candidate \
   --out runs/compare_rl_export \
@@ -420,27 +431,27 @@ test -f runs/compare_rl_export/manifest.json
 test -f runs/compare_rl_export/improvement_pairs.jsonl
 test -f runs/compare_rl_export/improvement_dpo.jsonl
 test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
-python -m flightrecorder schemas --check runs/compare_rl_export/manifest.json >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/compare_rl_export/improvement_pairs.jsonl --name compare_rl_pair >/dev/null
-python -m flightrecorder schemas --check-jsonl runs/compare_rl_export/improvement_dpo.jsonl --name compare_rl_dpo >/dev/null
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder schemas --check runs/compare_rl_export/manifest.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/compare_rl_export/improvement_pairs.jsonl --name compare_rl_pair >/dev/null
+"$PYTHON" -m flightrecorder schemas --check-jsonl runs/compare_rl_export/improvement_dpo.jsonl --name compare_rl_dpo >/dev/null
+"$PYTHON" -m flightrecorder validate \
   --compare-export runs/compare_rl_export \
   --strict >/dev/null
-python -m flightrecorder gate-compare-export \
+"$PYTHON" -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --policy examples/compare_gate_policy.demo.json \
   --out runs/compare_gate.json >/dev/null
 test -f runs/compare_gate.json
 test -f examples/compare_gate_policy.demo.json
-python -m flightrecorder export-compare-rl \
+"$PYTHON" -m flightrecorder export-compare-rl \
   --baseline runs/compare_rl_candidate \
   --candidate runs/compare_rl_baseline \
   --out runs/compare_rl_regression_export >/dev/null
-python -m flightrecorder schemas --check runs/compare_rl_regression_export/manifest.json >/dev/null
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder schemas --check runs/compare_rl_regression_export/manifest.json >/dev/null
+"$PYTHON" -m flightrecorder validate \
   --compare-export runs/compare_rl_regression_export \
   --strict >/dev/null
-if python -m flightrecorder gate-compare-export \
+if "$PYTHON" -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_regression_export \
   --max-baseline-wins 0 \
   --max-task-completion-regressions 0 \
@@ -449,19 +460,19 @@ if python -m flightrecorder gate-compare-export \
   echo "gate-compare-export did not fail regression movement" >&2
   exit 1
 fi
-if python -m flightrecorder gate-compare-export \
+if "$PYTHON" -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --min-candidate-wins 999 >/dev/null; then
   echo "gate-compare-export did not fail a too-high candidate-win threshold" >&2
   exit 1
 fi
-if python -m flightrecorder gate-compare-export \
+if "$PYTHON" -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --min-task-completion-improvements 999 >/dev/null; then
   echo "gate-compare-export did not fail a too-high task-completion improvement threshold" >&2
   exit 1
 fi
-if python -m flightrecorder gate-compare-export \
+if "$PYTHON" -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --max-contract-drifts 0 >/dev/null; then
   echo "gate-compare-export did not fail a zero contract-drift threshold" >&2
@@ -469,7 +480,7 @@ if python -m flightrecorder gate-compare-export \
 fi
 rm -rf runs/compare_rl_export_integrity_probe
 cp -R runs/compare_rl_export runs/compare_rl_export_integrity_probe
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -478,12 +489,12 @@ manifest = json.loads(path.read_text(encoding="utf-8"))
 manifest["artifact_fingerprints"]["improvement_pairs"]["sha256"] = "0" * 64
 path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
-if python -m flightrecorder gate-compare-export \
+if "$PYTHON" -m flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export_integrity_probe >/dev/null; then
   echo "gate-compare-export did not fail a stale artifact fingerprint" >&2
   exit 1
 fi
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -574,7 +585,7 @@ assert any(
     for check in gate["checks"]
 )
 PY
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -587,13 +598,13 @@ scoped_checks = [
 assert scoped_checks
 assert gate["policy"]["effective"]["task_family_gates"]
 PY
-if python -m flightrecorder gate-suite \
+if "$PYTHON" -m flightrecorder gate-suite \
   --suite-summary runs/suite_summary.json \
   --forbid-critical-rule secret_exposure >/dev/null; then
   echo "gate-suite did not fail a forbidden critical rule" >&2
   exit 1
 fi
-if python -m flightrecorder evidence-coverage \
+if "$PYTHON" -m flightrecorder evidence-coverage \
   --runs runs \
   --min-event-evidence-refs 999 >/dev/null; then
   echo "evidence-coverage did not fail a too-high event-evidence threshold" >&2
@@ -615,7 +626,7 @@ test -f runs/training_export/splits/validation/episodes.jsonl
 test -f runs/training_export/splits/test/episodes.jsonl
 test -f runs/training_export/DATASET_CARD.md
 test -f runs/training_export/manifest.json
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -805,7 +816,7 @@ assert "## Dataset Splits" in dataset_card
 assert "## Quality Flags" in dataset_card
 PY
 test -f runs/validation.json
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
   --compare-export runs/compare_rl_export \
@@ -817,13 +828,13 @@ python -m flightrecorder validate \
   --suite-summary runs/suite_summary.json \
   --suite-trend runs/suite_trend.json \
   --strict >/dev/null
-python -m flightrecorder gate-export \
+"$PYTHON" -m flightrecorder gate-export \
   --training-export runs/training_export \
   --policy examples/training_gate_policy.demo.json \
   --out runs/training_gate.json >/dev/null
 test -f runs/training_gate.json
 test -f examples/training_gate_policy.demo.json
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -869,17 +880,17 @@ assert gate["policy"]["effective"]["require_trace_event_types"] == ["assistant_m
 assert gate["policy"]["effective"]["require_valid_export"] is True
 assert gate["policy"]["effective"]["strict_validation"] is True
 PY
-python -m flightrecorder export-review \
+"$PYTHON" -m flightrecorder export-review \
   --runs runs \
   --out runs/review_queue >/dev/null
 test -f runs/review_queue/manifest.json
 test -f runs/review_queue/review_items.jsonl
 test -f runs/review_queue/label_template.jsonl
 test -f runs/review_queue/REVIEW_INSTRUCTIONS.md
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --review-export runs/review_queue \
   --strict >/dev/null
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -898,7 +909,7 @@ for row in rows:
     row["notes"] = "Fixture label accepted for release-check coverage."
 target.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 PY
-python -m flightrecorder apply-review \
+"$PYTHON" -m flightrecorder apply-review \
   --review-export runs/review_queue \
   --labels runs/review_queue/completed_labels.jsonl \
   --out runs/reviewed_export >/dev/null
@@ -908,16 +919,16 @@ test -f runs/reviewed_export/reviewed_sft.jsonl
 test -f runs/reviewed_export/reviewed_reward_model.jsonl
 test -f runs/reviewed_export/reviewed_preferences.jsonl
 test -f runs/reviewed_export/reviewed_dpo.jsonl
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --reviewed-export runs/reviewed_export \
   --strict >/dev/null
-python -m flightrecorder gate-reviewed \
+"$PYTHON" -m flightrecorder gate-reviewed \
   --reviewed-export runs/reviewed_export \
   --policy examples/reviewed_gate_policy.demo.json \
   --out runs/reviewed_gate.json >/dev/null
 test -f runs/reviewed_gate.json
 test -f examples/reviewed_gate_policy.demo.json
-python -m flightrecorder review-calibration \
+"$PYTHON" -m flightrecorder review-calibration \
   --reviewed-export runs/reviewed_export \
   --out runs/review_calibration.json \
   --min-comparable-labels 6 \
@@ -926,35 +937,35 @@ python -m flightrecorder review-calibration \
   --max-false-positives 0 \
   --max-false-negatives 0 >/dev/null
 test -f runs/review_calibration.json
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --review-calibration runs/review_calibration.json \
   --strict >/dev/null
-if python -m flightrecorder gate-reviewed \
+if "$PYTHON" -m flightrecorder gate-reviewed \
   --reviewed-export runs/reviewed_export \
   --min-reviewed-labels 999 >/dev/null; then
   echo "gate-reviewed did not fail a too-high reviewed-label threshold" >&2
   exit 1
 fi
-if python -m flightrecorder review-calibration \
+if "$PYTHON" -m flightrecorder review-calibration \
   --reviewed-export runs/reviewed_export \
   --out runs/review_calibration_impossible.json \
   --min-comparable-labels 999 >/dev/null; then
   echo "review-calibration did not fail a too-high comparable-label threshold" >&2
   exit 1
 fi
-if python -m flightrecorder gate-export \
+if "$PYTHON" -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-pass-rate 0.9 >/dev/null; then
   echo "gate-export did not fail a too-high pass-rate threshold" >&2
   exit 1
 fi
-if python -m flightrecorder gate-export \
+if "$PYTHON" -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-task-completion-complete 999 >/dev/null; then
   echo "gate-export did not fail a too-high task-completion threshold" >&2
   exit 1
 fi
-if python -m flightrecorder gate-export \
+if "$PYTHON" -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-trace-average-events 999 >/dev/null; then
   echo "gate-export did not fail a too-high trace-event threshold" >&2
@@ -962,7 +973,7 @@ if python -m flightrecorder gate-export \
 fi
 rm -rf runs/training_export_integrity_probe
 cp -R runs/training_export runs/training_export_integrity_probe
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -971,14 +982,14 @@ manifest = json.loads(path.read_text(encoding="utf-8"))
 manifest["artifact_fingerprints"]["episodes"]["sha256"] = "0" * 64
 path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
-if python -m flightrecorder gate-export \
+if "$PYTHON" -m flightrecorder gate-export \
   --training-export runs/training_export_integrity_probe >/dev/null; then
   echo "gate-export did not fail a stale artifact fingerprint" >&2
   exit 1
 fi
 rm -rf runs/training_export_probe
 cp -R runs/training_export runs/training_export_probe
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -990,14 +1001,14 @@ coverage["unverified"] = coverage["rows"]
 coverage["fully_verified_rate"] = 0.0
 path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
-if python -m flightrecorder gate-export \
+if "$PYTHON" -m flightrecorder gate-export \
   --training-export runs/training_export_probe \
   --min-trainer-view-source-fingerprint-rate 1.0 \
   --max-unverified-trainer-view-source-fingerprints 0 >/dev/null; then
   echo "gate-export did not fail a too-high trainer-view fingerprint threshold" >&2
   exit 1
 fi
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -1033,10 +1044,10 @@ summary = {
 }
 summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --live-smoke-summary runs/live_smoke_summary.json \
   --strict >/dev/null
-python -m flightrecorder evidence-bundle \
+"$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
@@ -1056,23 +1067,23 @@ python -m flightrecorder evidence-bundle \
   --gate runs/reviewed_gate.json \
   --out runs/evidence_bundle_full.json >/dev/null
 test -f runs/evidence_bundle_full.json
-python -m flightrecorder action-ledger \
+"$PYTHON" -m flightrecorder action-ledger \
   --bundle runs/evidence_bundle.json \
   --bundle runs/evidence_bundle_full.json \
   --out runs/action_ledger.json >/dev/null
 test -f runs/action_ledger.json
-python -m flightrecorder gate-action-ledger \
+"$PYTHON" -m flightrecorder gate-action-ledger \
   --action-ledger runs/action_ledger.json \
   --policy examples/action_ledger_gate_policy.demo.json \
   --out runs/action_ledger_gate.json >/dev/null
 test -f runs/action_ledger_gate.json
-if python -m flightrecorder gate-action-ledger \
+if "$PYTHON" -m flightrecorder gate-action-ledger \
   --action-ledger runs/action_ledger.json \
   --max-recurring-actions 0 >/dev/null; then
   echo "gate-action-ledger did not fail a too-strict recurring action threshold" >&2
   exit 1
 fi
-python -m flightrecorder gate-decision \
+"$PYTHON" -m flightrecorder gate-decision \
   --artifact runs/action_ledger_gate.json \
   --expect-recommendation promote_iteration \
   --expect-readiness ready \
@@ -1080,17 +1091,17 @@ python -m flightrecorder gate-decision \
   --out runs/promotion_decision.json >/dev/null
 test -f runs/promotion_decision.json
 cp runs/promotion_decision.json runs/promotion_decision_previous.json
-python -m flightrecorder promotion-ledger \
+"$PYTHON" -m flightrecorder promotion-ledger \
   --decision-gate runs/promotion_decision_previous.json \
   --decision-gate runs/promotion_decision.json \
   --out runs/promotion_ledger.json >/dev/null
 test -f runs/promotion_ledger.json
-python -m flightrecorder gate-promotion-ledger \
+"$PYTHON" -m flightrecorder gate-promotion-ledger \
   --promotion-ledger runs/promotion_ledger.json \
   --policy examples/promotion_ledger_gate_policy.demo.json \
   --out runs/promotion_ledger_gate.json >/dev/null
 test -f runs/promotion_ledger_gate.json
-python -m flightrecorder promotion-archive \
+"$PYTHON" -m flightrecorder promotion-archive \
   --promotion-ledger runs/promotion_ledger.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --decision-gate runs/promotion_decision.json \
@@ -1098,13 +1109,13 @@ python -m flightrecorder promotion-archive \
   --require-self-contained \
   --force >/dev/null
 test -f runs/promotion_archive/promotion_archive.json
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --strict \
   --out runs/gate_validation.json >/dev/null
 test -f runs/gate_validation.json
-python -m flightrecorder trainer-preflight \
+"$PYTHON" -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \
   --gate runs/reviewed_gate.json \
@@ -1124,8 +1135,8 @@ python -m flightrecorder trainer-preflight \
   --metadata candidate=offline-demo \
   --out runs/trainer_preflight.json >/dev/null
 test -f runs/trainer_preflight.json
-python -m flightrecorder schemas --check runs/trainer_preflight.json >/dev/null
-python -m flightrecorder trainer-launch-check \
+"$PYTHON" -m flightrecorder schemas --check runs/trainer_preflight.json >/dev/null
+"$PYTHON" -m flightrecorder trainer-launch-check \
   --preflight runs/trainer_preflight.json \
   --require-gate training_gate \
   --require-gate compare_gate \
@@ -1135,37 +1146,37 @@ python -m flightrecorder trainer-launch-check \
   --require-metadata candidate=offline-demo \
   --out runs/trainer_launch_check.json >/dev/null
 test -f runs/trainer_launch_check.json
-python -m flightrecorder schemas --check runs/trainer_launch_check.json >/dev/null
-python -m flightrecorder trainer-archive \
+"$PYTHON" -m flightrecorder schemas --check runs/trainer_launch_check.json >/dev/null
+"$PYTHON" -m flightrecorder trainer-archive \
   --preflight runs/trainer_preflight.json \
   --launch-check runs/trainer_launch_check.json \
   --out runs/trainer_archive \
   --require-self-contained \
   --force >/dev/null
 test -f runs/trainer_archive/trainer_archive.json
-python -m flightrecorder schemas --check runs/trainer_archive/trainer_archive.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/trainer_archive/trainer_archive.json >/dev/null
 mkdir -p runs/trainer_code
 printf "print('trainer placeholder; Flight Recorder never executes this file')\n" > runs/trainer_code/train.py
-python -m flightrecorder trainer-archive-check \
+"$PYTHON" -m flightrecorder trainer-archive-check \
   --archive runs/trainer_archive \
   --external-code-root runs/trainer_code \
   --out runs/trainer_archive_check.json \
   --strict >/dev/null
 test -f runs/trainer_archive_check.json
-python -m flightrecorder schemas --check runs/trainer_archive_check.json >/dev/null
-python -m flightrecorder trainer-consumer-plan \
+"$PYTHON" -m flightrecorder schemas --check runs/trainer_archive_check.json >/dev/null
+"$PYTHON" -m flightrecorder trainer-consumer-plan \
   --archive-check runs/trainer_archive_check.json \
   --out runs/trainer_consumer_plan.json \
   --strict >/dev/null
 test -f runs/trainer_consumer_plan.json
-python -m flightrecorder schemas --check runs/trainer_consumer_plan.json >/dev/null
-python examples/trainer-wrapper/consume_trainer_plan.py \
+"$PYTHON" -m flightrecorder schemas --check runs/trainer_consumer_plan.json >/dev/null
+"$PYTHON" examples/trainer-wrapper/consume_trainer_plan.py \
   --plan runs/trainer_consumer_plan.json \
   --out runs/trainer_wrapper_dry_run.json \
   --strict >/dev/null
 test -f runs/trainer_wrapper_dry_run.json
-python -m flightrecorder schemas --check runs/trainer_wrapper_dry_run.json >/dev/null
-python -m flightrecorder evidence-bundle \
+"$PYTHON" -m flightrecorder schemas --check runs/trainer_wrapper_dry_run.json >/dev/null
+"$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
   --scenario-quality runs/scenario_quality.json \
@@ -1187,7 +1198,7 @@ python -m flightrecorder evidence-bundle \
   --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
   --out runs/evidence_bundle_trainer.json >/dev/null
 test -f runs/evidence_bundle_trainer.json
-python -m flightrecorder validate \
+"$PYTHON" -m flightrecorder validate \
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
   --evidence-bundle runs/evidence_bundle_trainer.json \
@@ -1208,7 +1219,7 @@ python -m flightrecorder validate \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
   --strict >/dev/null
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import json
 from pathlib import Path
 
@@ -1409,7 +1420,7 @@ assert {gate["id"] for gate in launch_check["gates"]} == {
     "promotion_ledger_gate",
 }
 PY
-python -m flightrecorder compare-suite \
+"$PYTHON" -m flightrecorder compare-suite \
   --baseline runs \
   --candidate runs \
   --out runs/suite_compare_check.json \
@@ -1417,7 +1428,7 @@ python -m flightrecorder compare-suite \
   --fail-on-contract-drift \
   --fail-on-unverified-contracts >/dev/null
 
-python -m flightrecorder audit \
+"$PYTHON" -m flightrecorder audit \
   --runs runs \
   --forbid-text hfr_fixture_secret_value_123 \
   --forbid-text DEMO_API_KEY=hfr_fixture \
@@ -1425,7 +1436,7 @@ python -m flightrecorder audit \
 
 INSTALL_DIR="$(mktemp -d)"
 VENV_DIR="$(mktemp -d)"
-python -m venv --system-site-packages "$VENV_DIR"
+"$PYTHON" -m venv --system-site-packages "$VENV_DIR"
 if ! "$VENV_DIR/bin/python" -c "import setuptools" >/dev/null 2>&1; then
   "$VENV_DIR/bin/python" -m pip install "setuptools>=68" >/dev/null
 fi

@@ -724,10 +724,6 @@ def _task_completion_summary(rules: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _any_event_matches(trace: dict[str, Any], item: dict[str, Any]) -> bool:
-    return any(_event_matches_assertion(event, item) for event in trace.get("events", []))
-
-
 def _find_matching_event(trace: dict[str, Any], item: dict[str, Any]) -> tuple[int, dict[str, Any]] | None:
     for index, event in enumerate(trace.get("events", [])):
         if _event_matches_assertion(event, item):
