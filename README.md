@@ -366,6 +366,44 @@ The positive report uses a sent-mail snapshot with the reply present. The
 negative report uses the same successful-looking trace but no external sent
 message, so `required_state` and `required_state_transitions` fail.
 
+## External State Validators
+
+Use state validators to turn common external actions into reliable scenario
+assertions. They compile to ordinary `required_actions`, `required_state`, and
+`required_state_transitions` checks.
+
+List monitorable external tools and states:
+
+```bash
+flightrecorder state-validators --list --markdown-out monitor-catalog.md
+```
+
+Compile a validator config into assertion JSON:
+
+```bash
+flightrecorder state-validators \
+  --config examples/state_validators/email_sent.validator.json \
+  --out email_sent.assertions.json
+```
+
+Current monitor catalog:
+
+| External area | States Flight Recorder can monitor | Evidence source |
+| --- | --- | --- |
+| Email and mailboxes | sent mail, inbox messages, threads, headers, bodies | `imap`, `gmail_threads`, `maildir`, `eml` |
+| GitHub | issue state, comments, labels, assignees | `github_issue`, `http_json` |
+| Ticket, CRM, incident systems | ticket existence, status, owner, priority, resolution | `http_json` |
+| Databases and local stores | rows, counts, status fields, audit records | `sqlite`, `http_json` |
+| Files and artifacts | existence, hashes, size, text, directory entries | `capture-state --file`, `capture-state --dir` |
+| Jobs, CI, queues, deployments | status, conclusion, run ids, processed counts | `http_json` |
+| Webhooks and event sinks | delivery status, event ids, payload fields, attempts | `http_json`, `sqlite` |
+| Generic JSON APIs | any JSON field reachable by read-only GET | `http_json` |
+
+Built-in validators include `email_sent`, `email_read`, `github_issue_closed`,
+`github_issue_commented`, `ticket_created`, `status_changed`, `file_created`,
+`file_modified`, `db_row_exists`, `api_json_field`, `job_completed`, and
+`webhook_delivered`.
+
 ## Comparison And Improvement Loops
 
 Compare two runs:

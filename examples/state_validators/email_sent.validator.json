@@ -1,0 +1,24 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "email_123_reply",
+      "validator": "email_sent",
+      "description": "Verify the assigned email thread received exactly one sent reply.",
+      "state_path": "mail.sent",
+      "before_count": 0,
+      "after_count": 1,
+      "thread_id": "email-123",
+      "subject_contains": "email-123",
+      "message_id_matches": "msg-email-123-",
+      "trace": {
+        "tool_name": "gmail_send",
+        "where": {
+          "result.thread_id": "email-123",
+          "result.status": "sent"
+        }
+      }
+    }
+  ]
+}
+

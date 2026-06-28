@@ -50,6 +50,22 @@
       "name": "verifier_config"
     },
     {
+      "artifact": "state_validator_config",
+      "artifact_schema_version": "hfr.state_validator_config.v1",
+      "description": "Reusable external-state validator config accepted by state-validators.",
+      "filename": "state_validator_config.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/state_validator_config.v1.schema.json",
+      "name": "state_validator_config"
+    },
+    {
+      "artifact": "state_validator_assertions",
+      "artifact_schema_version": "hfr.state_validator_assertions.v1",
+      "description": "Compiled scenario assertion snippets emitted by state-validators.",
+      "filename": "state_validator_assertions.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/state_validator_assertions.v1.schema.json",
+      "name": "state_validator_assertions"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",

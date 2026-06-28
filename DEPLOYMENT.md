@@ -273,6 +273,11 @@ tool, state, or artifact events that satisfy the scenario assertions.
   run, then pass the artifacts to `flightrecorder run --before-state ... --state
   ...`. Keep API tokens and mailbox credentials in environment variables; the
   verifier snapshots are read-only evidence artifacts, not secret stores.
+- Use `flightrecorder state-validators --list` to review monitorable external
+  states, then compile reusable validator configs with `flightrecorder
+  state-validators --config <validator.json> --out <assertions.json>` when
+  repeated task families need consistent `required_actions`, `required_state`,
+  and `required_state_transitions` assertions.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or

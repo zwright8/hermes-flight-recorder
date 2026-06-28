@@ -1,0 +1,19 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "close_issue_7",
+      "validator": "github_issue_closed",
+      "description": "Verify GitHub issue 7 moved from open to closed.",
+      "state_path": "github.issue_7",
+      "trace": {
+        "tool_name": "github_update_issue",
+        "where": {
+          "result.issue_number": 7,
+          "result.state": "closed"
+        }
+      }
+    }
+  ]
+}
+

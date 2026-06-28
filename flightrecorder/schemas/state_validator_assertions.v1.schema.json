@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hermes-flight-recorder.dev/state_validator_assertions.v1.schema.json",
+  "title": "Flight Recorder State Validator Assertions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "validator_count", "validators", "assertions"],
+  "properties": {
+    "schema_version": {
+      "const": "hfr.state_validator_assertions.v1"
+    },
+    "validator_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "validators": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "validator", "state_path", "summary"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "validator": {
+            "type": "string"
+          },
+          "state_path": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_actions", "required_state", "required_state_transitions"],
+      "properties": {
+        "required_actions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "required_state": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "required_state_transitions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

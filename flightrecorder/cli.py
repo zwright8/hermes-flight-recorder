@@ -95,6 +95,12 @@ from .state import (
 )
 from .state_capture import StateCaptureError, capture_state_snapshot
 from .state_diff import StateDiffError, build_state_diff
+from .state_validators import (
+    StateValidatorError,
+    build_monitor_catalog,
+    build_state_validator_assertions,
+    render_monitor_catalog_markdown,
+)
 from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, evaluate_suite_gate, load_gate_policy
 from .trace_observability import TraceObservabilityError, build_trace_observability
 from .trainer_archive import TrainerArchiveError, build_trainer_archive
@@ -138,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         ArtifactError,
         ScenarioError,
         StateCaptureError,
+        StateValidatorError,
         VerifierError,
         StateDiffError,
         StateSnapshotError,
@@ -253,6 +260,32 @@ def cmd_verify_state(args: argparse.Namespace) -> int:
     )
     _write_json(Path(args.out), snapshot)
     print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_state_validators(args: argparse.Namespace) -> int:
+    if args.list:
+        catalog = build_monitor_catalog()
+        if args.out:
+            _write_json(Path(args.out), catalog)
+            print(f"wrote {args.out}")
+        else:
+            print(json.dumps(catalog, indent=2, sort_keys=True))
+        if args.markdown_out:
+            markdown_path = Path(args.markdown_out)
+            markdown_path.parent.mkdir(parents=True, exist_ok=True)
+            markdown_path.write_text(render_monitor_catalog_markdown(catalog), encoding="utf-8")
+            print(f"wrote {args.markdown_out}")
+        return 0
+
+    if not args.config:
+        raise StateValidatorError("state-validators requires --list or --config")
+    compiled = build_state_validator_assertions(args.config)
+    if args.out:
+        _write_json(Path(args.out), compiled)
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(compiled, indent=2, sort_keys=True))
     return 0
 
 
@@ -1631,6 +1664,16 @@ def _parser() -> argparse.ArgumentParser:
     verify_state.add_argument("--secret-pattern", action="append", default=[], help="Regex pattern to redact from captured state")
     verify_state.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in the snapshot")
     verify_state.set_defaults(func=cmd_verify_state)
+
+    state_validators = subparsers.add_parser(
+        "state-validators",
+        help="List external monitor targets or compile state-validator configs into scenario assertions",
+    )
+    state_validators.add_argument("--list", action="store_true", help="List monitorable external tool/state areas")
+    state_validators.add_argument("--config", help="State-validator config JSON path")
+    state_validators.add_argument("--out", help="JSON output path; prints to stdout when omitted")
+    state_validators.add_argument("--markdown-out", help="Optional Markdown monitor catalog output path with --list")
+    state_validators.set_defaults(func=cmd_state_validators)
 
     diff_state = subparsers.add_parser(
         "diff-state",

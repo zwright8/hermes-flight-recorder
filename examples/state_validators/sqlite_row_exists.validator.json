@@ -1,0 +1,17 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "task_row_done",
+      "validator": "db_row_exists",
+      "description": "Verify a task row exists in a read-only SQLite snapshot.",
+      "state_path": "db.tasks.queries.assigned_task",
+      "row_count": 1,
+      "fields": {
+        "id": "email-123",
+        "status": "done"
+      },
+      "trace": false
+    }
+  ]
+}

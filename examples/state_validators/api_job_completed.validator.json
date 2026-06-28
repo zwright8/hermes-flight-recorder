@@ -1,0 +1,16 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "deployment_job_completed",
+      "validator": "job_completed",
+      "description": "Verify an external deployment job reached completed status.",
+      "state_path": "external.deployment_job.json.job",
+      "field": "status",
+      "before_value": "running",
+      "after_value": "completed",
+      "trace": false
+    }
+  ]
+}
+
