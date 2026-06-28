@@ -225,8 +225,8 @@ def _validate_value(value: Any, schema: Any, path: str, root: dict[str, Any], er
             sub_errors: list[str] = []
             _validate_value(value, subschema, path, root, sub_errors)
             if not sub_errors:
-                matches += 1
-        if matches < 1:
+                matches = 1
+                break
             errors.append(f"{path}: expected at least one matching schema from anyOf, got {matches}")
 
     if "const" in schema and value != schema["const"]:
