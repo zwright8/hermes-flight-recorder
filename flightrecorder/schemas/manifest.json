@@ -50,6 +50,14 @@
       "name": "run_digest"
     },
     {
+      "artifact": "live_smoke_summary",
+      "artifact_schema_version": "hfr.live_smoke.summary.v2",
+      "description": "Live Hermes runtime smoke summary emitted by scripts/live_hermes_smoke.py.",
+      "filename": "live_smoke_summary.v2.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/live_smoke_summary.v2.schema.json",
+      "name": "live_smoke_summary"
+    },
+    {
       "artifact": "evidence_bundle",
       "artifact_schema_version": "hfr.evidence_bundle.v1",
       "description": "Evidence handoff manifest emitted by evidence-bundle.",

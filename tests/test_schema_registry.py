@@ -30,6 +30,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("task_completion", names)
         self.assertIn("state_diff", names)
         self.assertIn("run_digest", names)
+        self.assertIn("live_smoke_summary", names)
         self.assertIn("evidence_bundle", names)
         self.assertIn("improvement_plan", names)
         self.assertIn("improvement_ledger", names)
@@ -201,6 +202,40 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "run_digest")
+
+    def test_live_smoke_summary_schema_accepts_current_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.live_smoke.summary.v2",
+                "passed": True,
+                "hermes_exit_code": 0,
+                "mock_request_count": 9,
+                "chat_completion_request_count": 1,
+                "score": 100,
+                "hooks": ["on_session_start", "pre_llm_call", "post_llm_call"],
+                "missing_hooks": [],
+                "observer_file": "live_observer.jsonl",
+                "report": "report.html",
+                "lineage": "artifact_lineage.json",
+                "task_completion": "task_completion.json",
+                "run_digest": "run_digest.json",
+                "summary": "live_smoke_summary.json",
+                "environment": {
+                    "python_version": "3.11.14",
+                    "python_implementation": "CPython",
+                    "platform": "Linux-test",
+                    "hermes_root": "/tmp/hermes-agent",
+                    "hermes_git_commit": "abcdef123456",
+                    "hermes_git_dirty": False,
+                    "flight_recorder_root": "/tmp/hermes-flight-recorder",
+                    "flight_recorder_git_commit": "123456abcdef",
+                    "flight_recorder_git_dirty": False,
+                },
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "live_smoke_summary")
 
     def test_improvement_ledger_gate_schema_accepts_minimal_gate(self):
         result = check_schema_contract(

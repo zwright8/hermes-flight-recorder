@@ -1,0 +1,146 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/live_smoke_summary.v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Machine-readable proof that Flight Recorder launched a live Hermes runtime, captured observer hooks, and scored the resulting trace.",
+  "properties": {
+    "chat_completion_request_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "environment": {
+      "$ref": "#/$defs/environment"
+    },
+    "hermes_exit_code": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "hooks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "lineage": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "missing_hooks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "mock_request_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "observer_file": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "report": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "run_digest": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.live_smoke.summary.v2"
+    },
+    "score": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summary": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "task_completion": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "hermes_exit_code",
+    "mock_request_count",
+    "chat_completion_request_count",
+    "score",
+    "hooks",
+    "missing_hooks",
+    "observer_file",
+    "report",
+    "lineage",
+    "task_completion",
+    "run_digest",
+    "summary",
+    "environment"
+  ],
+  "title": "Hermes Flight Recorder Live Smoke Summary",
+  "type": "object",
+  "$defs": {
+    "environment": {
+      "additionalProperties": true,
+      "properties": {
+        "flight_recorder_git_commit": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "flight_recorder_git_dirty": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "flight_recorder_root": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "hermes_git_commit": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "hermes_git_dirty": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hermes_root": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "platform": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "python_implementation": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "python_version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "python_version",
+        "python_implementation",
+        "platform",
+        "hermes_root",
+        "hermes_git_commit",
+        "flight_recorder_root",
+        "flight_recorder_git_commit"
+      ],
+      "type": "object"
+    }
+  }
+}
