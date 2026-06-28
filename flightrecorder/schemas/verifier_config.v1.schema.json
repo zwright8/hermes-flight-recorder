@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.hermes-flight-recorder.dev/verifier_config.v1.schema.json",
+  "title": "Flight Recorder Verifier Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sources"],
+  "properties": {
+    "schema_version": {
+      "const": "hfr.verifier_config.v1"
+    },
+    "description": {
+      "type": "string"
+    },
+    "secret_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        },
+        "type": {
+          "enum": [
+            "eml",
+            "maildir",
+            "http_json",
+            "sqlite",
+            "github_issue",
+            "gmail_thread",
+            "gmail_threads",
+            "imap"
+          ]
+        },
+        "state_path": {
+          "type": "string",
+          "description": "Optional dot path where captured source data is copied into the hfr.state_snapshot.v1 root."
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        },
+        "path": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "issue_number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "token_env": {
+          "type": "string"
+        },
+        "username_env": {
+          "type": "string"
+        },
+        "password_env": {
+          "type": "string"
+        },
+        "query": {
+          "type": "string"
+        },
+        "queries": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "max_messages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_threads": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  }
+}

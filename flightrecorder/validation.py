@@ -72,6 +72,7 @@ from .training import (
     RL_STEP_REWARD_SCHEMA_VERSION,
     REWARD_SCALES,
 )
+from .verifiers import VERIFIER_SOURCES_SCHEMA_VERSION
 
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
@@ -980,6 +981,41 @@ def _validate_state_snapshot(
     observations = snapshot.get("observations")
     if not isinstance(observations, dict):
         target.errors.append(f"{label}.observations must be an object.")
+    verifiers = snapshot.get("verifiers")
+    if verifiers is not None:
+        _validate_snapshot_verifiers(verifiers, target, f"{label}.verifiers")
+
+
+def _validate_snapshot_verifiers(verifiers: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(verifiers, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _require_equal(verifiers, "schema_version", VERIFIER_SOURCES_SCHEMA_VERSION, target, prefix=f"{label}.")
+    sources = verifiers.get("sources")
+    if not isinstance(sources, dict):
+        target.errors.append(f"{label}.sources must be an object.")
+        sources = {}
+    source_count = verifiers.get("source_count")
+    if not isinstance(source_count, int):
+        target.errors.append(f"{label}.source_count must be an integer.")
+    elif source_count != len(sources):
+        target.errors.append(f"{label}.source_count must equal the number of sources.")
+    for source_id, source in sources.items():
+        source_label = f"{label}.sources.{source_id}"
+        if not isinstance(source_id, str) or not source_id:
+            target.errors.append(f"{label}.sources contains an empty source id.")
+            continue
+        if not isinstance(source, dict):
+            target.errors.append(f"{source_label} must be an object.")
+            continue
+        if not isinstance(source.get("type"), str) or not source.get("type"):
+            target.errors.append(f"{source_label}.type must be a non-empty string.")
+        if source.get("status") not in {"ok", "error"}:
+            target.errors.append(f"{source_label}.status must be ok or error.")
+        if source.get("readonly") is not True:
+            target.errors.append(f"{source_label}.readonly must be true.")
+        if "data" not in source:
+            target.errors.append(f"{source_label}.data is required.")
 
 
 def _validate_state_diff(diff: Any, target: ValidationTarget, label: str) -> None:

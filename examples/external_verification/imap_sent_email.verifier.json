@@ -1,0 +1,19 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture sent-email evidence from a live IMAP mailbox without mutating it.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "sent_mail",
+      "type": "imap",
+      "host": "imap.example.com",
+      "username_env": "IMAP_USERNAME",
+      "password_env": "IMAP_PASSWORD",
+      "mailbox": "Sent",
+      "search": "SUBJECT email-123",
+      "max_messages": 10,
+      "state_path": "mail.sent"
+    }
+  ]
+}
+

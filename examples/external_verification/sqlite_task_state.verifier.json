@@ -1,0 +1,15 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture task state from a local SQLite database in read-only mode.",
+  "sources": [
+    {
+      "id": "task_db",
+      "type": "sqlite",
+      "path": "path/to/tasks.db",
+      "queries": {
+        "assigned_task": "SELECT id, status, updated_at FROM tasks WHERE id = 'email-123'"
+      },
+      "state_path": "db.tasks"
+    }
+  ]
+}

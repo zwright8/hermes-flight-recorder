@@ -29,6 +29,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("scorecard", names)
         self.assertIn("task_completion", names)
         self.assertIn("state_diff", names)
+        self.assertIn("verifier_config", names)
         self.assertIn("run_digest", names)
         self.assertIn("live_smoke_summary", names)
         self.assertIn("openclaw_event", names)

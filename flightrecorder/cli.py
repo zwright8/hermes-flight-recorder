@@ -108,6 +108,7 @@ from .training_gate import (
     load_training_gate_policy,
 )
 from .validation import validate_artifacts
+from .verifiers import VerifierError, capture_verified_state
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
@@ -137,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
         ArtifactError,
         ScenarioError,
         StateCaptureError,
+        VerifierError,
         StateDiffError,
         StateSnapshotError,
         SuiteGatePolicyError,
@@ -235,6 +237,17 @@ def cmd_capture_state(args: argparse.Namespace) -> int:
         include_file_text=args.include_file_text,
         max_text_chars=args.max_text_chars,
         max_dir_entries=args.max_dir_entries,
+        preserve_paths=args.preserve_paths,
+        secret_patterns=args.secret_pattern,
+    )
+    _write_json(Path(args.out), snapshot)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def cmd_verify_state(args: argparse.Namespace) -> int:
+    snapshot = capture_verified_state(
+        args.config,
         preserve_paths=args.preserve_paths,
         secret_patterns=args.secret_pattern,
     )
@@ -1608,6 +1621,16 @@ def _parser() -> argparse.ArgumentParser:
     capture_state.add_argument("--secret-pattern", action="append", default=[], help="Regex pattern to redact from captured state")
     capture_state.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in the snapshot")
     capture_state.set_defaults(func=cmd_capture_state)
+
+    verify_state = subparsers.add_parser(
+        "verify-state",
+        help="Capture a JSON state snapshot from read-only external verifier adapters",
+    )
+    verify_state.add_argument("--config", required=True, help="Verifier config JSON path")
+    verify_state.add_argument("--out", required=True, help="State snapshot JSON output path")
+    verify_state.add_argument("--secret-pattern", action="append", default=[], help="Regex pattern to redact from captured state")
+    verify_state.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in the snapshot")
+    verify_state.set_defaults(func=cmd_verify_state)
 
     diff_state = subparsers.add_parser(
         "diff-state",

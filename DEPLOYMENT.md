@@ -266,6 +266,13 @@ tool, state, or artifact events that satisfy the scenario assertions.
   `capture-state` outputs before they become required-state evidence or
   downstream training signal. The validator checks the captured schema and
   recomputes file hashes when source paths are still available.
+- Use `flightrecorder verify-state --config <verifier.json> --out
+  <snapshot.json>` when task completion depends on state outside the model,
+  such as email sent folders, ticket APIs, GitHub issues, HTTP JSON endpoints,
+  SQLite databases, or IMAP/Gmail mailboxes. Run it before and after the agent
+  run, then pass the artifacts to `flightrecorder run --before-state ... --state
+  ...`. Keep API tokens and mailbox credentials in environment variables; the
+  verifier snapshots are read-only evidence artifacts, not secret stores.
 - Commit a suite gate policy JSON file and use `flightrecorder gate-suite
   --suite-summary runs/suite_summary.json --policy <policy.json>` for absolute
   CI acceptance gates. CLI threshold flags can tighten scalar policy values or

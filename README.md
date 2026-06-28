@@ -38,6 +38,8 @@ It helps teams:
 Flight Recorder works with user-defined eval loops as long as the claims are
 grounded in observable artifacts: tool calls, tool results, observer hooks,
 state snapshots, output files, final answers, budgets, and policy constraints.
+For side-effect tasks, the state snapshot should come from a verifier outside
+the model and agent process: a mailbox, API, database, or filesystem artifact.
 
 ## Quickstart
 
@@ -260,6 +262,109 @@ Scorecards are deterministic. Rules include:
 
 Scores start at 100. Critical rule failures force a failed verdict even when a
 numeric score remains above the threshold.
+
+## External Verification
+
+Flight Recorder should not ask the model whether it completed a task. It should
+compare the agent audit with independently captured external state.
+
+The live verification loop is:
+
+```bash
+flightrecorder verify-state \
+  --config verifier.before.json \
+  --out before_state.json
+
+# Run Hermes, OpenClaw, Coven, or another agent here.
+
+flightrecorder verify-state \
+  --config verifier.after.json \
+  --out after_state.json
+
+flightrecorder run \
+  --scenario scenarios/email_reply_completion_good.json \
+  --trace agent_trace.jsonl \
+  --before-state before_state.json \
+  --state after_state.json \
+  --out runs/email_reply_live
+```
+
+`verify-state` emits the same `hfr.state_snapshot.v1` artifact consumed by
+`required_state` and `required_state_transitions`, so reports, scorecards,
+state diffs, CI gates, and training exports all work with live evidence.
+
+Verifier configs are JSON:
+
+```json
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "sent_mail",
+      "type": "imap",
+      "host": "imap.example.com",
+      "username_env": "IMAP_USERNAME",
+      "password_env": "IMAP_PASSWORD",
+      "mailbox": "Sent",
+      "search": "SUBJECT email-123",
+      "state_path": "mail.sent"
+    }
+  ]
+}
+```
+
+Supported read-only verifier sources:
+
+- `eml` and `maildir` for local or synced email evidence.
+- `imap` for live mailbox reads with `SELECT readonly`.
+- `gmail_threads` for Gmail thread reads using `GMAIL_ACCESS_TOKEN` or a
+  configured token environment variable.
+- `github_issue` for issue state and comments.
+- `http_json` for arbitrary REST/API state.
+- `sqlite` for read-only local database queries.
+
+For example, an email task should require both trace evidence and external
+state evidence:
+
+```json
+{
+  "assertions": {
+    "required_actions": [
+      {
+        "id": "trace_reports_send",
+        "event_type": "tool_result",
+        "tool_name": "gmail_send",
+        "status": "ok",
+        "where": { "result.thread_id": "email-123", "result.status": "sent" }
+      }
+    ],
+    "required_state_transitions": [
+      {
+        "id": "reply_appears_in_mailbox",
+        "before": { "where": { "mail.sent.message_count": 0 } },
+        "after": { "where": { "mail.sent.message_count": 1 } }
+      }
+    ]
+  }
+}
+```
+
+If the trace claims `gmail_send` succeeded but the after-snapshot does not show
+the sent message, the scorecard fails. That is the core contract: claims must
+be grounded in observable events and external outputs.
+
+Run the offline proof:
+
+```bash
+python3.11 scripts/external_verification_smoke.py
+open runs/external_verification_smoke/positive/report.html
+open runs/external_verification_smoke/negative/report.html
+```
+
+The positive report uses a sent-mail snapshot with the reply present. The
+negative report uses the same successful-looking trace but no external sent
+message, so `required_state` and `required_state_transitions` fail.
 
 ## Comparison And Improvement Loops
 

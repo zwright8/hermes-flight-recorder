@@ -1,0 +1,15 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture task state from a JSON API.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "ticket_api",
+      "type": "http_json",
+      "url": "https://api.example.com/tickets/SUP-42",
+      "bearer_token_env": "TICKET_API_TOKEN",
+      "state_path": "support.ticket"
+    }
+  ]
+}
+

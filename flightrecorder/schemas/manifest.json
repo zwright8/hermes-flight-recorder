@@ -42,6 +42,14 @@
       "name": "state_diff"
     },
     {
+      "artifact": "verifier_config",
+      "artifact_schema_version": "hfr.verifier_config.v1",
+      "description": "Read-only external verifier source config accepted by verify-state.",
+      "filename": "verifier_config.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/verifier_config.v1.schema.json",
+      "name": "verifier_config"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",
