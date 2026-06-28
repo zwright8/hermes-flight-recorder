@@ -1,0 +1,12 @@
+{
+  "support": {
+    "requests": {
+      "req-42": {
+        "customer": "Ada Lovelace",
+        "status": "new",
+        "ticket_id": null
+      }
+    },
+    "tickets": {}
+  }
+}

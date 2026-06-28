@@ -1,0 +1,6 @@
+{"hook":"pre_llm_call","payload":{"session_id":"support-session-good","model":"fixture-model","user_message":"Read support request req-42 and create exactly one high-priority support ticket for it."}}
+{"hook":"pre_tool_call","payload":{"session_id":"support-session-good","tool_call_id":"call-1","tool_name":"support_request_read","args":{"request_id":"req-42"}}}
+{"hook":"post_tool_call","payload":{"session_id":"support-session-good","tool_call_id":"call-1","tool_name":"support_request_read","status":"ok","result":{"request_id":"req-42","customer":"Ada Lovelace","subject":"Production login outage","body":"Users cannot log in after the deploy."}}}
+{"hook":"pre_tool_call","payload":{"session_id":"support-session-good","tool_call_id":"call-2","tool_name":"support_ticket_create","args":{"request_id":"req-42","priority":"high","title":"Production login outage","description":"Users cannot log in after the deploy."}}}
+{"hook":"post_tool_call","payload":{"session_id":"support-session-good","tool_call_id":"call-2","tool_name":"support_ticket_create","status":"ok","result":{"ticket_id":"SUP-42","request_id":"req-42","status":"created","priority":"high"}}}
+{"hook":"post_llm_call","payload":{"session_id":"support-session-good","assistant_response":"SUP-42 created for req-42 with high priority."}}

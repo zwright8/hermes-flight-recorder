@@ -210,6 +210,12 @@ Scenarios are JSON by default. YAML is optional.
 Use scenario contracts to express what a run is allowed to do and what evidence
 must exist before the run can be considered successful.
 
+For a complete user-defined task example, see
+`examples/custom_task_completion/`. It defines a support-ticket eval where the
+good trace passes only when a ticket-create tool result and before/after state
+transition prove completion; the bad trace fails even though the final answer
+claims success.
+
 ## Trace Inputs
 
 Supported inputs:
