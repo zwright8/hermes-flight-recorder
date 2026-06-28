@@ -1,0 +1,19 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "webhook_event_delivered",
+      "validator": "collection_item_exists",
+      "description": "Verify an unordered API collection contains the delivered webhook event.",
+      "state_path": "webhooks.events",
+      "fields": {
+        "event_id": "evt_123",
+        "status": "delivered"
+      },
+      "contains_fields": {
+        "payload": "customer@example.com"
+      },
+      "trace": false
+    }
+  ]
+}

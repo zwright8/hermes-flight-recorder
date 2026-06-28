@@ -1,0 +1,15 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture calendar events from a read-only JSON API response.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "calendar_events",
+      "type": "http_json",
+      "url": "https://calendar.example.com/v1/calendars/primary/events",
+      "bearer_token_env": "CALENDAR_API_TOKEN",
+      "state_path": "calendar.events",
+      "state_value_path": "json.items"
+    }
+  ]
+}

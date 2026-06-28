@@ -26,7 +26,7 @@ def build_monitor_catalog() -> dict[str, Any]:
             "title": "Email And Mailboxes",
             "states": ["sent mail", "inbox messages", "threads", "message headers", "message bodies"],
             "source_types": ["imap", "gmail_threads", "maildir", "eml"],
-            "validators": ["email_sent", "email_read"],
+            "validators": ["email_sent", "email_read", "collection_item_exists"],
             "examples": ["reply sent", "assigned thread read before reply", "no duplicate reply"],
         },
         {
@@ -34,7 +34,14 @@ def build_monitor_catalog() -> dict[str, Any]:
             "title": "GitHub Issues And Pull Requests",
             "states": ["issue state", "labels", "assignees", "comments", "timestamps"],
             "source_types": ["github_issue", "http_json"],
-            "validators": ["github_issue_commented", "github_issue_closed", "status_changed"],
+            "validators": [
+                "github_issue_commented",
+                "github_issue_closed",
+                "linear_issue_status",
+                "jira_issue_status",
+                "collection_item_exists",
+                "status_changed",
+            ],
             "examples": ["issue closed", "comment added", "label present"],
         },
         {
@@ -42,7 +49,7 @@ def build_monitor_catalog() -> dict[str, Any]:
             "title": "Ticket, CRM, And Incident APIs",
             "states": ["ticket existence", "status", "assignee", "priority", "resolution fields"],
             "source_types": ["http_json"],
-            "validators": ["ticket_created", "status_changed", "api_json_field"],
+            "validators": ["ticket_created", "status_changed", "api_json_field", "collection_item_exists"],
             "examples": ["support ticket created", "incident moved to resolved", "CRM field updated"],
         },
         {
@@ -50,7 +57,7 @@ def build_monitor_catalog() -> dict[str, Any]:
             "title": "Databases And Local State Stores",
             "states": ["rows", "columns", "counts", "status fields", "audit tables"],
             "source_types": ["sqlite", "http_json"],
-            "validators": ["db_row_exists", "status_changed"],
+            "validators": ["db_row_exists", "status_changed", "collection_item_exists"],
             "examples": ["row inserted", "task status changed", "audit record exists"],
         },
         {
@@ -66,7 +73,7 @@ def build_monitor_catalog() -> dict[str, Any]:
             "title": "Jobs, CI, Builds, And Queues",
             "states": ["job status", "run id", "conclusion", "logs", "queued/completed counts"],
             "source_types": ["http_json"],
-            "validators": ["job_completed", "api_json_field", "status_changed"],
+            "validators": ["job_completed", "api_json_field", "status_changed", "collection_count_changed"],
             "examples": ["build completed successfully", "queue item processed", "deployment reached ready"],
         },
         {
@@ -74,7 +81,7 @@ def build_monitor_catalog() -> dict[str, Any]:
             "title": "Webhooks And Event Sinks",
             "states": ["delivery status", "event ids", "payload fields", "attempt counts"],
             "source_types": ["http_json", "sqlite"],
-            "validators": ["webhook_delivered", "db_row_exists", "api_json_field"],
+            "validators": ["webhook_delivered", "db_row_exists", "api_json_field", "collection_item_exists"],
             "examples": ["webhook delivered once", "event payload persisted", "retry count stayed bounded"],
         },
         {
@@ -82,8 +89,56 @@ def build_monitor_catalog() -> dict[str, Any]:
             "title": "Generic JSON APIs",
             "states": ["any JSON field reachable from a read-only GET"],
             "source_types": ["http_json"],
-            "validators": ["api_json_field", "status_changed", "job_completed"],
+            "validators": ["api_json_field", "status_changed", "job_completed", "collection_item_exists"],
             "examples": ["calendar event exists", "Slack message appears in history", "payment intent state changed"],
+        },
+        {
+            "id": "chat",
+            "title": "Chat And Collaboration",
+            "states": ["channel messages", "DMs", "thread replies", "authors", "timestamps", "reactions"],
+            "source_types": ["http_json"],
+            "validators": ["slack_message_sent", "collection_item_exists"],
+            "examples": ["Slack message sent", "Teams post visible", "Discord reply exists"],
+        },
+        {
+            "id": "calendar",
+            "title": "Calendars And Scheduling",
+            "states": ["events", "attendees", "start/end times", "conference links", "response status"],
+            "source_types": ["http_json"],
+            "validators": ["calendar_event_created", "collection_item_exists"],
+            "examples": ["calendar event created", "attendee invited", "meeting time updated"],
+        },
+        {
+            "id": "storage",
+            "title": "Object Stores And Document Drives",
+            "states": ["objects", "files", "keys", "mime types", "hashes", "owners", "modified times"],
+            "source_types": ["http_json"],
+            "validators": ["drive_file_created", "s3_object_exists", "collection_item_exists"],
+            "examples": ["Drive file created", "S3 object uploaded", "document renamed"],
+        },
+        {
+            "id": "payments",
+            "title": "Payments And Billing",
+            "states": ["payment intents", "invoices", "subscriptions", "refunds", "settlement status"],
+            "source_types": ["http_json"],
+            "validators": ["payment_status", "api_json_field", "collection_item_exists"],
+            "examples": ["payment intent succeeded", "invoice finalized", "subscription canceled"],
+        },
+        {
+            "id": "infrastructure",
+            "title": "Infrastructure And Runtime Control Planes",
+            "states": ["deployments", "pods", "services", "health checks", "resource conditions"],
+            "source_types": ["http_json"],
+            "validators": ["k8s_resource_ready", "job_completed", "collection_item_exists"],
+            "examples": ["deployment ready", "pod condition true", "service endpoint exists"],
+        },
+        {
+            "id": "knowledge_docs",
+            "title": "Knowledge Bases And Documents",
+            "states": ["pages", "blocks", "titles", "last edited times", "owners"],
+            "source_types": ["http_json"],
+            "validators": ["notion_page_updated", "drive_file_created", "collection_item_exists"],
+            "examples": ["Notion page updated", "document created", "wiki page contains expected text"],
         },
     ]
     return {
@@ -181,7 +236,6 @@ def _validator_specs(config: dict[str, Any]) -> list[dict[str, Any]]:
 def _build_email_sent(spec: dict[str, Any]) -> dict[str, Any]:
     validator_id = _validator_id(spec)
     state_path = _state_path(spec, "mail.sent")
-    message_index = _non_negative_int(spec.get("message_index", 0), "message_index")
     before_count = _optional_non_negative_int(spec.get("before_count"), "before_count")
     after_count = _optional_non_negative_int(spec.get("after_count"), "after_count")
     if before_count is None:
@@ -189,13 +243,13 @@ def _build_email_sent(spec: dict[str, Any]) -> dict[str, Any]:
     if after_count is None:
         after_count = before_count + 1
 
-    message_path = f"{state_path}.messages.{message_index}"
     after_where: dict[str, Any] = {f"{state_path}.message_count": after_count}
-    _add_optional_contains(after_where, f"{message_path}.subject", spec, "subject_contains")
-    _add_optional_contains(after_where, f"{message_path}.body_text", spec, "body_contains")
-    _add_optional_contains(after_where, f"{message_path}.to", spec, "recipient_contains")
-    _add_optional_contains(after_where, f"{message_path}.from", spec, "from_contains")
-    _add_optional_matches(after_where, f"{message_path}.message_id", spec, "message_id_matches")
+    message_where: dict[str, Any] = {}
+    _add_optional_contains(message_where, "subject", spec, "subject_contains")
+    _add_optional_contains(message_where, "body_text", spec, "body_contains")
+    _add_optional_contains(message_where, "to", spec, "recipient_contains")
+    _add_optional_contains(message_where, "from", spec, "from_contains")
+    _add_optional_matches(message_where, "message_id", spec, "message_id_matches")
 
     actions = _trace_action(spec, default_tool_name="gmail_send", default_id=f"{validator_id}_trace_send")
     if actions and spec.get("thread_id"):
@@ -207,7 +261,13 @@ def _build_email_sent(spec: dict[str, Any]) -> dict[str, Any]:
         "email_sent",
         state_path,
         required_actions=actions,
-        required_state=[_state_assertion(f"{validator_id}_after_sent_message", after_where)],
+        required_state=[
+            _state_assertion(
+                f"{validator_id}_after_sent_message",
+                after_where,
+                where_any=[_where_any(f"{state_path}.messages", message_where)] if message_where else None,
+            )
+        ],
         required_state_transitions=[
             _transition(
                 f"{validator_id}_sent_message_added",
@@ -221,12 +281,11 @@ def _build_email_sent(spec: dict[str, Any]) -> dict[str, Any]:
 def _build_email_read(spec: dict[str, Any]) -> dict[str, Any]:
     validator_id = _validator_id(spec)
     state_path = _state_path(spec, "mail.inbox")
-    message_index = _non_negative_int(spec.get("message_index", 0), "message_index")
-    message_path = f"{state_path}.messages.{message_index}"
-    before_where: dict[str, Any] = {f"{message_path}": {"present": True}}
-    _add_optional_contains(before_where, f"{message_path}.subject", spec, "subject_contains")
-    _add_optional_contains(before_where, f"{message_path}.body_text", spec, "body_contains")
-    _add_optional_matches(before_where, f"{message_path}.message_id", spec, "message_id_matches")
+    before_where: dict[str, Any] = {}
+    message_where: dict[str, Any] = {"message_id": {"present": True}}
+    _add_optional_contains(message_where, "subject", spec, "subject_contains")
+    _add_optional_contains(message_where, "body_text", spec, "body_contains")
+    _add_optional_matches(message_where, "message_id", spec, "message_id_matches")
 
     actions = _trace_action(spec, default_tool_name="gmail_read", default_id=f"{validator_id}_trace_read")
     if actions and spec.get("thread_id"):
@@ -238,7 +297,13 @@ def _build_email_read(spec: dict[str, Any]) -> dict[str, Any]:
         state_path,
         required_actions=actions,
         required_state_transitions=[
-            _transition(f"{validator_id}_target_message_existed_before_read", before=before_where, after={})
+            _transition(
+                f"{validator_id}_target_message_existed_before_read",
+                before=before_where,
+                after={},
+                before_any=[_where_any(f"{state_path}.messages", message_where)],
+                after_any=[_where_any(f"{state_path}.messages", message_where)],
+            )
         ],
     )
 
@@ -276,37 +341,43 @@ def _build_status_changed(spec: dict[str, Any]) -> dict[str, Any]:
     if "before_value" in spec:
         before[f"{state_path}.{field}"] = spec["before_value"]
     after = {f"{state_path}.{field}": spec["after_value"]}
+    transitions = [_transition(f"{validator_id}_status_changed", before=before, after=after)] if before else []
     return _built(
         spec,
         "status_changed",
         state_path,
         required_actions=_trace_action(spec, default_tool_name="", default_id=f"{validator_id}_trace_status_change"),
         required_state=[_state_assertion(f"{validator_id}_status_after", after)],
-        required_state_transitions=[_transition(f"{validator_id}_status_changed", before=before, after=after)],
+        required_state_transitions=transitions,
     )
 
 
 def _build_github_issue_commented(spec: dict[str, Any]) -> dict[str, Any]:
     validator_id = _validator_id(spec)
     state_path = _state_path(spec, "github.issue")
-    comment_index = _non_negative_int(spec.get("comment_index", 0), "comment_index")
     before_count = _optional_non_negative_int(spec.get("before_comment_count"), "before_comment_count")
     after_count = _optional_non_negative_int(spec.get("after_comment_count"), "after_comment_count")
     if before_count is None:
         before_count = 0
     if after_count is None:
         after_count = before_count + 1
-    comment_path = f"{state_path}.comments.{comment_index}"
     after_where: dict[str, Any] = {f"{state_path}.comment_count": after_count}
-    _add_optional_contains(after_where, f"{comment_path}.body", spec, "comment_contains")
+    comment_where: dict[str, Any] = {}
+    _add_optional_contains(comment_where, "body", spec, "comment_contains")
     if "comment_user" in spec:
-        after_where[f"{comment_path}.user"] = spec["comment_user"]
+        comment_where["user"] = spec["comment_user"]
     return _built(
         spec,
         "github_issue_commented",
         state_path,
         required_actions=_trace_action(spec, default_tool_name="github_comment", default_id=f"{validator_id}_trace_comment"),
-        required_state=[_state_assertion(f"{validator_id}_comment_after", after_where)],
+        required_state=[
+            _state_assertion(
+                f"{validator_id}_comment_after",
+                after_where,
+                where_any=[_where_any(f"{state_path}.comments", comment_where)] if comment_where else None,
+            )
+        ],
         required_state_transitions=[
             _transition(
                 f"{validator_id}_comment_added",
@@ -378,22 +449,27 @@ def _build_file_modified(spec: dict[str, Any]) -> dict[str, Any]:
 def _build_db_row_exists(spec: dict[str, Any]) -> dict[str, Any]:
     validator_id = _validator_id(spec)
     state_path = _required_string(spec, "state_path")
-    row_index = _non_negative_int(spec.get("row_index", 0), "row_index")
-    row_path = f"{state_path}.rows.{row_index}"
-    after: dict[str, Any] = {row_path: {"present": True}}
+    after: dict[str, Any] = {}
     if "row_count" in spec:
         after[f"{state_path}.row_count"] = _non_negative_int(spec["row_count"], "row_count")
     fields = spec.get("fields") or {}
     if not isinstance(fields, dict):
         raise StateValidatorError("db_row_exists fields must be an object")
-    for field, value in fields.items():
-        after[f"{row_path}.{field}"] = value
+    if not fields:
+        raise StateValidatorError("db_row_exists requires at least one field predicate")
+    row_fields = {str(field): value for field, value in fields.items()}
     return _built(
         spec,
         "db_row_exists",
         state_path,
         required_actions=_trace_action(spec, default_tool_name="", default_id=f"{validator_id}_trace_db_write"),
-        required_state=[_state_assertion(f"{validator_id}_row_exists_after", after)],
+        required_state=[
+            _state_assertion(
+                f"{validator_id}_row_exists_after",
+                after,
+                where_any=[_where_any(f"{state_path}.rows", row_fields)],
+            )
+        ],
     )
 
 
@@ -432,6 +508,138 @@ def _build_webhook_delivered(spec: dict[str, Any]) -> dict[str, Any]:
     spec.setdefault("field", "status")
     spec.setdefault("after_value", spec.get("status", "delivered"))
     return _rename_built(_build_status_changed(spec), "webhook_delivered")
+
+
+def _build_collection_item_exists(spec: dict[str, Any]) -> dict[str, Any]:
+    validator_id = _validator_id(spec)
+    state_path = _required_string(spec, "state_path")
+    item_where = _item_where_from_spec(spec)
+    if not item_where:
+        raise StateValidatorError("collection_item_exists requires fields, contains_fields, or matches_fields")
+    count_where = _count_where_from_spec(spec, state_path)
+    return _built(
+        spec,
+        "collection_item_exists",
+        state_path,
+        required_actions=_trace_action(spec, default_tool_name="", default_id=f"{validator_id}_trace_collection_action"),
+        required_state=[
+            _state_assertion(
+                f"{validator_id}_item_exists_after",
+                count_where,
+                where_any=[_where_any(state_path, item_where)],
+            )
+        ],
+    )
+
+
+def _build_collection_count_changed(spec: dict[str, Any]) -> dict[str, Any]:
+    validator_id = _validator_id(spec)
+    count_path = _required_string(spec, "count_path")
+    before_count = _non_negative_int(spec.get("before_count"), "before_count")
+    after_count = _non_negative_int(spec.get("after_count"), "after_count")
+    return _built(
+        spec,
+        "collection_count_changed",
+        count_path,
+        required_state=[_state_assertion(f"{validator_id}_count_after", {count_path: after_count})],
+        required_state_transitions=[
+            _transition(
+                f"{validator_id}_count_changed",
+                before={count_path: before_count},
+                after={count_path: after_count},
+            )
+        ],
+    )
+
+
+def _build_slack_message_sent(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "slack.messages")
+    spec.setdefault("tool_name", "slack_post_message")
+    _copy_spec_field(spec, "text_contains", "contains_fields", "text")
+    _copy_spec_field(spec, "channel_id", "fields", "channel_id")
+    _copy_spec_field(spec, "user", "fields", "user")
+    return _rename_built(_build_collection_item_exists(spec), "slack_message_sent")
+
+
+def _build_calendar_event_created(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "calendar.events")
+    spec.setdefault("tool_name", "calendar_create_event")
+    _copy_spec_field(spec, "summary_contains", "contains_fields", "summary")
+    _copy_spec_field(spec, "attendee_contains", "contains_fields", "attendees")
+    _copy_spec_field(spec, "event_id", "fields", "id")
+    _copy_spec_field(spec, "status", "fields", "status")
+    return _rename_built(_build_collection_item_exists(spec), "calendar_event_created")
+
+
+def _build_drive_file_created(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "drive.files")
+    spec.setdefault("tool_name", "drive_create_file")
+    _copy_spec_field(spec, "name_contains", "contains_fields", "name")
+    _copy_spec_field(spec, "file_id", "fields", "id")
+    _copy_spec_field(spec, "mime_type", "fields", "mimeType")
+    _copy_spec_field(spec, "owner_contains", "contains_fields", "owners")
+    return _rename_built(_build_collection_item_exists(spec), "drive_file_created")
+
+
+def _build_s3_object_exists(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "s3.objects")
+    spec.setdefault("tool_name", "s3_put_object")
+    _copy_spec_field(spec, "key", "fields", "key")
+    _copy_spec_field(spec, "bucket", "fields", "bucket")
+    _copy_spec_field(spec, "etag", "fields", "etag")
+    _copy_spec_field(spec, "key_contains", "contains_fields", "key")
+    return _rename_built(_build_collection_item_exists(spec), "s3_object_exists")
+
+
+def _build_k8s_resource_ready(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "kubernetes.resources")
+    _copy_spec_field(spec, "kind", "fields", "kind")
+    _copy_spec_field(spec, "name", "fields", "name")
+    _copy_spec_field(spec, "namespace", "fields", "namespace")
+    fields = spec.setdefault("fields", {})
+    if not isinstance(fields, dict):
+        raise StateValidatorError("fields must be an object")
+    fields.setdefault(str(spec.get("ready_field", "ready")), spec.get("ready_value", True))
+    return _rename_built(_build_collection_item_exists(spec), "k8s_resource_ready")
+
+
+def _build_payment_status(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "payments.payment")
+    spec.setdefault("field", "status")
+    if "after_value" not in spec:
+        spec["after_value"] = spec.get("status", "succeeded")
+    return _rename_built(_build_status_changed(spec), "payment_status")
+
+
+def _build_linear_issue_status(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "linear.issue")
+    spec.setdefault("field", "status")
+    return _rename_built(_build_status_changed(spec), "linear_issue_status")
+
+
+def _build_jira_issue_status(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "jira.issue")
+    spec.setdefault("field", "status")
+    return _rename_built(_build_status_changed(spec), "jira_issue_status")
+
+
+def _build_notion_page_updated(spec: dict[str, Any]) -> dict[str, Any]:
+    spec = dict(spec)
+    spec.setdefault("state_path", "notion.pages")
+    spec.setdefault("tool_name", "notion_update_page")
+    _copy_spec_field(spec, "page_id", "fields", "id")
+    _copy_spec_field(spec, "title_contains", "contains_fields", "title")
+    _copy_spec_field(spec, "body_contains", "contains_fields", "text")
+    _copy_spec_field(spec, "last_edited_time_matches", "matches_fields", "last_edited_time")
+    return _rename_built(_build_collection_item_exists(spec), "notion_page_updated")
 
 
 def _built(
@@ -490,12 +698,43 @@ def _trace_action(spec: dict[str, Any], *, default_tool_name: str, default_id: s
     return [action]
 
 
-def _state_assertion(assertion_id: str, where: dict[str, Any]) -> dict[str, Any]:
-    return {"id": assertion_id, "where": where}
+def _state_assertion(
+    assertion_id: str,
+    where: dict[str, Any] | None = None,
+    *,
+    where_any: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    assertion: dict[str, Any] = {"id": assertion_id}
+    if where:
+        assertion["where"] = where
+    if where_any:
+        assertion["where_any"] = where_any
+    return assertion
 
 
-def _transition(transition_id: str, *, before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
-    return {"id": transition_id, "before": {"where": before}, "after": {"where": after}}
+def _transition(
+    transition_id: str,
+    *,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    before_any: list[dict[str, Any]] | None = None,
+    after_any: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    before_block: dict[str, Any] = {}
+    after_block: dict[str, Any] = {}
+    if before:
+        before_block["where"] = before
+    if after:
+        after_block["where"] = after
+    if before_any:
+        before_block["where_any"] = before_any
+    if after_any:
+        after_block["where_any"] = after_any
+    return {"id": transition_id, "before": before_block, "after": after_block}
+
+
+def _where_any(path: str, where: dict[str, Any]) -> dict[str, Any]:
+    return {"path": path, "where": where}
 
 
 def _validator_id(spec: dict[str, Any]) -> str:
@@ -547,9 +786,51 @@ def _add_optional_matches(where: dict[str, Any], path: str, spec: dict[str, Any]
         where[path] = {"matches": spec[key]}
 
 
+def _copy_spec_field(spec: dict[str, Any], source_key: str, target_map: str, target_field: str) -> None:
+    if source_key not in spec:
+        return
+    values = spec.setdefault(target_map, {})
+    if not isinstance(values, dict):
+        raise StateValidatorError(f"{target_map} must be an object")
+    values[target_field] = spec[source_key]
+
+
+def _item_where_from_spec(spec: dict[str, Any]) -> dict[str, Any]:
+    item_where: dict[str, Any] = {}
+    fields = spec.get("fields") or {}
+    contains_fields = spec.get("contains_fields") or {}
+    matches_fields = spec.get("matches_fields") or {}
+    for label, values in (
+        ("fields", fields),
+        ("contains_fields", contains_fields),
+        ("matches_fields", matches_fields),
+    ):
+        if not isinstance(values, dict):
+            raise StateValidatorError(f"{label} must be an object")
+    for field, value in fields.items():
+        item_where[str(field)] = value
+    for field, value in contains_fields.items():
+        item_where[str(field)] = {"contains": value}
+    for field, value in matches_fields.items():
+        item_where[str(field)] = {"matches": value}
+    return item_where
+
+
+def _count_where_from_spec(spec: dict[str, Any], state_path: str) -> dict[str, Any]:
+    if "count_path" in spec and "count" in spec:
+        return {_required_string(spec, "count_path"): _non_negative_int(spec["count"], "count")}
+    if "count" in spec:
+        return {f"{state_path}_count": _non_negative_int(spec["count"], "count")}
+    return {}
+
+
 _VALIDATORS: dict[str, ValidatorBuilder] = {
     "api_json_field": _build_api_json_field,
+    "calendar_event_created": _build_calendar_event_created,
+    "collection_count_changed": _build_collection_count_changed,
+    "collection_item_exists": _build_collection_item_exists,
     "db_row_exists": _build_db_row_exists,
+    "drive_file_created": _build_drive_file_created,
     "email_read": _build_email_read,
     "email_sent": _build_email_sent,
     "file_created": _build_file_created,
@@ -557,6 +838,13 @@ _VALIDATORS: dict[str, ValidatorBuilder] = {
     "github_issue_closed": _build_github_issue_closed,
     "github_issue_commented": _build_github_issue_commented,
     "job_completed": _build_job_completed,
+    "jira_issue_status": _build_jira_issue_status,
+    "k8s_resource_ready": _build_k8s_resource_ready,
+    "linear_issue_status": _build_linear_issue_status,
+    "notion_page_updated": _build_notion_page_updated,
+    "payment_status": _build_payment_status,
+    "s3_object_exists": _build_s3_object_exists,
+    "slack_message_sent": _build_slack_message_sent,
     "status_changed": _build_status_changed,
     "ticket_created": _build_ticket_created,
     "webhook_delivered": _build_webhook_delivered,

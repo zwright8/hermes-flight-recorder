@@ -1,0 +1,21 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "notify_deployment_done",
+      "validator": "slack_message_sent",
+      "description": "Verify a deployment notification appears in channel history.",
+      "state_path": "slack.messages",
+      "text_contains": "deployment finished",
+      "channel_id": "C123",
+      "trace": {
+        "tool_name": "slack_post_message",
+        "where": {
+          "result.channel_id": "C123",
+          "result.status": "sent"
+        }
+      }
+    }
+  ]
+}
+

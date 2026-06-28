@@ -397,12 +397,29 @@ Current monitor catalog:
 | Files and artifacts | existence, hashes, size, text, directory entries | `capture-state --file`, `capture-state --dir` |
 | Jobs, CI, queues, deployments | status, conclusion, run ids, processed counts | `http_json` |
 | Webhooks and event sinks | delivery status, event ids, payload fields, attempts | `http_json`, `sqlite` |
+| Chat and collaboration | channel messages, replies, authors, timestamps, reactions | `http_json` |
+| Calendars and scheduling | events, attendees, times, conference links, response status | `http_json` |
+| Object stores and document drives | objects, files, keys, mime types, hashes, owners | `http_json` |
+| Payments and billing | payment intents, invoices, subscriptions, refunds, settlement status | `http_json` |
+| Infrastructure control planes | deployments, pods, services, health checks, resource conditions | `http_json` |
+| Knowledge bases and documents | pages, blocks, titles, last edited times, owners | `http_json` |
 | Generic JSON APIs | any JSON field reachable by read-only GET | `http_json` |
 
 Built-in validators include `email_sent`, `email_read`, `github_issue_closed`,
 `github_issue_commented`, `ticket_created`, `status_changed`, `file_created`,
-`file_modified`, `db_row_exists`, `api_json_field`, `job_completed`, and
-`webhook_delivered`.
+`file_modified`, `db_row_exists`, `api_json_field`, `job_completed`,
+`webhook_delivered`, `collection_item_exists`, `collection_count_changed`,
+`slack_message_sent`, `calendar_event_created`, `drive_file_created`,
+`s3_object_exists`, `k8s_resource_ready`, `payment_status`,
+`linear_issue_status`, `jira_issue_status`, and `notion_page_updated`.
+
+State assertions support wildcard paths such as `slack.messages.*.text` and
+same-item collection checks through `where_any`, so validators can match
+unordered API results without assuming that the relevant object is at index 0.
+For read-only JSON APIs, `verify-state` also supports `state_value_path` so a
+source can copy `json.messages` or `json.items` directly into a validator-facing
+state path such as `slack.messages`, `calendar.events`, or
+`kubernetes.resources`.
 
 ## Comparison And Improvement Loops
 

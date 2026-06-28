@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from flightrecorder.cli import main
+from flightrecorder.state_validators import build_state_validator_assertions
 from flightrecorder.verifiers import VerifierError, capture_verified_state
 
 
@@ -209,6 +210,130 @@ class VerifierAdapterTests(unittest.TestCase):
         self.assertEqual(snapshot["gmail"]["threads"]["threads"]["thread-1"]["message_count"], 1)
         self.assertNotIn("gmail-token", json.dumps(snapshot))
         self.assertNotIn("github-token", json.dumps(snapshot))
+
+    def test_http_json_state_value_path_feeds_collection_validator_end_to_end(self):
+        server = _JsonServer(
+            {
+                "/slack/good": {
+                    "ok": True,
+                    "messages": [
+                        {"text": "hello", "channel_id": "C999", "user": "U2"},
+                        {"text": "deployment finished successfully", "channel_id": "C123", "user": "U1"},
+                    ],
+                },
+                "/slack/bad": {
+                    "ok": True,
+                    "messages": [
+                        {"text": "deployment finished successfully", "channel_id": "C999", "user": "U1"},
+                        {"text": "wrong channel", "channel_id": "C123", "user": "U2"},
+                    ],
+                },
+            }
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                good_state = root / "good.state.json"
+                bad_state = root / "bad.state.json"
+                for name, endpoint, out_path in (
+                    ("good", "/slack/good", good_state),
+                    ("bad", "/slack/bad", bad_state),
+                ):
+                    config_path = root / f"{name}.verifier.json"
+                    config_path.write_text(
+                        json.dumps(
+                            {
+                                "schema_version": "hfr.verifier_config.v1",
+                                "sources": [
+                                    {
+                                        "id": "slack_history",
+                                        "type": "http_json",
+                                        "url": f"{server.url}{endpoint}",
+                                        "state_path": "slack.messages",
+                                        "state_value_path": "json.messages",
+                                    }
+                                ],
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    self.assertEqual(main(["verify-state", "--config", str(config_path), "--out", str(out_path)]), 0)
+
+                payload = json.loads(good_state.read_text(encoding="utf-8"))
+                self.assertEqual(payload["slack"]["messages"][1]["channel_id"], "C123")
+
+                compiled = build_state_validator_assertions(
+                    {
+                        "validator": "slack_message_sent",
+                        "id": "notify_deploy_done",
+                        "state_path": "slack.messages",
+                        "text_contains": "deployment finished",
+                        "channel_id": "C123",
+                        "trace": {
+                            "tool_name": "slack_post_message",
+                            "where": {
+                                "result.channel_id": "C123",
+                                "result.status": "sent",
+                            },
+                        },
+                    }
+                )
+                trace_path = root / "trace.json"
+                trace_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "hfr.trace.v1",
+                            "session": {"id": "session-1", "source_format": "normalized_json", "model": "test"},
+                            "events": [
+                                {
+                                    "type": "tool_result",
+                                    "session_id": "session-1",
+                                    "parent_session_id": None,
+                                    "tool_name": "slack_post_message",
+                                    "args": {},
+                                    "status": "ok",
+                                    "text": "",
+                                    "result": {"channel_id": "C123", "status": "sent"},
+                                    "timestamp": None,
+                                }
+                            ],
+                            "final_answer": "Posted the deployment finished notification.",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                scenario_path = root / "scenario.json"
+                scenario_path.write_text(
+                    json.dumps(
+                        {
+                            "id": "external_slack_completion",
+                            "title": "External Slack Completion Verification",
+                            "prompt": "Post a deployment completion notice to Slack channel C123.",
+                            "policy": {},
+                            "assertions": compiled["assertions"],
+                            "scoring": {"pass_threshold": 90},
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+                good_run = root / "good_run"
+                bad_run = root / "bad_run"
+                self.assertEqual(
+                    main(["run", "--scenario", str(scenario_path), "--trace", str(trace_path), "--state", str(good_state), "--out", str(good_run)]),
+                    0,
+                )
+                self.assertEqual(
+                    main(["run", "--scenario", str(scenario_path), "--trace", str(trace_path), "--state", str(bad_state), "--out", str(bad_run)]),
+                    0,
+                )
+                good_score = json.loads((good_run / "scorecard.json").read_text(encoding="utf-8"))
+                bad_score = json.loads((bad_run / "scorecard.json").read_text(encoding="utf-8"))
+                self.assertTrue(good_score["passed"], good_score)
+                self.assertFalse(bad_score["passed"])
+                self.assertIn("required_state", bad_score["critical_failures"])
+        finally:
+            server.close()
 
     def test_sqlite_source_uses_readonly_queries(self):
         with tempfile.TemporaryDirectory() as tmp:

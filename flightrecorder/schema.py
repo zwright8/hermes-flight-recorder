@@ -45,7 +45,7 @@ REGEX_FIELDS = (
 
 EVIDENCE_TYPES = {"event_matches", "no_event_matches", "final_matches", "no_final_matches"}
 MATCHER_FIELDS = ("equals", "contains", "matches", "pattern")
-STRUCTURED_MATCHER_FIELDS = ("where", "field_equals", "field_contains", "field_matches")
+STRUCTURED_MATCHER_FIELDS = ("where", "where_any", "field_equals", "field_contains", "field_matches")
 
 
 def load_scenario(path: str | Path) -> dict[str, Any]:
@@ -219,7 +219,7 @@ def _has_matcher(item: dict[str, Any]) -> bool:
 
 def _validate_matchers(item: dict[str, Any], label: str, *, require_matcher: bool) -> None:
     if require_matcher and not _has_matcher(item):
-        raise ScenarioError(f"{label} missing matcher: use pattern, equals, contains, matches, where, or field_*")
+        raise ScenarioError(f"{label} missing matcher: use pattern, equals, contains, matches, where, where_any, or field_*")
 
     if "pattern" in item:
         _compile_regex(item["pattern"], f"{label}.pattern")
@@ -238,6 +238,9 @@ def _validate_matchers(item: dict[str, Any], label: str, *, require_matcher: boo
                 raise ScenarioError(f"{label}.where field paths must be non-empty strings")
             _validate_constraint(constraint, f"{label}.where.{path}")
 
+    if "where_any" in item:
+        _validate_where_any(item["where_any"], f"{label}.where_any")
+
     for field in ("field_equals", "field_contains", "field_matches"):
         values = item.get(field)
         if field in item and not isinstance(values, dict):
@@ -250,6 +253,25 @@ def _validate_matchers(item: dict[str, Any], label: str, *, require_matcher: boo
                     _compile_regex(expected, f"{label}.{field}.{path}")
                 elif isinstance(expected, (dict, list)):
                     raise ScenarioError(f"{label}.{field}.{path} must be a scalar value")
+
+
+def _validate_where_any(value: Any, label: str) -> None:
+    checks = value if isinstance(value, list) else [value]
+    if not checks:
+        raise ScenarioError(f"{label} must not be empty")
+    for index, check in enumerate(checks):
+        check_label = f"{label}[{index}]"
+        if not isinstance(check, dict):
+            raise ScenarioError(f"{check_label} must be an object")
+        if not isinstance(check.get("path"), str) or not check.get("path"):
+            raise ScenarioError(f"{check_label}.path must be a non-empty string")
+        where = check.get("where")
+        if not isinstance(where, dict) or not where:
+            raise ScenarioError(f"{check_label}.where must be a non-empty object")
+        for field, constraint in where.items():
+            if not isinstance(field, str) or not field:
+                raise ScenarioError(f"{check_label}.where fields must be non-empty strings")
+            _validate_constraint(constraint, f"{check_label}.where.{field}")
 
 
 def _validate_event_assertion(item: Any, label: str, *, require_id: bool) -> None:

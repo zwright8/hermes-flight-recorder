@@ -23,3 +23,7 @@ Copy the generated `assertions` object into a scenario, then run that scenario
 with `--before-state` and `--state` snapshots captured by `verify-state` or
 `capture-state`.
 
+For unordered API results, use validators such as `collection_item_exists`,
+`slack_message_sent`, `calendar_event_created`, or `k8s_resource_ready`. They
+compile to `where_any` assertions, which require all field checks to match the
+same item in a collection.

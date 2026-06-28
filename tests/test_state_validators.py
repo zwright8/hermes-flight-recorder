@@ -5,6 +5,7 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 from flightrecorder.schema_registry import check_schema_contract
+from flightrecorder.scorers import score_trace
 from flightrecorder.state_validators import build_monitor_catalog, build_state_validator_assertions
 from flightrecorder.verifiers import capture_verified_state
 
@@ -23,6 +24,9 @@ class StateValidatorTests(unittest.TestCase):
         self.assertIn("filesystem", monitor_ids)
         self.assertIn("email_sent", catalog["validators"])
         self.assertIn("github_issue_closed", catalog["validators"])
+        self.assertIn("slack_message_sent", catalog["validators"])
+        self.assertIn("calendar_event_created", catalog["validators"])
+        self.assertIn("k8s_resource_ready", catalog["validators"])
 
     def test_cli_writes_catalog_and_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -47,6 +51,13 @@ class StateValidatorTests(unittest.TestCase):
             catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
             self.assertEqual(catalog["schema_version"], "hfr.state_validator_catalog.v1")
             self.assertIn("Email And Mailboxes", markdown_path.read_text(encoding="utf-8"))
+
+    def test_all_example_validator_configs_compile(self):
+        for path in sorted((ROOT / "examples" / "state_validators").glob("*.validator.json")):
+            with self.subTest(path=path.name):
+                compiled = build_state_validator_assertions(path)
+                self.assertEqual(compiled["schema_version"], "hfr.state_validator_assertions.v1")
+                self.assertGreater(compiled["validator_count"], 0)
 
     def test_email_sent_validator_scores_external_state_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -158,6 +169,44 @@ class StateValidatorTests(unittest.TestCase):
         transition = compiled["assertions"]["required_state_transitions"][0]
         self.assertEqual(transition["before"]["where"]["github.issue_7.issue.state"], "open")
         self.assertEqual(transition["after"]["where"]["github.issue_7.issue.state"], "closed")
+
+    def test_slack_message_validator_uses_same_item_collection_match(self):
+        compiled = build_state_validator_assertions(
+            {
+                "validator": "slack_message_sent",
+                "id": "notify_deploy_done",
+                "state_path": "slack.messages",
+                "text_contains": "deployment finished",
+                "channel_id": "C123",
+                "trace": False,
+            }
+        )
+        scenario = {
+            "id": "slack_state",
+            "title": "Slack State",
+            "policy": {},
+            "assertions": compiled["assertions"],
+            "scoring": {"pass_threshold": 90},
+        }
+        trace = {"schema_version": "hfr.trace.v1", "events": [], "final_answer": ""}
+        split_state = {
+            "slack": {
+                "messages": [
+                    {"text": "deployment finished", "channel_id": "C999"},
+                    {"text": "hello", "channel_id": "C123"},
+                ]
+            }
+        }
+        same_item_state = {
+            "slack": {
+                "messages": [
+                    {"text": "deployment finished", "channel_id": "C123"},
+                ]
+            }
+        }
+
+        self.assertFalse(score_trace(scenario, trace, split_state)["passed"])
+        self.assertTrue(score_trace(scenario, trace, same_item_state)["passed"])
 
 
 def _maildir(path: Path) -> Path:

@@ -78,7 +78,11 @@ def capture_verified_state(
         snapshot["verifiers"]["source_count"] += 1
         state_path = source.get("state_path")
         if result.get("status") == "ok" and state_path:
-            _assign_dot_path(snapshot, str(state_path), result.get("data"))
+            state_value = result.get("data")
+            state_value_path = source.get("state_value_path")
+            if state_value_path:
+                state_value = _select_dot_path(state_value, str(state_value_path))
+            _assign_dot_path(snapshot, str(state_path), state_value)
 
     return sanitize_state_snapshot(snapshot, patterns)
 
@@ -747,6 +751,29 @@ def _assign_dot_path(root: dict[str, Any], path: str, value: Any) -> None:
         elif not next_is_list and not isinstance(cursor[part], dict):
             raise VerifierError(f"state_path conflicts with non-object value at {part!r} in {path}")
         cursor = cursor[part]
+
+
+def _select_dot_path(root: Any, path: str) -> Any:
+    parts = path.split(".")
+    if not parts or any(not part for part in parts):
+        raise VerifierError(f"state_value_path must be dot-separated and non-empty: {path}")
+    cursor = root
+    for part in parts:
+        if isinstance(cursor, dict):
+            if part not in cursor:
+                raise VerifierError(f"state_value_path {path!r} missing key {part!r}")
+            cursor = cursor[part]
+            continue
+        if isinstance(cursor, list):
+            if not part.isdigit():
+                raise VerifierError(f"state_value_path {path!r} expected numeric list index at {part!r}")
+            index = int(part)
+            if index >= len(cursor):
+                raise VerifierError(f"state_value_path {path!r} index {index} out of range")
+            cursor = cursor[index]
+            continue
+        raise VerifierError(f"state_value_path {path!r} conflicts with scalar value at {part!r}")
+    return cursor
 
 
 def _required_string(source: dict[str, Any], field: str) -> str:

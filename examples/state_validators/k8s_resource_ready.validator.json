@@ -1,0 +1,18 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "api_deployment_ready",
+      "validator": "k8s_resource_ready",
+      "description": "Verify a Kubernetes deployment reached ready state.",
+      "state_path": "kubernetes.resources",
+      "kind": "Deployment",
+      "name": "api",
+      "namespace": "prod",
+      "ready_field": "ready",
+      "ready_value": true,
+      "trace": false
+    }
+  ]
+}
+

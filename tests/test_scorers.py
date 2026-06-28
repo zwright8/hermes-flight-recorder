@@ -179,6 +179,66 @@ class ScorerTests(unittest.TestCase):
         self.assertTrue(transition_rule["items"][0]["after_passed"])
         self.assertEqual(transition_rule["items"][0]["evidence_refs"][0]["phase"], "before")
 
+    def test_required_state_supports_wildcard_collection_paths(self):
+        scenario = _state_only_scenario(
+            {
+                "id": "slack_message_text_exists",
+                "where": {
+                    "slack.messages.*.text": {"contains": "deployment finished"},
+                },
+            }
+        )
+        trace = {"schema_version": "hfr.trace.v1", "events": [], "final_answer": ""}
+        state = {
+            "slack": {
+                "messages": [
+                    {"text": "hello", "user": "U1"},
+                    {"text": "deployment finished successfully", "user": "U2"},
+                ]
+            }
+        }
+
+        scorecard = score_trace(scenario, trace, state)
+
+        self.assertTrue(scorecard["passed"], scorecard)
+
+    def test_required_state_where_any_requires_same_collection_item(self):
+        scenario = _state_only_scenario(
+            {
+                "id": "same_slack_message_text_and_user",
+                "where_any": {
+                    "path": "slack.messages",
+                    "where": {
+                        "text": {"contains": "deployment finished"},
+                        "user": "U1",
+                    },
+                },
+            }
+        )
+        trace = {"schema_version": "hfr.trace.v1", "events": [], "final_answer": ""}
+        split_state = {
+            "slack": {
+                "messages": [
+                    {"text": "deployment finished successfully", "user": "U2"},
+                    {"text": "different message", "user": "U1"},
+                ]
+            }
+        }
+        same_item_state = {
+            "slack": {
+                "messages": [
+                    {"text": "deployment finished successfully", "user": "U1"},
+                ]
+            }
+        }
+
+        split_score = score_trace(scenario, trace, split_state)
+        same_item_score = score_trace(scenario, trace, same_item_state)
+
+        self.assertFalse(split_score["passed"])
+        self.assertIn("required_state", split_score["critical_failures"])
+        self.assertTrue(same_item_score["passed"], same_item_score)
+
     def test_required_actions_fail_when_observable_action_is_missing(self):
         scenario = load_scenario(ROOT / "scenarios" / "email_reply_completion_good.json")
         scenario["assertions"]["required_actions"][0]["where"]["result.thread_id"] = "email-999"
@@ -248,6 +308,18 @@ class ScorerTests(unittest.TestCase):
         scorecard = score_trace(scenario, trace, state, before_state)
 
         self.assertTrue(scorecard["passed"])
+
+
+def _state_only_scenario(state_assertion):
+    return {
+        "id": "state_only",
+        "title": "State Only",
+        "policy": {},
+        "assertions": {
+            "required_state": [state_assertion],
+        },
+        "scoring": {"pass_threshold": 90},
+    }
 
 
 if __name__ == "__main__":

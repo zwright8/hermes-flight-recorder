@@ -31,7 +31,11 @@
     "validatorName": {
       "enum": [
         "api_json_field",
+        "calendar_event_created",
+        "collection_count_changed",
+        "collection_item_exists",
         "db_row_exists",
+        "drive_file_created",
         "email_read",
         "email_sent",
         "file_created",
@@ -39,6 +43,13 @@
         "github_issue_closed",
         "github_issue_commented",
         "job_completed",
+        "jira_issue_status",
+        "k8s_resource_ready",
+        "linear_issue_status",
+        "notion_page_updated",
+        "payment_status",
+        "s3_object_exists",
+        "slack_message_sent",
         "status_changed",
         "ticket_created",
         "webhook_delivered"
@@ -129,6 +140,19 @@
         },
         "fields": {
           "type": "object"
+        },
+        "contains_fields": {
+          "type": "object"
+        },
+        "matches_fields": {
+          "type": "object"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "count_path": {
+          "type": "string"
         }
       }
     }

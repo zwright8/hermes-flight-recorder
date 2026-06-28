@@ -52,6 +52,10 @@
           "type": "string",
           "description": "Optional dot path where captured source data is copied into the hfr.state_snapshot.v1 root."
         },
+        "state_value_path": {
+          "type": "string",
+          "description": "Optional dot path inside the captured source data to copy into state_path instead of copying the full adapter result."
+        },
         "required": {
           "type": "boolean",
           "default": true

@@ -57,6 +57,67 @@ class ScenarioSchemaTests(unittest.TestCase):
             with self.assertRaisesRegex(ScenarioError, "missing matcher"):
                 load_scenario(path)
 
+    def test_required_state_accepts_where_any_collection_matcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "good.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "good",
+                        "title": "Good",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_state": [
+                                {
+                                    "id": "message_exists",
+                                    "where_any": {
+                                        "path": "slack.messages",
+                                        "where": {
+                                            "text": {"contains": "done"},
+                                            "channel_id": "C123",
+                                        },
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            scenario = load_scenario(path)
+
+            self.assertEqual(
+                scenario["assertions"]["required_state"][0]["where_any"]["path"],
+                "slack.messages",
+            )
+
+    def test_required_state_rejects_malformed_where_any(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "id": "bad",
+                        "title": "Bad",
+                        "prompt": "x",
+                        "policy": {},
+                        "assertions": {
+                            "required_state": [
+                                {
+                                    "id": "message_exists",
+                                    "where_any": {"path": "slack.messages"},
+                                }
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ScenarioError, "where must be a non-empty object"):
+                load_scenario(path)
+
     def test_required_state_transitions_require_before_and_after_matchers(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "bad.json"

@@ -847,6 +847,8 @@ def _final_matches_assertion(trace: dict[str, Any], item: dict[str, Any]) -> boo
 
 
 def _state_matches_assertion(state_snapshot: dict[str, Any], item: dict[str, Any]) -> bool:
+    if not _where_any_matches(state_snapshot, item):
+        return False
     constraints = _field_constraints(item)
     if constraints:
         return all(_value_matches_constraint(_path_value(state_snapshot, field), constraint) for field, constraint in constraints.items())
@@ -854,6 +856,41 @@ def _state_matches_assertion(state_snapshot: dict[str, Any], item: dict[str, Any
     if pattern is not None:
         return _matches(str(pattern), _field_value(state_snapshot, item.get("field", "all")))
     return True
+
+
+def _where_any_matches(root: dict[str, Any], item: dict[str, Any]) -> bool:
+    raw_checks = item.get("where_any")
+    if raw_checks is None:
+        return True
+    checks = raw_checks if isinstance(raw_checks, list) else [raw_checks]
+    for check in checks:
+        if not isinstance(check, dict):
+            return False
+        path = check.get("path")
+        where = check.get("where")
+        if not isinstance(path, str) or not isinstance(where, dict) or not where:
+            return False
+        collection = _path_value(root, path)
+        candidates = _collection_candidates(collection)
+        if not any(
+            all(_value_matches_constraint(_path_value(candidate, field), constraint) for field, constraint in where.items())
+            for candidate in candidates
+            if isinstance(candidate, dict)
+        ):
+            return False
+    return True
+
+
+def _collection_candidates(collection: Any) -> list[Any]:
+    if collection is _MISSING:
+        return []
+    if isinstance(collection, _WildcardValues):
+        return list(collection)
+    if isinstance(collection, list):
+        return collection
+    if isinstance(collection, dict):
+        return list(collection.values())
+    return [collection]
 
 
 def _field_value(event: dict[str, Any], field: str) -> str:
@@ -867,6 +904,10 @@ def _field_value(event: dict[str, Any], field: str) -> str:
 
 
 _MISSING = object()
+class _WildcardValues(list[Any]):
+    """Values collected from a wildcard path segment."""
+
+
 _OPERATORS = {"equals", "contains", "matches", "present"}
 
 
@@ -911,6 +952,8 @@ def _single_text_constraint(item: dict[str, Any]) -> dict[str, Any] | None:
 def _path_value(event: dict[str, Any], field: str) -> Any:
     if field == "all":
         return _event_blob(event)
+    if "*" in field.split("."):
+        return _WildcardValues(_path_values(event, field.split(".")))
     cursor: Any = event
     for part in field.split("."):
         if isinstance(cursor, dict) and part in cursor:
@@ -922,7 +965,40 @@ def _path_value(event: dict[str, Any], field: str) -> Any:
     return cursor
 
 
+def _path_values(cursor: Any, parts: list[str]) -> list[Any]:
+    if not parts:
+        return [cursor]
+    part = parts[0]
+    rest = parts[1:]
+    if part == "*":
+        values: list[Any] = []
+        if isinstance(cursor, dict):
+            iterable = cursor.values()
+        elif isinstance(cursor, list):
+            iterable = cursor
+        else:
+            return []
+        for item in iterable:
+            values.extend(_path_values(item, rest))
+        return values
+    if isinstance(cursor, dict) and part in cursor:
+        return _path_values(cursor[part], rest)
+    if isinstance(cursor, list) and part.isdigit() and int(part) < len(cursor):
+        return _path_values(cursor[int(part)], rest)
+    return []
+
+
 def _value_matches_constraint(value: Any, constraint: Any) -> bool:
+    if isinstance(value, _WildcardValues):
+        if isinstance(constraint, dict) and "present" in constraint:
+            present = bool(value)
+            if bool(constraint["present"]) != present:
+                return False
+            remaining = {key: item for key, item in constraint.items() if key != "present"}
+            return not remaining or any(_value_matches_constraint(item, remaining) for item in value)
+        if not value:
+            return False
+        return any(_value_matches_constraint(item, constraint) for item in value)
     if isinstance(constraint, dict) and _OPERATORS.intersection(constraint):
         if "present" in constraint:
             present = value is not _MISSING
@@ -948,6 +1024,9 @@ def _assertion_summary(item: dict[str, Any]) -> str:
     constraints = _field_constraints(item)
     if constraints:
         parts.extend(f"{field}={_constraint_label(constraint)}" for field, constraint in constraints.items())
+    where_any = item.get("where_any")
+    if where_any:
+        parts.append(f"where_any={_constraint_label(where_any)}")
     return ", ".join(parts) or "any event"
 
 

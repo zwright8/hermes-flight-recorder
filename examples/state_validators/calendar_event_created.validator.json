@@ -1,0 +1,18 @@
+{
+  "schema_version": "hfr.state_validator_config.v1",
+  "validators": [
+    {
+      "id": "calendar_followup_created",
+      "validator": "calendar_event_created",
+      "description": "Verify a follow-up meeting appears in calendar events.",
+      "state_path": "calendar.events",
+      "summary_contains": "Customer follow-up",
+      "attendee_contains": "customer@example.com",
+      "status": "confirmed",
+      "trace": {
+        "tool_name": "calendar_create_event"
+      }
+    }
+  ]
+}
+

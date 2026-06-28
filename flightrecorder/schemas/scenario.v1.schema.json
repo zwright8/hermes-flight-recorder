@@ -180,6 +180,9 @@
         },
         "where": {
           "type": "object"
+        },
+        "where_any": {
+          "$ref": "#/$defs/whereAny"
         }
       },
       "required": [
@@ -372,8 +375,43 @@
         },
         "where": {
           "type": "object"
+        },
+        "where_any": {
+          "$ref": "#/$defs/whereAny"
         }
       },
+      "type": "object"
+    },
+    "whereAny": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/whereAnyItem"
+        },
+        {
+          "items": {
+            "$ref": "#/$defs/whereAnyItem"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ]
+    },
+    "whereAnyItem": {
+      "additionalProperties": true,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "where": {
+          "minProperties": 1,
+          "type": "object"
+        }
+      },
+      "required": [
+        "path",
+        "where"
+      ],
       "type": "object"
     },
     "stringArray": {
