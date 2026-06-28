@@ -111,7 +111,16 @@ from .validation import validate_artifacts
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
-TRACE_FORMAT_CHOICES = ["auto", "trajectory_jsonl", "observer_jsonl", "openclaw_jsonl", "atof_jsonl", "atif_json", "normalized_json"]
+TRACE_FORMAT_CHOICES = [
+    "auto",
+    "trajectory_jsonl",
+    "observer_jsonl",
+    "openclaw_jsonl",
+    "coven_jsonl",
+    "atof_jsonl",
+    "atif_json",
+    "normalized_json",
+]
 
 
 class ReplayError(ValueError):

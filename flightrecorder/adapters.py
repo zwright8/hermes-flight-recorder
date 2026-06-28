@@ -10,6 +10,7 @@ from typing import Any
 
 TRACE_SCHEMA_VERSION = "hfr.trace.v1"
 OPENCLAW_EVENT_SCHEMA_VERSION = "hfr.openclaw.event.v1"
+COVEN_EVENT_SCHEMA_VERSION = "hfr.coven.event.v1"
 
 TOOL_CALL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 TOOL_RESPONSE_RE = re.compile(r"<tool_response>\s*(.*?)\s*</tool_response>", re.DOTALL)
@@ -37,6 +38,19 @@ OPENCLAW_HOOKS = {
     "subagent_spawning",
 }
 
+COVEN_STREAM_EVENT_TYPES = {"system", "user", "assistant", "tool_result", "result"}
+COVEN_EVENT_KINDS = {
+    "error",
+    "exit",
+    "input",
+    "kill",
+    "metadata",
+    "output",
+    "patch_metadata",
+    "tool_call",
+    "tool_result",
+}
+
 
 class AdapterError(ValueError):
     """Raised when a trace cannot be normalized."""
@@ -58,6 +72,8 @@ def normalize_trace(path: str | Path, fmt: str = "auto") -> dict[str, Any]:
         return normalize_observer_jsonl(trace_path)
     if selected == "openclaw_jsonl":
         return normalize_openclaw_jsonl(trace_path)
+    if selected == "coven_jsonl":
+        return normalize_coven_jsonl(trace_path)
     if selected == "atof_jsonl":
         return normalize_atof_jsonl(trace_path)
     if selected == "atif_json":
@@ -75,6 +91,12 @@ def detect_format(path: Path) -> str:
             return "normalized_json"
         if first.get("schema_version") == OPENCLAW_EVENT_SCHEMA_VERSION:
             return "openclaw_jsonl"
+        if first.get("schema_version") == COVEN_EVENT_SCHEMA_VERSION:
+            return "coven_jsonl"
+        if first.get("type") in COVEN_STREAM_EVENT_TYPES:
+            return "coven_jsonl"
+        if first.get("kind") in COVEN_EVENT_KINDS and ("payload_json" in first or "payload" in first):
+            return "coven_jsonl"
         if "conversations" in first:
             return "trajectory_jsonl"
         if first.get("schema_version", "").startswith("ATIF") or "steps" in first:
@@ -413,6 +435,156 @@ def normalize_openclaw_jsonl(path: Path) -> dict[str, Any]:
     return _trace(session_id, "openclaw_jsonl", model, events, final_answer, metadata)
 
 
+def normalize_coven_jsonl(path: Path) -> dict[str, Any]:
+    """Normalize Coven stream-json frames or daemon/API event rows into hfr.trace.v1."""
+    rows = _read_jsonl(path)
+    if not rows:
+        raise AdapterError(f"No JSONL entries in {path}")
+
+    events: list[dict[str, Any]] = []
+    final_answer = ""
+    model = "unknown"
+    session_id = path.stem
+    completed = None
+    stream_event_types: list[str] = []
+    daemon_event_kinds: list[str] = []
+    result_metadata: dict[str, Any] = {}
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        coven_row = _unwrap_coven_row(row)
+        if _is_coven_daemon_event(coven_row):
+            event = _normalize_coven_daemon_event(coven_row, session_id, len(events))
+            if event is None:
+                continue
+            daemon_event_kinds.append(str(coven_row.get("kind") or ""))
+            session_id = str(coven_row.get("session_id") or event.get("session_id") or session_id)
+            if event["type"] == "assistant_message" and event.get("text"):
+                final_answer = str(event["text"])
+            if event["type"] == "session_end":
+                payload = _coven_event_payload(coven_row)
+                completed = _coven_completed_from_payload(payload, default=completed)
+                result_metadata.update(_coven_daemon_result_metadata(payload))
+            events.append(event)
+            continue
+
+        event_type = coven_row.get("type")
+        if event_type not in COVEN_STREAM_EVENT_TYPES:
+            continue
+        stream_event_types.append(str(event_type))
+        session_id = str(coven_row.get("session_id") or session_id)
+        timestamp = coven_row.get("timestamp") or coven_row.get("created_at")
+
+        if event_type == "system":
+            model = str(coven_row.get("model") or model)
+            events.append(
+                _event(
+                    "session_start",
+                    session_id,
+                    args={
+                        "cwd": coven_row.get("cwd"),
+                        "tools": coven_row.get("tools") if isinstance(coven_row.get("tools"), list) else [],
+                        "agent_mode": coven_row.get("agent_mode"),
+                        "model": coven_row.get("model"),
+                    },
+                    status=str(coven_row.get("subtype") or "init"),
+                    text=str(coven_row.get("cwd") or ""),
+                    timestamp=timestamp,
+                    source_event_type="system",
+                    order=len(events),
+                )
+            )
+        elif event_type == "user":
+            events.append(
+                _event(
+                    "user_message",
+                    session_id,
+                    text=_coven_message_text(coven_row.get("message")),
+                    tool_call_id=coven_row.get("parent_tool_use_id"),
+                    timestamp=timestamp,
+                    source_event_type="user",
+                    order=len(events),
+                )
+            )
+        elif event_type == "assistant":
+            text = _coven_message_text(coven_row.get("message"), include_tool_use=False)
+            if text:
+                final_answer = text
+                events.append(
+                    _event(
+                        "assistant_message",
+                        session_id,
+                        status=str(coven_row.get("stop_reason") or "ok"),
+                        text=text,
+                        timestamp=timestamp,
+                        source_event_type="assistant",
+                        order=len(events),
+                    )
+                )
+            for tool_call in _coven_tool_use_blocks(coven_row.get("message")):
+                events.append(
+                    _event(
+                        "tool_call",
+                        session_id,
+                        tool_name=str(tool_call.get("name") or "unknown"),
+                        args=tool_call.get("input") if isinstance(tool_call.get("input"), dict) else {},
+                        status="requested",
+                        text="",
+                        tool_call_id=tool_call.get("id"),
+                        timestamp=timestamp,
+                        source_event_type="assistant",
+                        order=len(events),
+                    )
+                )
+        elif event_type == "tool_result":
+            is_error = bool(coven_row.get("is_error"))
+            events.append(
+                _event(
+                    "tool_result",
+                    session_id,
+                    status="error" if is_error else "ok",
+                    text=_coven_content_text(coven_row.get("content"), include_tool_use=False),
+                    tool_call_id=coven_row.get("tool_use_id"),
+                    result=coven_row.get("content"),
+                    timestamp=timestamp,
+                    source_event_type="tool_result",
+                    order=len(events),
+                )
+            )
+        elif event_type == "result":
+            completed = not bool(coven_row.get("is_error")) and coven_row.get("subtype") == "success"
+            result_metadata.update(
+                {
+                    "duration_ms": coven_row.get("duration_ms"),
+                    "num_turns": coven_row.get("num_turns"),
+                    "is_error": bool(coven_row.get("is_error")),
+                    "error": coven_row.get("error"),
+                }
+            )
+            events.append(
+                _event(
+                    "session_end",
+                    session_id,
+                    status=str(coven_row.get("subtype") or ""),
+                    text=str(coven_row.get("error") or ""),
+                    timestamp=timestamp,
+                    source_event_type="result",
+                    order=len(events),
+                )
+            )
+
+    metadata = {
+        "completed": completed,
+        "coven_stream_event_count": len(stream_event_types),
+        "coven_stream_event_types": stream_event_types,
+        "coven_daemon_event_count": len(daemon_event_kinds),
+        "coven_daemon_event_kinds": daemon_event_kinds,
+    }
+    metadata.update({key: value for key, value in result_metadata.items() if value is not None})
+    return _trace(session_id, "coven_jsonl", model, events, final_answer, metadata)
+
+
 def normalize_atof_jsonl(path: Path) -> dict[str, Any]:
     rows = _read_jsonl(path)
     events: list[dict[str, Any]] = []
@@ -648,6 +820,199 @@ def _openclaw_subagent_event(
         source_hook=hook,
         order=order,
     )
+
+
+def _unwrap_coven_row(row: dict[str, Any]) -> dict[str, Any]:
+    event = row.get("event")
+    if row.get("schema_version") == COVEN_EVENT_SCHEMA_VERSION and isinstance(event, dict):
+        return event
+    return row
+
+
+def _is_coven_daemon_event(row: dict[str, Any]) -> bool:
+    return row.get("kind") in COVEN_EVENT_KINDS and ("payload_json" in row or "payload" in row)
+
+
+def _normalize_coven_daemon_event(row: dict[str, Any], default_session_id: str, order: int) -> dict[str, Any] | None:
+    kind = str(row.get("kind") or "")
+    payload = _coven_event_payload(row)
+    session_id = str(row.get("session_id") or payload.get("session_id") or default_session_id)
+    timestamp = row.get("created_at") or row.get("timestamp")
+    source = {"source_event_kind": kind, "source_event_id": row.get("id"), "source_event_seq": row.get("seq")}
+
+    if kind == "input":
+        return _event(
+            "user_message",
+            session_id,
+            text=_coven_payload_text(payload),
+            timestamp=timestamp,
+            order=order,
+            **source,
+        )
+    if kind == "output":
+        return _event(
+            "assistant_message",
+            session_id,
+            status=str(payload.get("status") or "ok"),
+            text=_coven_payload_text(payload),
+            result=payload,
+            timestamp=timestamp,
+            order=order,
+            **source,
+        )
+    if kind == "tool_call":
+        args = _first_present(payload, keys=("args", "arguments", "input", "params"), default={})
+        return _event(
+            "tool_call",
+            session_id,
+            tool_name=str(_first_present(payload, keys=("tool_name", "toolName", "name"), default="unknown")),
+            args=args if isinstance(args, dict) else {},
+            status=str(payload.get("status") or "requested"),
+            text="",
+            tool_call_id=_first_present(payload, keys=("tool_call_id", "toolUseId", "tool_use_id", "id"), default=None),
+            timestamp=timestamp,
+            order=order,
+            **source,
+        )
+    if kind == "tool_result":
+        return _event(
+            "tool_result",
+            session_id,
+            tool_name=str(_first_present(payload, keys=("tool_name", "toolName", "name"), default="unknown")),
+            status=str(payload.get("status") or ("error" if payload.get("is_error") else "ok")),
+            text=_coven_payload_text(payload),
+            result=payload,
+            tool_call_id=_first_present(payload, keys=("tool_call_id", "toolUseId", "tool_use_id", "id"), default=None),
+            timestamp=timestamp,
+            order=order,
+            **source,
+        )
+    if kind == "exit":
+        return _event(
+            "session_end",
+            session_id,
+            status=str(payload.get("status") or payload.get("subtype") or ""),
+            text=_coven_payload_text(payload),
+            timestamp=timestamp,
+            order=order,
+            **source,
+        )
+    if kind == "error":
+        return _event(
+            "error",
+            session_id,
+            status="error",
+            text=_coven_payload_text(payload),
+            result=payload,
+            timestamp=timestamp,
+            order=order,
+            **source,
+        )
+    if kind in {"metadata", "patch_metadata"}:
+        return _event(
+            "session_metadata",
+            session_id,
+            status=str(payload.get("status") or ""),
+            text=_coven_payload_text(payload),
+            result=payload,
+            timestamp=timestamp,
+            order=order,
+            **source,
+        )
+    return _event(
+        f"coven_{kind}",
+        session_id,
+        status=str(payload.get("status") or ""),
+        text=_coven_payload_text(payload),
+        result=payload,
+        timestamp=timestamp,
+        order=order,
+        **source,
+    )
+
+
+def _coven_event_payload(row: dict[str, Any]) -> dict[str, Any]:
+    payload = row.get("payload")
+    if isinstance(payload, dict):
+        return payload
+    raw = row.get("payload_json")
+    if isinstance(raw, str):
+        parsed = _parse_json_object(raw)
+        if parsed is not None:
+            return parsed
+        return {"data": raw}
+    return {}
+
+
+def _coven_completed_from_payload(payload: dict[str, Any], default: Any) -> bool | None:
+    if "is_error" in payload:
+        return not bool(payload.get("is_error"))
+    if "exitCode" in payload:
+        return payload.get("exitCode") == 0
+    if "exit_code" in payload:
+        return payload.get("exit_code") == 0
+    status = str(payload.get("status") or payload.get("subtype") or "").lower()
+    if status:
+        return status in {"completed", "success", "succeeded", "ok"}
+    return default if isinstance(default, bool) else None
+
+
+def _coven_daemon_result_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "exit_code": _first_present(payload, keys=("exitCode", "exit_code"), default=None),
+        "is_error": payload.get("is_error"),
+        "error": payload.get("error") or payload.get("message"),
+    }
+
+
+def _coven_message_text(message: Any, *, include_tool_use: bool = True) -> str:
+    if isinstance(message, dict):
+        return _coven_content_text(message.get("content"), include_tool_use=include_tool_use)
+    return _coven_content_text(message, include_tool_use=include_tool_use)
+
+
+def _coven_content_text(content: Any, *, include_tool_use: bool = True) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        block_type = content.get("type")
+        if block_type == "text":
+            return str(content.get("text") or "")
+        if block_type == "image":
+            source = content.get("source") if isinstance(content.get("source"), dict) else {}
+            return str(source.get("path") or source.get("media_type") or "") if include_tool_use else ""
+        if block_type == "tool_use":
+            return _stringify(content) if include_tool_use else ""
+        for key in ("text", "data", "message", "content", "output"):
+            text = _coven_content_text(content.get(key), include_tool_use=include_tool_use)
+            if text:
+                return text
+        return _stringify(content) if include_tool_use else ""
+    if isinstance(content, list):
+        rendered = []
+        for item in content:
+            text = _coven_content_text(item, include_tool_use=include_tool_use)
+            if text:
+                rendered.append(text)
+        return "\n".join(rendered)
+    return _stringify(content)
+
+
+def _coven_tool_use_blocks(message: Any) -> list[dict[str, Any]]:
+    content = message.get("content") if isinstance(message, dict) else message
+    if not isinstance(content, list):
+        return []
+    return [item for item in content if isinstance(item, dict) and item.get("type") == "tool_use"]
+
+
+def _coven_payload_text(payload: dict[str, Any]) -> str:
+    for key in ("data", "text", "message", "output", "error", "reason"):
+        text = _coven_content_text(payload.get(key), include_tool_use=True)
+        if text:
+            return text
+    return _stringify(payload)
 
 
 def _dict_value(value: dict[str, Any], key: str) -> dict[str, Any] | None:

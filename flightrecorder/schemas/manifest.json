@@ -74,6 +74,22 @@
       "name": "live_openclaw_smoke_summary"
     },
     {
+      "artifact": "coven_event",
+      "artifact_schema_version": "hfr.coven.event.v1",
+      "description": "Raw Coven stream-json frame or daemon/API event row accepted by the Coven adapter.",
+      "filename": "coven_event.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/coven_event.v1.schema.json",
+      "name": "coven_event"
+    },
+    {
+      "artifact": "live_coven_smoke_summary",
+      "artifact_schema_version": "hfr.coven.live_smoke.summary.v1",
+      "description": "Live Coven daemon smoke summary emitted by scripts/live_coven_smoke.py.",
+      "filename": "live_coven_smoke_summary.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/live_coven_smoke_summary.v1.schema.json",
+      "name": "live_coven_smoke_summary"
+    },
+    {
       "artifact": "evidence_bundle",
       "artifact_schema_version": "hfr.evidence_bundle.v1",
       "description": "Evidence handoff manifest emitted by evidence-bundle.",

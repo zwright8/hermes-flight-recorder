@@ -77,6 +77,30 @@ class AdapterTests(unittest.TestCase):
             )
         )
 
+    def test_coven_adapter_maps_stream_json_frames(self):
+        trace = normalize_trace(ROOT / "fixtures" / "coven_detached_good.coven.jsonl")
+
+        self.assertEqual(trace["schema_version"], "hfr.trace.v1")
+        self.assertEqual(trace["session"]["source_format"], "coven_jsonl")
+        self.assertEqual(trace["session"]["id"], "coven-session-1")
+        self.assertEqual(trace["session"]["model"], "openai/gpt-5.5")
+        self.assertTrue(trace["metadata"]["completed"])
+        self.assertEqual(trace["metadata"]["coven_stream_event_types"], ["system", "user", "result"])
+        self.assertEqual(trace["final_answer"], "")
+        self.assertTrue(any(event["type"] == "session_start" and event["source_event_type"] == "system" for event in trace["events"]))
+        self.assertTrue(any(event["type"] == "user_message" and "detached Coven smoke" in event["text"] for event in trace["events"]))
+        self.assertTrue(any(event["type"] == "session_end" and event["status"] == "success" for event in trace["events"]))
+
+    def test_coven_adapter_maps_daemon_event_rows(self):
+        trace = normalize_trace(ROOT / "fixtures" / "coven_daemon_events_good.coven.jsonl")
+
+        self.assertEqual(trace["session"]["source_format"], "coven_jsonl")
+        self.assertEqual(trace["session"]["id"], "coven-session-2")
+        self.assertTrue(trace["metadata"]["completed"])
+        self.assertEqual(trace["metadata"]["coven_daemon_event_kinds"], ["input", "output", "exit"])
+        self.assertIn("README inspected successfully", trace["final_answer"])
+        self.assertTrue(any(event["type"] == "assistant_message" and event["source_event_kind"] == "output" for event in trace["events"]))
+
 
 if __name__ == "__main__":
     unittest.main()

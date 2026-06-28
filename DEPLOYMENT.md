@@ -138,6 +138,57 @@ turn, captures hook JSONL, normalizes it, scores it, and writes
 `normalized_trace.json`, `scorecard.json`, `task_completion.json`,
 `report.html`, and `artifact_lineage.json`.
 
+## Live Coven Collection
+
+Coven exposes a stable stream-json protocol for `coven run --stream-json`.
+Flight Recorder normalizes those JSONL frames, and it also accepts Coven
+daemon/API event rows that include `kind`, `payload_json`, `session_id`, and
+`created_at`.
+
+Score a captured Coven stream:
+
+```bash
+coven run codex --stream-json --detach \
+  "Record a detached Coven smoke session for Flight Recorder." \
+  > live_coven.coven.jsonl
+
+flightrecorder run \
+  --scenario examples/coven/detached_session_coven.json \
+  --trace live_coven.coven.jsonl \
+  --format coven_jsonl \
+  --out runs/coven_detached_session
+```
+
+Use the live smoke to prove the integration with a real Coven daemon and no
+external API keys:
+
+```bash
+python scripts/live_coven_smoke.py \
+  --out live_coven_smoke_artifacts/latest
+
+flightrecorder schemas \
+  --check-jsonl live_coven_smoke_artifacts/latest/live_coven.coven.jsonl \
+  --name coven_event
+
+flightrecorder schemas \
+  --check live_coven_smoke_artifacts/latest/live_coven_smoke_summary.json \
+  --name live_coven_smoke_summary
+```
+
+If `coven` or `pnpm` is not on `PATH`, pass `--coven-bin` or `--pnpm-bin`.
+When Node itself is not on `PATH`, pass `--node-bin-dir`.
+
+The smoke installs or finds Coven, starts an isolated daemon with a temporary
+`COVEN_HOME`, creates a detached stream-json session, normalizes the trace,
+scores it, and writes `live_coven_smoke_summary.json`,
+`live_coven.coven.jsonl`, `normalized_trace.json`, `scorecard.json`,
+`task_completion.json`, `run_digest.json`, `report.html`, and
+`artifact_lineage.json`.
+
+Detached Coven traces prove recording/session evidence only. Treat task
+completion as proven only when the Coven trace includes observable assistant,
+tool, state, or artifact events that satisfy the scenario assertions.
+
 ## Operational Checklist
 
 - Store raw Hermes exports in a restricted directory.
@@ -280,8 +331,10 @@ turn, captures hook JSONL, normalizes it, scores it, and writes
 - Run `python -m unittest discover` and `./demo.sh` in CI before release.
 - Run `python scripts/live_hermes_smoke.py --hermes-root <checkout>` before
   deploying the optional observer plugin into a real Hermes environment.
+- Run `python scripts/live_coven_smoke.py` before claiming Coven runtime
+  compatibility in release notes or downstream integrations.
 
 ## Rollback
 
-The standalone CLI does not mutate Hermes runtime state. To roll back a
-deployment, uninstall the package or disable the optional collector plugin.
+The standalone CLI does not mutate Hermes or Coven runtime behavior. To roll
+back a deployment, uninstall the package or disable optional collector plugins.

@@ -1,0 +1,56 @@
+{
+  "id": "coven_detached_session",
+  "title": "Coven Detached Session Evidence",
+  "prompt": "Record a detached Coven smoke session for Flight Recorder.",
+  "trace": {
+    "format": "coven_jsonl",
+    "path": "../../fixtures/coven_detached_good.coven.jsonl"
+  },
+  "policy": {
+    "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+    "max_tool_calls": 0,
+    "max_api_calls": 0,
+    "max_subagents": 0
+  },
+  "assertions": {
+    "required_actions": [
+      {
+        "id": "coven_session_started",
+        "description": "Coven emitted a stream-json system.init frame for the session.",
+        "event_type": "session_start",
+        "status": "init",
+        "field_equals": {
+          "source_event_type": "system"
+        }
+      },
+      {
+        "id": "user_prompt_recorded",
+        "description": "Coven recorded the user prompt in the stream-json trace.",
+        "event_type": "user_message",
+        "field_contains": {
+          "text": "detached Coven smoke session"
+        }
+      },
+      {
+        "id": "coven_session_completed",
+        "description": "Coven emitted a successful result frame.",
+        "event_type": "session_end",
+        "status": "success",
+        "field_equals": {
+          "source_event_type": "result"
+        }
+      }
+    ],
+    "required_evidence": [
+      {
+        "id": "no_agent_work_claimed",
+        "description": "Detached Coven smoke verifies recording only; it must not invent an assistant answer.",
+        "type": "final_matches",
+        "equals": ""
+      }
+    ]
+  },
+  "scoring": {
+    "pass_threshold": 90
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/live_coven_smoke_summary.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Machine-readable proof that Flight Recorder launched a live Coven daemon, recorded a Coven stream-json session, and scored the resulting trace.",
+  "properties": {
+    "coven_event_file": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "coven_exit_code": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "coven_home": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "coven_version": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "daemon_started": {
+      "type": "boolean"
+    },
+    "daemon_status_exit_code": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "environment": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "lineage": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "missing_event_types": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "report": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "run_digest": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.coven.live_smoke.summary.v1"
+    },
+    "score": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "session_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "stream_event_types": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "task_completion": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "daemon_started",
+    "daemon_status_exit_code",
+    "coven_exit_code",
+    "coven_version",
+    "coven_home",
+    "session_id",
+    "stream_event_types",
+    "missing_event_types",
+    "score",
+    "coven_event_file",
+    "report",
+    "lineage",
+    "task_completion",
+    "run_digest",
+    "summary",
+    "environment"
+  ],
+  "title": "Flight Recorder Live Coven Smoke Summary",
+  "type": "object"
+}

@@ -226,6 +226,8 @@ Supported inputs:
   `post_llm_call`, `subagent_start`, and `subagent_stop`.
 - OpenClaw plugin JSONL from `plugins/openclaw/flight_recorder`, normalized
   with `--format openclaw_jsonl`.
+- Coven `coven run --stream-json` JSONL and daemon/API event rows, normalized
+  with `--format coven_jsonl`.
 - Minimal ATOF JSONL and ATIF JSON for compatibility demos.
 
 The normalized trace schema is stable and intentionally small:
@@ -450,6 +452,40 @@ python3.11 scripts/live_openclaw_smoke.py \
 OpenClaw conversation hooks can include prompts and final answers. Treat raw
 `.openclaw.jsonl` files as sensitive operational traces.
 
+## Live Coven Collection
+
+Flight Recorder can score Coven traces from the stable stream-json protocol:
+
+```bash
+coven run codex --stream-json --detach \
+  "Record a detached Coven smoke session for Flight Recorder." \
+  > live_coven.coven.jsonl
+
+flightrecorder run \
+  --scenario examples/coven/detached_session_coven.json \
+  --trace live_coven.coven.jsonl \
+  --format coven_jsonl \
+  --out runs/coven_detached_session
+```
+
+It also accepts Coven daemon/API event rows shaped like
+`{ "kind": "output", "payload_json": "...", "session_id": "..." }`.
+
+The live smoke installs or finds the Coven CLI, starts a real isolated daemon,
+creates a detached stream-json session, normalizes it, scores it, and writes a
+standard report:
+
+```bash
+python3.11 scripts/live_coven_smoke.py \
+  --out live_coven_smoke_artifacts/latest
+```
+
+If `coven` or `pnpm` is not on `PATH`, pass `--coven-bin` or `--pnpm-bin`.
+
+Detached Coven runs prove that Coven recorded a project-scoped session and
+prompt. They do not prove model task completion unless the trace contains
+observable assistant/tool/state evidence for that task.
+
 ## Schemas
 
 Public artifacts ship with JSON Schema contracts.
@@ -474,8 +510,8 @@ flightrecorder/          Python package and CLI implementation
 flightrecorder/schemas/  Bundled JSON Schema contracts
 scenarios/               Offline demo scenario contracts
 fixtures/                Offline demo traces and state snapshots
-examples/                CI policies and trainer-wrapper example
-scripts/                 Live Hermes smoke helper
+examples/                CI policies, Coven/OpenClaw examples, trainer wrapper
+scripts/                 Live runtime smoke helpers
 plugins/openclaw/        Read-only OpenClaw hook collector plugin
 tests/                   Unittest regression suite
 demo.sh                  Deterministic offline demo
