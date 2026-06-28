@@ -102,6 +102,27 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("$.session: missing required property 'model'", errors)
         self.assertIn("$.events[0]: missing required property 'type'", errors)
 
+    def test_schema_check_enforces_any_of_contracts(self):
+        valid = check_schema_contract(
+            {
+                "kind": "input",
+                "session_id": "coven-session-1",
+                "payload_json": "{\"data\":\"hello\"}",
+            },
+            name_or_id="coven_event",
+        )
+        self.assertTrue(valid["passed"], valid["errors"])
+
+        invalid = check_schema_contract(
+            {
+                "kind": "input",
+                "session_id": "coven-session-1",
+            },
+            name_or_id="coven_event",
+        )
+        self.assertFalse(invalid["passed"])
+        self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(invalid["errors"]))
+
     def test_task_completion_schema_accepts_not_applicable_status(self):
         result = check_schema_contract(
             {
