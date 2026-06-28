@@ -80,6 +80,64 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 `scorecard.json`, `task_completion.json`, `report.html`, and
 `artifact_lineage.json`, without external API keys or network.
 
+## Live OpenClaw Collection
+
+Flight Recorder ships a read-only OpenClaw Gateway plugin at
+`plugins/openclaw/flight_recorder`. It captures OpenClaw hook payloads as
+`.openclaw.jsonl`, which the CLI normalizes with `--format openclaw_jsonl`.
+
+Install from this checkout:
+
+```bash
+openclaw plugins install plugins/openclaw/flight_recorder --link
+openclaw plugins enable flight-recorder
+```
+
+Conversation hooks such as `llm_input`, `llm_output`, and `agent_end` require
+explicit OpenClaw policy because they can contain prompts and final answers:
+
+```bash
+openclaw config patch --stdin <<'JSON'
+{
+  "plugins": {
+    "entries": {
+      "flight-recorder": {
+        "enabled": true,
+        "hooks": { "allowConversationAccess": true },
+        "config": { "outputDir": ".hfr-openclaw" }
+      }
+    }
+  }
+}
+JSON
+```
+
+Run an agent through the Gateway, then score a captured trace:
+
+```bash
+openclaw gateway run
+
+flightrecorder run \
+  --scenario examples/openclaw/support_ticket_completion_openclaw.json \
+  --trace .hfr-openclaw/<session>.openclaw.jsonl \
+  --format openclaw_jsonl \
+  --out runs/openclaw_support_ticket_completion
+```
+
+Use the live smoke to prove the integration without external API keys:
+
+```bash
+python scripts/live_openclaw_smoke.py \
+  --out live_openclaw_smoke_artifacts/latest
+```
+
+The smoke starts an isolated OpenClaw Gateway, configures a local
+OpenAI-compatible mock provider, links the plugin, runs a real `openclaw agent`
+turn, captures hook JSONL, normalizes it, scores it, and writes
+`live_openclaw_smoke_summary.json`, `live_openclaw.openclaw.jsonl`,
+`normalized_trace.json`, `scorecard.json`, `task_completion.json`,
+`report.html`, and `artifact_lineage.json`.
+
 ## Operational Checklist
 
 - Store raw Hermes exports in a restricted directory.

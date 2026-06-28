@@ -1,0 +1,30 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/openclaw_event.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Raw OpenClaw hook row emitted by the read-only Flight Recorder OpenClaw plugin.",
+  "properties": {
+    "captured_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "hook": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.openclaw.event.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "hook",
+    "captured_at",
+    "payload"
+  ],
+  "title": "Flight Recorder OpenClaw Hook Event",
+  "type": "object"
+}

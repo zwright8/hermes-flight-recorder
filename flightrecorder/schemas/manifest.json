@@ -58,6 +58,22 @@
       "name": "live_smoke_summary"
     },
     {
+      "artifact": "openclaw_event",
+      "artifact_schema_version": "hfr.openclaw.event.v1",
+      "description": "Raw OpenClaw hook JSONL row emitted by the Flight Recorder OpenClaw plugin.",
+      "filename": "openclaw_event.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/openclaw_event.v1.schema.json",
+      "name": "openclaw_event"
+    },
+    {
+      "artifact": "live_openclaw_smoke_summary",
+      "artifact_schema_version": "hfr.openclaw.live_smoke.summary.v1",
+      "description": "Live OpenClaw Gateway smoke summary emitted by scripts/live_openclaw_smoke.py.",
+      "filename": "live_openclaw_smoke_summary.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/live_openclaw_smoke_summary.v1.schema.json",
+      "name": "live_openclaw_smoke_summary"
+    },
+    {
       "artifact": "evidence_bundle",
       "artifact_schema_version": "hfr.evidence_bundle.v1",
       "description": "Evidence handoff manifest emitted by evidence-bundle.",

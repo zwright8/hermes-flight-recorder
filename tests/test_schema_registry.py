@@ -31,6 +31,8 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("state_diff", names)
         self.assertIn("run_digest", names)
         self.assertIn("live_smoke_summary", names)
+        self.assertIn("openclaw_event", names)
+        self.assertIn("live_openclaw_smoke_summary", names)
         self.assertIn("evidence_bundle", names)
         self.assertIn("improvement_plan", names)
         self.assertIn("improvement_ledger", names)
@@ -236,6 +238,34 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "live_smoke_summary")
+
+    def test_live_openclaw_smoke_summary_schema_accepts_current_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.openclaw.live_smoke.summary.v1",
+                "passed": True,
+                "agent_mode": "gateway",
+                "openclaw_exit_code": 0,
+                "openclaw_setup_exit_code": 1,
+                "mock_request_count": 1,
+                "chat_completion_request_count": 1,
+                "plugin_loaded": True,
+                "plugin_runtime_hook_count": 17,
+                "score": 100,
+                "hooks": ["agent_end", "llm_output"],
+                "missing_hooks": [],
+                "openclaw_event_file": "live_openclaw.openclaw.jsonl",
+                "report": "report.html",
+                "lineage": "artifact_lineage.json",
+                "task_completion": "task_completion.json",
+                "run_digest": "run_digest.json",
+                "summary": "live_openclaw_smoke_summary.json",
+                "environment": {"openclaw_version": "OpenClaw 2026.6.8"},
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "live_openclaw_smoke_summary")
 
     def test_improvement_ledger_gate_schema_accepts_minimal_gate(self):
         result = check_schema_contract(

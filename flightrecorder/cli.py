@@ -111,6 +111,7 @@ from .validation import validate_artifacts
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
+TRACE_FORMAT_CHOICES = ["auto", "trajectory_jsonl", "observer_jsonl", "openclaw_jsonl", "atof_jsonl", "atif_json", "normalized_json"]
 
 
 class ReplayError(ValueError):
@@ -1508,7 +1509,7 @@ def _parser() -> argparse.ArgumentParser:
 
     normalize = subparsers.add_parser("normalize", help="Normalize a Hermes trace artifact")
     normalize.add_argument("--trace", required=True)
-    normalize.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    normalize.add_argument("--format", default="auto", choices=TRACE_FORMAT_CHOICES)
     normalize.add_argument("--out", required=True)
     normalize.add_argument("--secret-pattern", action="append", default=[], help="Additional regex to redact from normalized output")
     normalize.add_argument("--no-redact", action="store_true", help="Write raw normalized trace without redaction")
@@ -1620,7 +1621,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--trace")
     run.add_argument("--state", help="Optional JSON state snapshot for required_state assertions")
     run.add_argument("--before-state", help="Optional JSON pre-run state snapshot for required_state_transitions assertions")
-    run.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    run.add_argument("--format", default="auto", choices=TRACE_FORMAT_CHOICES)
     run.add_argument("--out", required=True)
     run.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json with unredacted evidence")
     run.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated reports and regression files")
@@ -1633,7 +1634,7 @@ def _parser() -> argparse.ArgumentParser:
     replay.add_argument("--lineage", required=True, help="Path to artifact_lineage.json with replay metadata")
     replay.add_argument("--out", required=True, help="Output directory for replayed run artifacts")
     replay.add_argument("--base-dir", help="Base directory for relative replay paths; defaults to current directory")
-    replay.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    replay.add_argument("--format", default="auto", choices=TRACE_FORMAT_CHOICES)
     replay.add_argument("--write-sensitive-trace", action="store_true", help="Also write raw_trace.sensitive.json with unredacted evidence")
     replay.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in generated replay artifacts")
     replay.add_argument("--allow-non-self-contained", action="store_true", help="Attempt replay even when replay.self_contained is false")
@@ -1653,7 +1654,7 @@ def _parser() -> argparse.ArgumentParser:
     run_suite.add_argument("--out", required=True, help="Output directory for per-scenario run directories and suite artifacts")
     run_suite.add_argument("--pattern", default="*.json", help="Scenario filename glob relative to --scenarios")
     run_suite.add_argument("--recursive", action="store_true", help="Discover scenarios recursively with --pattern")
-    run_suite.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    run_suite.add_argument("--format", default="auto", choices=TRACE_FORMAT_CHOICES)
     run_suite.add_argument("--summary-out", help="Suite summary JSON output path; defaults to <out>/suite_summary.json")
     run_suite.add_argument("--index-out", help="Report index output path; defaults to <out>/index.html")
     run_suite.add_argument("--no-index", action="store_true", help="Skip writing the report index")
@@ -2149,7 +2150,7 @@ def _parser() -> argparse.ArgumentParser:
     draft_source = draft.add_mutually_exclusive_group(required=True)
     draft_source.add_argument("--trace", help="Trace artifact to normalize and use as source evidence")
     draft_source.add_argument("--run", help="Run directory containing normalized_trace.json")
-    draft.add_argument("--format", default="auto", choices=["auto", "trajectory_jsonl", "observer_jsonl", "atof_jsonl", "atif_json", "normalized_json"])
+    draft.add_argument("--format", default="auto", choices=TRACE_FORMAT_CHOICES)
     draft.add_argument("--out", required=True, help="Scenario JSON output path")
     draft.add_argument("--id", help="Scenario id; defaults to the source stem")
     draft.add_argument("--title", help="Scenario title; defaults from --id")

@@ -1,0 +1,45 @@
+{
+  "id": "openclaw_support_ticket_completion",
+  "title": "OpenClaw Support Ticket Completion",
+  "prompt": "Create a support ticket for the billing issue and summarize the result.",
+  "trace": {
+    "format": "openclaw_jsonl",
+    "path": "../../fixtures/openclaw_support_ticket_good.openclaw.jsonl"
+  },
+  "policy": {
+    "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+    "max_tool_calls": 3,
+    "max_api_calls": 3,
+    "max_subagents": 0
+  },
+  "assertions": {
+    "required_actions": [
+      {
+        "id": "ticket_create_tool_called",
+        "description": "OpenClaw called the support-ticket creation tool.",
+        "event_type": "tool_call",
+        "tool_name": "create_support_ticket",
+        "field_equals": {
+          "args.customer_id": "cust_123"
+        }
+      }
+    ],
+    "required_evidence": [
+      {
+        "id": "ticket_id_returned_by_tool",
+        "type": "event_matches",
+        "event_type": "tool_result",
+        "tool_name": "create_support_ticket",
+        "field_equals": {
+          "result.ticket_id": "TICK-1842",
+          "result.status": "open"
+        }
+      }
+    ],
+    "final_contains": ["TICK-1842"],
+    "final_not_contains": ["api_key", "password"]
+  },
+  "scoring": {
+    "pass_threshold": 90
+  }
+}

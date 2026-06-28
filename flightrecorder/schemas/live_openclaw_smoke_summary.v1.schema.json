@@ -1,0 +1,112 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/live_openclaw_smoke_summary.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Machine-readable proof that Flight Recorder launched a live OpenClaw Gateway, captured plugin hooks, and scored the resulting trace.",
+  "properties": {
+    "agent_mode": {
+      "const": "gateway"
+    },
+    "chat_completion_request_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "environment": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "gateway_port": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "hooks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "lineage": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "missing_hooks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "mock_request_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "openclaw_event_file": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "openclaw_exit_code": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "openclaw_setup_exit_code": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "plugin_loaded": {
+      "type": "boolean"
+    },
+    "plugin_runtime_hook_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "report": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "run_digest": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.openclaw.live_smoke.summary.v1"
+    },
+    "score": {
+      "maximum": 100,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summary": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "task_completion": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "agent_mode",
+    "openclaw_exit_code",
+    "openclaw_setup_exit_code",
+    "mock_request_count",
+    "chat_completion_request_count",
+    "plugin_loaded",
+    "plugin_runtime_hook_count",
+    "score",
+    "hooks",
+    "missing_hooks",
+    "openclaw_event_file",
+    "report",
+    "lineage",
+    "task_completion",
+    "run_digest",
+    "summary",
+    "environment"
+  ],
+  "title": "Flight Recorder Live OpenClaw Smoke Summary",
+  "type": "object"
+}

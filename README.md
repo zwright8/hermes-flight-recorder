@@ -224,6 +224,8 @@ Supported inputs:
   output.
 - Observer-hook JSONL with events such as `pre_tool_call`, `post_tool_call`,
   `post_llm_call`, `subagent_start`, and `subagent_stop`.
+- OpenClaw plugin JSONL from `plugins/openclaw/flight_recorder`, normalized
+  with `--format openclaw_jsonl`.
 - Minimal ATOF JSONL and ATIF JSON for compatibility demos.
 
 The normalized trace schema is stable and intentionally small:
@@ -388,12 +390,65 @@ Run the live smoke script when a local Hermes checkout/provider is available:
 ```bash
 python3.11 scripts/live_hermes_smoke.py \
   --hermes-root ../upstream-hermes-agent \
-  --flight-recorder-root . \
   --out live_smoke_artifacts
 ```
 
 The observer plugin is designed to fail open and record events. It must not be
 treated as a security boundary.
+
+## Live OpenClaw Collection
+
+Flight Recorder also includes a read-only OpenClaw plugin that records Gateway
+agent, model, tool, session, and subagent hooks as `.openclaw.jsonl`.
+
+Install and enable the plugin from this checkout:
+
+```bash
+openclaw plugins install plugins/openclaw/flight_recorder --link
+openclaw plugins enable flight-recorder
+```
+
+Allow conversation hook access and choose an output directory:
+
+```bash
+openclaw config patch --stdin <<'JSON'
+{
+  "plugins": {
+    "entries": {
+      "flight-recorder": {
+        "enabled": true,
+        "hooks": { "allowConversationAccess": true },
+        "config": { "outputDir": ".hfr-openclaw" }
+      }
+    }
+  }
+}
+JSON
+```
+
+Then run OpenClaw through the Gateway and score the captured trace:
+
+```bash
+openclaw gateway run
+
+flightrecorder run \
+  --scenario examples/openclaw/support_ticket_completion_openclaw.json \
+  --trace .hfr-openclaw/<session>.openclaw.jsonl \
+  --format openclaw_jsonl \
+  --out runs/openclaw_support_ticket_completion
+```
+
+The live smoke starts an isolated OpenClaw Gateway against a local mock model,
+captures real plugin hook JSONL, and generates normal Flight Recorder artifacts
+without API keys:
+
+```bash
+python3.11 scripts/live_openclaw_smoke.py \
+  --out live_openclaw_smoke_artifacts/latest
+```
+
+OpenClaw conversation hooks can include prompts and final answers. Treat raw
+`.openclaw.jsonl` files as sensitive operational traces.
 
 ## Schemas
 
@@ -421,6 +476,7 @@ scenarios/               Offline demo scenario contracts
 fixtures/                Offline demo traces and state snapshots
 examples/                CI policies and trainer-wrapper example
 scripts/                 Live Hermes smoke helper
+plugins/openclaw/        Read-only OpenClaw hook collector plugin
 tests/                   Unittest regression suite
 demo.sh                  Deterministic offline demo
 release_check.sh         Full local release gate used by CI

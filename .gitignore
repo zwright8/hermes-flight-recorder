@@ -1,4 +1,5 @@
 __pycache__/
+.DS_Store
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
@@ -10,6 +11,8 @@ build/
 dist/
 *.egg-info/
 runs/
+replay_runs/
 demo_artifacts/
 live_smoke_artifacts/
+live_openclaw_smoke_artifacts/
 *.sensitive.json

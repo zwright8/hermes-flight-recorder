@@ -52,6 +52,31 @@ class AdapterTests(unittest.TestCase):
 
             self.assertEqual(trace["session"]["source_format"], "observer_jsonl")
 
+    def test_openclaw_adapter_maps_plugin_hook_jsonl(self):
+        trace = normalize_trace(ROOT / "fixtures" / "openclaw_support_ticket_good.openclaw.jsonl")
+
+        self.assertEqual(trace["schema_version"], "hfr.trace.v1")
+        self.assertEqual(trace["session"]["source_format"], "openclaw_jsonl")
+        self.assertEqual(trace["session"]["model"], "hfr-openclaw-fixture")
+        self.assertIn("TICK-1842", trace["final_answer"])
+        self.assertEqual(trace["metadata"]["openclaw_hook_count"], 6)
+        self.assertTrue(
+            any(
+                event["type"] == "tool_call"
+                and event["tool_name"] == "create_support_ticket"
+                and event["args"]["customer_id"] == "cust_123"
+                for event in trace["events"]
+            )
+        )
+        self.assertTrue(
+            any(
+                event["type"] == "tool_result"
+                and event["result"]["ticket_id"] == "TICK-1842"
+                and event["source_hook"] == "after_tool_call"
+                for event in trace["events"]
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
