@@ -80,6 +80,38 @@ observer plugin can be loaded by Hermes, receives observer hooks, and produces
 `scorecard.json`, `task_completion.json`, `report.html`, and
 `artifact_lineage.json`, without external API keys or network.
 
+## Live External Provider Smoke
+
+Use the live verifier smoke before claiming production SaaS verification. It is
+opt-in and read-only; no provider calls are made unless `--allow-network` is
+supplied.
+
+```bash
+python scripts/live_verifier_smoke.py \
+  --allow-network \
+  --configured-only \
+  --require-live-provider \
+  --out runs/live_verifier_smoke
+```
+
+For release notes that name a specific provider, run that provider strictly:
+
+```bash
+python scripts/live_verifier_smoke.py \
+  --allow-network \
+  --provider gmail \
+  --strict-live \
+  --require-live-provider \
+  --out runs/live_verifier_smoke_gmail
+```
+
+The smoke writes one `state_snapshot.json` and `validation.json` per provider,
+plus `live_verifier_smoke_summary.json`. Check the summary contract with:
+
+```bash
+flightrecorder schemas --check runs/live_verifier_smoke/live_verifier_smoke_summary.json
+```
+
 ## Live OpenClaw Collection
 
 Flight Recorder ships a read-only OpenClaw Gateway plugin at
@@ -343,6 +375,9 @@ tool, state, or artifact events that satisfy the scenario assertions.
 - Run `python -m unittest discover` and `./demo.sh` in CI before release.
 - Run `python scripts/live_hermes_smoke.py --hermes-root <checkout>` before
   deploying the optional observer plugin into a real Hermes environment.
+- Run `python scripts/live_verifier_smoke.py --allow-network --provider
+  <provider> --strict-live --require-live-provider` before claiming live
+  production verification for that external provider.
 - Run `python scripts/live_coven_smoke.py` before claiming Coven runtime
   compatibility in release notes or downstream integrations.
 

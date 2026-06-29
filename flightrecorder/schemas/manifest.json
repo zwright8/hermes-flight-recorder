@@ -82,6 +82,14 @@
       "name": "live_smoke_summary"
     },
     {
+      "artifact": "live_verifier_smoke_summary",
+      "artifact_schema_version": "hfr.live_verifier_smoke.summary.v1",
+      "description": "Live provider verifier smoke summary emitted by scripts/live_verifier_smoke.py.",
+      "filename": "live_verifier_smoke_summary.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/live_verifier_smoke_summary.v1.schema.json",
+      "name": "live_verifier_smoke_summary"
+    },
+    {
       "artifact": "openclaw_event",
       "artifact_schema_version": "hfr.openclaw.event.v1",
       "description": "Raw OpenClaw hook JSONL row emitted by the Flight Recorder OpenClaw plugin.",

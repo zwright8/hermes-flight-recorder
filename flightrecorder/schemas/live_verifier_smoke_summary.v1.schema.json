@@ -1,0 +1,174 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/live_verifier_smoke_summary.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Machine-readable proof that Flight Recorder attempted read-only live external-state verifier checks for configured SaaS providers.",
+  "properties": {
+    "allow_network": {
+      "type": "boolean"
+    },
+    "artifacts": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "configured_only": {
+      "type": "boolean"
+    },
+    "environment": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "failed_provider_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "live_attempted_provider_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "passed_provider_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "providers": {
+      "items": {
+        "$ref": "#/$defs/provider"
+      },
+      "type": "array"
+    },
+    "require_live_provider": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "hfr.live_verifier_smoke.summary.v1"
+    },
+    "selected_provider_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "skipped_provider_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "strict_live": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "allow_network",
+    "configured_only",
+    "strict_live",
+    "require_live_provider",
+    "selected_provider_count",
+    "live_attempted_provider_count",
+    "passed_provider_count",
+    "failed_provider_count",
+    "skipped_provider_count",
+    "providers",
+    "artifacts",
+    "environment"
+  ],
+  "title": "Flight Recorder Live Verifier Smoke Summary",
+  "type": "object",
+  "$defs": {
+    "env_status": {
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "present": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "present"
+      ],
+      "type": "object"
+    },
+    "provider": {
+      "additionalProperties": true,
+      "properties": {
+        "artifacts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "missing_env": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "optional_env": {
+          "items": {
+            "$ref": "#/$defs/env_status"
+          },
+          "type": "array"
+        },
+        "provider": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "required_env": {
+          "items": {
+            "$ref": "#/$defs/env_status"
+          },
+          "type": "array"
+        },
+        "source_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_type": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "skipped",
+            "pending"
+          ]
+        },
+        "validation_passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "provider",
+        "source_type",
+        "description",
+        "required_env",
+        "optional_env",
+        "status"
+      ],
+      "type": "object"
+    }
+  }
+}

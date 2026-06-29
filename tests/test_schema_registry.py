@@ -34,6 +34,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("state_validator_assertions", names)
         self.assertIn("run_digest", names)
         self.assertIn("live_smoke_summary", names)
+        self.assertIn("live_verifier_smoke_summary", names)
         self.assertIn("openclaw_event", names)
         self.assertIn("live_openclaw_smoke_summary", names)
         self.assertIn("evidence_bundle", names)
@@ -269,6 +270,50 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "live_openclaw_smoke_summary")
+
+    def test_live_verifier_smoke_summary_schema_accepts_current_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.live_verifier_smoke.summary.v1",
+                "passed": True,
+                "allow_network": True,
+                "configured_only": False,
+                "strict_live": True,
+                "require_live_provider": True,
+                "selected_provider_count": 1,
+                "live_attempted_provider_count": 1,
+                "passed_provider_count": 1,
+                "failed_provider_count": 0,
+                "skipped_provider_count": 0,
+                "providers": [
+                    {
+                        "provider": "slack",
+                        "source_type": "slack_history",
+                        "description": "Read Slack channel history.",
+                        "required_env": [{"name": "SLACK_BOT_TOKEN", "present": True}],
+                        "optional_env": [],
+                        "status": "passed",
+                        "reason": "ok",
+                        "source_status": "ok",
+                        "source_count": 1,
+                        "validation_passed": True,
+                        "artifacts": {
+                            "verifier_config": "slack/verifier_config.json",
+                            "state_snapshot": "slack/state_snapshot.json",
+                            "validation": "slack/validation.json",
+                        },
+                    }
+                ],
+                "artifacts": {
+                    "summary": "live_verifier_smoke_summary.json",
+                    "schema_check": "live_verifier_smoke_summary.schema_check.json",
+                },
+                "environment": {"platform": "Linux-test"},
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "live_verifier_smoke_summary")
 
     def test_improvement_ledger_gate_schema_accepts_minimal_gate(self):
         result = check_schema_contract(

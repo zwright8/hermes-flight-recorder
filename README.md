@@ -379,6 +379,59 @@ The positive report uses a sent-mail snapshot with the reply present. The
 negative report uses the same successful-looking trace but no external sent
 message, so `required_state` and `required_state_transitions` fail.
 
+Run the opt-in live provider smoke when you have read-only production
+credentials configured:
+
+```bash
+python3.11 scripts/live_verifier_smoke.py \
+  --allow-network \
+  --configured-only \
+  --require-live-provider \
+  --out runs/live_verifier_smoke
+```
+
+For a single provider, make the check strict:
+
+```bash
+python3.11 scripts/live_verifier_smoke.py \
+  --allow-network \
+  --provider gmail \
+  --strict-live \
+  --require-live-provider \
+  --out runs/live_verifier_smoke_gmail
+```
+
+Without `--allow-network`, the script performs a safe inventory and records
+providers as skipped. With `--strict-live`, any selected skipped or failed
+provider fails the smoke. The summary artifact is
+`hfr.live_verifier_smoke.summary.v1` and can be checked with:
+
+```bash
+flightrecorder schemas --check runs/live_verifier_smoke/live_verifier_smoke_summary.json
+```
+
+Common live smoke environment variables:
+
+| Provider | Required env |
+| --- | --- |
+| Slack | `SLACK_BOT_TOKEN`, `HFR_SLACK_CHANNEL_ID` |
+| Gmail | `GMAIL_ACCESS_TOKEN` |
+| Google Calendar | `GOOGLE_CALENDAR_ACCESS_TOKEN` |
+| Google Drive | `GOOGLE_DRIVE_ACCESS_TOKEN` |
+| Microsoft Graph | `MICROSOFT_GRAPH_TOKEN` |
+| GitHub | `HFR_GITHUB_OWNER`, `HFR_GITHUB_REPO`, `HFR_GITHUB_ISSUE_NUMBER`; `GITHUB_TOKEN` optional |
+| GitLab | `GITLAB_TOKEN`, `HFR_GITLAB_PROJECT_ID` |
+| Linear | `LINEAR_API_KEY` |
+| Jira | `JIRA_API_TOKEN`, `HFR_JIRA_BASE_URL`; `JIRA_EMAIL` optional for Basic auth |
+| Zendesk | `ZENDESK_API_TOKEN`, `HFR_ZENDESK_BASE_URL`; `ZENDESK_EMAIL` optional for Basic auth |
+| PagerDuty | `PAGERDUTY_API_TOKEN` |
+| Discord | `DISCORD_BOT_TOKEN`, `HFR_DISCORD_CHANNEL_ID` |
+| Stripe | `STRIPE_SECRET_KEY`; `HFR_STRIPE_OBJECT_ID` optional |
+| Notion | `NOTION_TOKEN`, `HFR_NOTION_DATABASE_ID` |
+| Kubernetes | `HFR_K8S_RESOURCE_URL`; `KUBERNETES_BEARER_TOKEN` optional |
+| S3 | `HFR_S3_BUCKET` plus `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, or `HFR_S3_UNSIGNED=true` |
+| IMAP | `IMAP_HOST`, `IMAP_USERNAME`, `IMAP_PASSWORD` |
+
 ## External State Validators
 
 Use state validators to turn common external actions into reliable scenario

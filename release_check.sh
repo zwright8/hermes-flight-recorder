@@ -32,6 +32,7 @@ assert_help_contains() {
 "$PYTHON" -m unittest discover
 "$PYTHON" -m compileall -q flightrecorder scripts tests
 "$PYTHON" scripts/live_hermes_smoke.py --help >/dev/null
+"$PYTHON" scripts/live_verifier_smoke.py --help >/dev/null
 assert_help_contains "--evidence-handoff" "$PYTHON" -m flightrecorder run-suite --help
 "$PYTHON" -m flightrecorder schemas --help >/dev/null
 "$PYTHON" -m flightrecorder schemas --name trace >/dev/null
@@ -42,10 +43,16 @@ test -f schema_contracts_check/trace.v1.schema.json
 test -f schema_contracts_check/improvement_ledger_gate.v1.schema.json
 test -f schema_contracts_check/rl_episode.v1.schema.json
 test -f schema_contracts_check/rl_reward_model.v1.schema.json
+test -f schema_contracts_check/live_verifier_smoke_summary.v1.schema.json
 test -f schema_contracts_check/trainer_archive.v1.schema.json
 test -f schema_contracts_check/trainer_archive_check.v1.schema.json
 test -f schema_contracts_check/trainer_consumer_plan.v1.schema.json
 test -f schema_contracts_check/trainer_wrapper_dry_run.v1.schema.json
+"$PYTHON" scripts/live_verifier_smoke.py \
+  --out runs/live_verifier_smoke_release_check \
+  --provider slack >/dev/null
+"$PYTHON" -m flightrecorder schemas \
+  --check runs/live_verifier_smoke_release_check/live_verifier_smoke_summary.json >/dev/null
 "$PYTHON" -m flightrecorder schemas \
   --check scenarios/prompt_injection_good.json \
   --name scenario >/dev/null
