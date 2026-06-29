@@ -1,0 +1,17 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture Jira issues using a read-only bearer token or API token.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "jira_issues",
+      "type": "jira_issues",
+      "base_url": "https://example.atlassian.net",
+      "jql": "project = OPS ORDER BY updated DESC",
+      "max_results": 50,
+      "bearer_token_env": "JIRA_API_TOKEN",
+      "state_path": "jira.issue",
+      "state_value_path": "issues.0"
+    }
+  ]
+}

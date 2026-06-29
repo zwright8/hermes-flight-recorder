@@ -1,0 +1,16 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture GitLab issues using a read-only project token.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "gitlab_issues",
+      "type": "gitlab_issues",
+      "project_id": "group/project",
+      "state": "closed",
+      "per_page": 50,
+      "token_env": "GITLAB_TOKEN",
+      "state_path": "gitlab"
+    }
+  ]
+}

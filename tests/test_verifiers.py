@@ -335,6 +335,587 @@ class VerifierAdapterTests(unittest.TestCase):
         finally:
             server.close()
 
+    def test_slack_history_adapter_feeds_scorecard_end_to_end(self):
+        server = _JsonServer(
+            {
+                "/slack/conversations.history": {
+                    "ok": True,
+                    "messages": [
+                        {"text": "deployment finished successfully", "channel_id": "ignored", "user": "U1"}
+                    ],
+                }
+            }
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"TEST_SLACK_TOKEN": "slack-token"}):
+                root = Path(tmp)
+                state_path = root / "slack.state.json"
+                verifier_config = root / "slack.verifier.json"
+                verifier_config.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "hfr.verifier_config.v1",
+                            "sources": [
+                                {
+                                    "id": "slack_history",
+                                    "type": "slack_history",
+                                    "base_url": f"{server.url}/slack",
+                                    "channel_id": "C123",
+                                    "token_env": "TEST_SLACK_TOKEN",
+                                    "state_path": "slack",
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                self.assertEqual(
+                    main(["verify-state", "--config", str(verifier_config), "--out", str(state_path)]),
+                    0,
+                )
+                compiled = build_state_validator_assertions(
+                    {
+                        "validator": "slack_message_sent",
+                        "id": "notify_deploy_done",
+                        "state_path": "slack.messages",
+                        "text_contains": "deployment finished",
+                        "channel_id": "C123",
+                        "trace": {
+                            "tool_name": "slack_post_message",
+                            "where": {"result.channel_id": "C123", "result.status": "sent"},
+                        },
+                    }
+                )
+                trace_path = root / "trace.json"
+                trace_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "hfr.trace.v1",
+                            "session": {"id": "session-1", "source_format": "normalized_json", "model": "test"},
+                            "events": [
+                                {
+                                    "type": "tool_result",
+                                    "session_id": "session-1",
+                                    "parent_session_id": None,
+                                    "tool_name": "slack_post_message",
+                                    "args": {},
+                                    "status": "ok",
+                                    "text": "",
+                                    "result": {"channel_id": "C123", "status": "sent"},
+                                    "timestamp": None,
+                                }
+                            ],
+                            "final_answer": "Posted the deployment finished notification.",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                scenario_path = root / "scenario.json"
+                scenario_path.write_text(
+                    json.dumps(
+                        {
+                            "id": "slack_adapter_completion",
+                            "title": "Slack Adapter Completion Verification",
+                            "prompt": "Post a deployment completion notice to Slack channel C123.",
+                            "policy": {},
+                            "assertions": compiled["assertions"],
+                            "scoring": {"pass_threshold": 90},
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                run_dir = root / "run"
+                self.assertEqual(
+                    main(
+                        [
+                            "run",
+                            "--scenario",
+                            str(scenario_path),
+                            "--trace",
+                            str(trace_path),
+                            "--state",
+                            str(state_path),
+                            "--out",
+                            str(run_dir),
+                        ]
+                    ),
+                    0,
+                )
+                score = json.loads((run_dir / "scorecard.json").read_text(encoding="utf-8"))
+                self.assertTrue(score["passed"], score)
+                self.assertTrue((run_dir / "report.html").exists())
+        finally:
+            server.close()
+
+    def test_calendar_adapter_feeds_scorecard_end_to_end_and_honors_orderby(self):
+        server = _JsonServer(
+            {
+                "/calendar/v3/calendars/primary/events": {
+                    "items": [
+                        {
+                            "id": "evt-1",
+                            "summary": "Customer follow-up",
+                            "status": "confirmed",
+                            "attendees": [{"email": "customer@example.test"}],
+                        }
+                    ]
+                }
+            }
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"TEST_CALENDAR_TOKEN": "calendar-token"}):
+                root = Path(tmp)
+                state_path = root / "calendar.state.json"
+                verifier_config = root / "calendar.verifier.json"
+                verifier_config.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "hfr.verifier_config.v1",
+                            "sources": [
+                                {
+                                    "id": "calendar_events",
+                                    "type": "google_calendar_events",
+                                    "base_url": f"{server.url}/calendar/v3",
+                                    "calendar_id": "primary",
+                                    "orderby": "startTime",
+                                    "token_env": "TEST_CALENDAR_TOKEN",
+                                    "state_path": "calendar",
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                self.assertEqual(
+                    main(["verify-state", "--config", str(verifier_config), "--out", str(state_path)]),
+                    0,
+                )
+                self.assertTrue(
+                    any("orderBy=startTime" in request["query"] for request in server.requests),
+                    server.requests,
+                )
+                compiled = build_state_validator_assertions(
+                    {
+                        "validator": "calendar_event_created",
+                        "id": "calendar_followup_created",
+                        "state_path": "calendar.events",
+                        "summary_contains": "Customer follow-up",
+                        "attendee_contains": "customer@example.test",
+                        "status": "confirmed",
+                        "trace": {"tool_name": "calendar_create_event"},
+                    }
+                )
+                trace_path = root / "trace.json"
+                trace_path.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "hfr.trace.v1",
+                            "session": {"id": "session-1", "source_format": "normalized_json", "model": "test"},
+                            "events": [
+                                {
+                                    "type": "tool_result",
+                                    "session_id": "session-1",
+                                    "parent_session_id": None,
+                                    "tool_name": "calendar_create_event",
+                                    "args": {},
+                                    "status": "ok",
+                                    "text": "",
+                                    "result": {"id": "evt-1", "status": "confirmed"},
+                                    "timestamp": None,
+                                }
+                            ],
+                            "final_answer": "Created the customer follow-up event.",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                scenario_path = root / "scenario.json"
+                scenario_path.write_text(
+                    json.dumps(
+                        {
+                            "id": "calendar_adapter_completion",
+                            "title": "Calendar Adapter Completion Verification",
+                            "prompt": "Create a customer follow-up calendar event.",
+                            "policy": {},
+                            "assertions": compiled["assertions"],
+                            "scoring": {"pass_threshold": 90},
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                run_dir = root / "run"
+                self.assertEqual(
+                    main(
+                        [
+                            "run",
+                            "--scenario",
+                            str(scenario_path),
+                            "--trace",
+                            str(trace_path),
+                            "--state",
+                            str(state_path),
+                            "--out",
+                            str(run_dir),
+                        ]
+                    ),
+                    0,
+                )
+                score = json.loads((run_dir / "scorecard.json").read_text(encoding="utf-8"))
+                self.assertTrue(score["passed"], score)
+        finally:
+            server.close()
+
+    def test_provider_verifier_adapters_capture_normalized_external_state(self):
+        server = _JsonServer(
+            {
+                "/slack/conversations.history": {
+                    "ok": True,
+                    "messages": [
+                        {
+                            "type": "message",
+                            "ts": "1710000000.000100",
+                            "user": "U1",
+                            "text": "deployment finished successfully",
+                        }
+                    ],
+                },
+                "/calendar/v3/calendars/primary/events": {
+                    "items": [
+                        {
+                            "id": "evt-1",
+                            "summary": "Customer follow-up",
+                            "status": "confirmed",
+                            "attendees": [{"email": "customer@example.test"}],
+                            "start": {"dateTime": "2026-06-29T10:00:00Z"},
+                            "end": {"dateTime": "2026-06-29T10:30:00Z"},
+                        }
+                    ]
+                },
+                "/drive/v3/files": {
+                    "files": [
+                        {
+                            "id": "file-1",
+                            "name": "handoff notes",
+                            "mimeType": "text/plain",
+                            "owners": [{"emailAddress": "agent@example.test"}],
+                        }
+                    ]
+                },
+                "/k8s/apis/apps/v1/namespaces/prod/deployments": {
+                    "items": [
+                        {
+                            "kind": "Deployment",
+                            "metadata": {"name": "api", "namespace": "prod", "labels": {"app": "api"}},
+                            "spec": {"replicas": 2},
+                            "status": {"readyReplicas": 2},
+                        }
+                    ]
+                },
+                "/stripe/v1/payment_intents/pi_123": {
+                    "id": "pi_123",
+                    "object": "payment_intent",
+                    "status": "succeeded",
+                    "amount": 4200,
+                    "currency": "usd",
+                },
+                "/notion/v1/databases/db1/query": {
+                    "results": [
+                        {
+                            "id": "page-1",
+                            "url": "https://notion.example/page-1",
+                            "last_edited_time": "2026-06-29T00:00:00Z",
+                            "properties": {
+                                "Name": {
+                                    "type": "title",
+                                    "title": [{"plain_text": "Runbook update"}],
+                                },
+                                "Notes": {
+                                    "type": "rich_text",
+                                    "rich_text": [{"plain_text": "Added rollback steps"}],
+                                },
+                            },
+                        }
+                    ],
+                    "has_more": False,
+                },
+                "/linear/graphql": {
+                    "data": {
+                        "issues": {
+                            "nodes": [
+                                {
+                                    "id": "lin-1",
+                                    "identifier": "ENG-123",
+                                    "title": "Fix deploy",
+                                    "state": {"name": "Done"},
+                                    "team": {"key": "ENG"},
+                                }
+                            ]
+                        }
+                    }
+                },
+                "/jira/rest/api/3/search": {
+                    "issues": [
+                        {
+                            "id": "10001",
+                            "key": "OPS-7",
+                            "fields": {
+                                "summary": "Close incident",
+                                "status": {"name": "Done"},
+                                "issuetype": {"name": "Task"},
+                                "labels": ["incident"],
+                            },
+                        }
+                    ],
+                    "total": 1,
+                },
+                "/s3": (
+                    "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
+                    "<Contents><Key>reports/out.json</Key><LastModified>2026-06-29T00:00:00Z</LastModified>"
+                    "<ETag>\"abc123\"</ETag><Size>42</Size><StorageClass>STANDARD</StorageClass></Contents>"
+                    "</ListBucketResult>"
+                ),
+                "/graph/v1.0/me/mailFolders/SentItems/messages": {
+                    "value": [
+                        {
+                            "id": "msg-graph-1",
+                            "subject": "Re: customer",
+                            "bodyPreview": "Sent the requested update",
+                            "from": {"emailAddress": {"address": "agent@example.test"}},
+                            "toRecipients": [{"emailAddress": {"address": "customer@example.test"}}],
+                        }
+                    ]
+                },
+                "/graph/v1.0/me/events": {
+                    "value": [
+                        {
+                            "id": "graph-event-1",
+                            "subject": "Customer follow-up",
+                            "showAs": "busy",
+                            "attendees": [{"emailAddress": {"address": "customer@example.test"}}],
+                        }
+                    ]
+                },
+                "/gitlab/api/v4/projects/group%2Fproject/issues": [
+                    {
+                        "id": 1,
+                        "iid": 7,
+                        "title": "Fix deploy",
+                        "state": "closed",
+                        "labels": ["ops"],
+                        "assignees": [{"username": "agent"}],
+                    }
+                ],
+                "/discord/api/v10/channels/C123/messages": [
+                    {
+                        "id": "discord-msg-1",
+                        "content": "deployment finished successfully",
+                        "author": {"id": "U1", "username": "agent"},
+                    }
+                ],
+                "/zendesk/api/v2/tickets/42.json": {
+                    "ticket": {
+                        "id": 42,
+                        "subject": "Customer request",
+                        "status": "solved",
+                        "priority": "normal",
+                    }
+                },
+                "/pagerduty/incidents": {
+                    "incidents": [
+                        {
+                            "id": "PD123",
+                            "incident_number": 99,
+                            "title": "API outage",
+                            "status": "resolved",
+                            "service": {"summary": "api"},
+                            "assignments": [{"assignee": {"summary": "agent"}}],
+                        }
+                    ],
+                    "more": False,
+                },
+            }
+        )
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "TEST_SLACK_TOKEN": "slack-token",
+                    "TEST_CALENDAR_TOKEN": "calendar-token",
+                    "TEST_DRIVE_TOKEN": "drive-token",
+                    "TEST_STRIPE_TOKEN": "stripe-token",
+                    "TEST_NOTION_TOKEN": "notion-token",
+                    "TEST_LINEAR_TOKEN": "linear-token",
+                    "TEST_JIRA_TOKEN": "jira-token",
+                    "TEST_GRAPH_TOKEN": "graph-token",
+                    "TEST_GITLAB_TOKEN": "gitlab-token",
+                    "TEST_DISCORD_TOKEN": "discord-token",
+                    "TEST_ZENDESK_TOKEN": "zendesk-token",
+                    "TEST_PAGERDUTY_TOKEN": "pagerduty-token",
+                },
+            ):
+                snapshot = capture_verified_state(
+                    {
+                        "schema_version": "hfr.verifier_config.v1",
+                        "sources": [
+                            {
+                                "id": "slack",
+                                "type": "slack_history",
+                                "base_url": f"{server.url}/slack",
+                                "channel_id": "C123",
+                                "token_env": "TEST_SLACK_TOKEN",
+                                "state_path": "slack",
+                            },
+                            {
+                                "id": "calendar",
+                                "type": "google_calendar_events",
+                                "base_url": f"{server.url}/calendar/v3",
+                                "calendar_id": "primary",
+                                "token_env": "TEST_CALENDAR_TOKEN",
+                                "state_path": "calendar",
+                            },
+                            {
+                                "id": "drive",
+                                "type": "google_drive_files",
+                                "base_url": f"{server.url}/drive/v3",
+                                "token_env": "TEST_DRIVE_TOKEN",
+                                "state_path": "drive",
+                            },
+                            {
+                                "id": "kubernetes",
+                                "type": "kubernetes_resources",
+                                "url": f"{server.url}/k8s/apis/apps/v1/namespaces/prod/deployments",
+                                "state_path": "kubernetes",
+                            },
+                            {
+                                "id": "stripe",
+                                "type": "stripe_objects",
+                                "base_url": f"{server.url}/stripe/v1",
+                                "resource": "payment_intents",
+                                "object_id": "pi_123",
+                                "token_env": "TEST_STRIPE_TOKEN",
+                                "state_path": "payments.payment",
+                            },
+                            {
+                                "id": "notion",
+                                "type": "notion_database",
+                                "base_url": f"{server.url}/notion/v1",
+                                "database_id": "db1",
+                                "token_env": "TEST_NOTION_TOKEN",
+                                "state_path": "notion",
+                            },
+                            {
+                                "id": "linear",
+                                "type": "linear_issues",
+                                "base_url": f"{server.url}/linear/graphql",
+                                "token_env": "TEST_LINEAR_TOKEN",
+                                "state_path": "linear.issue",
+                                "state_value_path": "issues.0",
+                            },
+                            {
+                                "id": "jira",
+                                "type": "jira_issues",
+                                "base_url": f"{server.url}/jira",
+                                "jql": "project = OPS",
+                                "bearer_token_env": "TEST_JIRA_TOKEN",
+                                "state_path": "jira.issue",
+                                "state_value_path": "issues.0",
+                            },
+                            {
+                                "id": "s3",
+                                "type": "s3_objects",
+                                "url": f"{server.url}/s3",
+                                "bucket": "demo",
+                                "prefix": "reports/",
+                                "unsigned": True,
+                                "state_path": "s3.objects",
+                                "state_value_path": "objects",
+                            },
+                            {
+                                "id": "graph_messages",
+                                "type": "microsoft_graph_messages",
+                                "base_url": f"{server.url}/graph/v1.0",
+                                "folder_id": "SentItems",
+                                "token_env": "TEST_GRAPH_TOKEN",
+                                "state_path": "graph.mail",
+                            },
+                            {
+                                "id": "graph_events",
+                                "type": "microsoft_graph_events",
+                                "base_url": f"{server.url}/graph/v1.0",
+                                "token_env": "TEST_GRAPH_TOKEN",
+                                "state_path": "graph.calendar",
+                            },
+                            {
+                                "id": "gitlab",
+                                "type": "gitlab_issues",
+                                "base_url": f"{server.url}/gitlab/api/v4",
+                                "project_id": "group/project",
+                                "token_env": "TEST_GITLAB_TOKEN",
+                                "state_path": "gitlab",
+                            },
+                            {
+                                "id": "discord",
+                                "type": "discord_messages",
+                                "base_url": f"{server.url}/discord/api/v10",
+                                "channel_id": "C123",
+                                "token_env": "TEST_DISCORD_TOKEN",
+                                "state_path": "discord",
+                            },
+                            {
+                                "id": "zendesk",
+                                "type": "zendesk_tickets",
+                                "base_url": f"{server.url}/zendesk/api/v2",
+                                "ticket_id": "42",
+                                "bearer_token_env": "TEST_ZENDESK_TOKEN",
+                                "state_path": "zendesk.ticket",
+                                "state_value_path": "tickets.0",
+                            },
+                            {
+                                "id": "pagerduty",
+                                "type": "pagerduty_incidents",
+                                "base_url": f"{server.url}/pagerduty",
+                                "token_env": "TEST_PAGERDUTY_TOKEN",
+                                "state_path": "pagerduty.incident",
+                                "state_value_path": "incidents.0",
+                            },
+                        ],
+                    },
+                    secret_patterns=[
+                        "slack-token",
+                        "calendar-token",
+                        "drive-token",
+                        "stripe-token",
+                        "notion-token",
+                        "linear-token",
+                        "jira-token",
+                        "graph-token",
+                        "gitlab-token",
+                        "discord-token",
+                        "zendesk-token",
+                        "pagerduty-token",
+                    ],
+                )
+        finally:
+            server.close()
+
+        self.assertEqual(snapshot["verifiers"]["source_count"], 15)
+        self.assertEqual(snapshot["slack"]["messages"][0]["channel_id"], "C123")
+        self.assertEqual(snapshot["calendar"]["events"][0]["attendees"], ["customer@example.test"])
+        self.assertEqual(snapshot["drive"]["files"][0]["name"], "handoff notes")
+        self.assertTrue(snapshot["kubernetes"]["resources"][0]["ready"])
+        self.assertEqual(snapshot["payments"]["payment"]["status"], "succeeded")
+        self.assertEqual(snapshot["notion"]["pages"][0]["title"], "Runbook update")
+        self.assertEqual(snapshot["linear"]["issue"]["status"], "Done")
+        self.assertEqual(snapshot["jira"]["issue"]["key"], "OPS-7")
+        self.assertEqual(snapshot["s3"]["objects"][0]["key"], "reports/out.json")
+        self.assertEqual(snapshot["graph"]["mail"]["messages"][0]["to"], ["customer@example.test"])
+        self.assertEqual(snapshot["graph"]["calendar"]["events"][0]["summary"], "Customer follow-up")
+        self.assertEqual(snapshot["gitlab"]["issues"][0]["state"], "closed")
+        self.assertEqual(snapshot["discord"]["messages"][0]["text"], "deployment finished successfully")
+        self.assertEqual(snapshot["zendesk"]["ticket"]["status"], "solved")
+        self.assertEqual(snapshot["pagerduty"]["incident"]["status"], "resolved")
+        self.assertNotIn("stripe-token", json.dumps(snapshot))
+
     def test_sqlite_source_uses_readonly_queries(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -500,6 +1081,7 @@ class VerifierAdapterTests(unittest.TestCase):
 class _JsonServer:
     def __init__(self, routes):
         self.routes = routes
+        self.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -507,18 +1089,44 @@ class _JsonServer:
 
     def _handler(self):
         routes = self.routes
+        requests = self.requests
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
-                path = self.path.split("?", 1)[0]
+                path, _, query = self.path.partition("?")
+                requests.append({"method": "GET", "path": path, "query": query})
                 if path not in routes:
                     self.send_response(404)
                     self.end_headers()
                     self.wfile.write(b'{"error":"not found"}')
                     return
-                payload = json.dumps(routes[path]).encode("utf-8")
+                self._send_route(routes[path])
+
+            def do_POST(self):
+                path, _, query = self.path.partition("?")
+                requests.append({"method": "POST", "path": path, "query": query})
+                if path not in routes:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"not found"}')
+                    return
+                length = int(self.headers.get("Content-Length") or "0")
+                if length:
+                    self.rfile.read(length)
+                self._send_route(routes[path])
+
+            def _send_route(self, value):
+                if isinstance(value, bytes):
+                    payload = value
+                    content_type = "application/octet-stream"
+                elif isinstance(value, str):
+                    payload = value.encode("utf-8")
+                    content_type = "application/xml"
+                else:
+                    payload = json.dumps(value).encode("utf-8")
+                    content_type = "application/json"
                 self.send_response(200)
-                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)

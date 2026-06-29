@@ -41,6 +41,21 @@
             "eml",
             "maildir",
             "http_json",
+            "slack_history",
+            "google_calendar_events",
+            "google_drive_files",
+            "kubernetes_resources",
+            "stripe_objects",
+            "notion_database",
+            "linear_issues",
+            "jira_issues",
+            "s3_objects",
+            "microsoft_graph_messages",
+            "microsoft_graph_events",
+            "gitlab_issues",
+            "discord_messages",
+            "zendesk_tickets",
+            "pagerduty_incidents",
             "sqlite",
             "github_issue",
             "gmail_thread",
@@ -69,10 +84,25 @@
         "host": {
           "type": "string"
         },
+        "base_url": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
         "owner": {
           "type": "string"
         },
         "repo": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "folder_id": {
+          "type": "string"
+        },
+        "user_id": {
           "type": "string"
         },
         "issue_number": {
@@ -80,6 +110,21 @@
           "minimum": 0
         },
         "token_env": {
+          "type": "string"
+        },
+        "bearer_token_env": {
+          "type": "string"
+        },
+        "api_token_env": {
+          "type": "string"
+        },
+        "access_key_env": {
+          "type": "string"
+        },
+        "secret_key_env": {
+          "type": "string"
+        },
+        "session_token_env": {
           "type": "string"
         },
         "username_env": {
@@ -91,11 +136,78 @@
         "query": {
           "type": "string"
         },
+        "search": {
+          "type": "string"
+        },
+        "select": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "string"
+        },
+        "orderby": {
+          "type": "string"
+        },
+        "jql": {
+          "type": "string"
+        },
+        "time_min": {
+          "type": "string"
+        },
+        "time_max": {
+          "type": "string"
+        },
         "queries": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "variables": {
+          "type": "object"
+        },
+        "body": {
+          "type": "object"
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "calendar_id": {
+          "type": "string"
+        },
+        "database_id": {
+          "type": "string"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "object_id": {
+          "type": "string"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "statuses": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        },
+        "region": {
+          "type": "string"
+        },
+        "endpoint_url": {
+          "type": "string"
         },
         "max_messages": {
           "type": "integer",
@@ -108,6 +220,37 @@
         "max_rows": {
           "type": "integer",
           "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "page_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_results": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_keys": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "top": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "per_page": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsigned": {
+          "type": "boolean"
         },
         "timeout_seconds": {
           "type": "number",

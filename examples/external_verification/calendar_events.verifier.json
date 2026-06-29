@@ -1,15 +1,16 @@
 {
   "schema_version": "hfr.verifier_config.v1",
-  "description": "Capture calendar events from a read-only JSON API response.",
+  "description": "Capture Google Calendar events using a read-only OAuth token.",
   "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
   "sources": [
     {
       "id": "calendar_events",
-      "type": "http_json",
-      "url": "https://calendar.example.com/v1/calendars/primary/events",
-      "bearer_token_env": "CALENDAR_API_TOKEN",
-      "state_path": "calendar.events",
-      "state_value_path": "json.items"
+      "type": "google_calendar_events",
+      "calendar_id": "primary",
+      "time_min": "2026-06-29T00:00:00Z",
+      "max_results": 50,
+      "token_env": "GOOGLE_CALENDAR_ACCESS_TOKEN",
+      "state_path": "calendar"
     }
   ]
 }

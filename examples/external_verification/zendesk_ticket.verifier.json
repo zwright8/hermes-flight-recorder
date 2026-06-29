@@ -1,0 +1,16 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture a Zendesk ticket using read-only API credentials.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "zendesk_ticket",
+      "type": "zendesk_tickets",
+      "base_url": "https://example.zendesk.com/api/v2",
+      "ticket_id": "42",
+      "bearer_token_env": "ZENDESK_API_TOKEN",
+      "state_path": "zendesk.ticket",
+      "state_value_path": "tickets.0"
+    }
+  ]
+}

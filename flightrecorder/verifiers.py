@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import base64
+import datetime as _datetime
 import email.policy
+import hashlib
+import hmac
 import imaplib
 import json
 import os
@@ -13,6 +16,7 @@ import sqlite3
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from email.message import EmailMessage, Message
 from email.parser import BytesParser
 from pathlib import Path
@@ -28,6 +32,23 @@ DEFAULT_MAX_BODY_CHARS = 4096
 DEFAULT_MAX_HTTP_BYTES = 2 * 1024 * 1024
 _SOURCE_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _RESERVED_STATE_ROOTS = {"schema_version", "filesystem", "json_sources", "json", "observations", "verifiers"}
+_DEFAULT_LINEAR_ISSUES_QUERY = """
+query FlightRecorderIssues($first: Int!) {
+  issues(first: $first) {
+    nodes {
+      id
+      identifier
+      title
+      url
+      createdAt
+      updatedAt
+      state { name }
+      team { key name }
+      assignee { name email }
+    }
+  }
+}
+""".strip()
 
 
 class VerifierError(ValueError):
@@ -119,6 +140,36 @@ def _capture_source(source: dict[str, Any], *, base_dir: Path, preserve_paths: b
         data = _capture_maildir_source(source, base_dir, preserve_paths)
     elif source_type == "http_json":
         data = _capture_http_json_source(source)
+    elif source_type == "slack_history":
+        data = _capture_slack_history_source(source)
+    elif source_type == "google_calendar_events":
+        data = _capture_google_calendar_events_source(source)
+    elif source_type == "google_drive_files":
+        data = _capture_google_drive_files_source(source)
+    elif source_type == "kubernetes_resources":
+        data = _capture_kubernetes_resources_source(source)
+    elif source_type == "stripe_objects":
+        data = _capture_stripe_objects_source(source)
+    elif source_type == "notion_database":
+        data = _capture_notion_database_source(source)
+    elif source_type == "linear_issues":
+        data = _capture_linear_issues_source(source)
+    elif source_type == "jira_issues":
+        data = _capture_jira_issues_source(source)
+    elif source_type == "s3_objects":
+        data = _capture_s3_objects_source(source)
+    elif source_type == "microsoft_graph_messages":
+        data = _capture_microsoft_graph_messages_source(source)
+    elif source_type == "microsoft_graph_events":
+        data = _capture_microsoft_graph_events_source(source)
+    elif source_type == "gitlab_issues":
+        data = _capture_gitlab_issues_source(source)
+    elif source_type == "discord_messages":
+        data = _capture_discord_messages_source(source)
+    elif source_type == "zendesk_tickets":
+        data = _capture_zendesk_tickets_source(source)
+    elif source_type == "pagerduty_incidents":
+        data = _capture_pagerduty_incidents_source(source)
     elif source_type == "sqlite":
         data = _capture_sqlite_source(source, base_dir, preserve_paths)
     elif source_type == "github_issue":
@@ -196,6 +247,398 @@ def _capture_http_json_source(source: dict[str, Any]) -> dict[str, Any]:
         "url": url,
         "status_code": status_code,
         "json": payload,
+    }
+
+
+def _capture_slack_history_source(source: dict[str, Any]) -> dict[str, Any]:
+    channel_id = _required_string(source, "channel_id")
+    base_url = str(source.get("base_url") or "https://slack.com/api").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "SLACK_BOT_TOKEN")
+    params: dict[str, Any] = {
+        "channel": channel_id,
+        "limit": _non_negative_int(source.get("limit", 100), "limit"),
+    }
+    for name in ("oldest", "latest"):
+        if source.get(name) is not None:
+            params[name] = str(source[name])
+    if source.get("inclusive") is not None:
+        params["inclusive"] = "true" if bool(source["inclusive"]) else "false"
+    url = _url_with_params(f"{base_url}/conversations.history", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise VerifierError("Slack history response must be a JSON object")
+    if payload.get("ok") is False:
+        raise VerifierError(f"Slack history response error: {payload.get('error') or 'unknown'}")
+    messages = payload.get("messages") or []
+    if not isinstance(messages, list):
+        raise VerifierError("Slack history response messages must be a list")
+    return {
+        "channel_id": channel_id,
+        "message_count": len(messages),
+        "messages": [_slack_message_summary(message, channel_id) for message in messages if isinstance(message, dict)],
+        "has_more": bool(payload.get("has_more")),
+    }
+
+
+def _capture_google_calendar_events_source(source: dict[str, Any]) -> dict[str, Any]:
+    calendar_id = str(source.get("calendar_id") or "primary")
+    base_url = str(source.get("base_url") or "https://www.googleapis.com/calendar/v3").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "GOOGLE_CALENDAR_ACCESS_TOKEN")
+    params: dict[str, Any] = {
+        "maxResults": _non_negative_int(source.get("max_results", 100), "max_results"),
+        "singleEvents": "true" if bool(source.get("single_events", True)) else "false",
+    }
+    for source_key, param_key in (
+        ("query", "q"),
+        ("time_min", "timeMin"),
+        ("time_max", "timeMax"),
+        ("orderby", "orderBy"),
+    ):
+        if source.get(source_key) is not None:
+            params[param_key] = str(source[source_key])
+    if source.get("order_by") is not None and "orderBy" not in params:
+        params["orderBy"] = str(source["order_by"])
+    url = _url_with_params(f"{base_url}/calendars/{urllib.parse.quote(calendar_id, safe='')}/events", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise VerifierError("Google Calendar events response must be a JSON object")
+    items = payload.get("items") or []
+    if not isinstance(items, list):
+        raise VerifierError("Google Calendar events response items must be a list")
+    return {
+        "calendar_id": calendar_id,
+        "event_count": len(items),
+        "events": [_calendar_event_summary(event) for event in items if isinstance(event, dict)],
+        "next_page_token": payload.get("nextPageToken"),
+    }
+
+
+def _capture_google_drive_files_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = str(source.get("base_url") or "https://www.googleapis.com/drive/v3").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "GOOGLE_DRIVE_ACCESS_TOKEN")
+    params: dict[str, Any] = {
+        "pageSize": _non_negative_int(source.get("page_size", 100), "page_size"),
+        "fields": str(
+            source.get("fields")
+            or "nextPageToken, files(id,name,mimeType,webViewLink,owners(emailAddress,displayName),"
+            "modifiedTime,createdTime,trashed,md5Checksum,size)"
+        ),
+    }
+    if source.get("query") is not None:
+        params["q"] = str(source["query"])
+    url = _url_with_params(f"{base_url}/files", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise VerifierError("Google Drive files response must be a JSON object")
+    files = payload.get("files") or []
+    if not isinstance(files, list):
+        raise VerifierError("Google Drive files response files must be a list")
+    return {
+        "file_count": len(files),
+        "files": [_drive_file_summary(item) for item in files if isinstance(item, dict)],
+        "next_page_token": payload.get("nextPageToken"),
+    }
+
+
+def _capture_kubernetes_resources_source(source: dict[str, Any]) -> dict[str, Any]:
+    url = _required_string(source, "url")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _headers_from_source(source)
+    if "Authorization" not in headers and (source.get("token_env") or source.get("bearer_token_env")):
+        headers = _bearer_headers(source, "KUBERNETES_BEARER_TOKEN")
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    items = _payload_items(payload, "items", "Kubernetes resources")
+    return {
+        "resource_count": len(items),
+        "resources": [_kubernetes_resource_summary(item) for item in items if isinstance(item, dict)],
+    }
+
+
+def _capture_stripe_objects_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = str(source.get("base_url") or "https://api.stripe.com/v1").rstrip("/")
+    resource = _required_string(source, "resource").strip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "STRIPE_SECRET_KEY")
+    object_id = source.get("object_id")
+    if object_id:
+        url = f"{base_url}/{urllib.parse.quote(resource, safe='/')}/{urllib.parse.quote(str(object_id), safe='')}"
+    else:
+        params = {"limit": _non_negative_int(source.get("limit", 100), "limit")}
+        url = _url_with_params(f"{base_url}/{urllib.parse.quote(resource, safe='/')}", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if object_id:
+        if not isinstance(payload, dict):
+            raise VerifierError("Stripe object response must be a JSON object")
+        return _stripe_object_summary(payload)
+    items = _payload_items(payload, "data", "Stripe objects")
+    return {
+        "resource": resource,
+        "object_count": len(items),
+        "objects": [_stripe_object_summary(item) for item in items if isinstance(item, dict)],
+    }
+
+
+def _capture_notion_database_source(source: dict[str, Any]) -> dict[str, Any]:
+    database_id = _required_string(source, "database_id")
+    base_url = str(source.get("base_url") or "https://api.notion.com/v1").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "NOTION_TOKEN")
+    headers["Notion-Version"] = str(source.get("notion_version") or "2022-06-28")
+    body = source.get("body") or {}
+    if not isinstance(body, dict):
+        raise VerifierError("Notion database body must be an object")
+    if "page_size" in source and "page_size" not in body:
+        body = dict(body)
+        body["page_size"] = _non_negative_int(source["page_size"], "page_size")
+    url = f"{base_url}/databases/{urllib.parse.quote(database_id, safe='')}/query"
+    _status_code, payload = _http_post_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes, payload=body)
+    if not isinstance(payload, dict):
+        raise VerifierError("Notion database response must be a JSON object")
+    pages = payload.get("results") or []
+    if not isinstance(pages, list):
+        raise VerifierError("Notion database response results must be a list")
+    return {
+        "database_id": database_id,
+        "page_count": len(pages),
+        "pages": [_notion_page_summary(page) for page in pages if isinstance(page, dict)],
+        "has_more": bool(payload.get("has_more")),
+        "next_cursor": payload.get("next_cursor"),
+    }
+
+
+def _capture_linear_issues_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = str(source.get("base_url") or "https://api.linear.app/graphql").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "LINEAR_API_KEY")
+    query = str(source.get("query") or _DEFAULT_LINEAR_ISSUES_QUERY)
+    variables = source.get("variables") or {"first": _non_negative_int(source.get("first", 50), "first")}
+    if not isinstance(variables, dict):
+        raise VerifierError("Linear variables must be an object")
+    _status_code, payload = _http_post_json(
+        base_url,
+        headers=headers,
+        timeout=timeout,
+        max_bytes=max_bytes,
+        payload={"query": query, "variables": variables},
+    )
+    if not isinstance(payload, dict):
+        raise VerifierError("Linear GraphQL response must be a JSON object")
+    if payload.get("errors"):
+        raise VerifierError(f"Linear GraphQL response errors: {payload['errors']}")
+    nodes = _select_dot_path(payload, str(source.get("nodes_path") or "data.issues.nodes"))
+    if not isinstance(nodes, list):
+        raise VerifierError("Linear issue nodes must be a list")
+    return {
+        "issue_count": len(nodes),
+        "issues": [_linear_issue_summary(issue) for issue in nodes if isinstance(issue, dict)],
+    }
+
+
+def _capture_jira_issues_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = _required_string(source, "base_url").rstrip("/")
+    endpoint = str(source.get("endpoint") or "/rest/api/3/search").lstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _jira_headers(source)
+    params: dict[str, Any] = {
+        "jql": str(source.get("jql") or "ORDER BY updated DESC"),
+        "maxResults": _non_negative_int(source.get("max_results", 50), "max_results"),
+    }
+    if source.get("fields") is not None:
+        params["fields"] = ",".join(_string_list(source["fields"]))
+    url = _url_with_params(f"{base_url}/{endpoint}", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise VerifierError("Jira search response must be a JSON object")
+    issues = payload.get("issues") or []
+    if not isinstance(issues, list):
+        raise VerifierError("Jira search response issues must be a list")
+    return {
+        "issue_count": len(issues),
+        "issues": [_jira_issue_summary(issue) for issue in issues if isinstance(issue, dict)],
+        "total": payload.get("total"),
+    }
+
+
+def _capture_s3_objects_source(source: dict[str, Any]) -> dict[str, Any]:
+    bucket = _required_string(source, "bucket")
+    prefix = str(source.get("prefix") or "")
+    region = str(source.get("region") or os.environ.get("AWS_REGION") or "us-east-1")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    max_keys = _non_negative_int(source.get("max_keys", 1000), "max_keys")
+    url = source.get("url")
+    if url:
+        list_url = str(url)
+    else:
+        endpoint = str(source.get("endpoint_url") or f"https://s3.{region}.amazonaws.com").rstrip("/")
+        list_url = f"{endpoint}/{urllib.parse.quote(bucket, safe='')}"
+    params: dict[str, Any] = {"list-type": "2", "max-keys": max_keys}
+    if prefix:
+        params["prefix"] = prefix
+    list_url = _url_with_params(list_url, params)
+    headers = _headers_from_source(source)
+    if not bool(source.get("unsigned", False)):
+        headers.update(_aws_sigv4_headers(source, "GET", list_url, region, service="s3"))
+    _status_code, payload = _http_get_text(list_url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    objects = _parse_s3_list_objects(payload)
+    return {
+        "bucket": bucket,
+        "prefix": prefix,
+        "object_count": len(objects),
+        "objects": objects,
+    }
+
+
+def _capture_microsoft_graph_messages_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = str(source.get("base_url") or "https://graph.microsoft.com/v1.0").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "MICROSOFT_GRAPH_TOKEN")
+    user_path = _microsoft_graph_user_path(source)
+    folder_id = source.get("folder_id")
+    if folder_id:
+        url = f"{base_url}/{user_path}/mailFolders/{urllib.parse.quote(str(folder_id), safe='')}/messages"
+    else:
+        url = f"{base_url}/{user_path}/messages"
+    params = _odata_params(source, top_field="top", default_top=50)
+    _status_code, payload = _http_get_json(_url_with_params(url, params), headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise VerifierError("Microsoft Graph messages response must be a JSON object")
+    messages = payload.get("value") or []
+    if not isinstance(messages, list):
+        raise VerifierError("Microsoft Graph messages response value must be a list")
+    return {
+        "message_count": len(messages),
+        "messages": [_microsoft_graph_message_summary(message) for message in messages if isinstance(message, dict)],
+        "next_link": payload.get("@odata.nextLink"),
+    }
+
+
+def _capture_microsoft_graph_events_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = str(source.get("base_url") or "https://graph.microsoft.com/v1.0").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "MICROSOFT_GRAPH_TOKEN")
+    url = f"{base_url}/{_microsoft_graph_user_path(source)}/events"
+    params = _odata_params(source, top_field="top", default_top=50)
+    _status_code, payload = _http_get_json(_url_with_params(url, params), headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise VerifierError("Microsoft Graph events response must be a JSON object")
+    events = payload.get("value") or []
+    if not isinstance(events, list):
+        raise VerifierError("Microsoft Graph events response value must be a list")
+    return {
+        "event_count": len(events),
+        "events": [_microsoft_graph_event_summary(event) for event in events if isinstance(event, dict)],
+        "next_link": payload.get("@odata.nextLink"),
+    }
+
+
+def _capture_gitlab_issues_source(source: dict[str, Any]) -> dict[str, Any]:
+    project_id = _required_string(source, "project_id")
+    base_url = str(source.get("base_url") or "https://gitlab.com/api/v4").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _headers_from_source(source)
+    if "Authorization" not in headers:
+        token_env = str(source.get("token_env") or "GITLAB_TOKEN")
+        token = os.environ.get(token_env)
+        if not token:
+            raise VerifierError(f"Missing environment variable {token_env!r} for GitLab token")
+        headers["PRIVATE-TOKEN"] = token
+    params: dict[str, Any] = {"per_page": _non_negative_int(source.get("per_page", 50), "per_page")}
+    for field in ("state", "labels", "search"):
+        if source.get(field) is not None:
+            params[field] = str(source[field])
+    url = _url_with_params(f"{base_url}/projects/{urllib.parse.quote(project_id, safe='')}/issues", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, list):
+        raise VerifierError("GitLab issues response must be a JSON array")
+    return {
+        "issue_count": len(payload),
+        "issues": [_gitlab_issue_summary(issue) for issue in payload if isinstance(issue, dict)],
+    }
+
+
+def _capture_discord_messages_source(source: dict[str, Any]) -> dict[str, Any]:
+    channel_id = _required_string(source, "channel_id")
+    base_url = str(source.get("base_url") or "https://discord.com/api/v10").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _headers_from_source(source)
+    if "Authorization" not in headers:
+        token_env = str(source.get("token_env") or "DISCORD_BOT_TOKEN")
+        token = os.environ.get(token_env)
+        if not token:
+            raise VerifierError(f"Missing environment variable {token_env!r} for Discord bot token")
+        headers["Authorization"] = f"Bot {token}"
+    params = {"limit": _non_negative_int(source.get("limit", 50), "limit")}
+    url = _url_with_params(f"{base_url}/channels/{urllib.parse.quote(channel_id, safe='')}/messages", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, list):
+        raise VerifierError("Discord messages response must be a JSON array")
+    return {
+        "channel_id": channel_id,
+        "message_count": len(payload),
+        "messages": [_discord_message_summary(message, channel_id) for message in payload if isinstance(message, dict)],
+    }
+
+
+def _capture_zendesk_tickets_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = _required_string(source, "base_url").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _zendesk_headers(source)
+    ticket_id = source.get("ticket_id")
+    if ticket_id:
+        url = f"{base_url}/tickets/{urllib.parse.quote(str(ticket_id), safe='')}.json"
+    else:
+        query = str(source.get("query") or "type:ticket")
+        url = _url_with_params(f"{base_url}/search.json", {"query": query})
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    tickets = _zendesk_ticket_items(payload)
+    return {
+        "ticket_count": len(tickets),
+        "tickets": [_zendesk_ticket_summary(ticket) for ticket in tickets if isinstance(ticket, dict)],
+    }
+
+
+def _capture_pagerduty_incidents_source(source: dict[str, Any]) -> dict[str, Any]:
+    base_url = str(source.get("base_url") or "https://api.pagerduty.com").rstrip("/")
+    timeout = _positive_float(source.get("timeout_seconds", DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout_seconds")
+    max_bytes = _non_negative_int(source.get("max_bytes", DEFAULT_MAX_HTTP_BYTES), "max_bytes")
+    headers = _bearer_headers(source, "PAGERDUTY_API_TOKEN")
+    if not (isinstance(source.get("headers"), dict) and "Accept" in source["headers"]):
+        headers["Accept"] = "application/vnd.pagerduty+json;version=2"
+    params: dict[str, Any] = {"limit": _non_negative_int(source.get("limit", 50), "limit")}
+    statuses = source.get("statuses")
+    if statuses:
+        params["statuses[]"] = _string_list(statuses)
+    for field in ("since", "until", "service_ids[]", "team_ids[]"):
+        if source.get(field) is not None:
+            params[field] = source[field] if isinstance(source[field], list) else str(source[field])
+    url = _url_with_params(f"{base_url}/incidents", params)
+    _status_code, payload = _http_get_json(url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    if not isinstance(payload, dict):
+        raise VerifierError("PagerDuty incidents response must be a JSON object")
+    incidents = payload.get("incidents") or []
+    if not isinstance(incidents, list):
+        raise VerifierError("PagerDuty incidents response incidents must be a list")
+    return {
+        "incident_count": len(incidents),
+        "incidents": [_pagerduty_incident_summary(incident) for incident in incidents if isinstance(incident, dict)],
+        "more": bool(payload.get("more")),
     }
 
 
@@ -544,6 +987,37 @@ def _headers_from_source(source: dict[str, Any]) -> dict[str, str]:
     return headers
 
 
+def _bearer_headers(source: dict[str, Any], default_token_env: str) -> dict[str, str]:
+    headers = _headers_from_source(source)
+    if "Authorization" in headers:
+        return headers
+    token_env = str(source.get("token_env") or source.get("bearer_token_env") or default_token_env)
+    token = os.environ.get(token_env)
+    if not token:
+        raise VerifierError(f"Missing environment variable {token_env!r} for bearer token")
+    headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _jira_headers(source: dict[str, Any]) -> dict[str, str]:
+    headers = _headers_from_source(source)
+    if "Authorization" in headers:
+        return headers
+    if source.get("token_env") or source.get("bearer_token_env"):
+        return _bearer_headers(source, "JIRA_API_TOKEN")
+    username = source.get("username") or source.get("email")
+    username_env = source.get("username_env") or source.get("email_env")
+    if username_env:
+        username = os.environ.get(str(username_env))
+    token_env = str(source.get("api_token_env") or source.get("password_env") or "JIRA_API_TOKEN")
+    token = os.environ.get(token_env)
+    if not username or not token:
+        raise VerifierError("Jira verifier requires bearer token or username/email plus API token")
+    raw = f"{username}:{token}".encode("utf-8")
+    headers["Authorization"] = f"Basic {base64.b64encode(raw).decode('ascii')}"
+    return headers
+
+
 def _http_get_json(
     url: str,
     *,
@@ -551,23 +1025,578 @@ def _http_get_json(
     timeout: float,
     max_bytes: int = DEFAULT_MAX_HTTP_BYTES,
 ) -> tuple[int, Any]:
-    request = urllib.request.Request(url, headers=headers, method="GET")
+    return _http_json("GET", url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+
+
+def _http_post_json(
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout: float,
+    payload: Any,
+    max_bytes: int = DEFAULT_MAX_HTTP_BYTES,
+) -> tuple[int, Any]:
+    post_headers = dict(headers)
+    post_headers.setdefault("Content-Type", "application/json")
+    body = json.dumps(payload).encode("utf-8")
+    return _http_json("POST", url, headers=post_headers, timeout=timeout, max_bytes=max_bytes, body=body)
+
+
+def _http_json(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout: float,
+    max_bytes: int,
+    body: bytes | None = None,
+) -> tuple[int, Any]:
+    status_code, response_body = _http_request(method, url, headers=headers, timeout=timeout, max_bytes=max_bytes, body=body)
+    try:
+        payload = json.loads(response_body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise VerifierError(f"HTTP {method} {url} did not return valid JSON: {exc}") from exc
+    return status_code, payload
+
+
+def _http_get_text(
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout: float,
+    max_bytes: int = DEFAULT_MAX_HTTP_BYTES,
+) -> tuple[int, str]:
+    status_code, response_body = _http_request("GET", url, headers=headers, timeout=timeout, max_bytes=max_bytes)
+    return status_code, response_body.decode("utf-8", errors="replace")
+
+
+def _http_request(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    timeout: float,
+    max_bytes: int,
+    body: bytes | None = None,
+) -> tuple[int, bytes]:
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read(max_bytes + 1)
             status_code = int(response.status)
     except urllib.error.HTTPError as exc:
         body = exc.read(4096).decode("utf-8", errors="replace")
-        raise VerifierError(f"HTTP GET {url} failed with status {exc.code}: {body}") from exc
+        raise VerifierError(f"HTTP {method} {url} failed with status {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
-        raise VerifierError(f"HTTP GET {url} failed: {exc.reason}") from exc
+        raise VerifierError(f"HTTP {method} {url} failed: {exc.reason}") from exc
     if len(body) > max_bytes:
-        raise VerifierError(f"HTTP GET {url} exceeded max_bytes={max_bytes}")
+        raise VerifierError(f"HTTP {method} {url} exceeded max_bytes={max_bytes}")
+    return status_code, body
+
+
+def _payload_items(payload: Any, list_key: str, label: str) -> list[Any]:
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        raise VerifierError(f"{label} response must be a JSON object or array")
+    if list_key in payload:
+        items = payload.get(list_key)
+        if not isinstance(items, list):
+            raise VerifierError(f"{label} response {list_key} must be a list")
+        return items
+    return [payload]
+
+
+def _slack_message_summary(message: dict[str, Any], channel_id: str) -> dict[str, Any]:
+    reactions = message.get("reactions") or []
+    return {
+        "type": message.get("type"),
+        "subtype": message.get("subtype"),
+        "ts": message.get("ts"),
+        "thread_ts": message.get("thread_ts"),
+        "user": message.get("user"),
+        "bot_id": message.get("bot_id"),
+        "channel_id": channel_id,
+        "text": message.get("text") or "",
+        "reaction_names": [item.get("name") for item in reactions if isinstance(item, dict)],
+        "reply_count": message.get("reply_count"),
+    }
+
+
+def _calendar_event_summary(event: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": event.get("id"),
+        "summary": event.get("summary") or "",
+        "description": event.get("description") or "",
+        "status": event.get("status"),
+        "htmlLink": event.get("htmlLink"),
+        "created": event.get("created"),
+        "updated": event.get("updated"),
+        "start": _calendar_time(event.get("start")),
+        "end": _calendar_time(event.get("end")),
+        "attendees": [
+            attendee.get("email")
+            for attendee in event.get("attendees", [])
+            if isinstance(attendee, dict) and attendee.get("email")
+        ],
+        "creator": _nested_value(event, "creator.email"),
+        "organizer": _nested_value(event, "organizer.email"),
+        "conference_link": event.get("hangoutLink") or _nested_value(event, "conferenceData.entryPoints.0.uri"),
+    }
+
+
+def _calendar_time(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    raw = value.get("dateTime") or value.get("date")
+    return str(raw) if raw is not None else None
+
+
+def _drive_file_summary(item: dict[str, Any]) -> dict[str, Any]:
+    owners = item.get("owners") or []
+    return {
+        "id": item.get("id"),
+        "name": item.get("name") or "",
+        "mimeType": item.get("mimeType"),
+        "webViewLink": item.get("webViewLink"),
+        "createdTime": item.get("createdTime"),
+        "modifiedTime": item.get("modifiedTime"),
+        "trashed": bool(item.get("trashed")),
+        "md5Checksum": item.get("md5Checksum"),
+        "size": item.get("size"),
+        "owners": [
+            owner.get("emailAddress") or owner.get("displayName")
+            for owner in owners
+            if isinstance(owner, dict) and (owner.get("emailAddress") or owner.get("displayName"))
+        ],
+    }
+
+
+def _kubernetes_resource_summary(item: dict[str, Any]) -> dict[str, Any]:
+    metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    status = item.get("status") if isinstance(item.get("status"), dict) else {}
+    spec = item.get("spec") if isinstance(item.get("spec"), dict) else {}
+    conditions = status.get("conditions") if isinstance(status.get("conditions"), list) else []
+    return {
+        "apiVersion": item.get("apiVersion"),
+        "kind": item.get("kind"),
+        "name": metadata.get("name"),
+        "namespace": metadata.get("namespace"),
+        "uid": metadata.get("uid"),
+        "labels": metadata.get("labels") if isinstance(metadata.get("labels"), dict) else {},
+        "phase": status.get("phase"),
+        "ready": _kubernetes_ready(item, spec, status, conditions),
+        "replicas": spec.get("replicas"),
+        "ready_replicas": status.get("readyReplicas"),
+        "conditions": [
+            {
+                "type": condition.get("type"),
+                "status": condition.get("status"),
+                "reason": condition.get("reason"),
+            }
+            for condition in conditions
+            if isinstance(condition, dict)
+        ],
+    }
+
+
+def _kubernetes_ready(item: dict[str, Any], spec: dict[str, Any], status: dict[str, Any], conditions: list[Any]) -> bool:
+    kind = str(item.get("kind") or "")
+    for condition in conditions:
+        if not isinstance(condition, dict):
+            continue
+        condition_type = str(condition.get("type") or "")
+        if condition_type in {"Ready", "Available"}:
+            return str(condition.get("status") or "").lower() == "true"
+    if kind.lower() in {"deployment", "statefulset", "replicaset"}:
+        desired = spec.get("replicas") or status.get("replicas") or 1
+        ready = status.get("readyReplicas") or 0
+        try:
+            return int(ready) >= int(desired)
+        except (TypeError, ValueError):
+            return False
+    return str(status.get("phase") or "").lower() in {"running", "succeeded"}
+
+
+def _stripe_object_summary(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item.get("id"),
+        "object": item.get("object"),
+        "status": item.get("status"),
+        "amount": item.get("amount"),
+        "currency": item.get("currency"),
+        "customer": item.get("customer"),
+        "created": item.get("created"),
+        "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
+    }
+
+
+def _notion_page_summary(page: dict[str, Any]) -> dict[str, Any]:
+    properties = page.get("properties") if isinstance(page.get("properties"), dict) else {}
+    title = ""
+    text_parts: list[str] = []
+    for prop in properties.values():
+        if not isinstance(prop, dict):
+            continue
+        prop_type = prop.get("type")
+        if prop_type == "title":
+            title = _notion_rich_text(prop.get("title")) or title
+        elif prop_type == "rich_text":
+            text = _notion_rich_text(prop.get("rich_text"))
+            if text:
+                text_parts.append(text)
+        elif prop_type == "status" and isinstance(prop.get("status"), dict):
+            text_parts.append(str(prop["status"].get("name") or ""))
+        elif prop_type == "select" and isinstance(prop.get("select"), dict):
+            text_parts.append(str(prop["select"].get("name") or ""))
+    return {
+        "id": page.get("id"),
+        "url": page.get("url"),
+        "created_time": page.get("created_time"),
+        "last_edited_time": page.get("last_edited_time"),
+        "archived": bool(page.get("archived")),
+        "in_trash": bool(page.get("in_trash")),
+        "title": title,
+        "text": " ".join(part for part in text_parts if part),
+    }
+
+
+def _notion_rich_text(value: Any) -> str:
+    if not isinstance(value, list):
+        return ""
+    parts: list[str] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        plain = item.get("plain_text")
+        if plain:
+            parts.append(str(plain))
+    return "".join(parts)
+
+
+def _linear_issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": issue.get("id"),
+        "identifier": issue.get("identifier"),
+        "title": issue.get("title") or "",
+        "url": issue.get("url"),
+        "createdAt": issue.get("createdAt"),
+        "updatedAt": issue.get("updatedAt"),
+        "status": _nested_value(issue, "state.name"),
+        "team": _nested_value(issue, "team.key") or _nested_value(issue, "team.name"),
+        "assignee": _nested_value(issue, "assignee.email") or _nested_value(issue, "assignee.name"),
+    }
+
+
+def _jira_issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
+    fields = issue.get("fields") if isinstance(issue.get("fields"), dict) else {}
+    return {
+        "id": issue.get("id"),
+        "key": issue.get("key"),
+        "summary": fields.get("summary") or "",
+        "status": _nested_value(fields, "status.name"),
+        "issue_type": _nested_value(fields, "issuetype.name"),
+        "assignee": _nested_value(fields, "assignee.emailAddress") or _nested_value(fields, "assignee.displayName"),
+        "created": fields.get("created"),
+        "updated": fields.get("updated"),
+        "labels": fields.get("labels") if isinstance(fields.get("labels"), list) else [],
+    }
+
+
+def _microsoft_graph_user_path(source: dict[str, Any]) -> str:
+    user_id = str(source.get("user_id") or "me")
+    if user_id == "me":
+        return "me"
+    return f"users/{urllib.parse.quote(user_id, safe='')}"
+
+
+def _odata_params(source: dict[str, Any], *, top_field: str, default_top: int) -> dict[str, Any]:
+    params: dict[str, Any] = {"$top": _non_negative_int(source.get(top_field, default_top), top_field)}
+    for source_key, param_key in (
+        ("select", "$select"),
+        ("filter", "$filter"),
+        ("search", "$search"),
+        ("orderby", "$orderby"),
+    ):
+        if source.get(source_key) is not None:
+            params[param_key] = str(source[source_key])
+    return params
+
+
+def _microsoft_graph_message_summary(message: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": message.get("id"),
+        "subject": message.get("subject") or "",
+        "bodyPreview": message.get("bodyPreview") or "",
+        "conversationId": message.get("conversationId"),
+        "isRead": message.get("isRead"),
+        "receivedDateTime": message.get("receivedDateTime"),
+        "sentDateTime": message.get("sentDateTime"),
+        "from": _nested_value(message, "from.emailAddress.address"),
+        "to": _graph_recipients(message.get("toRecipients")),
+        "cc": _graph_recipients(message.get("ccRecipients")),
+        "webLink": message.get("webLink"),
+    }
+
+
+def _microsoft_graph_event_summary(event: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": event.get("id"),
+        "summary": event.get("subject") or "",
+        "bodyPreview": event.get("bodyPreview") or "",
+        "status": event.get("showAs"),
+        "webLink": event.get("webLink"),
+        "createdDateTime": event.get("createdDateTime"),
+        "lastModifiedDateTime": event.get("lastModifiedDateTime"),
+        "start": _nested_value(event, "start.dateTime"),
+        "end": _nested_value(event, "end.dateTime"),
+        "attendees": _graph_attendees(event.get("attendees")),
+        "organizer": _nested_value(event, "organizer.emailAddress.address"),
+    }
+
+
+def _graph_recipients(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    recipients: list[str] = []
+    for item in value:
+        address = _nested_value(item, "emailAddress.address")
+        if address:
+            recipients.append(str(address))
+    return recipients
+
+
+def _graph_attendees(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    attendees: list[str] = []
+    for item in value:
+        address = _nested_value(item, "emailAddress.address")
+        if address:
+            attendees.append(str(address))
+    return attendees
+
+
+def _gitlab_issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
+    assignees = issue.get("assignees") if isinstance(issue.get("assignees"), list) else []
+    return {
+        "id": issue.get("id"),
+        "iid": issue.get("iid"),
+        "title": issue.get("title") or "",
+        "description": issue.get("description") or "",
+        "state": issue.get("state"),
+        "labels": issue.get("labels") if isinstance(issue.get("labels"), list) else [],
+        "assignees": [
+            assignee.get("username") or assignee.get("name")
+            for assignee in assignees
+            if isinstance(assignee, dict) and (assignee.get("username") or assignee.get("name"))
+        ],
+        "web_url": issue.get("web_url"),
+        "created_at": issue.get("created_at"),
+        "updated_at": issue.get("updated_at"),
+        "closed_at": issue.get("closed_at"),
+    }
+
+
+def _discord_message_summary(message: dict[str, Any], channel_id: str) -> dict[str, Any]:
+    author = message.get("author") if isinstance(message.get("author"), dict) else {}
+    return {
+        "id": message.get("id"),
+        "channel_id": channel_id,
+        "text": message.get("content") or "",
+        "timestamp": message.get("timestamp"),
+        "edited_timestamp": message.get("edited_timestamp"),
+        "author_id": author.get("id"),
+        "author": author.get("username") or author.get("global_name"),
+        "type": message.get("type"),
+    }
+
+
+def _zendesk_headers(source: dict[str, Any]) -> dict[str, str]:
+    headers = _headers_from_source(source)
+    if "Authorization" in headers:
+        return headers
+    if source.get("token_env") or source.get("bearer_token_env"):
+        return _bearer_headers(source, "ZENDESK_API_TOKEN")
+    username = source.get("username") or source.get("email")
+    token_env = str(source.get("api_token_env") or "ZENDESK_API_TOKEN")
+    token = os.environ.get(token_env)
+    if not username or not token:
+        raise VerifierError("Zendesk verifier requires bearer token or username/email plus API token")
+    raw = f"{username}/token:{token}".encode("utf-8")
+    headers["Authorization"] = f"Basic {base64.b64encode(raw).decode('ascii')}"
+    return headers
+
+
+def _zendesk_ticket_items(payload: Any) -> list[Any]:
+    if not isinstance(payload, dict):
+        raise VerifierError("Zendesk ticket response must be a JSON object")
+    if isinstance(payload.get("ticket"), dict):
+        return [payload["ticket"]]
+    for key in ("tickets", "results"):
+        if key in payload:
+            items = payload[key]
+            if not isinstance(items, list):
+                raise VerifierError(f"Zendesk response {key} must be a list")
+            return items
+    return []
+
+
+def _zendesk_ticket_summary(ticket: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": ticket.get("id"),
+        "subject": ticket.get("subject") or "",
+        "description": ticket.get("description") or "",
+        "status": ticket.get("status"),
+        "priority": ticket.get("priority"),
+        "requester_id": ticket.get("requester_id"),
+        "assignee_id": ticket.get("assignee_id"),
+        "created_at": ticket.get("created_at"),
+        "updated_at": ticket.get("updated_at"),
+        "url": ticket.get("url"),
+    }
+
+
+def _pagerduty_incident_summary(incident: dict[str, Any]) -> dict[str, Any]:
+    assignments = incident.get("assignments") if isinstance(incident.get("assignments"), list) else []
+    return {
+        "id": incident.get("id"),
+        "incident_number": incident.get("incident_number"),
+        "title": incident.get("title") or incident.get("summary") or "",
+        "status": incident.get("status"),
+        "urgency": incident.get("urgency"),
+        "service": _nested_value(incident, "service.summary"),
+        "assignees": [
+            _nested_value(assignment, "assignee.summary")
+            for assignment in assignments
+            if _nested_value(assignment, "assignee.summary")
+        ],
+        "html_url": incident.get("html_url"),
+        "created_at": incident.get("created_at"),
+        "updated_at": incident.get("updated_at"),
+    }
+
+
+def _parse_s3_list_objects(xml_text: str) -> list[dict[str, Any]]:
     try:
-        payload = json.loads(body.decode("utf-8"))
-    except json.JSONDecodeError as exc:
-        raise VerifierError(f"HTTP GET {url} did not return valid JSON: {exc}") from exc
-    return status_code, payload
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        raise VerifierError(f"S3 ListObjects response was not valid XML: {exc}") from exc
+    objects: list[dict[str, Any]] = []
+    for item in root.iter():
+        if _xml_name(item.tag) != "Contents":
+            continue
+        objects.append(
+            {
+                "key": _xml_child_text(item, "Key"),
+                "last_modified": _xml_child_text(item, "LastModified"),
+                "etag": (_xml_child_text(item, "ETag") or "").strip('"'),
+                "size": _optional_int(_xml_child_text(item, "Size")),
+                "storage_class": _xml_child_text(item, "StorageClass"),
+            }
+        )
+    return objects
+
+
+def _xml_child_text(root: ET.Element, name: str) -> str | None:
+    for child in root:
+        if _xml_name(child.tag) == name:
+            return child.text
+    return None
+
+
+def _xml_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _nested_value(root: Any, path: str) -> Any:
+    cursor = root
+    for part in path.split("."):
+        if isinstance(cursor, dict):
+            cursor = cursor.get(part)
+        elif isinstance(cursor, list) and part.isdigit() and int(part) < len(cursor):
+            cursor = cursor[int(part)]
+        else:
+            return None
+    return cursor
+
+
+def _aws_sigv4_headers(source: dict[str, Any], method: str, url: str, region: str, *, service: str) -> dict[str, str]:
+    access_key_env = str(source.get("access_key_env") or "AWS_ACCESS_KEY_ID")
+    secret_key_env = str(source.get("secret_key_env") or "AWS_SECRET_ACCESS_KEY")
+    access_key = os.environ.get(access_key_env)
+    secret_key = os.environ.get(secret_key_env)
+    if not access_key or not secret_key:
+        raise VerifierError(f"S3 verifier requires {access_key_env} and {secret_key_env}, or unsigned=true")
+    session_token = os.environ.get(str(source.get("session_token_env") or "AWS_SESSION_TOKEN"))
+    now = _datetime.datetime.utcnow()
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+    date_stamp = now.strftime("%Y%m%d")
+    parsed = urllib.parse.urlsplit(url)
+    payload_hash = hashlib.sha256(b"").hexdigest()
+    headers = {
+        "Host": parsed.netloc,
+        "x-amz-content-sha256": payload_hash,
+        "x-amz-date": amz_date,
+    }
+    if session_token:
+        headers["x-amz-security-token"] = session_token
+    canonical_headers = "".join(f"{name.lower()}:{headers[name]}\n" for name in sorted(headers, key=str.lower))
+    signed_headers = ";".join(name.lower() for name in sorted(headers, key=str.lower))
+    canonical_request = "\n".join(
+        [
+            method,
+            urllib.parse.quote(parsed.path or "/", safe="/~"),
+            _canonical_query(parsed.query),
+            canonical_headers,
+            signed_headers,
+            payload_hash,
+        ]
+    )
+    credential_scope = f"{date_stamp}/{region}/{service}/aws4_request"
+    string_to_sign = "\n".join(
+        [
+            "AWS4-HMAC-SHA256",
+            amz_date,
+            credential_scope,
+            hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+        ]
+    )
+    signing_key = _aws_signing_key(secret_key, date_stamp, region, service)
+    signature = hmac.new(signing_key, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+    headers["Authorization"] = (
+        f"AWS4-HMAC-SHA256 Credential={access_key}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, Signature={signature}"
+    )
+    return headers
+
+
+def _aws_signing_key(secret_key: str, date_stamp: str, region: str, service: str) -> bytes:
+    key = ("AWS4" + secret_key).encode("utf-8")
+    for value in (date_stamp, region, service, "aws4_request"):
+        key = hmac.new(key, value.encode("utf-8"), hashlib.sha256).digest()
+    return key
+
+
+def _canonical_query(query: str) -> str:
+    pairs = urllib.parse.parse_qsl(query, keep_blank_values=True)
+    encoded = [
+        (
+            urllib.parse.quote(key, safe="-_.~"),
+            urllib.parse.quote(value, safe="-_.~"),
+        )
+        for key, value in pairs
+    ]
+    return "&".join(f"{key}={value}" for key, value in sorted(encoded))
 
 
 def _github_issue_summary(issue: dict[str, Any]) -> dict[str, Any]:
@@ -844,7 +1873,10 @@ def _validate_readonly_sql(sql: str, query_id: str) -> None:
 
 def _url_with_params(url: str, params: dict[str, Any]) -> str:
     query = urllib.parse.urlencode(params, doseq=True)
-    return f"{url}?{query}" if query else url
+    if not query:
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{query}"
 
 
 def _display_path(path: Path, preserve_paths: bool) -> str:

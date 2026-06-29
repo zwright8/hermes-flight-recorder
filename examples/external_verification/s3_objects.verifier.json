@@ -1,0 +1,18 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture S3 object listings with AWS SigV4 read-only credentials.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password|aws_access_key|aws_secret)"],
+  "sources": [
+    {
+      "id": "s3_reports",
+      "type": "s3_objects",
+      "bucket": "my-flight-recorder-artifacts",
+      "prefix": "reports/",
+      "region": "us-east-1",
+      "access_key_env": "AWS_ACCESS_KEY_ID",
+      "secret_key_env": "AWS_SECRET_ACCESS_KEY",
+      "state_path": "s3.objects",
+      "state_value_path": "objects"
+    }
+  ]
+}

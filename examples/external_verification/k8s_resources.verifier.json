@@ -1,15 +1,14 @@
 {
   "schema_version": "hfr.verifier_config.v1",
-  "description": "Capture Kubernetes-style resource summaries from a read-only API response.",
+  "description": "Capture Kubernetes resources from a read-only API server endpoint.",
   "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
   "sources": [
     {
       "id": "kubernetes_resources",
-      "type": "http_json",
+      "type": "kubernetes_resources",
       "url": "https://kubernetes.example.com/apis/apps/v1/namespaces/prod/deployments",
       "bearer_token_env": "K8S_READONLY_TOKEN",
-      "state_path": "kubernetes.resources",
-      "state_value_path": "json.items"
+      "state_path": "kubernetes"
     }
   ]
 }

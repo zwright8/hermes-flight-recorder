@@ -1,0 +1,15 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture Linear issues through the read-only GraphQL API.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "linear_issues",
+      "type": "linear_issues",
+      "first": 50,
+      "token_env": "LINEAR_API_KEY",
+      "state_path": "linear.issue",
+      "state_value_path": "issues.0"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture a Stripe payment intent without mutating billing state.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password|sk_live|sk_test)"],
+  "sources": [
+    {
+      "id": "payment_intent",
+      "type": "stripe_objects",
+      "resource": "payment_intents",
+      "object_id": "pi_123",
+      "token_env": "STRIPE_SECRET_KEY",
+      "state_path": "payments.payment"
+    }
+  ]
+}

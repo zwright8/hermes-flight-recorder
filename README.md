@@ -320,7 +320,20 @@ Supported read-only verifier sources:
 - `imap` for live mailbox reads with `SELECT readonly`.
 - `gmail_threads` for Gmail thread reads using `GMAIL_ACCESS_TOKEN` or a
   configured token environment variable.
+- `microsoft_graph_messages` and `microsoft_graph_events` for Outlook/Graph
+  mail and calendar evidence.
 - `github_issue` for issue state and comments.
+- `gitlab_issues` for GitLab issue evidence.
+- `slack_history` for Slack channel-history evidence.
+- `discord_messages` for Discord channel-message evidence.
+- `google_calendar_events` for Calendar event evidence.
+- `google_drive_files` for Drive file evidence.
+- `zendesk_tickets` and `pagerduty_incidents` for support and incident state.
+- `kubernetes_resources` for Kubernetes API resource readiness evidence.
+- `stripe_objects` for Stripe object and payment state.
+- `notion_database` for Notion page/database evidence.
+- `linear_issues` and `jira_issues` for issue tracker state.
+- `s3_objects` for S3-compatible object listings, including AWS SigV4.
 - `http_json` for arbitrary REST/API state.
 - `sqlite` for read-only local database queries.
 
@@ -390,19 +403,19 @@ Current monitor catalog:
 
 | External area | States Flight Recorder can monitor | Evidence source |
 | --- | --- | --- |
-| Email and mailboxes | sent mail, inbox messages, threads, headers, bodies | `imap`, `gmail_threads`, `maildir`, `eml` |
-| GitHub | issue state, comments, labels, assignees | `github_issue`, `http_json` |
-| Ticket, CRM, incident systems | ticket existence, status, owner, priority, resolution | `http_json` |
+| Email and mailboxes | sent mail, inbox messages, threads, headers, bodies | `imap`, `gmail_threads`, `microsoft_graph_messages`, `maildir`, `eml` |
+| GitHub | issue state, comments, labels, assignees | `github_issue`, `gitlab_issues`, `linear_issues`, `jira_issues`, `http_json` |
+| Ticket, CRM, incident systems | ticket existence, status, owner, priority, resolution | `jira_issues`, `linear_issues`, `zendesk_tickets`, `pagerduty_incidents`, `http_json` |
 | Databases and local stores | rows, counts, status fields, audit records | `sqlite`, `http_json` |
 | Files and artifacts | existence, hashes, size, text, directory entries | `capture-state --file`, `capture-state --dir` |
 | Jobs, CI, queues, deployments | status, conclusion, run ids, processed counts | `http_json` |
 | Webhooks and event sinks | delivery status, event ids, payload fields, attempts | `http_json`, `sqlite` |
-| Chat and collaboration | channel messages, replies, authors, timestamps, reactions | `http_json` |
-| Calendars and scheduling | events, attendees, times, conference links, response status | `http_json` |
-| Object stores and document drives | objects, files, keys, mime types, hashes, owners | `http_json` |
-| Payments and billing | payment intents, invoices, subscriptions, refunds, settlement status | `http_json` |
-| Infrastructure control planes | deployments, pods, services, health checks, resource conditions | `http_json` |
-| Knowledge bases and documents | pages, blocks, titles, last edited times, owners | `http_json` |
+| Chat and collaboration | channel messages, replies, authors, timestamps, reactions | `slack_history`, `discord_messages`, `http_json` |
+| Calendars and scheduling | events, attendees, times, conference links, response status | `google_calendar_events`, `microsoft_graph_events`, `http_json` |
+| Object stores and document drives | objects, files, keys, mime types, hashes, owners | `google_drive_files`, `s3_objects`, `http_json` |
+| Payments and billing | payment intents, invoices, subscriptions, refunds, settlement status | `stripe_objects`, `http_json` |
+| Infrastructure control planes | deployments, pods, services, health checks, resource conditions | `kubernetes_resources`, `http_json` |
+| Knowledge bases and documents | pages, blocks, titles, last edited times, owners | `notion_database`, `google_drive_files`, `http_json` |
 | Generic JSON APIs | any JSON field reachable by read-only GET | `http_json` |
 
 Built-in validators include `email_sent`, `email_read`, `github_issue_closed`,
@@ -420,6 +433,11 @@ For read-only JSON APIs, `verify-state` also supports `state_value_path` so a
 source can copy `json.messages` or `json.items` directly into a validator-facing
 state path such as `slack.messages`, `calendar.events`, or
 `kubernetes.resources`.
+Dedicated provider adapters already normalize common response wrappers into
+stable state roots such as `slack.messages`, `calendar.events`, `drive.files`,
+`kubernetes.resources`, `payments.payment`, `notion.pages`, and `s3.objects`.
+For list-shaped issue trackers, use `state_value_path` to copy the relevant
+item into validator-facing paths such as `linear.issue` or `jira.issue`.
 
 ## Comparison And Improvement Loops
 

@@ -1,0 +1,15 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture Notion database pages using a read-only integration token.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "notion_pages",
+      "type": "notion_database",
+      "database_id": "NOTION_DATABASE_ID",
+      "page_size": 50,
+      "token_env": "NOTION_TOKEN",
+      "state_path": "notion"
+    }
+  ]
+}

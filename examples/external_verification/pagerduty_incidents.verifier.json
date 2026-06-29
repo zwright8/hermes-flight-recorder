@@ -1,0 +1,16 @@
+{
+  "schema_version": "hfr.verifier_config.v1",
+  "description": "Capture PagerDuty incidents using a read-only REST API token.",
+  "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
+  "sources": [
+    {
+      "id": "pagerduty_incidents",
+      "type": "pagerduty_incidents",
+      "statuses": ["resolved"],
+      "limit": 50,
+      "token_env": "PAGERDUTY_API_TOKEN",
+      "state_path": "pagerduty.incident",
+      "state_value_path": "incidents.0"
+    }
+  ]
+}

@@ -1,15 +1,15 @@
 {
   "schema_version": "hfr.verifier_config.v1",
-  "description": "Capture Slack-style channel history from a read-only JSON API response.",
+  "description": "Capture Slack channel history using a read-only bot token.",
   "secret_patterns": ["(?i)(api[_-]?key|secret|token|password)"],
   "sources": [
     {
       "id": "slack_channel_history",
-      "type": "http_json",
-      "url": "https://slack.com/api/conversations.history?channel=C123&limit=50",
-      "bearer_token_env": "SLACK_BOT_TOKEN",
-      "state_path": "slack.messages",
-      "state_value_path": "json.messages"
+      "type": "slack_history",
+      "channel_id": "C123",
+      "limit": 50,
+      "token_env": "SLACK_BOT_TOKEN",
+      "state_path": "slack"
     }
   ]
 }
