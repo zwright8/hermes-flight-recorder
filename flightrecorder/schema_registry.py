@@ -218,6 +218,17 @@ def _validate_value(value: Any, schema: Any, path: str, root: dict[str, Any], er
             errors.append(f"{path}: expected exactly one matching schema from oneOf, got {matches}")
         return
 
+    any_of = schema.get("anyOf")
+    if isinstance(any_of, list):
+        matches = 0
+        for subschema in any_of:
+            sub_errors: list[str] = []
+            _validate_value(value, subschema, path, root, sub_errors)
+            if not sub_errors:
+                matches = 1
+                break
+            errors.append(f"{path}: expected at least one matching schema from anyOf, got {matches}")
+
     if "const" in schema and value != schema["const"]:
         errors.append(f"{path}: expected constant {schema['const']!r}, got {value!r}")
     if "enum" in schema and isinstance(schema["enum"], list) and value not in schema["enum"]:
