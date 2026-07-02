@@ -1,0 +1,148 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/action_ledger_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Gate result over longitudinal action-ledger repair pressure and optional action-ledger-gate policy.",
+  "properties": {
+    "action_ledger": { "minLength": 1, "type": "string" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "decision": { "$ref": "#/$defs/decision" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "passed": { "type": "boolean" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "schema_version": { "const": "hfr.action_ledger_gate.v1" }
+  },
+  "required": [
+    "schema_version",
+    "action_ledger",
+    "passed",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics"
+  ],
+  "title": "Hermes Flight Recorder Action Ledger Gate",
+  "type": "object",
+  "$defs": {
+    "blocking_check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "summary"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": { "minimum": 0, "type": "integer" },
+        "blocking_checks": {
+          "items": { "$ref": "#/$defs/blocking_check" },
+          "type": "array"
+        },
+        "key_metrics": { "$ref": "#/$defs/metrics" },
+        "readiness": { "enum": ["blocked", "ready"], "type": "string" },
+        "recommendation": { "enum": ["block_iteration", "promote_iteration"], "type": "string" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "bundle_count": { "minimum": 0, "type": "integer" },
+        "new_action_count": { "minimum": 0, "type": "integer" },
+        "open_action_count": { "minimum": 0, "type": "integer" },
+        "open_priority_counts": {
+          "items": { "$ref": "#/$defs/priority_count" },
+          "type": "array"
+        },
+        "recurring_action_count": { "minimum": 0, "type": "integer" },
+        "resolved_action_count": { "minimum": 0, "type": "integer" },
+        "unique_action_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "bundle_count",
+        "unique_action_count",
+        "open_action_count",
+        "new_action_count",
+        "recurring_action_count",
+        "resolved_action_count",
+        "open_priority_counts"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "description": { "type": "string" },
+        "effective": { "$ref": "#/$defs/policy_effective" },
+        "path": { "type": ["string", "null"] },
+        "schema_version": { "const": "hfr.action_ledger_gate.policy.v1" }
+      },
+      "required": ["schema_version", "path", "effective"],
+      "type": "object"
+    },
+    "policy_effective": {
+      "additionalProperties": true,
+      "properties": {
+        "forbid_open_actions": {
+          "items": { "minLength": 1, "type": "string" },
+          "type": "array"
+        },
+        "forbid_open_priorities": {
+          "items": { "enum": ["critical", "high", "medium", "low"], "type": "string" },
+          "type": "array"
+        },
+        "max_new_actions": { "minimum": 0, "type": "integer" },
+        "max_open_actions": { "minimum": 0, "type": "integer" },
+        "max_recurring_actions": { "minimum": 0, "type": "integer" },
+        "min_bundles": { "minimum": 0, "type": "integer" },
+        "min_resolved_actions": { "minimum": 0, "type": "integer" },
+        "require_resolved_actions": {
+          "items": { "minLength": 1, "type": "string" },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "priority_count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "enum": ["critical", "high", "medium", "low"], "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    }
+  }
+}

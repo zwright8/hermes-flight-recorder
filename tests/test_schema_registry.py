@@ -718,6 +718,55 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "decision_gate")
 
+    def test_action_ledger_gate_schema_accepts_minimal_gate(self):
+        metrics = {
+            "bundle_count": 2,
+            "unique_action_count": 2,
+            "open_action_count": 2,
+            "new_action_count": 0,
+            "recurring_action_count": 2,
+            "resolved_action_count": 0,
+            "open_priority_counts": [{"id": "high", "count": 2}],
+        }
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.action_ledger_gate.v1",
+                "action_ledger": "runs/action_ledger.json",
+                "passed": True,
+                "check_count": 1,
+                "failed_check_count": 0,
+                "checks": [
+                    {
+                        "id": "max_recurring_actions",
+                        "passed": True,
+                        "actual": 2,
+                        "expected": {"max": 3},
+                        "summary": "max_recurring_actions: actual=2, max=3",
+                    }
+                ],
+                "metrics": metrics,
+                "decision": {
+                    "readiness": "ready",
+                    "recommendation": "promote_iteration",
+                    "summary": "Action-ledger gate is ready.",
+                    "blocking_check_count": 0,
+                    "blocking_checks": [],
+                    "key_metrics": metrics,
+                },
+                "policy": {
+                    "schema_version": "hfr.action_ledger_gate.policy.v1",
+                    "path": "examples/action_ledger_gate_policy.demo.json",
+                    "effective": {
+                        "max_recurring_actions": 3,
+                        "forbid_open_priorities": ["critical"],
+                    },
+                },
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "action_ledger_gate")
+
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(
             {

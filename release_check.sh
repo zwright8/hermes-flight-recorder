@@ -1151,6 +1151,7 @@ test -f runs/action_ledger.json
   --policy examples/action_ledger_gate_policy.demo.json \
   --out runs/action_ledger_gate.json >/dev/null
 test -f runs/action_ledger_gate.json
+"$PYTHON" -m flightrecorder schemas --check runs/action_ledger_gate.json >/dev/null
 if "$PYTHON" -m flightrecorder gate-action-ledger \
   --action-ledger runs/action_ledger.json \
   --max-recurring-actions 0 >/dev/null; then

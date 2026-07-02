@@ -70,6 +70,7 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertEqual(gate_result["policy"]["schema_version"], "hfr.action_ledger_gate.policy.v1")
             self.assertEqual(gate_result["policy"]["effective"]["max_recurring_actions"], 6)
             self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(gate_path)]), 0)
 
             strict_gate_path = root / "strict_action_ledger_gate.json"
             self.assertEqual(
@@ -96,6 +97,7 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertIn("max_recurring_actions", failed_checks)
             self.assertIn("forbid_open_priority", failed_checks)
             self.assertEqual(run_cli(["validate", "--action-ledger-gate", str(strict_gate_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(strict_gate_path)]), 0)
 
             strict_gate["failed_check_count"] = 0
             strict_gate_path.write_text(json.dumps(strict_gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")

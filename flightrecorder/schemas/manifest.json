@@ -674,6 +674,14 @@
       "name": "promotion_decision"
     },
     {
+      "artifact": "action_ledger_gate",
+      "artifact_schema_version": "hfr.action_ledger_gate.v1",
+      "description": "Gate result over longitudinal action-ledger repair pressure and optional action-ledger-gate policy.",
+      "filename": "action_ledger_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/action_ledger_gate.v1.schema.json",
+      "name": "action_ledger_gate"
+    },
+    {
       "artifact": "decision_gate",
       "artifact_schema_version": "hfr.decision_gate.v1",
       "description": "Side-effect-free gate over a source artifact decision recommendation.",
