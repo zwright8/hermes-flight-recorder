@@ -14,21 +14,22 @@
       "blocked_at": "2026-07-02T15:31:38Z",
       "id": "harness_pr3_main_delivery_lock_unavailable_supervisor_integration",
       "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
-      "integration_branch_sha": "182effcd0177a51d2f069f682b7bb8df4386abdb",
+      "integration_branch_sha": "479fef9ce4c3e9ea17b3efb6e1d74e094aed84e2",
+      "last_observed_at": "2026-07-02T15:43:28Z",
       "layer": "harness",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
       "lock_rechecked_at": "2026-07-02T15:32:53Z",
-      "origin_main_sha": "26ef4aa775e7b0cf9e819f6d4a556ae7351457c2",
+      "origin_main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
       "priority": "critical",
       "source_branch": "codex/hermes-goal-2-harness-20260702-1027",
       "source_branch_sha": "b702a84792450f5342ad0df3b93515c89a47767a",
       "status": "blocked",
-      "summary": "Harness PR #3 latest head is integrated and verified on the supervisor branch, but main delivery cannot proceed because the main-push lock remains unavailable; origin/main has advanced to 26ef4aa775e7b0cf9e819f6d4a556ae7351457c2.",
+      "summary": "Harness PR #3 latest head is integrated and verified on the supervisor branch, but main delivery cannot proceed because the main-push lock remains unavailable after a bounded retry.",
       "verification": [
         {
           "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
           "status": "pass",
-          "summary": "325 tests passed after merging current origin/main with Harness PR #3 before the final blocker checkpoint."
+          "summary": "332 tests passed after merging current origin/main with Harness PR #3."
         },
         {
           "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && git diff --check",
@@ -36,9 +37,9 @@
           "summary": "Metadata checks passed during integration."
         },
         {
-          "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
+          "command": "bounded 120-second lock acquisition retry ending 2026-07-02T15:43:28Z",
           "status": "blocked",
-          "summary": "Lock directory already existed; no main push attempted."
+          "summary": "Lock remained unavailable; no main push attempted."
         }
       ]
     }
@@ -872,8 +873,8 @@
     "id": "land_goal2_harness_pr3",
     "layer": "harness",
     "priority": "critical",
-    "status": "verified_pending_main_delivery",
-    "summary": "Harness PR #3 is merged with Model main and verified; main delivery is pending lock acquisition.",
+    "status": "blocked_lock_unavailable",
+    "summary": "Harness PR #3 is merged with Model main and verified on the supervisor branch, but main delivery is blocked by the active main-push lock.",
     "title": "Land auditable harness contracts"
   },
   "git": {
@@ -1154,18 +1155,18 @@
     "current_main_merged_at": "2026-07-02T15:29:15Z",
     "current_main_merged_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
-    "integration_branch_sha": "182effcd0177a51d2f069f682b7bb8df4386abdb",
+    "integration_branch_sha": "479fef9ce4c3e9ea17b3efb6e1d74e094aed84e2",
     "latest_head_note": "PR #3 advanced while the main-push lock was unavailable; latest head was merged before any main push attempt.",
     "latest_origin_main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
-    "lock_rechecked_at": "2026-07-02T15:32:53Z",
-    "lock_status": "unavailable_file_exists",
+    "lock_rechecked_at": "2026-07-02T15:43:28Z",
+    "lock_status": "unavailable_file_exists_after_bounded_retry",
     "main_push_status": "not_attempted_lock_unavailable",
     "pr_status": "open_ci_green",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
     "previous_verified_remote_branch_sha": "dd08db12f0049079de61454364474fa60847c03e",
     "remote_branch_sha": "b702a84792450f5342ad0df3b93515c89a47767a",
     "required_retry": "Acquire /tmp/hermes-flight-recorder-main-push.lock, fetch origin, verify PR #3 has not advanced, merge current origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c or later if needed, rerun verification, push HEAD to origin main, verify remote main SHA, close/merge PR #3, delete source and integration remote branches, and release the lock.",
-    "status": "verified_pending_main_delivery",
+    "status": "blocked_lock_unavailable",
     "verification": [
       {
         "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/cli.py flightrecorder/validation.py flightrecorder/report.py scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py tests/test_deployment_hardening.py tests/test_harness_manifest_cli.py tests/test_harness_replay_matrix.py tests/test_harness_tool_policy.py tests/test_schema_registry.py",
@@ -1392,8 +1393,8 @@
     },
     "harness": {
       "next_packet": null,
-      "status": "verified_pending_main_delivery",
-      "summary": "Harness PR #3 is merged with Model main 00d5430a6166ec5c805688c6b77430e4d55a207c and passed focused plus full Python 3.11 verification."
+      "status": "blocked_lock_unavailable",
+      "summary": "Integration branch codex/hermes-goal-0-supervisor-20260702-1115 is pushed at 479fef9ce4c3e9ea17b3efb6e1d74e094aed84e2 and contains PR #3 head b702a84792450f5342ad0df3b93515c89a47767a plus origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c, but /tmp/hermes-flight-recorder-main-push.lock remains unavailable."
     },
     "model": {
       "next_packet": "model_real_metadata_scout_packet",
@@ -1433,11 +1434,11 @@
     "eval": "not_started",
     "evidence": "in_progress",
     "governance": "in_progress",
-    "harness": "verified_pending_main_delivery",
+    "harness": "blocked_lock_unavailable",
     "model": "in_progress",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:39:27Z"
+  "updated_at": "2026-07-02T15:43:28Z"
 }
