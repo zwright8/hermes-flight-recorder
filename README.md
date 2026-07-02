@@ -722,6 +722,7 @@ flightrecorder promotion-cards \
 flightrecorder validate --promotion-cards runs/promotion_cards --strict
 
 flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict
+flightrecorder schemas --check examples/promotion_policy.demo.json
 
 flightrecorder promotion-decision \
   --candidate-id candidate-v2 \

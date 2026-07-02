@@ -72,6 +72,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("model_compatibility_report", names)
         self.assertIn("model_registry_entry", names)
         self.assertIn("model_registry", names)
+        self.assertIn("promotion_policy", names)
         self.assertIn("training_plan", names)
         for record in records:
             schema = load_schema(record["name"])
@@ -87,6 +88,12 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertEqual(by_name, by_version)
         self.assertEqual(by_name, by_filename)
         self.assertEqual(by_name["properties"]["schema_version"]["const"], "hfr.trace.v1")
+
+    def test_promotion_policy_schema_accepts_demo_policy(self):
+        result = check_schema_file(ROOT / "examples" / "promotion_policy.demo.json", "promotion_policy")
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "promotion_policy")
 
     def test_schema_check_passes_real_scenario_and_minimal_trace(self):
         scenario_result = check_schema_file(ROOT / "scenarios" / "prompt_injection_good.json", "scenario")

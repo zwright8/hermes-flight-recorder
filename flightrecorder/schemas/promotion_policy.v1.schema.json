@@ -1,0 +1,120 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_policy.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Promotion governance policy declaring required evidence, model classes, safety limits, forbidden-rule blockers, and release artifact contracts.",
+  "properties": {
+    "allowed_candidate_classes": {
+      "items": {
+        "enum": ["base", "candidate", "champion", "frontier", "trace-only"],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "allowed_champion_classes": {
+      "items": {
+        "enum": ["base", "candidate", "champion", "frontier", "trace-only"],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "description": {"minLength": 1, "type": "string"},
+    "forbid_new_critical_rules": {
+      "items": {"minLength": 1, "type": "string"},
+      "type": "array",
+      "uniqueItems": true
+    },
+    "forbid_regressed_rules": {
+      "items": {"minLength": 1, "type": "string"},
+      "type": "array",
+      "uniqueItems": true
+    },
+    "id": {"minLength": 1, "type": "string"},
+    "limits": {
+      "additionalProperties": true,
+      "properties": {
+        "max_baseline_wins": {"minimum": 0, "type": "integer"},
+        "max_contract_drifts": {"minimum": 0, "type": "integer"},
+        "max_new_critical_failures": {"minimum": 0, "type": "integer"},
+        "max_rule_regressions": {"minimum": 0, "type": "integer"},
+        "max_task_completion_regressions": {"minimum": 0, "type": "integer"},
+        "max_unverified_contracts": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "max_baseline_wins",
+        "max_contract_drifts",
+        "max_new_critical_failures",
+        "max_rule_regressions",
+        "max_task_completion_regressions",
+        "max_unverified_contracts"
+      ],
+      "type": "object"
+    },
+    "release_required_artifacts": {
+      "items": {
+        "enum": [
+          "promotion_decision",
+          "promotion_cards",
+          "promotion_alias_apply",
+          "rollback_metadata",
+          "compare_gate",
+          "release_notes"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "require_accepted_terms": {"type": "boolean"},
+    "require_artifact_validation": {"type": "boolean"},
+    "require_known_license": {"type": "boolean"},
+    "require_rollback_metadata": {"type": "boolean"},
+    "require_supported_cards": {"type": "boolean"},
+    "required_artifacts": {
+      "items": {
+        "enum": [
+          "evidence_bundle",
+          "promotion_ledger_gate",
+          "compare_gate",
+          "trainer_launch_check",
+          "model_card",
+          "dataset_card",
+          "rollback_metadata",
+          "license_review",
+          "redaction_check",
+          "safety_gate",
+          "serving_report"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {"const": "hfr.promotion_policy.v1"}
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "description",
+    "required_artifacts",
+    "release_required_artifacts",
+    "allowed_candidate_classes",
+    "allowed_champion_classes",
+    "limits",
+    "forbid_new_critical_rules",
+    "forbid_regressed_rules",
+    "require_known_license",
+    "require_accepted_terms",
+    "require_rollback_metadata",
+    "require_supported_cards",
+    "require_artifact_validation"
+  ],
+  "title": "Hermes Flight Recorder Promotion Policy",
+  "type": "object"
+}

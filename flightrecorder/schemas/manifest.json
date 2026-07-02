@@ -426,6 +426,14 @@
       "name": "model_registry"
     },
     {
+      "artifact": "promotion_policy",
+      "artifact_schema_version": "hfr.promotion_policy.v1",
+      "description": "Promotion governance policy declaring required evidence, model classes, safety limits, forbidden-rule blockers, and release artifact contracts.",
+      "filename": "promotion_policy.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_policy.v1.schema.json",
+      "name": "promotion_policy"
+    },
+    {
       "artifact": "training_plan",
       "artifact_schema_version": "hfr.training_plan.v1",
       "description": "Model-layer dry-run training plan written before downloads, heavy ML imports, or GPU work.",
