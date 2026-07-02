@@ -443,6 +443,75 @@
           "summary": "Full suite passed under Python 3.11 before main integration."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "branch": "codex/hermes-goal-8-governance-release-record-20260702-1528",
+      "completed_at": "2026-07-02T15:35:00Z",
+      "id": "governance_release_record",
+      "implementation_commit_sha": "321a9b639dbb79c85b832e7fba72926e0e55936d",
+      "layer": "governance",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added promotion-release-record to bind a passing promotion decision, generated cards, alias receipt, rollback metadata, eval compare gate, and release notes into a validated release artifact that rehashes each input.",
+      "title": "Bind governance release records",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "Touched governance modules compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "55 focused governance, ledger, and validation tests passed."
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "323 tests passed under Python 3.11."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "blocked",
+          "summary": "System Python 3.9 cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
+        }
+      ]
     }
   ],
   "current_packet": {
@@ -602,48 +671,69 @@
       "kind": "schema",
       "layer": "data",
       "path": "flightrecorder/schemas/manifest.json"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/governance.py",
+      "sha256": "ee13e407757904d18b37f809a9164c90065d568f015f9f519609d50d8c925190"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/cli.py",
+      "sha256": "4bf755744f28497032b88adfd4ac7d080674ca7dd2509a9e880189dab92a6d9e"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/validation.py",
+      "sha256": "fbd9856a53e14d6239da38354c01f6e926509a6b5998e609e94b5dde5d52a008"
+    },
+    {
+      "kind": "test",
+      "layer": "governance",
+      "path": "tests/test_promotion_decision.py",
+      "sha256": "7dd477a71b9c32b1dc4247c66ef864293b7125545b9e8774b8ca147ac8cc5de0"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "README.md",
+      "sha256": "cc3d3a38c45160cb35293917c000ff7a6be11841e194e47b66402f03c591cb67"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "TRAINING_PIPELINE.md",
+      "sha256": "3650bc40ae59816b8221156bac9b67171bc17adbd7a3699dbe2431a54957904c"
     }
   ],
   "latest_verification": [
     {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
-      "status": "pass",
-      "summary": "Supervisor state JSON validates after Goal 8 merge conflict resolution."
-    },
-    {
-      "command": "git diff --check",
-      "status": "pass",
-      "summary": "Integrated Goal 8 diff has no whitespace errors."
-    },
-    {
       "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
       "status": "pass",
-      "summary": "Touched Goal 8 governance modules compile after merging current origin/main."
+      "summary": "Touched release-record modules compile."
     },
     {
       "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
       "status": "pass",
-      "summary": "53 focused governance, ledger, and validation tests passed after merging current origin/main."
+      "summary": "55 focused governance, ledger, and validation tests passed."
+    },
+    {
+      "command": "python3 -m flightrecorder promotion-release-record --help && python3 -m flightrecorder validate --help",
+      "status": "pass",
+      "summary": "promotion-release-record and validate --promotion-release-record are advertised."
     },
     {
       "command": "python3.11 -m unittest discover",
       "status": "pass",
-      "summary": "321 tests passed under Python 3.11 after merging current origin/main."
+      "summary": "323 tests passed under Python 3.11."
     },
     {
-      "command": "git ls-remote origin refs/heads/main",
-      "status": "pass",
-      "summary": "Remote main verified at db1e2e8302c2df7d1c25242b433b79f626237aa7 after the locked push."
-    },
-    {
-      "command": "gh pr view 9 --json url,state,mergeCommit,headRefName,baseRefName",
-      "status": "pass",
-      "summary": "PR #9 is MERGED with merge commit db1e2e8302c2df7d1c25242b433b79f626237aa7."
-    },
-    {
-      "command": "git ls-remote --heads origin codex/hermes-goal-8-governance-20260702-1027",
-      "status": "pass",
-      "summary": "Remote Goal 8 branch deletion verified by empty output."
+      "command": "python3 -m unittest discover",
+      "status": "blocked",
+      "summary": "System Python 3.9 cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
     }
   ],
   "layer_status": {
@@ -663,9 +753,9 @@
       "summary": "Evidence bundles now require gate decision contracts when gates are included and can require at least one gate summary."
     },
     "governance": {
-      "next_packet": "governance_release_record",
+      "next_packet": "governance_policy_artifact",
       "status": "in_progress",
-      "summary": "Promotion decisions, model/dataset cards, and guarded registry alias application are implemented; release-record binding remains."
+      "summary": "Promotion decisions, model/dataset cards, guarded registry alias application, and release-record binding are implemented; explicit promotion policy artifacts remain."
     },
     "harness": {
       "next_packet": null,
@@ -707,9 +797,20 @@
       "id": "governance_release_record",
       "layer": "governance",
       "priority": "high",
-      "status": "ready",
+      "status": "completed",
       "summary": "Bind promotion decisions, cards, alias receipts, rollback metadata, evals, and release notes into a validated release-record artifact.",
       "title": "Bind governance release records"
+    },
+    {
+      "depends_on": [
+        "governance_release_record"
+      ],
+      "id": "governance_policy_artifact",
+      "layer": "governance",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Externalize the promotion policy thresholds and required artifact contract consumed by promotion-decision and release-record checks.",
+      "title": "Externalize promotion policy artifacts"
     }
   ],
   "promotion_readiness": {
@@ -723,5 +824,5 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:28:00Z"
+  "updated_at": "2026-07-02T15:35:00Z"
 }
