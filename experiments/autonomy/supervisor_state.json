@@ -16,7 +16,7 @@
       "layer": "supervisor",
       "priority": "critical",
       "status": "blocked",
-      "summary": "Verified Goal 0 branch codex/hermes-goal-0-supervisor-20260702-1027 is pushed at 10117e660542e9d8aaf0df74e90a32ed81eed0ef, but main delivery could not proceed because /tmp/hermes-flight-recorder-main-push.lock remained unavailable after 12 bounded retries and origin/main advanced to 48f7660058d8692962f80a075c1e25411cf4f254.",
+      "summary": "Verified Goal 0 branch codex/hermes-goal-0-supervisor-20260702-1027 is pushed at 10117e660542e9d8aaf0df74e90a32ed81eed0ef before blocker metadata, but main delivery could not proceed because /tmp/hermes-flight-recorder-main-push.lock remained unavailable after 12 bounded retries and origin/main advanced to ebd562fc39251d32778f6d2265e257dbf5a60b90.",
       "title": "Land verified Goal 0 branch to main"
     }
   ],
@@ -249,8 +249,8 @@
     "main_delivery": {
       "attempted_at": "2026-07-02T15:02:50Z",
       "branch_delete_status": "not_deleted_lock_unavailable",
-      "latest_origin_main_sha": "48f7660058d8692962f80a075c1e25411cf4f254",
-      "lock_rechecked_at": "2026-07-02T15:05:33Z",
+      "latest_origin_main_sha": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
+      "lock_rechecked_at": "2026-07-02T15:07:12Z",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
       "pr_status": "open",
       "push_main_status": "blocked_lock_unavailable",
@@ -396,5 +396,5 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:05:33Z"
+  "updated_at": "2026-07-02T15:07:12Z"
 }
