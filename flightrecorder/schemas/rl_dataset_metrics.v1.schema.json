@@ -103,6 +103,9 @@
     },
     "trainer_view_source_fingerprint_coverage": {
       "type": "object"
+    },
+    "trainer_views": {
+      "type": "object"
     }
   },
   "required": [

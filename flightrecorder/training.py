@@ -30,6 +30,7 @@ RL_DATASET_SPLITS_SCHEMA_VERSION = "hfr.rl.dataset_splits.v1"
 RL_DATASET_REGISTRY_SCHEMA_VERSION = "hfr.rl.dataset_registry.v1"
 RL_REDACTION_STATUS_SCHEMA_VERSION = "hfr.rl.redaction_status.v1"
 RL_LABEL_PROVENANCE_SCHEMA_VERSION = "hfr.rl.label_provenance.v1"
+RL_TRAINER_VIEWS_CONTRACT_VERSION = "hfr.rl.trainer_views.v1"
 COMPARE_RL_MANIFEST_SCHEMA_VERSION = "hfr.compare_rl.manifest.v1"
 COMPARE_RL_PAIR_SCHEMA_VERSION = "hfr.compare_rl.pair.v1"
 COMPARE_RL_DPO_SCHEMA_VERSION = "hfr.compare_rl.dpo.v1"
@@ -114,6 +115,7 @@ def export_rl_dataset(
             "Training export contains unredacted secret-like values; redact traces or metadata before export."
         )
     label_provenance = build_label_provenance_summary(episodes, sft, dpo, reward_model)
+    trainer_views = _trainer_views(sft, dpo, reward_model, step_rewards, curriculum)
     dataset_metrics = _dataset_metrics(
         episodes,
         rewards,
@@ -128,6 +130,7 @@ def export_rl_dataset(
         export_metadata,
         redaction_status,
         label_provenance,
+        trainer_views,
     )
 
     paths = {
@@ -190,10 +193,11 @@ def export_rl_dataset(
         "reward_model_count": len(reward_model),
         "quality_flag_count": len(dataset_metrics.get("quality_flags", [])),
         "source_fingerprint_coverage": dataset_metrics.get("source_fingerprint_coverage"),
+        "trainer_views": trainer_views,
         "dataset_splits": dataset_splits["summary"],
         "redaction_status": redaction_status,
         "label_provenance": label_provenance,
-        "registry": _manifest_registry_record(dataset_version, paths, preserve_paths, redaction_status, dataset_splits),
+        "registry": _manifest_registry_record(dataset_version, paths, preserve_paths, redaction_status, dataset_splits, trainer_views),
         "task_families": sorted({str(episode["task_family"]) for episode in episodes}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
         "notes": [
@@ -203,6 +207,7 @@ def export_rl_dataset(
             "New scorecards include evidence_refs for structured event/final-answer/episode attribution.",
             "step_rewards.jsonl flattens failed-rule attribution into one row per event/final-answer/episode target.",
             "sft.jsonl, dpo.jsonl, and reward_model.jsonl are trainer-ready views over the canonical evidence files.",
+            "trainer_views maps supported training modes to root and split artifacts so launch tooling does not infer mode support from filenames.",
             "dataset_metrics.json and DATASET_CARD.md summarize export quality and coverage.",
             "dataset_splits.json and splits/<split>/*.jsonl partition rows by task family to reduce train/eval leakage.",
             "dataset_registry.json binds dataset_version to manifest SHA-256, artifact fingerprints, redaction status, and split leakage checks.",
@@ -1374,6 +1379,7 @@ def _dataset_metrics(
     metadata: dict[str, str],
     redaction_status: dict[str, Any],
     label_provenance: dict[str, Any],
+    trainer_views: dict[str, Any],
 ) -> dict[str, Any]:
     scores = [_score_value(episode.get("outcome", {}).get("score")) for episode in episodes if isinstance(episode.get("outcome"), dict)]
     rewards_values = [_numeric_value(reward.get("reward")) for reward in rewards]
@@ -1405,6 +1411,7 @@ def _dataset_metrics(
         "max_reward": max(rewards_values) if rewards_values else None,
         "source_fingerprint_coverage": _source_fingerprint_coverage(episodes),
         "trainer_view_source_fingerprint_coverage": _trainer_view_source_fingerprint_coverage(sft, dpo, reward_model),
+        "trainer_views": trainer_views,
         "task_completion": _task_completion_metrics(episodes),
         "trace_signal": _trace_signal_metrics(episodes),
         "dataset_splits": dataset_splits.get("summary", {}),
@@ -1434,6 +1441,144 @@ def _dataset_metrics(
     if metadata:
         metrics["metadata"] = metadata
     return metrics
+
+
+def _trainer_views(
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+    step_rewards: list[dict[str, Any]],
+    curriculum: dict[str, Any],
+) -> dict[str, Any]:
+    specs = [
+        {
+            "view_id": "sft",
+            "training_modes": ["sft"],
+            "artifact": "sft",
+            "artifact_path": "sft.jsonl",
+            "artifact_format": "jsonl",
+            "schema_version": RL_SFT_SCHEMA_VERSION,
+            "row_count": len(sft),
+            "source_artifacts": ["episodes.jsonl"],
+            "label_policy": "scorecard_pass_plus_configured_task_completion",
+            "notes": ["Positive rows require configured task-completion evidence."],
+        },
+        {
+            "view_id": "action_sft",
+            "training_modes": ["action_sft"],
+            "artifact": "sft",
+            "artifact_path": "sft.jsonl",
+            "artifact_format": "jsonl",
+            "schema_version": RL_SFT_SCHEMA_VERSION,
+            "row_count": len(sft),
+            "source_artifacts": ["episodes.jsonl"],
+            "label_policy": "scorecard_pass_plus_configured_task_completion",
+            "notes": [
+                "Action SFT consumes the SFT message rows plus state_change metadata; no separate row copy is emitted."
+            ],
+        },
+        {
+            "view_id": "dpo",
+            "training_modes": ["dpo"],
+            "artifact": "dpo",
+            "artifact_path": "dpo.jsonl",
+            "artifact_format": "jsonl",
+            "schema_version": RL_DPO_SCHEMA_VERSION,
+            "row_count": len(dpo),
+            "source_artifacts": ["preferences.jsonl"],
+            "label_policy": "within_family_score_gap_preference",
+            "notes": ["Chosen rows inherit the same positive-label eligibility policy as SFT."],
+        },
+        {
+            "view_id": "reward_model",
+            "training_modes": ["reward_model"],
+            "artifact": "reward_model",
+            "artifact_path": "reward_model.jsonl",
+            "artifact_format": "jsonl",
+            "schema_version": RL_REWARD_MODEL_SCHEMA_VERSION,
+            "row_count": len(reward_model),
+            "source_artifacts": ["episodes.jsonl"],
+            "label_policy": "failing_episodes_plus_verified_positive_episodes",
+            "notes": ["Positive reward rows exclude final-answer-only successes."],
+        },
+        {
+            "view_id": "step_reward",
+            "training_modes": ["step_reward"],
+            "artifact": "step_rewards",
+            "artifact_path": "step_rewards.jsonl",
+            "artifact_format": "jsonl",
+            "schema_version": RL_STEP_REWARD_SCHEMA_VERSION,
+            "row_count": len(step_rewards),
+            "source_artifacts": ["rewards.jsonl", "failure_modes.jsonl"],
+            "label_policy": "failed_rule_attribution",
+            "notes": ["Rows allocate failed-rule reward deltas across event, final-answer, or episode targets."],
+        },
+        {
+            "view_id": "process_reward",
+            "training_modes": ["process_reward"],
+            "artifact": "step_rewards",
+            "artifact_path": "step_rewards.jsonl",
+            "artifact_format": "jsonl",
+            "schema_version": RL_STEP_REWARD_SCHEMA_VERSION,
+            "row_count": len(step_rewards),
+            "source_artifacts": ["rewards.jsonl", "failure_modes.jsonl"],
+            "label_policy": "failed_rule_attribution",
+            "notes": ["Process reward is an alias over step_rewards.jsonl; no separate row copy is emitted."],
+        },
+        {
+            "view_id": "curriculum",
+            "training_modes": ["curriculum"],
+            "artifact": "curriculum",
+            "artifact_path": "curriculum.json",
+            "artifact_format": "json",
+            "schema_version": RL_CURRICULUM_SCHEMA_VERSION,
+            "row_count": _int_value(curriculum.get("failure_mode_count") if isinstance(curriculum, dict) else 0),
+            "source_artifacts": ["failure_modes.jsonl"],
+            "label_policy": "failure_mode_priority_metadata",
+            "notes": ["Curriculum is prioritization metadata for repair/data-generation loops, not optimizer settings."],
+        },
+    ]
+    views = [_trainer_view_record(spec) for spec in specs]
+    return {
+        "contract_version": RL_TRAINER_VIEWS_CONTRACT_VERSION,
+        "mode_to_view": {
+            mode: str(view["view_id"])
+            for view in views
+            for mode in view["training_modes"]
+        },
+        "root_views": _ordered_unique(str(view["artifact_path"]) for view in views),
+        "views": views,
+        "notes": [
+            "Trainer views are selectors over canonical export artifacts.",
+            "Alias modes such as action_sft and process_reward do not duplicate rows.",
+            "Use split_paths when training requires train/validation/test isolation.",
+        ],
+    }
+
+
+def _trainer_view_record(spec: dict[str, Any]) -> dict[str, Any]:
+    artifact = str(spec["artifact"])
+    record = dict(spec)
+    record["available"] = True
+    record["split_paths"] = _trainer_view_split_paths(artifact)
+    return record
+
+
+def _trainer_view_split_paths(artifact: str) -> dict[str, str]:
+    if artifact not in DATASET_SPLIT_ARTIFACTS:
+        return {}
+    return {split_name: f"splits/{split_name}/{artifact}.jsonl" for split_name in DATASET_SPLIT_NAMES}
+
+
+def _ordered_unique(values: Any) -> list[str]:
+    seen: set[str] = set()
+    rows: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value or value in seen:
+            continue
+        seen.add(value)
+        rows.append(value)
+    return rows
 
 
 def _dataset_family_metrics(
@@ -1751,6 +1896,38 @@ def _dataset_card(manifest: dict[str, Any], metrics: dict[str, Any]) -> str:
     rows.extend(["## Artifact Counts", "", "| Artifact | Count |", "| --- | ---: |"])
     for name, count in sorted((metrics.get("artifact_counts") or {}).items()):
         rows.append(f"| `{_md_cell(name)}` | {count} |")
+    trainer_views = metrics.get("trainer_views") if isinstance(metrics.get("trainer_views"), dict) else {}
+    views = trainer_views.get("views") if isinstance(trainer_views.get("views"), list) else []
+    rows.extend(
+        [
+            "",
+            "## Trainer Views",
+            "",
+            "| Mode | Artifact | Rows | Split Views | Label Policy |",
+            "| --- | --- | ---: | --- | --- |",
+        ]
+    )
+    if views:
+        for view in views:
+            if not isinstance(view, dict):
+                continue
+            modes = ", ".join(f"`{_md_cell(str(mode))}`" for mode in view.get("training_modes", []) if isinstance(mode, str))
+            split_paths = view.get("split_paths") if isinstance(view.get("split_paths"), dict) else {}
+            rows.append(
+                "| "
+                + " | ".join(
+                    [
+                        modes or "`unknown`",
+                        f"`{_md_cell(str(view.get('artifact_path') or 'unknown'))}`",
+                        str(view.get("row_count", 0)),
+                        "yes" if split_paths else "no",
+                        _md_cell(str(view.get("label_policy") or "unknown")),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        rows.append("| None | n/a | 0 | no | No trainer views were declared. |")
     rows.extend(
         [
             "",
@@ -2324,6 +2501,7 @@ def _manifest_registry_record(
     preserve_paths: bool,
     redaction_status: dict[str, Any],
     dataset_splits: dict[str, Any],
+    trainer_views: dict[str, Any],
 ) -> dict[str, Any]:
     leakage = dataset_splits.get("leakage_checks") if isinstance(dataset_splits.get("leakage_checks"), dict) else {}
     return {
@@ -2331,6 +2509,8 @@ def _manifest_registry_record(
         "path": _display_path(paths["dataset_registry"], preserve_paths),
         "selection_key": dataset_version,
         "manifest_path": _display_path(paths["manifest"], preserve_paths),
+        "root_views": trainer_views.get("root_views", []),
+        "mode_to_view": trainer_views.get("mode_to_view", {}),
         "redaction_passed": redaction_status.get("passed") is True,
         "heldout_scenario_exclusive": leakage.get("heldout_scenario_exclusive") is True,
     }
@@ -2347,6 +2527,7 @@ def _dataset_registry_record(
     label_provenance: dict[str, Any],
 ) -> dict[str, Any]:
     leakage = dataset_splits.get("leakage_checks") if isinstance(dataset_splits.get("leakage_checks"), dict) else {}
+    trainer_views = dataset_metrics.get("trainer_views") if isinstance(dataset_metrics.get("trainer_views"), dict) else {}
     return {
         "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
         "dataset_version": str(manifest.get("dataset_version") or ""),
@@ -2359,7 +2540,8 @@ def _dataset_registry_record(
         "selection": {
             "key": str(manifest.get("dataset_version") or ""),
             "trainer_preflight_arg": f"--require-dataset-version {manifest.get('dataset_version')}",
-            "root_views": ["sft.jsonl", "dpo.jsonl", "reward_model.jsonl"],
+            "root_views": trainer_views.get("root_views", ["sft.jsonl", "dpo.jsonl", "reward_model.jsonl"]),
+            "mode_to_view": trainer_views.get("mode_to_view", {}),
         },
         "counts": {
             "episodes": len(episodes),
@@ -2373,6 +2555,7 @@ def _dataset_registry_record(
         "dataset_splits": dataset_splits.get("summary", {}),
         "leakage_checks": leakage,
         "source_fingerprint_coverage": dataset_metrics.get("source_fingerprint_coverage", {}),
+        "trainer_views": trainer_views,
         "quality_flags": dataset_metrics.get("quality_flags", []),
         "artifact_fingerprints": manifest.get("artifact_fingerprints", {}),
         "outputs": manifest.get("outputs", {}),

@@ -351,6 +351,16 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(result["dataset_selection"][0]["matches_required"])
             self.assertTrue(result["dataset_selection"][0]["redaction_passed"])
             self.assertTrue(result["dataset_selection"][0]["heldout_scenario_exclusive"])
+            self.assertIn("action_sft", result["dataset_selection"][0]["trainer_modes"])
+            self.assertIn("process_reward", result["dataset_selection"][0]["trainer_modes"])
+            self.assertEqual(
+                result["dataset_selection"][0]["trainer_views"]["mode_to_view"]["action_sft"],
+                "action_sft",
+            )
+            self.assertEqual(
+                result["dataset_selection"][0]["trainer_views"]["mode_to_view"]["process_reward"],
+                "process_reward",
+            )
             self.assertTrue(result["gates"][0]["validation"]["passed"])
             self.assertEqual(result["metadata"]["launcher"], "dry-run")
             self.assertEqual(result["trainer_command"]["argv"][:2], ["python", "train.py"])

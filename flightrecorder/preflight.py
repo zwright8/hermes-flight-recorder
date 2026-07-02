@@ -602,6 +602,7 @@ def _add_dataset_selection(
     registry_manifest_sha256 = str(registry.get("manifest_sha256") or "") if isinstance(registry, dict) else ""
     leakage = registry.get("leakage_checks") if isinstance(registry, dict) and isinstance(registry.get("leakage_checks"), dict) else {}
     manifest_registry = manifest.get("registry") if isinstance(manifest, dict) and isinstance(manifest.get("registry"), dict) else {}
+    trainer_views = _dataset_trainer_views(manifest, registry)
     redaction_status = registry.get("redaction_status") if isinstance(registry, dict) and isinstance(registry.get("redaction_status"), dict) else {}
     matches_required = bool(dataset_version and (not required_dataset_versions or dataset_version in required_dataset_versions))
     record: dict[str, Any] = {
@@ -618,6 +619,8 @@ def _add_dataset_selection(
         "registry_selection_key": str(registry_selection.get("key") or ""),
         "registry_manifest_sha256": registry_manifest_sha256,
         "redaction_passed": redaction_status.get("passed") is True or manifest_registry.get("redaction_passed") is True,
+        "trainer_views": trainer_views,
+        "trainer_modes": sorted(trainer_views.get("mode_to_view", {})),
     }
     if artifact == "training_export":
         record["heldout_scenario_exclusive"] = (
@@ -660,6 +663,27 @@ def _add_dataset_selection(
             record.get("heldout_scenario_exclusive") is True,
             {"artifact": artifact, "dataset_version": dataset_version},
         )
+
+
+def _dataset_trainer_views(manifest: dict[str, Any], registry: dict[str, Any]) -> dict[str, Any]:
+    for source in (registry, manifest):
+        if isinstance(source, dict) and isinstance(source.get("trainer_views"), dict):
+            return source["trainer_views"]
+    manifest_registry = manifest.get("registry") if isinstance(manifest, dict) and isinstance(manifest.get("registry"), dict) else {}
+    mode_to_view = manifest_registry.get("mode_to_view") if isinstance(manifest_registry.get("mode_to_view"), dict) else {}
+    root_views = manifest_registry.get("root_views") if isinstance(manifest_registry.get("root_views"), list) else []
+    selection = registry.get("selection") if isinstance(registry, dict) and isinstance(registry.get("selection"), dict) else {}
+    if not mode_to_view and isinstance(selection.get("mode_to_view"), dict):
+        mode_to_view = selection["mode_to_view"]
+    if not root_views and isinstance(selection.get("root_views"), list):
+        root_views = selection["root_views"]
+    if not mode_to_view and not root_views:
+        return {}
+    return {
+        "mode_to_view": {str(key): str(value) for key, value in sorted(mode_to_view.items())},
+        "root_views": [str(path) for path in root_views if isinstance(path, str)],
+        "views": [],
+    }
 
 
 def _trainer_command_record(value: str | None) -> dict[str, Any]:

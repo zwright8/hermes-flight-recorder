@@ -738,21 +738,24 @@ The export directory contains:
 - `dataset_metrics.json`: machine-readable export coverage, source-fingerprint
   coverage, trainer-view source-fingerprint coverage, task-completion coverage,
   trace-signal coverage, reward/score distribution, failure pressure,
-  redaction status, label provenance, and quality flags.
+  redaction status, label provenance, trainer-view mode mappings, and quality
+  flags.
 - `dataset_splits.json`: deterministic task-family train/validation/test split
   metadata, including family-exclusivity leakage checks, held-out scenario ID
   exclusivity checks, and per-split artifact counts.
 - `dataset_registry.json`: trainer-facing selection record that binds
   `dataset_version` to `manifest.json` SHA-256, artifact fingerprints,
-  redaction status, label provenance, source runs, and split leakage checks.
+  redaction status, label provenance, trainer-view mode mappings, source runs,
+  and split leakage checks.
 - `splits/<split>/*.jsonl`: split copies of `episodes`, `rewards`,
   `step_rewards`, `preferences`, `failure_modes`, `sft`, `dpo`, and
   `reward_model` rows for external trainers.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
 - `manifest.json`: generation settings, counts, `dataset_version`, output
-  paths, artifact fingerprints, redaction status, label provenance, registry
-  pointer, caveats, and optional experiment metadata.
+  paths, artifact fingerprints, redaction status, label provenance,
+  trainer-view mappings, registry pointer, caveats, and optional experiment
+  metadata.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
 use the redacted evidence surface rather than raw sensitive traces. When a run
@@ -1020,6 +1023,8 @@ simple rows without losing the audit trail.
   task-family exclusivity,
 - failed-rule and critical-failure counts,
 - task-family coverage with SFT/DPO/reward-model/step-reward counts,
+- `trainer_views` mode selectors for `sft`, `action_sft`, `dpo`,
+  `reward_model`, `step_reward`, `process_reward`, and `curriculum`,
 - quality flags such as missing positives, missing negatives, missing
   preferences, missing step attribution, or single-family coverage.
 
@@ -1028,7 +1033,10 @@ first checkpoint before handing an export to an SFT, DPO, reward-model, or RL
 job. The card helps answer: "Do we have enough positive examples, negative
 pressure, task-family coverage, and attribution to learn anything meaningful?"
 It also shows whether the held-out splits exist and whether the split assignment
-keeps each task family exclusive.
+keeps each task family exclusive. Its trainer-view table shows which canonical
+artifact and split files each supported training mode should consume, so action
+SFT and process-reward launches do not have to infer their source rows from
+filenames alone.
 When `--metadata` is provided, the card also shows an experiment metadata table
 so humans can tell which candidate/config the export represents.
 

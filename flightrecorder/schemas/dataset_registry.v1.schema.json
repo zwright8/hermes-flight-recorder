@@ -46,6 +46,12 @@
           "pattern": "^hfrds-[0-9a-f]+$",
           "type": "string"
         },
+        "mode_to_view": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
         "root_views": {
           "items": {
             "type": "string"
@@ -61,6 +67,9 @@
         "trainer_preflight_arg",
         "root_views"
       ],
+      "type": "object"
+    },
+    "trainer_views": {
       "type": "object"
     }
   },

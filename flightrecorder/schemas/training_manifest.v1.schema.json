@@ -186,6 +186,9 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "trainer_views": {
+      "type": "object"
     }
   },
   "required": [

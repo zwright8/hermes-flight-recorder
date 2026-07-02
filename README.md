@@ -609,7 +609,11 @@ The export can include episodes, terminal rewards, step rewards, preference
 pairs, SFT rows, DPO rows, reward-model rows, failure modes, curriculum
 metadata, dataset split manifests, dataset metrics, a dataset card, and
 `dataset_registry.json`. The manifest now carries a stable `dataset_version`;
-use that value, not only a directory path, when handing data to a trainer.
+use that value, not only a directory path, when handing data to a trainer. The
+manifest, metrics, registry, and card also expose `trainer_views`, a
+machine-readable map from modes such as `sft`, `action_sft`, `dpo`,
+`reward_model`, `step_reward`, `process_reward`, and `curriculum` to the
+canonical root and split artifacts they should consume.
 
 For launch safety, the trainer flow is side-effect free until an external
 trainer consumes the approved plan:
