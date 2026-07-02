@@ -193,15 +193,7 @@ def build_evidence_bundle(
 
     if validation_path is not None:
         validation = _read_json_artifact(Path(validation_path), artifacts, "validation", preserve_paths)
-        _summarize_boolean_artifact(
-            validation,
-            metrics,
-            checks,
-            artifact_name="validation",
-            metric_prefix="validation",
-            metric_fields=("target_count", "error_count", "warning_count"),
-            metrics_source="root",
-        )
+        _summarize_validation_artifact(validation, metrics, checks)
 
     if training_export_dir is not None:
         training_dir = Path(training_export_dir)
@@ -373,6 +365,29 @@ def build_evidence_bundle(
                     "validation_error_count": str(validation["error_count"]),
                 },
             )
+            _add_presence_check(
+                checks,
+                "gate_validation_has_targets",
+                bool(validation["available"] and _validation_summary_has_targets(validation)),
+                {
+                    "gate": gate_id,
+                    "validation_available": str(validation["available"]).lower(),
+                    "validation_target_count": str(validation["target_count"]),
+                },
+            )
+            _add_presence_check(
+                checks,
+                "gate_validation_counts_consistent",
+                bool(validation["available"] and _validation_summary_counts_consistent(validation)),
+                {
+                    "gate": gate_id,
+                    "validation_available": str(validation["available"]).lower(),
+                    "validation_passed": str(validation["passed"]).lower(),
+                    "validation_strict": str(validation["strict"]).lower(),
+                    "validation_error_count": str(validation["error_count"]),
+                    "validation_warning_count": str(validation["warning_count"]),
+                },
+            )
     if gate_rows:
         metrics["gates"] = gate_rows
     if require_gate:
@@ -488,7 +503,7 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "recommended_action_counts",
         ),
         "repair_queue": ("item_count", "critical_item_count", "scenario_count", "task_family_count", "priority_counts", "rule_counts"),
-        "validation": ("target_count", "error_count", "warning_count"),
+        "validation": ("passed", "strict", "target_count", "error_count", "warning_count"),
         "training_export": (
             "episode_count",
             "preference_count",
@@ -1640,6 +1655,59 @@ def _summarize_boolean_artifact(
     source = artifact if metrics_source == "root" else artifact.get("metrics") if isinstance(artifact.get("metrics"), dict) else {}
     metrics[metric_prefix] = {field: source.get(field) for field in metric_fields}
     _add_presence_check(checks, f"{artifact_name}_passed", artifact.get("passed") is True, {"artifact": artifact_name})
+
+
+def _summarize_validation_artifact(
+    validation: dict[str, Any],
+    metrics: dict[str, Any],
+    checks: list[dict[str, Any]],
+) -> None:
+    metrics["validation"] = {
+        "passed": validation.get("passed"),
+        "strict": validation.get("strict"),
+        "target_count": validation.get("target_count"),
+        "error_count": validation.get("error_count"),
+        "warning_count": validation.get("warning_count"),
+    }
+    _add_presence_check(checks, "validation_passed", validation.get("passed") is True, {"artifact": "validation"})
+    _add_presence_check(
+        checks,
+        "validation_has_targets",
+        _validation_summary_has_targets(validation),
+        {"artifact": "validation", "target_count": str(validation.get("target_count"))},
+    )
+    _add_presence_check(
+        checks,
+        "validation_counts_consistent",
+        _validation_summary_counts_consistent(validation),
+        {
+            "artifact": "validation",
+            "passed": str(validation.get("passed")).lower(),
+            "strict": str(validation.get("strict")).lower(),
+            "error_count": str(validation.get("error_count")),
+            "warning_count": str(validation.get("warning_count")),
+        },
+    )
+
+
+def _validation_summary_has_targets(summary: dict[str, Any]) -> bool:
+    value = summary.get("target_count")
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _validation_summary_counts_consistent(summary: dict[str, Any]) -> bool:
+    passed = summary.get("passed")
+    error_count = summary.get("error_count")
+    warning_count = summary.get("warning_count")
+    if not isinstance(passed, bool):
+        return False
+    if not isinstance(error_count, int) or isinstance(error_count, bool) or error_count < 0:
+        return False
+    if not isinstance(warning_count, int) or isinstance(warning_count, bool) or warning_count < 0:
+        return False
+    strict = summary.get("strict") is True
+    expected_passed = error_count == 0 and (warning_count == 0 or not strict)
+    return passed == expected_passed
 
 
 def _read_json_artifact(path: Path, artifacts: dict[str, Any], name: str, preserve_paths: bool) -> dict[str, Any]:

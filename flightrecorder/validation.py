@@ -7498,6 +7498,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
         _validate_evidence_bundle_artifact_record(name, record, target)
     _validate_evidence_bundle_metrics(metrics, target)
     _validate_evidence_bundle_harness_checks(metrics, checks, target)
+    _validate_evidence_bundle_validation_checks(metrics, checks, target)
     target.details.update(
         {
             "readiness": bundle.get("readiness"),
@@ -12935,6 +12936,47 @@ def _validate_evidence_bundle_harness_checks(metrics: dict[str, Any], checks: li
         )
 
 
+def _validate_evidence_bundle_validation_checks(metrics: dict[str, Any], checks: list[Any], target: ValidationTarget) -> None:
+    failed_check_ids = {
+        check.get("id")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is False and isinstance(check.get("id"), str)
+    }
+    validation = metrics.get("validation")
+    if isinstance(validation, dict):
+        if not _bundle_validation_has_targets(validation) and "validation_has_targets" not in failed_check_ids:
+            target.errors.append(
+                "evidence_bundle.checks must include a failed validation_has_targets check when validation metrics have no targets."
+            )
+        if not _bundle_validation_counts_consistent(validation) and "validation_counts_consistent" not in failed_check_ids:
+            target.errors.append(
+                "evidence_bundle.checks must include a failed validation_counts_consistent check when validation metrics are inconsistent."
+            )
+    gates = metrics.get("gates")
+    if not isinstance(gates, list):
+        return
+    invalid_gate_targets = []
+    invalid_gate_counts = []
+    for gate in gates:
+        if not isinstance(gate, dict):
+            continue
+        validation_metrics = gate.get("validation")
+        if not isinstance(validation_metrics, dict) or validation_metrics.get("available") is not True:
+            continue
+        if not _bundle_validation_has_targets(validation_metrics):
+            invalid_gate_targets.append(gate)
+        if not _bundle_validation_counts_consistent(validation_metrics):
+            invalid_gate_counts.append(gate)
+    if invalid_gate_targets and "gate_validation_has_targets" not in failed_check_ids:
+        target.errors.append(
+            "evidence_bundle.checks must include a failed gate_validation_has_targets check when gate validation metrics have no targets."
+        )
+    if invalid_gate_counts and "gate_validation_counts_consistent" not in failed_check_ids:
+        target.errors.append(
+            "evidence_bundle.checks must include a failed gate_validation_counts_consistent check when gate validation metrics are inconsistent."
+        )
+
+
 def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
     expected_sections = (
         "suite_summary",
@@ -12962,6 +13004,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     run_digest_coverage = metrics.get("run_digest_coverage")
     if isinstance(run_digest_coverage, dict):
         _validate_bundle_run_digest_coverage(run_digest_coverage, target)
+    validation = metrics.get("validation")
+    if isinstance(validation, dict):
+        _validate_bundle_validation_metrics(validation, target, "evidence_bundle.metrics.validation")
     trainer_handoff = metrics.get("trainer_handoff")
     if isinstance(trainer_handoff, dict):
         _validate_bundle_trainer_handoff(trainer_handoff, target)
@@ -12996,12 +13041,44 @@ def _validate_bundle_gate_validation(value: Any, target: ValidationTarget, label
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object when present.")
         return
+    _validate_bundle_validation_metrics(value, target, label, require_available=True)
+
+
+def _validate_bundle_validation_metrics(
+    value: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    *,
+    require_available: bool = False,
+) -> None:
+    if require_available and not isinstance(value.get("available"), bool):
+        target.errors.append(f"{label}.available must be a boolean.")
     for field_name in ("available", "passed", "strict"):
-        if not isinstance(value.get(field_name), bool):
+        if field_name == "available" and not require_available and field_name not in value:
+            continue
+        if field_name in value and not isinstance(value.get(field_name), bool):
             target.errors.append(f"{label}.{field_name} must be a boolean.")
     for field_name in ("target_count", "error_count", "warning_count"):
         if not _is_non_negative_int(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+
+
+def _bundle_validation_has_targets(value: dict[str, Any]) -> bool:
+    target_count = value.get("target_count")
+    return _is_non_negative_int(target_count) and int(target_count) > 0
+
+
+def _bundle_validation_counts_consistent(value: dict[str, Any]) -> bool:
+    passed = value.get("passed")
+    error_count = value.get("error_count")
+    warning_count = value.get("warning_count")
+    if not isinstance(passed, bool):
+        return True
+    if not _is_non_negative_int(error_count) or not _is_non_negative_int(warning_count):
+        return True
+    strict = value.get("strict") is True
+    expected_passed = int(error_count) == 0 and (int(warning_count) == 0 or not strict)
+    return passed == expected_passed
 
 
 def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: ValidationTarget) -> None:

@@ -846,6 +846,151 @@ class EvidenceBundleTests(unittest.TestCase):
                 self.assertIn("gate_validation_passed", blocking_checks)
                 self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
+    def test_evidence_bundle_blocks_low_signal_required_gate_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            gate_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.training_gate.v1",
+                        "passed": True,
+                        "metrics": {
+                            "validation": {
+                                "available": True,
+                                "passed": True,
+                                "strict": True,
+                                "target_count": 0,
+                                "error_count": 1,
+                                "warning_count": 0,
+                            }
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate_path), "--out", str(bundle_path)])
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("gate_validation_has_targets", failed_checks)
+            self.assertIn("gate_validation_counts_consistent", failed_checks)
+            gate_metrics = bundle["metrics"]["gates"][0]
+            self.assertTrue(gate_metrics["validation"]["available"])
+            self.assertTrue(gate_metrics["validation"]["passed"])
+            self.assertEqual(gate_metrics["validation"]["target_count"], 0)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_evidence_bundle_blocks_low_signal_validation_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            validation_path = root / "validation.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.validation.v1",
+                        "passed": True,
+                        "strict": True,
+                        "target_count": 0,
+                        "error_count": 1,
+                        "warning_count": 1,
+                        "targets": [],
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(["evidence-bundle", "--runs", str(runs), "--validation", str(validation_path), "--out", str(bundle_path)])
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            self.assertEqual(bundle["metrics"]["validation"]["passed"], True)
+            self.assertEqual(bundle["metrics"]["validation"]["strict"], True)
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("validation_has_targets", failed_checks)
+            self.assertIn("validation_counts_consistent", failed_checks)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_validate_rejects_hidden_low_signal_validation_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            validation_path = root / "validation.json"
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation_summary.json"
+            validation_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.validation.v1",
+                        "passed": True,
+                        "strict": True,
+                        "target_count": 1,
+                        "error_count": 0,
+                        "warning_count": 0,
+                        "targets": [
+                            {
+                                "type": "runs",
+                                "path": "runs",
+                                "passed": True,
+                                "errors": [],
+                                "warnings": [],
+                                "details": {},
+                            }
+                        ],
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--validation", str(validation_path), "--out", str(bundle_path)]), 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["metrics"]["validation"]["target_count"] = 0
+            bundle["metrics"]["validation"]["error_count"] = 1
+            bundle["metrics"]["validation"]["warning_count"] = 1
+            bundle["metrics"]["gates"] = [
+                {
+                    "id": "training_gate",
+                    "path": "training_gate.json",
+                    "passed": True,
+                    "validation": {
+                        "available": True,
+                        "passed": True,
+                        "strict": True,
+                        "target_count": 0,
+                        "error_count": 1,
+                        "warning_count": 0,
+                    },
+                }
+            ]
+            bundle["decision"]["gate_count"] = 1
+            bundle["decision"]["passed_gate_count"] = 1
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("validation_has_targets", errors)
+            self.assertIn("validation_counts_consistent", errors)
+            self.assertIn("gate_validation_has_targets", errors)
+            self.assertIn("gate_validation_counts_consistent", errors)
+
     def test_validate_rejects_stale_bundle_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
