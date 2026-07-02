@@ -1,0 +1,94 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/goal3_handoff.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Goal 3 data handoff summary over export, validation, gate, evidence bundle, and trainer preflight artifacts.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "dataset_version": {
+      "pattern": "^hfrds-[0-9a-f]+$",
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "recommendation": {
+      "enum": [
+        "handoff_ready",
+        "fix_handoff"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.goal3_handoff.v1"
+    },
+    "stages": {
+      "items": {
+        "$ref": "#/$defs/stage"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "passed",
+    "recommendation",
+    "output_dir",
+    "dataset_version",
+    "metadata",
+    "artifacts",
+    "stages",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Goal 3 Handoff",
+  "type": "object",
+  "$defs": {
+    "stage": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "artifact",
+        "summary"
+      ],
+      "type": "object"
+    }
+  }
+}

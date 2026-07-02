@@ -57,6 +57,7 @@ class Goal3HandoffTests(unittest.TestCase):
             self.assertTrue((out / "training_gate.json").exists())
             self.assertTrue((out / "trainer_preflight.json").exists())
             self.assertTrue((out / "runs" / "evidence_bundle.json").exists())
+            self.assertEqual(run_cli(["schemas", "--check", str(out / "goal3_handoff.json")]), 0)
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(out / "trainer_preflight.json"), "--strict"]), 0)
 
 

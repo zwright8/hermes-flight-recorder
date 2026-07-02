@@ -442,6 +442,14 @@
       "name": "eval_summary"
     },
     {
+      "artifact": "goal3_handoff",
+      "artifact_schema_version": "hfr.goal3_handoff.v1",
+      "description": "Goal 3 data handoff summary emitted by goal3-handoff.",
+      "filename": "goal3_handoff.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/goal3_handoff.v1.schema.json",
+      "name": "goal3_handoff"
+    },
+    {
       "artifact": "review_manifest",
       "artifact_schema_version": "hfr.review.manifest.v1",
       "description": "Manifest for export-review human review queues.",
