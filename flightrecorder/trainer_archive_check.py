@@ -331,9 +331,12 @@ def _trainer_input_check(index: int, item: Any, archive_root: Path, preserve_pat
         "regular_directory": regular_directory,
         "symlink": symlink,
         "expected_sha256": str(spec.get("sha256") or ""),
+        "expected_size_bytes": _int_value(spec.get("size_bytes")),
         "passed": False,
         "reason": reason or "",
     }
+    if kind == "directory":
+        record["expected_file_count"] = _int_value(spec.get("file_count"))
     if reason is not None:
         return record
     if kind == "file" and regular_file and resolved_path is not None:

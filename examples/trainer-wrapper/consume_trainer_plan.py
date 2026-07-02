@@ -19,8 +19,8 @@ SOURCE_ROOT = Path(__file__).resolve().parents[2]
 if (SOURCE_ROOT / "flightrecorder").is_dir():
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from flightrecorder.trainer_consumer_plan import TRAINER_CONSUMER_PLAN_SCHEMA_VERSION
-from flightrecorder.validation import validate_artifacts
+from flightrecorder.trainer_consumer_plan import TRAINER_CONSUMER_PLAN_SCHEMA_VERSION  # noqa: E402
+from flightrecorder.validation import validate_artifacts  # noqa: E402
 
 WRAPPER_RECEIPT_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
 
@@ -152,9 +152,10 @@ def _input_record(item: dict[str, Any]) -> dict[str, Any]:
         "resolved_path": str(item.get("resolved_path") or ""),
         "kind": str(item.get("kind") or ""),
         "sha256": str(item.get("sha256") or ""),
+        "expected_sha256": str(item.get("expected_sha256") or ""),
         "passed": item.get("passed") is True,
     }
-    for field_name in ("size_bytes", "file_count"):
+    for field_name in ("size_bytes", "file_count", "expected_size_bytes", "expected_file_count"):
         if isinstance(item.get(field_name), int) and not isinstance(item.get(field_name), bool):
             record[field_name] = item[field_name]
     return record

@@ -11265,6 +11265,7 @@ def _validate_trainer_archive_check_inputs(value: Any, target: ValidationTarget)
         if item.get("expected_sha256") and not _is_sha256(item.get("expected_sha256")):
             target.errors.append(f"{label}.expected_sha256 must be a SHA-256 hex string when present.")
         if item.get("passed") is True:
+            _validate_trainer_input_expected_payload(item, target, label)
             if item.get("kind") == "file":
                 if item.get("regular_file") is not True or item.get("symlink") is True:
                     target.errors.append(f"{label}.passed file checks must be regular non-symlink files.")
@@ -11284,6 +11285,25 @@ def _validate_trainer_archive_check_inputs(value: Any, target: ValidationTarget)
                     target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
                 _validate_visible_directory_hash(item, target, label)
     return records
+
+
+def _validate_trainer_input_expected_payload(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    expected_sha = item.get("expected_sha256")
+    if not _is_sha256(expected_sha):
+        target.errors.append(f"{label}.expected_sha256 must be a SHA-256 hex string when passed.")
+    elif _is_sha256(item.get("sha256")) and item.get("sha256") != expected_sha:
+        target.errors.append(f"{label}.sha256 must match expected_sha256 when passed.")
+    expected_size = item.get("expected_size_bytes")
+    if not _is_non_negative_int(expected_size):
+        target.errors.append(f"{label}.expected_size_bytes must be a non-negative integer when passed.")
+    elif _is_non_negative_int(item.get("size_bytes")) and item.get("size_bytes") != expected_size:
+        target.errors.append(f"{label}.size_bytes must match expected_size_bytes when passed.")
+    if item.get("kind") == "directory":
+        expected_file_count = item.get("expected_file_count")
+        if not _is_non_negative_int(expected_file_count):
+            target.errors.append(f"{label}.expected_file_count must be a non-negative integer for passed directories.")
+        elif _is_non_negative_int(item.get("file_count")) and item.get("file_count") != expected_file_count:
+            target.errors.append(f"{label}.file_count must match expected_file_count when passed.")
 
 
 def _validate_trainer_archive_check_metrics(
@@ -11546,6 +11566,7 @@ def _validate_trainer_consumer_plan_trainer_input(item: dict[str, Any], target: 
     if item.get("expected_sha256") and not _is_sha256(item.get("expected_sha256")):
         target.errors.append(f"{label}.expected_sha256 must be a SHA-256 hex string when present.")
     if item.get("passed") is True:
+        _validate_trainer_input_expected_payload(item, target, label)
         if not _is_non_negative_int(item.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
         if not _is_sha256(item.get("sha256")):
@@ -11799,6 +11820,8 @@ def _validate_trainer_wrapper_input(item: dict[str, Any], target: ValidationTarg
         target.errors.append(f"{label}.size_bytes must be a non-negative integer when present.")
     if "file_count" in item and not _is_non_negative_int(item.get("file_count")):
         target.errors.append(f"{label}.file_count must be a non-negative integer when present.")
+    if item.get("passed") is True:
+        _validate_trainer_input_expected_payload(item, target, label)
 
 
 def _validate_trainer_wrapper_external_code(item: dict[str, Any], target: ValidationTarget, label: str) -> None:

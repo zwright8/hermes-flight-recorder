@@ -286,6 +286,14 @@
         "expected_sha256": {
           "type": "string"
         },
+        "expected_size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "index": {
           "minimum": 0,
           "type": "integer"

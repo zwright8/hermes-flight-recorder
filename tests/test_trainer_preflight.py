@@ -489,8 +489,34 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(len(external), contract["external_command_path_count"])
             self.assertIn("train.py", {item["path"] for item in external})
             self.assertTrue(all(len(item["sha256"]) == 64 for item in external if item["passed"]))
+            self.assertTrue(all("expected_size_bytes" in item for item in check["trainer_input_checks"] if item["passed"]))
             self.assertEqual(run_cli(["schemas", "--check", str(archive_check)]), 0)
             self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check), "--strict"]), 0)
+
+            forged_check = Path(tmp) / "trainer_archive_check_forged_input_size.json"
+            forged_summary = Path(tmp) / "trainer_archive_check_forged_input_size_summary.json"
+            forged = json.loads(json.dumps(check))
+            for item in forged["trainer_input_checks"]:
+                if item["passed"]:
+                    item["resolved_path"] = "<redacted:trainer-input>"
+                    item["size_bytes"] += 1
+                    break
+            forged_check.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive-check",
+                    str(forged_check),
+                    "--strict",
+                    "--out",
+                    str(forged_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_archive_check.trainer_input_checks", errors)
+            self.assertIn("size_bytes", errors)
 
             consumer_plan = Path(tmp) / "trainer_consumer_plan.json"
             self.assertEqual(

@@ -535,13 +535,16 @@ from the archive root and flags path-like command tokens, such as trainer
 scripts, that still must be supplied by external training infrastructure.
 `trainer-archive-check` is the next non-executing proof for that external
 launcher: it validates the archive, confirms archive-local trainer inputs still
-match their recorded hashes, and checks that caller-provided trainer code paths
-such as `train.py` exist under `--external-code-root`. External training
-infrastructure can validate that directory before consuming the rows, without
-needing the original producer's local paths.
+match their recorded hashes and byte counts, and checks that caller-provided
+trainer code paths such as `train.py` exist under `--external-code-root`.
+Passed trainer input rows carry expected hash and size payloads so validation
+can reject forged redacted receipts without needing the original producer's
+local paths.
 `trainer-consumer-plan` then records the exact approved command argv, archive
 root, external code file hashes, trainer input hashes, and launcher invariants
-that the external wrapper should require. It is still a plan, not a runner.
+that the external wrapper should require. It preserves the expected trainer
+input hash and size payloads through the wrapper dry run. It is still a plan,
+not a runner.
 Validation summaries embedded in the archive check, consumer plan, and wrapper
 dry-run receipts must include targets and internally consistent pass/error/
 warning counts, so a ready handoff cannot hide failed validation behind a

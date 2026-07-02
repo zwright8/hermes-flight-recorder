@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
@@ -194,7 +193,7 @@ def _trainer_inputs(value: Any) -> list[dict[str, Any]]:
             "passed": item.get("passed") is True,
             "reason": str(item.get("reason") or ""),
         }
-        for field_name in ("size_bytes", "file_count"):
+        for field_name in ("size_bytes", "file_count", "expected_size_bytes", "expected_file_count"):
             if isinstance(item.get(field_name), int) and not isinstance(item.get(field_name), bool):
                 record[field_name] = item[field_name]
         if isinstance(item.get("sha256"), str):
