@@ -986,8 +986,10 @@
       "summary": "Added a real Hugging Face metadata-only Qwen/Qwen3-4B-Instruct-2507 candidate with Apache-2.0 license review, metadata evidence hashes, compatibility report, registry entry, scout-manifest entry, dry-run training plan, docs, and tests; no weights, tokenizer payloads, GPU jobs, or heavy ML imports were used.",
       "branch": "codex/hermes-goal-4-model-20260702-1534",
       "completed_at": "2026-07-02T15:39:14Z",
-      "commit_sha": null,
-      "pr_url": null,
+      "commit_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+      "main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/12",
+      "remote_branch_status": "deleted",
       "artifacts": [
         {
           "kind": "model_candidate",
@@ -1076,12 +1078,12 @@
     }
   ],
   "current_packet": {
-    "id": "deliver_qwen_metadata_scout_packet",
+    "id": "prepare_next_model_layer_packet",
     "layer": "model",
     "priority": "medium",
-    "status": "rebased_pending_main_push",
-    "summary": "Qwen metadata-only scout packet is rebased over current main and awaiting branch force-update plus main-push lock delivery.",
-    "title": "Scout Qwen3 metadata without weights"
+    "status": "ready",
+    "summary": "Qwen metadata-only scout packet landed on main; next Goal 4 packet should extend serving-probe receipts or adapter registry links without downloading weights.",
+    "title": "Prepare next model-layer packet"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -1638,9 +1640,9 @@
       "summary": "Harness PR #3 landed on origin/main at 98dddf36e75a315c3a232e7542ca7a2802d53c96; PR #3 is merged and the source plus supervisor remote branches are deleted."
     },
     "model": {
-      "next_packet": "deliver_qwen_metadata_scout_packet",
+      "next_packet": "model_serving_probe_receipts",
       "status": "in_progress",
-      "summary": "Qwen metadata-only scout packet is rebased onto current main and awaiting branch delivery/main lock."
+      "summary": "Qwen metadata-only scout packet landed on main at 23729146346958edc9aaa56a29cebe3420626aaa; next Goal 4 work should add serving-probe receipts or adapter registry links without model downloads."
     },
     "serving_demo": {
       "next_packet": null,
@@ -1728,18 +1730,58 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:03:41Z",
+  "updated_at": "2026-07-02T16:07:15Z",
   "github_delivery": {
     "branch": "codex/hermes-goal-4-model-20260702-1534",
-    "branch_remote_status": "needs_force_update_after_rebase",
-    "commit_sha": null,
-    "main_integration_status": "pending_rebased_branch_push",
-    "main_sha": null,
+    "branch_remote_deleted_at": "2026-07-02T16:06:00Z",
+    "branch_remote_status": "deleted",
+    "commit_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "integrated_main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+    "lock_release_status": "pending_after_post_delivery_checkpoint_push",
+    "lock_status": "held_until_post_delivery_checkpoint_push",
+    "main_integration_status": "pushed_and_verified",
+    "main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
     "observed_origin_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/12",
-    "pr_status": "OPEN",
-    "remote_branch_verified": false,
-    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1534"
+    "pr_status": "MERGED",
+    "remote_branch_verified_deleted": true,
+    "remote_branch_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "remote_main_verified_at": "2026-07-02T16:06:00Z",
+    "remote_main_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1534",
+    "verification": [
+      {
+        "command": "python3 -m flightrecorder model-candidate validate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --require-training-eligible --out /tmp/qwen3_candidate_validation.json",
+        "status": "pass",
+        "summary": "Qwen metadata candidate remained training-eligible under approved Apache-2.0 review fields."
+      },
+      {
+        "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+        "status": "pass",
+        "summary": "Strict semantic validation passed for local and Qwen model-layer artifacts."
+      },
+      {
+        "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, registry entry, registry, scout manifest, and training plan",
+        "status": "pass",
+        "summary": "Public schema checks passed for all new and updated Qwen artifacts."
+      },
+      {
+        "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+        "status": "pass",
+        "summary": "54 focused model, schema registry, and validation tests passed."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "status": "pass",
+        "summary": "335 tests passed under Python 3.11.14 after integrating current origin/main."
+      },
+      {
+        "command": "git ls-remote origin refs/heads/main && git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1534",
+        "status": "pass",
+        "summary": "Remote main resolved to 23729146346958edc9aaa56a29cebe3420626aaa and the Goal 4 remote branch was absent after deletion."
+      }
+    ]
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
