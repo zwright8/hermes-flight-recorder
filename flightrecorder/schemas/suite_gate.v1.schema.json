@@ -1,0 +1,111 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/suite_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Gate result over a run-suite summary and optional suite-gate policy.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "decision": { "$ref": "#/$defs/decision" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "passed": { "type": "boolean" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "schema_version": { "const": "hfr.suite_gate.v1" },
+    "suite_summary": { "minLength": 1, "type": "string" }
+  },
+  "required": [
+    "schema_version",
+    "suite_summary",
+    "passed",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics"
+  ],
+  "title": "Hermes Flight Recorder Suite Gate",
+  "type": "object",
+  "$defs": {
+    "blocking_check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "summary"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": { "minimum": 0, "type": "integer" },
+        "blocking_checks": {
+          "items": { "$ref": "#/$defs/blocking_check" },
+          "type": "array"
+        },
+        "failed_checks": {
+          "items": { "$ref": "#/$defs/blocking_check" },
+          "type": "array"
+        },
+        "key_metrics": { "$ref": "#/$defs/metrics" },
+        "next_action_count": { "minimum": 0, "type": "integer" },
+        "next_actions": {
+          "items": { "type": "object" },
+          "type": "array"
+        },
+        "readiness": { "enum": ["blocked", "ready"], "type": "string" },
+        "recommendation": { "enum": ["block_iteration", "promote_iteration"], "type": "string" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "average_score": { "maximum": 100, "minimum": 0, "type": ["number", "null"] },
+        "critical_failure_total": { "minimum": 0, "type": "integer" },
+        "error_count": { "minimum": 0, "type": ["integer", "null"] },
+        "failed": { "minimum": 0, "type": ["integer", "null"] },
+        "pass_rate": { "maximum": 1, "minimum": 0, "type": ["number", "null"] }
+      },
+      "required": ["pass_rate", "average_score", "failed", "error_count", "critical_failure_total"],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "description": { "type": "string" },
+        "effective": { "type": "object" },
+        "path": { "type": "string" },
+        "schema_version": { "const": "hfr.suite_gate.policy.v1" }
+      },
+      "type": "object"
+    }
+  }
+}

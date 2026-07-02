@@ -98,6 +98,14 @@
       "name": "run_suite"
     },
     {
+      "artifact": "suite_gate",
+      "artifact_schema_version": "hfr.suite_gate.v1",
+      "description": "Gate result over a run-suite summary and optional suite-gate policy.",
+      "filename": "suite_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/suite_gate.v1.schema.json",
+      "name": "suite_gate"
+    },
+    {
       "artifact": "suite_compare",
       "artifact_schema_version": "hfr.suite_compare.v1",
       "description": "Suite-level regression and contract-drift comparison emitted as suite_compare.json by compare-suite.",

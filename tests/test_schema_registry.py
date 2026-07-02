@@ -36,6 +36,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("supervisor_state", names)
         self.assertIn("validation", names)
         self.assertIn("run_suite", names)
+        self.assertIn("suite_gate", names)
         self.assertIn("suite_compare", names)
         self.assertIn("suite_trend", names)
         self.assertIn("evidence_coverage", names)
@@ -578,6 +579,45 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "compare_gate")
+
+    def test_suite_gate_schema_accepts_minimal_gate(self):
+        metrics = {
+            "pass_rate": 1.0,
+            "average_score": 100.0,
+            "failed": 0,
+            "error_count": 0,
+            "critical_failure_total": 0,
+        }
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.suite_gate.v1",
+                "suite_summary": "runs/suite_summary.json",
+                "passed": True,
+                "check_count": 1,
+                "failed_check_count": 0,
+                "checks": [
+                    {
+                        "id": "min_pass_rate",
+                        "passed": True,
+                        "actual": 1.0,
+                        "expected": {"min": 1.0},
+                        "summary": "min_pass_rate: actual=1.0, min=1.0",
+                    }
+                ],
+                "metrics": metrics,
+                "decision": {
+                    "readiness": "ready",
+                    "recommendation": "promote_iteration",
+                    "summary": "Gate is ready: all checks passed.",
+                    "blocking_check_count": 0,
+                    "blocking_checks": [],
+                    "key_metrics": metrics,
+                },
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "suite_gate")
 
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(

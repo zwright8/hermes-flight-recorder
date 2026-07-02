@@ -423,6 +423,7 @@ PY
   --policy examples/suite_gate_policy.demo.json \
   --out runs/suite_gate.json >/dev/null
 test -f runs/suite_gate.json
+"$PYTHON" -m flightrecorder schemas --check runs/suite_gate.json >/dev/null
 test -f examples/suite_gate_policy.demo.json
 "$PYTHON" - <<'PY'
 import json

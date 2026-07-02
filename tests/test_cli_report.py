@@ -532,6 +532,8 @@ class CliReportTests(unittest.TestCase):
             )
 
             self.assertEqual(code, 0)
+            schema_result = check_schema_file(gate, "suite_gate")
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             result = json.loads(gate.read_text(encoding="utf-8"))
             self.assertEqual(result["schema_version"], "hfr.suite_gate.v1")
             self.assertTrue(result["passed"])
