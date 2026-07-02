@@ -12,15 +12,15 @@
         "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md"
       ],
       "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-      "commit_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
+      "commit_sha": "071128c",
       "completed_at": "2026-07-02T14:39:14Z",
       "github_persistence": {
         "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-        "implementation_commit_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
-        "note": "A follow-up checkpoint commit records these GitHub persistence fields in-repo.",
+        "implementation_commit_sha": "071128c",
+        "note": "Commit was rebased onto origin/main during main-delivery migration; branch head verification moved to main_delivery.",
         "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
         "remote_branch_verified": true,
-        "remote_ref_verified_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
+        "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
         "verified_at": "2026-07-02T14:45:00Z"
       },
       "id": "serving_endpoint_preflight_and_demo_report",
@@ -63,12 +63,34 @@
         "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md"
       ],
       "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-      "commit_sha": "pending",
+      "commit_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
       "completed_at": "2026-07-02T14:56:12Z",
       "id": "serving_managed_lifecycle_and_endpoint_suite",
       "layer": "serving_demo",
+      "main_delivery": {
+        "attempted_at": "2026-07-02T15:05:39Z",
+        "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+        "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+        "lock_status": "not_acquired_after_retries",
+        "main_sha": null,
+        "notes": [
+          "git fetch origin completed before rebase",
+          "git rebase origin/main completed without conflicts",
+          "git push --force-with-lease updated the rebased goal branch",
+          "main push was not attempted because the integration lock was already present and remained held through retry windows"
+        ],
+        "pr_state": "OPEN",
+        "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
+        "remote_branch_deleted": false,
+        "remote_branch_verified": true,
+        "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
+        "status": "blocked_lock_not_acquired",
+        "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
+      },
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
       "priority": "high",
+      "remote_branch": "origin/codex/hermes-goal-6-serving-demo-20260702-1027",
+      "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
       "risks": [
         "Real Qwen/vLLM/SGLang launch was not executed in this worktree; the wrapper and launch profiles are tested against a managed OpenAI-compatible mock process.",
         "System python3 is 3.9.6 and cannot run tests.test_deployment_hardening because tomllib requires Python 3.11+; full discovery passed with /opt/homebrew/bin/python3.11."
@@ -85,7 +107,14 @@
         "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_profile.json",
         "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
         "/opt/homebrew/bin/python3.11 -m unittest discover",
-        "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches"
+        "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches",
+        "git fetch origin",
+        "git rebase origin/main",
+        "git push --force-with-lease -u origin codex/hermes-goal-6-serving-demo-20260702-1027",
+        "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
+        "gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json url,number,state,headRefOid,headRefName,baseRefName",
+        "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
+        "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired"
       ]
     }
   ],
@@ -99,11 +128,12 @@
   },
   "github_persistence": {
     "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-    "implementation_commit_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
+    "main_delivery_status": "blocked_lock_not_acquired",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
     "remote_branch_verified": true,
-    "remote_ref_verified_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
-    "verified_at": "2026-07-02T14:45:00Z"
+    "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
+    "verified_at": "2026-07-02T15:05:39Z",
+    "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -130,7 +160,14 @@
     "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_profile.json",
     "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
     "/opt/homebrew/bin/python3.11 -m unittest discover",
-    "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches"
+    "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches",
+    "git fetch origin",
+    "git rebase origin/main",
+    "git push --force-with-lease -u origin codex/hermes-goal-6-serving-demo-20260702-1027",
+    "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
+    "gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json url,number,state,headRefOid,headRefName,baseRefName",
+    "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
+    "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired"
   ],
   "layer_status": {
     "serving_demo": {
@@ -139,6 +176,18 @@
       "status": "in_progress",
       "summary": "Managed lifecycle packet completed with mock-owned process verification; real vLLM/SGLang hardware runs remain pending."
     }
+  },
+  "main_delivery": {
+    "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+    "lock_status": "not_acquired_after_retries",
+    "main_sha": null,
+    "pr_state": "OPEN",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
+    "recorded_at": "2026-07-02T15:05:39Z",
+    "remote_branch_deleted": false,
+    "status": "blocked_lock_not_acquired",
+    "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
   },
   "next_packets": [
     {
@@ -158,5 +207,5 @@
     "serving_demo": "managed_mock_lifecycle_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:56:12Z"
+  "updated_at": "2026-07-02T15:05:39Z"
 }
