@@ -442,6 +442,14 @@
       "name": "compare_rl_dpo"
     },
     {
+      "artifact": "compare_gate",
+      "artifact_schema_version": "hfr.compare_gate.v1",
+      "description": "Gate result over comparison-export improvement movement and optional compare-gate policy.",
+      "filename": "compare_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/compare_gate.v1.schema.json",
+      "name": "compare_gate"
+    },
+    {
       "artifact": "heldout_manifest",
       "artifact_schema_version": "hfr.heldout_scenario_manifest.v1",
       "description": "Held-out scenario manifest emitted by heldout-manifest.",

@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,8 @@ class CompareGateTests(unittest.TestCase):
             )
 
             self.assertEqual(code, 0)
+            schema_result = check_schema_file(gate_path, "compare_gate")
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             gate = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertEqual(gate["schema_version"], "hfr.compare_gate.v1")
             self.assertTrue(gate["passed"])

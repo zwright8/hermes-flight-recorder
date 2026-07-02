@@ -1,0 +1,193 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/compare_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Gate result over comparison-export improvement movement and optional compare-gate policy.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "compare_export": { "minLength": 1, "type": "string" },
+    "decision": { "$ref": "#/$defs/decision" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "passed": { "type": "boolean" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "schema_version": { "const": "hfr.compare_gate.v1" }
+  },
+  "required": [
+    "schema_version",
+    "compare_export",
+    "passed",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics"
+  ],
+  "title": "Hermes Flight Recorder Compare Gate",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": { "minimum": 0, "type": "integer" },
+        "blocking_checks": {
+          "items": { "$ref": "#/$defs/blocking_check" },
+          "type": "array"
+        },
+        "failed_checks": {
+          "items": { "$ref": "#/$defs/blocking_check" },
+          "type": "array"
+        },
+        "key_metrics": { "$ref": "#/$defs/metrics" },
+        "next_action_count": { "minimum": 0, "type": "integer" },
+        "next_actions": {
+          "items": { "type": "object" },
+          "type": "array"
+        },
+        "readiness": { "enum": ["blocked", "ready"], "type": "string" },
+        "recommendation": { "enum": ["block_iteration", "promote_iteration"], "type": "string" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "blocking_check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "summary"],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "baseline_win_count": { "minimum": 0, "type": "integer" },
+        "baseline_win_scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "candidate_win_count": { "minimum": 0, "type": "integer" },
+        "candidate_win_scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "contract_drift_count": { "minimum": 0, "type": "integer" },
+        "dpo_count": { "minimum": 0, "type": "integer" },
+        "fixed_rule_counts": { "type": "object" },
+        "new_critical_failure_counts": { "type": "object" },
+        "pair_count": { "minimum": 0, "type": "integer" },
+        "regressed_rule_counts": { "type": "object" },
+        "skipped_pair_count": { "minimum": 0, "type": "integer" },
+        "task_completion_improvement_count": { "minimum": 0, "type": "integer" },
+        "task_completion_improvement_scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "task_completion_regression_count": { "minimum": 0, "type": "integer" },
+        "task_completion_regression_scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "task_families": {
+          "items": { "$ref": "#/$defs/task_family_metrics" },
+          "type": "array"
+        },
+        "unverified_contract_count": { "minimum": 0, "type": "integer" },
+        "validation": { "$ref": "#/$defs/validation" }
+      },
+      "required": [
+        "pair_count",
+        "dpo_count",
+        "candidate_win_count",
+        "baseline_win_count",
+        "skipped_pair_count",
+        "contract_drift_count",
+        "unverified_contract_count",
+        "task_completion_improvement_count",
+        "task_completion_regression_count",
+        "task_families",
+        "validation"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "description": { "type": "string" },
+        "effective": { "type": "object" },
+        "path": { "type": "string" },
+        "schema_version": { "const": "hfr.compare_gate.policy.v1" }
+      },
+      "type": "object"
+    },
+    "task_family_metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "baseline_win_count": { "minimum": 0, "type": "integer" },
+        "candidate_win_count": { "minimum": 0, "type": "integer" },
+        "contract_drift_count": { "minimum": 0, "type": "integer" },
+        "pair_count": { "minimum": 0, "type": "integer" },
+        "scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "task_completion_improvement_count": { "minimum": 0, "type": "integer" },
+        "task_completion_regression_count": { "minimum": 0, "type": "integer" },
+        "task_family": { "minLength": 1, "type": "string" },
+        "unverified_contract_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "task_family",
+        "pair_count",
+        "candidate_win_count",
+        "baseline_win_count",
+        "task_completion_improvement_count",
+        "task_completion_regression_count",
+        "contract_drift_count",
+        "unverified_contract_count",
+        "scenarios"
+      ],
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "available": { "type": "boolean" },
+        "error_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" },
+        "strict": { "type": "boolean" },
+        "target_count": { "minimum": 0, "type": "integer" },
+        "warning_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["available", "passed", "strict", "target_count", "error_count", "warning_count"],
+      "type": "object"
+    }
+  }
+}

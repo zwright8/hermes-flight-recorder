@@ -462,6 +462,7 @@ test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
   --policy examples/compare_gate_policy.demo.json \
   --out runs/compare_gate.json >/dev/null
 test -f runs/compare_gate.json
+"$PYTHON" -m flightrecorder schemas --check runs/compare_gate.json >/dev/null
 test -f examples/compare_gate_policy.demo.json
 "$PYTHON" -m flightrecorder heldout-manifest \
   --suite-summary baseline=runs/suite_summary.json \
