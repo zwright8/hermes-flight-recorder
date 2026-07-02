@@ -1,0 +1,146 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/training_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Gate result over an exported training dataset and optional training-gate policy.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "decision": { "$ref": "#/$defs/decision" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "passed": { "type": "boolean" },
+    "policy": { "$ref": "#/$defs/policy" },
+    "schema_version": { "const": "hfr.training_gate.v1" },
+    "training_export": { "minLength": 1, "type": "string" }
+  },
+  "required": [
+    "schema_version",
+    "training_export",
+    "passed",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics"
+  ],
+  "title": "Hermes Flight Recorder Training Gate",
+  "type": "object",
+  "$defs": {
+    "blocking_check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "summary"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": { "minimum": 0, "type": "integer" },
+        "blocking_checks": {
+          "items": { "$ref": "#/$defs/blocking_check" },
+          "type": "array"
+        },
+        "failed_checks": {
+          "items": { "$ref": "#/$defs/blocking_check" },
+          "type": "array"
+        },
+        "key_metrics": { "$ref": "#/$defs/metrics" },
+        "next_action_count": { "minimum": 0, "type": "integer" },
+        "next_actions": {
+          "items": { "type": "object" },
+          "type": "array"
+        },
+        "readiness": { "enum": ["blocked", "ready"], "type": "string" },
+        "recommendation": { "enum": ["block_iteration", "promote_iteration"], "type": "string" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_counts": { "$ref": "#/$defs/non_negative_counts" },
+        "average_score": { "maximum": 100, "minimum": 0, "type": ["number", "null"] },
+        "dataset_splits": { "type": "object" },
+        "episode_count": { "minimum": 0, "type": ["integer", "null"] },
+        "pass_rate": { "maximum": 1, "minimum": 0, "type": ["number", "null"] },
+        "quality_flag_count": { "minimum": 0, "type": "integer" },
+        "source_fingerprint_coverage": { "type": "object" },
+        "task_completion": { "type": "object" },
+        "trace_signal": { "type": "object" },
+        "trainer_view_source_fingerprint_coverage": { "type": "object" },
+        "validation": { "$ref": "#/$defs/validation" }
+      },
+      "required": [
+        "episode_count",
+        "pass_rate",
+        "average_score",
+        "quality_flag_count",
+        "source_fingerprint_coverage",
+        "trainer_view_source_fingerprint_coverage",
+        "task_completion",
+        "trace_signal",
+        "dataset_splits",
+        "artifact_counts",
+        "validation"
+      ],
+      "type": "object"
+    },
+    "non_negative_counts": {
+      "additionalProperties": { "minimum": 0, "type": "integer" },
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "description": { "type": "string" },
+        "effective": { "type": "object" },
+        "path": { "type": "string" },
+        "schema_version": { "const": "hfr.training_gate.policy.v1" }
+      },
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "available": { "type": "boolean" },
+        "error_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" },
+        "strict": { "type": "boolean" },
+        "target_count": { "minimum": 0, "type": "integer" },
+        "warning_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["available", "passed", "strict", "target_count", "error_count", "warning_count"],
+      "type": "object"
+    }
+  }
+}

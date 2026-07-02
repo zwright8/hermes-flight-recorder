@@ -896,6 +896,7 @@ test -f runs/validation.json
   --policy examples/training_gate_policy.demo.json \
   --out runs/training_gate.json >/dev/null
 test -f runs/training_gate.json
+"$PYTHON" -m flightrecorder schemas --check runs/training_gate.json >/dev/null
 test -f examples/training_gate_policy.demo.json
 "$PYTHON" - <<'PY'
 import json

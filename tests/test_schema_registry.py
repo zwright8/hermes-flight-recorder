@@ -81,6 +81,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("compare_rl_pair", names)
         self.assertIn("compare_rl_dpo", names)
         self.assertIn("compare_gate", names)
+        self.assertIn("training_gate", names)
         self.assertIn("heldout_manifest", names)
         self.assertIn("eval_suite_manifest", names)
         self.assertIn("external_eval_plan", names)
@@ -618,6 +619,58 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "suite_gate")
+
+    def test_training_gate_schema_accepts_minimal_gate(self):
+        metrics = {
+            "episode_count": 1,
+            "pass_rate": 1.0,
+            "average_score": 100.0,
+            "quality_flag_count": 0,
+            "source_fingerprint_coverage": {"rate": 1.0, "unverified": 0},
+            "trainer_view_source_fingerprint_coverage": {"fully_verified_rate": 1.0, "unverified": 0},
+            "task_completion": {"complete_count": 1, "incomplete_count": 0},
+            "trace_signal": {"average_event_count": 4.0, "event_type_count": 3},
+            "dataset_splits": {"episode_count": 1, "family_exclusive": True},
+            "artifact_counts": {"episodes": 1, "rewards": 1},
+            "validation": {
+                "available": True,
+                "passed": True,
+                "strict": True,
+                "target_count": 1,
+                "error_count": 0,
+                "warning_count": 0,
+            },
+        }
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.training_gate.v1",
+                "training_export": "runs/training_export",
+                "passed": True,
+                "check_count": 1,
+                "failed_check_count": 0,
+                "checks": [
+                    {
+                        "id": "min_episodes",
+                        "passed": True,
+                        "actual": 1,
+                        "expected": {"min": 1},
+                        "summary": "min_episodes: actual=1, min=1",
+                    }
+                ],
+                "metrics": metrics,
+                "decision": {
+                    "readiness": "ready",
+                    "recommendation": "promote_iteration",
+                    "summary": "Gate is ready: all checks passed.",
+                    "blocking_check_count": 0,
+                    "blocking_checks": [],
+                    "key_metrics": metrics,
+                },
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "training_gate")
 
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(

@@ -458,6 +458,14 @@
       "name": "compare_gate"
     },
     {
+      "artifact": "training_gate",
+      "artifact_schema_version": "hfr.training_gate.v1",
+      "description": "Gate result over an exported training dataset and optional training-gate policy.",
+      "filename": "training_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/training_gate.v1.schema.json",
+      "name": "training_gate"
+    },
+    {
       "artifact": "heldout_manifest",
       "artifact_schema_version": "hfr.heldout_scenario_manifest.v1",
       "description": "Held-out scenario manifest emitted by heldout-manifest.",
