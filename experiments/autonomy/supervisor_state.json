@@ -1,6 +1,6 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:51:50Z",
+  "updated_at": "2026-07-02T14:54:03Z",
   "active_layer": "governance",
   "current_packet": "governance promotion-cards artifact",
   "completed_packets": [
@@ -21,7 +21,7 @@
       "title": "Promotion model and dataset card generation",
       "summary": "Added a side-effect-free promotion-cards command that writes MODEL_CARD.md, DATASET_CARD.md, and promotion_cards.json while blocking readiness on missing inputs, unknown license, failed redaction/safety/evidence/eval gates, stale hashes, task-completion regression, or new critical failures.",
       "branch": "codex/hermes-goal-8-governance-20260702-1027",
-      "commit_sha": "pending",
+      "commit_sha": "d5e2539cdf075983c9b17724408cc0b17270357a",
       "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9"
     }
   ],
@@ -129,7 +129,7 @@
   ],
   "github_persistence": {
     "branch": "codex/hermes-goal-8-governance-20260702-1027",
-    "commit_sha": "eb2b97cfe046b909b04e3ae114a96f5355ea13a5",
+    "commit_sha": "d5e2539cdf075983c9b17724408cc0b17270357a",
     "remote_branch": "verified",
     "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9",
     "risks": [
