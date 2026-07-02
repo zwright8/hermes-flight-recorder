@@ -652,7 +652,10 @@ flightrecorder validate \
 
 The live Hermes, OpenClaw, and Coven smoke scripts keep their existing summary
 files and also write the same harness manifest/result artifacts in the smoke
-output directory.
+output directory. Fixture-backed replay matrix tests cover the same live-shaped
+observer, OpenClaw, and Coven artifacts, including a failing scorecard case, so
+Eval and Evidence workers can exercise harness replay without installing those
+agent runtimes.
 
 ## Live Hermes Collection
 
