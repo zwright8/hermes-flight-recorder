@@ -1,5 +1,5 @@
 {
-  "active_layer": "training",
+  "active_layer": "serving_demo",
   "blocked_packets": [
     {
       "blocked_at": "2026-07-02T14:32:48Z",
@@ -152,9 +152,9 @@
       "id": "training_pr4_main_delivery_conflicts",
       "layer": "training",
       "priority": "critical",
-      "status": "resolved_verified_pending_main_delivery",
+      "status": "resolved_landed_on_main",
       "blocked_at": "2026-07-02T15:49:29Z",
-      "resolved_at": "2026-07-02T16:57:59Z",
+      "resolved_at": "2026-07-02T17:01:09Z",
       "resolved_by_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
       "source_branch": "codex/hermes-goal-5-training-20260702-1027",
       "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
@@ -166,7 +166,7 @@
         "flightrecorder/schemas/manifest.json",
         "tests/test_schema_registry.py"
       ],
-      "summary": "Supervisor resolved the repeated Training PR #4 current-main conflicts and reran focused plus release verification under the lock; main delivery cleanup remains pending.",
+      "summary": "Resolved by supervisor current-main merge, locked verification, origin/main push, PR #4 merge observation, and remote source/supervisor branch deletion.",
       "verification": [
         {
           "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py tests/test_trainer_preflight.py tests/test_schema_registry.py",
@@ -217,8 +217,34 @@
           "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
           "status": "pass",
           "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
+        },
+        {
+          "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1248",
+          "status": "pass",
+          "summary": "Supervisor branch pushed and verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 before main delivery."
+        },
+        {
+          "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+          "status": "pass",
+          "summary": "Fetched origin; current origin/main remained 7bd3124f5713bf89259b39f99ef7aa432dd2aa53, integrated HEAD was a clean descendant, and the worktree was clean."
+        },
+        {
+          "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+          "status": "pass",
+          "summary": "origin/main verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 after the locked Training PR #4 push."
+        },
+        {
+          "command": "gh pr view 4 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+          "status": "pass",
+          "summary": "PR #4 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/4 with merge commit 6e65d3732ab39b659ac76f725f63961c99af28d9."
+        },
+        {
+          "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
         }
-      ]
+      ],
+      "resolved_by_main_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9"
     }
   ],
   "completed_packets": [
@@ -1988,28 +2014,250 @@
       "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
       "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
       "main_delivery_status": "verified_pending_main_delivery"
+    },
+    {
+      "id": "training_pr4_main_delivery",
+      "layer": "training",
+      "priority": "high",
+      "status": "landed_on_main",
+      "title": "Land registry-backed agentic training plans",
+      "summary": "Landed Training PR #4 on main: registry-backed no-launch agentic training planner, schema-checked plan artifacts, trainer-preflight handoff, and side-effect-free runtime preflight receipts.",
+      "branch": "codex/hermes-goal-5-training-20260702-1027",
+      "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+      "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+      "integration_branch_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+      "main_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+      "merge_commit_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
+      "remote_branch_status": "deleted",
+      "integration_branch_remote_status": "deleted",
+      "completed_at": "2026-07-02T17:01:09Z",
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/agentic_training_plan.py"
+        },
+        {
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/plan_agentic_training.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_training_plan.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_training_plan.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        },
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/preflight.py"
+        },
+        {
+          "kind": "cli",
+          "layer": "training",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/model_manifest.json"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/dataset_manifest.json"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/plans/sft_then_dpo_plan.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_trainer_preflight.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "TRAINING_PIPELINE.md"
+        },
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/agentic_training_runtime.py"
+        },
+        {
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/preflight_agentic_training_runtime.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_training_runtime.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "examples/agentic_training/README.md"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/data/sft.jsonl"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/data/action_sft.jsonl"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/data/dpo.jsonl"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/data/reward_model.jsonl"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/data/step_rewards.jsonl"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/data/episodes.jsonl"
+        },
+        {
+          "kind": "manifest",
+          "layer": "training",
+          "path": "flightrecorder/schemas/manifest.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_schema_registry.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py tests/test_trainer_preflight.py tests/test_schema_registry.py",
+          "status": "pass",
+          "summary": "Touched Training planner/runtime/preflight/CLI/scripts/tests compile after locked merge."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_agentic_training_plan tests.test_agentic_training_runtime tests.test_trainer_preflight tests.test_schema_registry tests.test_validation",
+          "status": "pass",
+          "summary": "76 focused Training, schema registry, and validation tests passed under the lock."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check examples/agentic_training/plans/sft_then_dpo_plan.json and --check-jsonl for sft/action_sft/dpo/reward_model/step_rewards/episodes",
+          "status": "pass",
+          "summary": "Example agentic training plan and all committed trainer-view JSONL samples validate against their registered schemas."
+        },
+        {
+          "command": "rm -rf /tmp/hfr-agentic-training-schema-locked && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name agentic_training_plan --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-training-schema-locked --force",
+          "status": "pass",
+          "summary": "Selected schema bundle export wrote agentic training plan/runtime schemas plus manifest."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 scripts/plan_agentic_training.py --mode sft_then_dpo --model-manifest examples/agentic_training/model_manifest.json --dataset-manifest examples/agentic_training/dataset_manifest.json --trainer-backend no_launch_demo --output-dir /tmp/hfr-agentic-training-output --limit 2 --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-training-plan-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan-locked.json",
+          "status": "pass",
+          "summary": "No-launch planner CLI emitted a ready SFT-then-DPO external-trainer plan and the artifact validated against hfr.agentic_training_plan.v1."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-ready-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-ready-locked.json",
+          "status": "pass",
+          "summary": "Ready runtime preflight emitted ready_for_tiny_smoke_launch while using importlib metadata checks only; no trainer imports, model downloads, or training launches occurred."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-blocked-locked.json (expected exit 1) plus schema and jq guard checks",
+          "status": "pass",
+          "summary": "Blocked runtime preflight emitted block_tiny_smoke_launch, recorded no trainer imports/training starts, and still validated against hfr.agentic_training_runtime_preflight.v1."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json",
+          "status": "pass",
+          "summary": "Supervisor state, schema catalog, and new Training schemas parse as JSON after locked merge resolution."
+        },
+        {
+          "command": "git diff --cached --check && git diff --check",
+          "status": "pass",
+          "summary": "No staged or unstaged whitespace errors before the verified merge commit."
+        },
+        {
+          "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+          "status": "pass",
+          "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
+        },
+        {
+          "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1248",
+          "status": "pass",
+          "summary": "Supervisor branch pushed and verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 before main delivery."
+        },
+        {
+          "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+          "status": "pass",
+          "summary": "Fetched origin; current origin/main remained 7bd3124f5713bf89259b39f99ef7aa432dd2aa53, integrated HEAD was a clean descendant, and the worktree was clean."
+        },
+        {
+          "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+          "status": "pass",
+          "summary": "origin/main verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 after the locked Training PR #4 push."
+        },
+        {
+          "command": "gh pr view 4 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+          "status": "pass",
+          "summary": "PR #4 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/4 with merge commit 6e65d3732ab39b659ac76f725f63961c99af28d9."
+        },
+        {
+          "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
+        }
+      ],
+      "risks": [
+        "Runtime preflight checks schema and dependency discoverability only; it does not execute a tiny smoke job or prove trainer version compatibility.",
+        "Default backend dependency probes may remain blocked until an external trainer environment installs Axolotl, LLaMA Factory, Unsloth, or process-reward packages.",
+        "No model downloads, trainer imports, weight updates, serving processes, GPU jobs, or expensive training launches are authorized in this packet."
+      ]
     }
   ],
   "current_packet": {
-    "id": "land_goal5_training_pr4",
-    "layer": "training",
+    "id": "land_goal6_serving_demo_pr7",
+    "layer": "serving_demo",
     "priority": "high",
-    "status": "verified_pending_commit_and_main_delivery",
-    "title": "Land Training PR #4",
-    "summary": "Training PR #4 is verified under the main-push lock after supervisor conflict resolution; commit and main delivery are next.",
-    "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
-    "source_branch": "codex/hermes-goal-5-training-20260702-1027",
-    "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
-    "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
-    "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
-    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
-    "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
-    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock"
+    "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
+    "source_branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+    "source_branch_sha": "de9df6ade536a4c6d586dab158a81aba6e6a33c7",
+    "status": "ready",
+    "summary": "Next dependency-order landing packet after Training PR #4; integrate serving endpoint preflight/demo replay without launching a serving process.",
+    "title": "Land Serving/Demo PR #7"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1248",
-    "branch_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
+    "branch_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
     "commit_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "main_delivery": {
       "attempted_at": "2026-07-02T15:09:17Z",
@@ -2097,9 +2345,9 @@
       "lock_released_at": "2026-07-02T16:03:36Z",
       "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     },
-    "latest_origin_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
+    "latest_origin_main_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "acquired"
+    "lock_status": "held_until_post_delivery_checkpoint_push"
   },
   "governance_main_delivery": {
     "attempted_at": "2026-07-02T15:09:17Z",
@@ -2639,6 +2887,31 @@
       "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
       "status": "pass",
       "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
+    },
+    {
+      "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1248",
+      "status": "pass",
+      "summary": "Supervisor branch pushed and verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 before main delivery."
+    },
+    {
+      "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+      "status": "pass",
+      "summary": "Fetched origin; current origin/main remained 7bd3124f5713bf89259b39f99ef7aa432dd2aa53, integrated HEAD was a clean descendant, and the worktree was clean."
+    },
+    {
+      "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+      "status": "pass",
+      "summary": "origin/main verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 after the locked Training PR #4 push."
+    },
+    {
+      "command": "gh pr view 4 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+      "status": "pass",
+      "summary": "PR #4 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/4 with merge commit 6e65d3732ab39b659ac76f725f63961c99af28d9."
+    },
+    {
+      "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+      "status": "pass",
+      "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
     }
   ],
   "layer_status": {
@@ -2674,14 +2947,15 @@
       "summary": "No-launch model serving-probe receipt packet landed on origin/main at 8567c0de92eeac71135e8dddece46ce3f69949d6; PR #15 is merged and the source plus supervisor remote branches are deleted."
     },
     "serving_demo": {
-      "next_packet": null,
-      "status": "not_started",
-      "summary": "No serving processes launched."
+      "next_packet": "land_goal6_serving_demo_pr7",
+      "status": "ready",
+      "summary": "Training is landed; next dependency-order packet is Serving/Demo PR #7. No serving process should be launched during integration."
     },
     "training": {
-      "next_packet": "land_goal5_training_pr4",
-      "status": "verified_pending_main_delivery",
-      "summary": "Training PR #4 passed focused Training/schema checks and release_check under the lock; commit, branch push, main push, PR observation, and branch cleanup remain."
+      "next_packet": null,
+      "status": "completed_landed_on_main",
+      "summary": "Training PR #4 landed on origin/main at 6e65d3732ab39b659ac76f725f63961c99af28d9; PR #4 is merged and the source plus supervisor remote branches are deleted. No training was launched.",
+      "latest_packet": "training_pr4_main_delivery"
     }
   },
   "model_main_delivery": {
@@ -2734,14 +3008,18 @@
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
       "source_branch": "codex/hermes-goal-5-training-20260702-1027",
       "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
-      "status": "verified_pending_main_delivery",
-      "summary": "Training PR #4 passed locked supervisor verification; pending commit, branch push, origin/main push, PR observation, and branch cleanup.",
+      "status": "landed_on_main",
+      "summary": "Training PR #4 landed on origin/main and both remote temporary branches were deleted.",
       "title": "Land Training PR #4",
       "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
       "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
       "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
       "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
-      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock"
+      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+      "main_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+      "merge_commit_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+      "remote_branch_deleted": true,
+      "completed_at": "2026-07-02T17:01:09Z"
     },
     {
       "id": "land_goal6_serving_demo_pr7",
@@ -2750,8 +3028,8 @@
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
       "source_branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
       "source_branch_sha": "de9df6ade536a4c6d586dab158a81aba6e6a33c7",
-      "status": "open_queued",
-      "summary": "Serving endpoint preflight and demo replay artifacts remain open; no serving process should be launched during integration.",
+      "status": "ready",
+      "summary": "Next dependency-order landing packet after Training PR #4; integrate serving endpoint preflight/demo replay without launching a serving process.",
       "title": "Land Serving/Demo PR #7"
     },
     {
@@ -2788,7 +3066,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:57:59Z",
+  "updated_at": "2026-07-02T17:01:09Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2867,10 +3145,10 @@
     "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "verified_pending_commit_and_main_delivery",
+    "main_integration_status": "pushed_and_verified",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
-    "pr_status": "OPEN_CONFLICTING_BEFORE_SUPERVISOR_MAIN_PUSH",
+    "pr_status": "MERGED",
     "merged_under_lock_at": "2026-07-02T16:53:41Z",
     "conflict_resolution": [
       "Preserved current main autonomy state and journal as the authoritative delivery history.",
@@ -2927,6 +3205,31 @@
         "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
         "status": "pass",
         "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
+      },
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 7bd3124f5713bf89259b39f99ef7aa432dd2aa53, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 after the locked Training PR #4 push."
+      },
+      {
+        "command": "gh pr view 4 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #4 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/4 with merge commit 6e65d3732ab39b659ac76f725f63961c99af28d9."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
       }
     ],
     "risks": [
@@ -2939,7 +3242,47 @@
       "Commit the verified merge with Lore trailers and push the supervisor branch.",
       "Push the integrated HEAD to origin/main, verify the remote SHA, observe PR #4 as merged/closed, delete source and supervisor branches, and record a post-delivery checkpoint."
     ],
-    "verified_at": "2026-07-02T16:57:59Z"
+    "verified_at": "2026-07-02T16:57:59Z",
+    "merged_at": "2026-07-02T17:00:09Z",
+    "main_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+    "merge_commit_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+    "remote_main_verified_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+    "remote_main_verified_at": "2026-07-02T17:01:09Z",
+    "branch_remote_status": "deleted",
+    "integration_branch_remote_status": "deleted",
+    "remote_branch_verified_deleted": true,
+    "branch_remote_deleted_at": "2026-07-02T17:01:09Z",
+    "integration_branch_remote_deleted_at": "2026-07-02T17:01:09Z",
+    "completed_at": "2026-07-02T17:01:09Z",
+    "post_delivery_verification": [
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 7bd3124f5713bf89259b39f99ef7aa432dd2aa53, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 after the locked Training PR #4 push."
+      },
+      {
+        "command": "gh pr view 4 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #4 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/4 with merge commit 6e65d3732ab39b659ac76f725f63961c99af28d9."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
+      }
+    ],
+    "local_branch_status": "source branch is checked out in /Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-5-training and was not deleted by Goal 0; remote branch is retired",
+    "post_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the checkpoint commit SHA is verified after push because a commit cannot self-record its final SHA."
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
@@ -3131,6 +3474,25 @@
           "summary": "Only refs/heads/main returned at 99a4bc58f7696c15f15d9f8bdf2223a08b258919; the checkpoint branch was absent."
         }
       ]
+    },
+    {
+      "id": "training_pr4_remote_branches_retired",
+      "source_branch": "codex/hermes-goal-5-training-20260702-1027",
+      "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+      "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+      "integration_branch_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+      "status": "remote_deleted_after_main_delivery",
+      "deleted_at": "2026-07-02T17:01:09Z",
+      "main_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+      "remote_branch_verified_deleted": true,
+      "local_branch_status": "source local branch remains checked out in its dedicated worktree; supervisor local branch will be retired after checkpoint push and fresh branch creation",
+      "verification": [
+        {
+          "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
+        }
+      ]
     }
   ],
   "governance_policy_schema_main_delivery": {
@@ -3303,10 +3665,10 @@
     "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "verified_pending_commit_and_main_delivery",
+    "main_integration_status": "pushed_and_verified",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
-    "pr_status": "OPEN_CONFLICTING_BEFORE_SUPERVISOR_MAIN_PUSH",
+    "pr_status": "MERGED",
     "merged_under_lock_at": "2026-07-02T16:53:41Z",
     "conflict_resolution": [
       "Preserved current main autonomy state and journal as the authoritative delivery history.",
@@ -3363,6 +3725,31 @@
         "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
         "status": "pass",
         "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
+      },
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 7bd3124f5713bf89259b39f99ef7aa432dd2aa53, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 after the locked Training PR #4 push."
+      },
+      {
+        "command": "gh pr view 4 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #4 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/4 with merge commit 6e65d3732ab39b659ac76f725f63961c99af28d9."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
       }
     ],
     "risks": [
@@ -3375,6 +3762,46 @@
       "Commit the verified merge with Lore trailers and push the supervisor branch.",
       "Push the integrated HEAD to origin/main, verify the remote SHA, observe PR #4 as merged/closed, delete source and supervisor branches, and record a post-delivery checkpoint."
     ],
-    "verified_at": "2026-07-02T16:57:59Z"
+    "verified_at": "2026-07-02T16:57:59Z",
+    "merged_at": "2026-07-02T17:00:09Z",
+    "main_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+    "merge_commit_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+    "remote_main_verified_sha": "6e65d3732ab39b659ac76f725f63961c99af28d9",
+    "remote_main_verified_at": "2026-07-02T17:01:09Z",
+    "branch_remote_status": "deleted",
+    "integration_branch_remote_status": "deleted",
+    "remote_branch_verified_deleted": true,
+    "branch_remote_deleted_at": "2026-07-02T17:01:09Z",
+    "integration_branch_remote_deleted_at": "2026-07-02T17:01:09Z",
+    "completed_at": "2026-07-02T17:01:09Z",
+    "post_delivery_verification": [
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 7bd3124f5713bf89259b39f99ef7aa432dd2aa53, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 6e65d3732ab39b659ac76f725f63961c99af28d9 after the locked Training PR #4 push."
+      },
+      {
+        "command": "gh pr view 4 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #4 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/4 with merge commit 6e65d3732ab39b659ac76f725f63961c99af28d9."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248 && git ls-remote --heads origin main codex/hermes-goal-5-training-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1248",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Training source and supervisor remote branches were absent."
+      }
+    ],
+    "local_branch_status": "source branch is checked out in /Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-5-training and was not deleted by Goal 0; remote branch is retired",
+    "post_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the checkpoint commit SHA is verified after push because a commit cannot self-record its final SHA."
   }
 }
