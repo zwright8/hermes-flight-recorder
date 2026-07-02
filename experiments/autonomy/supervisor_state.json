@@ -242,7 +242,7 @@
       ],
       "consecutive_goal_turn_conflict_count": 2,
       "latest_conflict_attempt": {
-        "attempted_at": "2026-07-02T15:34:54Z",
+        "attempted_at": "2026-07-02T15:37:36Z",
         "conflicting_files": [
           "experiments/autonomy/journal/2026-07-02.md",
           "experiments/autonomy/supervisor_state.json",
@@ -261,7 +261,7 @@
         "packet_in_origin_main": false,
         "result": "third conflict audit not attempted because lock was unavailable"
       },
-      "locked_integration_conflict_attempt_count": 3,
+      "locked_integration_conflict_attempt_count": 4,
       "origin_main_sha_at_conflict": "b671b9671fff7e891fa0ee58a69f64e818694b11",
       "origin_main_sha_latest_attempt": "00d5430a6166ec5c805688c6b77430e4d55a207c",
       "reason": "Rebasing the verified Goal 5 branch onto current origin/main hit add/add autonomy state and journal conflicts from earlier packet commits. Per the main delivery protocol, the worker aborted rather than resolving non-trivial cross-worker integration conflicts.",
@@ -316,7 +316,8 @@
     "Main integration for the runtime-preflight packet was attempted under the lock and aborted after non-trivial add/add conflicts in autonomy journal/state files against origin/main b671b9671fff7e891fa0ee58a69f64e818694b11.",
     "A second locked integration attempt at 2026-07-02T15:18:43Z hit the same add/add conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c.",
     "A later continuation at 2026-07-02T15:26:48Z could not acquire /tmp/hermes-flight-recorder-main-push.lock; origin/main had advanced to db1e2e8302c2df7d1c25242b433b79f626237aa7 and still did not contain packet commit a37b7000b88643d8aaf6f4af436e69977bb321e7.",
-    "A third locked integration attempt at 2026-07-02T15:34:54Z hit non-trivial conflicts against origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c in autonomy state/journal plus the schema manifest/catalog test."
+    "A third locked integration attempt at 2026-07-02T15:34:54Z hit non-trivial conflicts against origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c in autonomy state/journal plus the schema manifest/catalog test.",
+    "A fourth locked integration attempt at 2026-07-02T15:37:36Z hit the same non-trivial conflict set against the same origin/main SHA."
   ],
   "next_packets": [
     {
@@ -339,8 +340,9 @@
     "Main delivery is blocked because rebasing onto current origin/main requires supervisor-level resolution of autonomy state and journal conflicts.",
     "The same non-trivial main integration conflict has recurred for two consecutive Goal 5 continuation turns; one more recurrence without a resolution would satisfy the strict blocked audit threshold.",
     "The latest successful lock acquisition showed a third locked rebase conflict, now including schema catalog files as well as autonomy state/journal.",
-    "The overall goal was not marked blocked because the immediately previous goal turn was lock contention rather than the same conflict recurring under an integration attempt."
+    "The latest successful lock acquisition showed a fourth locked rebase conflict with the same conflict set.",
+    "The same conflict has recurred for two consecutive goal turns since the lock-contention interruption; one more consecutive conflict recurrence without resolution would satisfy the strict blocked audit threshold."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:34:54Z"
+  "updated_at": "2026-07-02T15:37:36Z"
 }
