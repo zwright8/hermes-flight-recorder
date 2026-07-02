@@ -5,10 +5,10 @@
 
 ## Arm Metrics
 
-| Arm | Model | Pass Rate | Average Score | Passed | Failed | Critical Failures |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| baseline | `hfr-base-mock` | 0.0 | 42 | 0 | 1 | 1 |
-| flightrecorder | `hfr-base-mock+adapter` | 1.0 | 96 | 1 | 0 | 0 |
+| Arm | Model | Serving Profile | Pass Rate | Average Score | Passed | Failed | Critical Failures |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| baseline | `hfr-base-mock` | [serving_profile](managed_mock_lifecycle/preflight/serving_profile.json) | 0.0 | 42 | 0 | 1 | 1 |
+| flightrecorder | `hfr-base-mock+adapter` | [serving_profile](managed_mock_lifecycle/preflight/serving_profile.json) | 1.0 | 96 | 1 | 0 | 0 |
 
 ## Evidence-Backed Claims
 

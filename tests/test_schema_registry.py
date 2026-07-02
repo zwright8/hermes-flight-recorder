@@ -38,6 +38,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("openclaw_event", names)
         self.assertIn("live_openclaw_smoke_summary", names)
         self.assertIn("serving_profile", names)
+        self.assertIn("serving_lifecycle", names)
         self.assertIn("serving_demo_run", names)
         self.assertIn("evidence_bundle", names)
         self.assertIn("improvement_plan", names)

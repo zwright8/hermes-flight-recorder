@@ -103,6 +103,7 @@ class ServingDemoTests(unittest.TestCase):
             self.assertFalse(Path(demo["arms"][0]["source"]).is_absolute())
             self.assertEqual(demo["arms"][0]["serving_profile"], "baseline/serving_profile.json")
             self.assertFalse(Path(demo["scenarios"][0]["arms"]["baseline"]["trace_path"]).is_absolute())
+            self.assertIn("[serving_profile](baseline/serving_profile.json)", report)
             self.assertIn("scorecard", report)
             self.assertIn("run_digest", report)
             self.assertIn("live_observer.jsonl", report)

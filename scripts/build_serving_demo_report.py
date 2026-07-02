@@ -66,12 +66,12 @@ def render_report(demo: dict[str, Any]) -> str:
         "",
         "## Arm Metrics",
         "",
-        "| Arm | Model | Pass Rate | Average Score | Passed | Failed | Critical Failures |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Arm | Model | Serving Profile | Pass Rate | Average Score | Passed | Failed | Critical Failures |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for arm in demo["arms"]:
         metrics = arm["metrics"]
-        lines.append(f"| {arm['name']} | `{arm.get('model') or ''}` | {metrics.get('pass_rate')} | {metrics.get('average_score')} | {metrics.get('passed')} | {metrics.get('failed')} | {metrics.get('critical_failure_total')} |")
+        lines.append(f"| {arm['name']} | `{arm.get('model') or ''}` | {_md_link('serving_profile', arm.get('serving_profile'))} | {metrics.get('pass_rate')} | {metrics.get('average_score')} | {metrics.get('passed')} | {metrics.get('failed')} | {metrics.get('critical_failure_total')} |")
     lines.extend(["", "## Evidence-Backed Claims", ""])
     if not demo["claims"]:
         lines.append("- No cross-arm behavior claims were generated.")

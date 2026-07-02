@@ -50,15 +50,52 @@
         "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
         "gh pr create --base main --head codex/hermes-goal-6-serving-demo-20260702-1027"
       ]
+    },
+    {
+      "artifacts": [
+        "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json",
+        "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server.stdout.log",
+        "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server.stderr.log",
+        "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_profile.json",
+        "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/compatibility_report.json",
+        "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_check.json",
+        "experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
+        "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md"
+      ],
+      "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+      "commit_sha": "pending",
+      "completed_at": "2026-07-02T14:56:12Z",
+      "id": "serving_managed_lifecycle_and_endpoint_suite",
+      "layer": "serving_demo",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
+      "priority": "high",
+      "risks": [
+        "Real Qwen/vLLM/SGLang launch was not executed in this worktree; the wrapper and launch profiles are tested against a managed OpenAI-compatible mock process.",
+        "System python3 is 3.9.6 and cannot run tests.test_deployment_hardening because tomllib requires Python 3.11+; full discovery passed with /opt/homebrew/bin/python3.11."
+      ],
+      "status": "completed",
+      "summary": "Added managed process lifecycle wrapper, reusable OpenAI-compatible mock server, vLLM/SGLang launch profiles, lifecycle schema, tests, and replay artifacts that link behavior reports to serving readiness evidence.",
+      "title": "Add managed lifecycle helpers and real endpoint suite profiles",
+      "verification": [
+        "python3 scripts/manage_openai_serving.py --profile mock --host 127.0.0.1 --port <dynamic-free-port> --base-url http://127.0.0.1:<port>/v1 --model hfr-managed-mock --served-model-name hfr-managed-mock --require-tool-call --require-structured-output --startup-timeout 10 --poll-interval 0.1 --grace-period 2 --out experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle",
+        "python3 scripts/build_serving_demo_report.py --arm baseline=experiments/qwen3_4b_flightrecorder/evaluations/baseline/evaluation_summary.json --arm flightrecorder=experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/evaluation_summary.json --out experiments/qwen3_4b_flightrecorder/serving/demo_run.json --report experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md",
+        "python3 -m unittest tests.test_serving_lifecycle tests.test_serving_demo tests.test_schema_registry",
+        "python3 -m py_compile scripts/manage_openai_serving.py scripts/mock_openai_server.py scripts/check_openai_serving.py scripts/build_serving_demo_report.py tests/test_serving_lifecycle.py tests/test_serving_demo.py",
+        "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json",
+        "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_profile.json",
+        "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
+        "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches"
+      ]
     }
   ],
   "current_packet": {
-    "id": "serving_managed_lifecycle_and_endpoint_suite",
+    "id": "adapter_identity_endpoint_matrix",
     "layer": "serving_demo",
-    "priority": "high",
+    "priority": "medium",
     "status": "ready",
-    "summary": "Next packet should wrap real vLLM/SGLang startup, readiness polling, smoke checks, and teardown without leaving unmanaged servers.",
-    "title": "Add managed lifecycle helpers and real endpoint suite profiles"
+    "summary": "Next packet should capture base/candidate adapter identity across managed mock, vLLM, SGLang, and externally supplied OpenAI-compatible endpoints.",
+    "title": "Record adapter identity across endpoint profile matrix"
   },
   "github_persistence": {
     "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
@@ -75,51 +112,51 @@
     "require_verification_before_completion": true
   },
   "latest_artifacts": [
-    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json",
-    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/compatibility_report.json",
-    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_check.json",
-    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/mock_requests.json",
+    "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json",
+    "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server.stdout.log",
+    "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/server.stderr.log",
+    "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_profile.json",
+    "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/compatibility_report.json",
+    "experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_check.json",
     "experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
     "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md"
   ],
   "latest_verification": [
-    "python3 scripts/check_openai_serving.py --mock-response \"hfr serving smoke ok\" --require-tool-call --require-structured-output --model hfr-mock-model --out experiments/qwen3_4b_flightrecorder/serving/mock_openai_check",
+    "python3 scripts/manage_openai_serving.py --profile mock --host 127.0.0.1 --port <dynamic-free-port> --base-url http://127.0.0.1:<port>/v1 --model hfr-managed-mock --served-model-name hfr-managed-mock --require-tool-call --require-structured-output --startup-timeout 10 --poll-interval 0.1 --grace-period 2 --out experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle",
     "python3 scripts/build_serving_demo_report.py --arm baseline=experiments/qwen3_4b_flightrecorder/evaluations/baseline/evaluation_summary.json --arm flightrecorder=experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/evaluation_summary.json --out experiments/qwen3_4b_flightrecorder/serving/demo_run.json --report experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md",
-    "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json",
+    "python3 -m unittest tests.test_serving_lifecycle tests.test_serving_demo tests.test_schema_registry",
+    "python3 -m py_compile scripts/manage_openai_serving.py scripts/mock_openai_server.py scripts/check_openai_serving.py scripts/build_serving_demo_report.py tests/test_serving_lifecycle.py tests/test_serving_demo.py",
+    "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json",
+    "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/preflight/serving_profile.json",
     "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
-    "python3 -m py_compile scripts/check_openai_serving.py scripts/build_serving_demo_report.py tests/test_serving_demo.py",
-    "python3 -m unittest tests.test_serving_demo tests.test_schema_registry",
     "/opt/homebrew/bin/python3.11 -m unittest discover",
-    "pgrep -fl 'check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|mock_openai|vllm|sglang' # no matches",
-    "git push -u origin codex/hermes-goal-6-serving-demo-20260702-1027",
-    "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
-    "gh pr create --base main --head codex/hermes-goal-6-serving-demo-20260702-1027"
+    "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches"
   ],
   "layer_status": {
     "serving_demo": {
-      "last_completed_packet": "serving_endpoint_preflight_and_demo_report",
-      "next_packet": "serving_managed_lifecycle_and_endpoint_suite",
+      "last_completed_packet": "serving_managed_lifecycle_and_endpoint_suite",
+      "next_packet": "adapter_identity_endpoint_matrix",
       "status": "in_progress",
-      "summary": "Endpoint preflight and replayable demo report packet completed; managed real-engine lifecycle remains."
+      "summary": "Managed lifecycle packet completed with mock-owned process verification; real vLLM/SGLang hardware runs remain pending."
     }
   },
   "next_packets": [
     {
-      "id": "serving_managed_lifecycle_and_endpoint_suite",
-      "layer": "serving_demo",
-      "priority": "high",
-      "summary": "Add process lifecycle helpers and real vLLM/SGLang profile smoke checks with teardown guarantees."
-    },
-    {
       "id": "adapter_identity_endpoint_matrix",
       "layer": "serving_demo",
       "priority": "medium",
-      "summary": "Record base, adapter, provider, and endpoint identity across multiple serving profiles."
+      "summary": "Record base, adapter, provider, and endpoint identity across mock, vLLM, SGLang, and external endpoint profiles."
+    },
+    {
+      "id": "real_engine_lifecycle_run",
+      "layer": "serving_demo",
+      "priority": "high",
+      "summary": "Run manage_openai_serving.py against an actual vLLM or SGLang Qwen endpoint when GPU/runtime dependencies are available."
     }
   ],
   "promotion_readiness": {
-    "serving_demo": "partial_mock_verified"
+    "serving_demo": "managed_mock_lifecycle_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:45:00Z"
+  "updated_at": "2026-07-02T14:56:12Z"
 }

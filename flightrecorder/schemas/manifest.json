@@ -114,6 +114,14 @@
       "name": "serving_profile"
     },
     {
+      "artifact": "serving_lifecycle",
+      "artifact_schema_version": "hfr.serving_lifecycle.v1",
+      "description": "Managed OpenAI-compatible serving process lifecycle check.",
+      "filename": "serving_lifecycle.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_lifecycle.v1.schema.json",
+      "name": "serving_lifecycle"
+    },
+    {
       "artifact": "serving_demo_run",
       "artifact_schema_version": "hfr.serving_demo_run.v1",
       "description": "Replayable serving demo report linking claims to eval evidence.",

@@ -4,7 +4,7 @@
     "arm": "flightrecorder",
     "base_url": "mock://openai-compatible",
     "model": "hfr-base-mock+adapter",
-    "serving_profile": "../../serving/mock_openai_check/serving_profile.json"
+    "serving_profile": "../../serving/managed_mock_lifecycle/preflight/serving_profile.json"
   },
   "metrics": {
     "average_score": 96,

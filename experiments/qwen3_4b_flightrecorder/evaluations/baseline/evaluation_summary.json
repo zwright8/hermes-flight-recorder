@@ -8,7 +8,7 @@
   "pass_rate": 0.0,
   "passed": 0,
   "schema_version": "hfr.hermes_heldout_eval_summary.v1",
-  "serving_profile": "../../serving/mock_openai_check/serving_profile.json",
+  "serving_profile": "../../serving/managed_mock_lifecycle/preflight/serving_profile.json",
   "suite_summary": "suite_summary.json",
   "total": 1
 }

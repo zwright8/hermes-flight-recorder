@@ -1,0 +1,123 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_lifecycle.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Managed OpenAI-compatible serving process lifecycle check.",
+  "properties": {
+    "artifacts": {
+      "type": "object"
+    },
+    "endpoint": {
+      "type": "object"
+    },
+    "engine": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "errors": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "finished_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "launch": {
+      "type": "object"
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "process": {
+      "type": "object"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "readiness_probe": {
+      "properties": {
+        "attempts": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "ready",
+        "summary",
+        "attempts"
+      ],
+      "type": "object"
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "hfr.serving_lifecycle.v1"
+    },
+    "smoke_check": {
+      "type": "object"
+    },
+    "teardown": {
+      "properties": {
+        "attempted": {
+          "type": "boolean"
+        },
+        "clean": {
+          "type": "boolean"
+        },
+        "running_after_teardown": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "attempted",
+        "clean",
+        "running_after_teardown"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "finished_at",
+    "profile",
+    "engine",
+    "model",
+    "endpoint",
+    "launch",
+    "process",
+    "readiness_probe",
+    "smoke_check",
+    "teardown",
+    "ready",
+    "readiness",
+    "passed",
+    "artifacts",
+    "errors"
+  ],
+  "title": "Hermes Flight Recorder Serving Lifecycle",
+  "type": "object"
+}

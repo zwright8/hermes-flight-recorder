@@ -1,0 +1,131 @@
+{
+  "adapter": "",
+  "arm": "candidate",
+  "artifacts": {
+    "compatibility_report": "preflight/compatibility_report.json",
+    "serving_check": "preflight/serving_check.json",
+    "serving_lifecycle": "serving_lifecycle.json",
+    "serving_profile": "preflight/serving_profile.json",
+    "stderr_log": "server.stderr.log",
+    "stdout_log": "server.stdout.log"
+  },
+  "artifacts_root": ".",
+  "duration_ms": 132,
+  "endpoint": {
+    "base_url": "http://127.0.0.1:54865/v1",
+    "host": "127.0.0.1",
+    "port": 54865
+  },
+  "engine": "mock",
+  "environment": {
+    "platform": "macOS-26.5-arm64-arm-64bit",
+    "python_version": "3.9.6"
+  },
+  "errors": [],
+  "finished_at": "2026-07-02T14:53:35Z",
+  "generated_at": "2026-07-02T14:53:35Z",
+  "launch": {
+    "command": [
+      "python3",
+      "scripts/mock_openai_server.py",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "54865",
+      "--model",
+      "hfr-managed-mock",
+      "--response",
+      "hfr serving smoke ok"
+    ],
+    "command_display": "python3 scripts/mock_openai_server.py --host 127.0.0.1 --port 54865 --model hfr-managed-mock --response 'hfr serving smoke ok'",
+    "cwd": ".",
+    "env_keys": [],
+    "grace_period_s": 2.0,
+    "poll_interval_s": 0.1,
+    "startup_timeout_s": 10.0
+  },
+  "logs": {
+    "stderr_tail": "",
+    "stdout_tail": "{\"event\": \"mock_openai_server_ready\", \"base_url\": \"http://127.0.0.1:54865/v1\", \"model\": \"hfr-managed-mock\"}\n"
+  },
+  "model": "hfr-managed-mock",
+  "passed": true,
+  "process": {
+    "exit_code": -15,
+    "pid": 34320,
+    "started": true
+  },
+  "profile": "mock",
+  "provider": "custom",
+  "readiness": "ready",
+  "readiness_probe": {
+    "attempts": [
+      {
+        "elapsed_ms": 6,
+        "error": "<urlopen error [Errno 61] Connection refused>",
+        "ok": false,
+        "status_code": null,
+        "url": "http://127.0.0.1:54865/healthz"
+      },
+      {
+        "elapsed_ms": 0,
+        "error": "<urlopen error [Errno 61] Connection refused>",
+        "ok": false,
+        "status_code": null,
+        "url": "http://127.0.0.1:54865/health"
+      },
+      {
+        "elapsed_ms": 0,
+        "error": "<urlopen error [Errno 61] Connection refused>",
+        "ok": false,
+        "status_code": null,
+        "url": "http://127.0.0.1:54865/version"
+      },
+      {
+        "elapsed_ms": 0,
+        "error": "<urlopen error [Errno 61] Connection refused>",
+        "ok": false,
+        "status_code": null,
+        "url": "http://127.0.0.1:54865/v1/models"
+      },
+      {
+        "elapsed_ms": 0,
+        "json": {
+          "model": "hfr-managed-mock",
+          "ok": true
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:54865/healthz"
+      }
+    ],
+    "ready": true,
+    "summary": "readiness_endpoint_passed",
+    "url": "http://127.0.0.1:54865/healthz"
+  },
+  "ready": true,
+  "schema_version": "hfr.serving_lifecycle.v1",
+  "served_model_name": "hfr-managed-mock",
+  "smoke_check": {
+    "artifacts": {
+      "compatibility_report": "preflight/compatibility_report.json",
+      "serving_check": "preflight/serving_check.json",
+      "serving_profile": "preflight/serving_profile.json"
+    },
+    "attempted": true,
+    "failed_checks": [],
+    "passed": true,
+    "readiness": "ready"
+  },
+  "teardown": {
+    "already_exited": false,
+    "attempted": true,
+    "clean": true,
+    "exit_code_after_teardown": -15,
+    "exit_code_before_teardown": null,
+    "killed": false,
+    "running_after_teardown": false,
+    "started_at": "2026-07-02T14:53:35Z",
+    "terminated": true
+  }
+}
