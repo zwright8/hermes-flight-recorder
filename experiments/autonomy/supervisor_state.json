@@ -12,34 +12,35 @@
     },
     {
       "blocked_at": "2026-07-02T15:31:38Z",
+      "goal_blocked_threshold_met": true,
       "id": "harness_pr3_main_delivery_lock_unavailable_supervisor_integration",
       "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
-      "integration_branch_sha": "479fef9ce4c3e9ea17b3efb6e1d74e094aed84e2",
-      "last_observed_at": "2026-07-02T15:43:28Z",
+      "integration_branch_sha": "a9e39d0dee9f83c7254bf34e5790f73e8bc65019",
+      "last_observed_at": "2026-07-02T15:49:10Z",
       "layer": "harness",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
       "lock_rechecked_at": "2026-07-02T15:32:53Z",
-      "origin_main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
+      "origin_main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
       "priority": "critical",
       "source_branch": "codex/hermes-goal-2-harness-20260702-1027",
       "source_branch_sha": "b702a84792450f5342ad0df3b93515c89a47767a",
-      "status": "blocked",
-      "summary": "Harness PR #3 latest head is integrated and verified on the supervisor branch, but main delivery cannot proceed because the main-push lock remains unavailable after a bounded retry.",
+      "status": "blocked_recurring",
+      "summary": "Harness PR #3 latest head is integrated on the supervisor branch, but main delivery cannot proceed because the main-push lock remains unavailable across consecutive Goal 0 continuations and origin/main has advanced again.",
       "verification": [
         {
           "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
           "status": "pass",
-          "summary": "332 tests passed after merging current origin/main with Harness PR #3."
+          "summary": "332 tests passed after merging origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c with Harness PR #3 before origin/main advanced again."
         },
         {
-          "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && git diff --check",
-          "status": "pass",
-          "summary": "Metadata checks passed during integration."
-        },
-        {
-          "command": "bounded 120-second lock acquisition retry ending 2026-07-02T15:43:28Z",
+          "command": "bounded 120-second lock acquisition retry ending 2026-07-02T15:49:10Z",
           "status": "blocked",
           "summary": "Lock remained unavailable; no main push attempted."
+        },
+        {
+          "command": "git fetch origin && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1115 codex/hermes-goal-2-harness-20260702-1027",
+          "status": "pass",
+          "summary": "Integration branch, PR #3 source branch, and latest origin/main coordinates recorded."
         }
       ]
     }
@@ -873,8 +874,8 @@
     "id": "land_goal2_harness_pr3",
     "layer": "harness",
     "priority": "critical",
-    "status": "blocked_lock_unavailable",
-    "summary": "Harness PR #3 is merged with Model main and verified on the supervisor branch, but main delivery is blocked by the active main-push lock.",
+    "status": "blocked_recurring_main_push_lock",
+    "summary": "Harness PR #3 remains integrated and previously verified on the supervisor branch, but main delivery is blocked by the recurring active main-push lock and origin/main has advanced again.",
     "title": "Land auditable harness contracts"
   },
   "git": {
@@ -973,6 +974,11 @@
     "require_verification_before_completion": true
   },
   "harness_pr3": {
+    "blocked_goal_audit": {
+      "latest_observed_at": "2026-07-02T15:49:10Z",
+      "status": "threshold_met",
+      "summary": "The same main-push lock blocker has recurred across consecutive Goal 0 continuations while preventing the verified Harness integration from landing to main. No safe alternate packet can complete under the protocol until the lock is available or the external main-push lane changes."
+    },
     "branch": "codex/hermes-goal-2-harness-20260702-1027",
     "branch_blocker_history": [
       {
@@ -1155,18 +1161,18 @@
     "current_main_merged_at": "2026-07-02T15:29:15Z",
     "current_main_merged_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
-    "integration_branch_sha": "479fef9ce4c3e9ea17b3efb6e1d74e094aed84e2",
+    "integration_branch_sha": "a9e39d0dee9f83c7254bf34e5790f73e8bc65019",
     "latest_head_note": "PR #3 advanced while the main-push lock was unavailable; latest head was merged before any main push attempt.",
-    "latest_origin_main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
-    "lock_rechecked_at": "2026-07-02T15:43:28Z",
-    "lock_status": "unavailable_file_exists_after_bounded_retry",
+    "latest_origin_main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
+    "lock_rechecked_at": "2026-07-02T15:49:10Z",
+    "lock_status": "unavailable_file_exists_after_consecutive_goal_retry",
     "main_push_status": "not_attempted_lock_unavailable",
     "pr_status": "open_ci_green",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
     "previous_verified_remote_branch_sha": "dd08db12f0049079de61454364474fa60847c03e",
     "remote_branch_sha": "b702a84792450f5342ad0df3b93515c89a47767a",
-    "required_retry": "Acquire /tmp/hermes-flight-recorder-main-push.lock, fetch origin, verify PR #3 has not advanced, merge current origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c or later if needed, rerun verification, push HEAD to origin main, verify remote main SHA, close/merge PR #3, delete source and integration remote branches, and release the lock.",
-    "status": "blocked_lock_unavailable",
+    "required_retry": "Acquire /tmp/hermes-flight-recorder-main-push.lock, fetch origin, verify PR #3 has not advanced, merge current origin/main bc15b6bd27e0a8a6649a5c66e19943f20949da7e or later, rerun verification, push HEAD to origin main, verify remote main SHA, close/merge PR #3, delete source and integration remote branches, and release the lock.",
+    "status": "blocked_recurring_main_push_lock",
     "verification": [
       {
         "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/cli.py flightrecorder/validation.py flightrecorder/report.py scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py tests/test_deployment_hardening.py tests/test_harness_manifest_cli.py tests/test_harness_replay_matrix.py tests/test_harness_tool_policy.py tests/test_schema_registry.py",
@@ -1393,8 +1399,8 @@
     },
     "harness": {
       "next_packet": null,
-      "status": "blocked_lock_unavailable",
-      "summary": "Integration branch codex/hermes-goal-0-supervisor-20260702-1115 is pushed at 479fef9ce4c3e9ea17b3efb6e1d74e094aed84e2 and contains PR #3 head b702a84792450f5342ad0df3b93515c89a47767a plus origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c, but /tmp/hermes-flight-recorder-main-push.lock remains unavailable."
+      "status": "blocked_recurring_main_push_lock",
+      "summary": "Integration branch codex/hermes-goal-0-supervisor-20260702-1115 is pushed at a9e39d0dee9f83c7254bf34e5790f73e8bc65019 and contains PR #3 head b702a84792450f5342ad0df3b93515c89a47767a, but /tmp/hermes-flight-recorder-main-push.lock remains unavailable and origin/main advanced to bc15b6bd27e0a8a6649a5c66e19943f20949da7e."
     },
     "model": {
       "next_packet": "model_real_metadata_scout_packet",
@@ -1434,11 +1440,11 @@
     "eval": "not_started",
     "evidence": "in_progress",
     "governance": "in_progress",
-    "harness": "blocked_lock_unavailable",
+    "harness": "blocked_recurring_main_push_lock",
     "model": "in_progress",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:43:28Z"
+  "updated_at": "2026-07-02T15:49:10Z"
 }
