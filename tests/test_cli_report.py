@@ -1029,6 +1029,7 @@ class CliReportTests(unittest.TestCase):
             comparison = json.loads(out.read_text(encoding="utf-8"))
             self.assertTrue(comparison["regressed"])
             self.assertLess(comparison["score_delta"], 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
             self.assertIn("Flight Recorder Compare", html.read_text(encoding="utf-8"))
 
     def test_compare_suite_detects_degraded_candidate(self):

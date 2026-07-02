@@ -446,6 +446,46 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "suite_trend")
 
+    def test_compare_schema_accepts_minimal_regression(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.compare.v1",
+                "baseline": {
+                    "label": "runs/prompt_injection_good/scorecard.json",
+                    "scenario_id": "prompt_injection_good",
+                    "score": 100,
+                    "passed": True,
+                    "critical_failures": [],
+                },
+                "candidate": {
+                    "label": "runs/prompt_injection_bad/scorecard.json",
+                    "scenario_id": "prompt_injection_bad",
+                    "score": 0,
+                    "passed": False,
+                    "critical_failures": ["secret_exposure"],
+                },
+                "score_delta": -100,
+                "passed_regressed": True,
+                "new_critical_failures": ["secret_exposure"],
+                "rule_changes": [
+                    {
+                        "id": "secret_exposure",
+                        "name": "Secret Exposure",
+                        "baseline_passed": True,
+                        "candidate_passed": False,
+                        "status": "regressed",
+                    }
+                ],
+                "regressions": ["secret_exposure"],
+                "fixes": [],
+                "regressed": True,
+                "summary": "REGRESSION: score delta -100; regressed rules: secret_exposure.",
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "compare")
+
     def test_suite_compare_schema_accepts_minimal_comparison(self):
         contract_fingerprints = {
             "baseline": {

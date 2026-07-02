@@ -513,6 +513,7 @@ flightrecorder schemas --check runs/action_ledger.json
 flightrecorder schemas --check runs/action_ledger_gate.json
 flightrecorder schemas --check runs/training_gate.json
 flightrecorder schemas --check runs/suite_gate.json
+flightrecorder schemas --check runs/prompt_compare.json
 flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/suite_compare.json
 flightrecorder schemas --check runs/suite_trend.json

@@ -223,6 +223,7 @@ test -f runs/email_reply_completion_good/standalone_state_report.html
 test -f replay_runs/moved_prompt_injection_good_bundle/replay_bundle.json
 test -f replay_runs/prompt_injection_good_replay/artifact_lineage.json
 test -f runs/prompt_injection_compare.json
+"$PYTHON" -m flightrecorder schemas --check runs/prompt_injection_compare.json >/dev/null
 test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
 "$PYTHON" -m flightrecorder schemas --check runs/suite_compare.json >/dev/null

@@ -106,6 +106,14 @@
       "name": "suite_gate"
     },
     {
+      "artifact": "compare",
+      "artifact_schema_version": "hfr.compare.v1",
+      "description": "Single scorecard baseline/candidate comparison emitted by compare.",
+      "filename": "compare.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/compare.v1.schema.json",
+      "name": "compare"
+    },
+    {
       "artifact": "suite_compare",
       "artifact_schema_version": "hfr.suite_compare.v1",
       "description": "Suite-level regression and contract-drift comparison emitted as suite_compare.json by compare-suite.",

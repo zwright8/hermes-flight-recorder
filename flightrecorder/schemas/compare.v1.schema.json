@@ -1,0 +1,75 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/compare.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Single scorecard baseline/candidate comparison emitted by compare.",
+  "properties": {
+    "baseline": { "$ref": "#/$defs/score_summary" },
+    "candidate": { "$ref": "#/$defs/score_summary" },
+    "fixes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "new_critical_failures": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed_regressed": { "type": "boolean" },
+    "regressed": { "type": "boolean" },
+    "regressions": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "rule_changes": {
+      "items": { "$ref": "#/$defs/rule_change" },
+      "type": "array"
+    },
+    "schema_version": { "const": "hfr.compare.v1" },
+    "score_delta": { "type": "integer" },
+    "summary": { "minLength": 1, "type": "string" }
+  },
+  "required": [
+    "schema_version",
+    "baseline",
+    "candidate",
+    "score_delta",
+    "passed_regressed",
+    "new_critical_failures",
+    "rule_changes",
+    "regressions",
+    "fixes",
+    "regressed",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder Compare",
+  "type": "object",
+  "$defs": {
+    "rule_change": {
+      "additionalProperties": true,
+      "properties": {
+        "baseline_passed": { "type": ["boolean", "null"] },
+        "candidate_passed": { "type": ["boolean", "null"] },
+        "id": { "minLength": 1, "type": "string" },
+        "name": { "minLength": 1, "type": "string" },
+        "status": { "enum": ["unchanged", "regressed", "fixed"], "type": "string" }
+      },
+      "required": ["id", "name", "baseline_passed", "candidate_passed", "status"],
+      "type": "object"
+    },
+    "score_summary": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failures": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "label": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "score": { "maximum": 100, "minimum": 0, "type": "integer" }
+      },
+      "required": ["label", "scenario_id", "score", "passed", "critical_failures"],
+      "type": "object"
+    }
+  }
+}
