@@ -12980,6 +12980,10 @@ def _validate_replay_bundle_copied_lineage_inputs(inputs: dict[str, dict[str, An
             continue
         if record.get("exists") is not True:
             target.errors.append(f"artifact_lineage.inputs.{name}.exists must be true.")
+        if not _is_non_negative_int(record.get("size_bytes")):
+            target.errors.append(f"artifact_lineage.inputs.{name}.size_bytes must be a non-negative integer.")
+        elif file_path.stat().st_size != record.get("size_bytes"):
+            target.errors.append(f"artifact_lineage.inputs.{name}.size_bytes does not match the bundled file.")
         if not _is_sha256(record.get("sha256")):
             target.errors.append(f"artifact_lineage.inputs.{name}.sha256 must be a SHA-256 hex string.")
         elif _sha256(file_path) != record.get("sha256"):

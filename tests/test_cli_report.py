@@ -277,6 +277,28 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("replay_bundle.inputs", errors)
             self.assertIn("sha256", errors)
 
+    def test_validate_replay_bundle_rejects_stale_lineage_input_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            bundle = Path(tmp) / "bundle"
+            summary_path = Path(tmp) / "validation.json"
+            self.assertEqual(run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(source)]), 0)
+            self.assertEqual(run_cli(["replay-bundle", "--lineage", str(source / "artifact_lineage.json"), "--out", str(bundle)]), 0)
+            lineage_path = bundle / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            for record in lineage["inputs"]:
+                if record["name"] == "scenario":
+                    record["size_bytes"] += 1
+                    break
+            lineage_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--replay-bundle", str(bundle), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("artifact_lineage.inputs.scenario.size_bytes", errors)
+
     def test_failing_report_redacts_secret_values_and_writes_regression(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "run"

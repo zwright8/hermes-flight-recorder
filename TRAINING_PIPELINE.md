@@ -893,7 +893,9 @@ moving evidence packages; it copies the scenario, trace, and state snapshot into
 a portable directory and rewrites replay paths to those copied inputs. Validate
 portable bundles with `flightrecorder validate` and
 `--replay-bundle <bundle-dir> --strict` before publishing them as reproducible
-evidence. Use `--preserve-paths` only for private runs when absolute replay
+evidence. Validation checks both manifest inputs and copied lineage inputs
+against the bundled files, including recorded sizes and SHA-256 fingerprints.
+Use `--preserve-paths` only for private runs when absolute replay
 commands are acceptable. Harness replay receipts must point at the replayed
 `scorecard.json`, and validation rejects receipts whose `passed` flag does not
 match that scorecard.
