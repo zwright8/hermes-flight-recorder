@@ -1433,10 +1433,10 @@
       "id": "governance_policy_schema_registry",
       "layer": "governance",
       "priority": "medium",
-      "status": "verified_after_current_main_merge",
+      "status": "landed_on_main",
       "title": "Register promotion policy schema",
       "summary": "Registered hfr.promotion_policy.v1 in the public schema catalog, added a schema-registry regression test for the demo policy, and documented schema validation next to strict promotion-policy checks.",
-      "completed_at": "2026-07-02T16:25:35Z",
+      "completed_at": "2026-07-02T16:33:26Z",
       "commit_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
       "artifacts": [
         {
@@ -1521,16 +1521,24 @@
         "branch_sha": "9f70696497eda0b417ed785ca5173b19d868f516",
         "pushed": true,
         "remote_branch_verified": true,
-        "main_sha": null,
-        "remote_main_verified": false,
-        "remote_branch_deleted": false,
+        "main_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+        "remote_main_verified": true,
+        "remote_branch_deleted": true,
         "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/14",
-        "pr_state": "OPEN",
+        "pr_state": "MERGED",
         "implementation_commit_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
-        "remote_branch_verified_sha": "9f70696497eda0b417ed785ca5173b19d868f516"
+        "remote_branch_verified_sha": "9f70696497eda0b417ed785ca5173b19d868f516",
+        "merge_commit_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+        "remote_main_verified_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+        "remote_branch_deleted_at": "2026-07-02T16:33:26Z",
+        "state_checkpoint_sha": "verify after pushing this checkpoint because a commit cannot self-record its final SHA"
       },
       "integrated_origin_main_sha": "1842611af7a080c41f811839e24a053a5d12b024",
-      "integration_verified_at": "2026-07-02T16:31:46Z"
+      "integration_verified_at": "2026-07-02T16:31:46Z",
+      "merge_commit_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+      "main_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+      "remote_main_verified_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+      "remote_branch_deleted_at": "2026-07-02T16:33:26Z"
     }
   ],
   "current_packet": {
@@ -1538,8 +1546,8 @@
     "layer": "governance",
     "priority": "high",
     "status": "ready",
-    "summary": "Add explicit rollback target receipts and validation hooks so alias movement and release records cannot proceed without reversible rollback evidence.",
     "title": "Require rollback target receipts",
+    "summary": "Add explicit rollback target receipts and validation hooks so alias movement and release records cannot proceed without reversible rollback evidence.",
     "depends_on": [
       "governance_policy_schema_registry"
     ]
@@ -2094,7 +2102,7 @@
     "governance": {
       "next_packet": "governance_rollback_target_receipts",
       "status": "in_progress",
-      "summary": "Promotion policy schema is merged over current origin/main and verified under the main-push lock; merge commit and main push are pending."
+      "summary": "Promotion policy schema landed on main; PR #14 is merged and the remote packet branch is deleted. Rollback target receipts are queued next."
     },
     "harness": {
       "next_packet": null,
@@ -2132,14 +2140,17 @@
       "id": "governance_policy_schema_registry",
       "layer": "governance",
       "priority": "medium",
-      "status": "verified_after_current_main_merge",
+      "status": "landed_on_main",
       "summary": "Registered hfr.promotion_policy.v1 in the public schema catalog, added a schema-registry regression test for the demo policy, and documented schema validation next to strict promotion-policy checks.",
       "title": "Register promotion policy schema",
       "source_branch": "codex/hermes-goal-8-governance-policy-schema-20260702-1620",
       "source_branch_sha": "9f70696497eda0b417ed785ca5173b19d868f516",
       "implementation_commit_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/14",
-      "integrated_origin_main_sha": "1842611af7a080c41f811839e24a053a5d12b024"
+      "integrated_origin_main_sha": "1842611af7a080c41f811839e24a053a5d12b024",
+      "merge_commit_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+      "main_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+      "remote_branch_deleted": true
     },
     {
       "id": "model_serving_probe_receipts",
@@ -2205,7 +2216,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:31:46Z",
+  "updated_at": "2026-07-02T16:33:26Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2279,15 +2290,15 @@
     "remote_ref": "refs/heads/codex/hermes-goal-8-governance-policy-schema-20260702-1620",
     "implementation_commit_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
     "branch_head_before_locked_merge_sha": "9f70696497eda0b417ed785ca5173b19d868f516",
-    "branch_remote_status": "pushed_and_verified",
+    "branch_remote_status": "deleted",
     "branch_remote_verified_sha": "9f70696497eda0b417ed785ca5173b19d868f516",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/14",
-    "pr_status": "OPEN",
+    "pr_status": "MERGED",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "held",
-    "main_integration_status": "verified_pending_merge_commit",
-    "main_sha": null,
-    "remote_main_verified_sha": null,
+    "lock_status": "held_until_post_delivery_checkpoint_push",
+    "main_integration_status": "pushed_and_verified",
+    "main_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+    "remote_main_verified_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
     "verification": [
       {
         "command": "git diff --check",
@@ -2330,13 +2341,20 @@
         "summary": "System Python 3.9 full discovery remains blocked by existing Python 3.11-only harness/deployment imports; Python 3.11 discovery and release_check passed."
       }
     ],
-    "verified_at": "2026-07-02T16:31:46Z",
+    "verified_at": "2026-07-02T16:33:26Z",
     "risks": [
       "The schema is intentionally permissive for additionalProperties to preserve forward-compatible policy extension; governance code remains the safety floor for unknown fields.",
       "System python3 is Python 3.9.6 and cannot run the full discovery suite because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11."
     ],
     "base_main_sha": "1842611af7a080c41f811839e24a053a5d12b024",
-    "merge_base_main_sha": "1842611af7a080c41f811839e24a053a5d12b024"
+    "merge_base_main_sha": "1842611af7a080c41f811839e24a053a5d12b024",
+    "branch_remote_deleted_at": "2026-07-02T16:33:26Z",
+    "remote_branch_verified_deleted": true,
+    "merge_commit_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+    "integrated_main_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+    "main_sha_status": "verified_before_post_delivery_checkpoint",
+    "remote_main_verified_at": "2026-07-02T16:33:26Z",
+    "post_delivery_checkpoint_main_sha_status": "verify after pushing this checkpoint because a commit cannot self-record its final SHA"
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
