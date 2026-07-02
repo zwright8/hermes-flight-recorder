@@ -601,9 +601,18 @@ flightrecorder evidence-bundle \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --training-export runs/training_export \
+  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
   --gate runs/suite_gate.json \
+  --require-harness \
+  --require-gate \
   --out runs/evidence_bundle.json
 ```
+
+For Eval or Governance handoffs, include matched `--harness-manifest` and
+`--harness-result` inputs plus `--require-harness --require-gate`. The bundle
+blocks unless harness lineage is schema-valid, internally consistent, and backed
+by a passing scorecard.
 
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI
 promotion-gate example.

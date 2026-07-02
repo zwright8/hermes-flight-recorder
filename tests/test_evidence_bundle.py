@@ -166,6 +166,7 @@ class EvidenceBundleTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            harness_artifacts = _write_harness_handoff_artifacts(root)
 
             code = run_cli(
                 [
@@ -188,8 +189,14 @@ class EvidenceBundleTests(unittest.TestCase):
                     str(runs / "training_export"),
                     "--live-smoke-summary",
                     str(live_smoke_path),
+                    "--harness-manifest",
+                    str(harness_artifacts["manifest"]),
+                    "--harness-result",
+                    str(harness_artifacts["result"]),
                     "--gate",
                     str(runs / "suite_gate.json"),
+                    "--require-harness",
+                    "--require-gate",
                     "--out",
                     str(bundle_path),
                 ]
@@ -254,6 +261,9 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["platform"], "Linux-test")
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["hermes_git_commit"], "abcdef123456")
             self.assertEqual(bundle["decision"]["key_metrics"]["live_smoke_summary"]["flight_recorder_git_commit"], "123456abcdef")
+            self.assertEqual(bundle["decision"]["key_metrics"]["harness_handoff"]["pair_count"], 1)
+            self.assertEqual(bundle["decision"]["key_metrics"]["harness_handoff"]["passed_pair_count"], 1)
+            self.assertEqual(bundle["decision"]["key_metrics"]["harness_handoff"]["missing_pair_count"], 0)
             top_priorities = bundle["decision"]["key_metrics"]["training_export"]["top_curriculum_priorities"]
             self.assertEqual(len(top_priorities), 5)
             self.assertEqual(
@@ -285,6 +295,12 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hook_count"], 3)
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hermes_root"], "/tmp/hermes-agent")
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["flight_recorder_git_dirty"], True)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["schema_valid_pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["consistent_pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["runs"][0]["runner"], "hermes_harness")
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["runs"][0]["provider"], "mock")
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["runs"][0]["trace_format"], "normalized_json")
             self.assertEqual(bundle["metrics"]["gates"][0]["id"], "suite_gate")
             self.assertTrue(bundle["metrics"]["gates"][0]["passed"])
             self.assertEqual(bundle["artifacts"]["suite_summary"]["kind"], "file")
@@ -295,10 +311,85 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(len(bundle["artifacts"]["training_export_curriculum"]["sha256"]), 64)
             self.assertEqual(len(bundle["artifacts"]["suite_summary"]["sha256"]), 64)
 
+            self.assertEqual(
+                run_cli(
+                    [
+                        "validate",
+                        "--harness-manifest",
+                        str(harness_artifacts["manifest"]),
+                        "--harness-result",
+                        str(harness_artifacts["result"]),
+                        "--strict",
+                    ]
+                ),
+                0,
+            )
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
             bundle["metrics"]["training_export"]["top_curriculum_priorities"][0]["priority_band"] = "urgent"
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
+
+    def test_evidence_bundle_blocks_missing_required_harness_and_gate_summaries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--runs",
+                    str(runs),
+                    "--require-harness",
+                    "--require-gate",
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            self.assertEqual(bundle["readiness"], "blocked")
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("harness_handoff_present", failed_checks)
+            self.assertIn("gate_summary_present", failed_checks)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["pair_count"], 0)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["missing_pair_count"], 1)
+            action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
+            self.assertIn("attach_harness_lineage", action_ids)
+            self.assertIn("resolve_blocking_checks", action_ids)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_evidence_bundle_blocks_failed_harness_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = _write_harness_handoff_artifacts(root, passed=False)
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--harness-manifest",
+                    str(artifacts["manifest"]),
+                    "--harness-result",
+                    str(artifacts["result"]),
+                    "--require-harness",
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("harness_result_passed", failed_checks)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["failed_pair_count"], 1)
+            action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
+            self.assertIn("fix_harness_handoff", action_ids)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
     def test_evidence_bundle_summarizes_complete_trainer_handoff(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -604,6 +695,73 @@ class EvidenceBundleTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_fingerprint does not match", errors)
+
+
+def _write_harness_handoff_artifacts(root: Path, *, passed: bool = True) -> dict[str, Path]:
+    harness_dir = root / "harness_prompt_injection_good"
+    harness_dir.mkdir()
+    artifacts = {
+        "manifest": harness_dir / "harness_manifest.json",
+        "result": harness_dir / "harness_result.json",
+    }
+    manifest = {
+        "schema_version": "hfr.harness_run_manifest.v1",
+        "runner": "hermes_harness",
+        "provider": "mock",
+        "model": {"id": "hfr-mock"},
+        "scenario": {
+            "id": "prompt_injection_good",
+            "path": "scenarios/prompt_injection_good.json",
+        },
+        "outputs": {
+            "run_dir": ".",
+            "manifest": "harness_manifest.json",
+            "result": "harness_result.json",
+        },
+        "sandbox": {
+            "root": "sandbox",
+            "home": "sandbox/home",
+            "workspace": "sandbox/workspace",
+            "events": "sandbox/events.jsonl",
+            "fake_secret_canaries": ["HFR_FAKE_SECRET_CANARY"],
+        },
+        "tool_policy": {
+            "network": "disabled",
+            "filesystem": "sandboxed",
+        },
+    }
+    result = {
+        "schema_version": "hfr.harness_run_result.v1",
+        "runner": "hermes_harness",
+        "provider": "mock",
+        "model": {"id": "hfr-mock"},
+        "scenario_id": "prompt_injection_good",
+        "sandbox": manifest["sandbox"],
+        "tool_policy": manifest["tool_policy"],
+        "trace": {
+            "path": "normalized_trace.json",
+            "format": "normalized_json",
+        },
+        "scorecard": {
+            "path": "scorecard.json",
+            "passed": passed,
+            "score": 100 if passed else 35,
+        },
+        "artifacts": {
+            "normalized_trace": "normalized_trace.json",
+            "scorecard": "scorecard.json",
+            "run_digest": "run_digest.json",
+            "report": "report.html",
+            "lineage": "artifact_lineage.json",
+        },
+        "replay": {
+            "lineage": "artifact_lineage.json",
+            "self_contained": True,
+        },
+    }
+    artifacts["manifest"].write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    artifacts["result"].write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return artifacts
 
 
 def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:

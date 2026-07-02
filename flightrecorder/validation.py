@@ -13,7 +13,7 @@ from .action_gate import ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, ACTION_LEDGER
 from .action_ledger import ACTION_LEDGER_SCHEMA_VERSION
 from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
-from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
+from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .compare_gate import compare_movement_summary
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
@@ -125,6 +125,8 @@ def validate_artifacts(
     trainer_archive_check_paths: list[str | Path] | None = None,
     trainer_consumer_plan_paths: list[str | Path] | None = None,
     trainer_wrapper_dry_run_paths: list[str | Path] | None = None,
+    harness_manifest_paths: list[str | Path] | None = None,
+    harness_result_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -186,6 +188,10 @@ def validate_artifacts(
         targets.append(validate_trainer_consumer_plan(trainer_consumer_plan_path))
     for trainer_wrapper_dry_run_path in trainer_wrapper_dry_run_paths or []:
         targets.append(validate_trainer_wrapper_dry_run(trainer_wrapper_dry_run_path))
+    for harness_manifest_path in harness_manifest_paths or []:
+        targets.append(validate_harness_run_manifest(harness_manifest_path))
+    for harness_result_path in harness_result_paths or []:
+        targets.append(validate_harness_run_result(harness_result_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -804,6 +810,26 @@ def validate_run_digest(path: str | Path) -> ValidationTarget:
     digest = _read_object(digest_path, target, "run_digest.json")
     if digest is not None:
         _validate_run_digest(digest, target, "run_digest")
+    return target
+
+
+def validate_harness_run_manifest(path: str | Path) -> ValidationTarget:
+    """Validate a harness run manifest handoff artifact."""
+    manifest_path = Path(path)
+    target = ValidationTarget("harness_run_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "harness_manifest.json")
+    if manifest is not None:
+        _validate_harness_run_manifest(manifest, target)
+    return target
+
+
+def validate_harness_run_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness run result handoff artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_run_result", str(result_path))
+    result = _read_object(result_path, target, "harness_result.json")
+    if result is not None:
+        _validate_harness_run_result(result, target)
     return target
 
 
@@ -9038,6 +9064,90 @@ def _evidence_bundle_action_fingerprint(action: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(manifest, "schema_version", HARNESS_RUN_MANIFEST_SCHEMA_VERSION, target, prefix="harness_run_manifest.")
+    for field_name in ("runner", "provider"):
+        if not isinstance(manifest.get(field_name), str) or not manifest.get(field_name):
+            target.errors.append(f"harness_run_manifest.{field_name} must be a non-empty string.")
+    model = manifest.get("model")
+    if not isinstance(model, dict):
+        target.errors.append("harness_run_manifest.model must be an object.")
+    elif not isinstance(model.get("id"), str) or not model.get("id"):
+        target.errors.append("harness_run_manifest.model.id must be a non-empty string.")
+    scenario = manifest.get("scenario")
+    if not isinstance(scenario, dict):
+        target.errors.append("harness_run_manifest.scenario must be an object.")
+    else:
+        for field_name in ("id", "path"):
+            if not isinstance(scenario.get(field_name), str) or not scenario.get(field_name):
+                target.errors.append(f"harness_run_manifest.scenario.{field_name} must be a non-empty string.")
+    outputs = manifest.get("outputs")
+    if not isinstance(outputs, dict):
+        target.errors.append("harness_run_manifest.outputs must be an object.")
+    else:
+        for field_name in ("run_dir", "manifest", "result"):
+            if not isinstance(outputs.get(field_name), str) or not outputs.get(field_name):
+                target.errors.append(f"harness_run_manifest.outputs.{field_name} must be a non-empty string.")
+    sandbox = manifest.get("sandbox")
+    if not isinstance(sandbox, dict):
+        target.errors.append("harness_run_manifest.sandbox must be an object.")
+    else:
+        for field_name in ("root", "home", "workspace", "events"):
+            if not isinstance(sandbox.get(field_name), str) or not sandbox.get(field_name):
+                target.errors.append(f"harness_run_manifest.sandbox.{field_name} must be a non-empty string.")
+        if not _is_string_list(sandbox.get("fake_secret_canaries")):
+            target.errors.append("harness_run_manifest.sandbox.fake_secret_canaries must be a list of strings.")
+    if not isinstance(manifest.get("tool_policy"), dict):
+        target.errors.append("harness_run_manifest.tool_policy must be an object.")
+
+
+def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(result, "schema_version", HARNESS_RUN_RESULT_SCHEMA_VERSION, target, prefix="harness_run_result.")
+    for field_name in ("runner", "provider", "scenario_id"):
+        if not isinstance(result.get(field_name), str) or not result.get(field_name):
+            target.errors.append(f"harness_run_result.{field_name} must be a non-empty string.")
+    model = result.get("model")
+    if not isinstance(model, dict):
+        target.errors.append("harness_run_result.model must be an object.")
+    elif not isinstance(model.get("id"), str) or not model.get("id"):
+        target.errors.append("harness_run_result.model.id must be a non-empty string.")
+    for field_name in ("sandbox", "tool_policy"):
+        if not isinstance(result.get(field_name), dict):
+            target.errors.append(f"harness_run_result.{field_name} must be an object.")
+    trace = result.get("trace")
+    if not isinstance(trace, dict):
+        target.errors.append("harness_run_result.trace must be an object.")
+    else:
+        for field_name in ("path", "format"):
+            if not isinstance(trace.get(field_name), str) or not trace.get(field_name):
+                target.errors.append(f"harness_run_result.trace.{field_name} must be a non-empty string.")
+    scorecard = result.get("scorecard")
+    if not isinstance(scorecard, dict):
+        target.errors.append("harness_run_result.scorecard must be an object.")
+    else:
+        if not isinstance(scorecard.get("path"), str) or not scorecard.get("path"):
+            target.errors.append("harness_run_result.scorecard.path must be a non-empty string.")
+        if not isinstance(scorecard.get("passed"), bool):
+            target.errors.append("harness_run_result.scorecard.passed must be a boolean.")
+        if not isinstance(scorecard.get("score"), (int, float)) or isinstance(scorecard.get("score"), bool):
+            target.errors.append("harness_run_result.scorecard.score must be numeric.")
+    artifacts = result.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("harness_run_result.artifacts must be an object.")
+    else:
+        for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
+            if not isinstance(artifacts.get(field_name), str) or not artifacts.get(field_name):
+                target.errors.append(f"harness_run_result.artifacts.{field_name} must be a non-empty string.")
+    replay = result.get("replay")
+    if not isinstance(replay, dict):
+        target.errors.append("harness_run_result.replay must be an object.")
+    else:
+        if not isinstance(replay.get("lineage"), str) or not replay.get("lineage"):
+            target.errors.append("harness_run_result.replay.lineage must be a non-empty string.")
+        if not isinstance(replay.get("self_contained"), bool):
+            target.errors.append("harness_run_result.replay.self_contained must be a boolean.")
+
+
 def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
     expected_sections = (
         "suite_summary",
@@ -9054,6 +9164,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "review_calibration",
         "live_smoke_summary",
         "trainer_handoff",
+        "harness_handoff",
     )
     for section in expected_sections:
         if section in metrics and not isinstance(metrics[section], dict):
@@ -9067,6 +9178,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     trainer_handoff = metrics.get("trainer_handoff")
     if isinstance(trainer_handoff, dict):
         _validate_bundle_trainer_handoff(trainer_handoff, target)
+    harness_handoff = metrics.get("harness_handoff")
+    if isinstance(harness_handoff, dict):
+        _validate_bundle_harness_handoff(harness_handoff, target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -9136,6 +9250,70 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
     for field_name in ("missing_digest_scenarios", "invalid_digest_scenarios"):
         if not _is_string_list(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a list of strings.")
+
+
+def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "evidence_bundle.metrics.harness_handoff"
+    for field_name in (
+        "manifest_count",
+        "result_count",
+        "pair_count",
+        "passed_pair_count",
+        "failed_pair_count",
+        "schema_valid_pair_count",
+        "consistent_pair_count",
+        "missing_pair_count",
+    ):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("runners", "providers", "models", "trace_formats"):
+        _validate_count_rows(value.get(field_name), target, f"{label}.{field_name}")
+    runs = value.get("runs")
+    if not isinstance(runs, list):
+        target.errors.append(f"{label}.runs must be a list.")
+        runs = []
+    if _is_non_negative_int(value.get("pair_count")) and int(value["pair_count"]) != len(runs):
+        target.errors.append(f"{label}.pair_count expected {len(runs)}, got {value.get('pair_count')!r}.")
+
+    passed_count = 0
+    failed_count = 0
+    schema_valid_count = 0
+    consistent_count = 0
+    for index, row in enumerate(runs):
+        row_label = f"{label}.runs[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        for field_name in ("id", "scenario_id", "runner", "provider", "model", "manifest_path", "result_path", "trace_format"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{row_label}.{field_name} must be a non-empty string.")
+        for field_name in ("passed", "schema_valid", "consistent"):
+            if not isinstance(row.get(field_name), bool):
+                target.errors.append(f"{row_label}.{field_name} must be a boolean.")
+        if row.get("score") is not None and (not isinstance(row.get("score"), (int, float)) or isinstance(row.get("score"), bool)):
+            target.errors.append(f"{row_label}.score must be numeric when present.")
+        if not _is_string_list(row.get("schema_errors")):
+            target.errors.append(f"{row_label}.schema_errors must be a list of strings.")
+        if not _is_string_list(row.get("consistency_errors")):
+            target.errors.append(f"{row_label}.consistency_errors must be a list of strings.")
+        if row.get("passed") is True:
+            passed_count += 1
+        elif row.get("passed") is False:
+            failed_count += 1
+        if row.get("schema_valid") is True:
+            schema_valid_count += 1
+        if row.get("consistent") is True:
+            consistent_count += 1
+
+    expected_counts = {
+        "passed_pair_count": passed_count,
+        "failed_pair_count": failed_count,
+        "schema_valid_pair_count": schema_valid_count,
+        "consistent_pair_count": consistent_count,
+    }
+    for field_name, expected in expected_counts.items():
+        if _is_non_negative_int(value.get(field_name)) and int(value[field_name]) != expected:
+            target.errors.append(f"{label}.{field_name} expected {expected}, got {value.get(field_name)!r}.")
 
 
 def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTarget) -> None:

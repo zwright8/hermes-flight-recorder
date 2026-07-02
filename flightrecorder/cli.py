@@ -797,6 +797,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
         trainer_archive_check_paths=args.trainer_archive_check,
         trainer_consumer_plan_paths=args.trainer_consumer_plan,
         trainer_wrapper_dry_run_paths=args.trainer_wrapper_dry_run,
+        harness_manifest_paths=args.harness_manifest,
+        harness_result_paths=args.harness_result,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -951,7 +953,11 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         trainer_archive_check_path=args.trainer_archive_check,
         trainer_consumer_plan_path=args.trainer_consumer_plan,
         trainer_wrapper_dry_run_path=args.trainer_wrapper_dry_run,
+        harness_manifest_paths=args.harness_manifest,
+        harness_result_paths=args.harness_result,
         gate_paths=args.gate,
+        require_harness=args.require_harness,
+        require_gate=args.require_gate,
         preserve_paths=args.preserve_paths,
     )
     _write_json(Path(args.out), bundle)
@@ -1886,6 +1892,8 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one trainer_wrapper_dry_run.json; may be repeated",
     )
+    validate.add_argument("--harness-manifest", action="append", default=[], help="Validate one harness_manifest.json; may be repeated")
+    validate.add_argument("--harness-result", action="append", default=[], help="Validate one harness_result.json; may be repeated")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -1998,7 +2006,11 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--trainer-archive-check", help="trainer_archive_check.json included in the handoff")
     evidence_bundle.add_argument("--trainer-consumer-plan", help="trainer_consumer_plan.json included in the handoff")
     evidence_bundle.add_argument("--trainer-wrapper-dry-run", help="trainer_wrapper_dry_run.json included in the handoff")
+    evidence_bundle.add_argument("--harness-manifest", action="append", default=[], help="harness_manifest.json included in the handoff; may be repeated")
+    evidence_bundle.add_argument("--harness-result", action="append", default=[], help="harness_result.json included in the handoff; may be repeated")
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
+    evidence_bundle.add_argument("--require-harness", action="store_true", help="Block unless at least one matched harness manifest/result pair is included")
+    evidence_bundle.add_argument("--require-gate", action="store_true", help="Block unless at least one gate summary is included")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)
 

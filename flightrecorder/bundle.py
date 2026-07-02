@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .schema_registry import SchemaRegistryError, check_schema_file
+
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "hfr.evidence_bundle.v1"
+HARNESS_RUN_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
+HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
 _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.training_gate.v1",
     "hfr.compare_gate.v1",
@@ -75,6 +79,10 @@ def build_evidence_bundle(
     trainer_archive_check_path: str | Path | None = None,
     trainer_consumer_plan_path: str | Path | None = None,
     trainer_wrapper_dry_run_path: str | Path | None = None,
+    harness_manifest_paths: list[str | Path] | None = None,
+    harness_result_paths: list[str | Path] | None = None,
+    require_harness: bool = False,
+    require_gate: bool = False,
     gate_paths: list[str | Path] | None = None,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
@@ -299,6 +307,15 @@ def build_evidence_bundle(
         trainer_consumer_plan_path=trainer_consumer_plan_path,
         trainer_wrapper_dry_run_path=trainer_wrapper_dry_run_path,
     )
+    _summarize_harness_handoff(
+        artifacts,
+        metrics,
+        checks,
+        preserve_paths=preserve_paths,
+        manifest_paths=harness_manifest_paths,
+        result_paths=harness_result_paths,
+        require_harness=require_harness,
+    )
 
     gate_rows: list[dict[str, Any]] = []
     for index, gate_path in enumerate(gate_paths or []):
@@ -331,6 +348,8 @@ def build_evidence_bundle(
             )
     if gate_rows:
         metrics["gates"] = gate_rows
+    if require_gate:
+        _add_presence_check(checks, "gate_summary_present", bool(gate_rows), {"artifact": "gates"})
 
     if not artifacts:
         raise EvidenceBundleError("At least one evidence artifact or directory must be provided.")
@@ -494,6 +513,20 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "complete_chain",
             "all_included_ready",
             "missing_stage_ids",
+        ),
+        "harness_handoff": (
+            "manifest_count",
+            "result_count",
+            "pair_count",
+            "passed_pair_count",
+            "failed_pair_count",
+            "schema_valid_pair_count",
+            "consistent_pair_count",
+            "missing_pair_count",
+            "runners",
+            "providers",
+            "models",
+            "trace_formats",
         ),
     }
     summary: dict[str, Any] = {}
@@ -780,6 +813,42 @@ def _next_actions(
                 },
             )
         )
+
+    harness = metrics.get("harness_handoff") if isinstance(metrics.get("harness_handoff"), dict) else {}
+    missing_harness_pairs = _non_negative_int(harness.get("missing_pair_count"))
+    if missing_harness_pairs:
+        actions.append(
+            _action(
+                "attach_harness_lineage",
+                "critical",
+                "harness_handoff",
+                "Attach matched harness_manifest.json and harness_result.json artifacts before downstream Eval or Governance consumes this bundle.",
+                {
+                    "missing_pair_count": missing_harness_pairs,
+                    "manifest_count": _non_negative_int(harness.get("manifest_count")),
+                    "result_count": _non_negative_int(harness.get("result_count")),
+                },
+            )
+        )
+    failed_harness_pairs = _non_negative_int(harness.get("failed_pair_count"))
+    invalid_harness_pairs = _non_negative_int(harness.get("pair_count")) - min(
+        _non_negative_int(harness.get("schema_valid_pair_count")),
+        _non_negative_int(harness.get("consistent_pair_count")),
+    )
+    if failed_harness_pairs or invalid_harness_pairs:
+        actions.append(
+            _action(
+                "fix_harness_handoff",
+                "critical",
+                "harness_handoff",
+                "Fix failed, malformed, or inconsistent harness handoff artifacts before relying on live-run lineage.",
+                {
+                    "failed_pair_count": failed_harness_pairs,
+                    "invalid_pair_count": max(invalid_harness_pairs, 0),
+                    "pair_count": _non_negative_int(harness.get("pair_count")),
+                },
+            )
+        )
     return actions
 
 
@@ -1031,6 +1100,185 @@ def _live_smoke_environment_metrics(environment: Any) -> dict[str, Any]:
         "flight_recorder_git_dirty",
     )
     return {field: environment.get(field) for field in fields if field in environment}
+
+
+def _summarize_harness_handoff(
+    artifacts: dict[str, Any],
+    metrics: dict[str, Any],
+    checks: list[dict[str, Any]],
+    *,
+    preserve_paths: bool,
+    manifest_paths: list[str | Path] | None,
+    result_paths: list[str | Path] | None,
+    require_harness: bool,
+) -> None:
+    manifests = [Path(path) for path in manifest_paths or []]
+    results = [Path(path) for path in result_paths or []]
+    if not manifests and not results:
+        if require_harness:
+            metrics["harness_handoff"] = _empty_harness_metrics()
+            _add_presence_check(checks, "harness_handoff_present", False, {"artifact": "harness_handoff"})
+        return
+
+    _add_presence_check(
+        checks,
+        "harness_handoff_pair_count",
+        len(manifests) == len(results) and bool(manifests),
+        {
+            "artifact": "harness_handoff",
+            "manifest_count": str(len(manifests)),
+            "result_count": str(len(results)),
+        },
+    )
+
+    rows: list[dict[str, Any]] = []
+    runner_counts: dict[str, int] = {}
+    provider_counts: dict[str, int] = {}
+    model_counts: dict[str, int] = {}
+    trace_format_counts: dict[str, int] = {}
+    for index, (manifest_path, result_path) in enumerate(zip(manifests, results), start=1):
+        manifest_key = f"harness_manifest_{index}"
+        result_key = f"harness_result_{index}"
+        manifest = _read_json_artifact(manifest_path, artifacts, manifest_key, preserve_paths)
+        result = _read_json_artifact(result_path, artifacts, result_key, preserve_paths)
+        row = _harness_pair_metrics(manifest_path, manifest, result_path, result, preserve_paths)
+        rows.append(row)
+        for counts, value in (
+            (runner_counts, row["runner"]),
+            (provider_counts, row["provider"]),
+            (model_counts, row["model"]),
+            (trace_format_counts, row["trace_format"]),
+        ):
+            if value:
+                counts[value] = counts.get(value, 0) + 1
+
+        scope = {
+            "artifact": "harness_handoff",
+            "scenario_id": row["scenario_id"],
+            "runner": row["runner"],
+            "provider": row["provider"],
+        }
+        _add_presence_check(checks, "harness_pair_schema_valid", bool(row["schema_valid"]), scope)
+        _add_presence_check(checks, "harness_pair_consistent", bool(row["consistent"]), scope)
+        _add_presence_check(checks, "harness_result_passed", bool(row["passed"]), scope)
+
+    missing_pair_count = abs(len(manifests) - len(results))
+    metrics["harness_handoff"] = {
+        "manifest_count": len(manifests),
+        "result_count": len(results),
+        "pair_count": len(rows),
+        "passed_pair_count": sum(1 for row in rows if row["passed"]),
+        "failed_pair_count": sum(1 for row in rows if not row["passed"]),
+        "schema_valid_pair_count": sum(1 for row in rows if row["schema_valid"]),
+        "consistent_pair_count": sum(1 for row in rows if row["consistent"]),
+        "missing_pair_count": missing_pair_count,
+        "runners": _count_map_rows(runner_counts),
+        "providers": _count_map_rows(provider_counts),
+        "models": _count_map_rows(model_counts),
+        "trace_formats": _count_map_rows(trace_format_counts),
+        "runs": rows,
+    }
+    if require_harness:
+        _add_presence_check(checks, "harness_handoff_present", bool(rows), {"artifact": "harness_handoff"})
+
+
+def _empty_harness_metrics() -> dict[str, Any]:
+    return {
+        "manifest_count": 0,
+        "result_count": 0,
+        "pair_count": 0,
+        "passed_pair_count": 0,
+        "failed_pair_count": 0,
+        "schema_valid_pair_count": 0,
+        "consistent_pair_count": 0,
+        "missing_pair_count": 1,
+        "runners": [],
+        "providers": [],
+        "models": [],
+        "trace_formats": [],
+        "runs": [],
+    }
+
+
+def _harness_pair_metrics(
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    result_path: Path,
+    result: dict[str, Any],
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    model = manifest.get("model") if isinstance(manifest.get("model"), dict) else {}
+    result_model = result.get("model") if isinstance(result.get("model"), dict) else {}
+    scenario = manifest.get("scenario") if isinstance(manifest.get("scenario"), dict) else {}
+    scorecard = result.get("scorecard") if isinstance(result.get("scorecard"), dict) else {}
+    trace = result.get("trace") if isinstance(result.get("trace"), dict) else {}
+    replay = result.get("replay") if isinstance(result.get("replay"), dict) else {}
+    schema_errors: list[str] = []
+    for schema_name, path in (("harness_run_manifest", manifest_path), ("harness_run_result", result_path)):
+        check = _schema_check_summary(path, schema_name)
+        if not check["passed"]:
+            schema_errors.extend(f"{schema_name}: {error}" for error in check["errors"])
+    consistency_errors = _harness_consistency_errors(manifest_path, manifest, result_path, result)
+    return {
+        "id": str(result.get("scenario_id") or scenario.get("id") or manifest_path.parent.name or "unknown"),
+        "scenario_id": str(result.get("scenario_id") or scenario.get("id") or ""),
+        "runner": str(result.get("runner") or manifest.get("runner") or ""),
+        "provider": str(result.get("provider") or manifest.get("provider") or ""),
+        "model": str(result_model.get("id") or model.get("id") or ""),
+        "manifest_path": _display_path(manifest_path, preserve_paths),
+        "result_path": _display_path(result_path, preserve_paths),
+        "trace_format": str(trace.get("format") or ""),
+        "trace_path": str(trace.get("path") or ""),
+        "score": scorecard.get("score"),
+        "passed": scorecard.get("passed") is True,
+        "schema_valid": not schema_errors,
+        "consistent": not consistency_errors,
+        "schema_errors": schema_errors[:5],
+        "consistency_errors": consistency_errors[:5],
+        "replay_lineage": str(replay.get("lineage") or ""),
+        "replay_self_contained": replay.get("self_contained") if isinstance(replay.get("self_contained"), bool) else None,
+    }
+
+
+def _schema_check_summary(path: Path, schema_name: str) -> dict[str, Any]:
+    try:
+        result = check_schema_file(path, schema_name)
+    except (OSError, json.JSONDecodeError, SchemaRegistryError) as exc:
+        return {"passed": False, "errors": [str(exc)]}
+    errors = result.get("errors") if isinstance(result.get("errors"), list) else []
+    return {"passed": bool(result.get("passed")), "errors": [str(error) for error in errors[:5]]}
+
+
+def _harness_consistency_errors(manifest_path: Path, manifest: dict[str, Any], result_path: Path, result: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for field_name in ("runner", "provider"):
+        if manifest.get(field_name) != result.get(field_name):
+            errors.append(f"{field_name} mismatch")
+    manifest_model = manifest.get("model") if isinstance(manifest.get("model"), dict) else {}
+    result_model = result.get("model") if isinstance(result.get("model"), dict) else {}
+    if manifest_model.get("id") != result_model.get("id"):
+        errors.append("model.id mismatch")
+    scenario = manifest.get("scenario") if isinstance(manifest.get("scenario"), dict) else {}
+    if scenario.get("id") != result.get("scenario_id"):
+        errors.append("scenario id mismatch")
+    outputs = manifest.get("outputs") if isinstance(manifest.get("outputs"), dict) else {}
+    output_result = outputs.get("result")
+    if isinstance(output_result, str) and output_result:
+        expected_result = _resolve_harness_path(manifest_path.parent, output_result)
+        if expected_result != result_path.resolve():
+            errors.append("manifest.outputs.result does not point at harness result")
+    if result.get("schema_version") != HARNESS_RUN_RESULT_SCHEMA_VERSION:
+        errors.append("result schema_version mismatch")
+    if manifest.get("schema_version") != HARNESS_RUN_MANIFEST_SCHEMA_VERSION:
+        errors.append("manifest schema_version mismatch")
+    return errors
+
+
+def _resolve_harness_path(base_dir: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return (base_dir / path).resolve()
 
 
 def _summarize_trainer_handoff(
