@@ -50,7 +50,6 @@
       "commit_sha": "b8663f73a24f0a607d6dc98261e748b6f590e5f1",
       "pushed_branch": "codex/hermes-goal-7-eval-20260702-1027",
       "remote_branch_verified": true,
-      "remote_head": "b8663f73a24f0a607d6dc98261e748b6f590e5f1",
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
       "pr_blocker": null
     }
