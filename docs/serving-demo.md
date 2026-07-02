@@ -42,6 +42,7 @@ python3 scripts/manage_openai_serving.py \
   --base-url http://127.0.0.1:18080/v1 \
   --model hfr-managed-mock \
   --served-model-name hfr-managed-mock \
+  --adapter-load-strategy auto \
   --require-streaming \
   --require-tool-call \
   --require-structured-output \
@@ -85,6 +86,10 @@ python3 scripts/manage_openai_serving.py \
 
 If upstream launch flags need local tuning, pass `--command "<server command>"`
 and keep `--base-url` pointed at the resulting OpenAI-compatible endpoint.
+When `--adapter` is supplied, the lifecycle artifact records
+`adapter_strategy` with the requested and resolved load strategy. For built-in
+vLLM/SGLang profiles this is metadata only; pass engine-specific adapter flags
+with `--extra-engine-arg` or use `--command`.
 
 ## Replayable Demo Report
 

@@ -28,6 +28,9 @@ class ServingLifecycleTests(unittest.TestCase):
         port = _free_port()
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "managed"
+            adapter = Path(tmp) / "adapter"
+            adapter.mkdir()
+            (adapter / "adapter_config.json").write_text('{"r": 8}\n', encoding="utf-8")
             with redirect_stdout(StringIO()):
                 code = manage_openai_serving.main(
                     [
@@ -43,6 +46,8 @@ class ServingLifecycleTests(unittest.TestCase):
                         "hfr-managed-mock",
                         "--served-model-name",
                         "hfr-managed-mock",
+                        "--adapter",
+                        str(adapter),
                         "--out",
                         str(out),
                         "--startup-timeout",
@@ -67,9 +72,13 @@ class ServingLifecycleTests(unittest.TestCase):
             self.assertTrue(lifecycle["teardown"]["clean"])
             self.assertFalse(lifecycle["teardown"]["running_after_teardown"])
             self.assertEqual(lifecycle["artifacts"]["serving_profile"], "preflight/serving_profile.json")
+            self.assertEqual(lifecycle["adapter_strategy"]["resolved_strategy"], "mock_suffix")
+            self.assertTrue(lifecycle["adapter_strategy"]["launch_command_applies_adapter"])
             self.assertIn("mock_openai_server_ready", lifecycle["logs"]["stdout_tail"])
             profile = _read_json(out / "preflight" / "serving_profile.json")
             self.assertEqual(profile["capabilities"]["streaming"], "supported")
+            self.assertEqual(profile["adapter_strategy"]["resolved_strategy"], "mock_suffix")
+            self.assertEqual(profile["model_identity"]["adapter_strategy"]["adapter_id"], "adapter")
 
             schema_result = check_schema_file(out / "serving_lifecycle.json")
             self.assertTrue(schema_result["passed"], schema_result["errors"])
@@ -150,6 +159,8 @@ class ServingLifecycleTests(unittest.TestCase):
                 "qwen3-flightrecorder",
                 "--port",
                 "18080",
+                "--adapter",
+                "adapter-lora",
                 "--out",
                 "unused",
             ]
@@ -166,6 +177,8 @@ class ServingLifecycleTests(unittest.TestCase):
                 "2",
                 "--port",
                 "30000",
+                "--adapter",
+                "adapter-lora",
                 "--out",
                 "unused",
             ]
@@ -175,6 +188,12 @@ class ServingLifecycleTests(unittest.TestCase):
         self.assertIn("--served-model-name", manage_openai_serving._launch_command(vllm_args))
         self.assertEqual(manage_openai_serving._launch_command(sglang_args)[:3], ["python3", "-m", "sglang.launch_server"])
         self.assertIn("--tp-size", manage_openai_serving._launch_command(sglang_args))
+        vllm_strategy = manage_openai_serving._adapter_strategy(vllm_args)
+        sglang_strategy = manage_openai_serving._adapter_strategy(sglang_args)
+        self.assertEqual(vllm_strategy["resolved_strategy"], "engine_args")
+        self.assertTrue(vllm_strategy["requires_engine_args"])
+        self.assertIn("engine-specific adapter flags", " ".join(vllm_strategy["notes"]))
+        self.assertEqual(sglang_strategy["resolved_strategy"], "engine_args")
 
 
 def _read_json(path: Path):

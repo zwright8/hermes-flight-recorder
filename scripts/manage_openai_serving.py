@@ -44,6 +44,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--arm", default="candidate")
     parser.add_argument("--engine", choices=["mock", "openai_compatible", "sglang", "transformers", "vllm"], default="")
     parser.add_argument("--adapter", default="", help="Optional adapter path or id.")
+    parser.add_argument(
+        "--adapter-load-strategy",
+        choices=["auto", "none", "mock_suffix", "engine_args", "merged"],
+        default="auto",
+        help="Record how --adapter is expected to be used; built-in non-mock profiles do not add adapter flags automatically.",
+    )
     parser.add_argument("--tensor-parallel-size", type=int, default=1)
     parser.add_argument("--extra-engine-arg", action="append", default=[], help="Additional argument passed to a built-in engine profile.")
     parser.add_argument("--out", type=Path, required=True)
@@ -72,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     base_url = args.base_url or f"http://{args.host}:{int(args.port)}/v1"
     command = _launch_command(args)
     engine = args.engine or ("openai_compatible" if args.profile == "custom" else args.profile)
+    adapter_strategy = _adapter_strategy(args)
     env = _process_env(args.env)
     cwd = Path(args.cwd).expanduser().resolve()
     generated_at = _utc_now()
@@ -82,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
     teardown: dict[str, Any] = {"attempted": False, "clean": False, "running_after_teardown": False}
     errors: list[str] = []
 
-    lifecycle = _base_lifecycle(args, command, base_url, engine, cwd, generated_at, out_dir)
+    lifecycle = _base_lifecycle(args, command, base_url, engine, cwd, generated_at, out_dir, adapter_strategy)
     try:
         with stdout_path.open("wb") as stdout_handle, stderr_path.open("wb") as stderr_handle:
             process = subprocess.Popen(
@@ -110,6 +117,9 @@ def main(argv: list[str] | None = None) -> int:
                     require_tool_call=bool(args.require_tool_call),
                     require_structured_output=bool(args.require_structured_output),
                 )
+                profile["adapter_strategy"] = adapter_strategy
+                profile.setdefault("model_identity", {})["adapter_strategy"] = adapter_strategy
+                report["adapter_strategy"] = adapter_strategy
                 _write_json(preflight_dir / "serving_profile.json", profile)
                 _write_json(preflight_dir / "compatibility_report.json", compatibility)
                 _write_json(preflight_dir / "serving_check.json", report)
@@ -215,7 +225,16 @@ def _launch_command(args: argparse.Namespace) -> list[str]:
     raise SystemExit("--command is required when --profile custom is used")
 
 
-def _base_lifecycle(args: argparse.Namespace, command: list[str], base_url: str, engine: str, cwd: Path, generated_at: str, out_dir: Path) -> dict[str, Any]:
+def _base_lifecycle(
+    args: argparse.Namespace,
+    command: list[str],
+    base_url: str,
+    engine: str,
+    cwd: Path,
+    generated_at: str,
+    out_dir: Path,
+    adapter_strategy: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_LIFECYCLE,
         "generated_at": generated_at,
@@ -226,6 +245,7 @@ def _base_lifecycle(args: argparse.Namespace, command: list[str], base_url: str,
         "model": args.model,
         "served_model_name": args.served_model_name or args.model,
         "adapter": args.adapter,
+        "adapter_strategy": adapter_strategy,
         "endpoint": {"base_url": base_url, "host": args.host, "port": int(args.port)},
         "launch": {
             "command": command,
@@ -239,6 +259,38 @@ def _base_lifecycle(args: argparse.Namespace, command: list[str], base_url: str,
         "process": {"started": False},
         "environment": {"python_version": platform.python_version(), "platform": platform.platform()},
         "artifacts_root": ".",
+    }
+
+
+def _adapter_strategy(args: argparse.Namespace) -> dict[str, Any]:
+    adapter = str(args.adapter or "")
+    requested = str(args.adapter_load_strategy or "auto")
+    if not adapter:
+        resolved = "none"
+    elif requested != "auto":
+        resolved = requested
+    elif args.profile == "mock":
+        resolved = "mock_suffix"
+    else:
+        resolved = "engine_args"
+    requires_engine_args = bool(adapter and resolved == "engine_args")
+    notes: list[str] = []
+    if adapter and args.profile in {"vllm", "sglang"} and resolved == "engine_args":
+        notes.append("Built-in launch profiles record adapter intent; pass engine-specific adapter flags with --extra-engine-arg or use --command.")
+    if adapter and resolved == "merged":
+        notes.append("Adapter is treated as already merged into the served model; lifecycle records it for provenance only.")
+    if not adapter and requested not in {"auto", "none"}:
+        notes.append("No adapter was provided, so the resolved strategy is none.")
+    return {
+        "present": bool(adapter),
+        "adapter": adapter,
+        "adapter_id": Path(adapter).name if adapter else "",
+        "requested_strategy": requested,
+        "resolved_strategy": resolved,
+        "engine_profile": args.profile,
+        "launch_command_applies_adapter": bool(adapter and args.profile == "mock" and resolved == "mock_suffix"),
+        "requires_engine_args": requires_engine_args,
+        "notes": notes,
     }
 
 

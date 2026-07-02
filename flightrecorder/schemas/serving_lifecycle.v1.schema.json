@@ -7,6 +7,9 @@
     "artifacts": {
       "type": "object"
     },
+    "adapter_strategy": {
+      "type": "object"
+    },
     "endpoint": {
       "type": "object"
     },
