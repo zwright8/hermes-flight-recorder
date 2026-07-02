@@ -1682,6 +1682,8 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     for field_name, expected in artifact_counts.items():
         if metrics.get(field_name) != expected:
             target.errors.append(f"agentic_training_result.metrics.{field_name} expected {expected}, got {metrics.get(field_name)!r}.")
+    if expected_passed and artifact_counts["regular_artifact_count"] != artifact_counts["artifact_count"]:
+        target.errors.append("agentic_training_result passed receipts require all artifact refs to be regular files.")
     if status == "completed" and artifact_counts["output_artifact_count"] == 0:
         target.errors.append("agentic_training_result completed receipts must include an adapter or checkpoint artifact.")
 

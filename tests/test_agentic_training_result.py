@@ -237,6 +237,45 @@ class AgenticTrainingResultTests(unittest.TestCase):
             self.assertIn("agentic_training_result.metrics.adapter_count expected 1", errors)
             self.assertIn("agentic_training_result.registry_update.applied expected False", errors)
 
+    def test_validate_rejects_passed_result_with_irregular_artifact_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["artifacts"][0]["regular_file"] = False
+            result["artifacts"][0]["sha256"] = None
+            result["metrics"]["regular_artifact_count"] = 0
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result passed receipts require all artifact refs to be regular files", errors)
+
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_training_result", names)
