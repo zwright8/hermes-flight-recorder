@@ -26,6 +26,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts
+from scripts.hermes_harness import publish_harness_artifacts, write_fake_secret_canaries
 
 
 SUMMARY_SCHEMA_VERSION = "hfr.openclaw.live_smoke.summary.v1"
@@ -175,12 +176,16 @@ def _run_live_session(flight_root: Path, out_dir: Path, temp_root: Path, port: i
     state_dir = temp_root / "state"
     workspace = temp_root / "workspace"
     events_dir = temp_root / "events"
+    home_dir = temp_root / "home"
     gateway_port = _free_port()
     events_dir.mkdir(parents=True)
+    home_dir.mkdir(parents=True)
+    fake_secret_files = write_fake_secret_canaries(home_dir)
 
     env = os.environ.copy()
     env.update(
         {
+            "HOME": str(home_dir),
             "OPENCLAW_CONFIG_PATH": str(config_path),
             "OPENCLAW_STATE_DIR": str(state_dir),
             "OPENCLAW_FLIGHT_RECORDER_OUTPUT_DIR": str(events_dir),
@@ -256,6 +261,38 @@ def _run_live_session(flight_root: Path, out_dir: Path, temp_root: Path, port: i
     openclaw_trace = out_dir / "live_openclaw.openclaw.jsonl"
     _combine_jsonl(event_files, openclaw_trace)
     run_result = _write_smoke_artifacts(openclaw_trace, out_dir)
+    harness_result = publish_harness_artifacts(
+        scenario_path=out_dir / "live_openclaw_scenario.json",
+        run_dir=out_dir,
+        artifact_result=run_result,
+        trace_path=openclaw_trace,
+        trace_format="openclaw_jsonl",
+        runner="openclaw_live_smoke",
+        provider="hfrmock",
+        model=MODEL_REF,
+        base_url=f"http://127.0.0.1:{port}/v1",
+        sandbox={
+            "root": temp_root,
+            "home": home_dir,
+            "workspace": workspace,
+            "events": events_dir,
+            "state_dir": str(state_dir),
+            "config": str(config_path),
+            "ephemeral": True,
+            "audit_artifacts_kept": True,
+        },
+        fake_secret_files=fake_secret_files,
+        process={
+            "setup_exit_code": setup.returncode,
+            "agent_exit_code": agent.returncode,
+            "setup_stdout": str(out_dir / "openclaw_setup_stdout.txt"),
+            "setup_stderr": str(out_dir / "openclaw_setup_stderr.txt"),
+            "agent_stdout": str(out_dir / "openclaw_agent_stdout.txt"),
+            "agent_stderr": str(out_dir / "openclaw_agent_stderr.txt"),
+            "gateway_port": gateway_port,
+        },
+        metadata={"source": "scripts/live_openclaw_smoke.py", "mock_endpoint": True, "session_key": SESSION_KEY},
+    )
     scorecard = run_result["scorecard"]
     report_path = run_result["paths"]["report"]
 
@@ -293,6 +330,9 @@ def _run_live_session(flight_root: Path, out_dir: Path, temp_root: Path, port: i
         "lineage": str(run_result["paths"]["lineage"]),
         "task_completion": str(run_result["paths"]["task_completion"]),
         "run_digest": str(run_result["paths"]["run_digest"]),
+        "harness_manifest": str(out_dir / "harness_manifest.json"),
+        "harness_result": str(out_dir / "harness_result.json"),
+        "harness_runner": harness_result["runner"],
         "environment": _environment_summary(flight_root),
     }
 
@@ -413,6 +453,7 @@ def _write_smoke_artifacts(openclaw_trace: Path, out_dir: Path) -> dict[str, Any
         scenario_path,
         out_dir,
         trace_format="openclaw_jsonl",
+        preserve_paths=True,
     )
 
 

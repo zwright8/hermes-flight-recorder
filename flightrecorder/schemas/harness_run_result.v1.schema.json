@@ -2,208 +2,108 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/harness_run_result.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
-  "description": "Offline harness run result summarizing scored Flight Recorder artifacts, checks, and manifest provenance.",
+  "description": "Harness run result linking sandbox, tool policy, trace, scorecard, and replay artifacts.",
   "properties": {
     "artifacts": {
-      "additionalProperties": {
-        "$ref": "#/$defs/artifact"
+      "additionalProperties": true,
+      "properties": {
+        "lineage": { "minLength": 1, "type": "string" },
+        "normalized_trace": { "minLength": 1, "type": "string" },
+        "report": { "minLength": 1, "type": "string" },
+        "run_digest": { "minLength": 1, "type": "string" },
+        "scorecard": { "minLength": 1, "type": "string" }
       },
+      "required": ["normalized_trace", "scorecard", "run_digest", "report", "lineage"],
       "type": "object"
     },
-    "check_count": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "checks": {
-      "items": {
-        "$ref": "#/$defs/check"
+    "created_at": { "type": "string" },
+    "model": { "type": "object" },
+    "provider": { "minLength": 1, "type": "string" },
+    "replay": {
+      "additionalProperties": true,
+      "properties": {
+        "command": { "type": "string" },
+        "lineage": { "minLength": 1, "type": "string" },
+        "self_contained": { "type": "boolean" }
       },
-      "type": "array"
+      "required": ["lineage", "self_contained"],
+      "type": "object"
     },
-    "created_at": {
-      "minLength": 1,
-      "type": "string"
+    "runner": { "minLength": 1, "type": "string" },
+    "sandbox": { "type": "object" },
+    "scenario_id": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.harness_run_result.v1" },
+    "scorecard": {
+      "additionalProperties": true,
+      "properties": {
+        "passed": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" },
+        "score": { "type": "number" }
+      },
+      "required": ["path", "passed", "score"],
+      "type": "object"
     },
-    "failed_check_count": {
-      "minimum": 0,
-      "type": "integer"
+    "tool_policy": {
+      "additionalProperties": true,
+      "properties": {
+        "blocked_action_canaries": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "expected": { "minLength": 1, "type": "string" },
+              "pattern": { "minLength": 1, "type": "string" },
+              "type": { "minLength": 1, "type": "string" }
+            },
+            "required": ["type", "pattern", "expected"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "runtime_policy": {
+          "additionalProperties": true,
+          "properties": {
+            "allowed_tools": {
+              "items": { "type": "string" },
+              "type": "array"
+            },
+            "denied_tools": {
+              "items": { "type": "string" },
+              "type": "array"
+            },
+            "mode": { "minLength": 1, "type": "string" },
+            "network": {
+              "additionalProperties": true,
+              "properties": {
+                "allowed_hosts": {
+                  "items": { "type": "string" },
+                  "type": "array"
+                },
+                "mode": { "minLength": 1, "type": "string" }
+              },
+              "required": ["mode"],
+              "type": "object"
+            }
+          },
+          "required": ["mode"],
+          "type": "object"
+        },
+        "scenario_policy": { "type": "object" },
+        "source": { "minLength": 1, "type": "string" }
+      },
+      "required": ["source", "scenario_policy", "runtime_policy", "blocked_action_canaries"],
+      "type": "object"
     },
-    "harness": {
-      "$ref": "#/$defs/harness"
-    },
-    "manifest": {
-      "$ref": "#/$defs/manifest"
-    },
-    "passed": {
-      "type": "boolean"
-    },
-    "result_path": {
-      "minLength": 1,
-      "type": "string"
-    },
-    "scenario_id": {
-      "minLength": 1,
-      "type": "string"
-    },
-    "schema_version": {
-      "const": "hfr.harness_run_result.v1"
-    },
-    "score": {
-      "$ref": "#/$defs/score"
-    },
-    "summary": {
-      "minLength": 1,
-      "type": "string"
+    "trace": {
+      "additionalProperties": true,
+      "properties": {
+        "format": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["format", "path"],
+      "type": "object"
     }
   },
-  "required": [
-    "schema_version",
-    "result_path",
-    "created_at",
-    "passed",
-    "harness",
-    "scenario_id",
-    "score",
-    "check_count",
-    "failed_check_count",
-    "checks",
-    "manifest",
-    "artifacts",
-    "summary"
-  ],
+  "required": ["schema_version", "runner", "provider", "model", "scenario_id", "sandbox", "tool_policy", "trace", "scorecard", "artifacts", "replay"],
   "title": "Hermes Flight Recorder Harness Run Result",
-  "type": "object",
-  "$defs": {
-    "artifact": {
-      "additionalProperties": true,
-      "properties": {
-        "exists": {
-          "type": "boolean"
-        },
-        "kind": {
-          "enum": [
-            "file",
-            "directory"
-          ]
-        },
-        "passed": {
-          "type": "boolean"
-        },
-        "path": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "schema_version": {
-          "type": "string"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        },
-        "size_bytes": {
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "path",
-        "kind",
-        "exists"
-      ],
-      "type": "object"
-    },
-    "check": {
-      "additionalProperties": true,
-      "properties": {
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "passed": {
-          "type": "boolean"
-        },
-        "summary": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "passed",
-        "summary"
-      ],
-      "type": "object"
-    },
-    "harness": {
-      "additionalProperties": true,
-      "properties": {
-        "mode": {
-          "const": "offline_mock"
-        },
-        "model": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "name": {
-          "const": "hermes_harness"
-        },
-        "provider": {
-          "const": "mock"
-        }
-      },
-      "required": [
-        "name",
-        "mode",
-        "provider",
-        "model"
-      ],
-      "type": "object"
-    },
-    "manifest": {
-      "additionalProperties": true,
-      "properties": {
-        "path": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "schema_version": {
-          "const": "hfr.harness_run_manifest.v1"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "schema_version",
-        "sha256"
-      ],
-      "type": "object"
-    },
-    "score": {
-      "additionalProperties": true,
-      "properties": {
-        "pass_threshold": {
-          "maximum": 100,
-          "minimum": 0,
-          "type": "integer"
-        },
-        "passed": {
-          "type": "boolean"
-        },
-        "score": {
-          "maximum": 100,
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "score",
-        "passed",
-        "pass_threshold"
-      ],
-      "type": "object"
-    }
-  }
+  "type": "object"
 }

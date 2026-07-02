@@ -74,6 +74,30 @@
       "name": "run_digest"
     },
     {
+      "artifact": "harness_run_manifest",
+      "artifact_schema_version": "hfr.harness_run_manifest.v1",
+      "description": "Common harness manifest for mock and live runner executions.",
+      "filename": "harness_run_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_run_manifest.v1.schema.json",
+      "name": "harness_run_manifest"
+    },
+    {
+      "artifact": "harness_run_result",
+      "artifact_schema_version": "hfr.harness_run_result.v1",
+      "description": "Common harness result linking sandbox, policy, trace, scorecard, and replay artifacts.",
+      "filename": "harness_run_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_run_result.v1.schema.json",
+      "name": "harness_run_result"
+    },
+    {
+      "artifact": "harness_replay_result",
+      "artifact_schema_version": "hfr.harness_replay_result.v1",
+      "description": "Receipt emitted after replaying a harness lineage artifact.",
+      "filename": "harness_replay_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_replay_result.v1.schema.json",
+      "name": "harness_replay_result"
+    },
+    {
       "artifact": "live_smoke_summary",
       "artifact_schema_version": "hfr.live_smoke.summary.v2",
       "description": "Live Hermes runtime smoke summary emitted by scripts/live_hermes_smoke.py.",

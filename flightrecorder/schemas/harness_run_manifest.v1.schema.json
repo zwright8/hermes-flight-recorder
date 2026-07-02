@@ -2,215 +2,118 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/harness_run_manifest.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
-  "description": "Offline harness run intent manifest linking a scenario contract to a deterministic source trace and output directory.",
+  "description": "Common harness-run manifest emitted before mock or live scenario execution.",
   "properties": {
-    "created_at": {
-      "minLength": 1,
-      "type": "string"
+    "created_at": { "type": "string" },
+    "force": { "type": "boolean" },
+    "model": {
+      "additionalProperties": true,
+      "properties": {
+        "base_url": { "type": ["string", "null"] },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id"],
+      "type": "object"
     },
-    "harness": {
-      "$ref": "#/$defs/harness"
+    "outputs": {
+      "additionalProperties": true,
+      "properties": {
+        "manifest": { "minLength": 1, "type": "string" },
+        "result": { "minLength": 1, "type": "string" },
+        "run_dir": { "minLength": 1, "type": "string" }
+      },
+      "required": ["run_dir", "manifest", "result"],
+      "type": "object"
     },
-    "manifest_path": {
-      "minLength": 1,
-      "type": "string"
-    },
-    "mock_response": {
-      "$ref": "#/$defs/mockResponse"
-    },
-    "output_dir": {
-      "$ref": "#/$defs/outputDir"
+    "provider": { "minLength": 1, "type": "string" },
+    "runner": { "minLength": 1, "type": "string" },
+    "sandbox": {
+      "additionalProperties": true,
+      "properties": {
+        "audit_artifacts_kept": { "type": "boolean" },
+        "ephemeral": { "type": "boolean" },
+        "events": { "minLength": 1, "type": "string" },
+        "fake_secret_canaries": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "name": { "minLength": 1, "type": "string" },
+              "sha256": { "minLength": 64, "type": "string" }
+            },
+            "required": ["name", "sha256"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "home": { "minLength": 1, "type": "string" },
+        "root": { "minLength": 1, "type": "string" },
+        "workspace": { "minLength": 1, "type": "string" }
+      },
+      "required": ["root", "home", "workspace", "events", "fake_secret_canaries"],
+      "type": "object"
     },
     "scenario": {
-      "$ref": "#/$defs/scenario"
+      "additionalProperties": true,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "path"],
+      "type": "object"
     },
-    "schema_version": {
-      "const": "hfr.harness_run_manifest.v1"
-    },
-    "source_trace": {
-      "$ref": "#/$defs/artifact"
-    },
+    "schema_version": { "const": "hfr.harness_run_manifest.v1" },
     "tool_policy": {
-      "$ref": "#/$defs/toolPolicy"
+      "additionalProperties": true,
+      "properties": {
+        "blocked_action_canaries": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "expected": { "minLength": 1, "type": "string" },
+              "pattern": { "minLength": 1, "type": "string" },
+              "type": { "minLength": 1, "type": "string" }
+            },
+            "required": ["type", "pattern", "expected"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "runtime_policy": {
+          "additionalProperties": true,
+          "properties": {
+            "allowed_tools": {
+              "items": { "type": "string" },
+              "type": "array"
+            },
+            "denied_tools": {
+              "items": { "type": "string" },
+              "type": "array"
+            },
+            "mode": { "minLength": 1, "type": "string" },
+            "network": {
+              "additionalProperties": true,
+              "properties": {
+                "allowed_hosts": {
+                  "items": { "type": "string" },
+                  "type": "array"
+                },
+                "mode": { "minLength": 1, "type": "string" }
+              },
+              "required": ["mode"],
+              "type": "object"
+            }
+          },
+          "required": ["mode"],
+          "type": "object"
+        },
+        "scenario_policy": { "type": "object" },
+        "source": { "minLength": 1, "type": "string" }
+      },
+      "required": ["source", "scenario_policy", "runtime_policy", "blocked_action_canaries"],
+      "type": "object"
     }
   },
-  "required": [
-    "schema_version",
-    "manifest_path",
-    "created_at",
-    "harness",
-    "scenario",
-    "source_trace",
-    "output_dir",
-    "tool_policy",
-    "mock_response"
-  ],
+  "required": ["schema_version", "runner", "provider", "model", "scenario", "outputs", "sandbox", "tool_policy"],
   "title": "Hermes Flight Recorder Harness Run Manifest",
-  "type": "object",
-  "$defs": {
-    "artifact": {
-      "additionalProperties": true,
-      "properties": {
-        "exists": {
-          "type": "boolean"
-        },
-        "kind": {
-          "enum": [
-            "file",
-            "directory"
-          ]
-        },
-        "path": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        },
-        "size_bytes": {
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "path",
-        "kind",
-        "exists"
-      ],
-      "type": "object"
-    },
-    "harness": {
-      "additionalProperties": true,
-      "properties": {
-        "mode": {
-          "const": "offline_mock"
-        },
-        "model": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "name": {
-          "const": "hermes_harness"
-        },
-        "network": {
-          "const": "disabled"
-        },
-        "provider": {
-          "const": "mock"
-        }
-      },
-      "required": [
-        "name",
-        "mode",
-        "provider",
-        "model",
-        "network"
-      ],
-      "type": "object"
-    },
-    "mockResponse": {
-      "additionalProperties": true,
-      "properties": {
-        "length_chars": {
-          "minimum": 1,
-          "type": "integer"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        }
-      },
-      "required": [
-        "sha256",
-        "length_chars"
-      ],
-      "type": "object"
-    },
-    "outputDir": {
-      "additionalProperties": true,
-      "properties": {
-        "exists": {
-          "type": "boolean"
-        },
-        "expected_artifacts": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "kind": {
-          "const": "directory"
-        },
-        "path": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "kind",
-        "exists",
-        "expected_artifacts"
-      ],
-      "type": "object"
-    },
-    "scenario": {
-      "additionalProperties": true,
-      "properties": {
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "path": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "prompt_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        },
-        "title": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "title",
-        "path",
-        "sha256",
-        "prompt_sha256"
-      ],
-      "type": "object"
-    },
-    "toolPolicy": {
-      "additionalProperties": true,
-      "properties": {
-        "allowed_tools": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "network": {
-          "const": "disabled"
-        },
-        "write_scope": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "network",
-        "allowed_tools",
-        "write_scope"
-      ],
-      "type": "object"
-    }
-  }
+  "type": "object"
 }

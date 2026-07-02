@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from flightrecorder.cli import _run_scenario_artifacts
 from flightrecorder.hermes_plugin import HOOKS, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from flightrecorder.schema import ScenarioError
+from scripts.hermes_harness import publish_harness_artifacts, write_fake_secret_canaries
 
 
 PROMPT = "Reply exactly: flight recorder live smoke ok"
@@ -192,9 +193,12 @@ def main(argv: list[str] | None = None) -> int:
 def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_root: Path, port: int) -> dict[str, Any]:
     hermes_home = temp_root / "hermes-home"
     events_dir = temp_root / "events"
+    home_dir = temp_root / "home"
     plugin_dir = hermes_home / "plugins" / "flight_recorder_live"
     plugin_dir.mkdir(parents=True)
     events_dir.mkdir(parents=True)
+    home_dir.mkdir(parents=True)
+    fake_secret_files = write_fake_secret_canaries(home_dir)
 
     _write_plugin(plugin_dir)
     _write_config(hermes_home / "config.yaml", port)
@@ -203,6 +207,7 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
     env.update(
         {
             "HERMES_HOME": str(hermes_home),
+            "HOME": str(home_dir),
             "HERMES_FLIGHT_RECORDER_OUTPUT_DIR": str(events_dir),
             "HERMES_FLIGHT_RECORDER_MAX_FIELD_CHARS": "20000",
             "HERMES_API_TIMEOUT": "30",
@@ -253,6 +258,32 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
     observer_path = out_dir / "live_observer.jsonl"
     shutil.copyfile(observer_files[0], observer_path)
     run_result = _write_smoke_artifacts(observer_path, out_dir)
+    harness_result = publish_harness_artifacts(
+        scenario_path=out_dir / "live_scenario.json",
+        run_dir=out_dir,
+        artifact_result=run_result,
+        trace_path=observer_path,
+        trace_format="observer_jsonl",
+        runner="hermes_live_smoke",
+        provider="custom",
+        model="hfr-mock",
+        base_url=f"http://127.0.0.1:{port}/v1",
+        sandbox={
+            "root": temp_root,
+            "home": home_dir,
+            "workspace": hermes_root,
+            "events": events_dir,
+            "ephemeral": True,
+            "audit_artifacts_kept": True,
+        },
+        fake_secret_files=fake_secret_files,
+        process={
+            "exit_code": completed.returncode,
+            "stdout": str(out_dir / "hermes_stdout.txt"),
+            "stderr": str(out_dir / "hermes_stderr.txt"),
+        },
+        metadata={"source": "scripts/live_hermes_smoke.py", "mock_endpoint": True},
+    )
     scorecard = run_result["scorecard"]
     report_path = run_result["paths"]["report"]
 
@@ -277,6 +308,9 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
         "lineage": str(run_result["paths"]["lineage"]),
         "task_completion": str(run_result["paths"]["task_completion"]),
         "run_digest": str(run_result["paths"]["run_digest"]),
+        "harness_manifest": str(out_dir / "harness_manifest.json"),
+        "harness_result": str(out_dir / "harness_result.json"),
+        "harness_runner": harness_result["runner"],
         "environment": _environment_summary(hermes_root, flight_root),
     }
 
@@ -290,6 +324,7 @@ def _write_smoke_artifacts(observer_path: Path, out_dir: Path) -> dict[str, Any]
         scenario_path,
         out_dir,
         trace_format="observer_jsonl",
+        preserve_paths=True,
     )
 
 

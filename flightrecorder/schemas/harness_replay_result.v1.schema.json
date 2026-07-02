@@ -1,0 +1,18 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_replay_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Receipt emitted after replaying a harness lineage artifact.",
+  "properties": {
+    "created_at": { "type": "string" },
+    "exit_code": { "minimum": 0, "type": "integer" },
+    "lineage": { "minLength": 1, "type": "string" },
+    "out_dir": { "minLength": 1, "type": "string" },
+    "passed": { "type": "boolean" },
+    "schema_version": { "const": "hfr.harness_replay_result.v1" },
+    "scorecard": { "type": ["string", "null"] }
+  },
+  "required": ["schema_version", "lineage", "out_dir", "exit_code", "passed"],
+  "title": "Hermes Flight Recorder Harness Replay Result",
+  "type": "object"
+}
