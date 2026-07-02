@@ -97,6 +97,15 @@ class HarnessToolPolicyTests(unittest.TestCase):
             self.assertTrue(check_schema_file(replay_dir / "harness_replay_result.json", "harness_replay_result")["passed"])
             self._assert_no_canary_value_leaked(replay_dir, fake_api_key)
 
+            forged_replay = json.loads((replay_dir / "harness_replay_result.json").read_text(encoding="utf-8"))
+            forged_replay["passed"] = True
+            (replay_dir / "harness_replay_result.json").write_text(
+                json.dumps(forged_replay, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            rc, stdout, stderr = _run_cli(["validate", "--harness-replay-result", str(replay_dir / "harness_replay_result.json"), "--strict"])
+            self.assertEqual(rc, 1, stderr or stdout)
+
     def test_harness_tool_policy_schema_rejects_missing_canary_contract(self):
         valid = {
             "schema_version": "hfr.harness_run_manifest.v1",

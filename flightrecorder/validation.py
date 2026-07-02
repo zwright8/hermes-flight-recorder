@@ -1544,10 +1544,23 @@ def _validate_harness_replay_result(
             target.errors.append(f"harness_replay_result.out_dir does not exist or is not a directory: {out_dir}.")
     if not _is_non_negative_int(result.get("exit_code")):
         target.errors.append("harness_replay_result.exit_code must be a non-negative integer.")
+    scorecard_path: Path | None = None
     if result.get("scorecard") is not None:
         _validate_existing_path_field(result, "scorecard", target, "harness_replay_result.scorecard", base_dir=source_dir)
+        if isinstance(result.get("scorecard"), str) and result["scorecard"]:
+            scorecard_path = Path(result["scorecard"])
+            if source_dir is not None and not scorecard_path.is_absolute():
+                scorecard_path = source_dir / scorecard_path
+    elif result.get("passed") is True:
+        target.errors.append("harness_replay_result.scorecard must be present when passed is true.")
     if not isinstance(result.get("passed"), bool):
         target.errors.append("harness_replay_result.passed must be a boolean.")
+    if scorecard_path is not None and scorecard_path.exists() and scorecard_path.is_file():
+        scorecard = _read_object(scorecard_path, target, "harness_replay_result.scorecard")
+        if isinstance(scorecard, dict):
+            _validate_scorecard(scorecard, target)
+            if isinstance(result.get("passed"), bool) and isinstance(scorecard.get("passed"), bool) and result["passed"] != scorecard["passed"]:
+                target.errors.append("harness_replay_result.passed must match referenced scorecard.passed.")
 
 
 def _validate_existing_path_field(
