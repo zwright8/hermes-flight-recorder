@@ -67,6 +67,9 @@ def _handler(response: str, model: str, adapter: str) -> type[BaseHTTPRequestHan
             if self.path.split("?", 1)[0].rstrip("/") != "/v1/chat/completions":
                 _send_json(self, {"error": {"message": "not found"}}, status=404)
                 return
+            if payload.get("stream"):
+                _send_sse(self, _stream_events(served_model, response))
+                return
             if payload.get("tools"):
                 message = {
                     "role": "assistant",
@@ -116,6 +119,44 @@ def _send_json(handler: BaseHTTPRequestHandler, payload: dict[str, Any], *, stat
     handler.send_header("content-length", str(len(raw)))
     handler.end_headers()
     handler.wfile.write(raw)
+
+
+def _send_sse(handler: BaseHTTPRequestHandler, events: list[dict[str, Any]], *, status: int = 200) -> None:
+    raw = ("".join(f"data: {json.dumps(event, sort_keys=True)}\n\n" for event in events) + "data: [DONE]\n\n").encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("content-type", "text/event-stream")
+    handler.send_header("cache-control", "no-cache")
+    handler.send_header("connection", "close")
+    handler.send_header("content-length", str(len(raw)))
+    handler.end_headers()
+    handler.wfile.write(raw)
+
+
+def _stream_events(model: str, content: str) -> list[dict[str, Any]]:
+    created = int(time.time())
+    return [
+        {
+            "id": "chatcmpl-hfr-mock-stream",
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+        },
+        {
+            "id": "chatcmpl-hfr-mock-stream",
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
+        },
+        {
+            "id": "chatcmpl-hfr-mock-stream",
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+        },
+    ]
 
 
 if __name__ == "__main__":

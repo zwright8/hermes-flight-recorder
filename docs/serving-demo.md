@@ -10,6 +10,7 @@ For local or CI verification without a model server, use the managed mock:
 ```bash
 python3 scripts/check_openai_serving.py \
   --mock-response "hfr serving smoke ok" \
+  --require-streaming \
   --require-tool-call \
   --require-structured-output \
   --model hfr-mock-model \
@@ -20,8 +21,8 @@ The command writes:
 
 - `serving_profile.json`: endpoint, model identity, adapter identity,
   capability summary, and Eval readiness.
-- `compatibility_report.json`: OpenAI core, tool-call, and structured-output
-  smoke results.
+- `compatibility_report.json`: OpenAI core, streaming, tool-call, and
+  structured-output smoke results.
 - `serving_check.json`: pass/fail summary and failed checks for automation.
 
 For a real endpoint, pass `--base-url http://127.0.0.1:<port>/v1` instead of
@@ -41,6 +42,7 @@ python3 scripts/manage_openai_serving.py \
   --base-url http://127.0.0.1:18080/v1 \
   --model hfr-managed-mock \
   --served-model-name hfr-managed-mock \
+  --require-streaming \
   --require-tool-call \
   --require-structured-output \
   --out experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle
@@ -60,6 +62,7 @@ python3 scripts/manage_openai_serving.py \
   --port 8000 \
   --model Qwen/Qwen3-4B-Instruct-2507 \
   --served-model-name qwen3-flightrecorder \
+  --require-streaming \
   --require-tool-call \
   --require-structured-output \
   --out experiments/qwen3_4b_flightrecorder/serving/vllm_lifecycle
@@ -74,6 +77,7 @@ python3 scripts/manage_openai_serving.py \
   --port 30000 \
   --model Qwen/Qwen3-4B-Instruct-2507 \
   --served-model-name qwen3-flightrecorder \
+  --require-streaming \
   --require-tool-call \
   --require-structured-output \
   --out experiments/qwen3_4b_flightrecorder/serving/sglang_lifecycle

@@ -6,6 +6,14 @@
       "model_metadata": true,
       "models": true
     },
+    "streaming": {
+      "done_seen": true,
+      "error": null,
+      "event_count": 3,
+      "response_ok": true,
+      "status": "supported",
+      "text": "hfr serving smoke ok"
+    },
     "structured_outputs": {
       "error": null,
       "json_parse_passed": true,
@@ -35,7 +43,7 @@
     }
   },
   "engine": "openai_compatible",
-  "generated_at": "2026-07-02T14:53:35Z",
+  "generated_at": "2026-07-02T20:25:00Z",
   "model": "hfr-managed-mock",
   "profile_id": "candidate-openai-compatible-hfr-managed-mock",
   "schema_version": "hfr.serving_compatibility_report.v1",

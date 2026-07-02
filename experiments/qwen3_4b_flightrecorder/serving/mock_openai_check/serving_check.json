@@ -5,30 +5,30 @@
     "serving_check": "serving_check.json",
     "serving_profile": "serving_profile.json"
   },
-  "base_url": "http://127.0.0.1:52343/v1",
+  "base_url": "http://127.0.0.1:54331/v1",
   "checks": [
     {
       "details": {
         "attempts": [
           {
-            "elapsed_ms": 5,
+            "elapsed_ms": 3,
             "json": {
               "model": "hfr-mock-model",
               "ok": true
             },
             "ok": true,
             "status_code": 200,
-            "url": "http://127.0.0.1:52343/healthz"
+            "url": "http://127.0.0.1:54331/healthz"
           }
         ],
-        "elapsed_ms": 5,
+        "elapsed_ms": 3,
         "json": {
           "model": "hfr-mock-model",
           "ok": true
         },
         "ok": true,
         "status_code": 200,
-        "url": "http://127.0.0.1:52343/healthz"
+        "url": "http://127.0.0.1:54331/healthz"
       },
       "id": "health",
       "passed": true
@@ -47,7 +47,7 @@
         },
         "ok": true,
         "status_code": 200,
-        "url": "http://127.0.0.1:52343/v1/models"
+        "url": "http://127.0.0.1:54331/v1/models"
       },
       "id": "models",
       "passed": true
@@ -64,7 +64,7 @@
             },
             "ok": true,
             "status_code": 200,
-            "url": "http://127.0.0.1:52343/v1/models/hfr-mock-model"
+            "url": "http://127.0.0.1:54331/v1/models/hfr-mock-model"
           }
         ],
         "elapsed_ms": 0,
@@ -75,14 +75,14 @@
         },
         "ok": true,
         "status_code": 200,
-        "url": "http://127.0.0.1:52343/v1/models/hfr-mock-model"
+        "url": "http://127.0.0.1:54331/v1/models/hfr-mock-model"
       },
       "id": "model_metadata",
       "passed": true
     },
     {
       "details": {
-        "elapsed_ms": 1,
+        "elapsed_ms": 0,
         "json": {
           "choices": [
             {
@@ -94,7 +94,7 @@
               }
             }
           ],
-          "created": 1783003357,
+          "created": 1783023893,
           "id": "chatcmpl-hfr-mock",
           "model": "hfr-mock-model",
           "object": "chat.completion",
@@ -108,9 +108,21 @@
         "response_model": "hfr-mock-model",
         "status_code": 200,
         "text": "hfr serving smoke ok",
-        "url": "http://127.0.0.1:52343/v1/chat/completions"
+        "url": "http://127.0.0.1:54331/v1/chat/completions"
       },
       "id": "chat_completion",
+      "passed": true
+    },
+    {
+      "details": {
+        "done_seen": true,
+        "error": null,
+        "event_count": 3,
+        "response_ok": true,
+        "status": "supported",
+        "text": "hfr serving smoke ok"
+      },
+      "id": "streaming_required",
       "passed": true
     },
     {
@@ -163,7 +175,7 @@
     }
   ],
   "failed_checks": [],
-  "generated_at": "2026-07-02T14:42:37Z",
+  "generated_at": "2026-07-02T20:24:53Z",
   "model": "hfr-mock-model",
   "passed": true,
   "profile_id": "candidate-transformers-hfr-mock-model",

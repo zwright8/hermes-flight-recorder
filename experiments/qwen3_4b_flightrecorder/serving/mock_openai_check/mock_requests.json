@@ -80,6 +80,22 @@
         },
         "temperature": 0
       }
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "payload": {
+        "max_tokens": 32,
+        "messages": [
+          {
+            "content": "Stream the phrase: hfr serving smoke ok",
+            "role": "user"
+          }
+        ],
+        "model": "hfr-mock-model",
+        "stream": true,
+        "temperature": 0
+      }
     }
   ]
 }

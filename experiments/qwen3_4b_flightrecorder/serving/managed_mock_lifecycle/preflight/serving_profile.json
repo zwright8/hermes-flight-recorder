@@ -10,14 +10,14 @@
     "health": true,
     "model_metadata": true,
     "models": true,
-    "streaming": "not_checked",
+    "streaming": "supported",
     "structured_outputs": "supported",
     "tool_calls": "supported"
   },
   "endpoint": {
-    "base_url": "http://127.0.0.1:54865/v1",
-    "chat_completions_url": "http://127.0.0.1:54865/v1/chat/completions",
-    "models_url": "http://127.0.0.1:54865/v1/models"
+    "base_url": "http://127.0.0.1:18080/v1",
+    "chat_completions_url": "http://127.0.0.1:18080/v1/chat/completions",
+    "models_url": "http://127.0.0.1:18080/v1/models"
   },
   "engine": "openai_compatible",
   "environment": {
@@ -29,7 +29,7 @@
     "readiness": "ready",
     "ready": true
   },
-  "generated_at": "2026-07-02T14:53:35Z",
+  "generated_at": "2026-07-02T20:25:00Z",
   "model_identity": {
     "adapter": {
       "id": "",

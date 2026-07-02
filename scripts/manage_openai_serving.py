@@ -53,6 +53,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--grace-period", type=float, default=10.0)
     parser.add_argument("--api-key-env", default="HERMES_EVAL_API_KEY")
     parser.add_argument("--api-key", default="")
+    parser.add_argument("--require-streaming", action="store_true")
     parser.add_argument("--require-tool-call", action="store_true")
     parser.add_argument("--require-structured-output", action="store_true")
     return parser.parse_args(argv)
@@ -105,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
                     api_key=_api_key(args, base_url),
                     timeout=float(args.check_timeout),
                     out_dir=preflight_dir,
+                    require_streaming=bool(args.require_streaming),
                     require_tool_call=bool(args.require_tool_call),
                     require_structured_output=bool(args.require_structured_output),
                 )

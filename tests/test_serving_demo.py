@@ -47,6 +47,7 @@ class ServingDemoTests(unittest.TestCase):
                         str(adapter),
                         "--mock-response",
                         "hfr serving smoke ok",
+                        "--require-streaming",
                         "--require-tool-call",
                         "--require-structured-output",
                     ]
@@ -64,8 +65,11 @@ class ServingDemoTests(unittest.TestCase):
             self.assertEqual(profile["artifacts"]["serving_profile"], "serving_profile.json")
             self.assertEqual(profile["model_identity"]["served_model_id"], "hfr-mock-model+adapter")
             self.assertTrue(profile["model_identity"]["adapter"]["local"])
+            self.assertEqual(profile["capabilities"]["streaming"], "supported")
             self.assertEqual(profile["capabilities"]["tool_calls"], "supported")
             self.assertEqual(profile["capabilities"]["structured_outputs"], "supported")
+            self.assertGreaterEqual(compatibility["checks"]["streaming"]["event_count"], 1)
+            self.assertTrue(compatibility["checks"]["streaming"]["done_seen"])
             self.assertEqual(compatibility["checks"]["tool_calls"]["tool_call_count"], 1)
 
     def test_demo_report_links_claims_to_replay_artifacts(self):

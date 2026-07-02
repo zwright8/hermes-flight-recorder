@@ -37,6 +37,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--api-key-env", default="HERMES_EVAL_API_KEY")
     parser.add_argument("--api-key", default="")
     parser.add_argument("--mock-response", help="Start a managed mock endpoint returning this text")
+    parser.add_argument("--require-streaming", action="store_true")
     parser.add_argument("--require-tool-call", action="store_true")
     parser.add_argument("--require-structured-output", action="store_true")
     return parser.parse_args(argv)
@@ -66,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             api_key=_api_key(args, str(base_url)),
             timeout=float(args.timeout),
             out_dir=out_dir,
+            require_streaming=bool(args.require_streaming),
             require_tool_call=bool(args.require_tool_call),
             require_structured_output=bool(args.require_structured_output),
         )
@@ -94,6 +96,7 @@ def check_endpoint(
     api_key: str,
     timeout: float,
     out_dir: Path,
+    require_streaming: bool,
     require_tool_call: bool,
     require_structured_output: bool,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -124,6 +127,9 @@ def check_endpoint(
 
     tool_check = _tool_call_check(base_url, model, api_key=api_key, timeout=timeout)
     structured_check = _structured_output_check(base_url, model, api_key=api_key, timeout=timeout)
+    streaming_check = _streaming_check(base_url, model, api_key=api_key, timeout=timeout)
+    if require_streaming:
+        checks.append(_check("streaming_required", streaming_check["status"] == "supported", streaming_check))
     if require_tool_call:
         checks.append(_check("tool_call_required", tool_check["status"] == "supported", tool_check))
     if require_structured_output:
@@ -145,6 +151,7 @@ def check_endpoint(
         "engine": engine,
         "checks": {
             "openai_core": {item["id"]: item["passed"] for item in checks if item["id"] in {"health", "models", "model_metadata", "chat_completion"}},
+            "streaming": streaming_check,
             "tool_calls": tool_check,
             "structured_outputs": structured_check,
         },
@@ -163,7 +170,7 @@ def check_endpoint(
             "models": _check_passed(checks, "models"),
             "model_metadata": _check_passed(checks, "model_metadata"),
             "chat_completions": _check_passed(checks, "chat_completion"),
-            "streaming": "not_checked",
+            "streaming": streaming_check["status"],
             "tool_calls": tool_check["status"],
             "structured_outputs": structured_check["status"],
         },
@@ -219,6 +226,29 @@ def _structured_output_check(base_url: str, model: str, *, api_key: str, timeout
     return {"status": "supported" if response["ok"] and isinstance(parsed, dict) else "not_verified", "response_ok": response["ok"], "json_parse_passed": isinstance(parsed, dict), "parsed": parsed, "text": text, "error": response.get("error")}
 
 
+def _streaming_check(base_url: str, model: str, *, api_key: str, timeout: float) -> dict[str, Any]:
+    response = _request_stream(
+        _openai_url(base_url, "/chat/completions"),
+        payload={
+            "model": model,
+            "messages": [{"role": "user", "content": "Stream the phrase: hfr serving smoke ok"}],
+            "temperature": 0,
+            "max_tokens": 32,
+            "stream": True,
+        },
+        api_key=api_key,
+        timeout=timeout,
+    )
+    return {
+        "status": "supported" if response["ok"] and response["event_count"] > 0 and response["text"] else "not_verified",
+        "response_ok": response["ok"],
+        "event_count": response["event_count"],
+        "done_seen": response["done_seen"],
+        "text": response["text"],
+        "error": response.get("error"),
+    }
+
+
 def _request_json(method: str, url: str, *, payload: dict[str, Any] | None = None, api_key: str, timeout: float) -> dict[str, Any]:
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, method=method, data=data)
@@ -240,6 +270,52 @@ def _request_json(method: str, url: str, *, payload: dict[str, Any] | None = Non
         return {"ok": False, "status_code": int(exc.code), "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": exc.read().decode("utf-8", "replace")}
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         return {"ok": False, "status_code": None, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "error": str(exc)}
+
+
+def _request_stream(url: str, *, payload: dict[str, Any], api_key: str, timeout: float) -> dict[str, Any]:
+    request = urllib.request.Request(url, method="POST", data=json.dumps(payload).encode("utf-8"))
+    request.add_header("accept", "text/event-stream")
+    request.add_header("content-type", "application/json")
+    if api_key:
+        request.add_header("authorization", f"Bearer {api_key}")
+    started = time.time()
+    text_parts: list[str] = []
+    event_count = 0
+    done_seen = False
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            for _ in range(128):
+                raw_line = response.readline()
+                if not raw_line:
+                    break
+                line = raw_line.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line.removeprefix("data:").strip()
+                if data == "[DONE]":
+                    done_seen = True
+                    break
+                try:
+                    event = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                event_count += 1
+                chunk = _stream_chunk_text(event)
+                if chunk:
+                    text_parts.append(chunk)
+        return {
+            "ok": event_count > 0,
+            "status_code": int(getattr(response, "status", 0) or 0),
+            "url": url,
+            "elapsed_ms": int((time.time() - started) * 1000),
+            "event_count": event_count,
+            "done_seen": done_seen,
+            "text": "".join(text_parts),
+        }
+    except urllib.error.HTTPError as exc:
+        return {"ok": False, "status_code": int(exc.code), "url": url, "elapsed_ms": int((time.time() - started) * 1000), "event_count": event_count, "done_seen": done_seen, "text": "".join(text_parts), "error": exc.read().decode("utf-8", "replace")}
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return {"ok": False, "status_code": None, "url": url, "elapsed_ms": int((time.time() - started) * 1000), "event_count": event_count, "done_seen": done_seen, "text": "".join(text_parts), "error": str(exc)}
 
 
 def _get_first_json(urls: list[str], *, api_key: str, timeout: float) -> dict[str, Any]:
@@ -286,6 +362,9 @@ def _start_mock_server(response: str, model: str, adapter: str) -> tuple[Threadi
             requests.append({"method": "POST", "path": self.path, "payload": payload})
             if self.path.split("?", 1)[0].rstrip("/") != "/v1/chat/completions":
                 _send_handler_json(self, {"error": {"message": "not found"}}, status=404)
+                return
+            if payload.get("stream"):
+                _send_handler_sse(self, _mock_stream_events(served_model, response))
                 return
             if payload.get("tools"):
                 message = {"role": "assistant", "content": None, "tool_calls": [{"id": "call_hfr_mock", "type": "function", "function": {"name": "read_file", "arguments": json.dumps({"path": "demo.txt"})}}]}
@@ -355,6 +434,18 @@ def _tool_calls(payload: Any) -> list[dict[str, Any]]:
     message = choices[0].get("message") if isinstance(choices[0], dict) else {}
     calls = message.get("tool_calls") if isinstance(message, dict) else []
     return calls if isinstance(calls, list) else []
+
+
+def _stream_chunk_text(payload: Any) -> str:
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    if not isinstance(choices, list) or not choices:
+        return ""
+    choice = choices[0] if isinstance(choices[0], dict) else {}
+    delta = choice.get("delta") if isinstance(choice, dict) else {}
+    if isinstance(delta, dict) and delta.get("content"):
+        return str(delta["content"])
+    message = choice.get("message") if isinstance(choice, dict) else {}
+    return str(message.get("content") or "") if isinstance(message, dict) else ""
 
 
 def _check(check_id: str, passed: bool, details: dict[str, Any]) -> dict[str, Any]:
@@ -427,6 +518,26 @@ def _send_handler_json(handler: BaseHTTPRequestHandler, payload: dict[str, Any],
     handler.send_header("content-length", str(len(raw)))
     handler.end_headers()
     handler.wfile.write(raw)
+
+
+def _send_handler_sse(handler: BaseHTTPRequestHandler, events: list[dict[str, Any]], *, status: int = 200) -> None:
+    raw = ("".join(f"data: {json.dumps(event, sort_keys=True)}\n\n" for event in events) + "data: [DONE]\n\n").encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("content-type", "text/event-stream")
+    handler.send_header("cache-control", "no-cache")
+    handler.send_header("connection", "close")
+    handler.send_header("content-length", str(len(raw)))
+    handler.end_headers()
+    handler.wfile.write(raw)
+
+
+def _mock_stream_events(model: str, content: str) -> list[dict[str, Any]]:
+    created = int(time.time())
+    return [
+        {"id": "chatcmpl-hfr-mock-stream", "object": "chat.completion.chunk", "created": created, "model": model, "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]},
+        {"id": "chatcmpl-hfr-mock-stream", "object": "chat.completion.chunk", "created": created, "model": model, "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]},
+        {"id": "chatcmpl-hfr-mock-stream", "object": "chat.completion.chunk", "created": created, "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+    ]
 
 
 def _utc_now() -> str:

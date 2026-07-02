@@ -5,7 +5,7 @@
     "serving_check": "serving_check.json",
     "serving_profile": "serving_profile.json"
   },
-  "base_url": "http://127.0.0.1:54865/v1",
+  "base_url": "http://127.0.0.1:18080/v1",
   "checks": [
     {
       "details": {
@@ -18,7 +18,7 @@
             },
             "ok": true,
             "status_code": 200,
-            "url": "http://127.0.0.1:54865/healthz"
+            "url": "http://127.0.0.1:18080/healthz"
           }
         ],
         "elapsed_ms": 0,
@@ -28,7 +28,7 @@
         },
         "ok": true,
         "status_code": 200,
-        "url": "http://127.0.0.1:54865/healthz"
+        "url": "http://127.0.0.1:18080/healthz"
       },
       "id": "health",
       "passed": true
@@ -47,7 +47,7 @@
         },
         "ok": true,
         "status_code": 200,
-        "url": "http://127.0.0.1:54865/v1/models"
+        "url": "http://127.0.0.1:18080/v1/models"
       },
       "id": "models",
       "passed": true
@@ -64,7 +64,7 @@
             },
             "ok": true,
             "status_code": 200,
-            "url": "http://127.0.0.1:54865/v1/models/hfr-managed-mock"
+            "url": "http://127.0.0.1:18080/v1/models/hfr-managed-mock"
           }
         ],
         "elapsed_ms": 0,
@@ -75,7 +75,7 @@
         },
         "ok": true,
         "status_code": 200,
-        "url": "http://127.0.0.1:54865/v1/models/hfr-managed-mock"
+        "url": "http://127.0.0.1:18080/v1/models/hfr-managed-mock"
       },
       "id": "model_metadata",
       "passed": true
@@ -94,7 +94,7 @@
               }
             }
           ],
-          "created": 1783004015,
+          "created": 1783023900,
           "id": "chatcmpl-hfr-mock",
           "model": "hfr-managed-mock",
           "object": "chat.completion",
@@ -108,9 +108,21 @@
         "response_model": "hfr-managed-mock",
         "status_code": 200,
         "text": "hfr serving smoke ok",
-        "url": "http://127.0.0.1:54865/v1/chat/completions"
+        "url": "http://127.0.0.1:18080/v1/chat/completions"
       },
       "id": "chat_completion",
+      "passed": true
+    },
+    {
+      "details": {
+        "done_seen": true,
+        "error": null,
+        "event_count": 3,
+        "response_ok": true,
+        "status": "supported",
+        "text": "hfr serving smoke ok"
+      },
+      "id": "streaming_required",
       "passed": true
     },
     {
@@ -163,7 +175,7 @@
     }
   ],
   "failed_checks": [],
-  "generated_at": "2026-07-02T14:53:35Z",
+  "generated_at": "2026-07-02T20:25:00Z",
   "model": "hfr-managed-mock",
   "passed": true,
   "profile_id": "candidate-openai-compatible-hfr-managed-mock",

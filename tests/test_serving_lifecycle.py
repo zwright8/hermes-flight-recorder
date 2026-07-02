@@ -51,6 +51,7 @@ class ServingLifecycleTests(unittest.TestCase):
                         "0.1",
                         "--grace-period",
                         "2",
+                        "--require-streaming",
                         "--require-tool-call",
                         "--require-structured-output",
                     ]
@@ -67,6 +68,8 @@ class ServingLifecycleTests(unittest.TestCase):
             self.assertFalse(lifecycle["teardown"]["running_after_teardown"])
             self.assertEqual(lifecycle["artifacts"]["serving_profile"], "preflight/serving_profile.json")
             self.assertIn("mock_openai_server_ready", lifecycle["logs"]["stdout_tail"])
+            profile = _read_json(out / "preflight" / "serving_profile.json")
+            self.assertEqual(profile["capabilities"]["streaming"], "supported")
 
             schema_result = check_schema_file(out / "serving_lifecycle.json")
             self.assertTrue(schema_result["passed"], schema_result["errors"])
