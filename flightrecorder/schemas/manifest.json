@@ -98,6 +98,14 @@
       "name": "scenario_quality"
     },
     {
+      "artifact": "trace_observability",
+      "artifact_schema_version": "hfr.trace_observability.v1",
+      "description": "Suite-level trace signal summary emitted as trace_observability.json.",
+      "filename": "trace_observability.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/trace_observability.v1.schema.json",
+      "name": "trace_observability"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",

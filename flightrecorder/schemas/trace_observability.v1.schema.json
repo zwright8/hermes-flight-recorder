@@ -1,0 +1,173 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/trace_observability.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Suite-level trace signal summary emitted as trace_observability.json.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "passed": { "type": "boolean" },
+    "runs": {
+      "items": { "$ref": "#/$defs/run" },
+      "type": "array"
+    },
+    "runs_dir": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.trace_observability.v1" },
+    "warnings": {
+      "items": { "type": "string" },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "runs_dir",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics",
+    "warnings",
+    "runs"
+  ],
+  "title": "Hermes Flight Recorder Trace Observability",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": { "type": ["integer", "number", "object", "string", "boolean", "null"] },
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "passed", "summary"],
+      "type": "object"
+    },
+    "count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "api_call_count": { "minimum": 0, "type": "integer" },
+        "approval_event_count": { "minimum": 0, "type": "integer" },
+        "average_event_count": { "minimum": 0, "type": "number" },
+        "empty_final_answer_count": { "minimum": 0, "type": "integer" },
+        "event_type_count": { "minimum": 0, "type": "integer" },
+        "event_type_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "final_answer_rate": { "maximum": 1, "minimum": 0, "type": "number" },
+        "max_event_count": { "minimum": 0, "type": "integer" },
+        "min_event_count": { "minimum": 0, "type": "integer" },
+        "model_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "risk_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "run_count": { "minimum": 0, "type": "integer" },
+        "runs_with_final_answer": { "minimum": 0, "type": "integer" },
+        "runs_with_tool_or_api_events": { "minimum": 0, "type": "integer" },
+        "source_format_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "subagent_event_count": { "minimum": 0, "type": "integer" },
+        "tool_call_count": { "minimum": 0, "type": "integer" },
+        "tool_or_api_run_rate": { "maximum": 1, "minimum": 0, "type": "number" },
+        "tool_result_count": { "minimum": 0, "type": "integer" },
+        "total_event_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "run_count",
+        "total_event_count",
+        "average_event_count",
+        "min_event_count",
+        "max_event_count",
+        "event_type_count",
+        "event_type_counts",
+        "source_format_counts",
+        "model_counts",
+        "runs_with_final_answer",
+        "empty_final_answer_count",
+        "final_answer_rate",
+        "runs_with_tool_or_api_events",
+        "tool_or_api_run_rate",
+        "tool_call_count",
+        "tool_result_count",
+        "api_call_count",
+        "subagent_event_count",
+        "approval_event_count",
+        "risk_counts"
+      ],
+      "type": "object"
+    },
+    "run": {
+      "additionalProperties": true,
+      "properties": {
+        "api_call_count": { "minimum": 0, "type": "integer" },
+        "approval_event_count": { "minimum": 0, "type": "integer" },
+        "event_count": { "minimum": 0, "type": "integer" },
+        "event_type_count": { "minimum": 0, "type": "integer" },
+        "event_types": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "final_answer_chars": { "minimum": 0, "type": "integer" },
+        "has_final_answer": { "type": "boolean" },
+        "has_tool_or_api_events": { "type": "boolean" },
+        "model": { "minLength": 1, "type": "string" },
+        "passed": { "type": ["boolean", "null"] },
+        "risks": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "run_dir": { "minLength": 1, "type": "string" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "score": { "type": ["integer", "null"] },
+        "source_format": { "minLength": 1, "type": "string" },
+        "subagent_event_count": { "minimum": 0, "type": "integer" },
+        "tool_call_count": { "minimum": 0, "type": "integer" },
+        "tool_result_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "run_dir",
+        "scenario_id",
+        "passed",
+        "score",
+        "source_format",
+        "model",
+        "event_count",
+        "event_type_count",
+        "event_types",
+        "has_final_answer",
+        "final_answer_chars",
+        "tool_call_count",
+        "tool_result_count",
+        "api_call_count",
+        "subagent_event_count",
+        "approval_event_count",
+        "has_tool_or_api_events",
+        "risks"
+      ],
+      "type": "object"
+    }
+  }
+}

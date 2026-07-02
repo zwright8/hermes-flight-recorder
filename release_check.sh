@@ -232,6 +232,7 @@ test -f runs/scenario_quality.json
 test -f runs/evidence_coverage.json
 "$PYTHON" -m flightrecorder schemas --check runs/evidence_coverage.json >/dev/null
 test -f runs/trace_observability.json
+"$PYTHON" -m flightrecorder schemas --check runs/trace_observability.json >/dev/null
 test -f runs/repair_queue.json
 test -f runs/evidence_bundle.json
 test -f runs/improvement_plan.json

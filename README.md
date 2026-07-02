@@ -1059,6 +1059,7 @@ flightrecorder schemas --write-dir artifact_schemas
 flightrecorder schemas --check runs/suite_summary.json
 flightrecorder schemas --check runs/scenario_quality.json
 flightrecorder schemas --check runs/evidence_coverage.json
+flightrecorder schemas --check runs/trace_observability.json
 flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json
 flightrecorder schemas --check-jsonl runs/training_export/episodes.jsonl
 ```

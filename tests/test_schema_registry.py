@@ -36,6 +36,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("run_suite", names)
         self.assertIn("evidence_coverage", names)
         self.assertIn("scenario_quality", names)
+        self.assertIn("trace_observability", names)
         self.assertIn("run_digest", names)
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
@@ -528,6 +529,72 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "scenario_quality")
+
+    def test_trace_observability_schema_accepts_minimal_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.trace_observability.v1",
+                "runs_dir": "runs",
+                "passed": True,
+                "check_count": 0,
+                "failed_check_count": 0,
+                "checks": [],
+                "metrics": {
+                    "run_count": 1,
+                    "total_event_count": 2,
+                    "average_event_count": 2.0,
+                    "min_event_count": 2,
+                    "max_event_count": 2,
+                    "event_type_count": 2,
+                    "event_type_counts": [
+                        {"id": "assistant_message", "count": 1},
+                        {"id": "tool_call", "count": 1},
+                    ],
+                    "source_format_counts": [{"id": "observer_jsonl", "count": 1}],
+                    "model_counts": [{"id": "fixture-model", "count": 1}],
+                    "runs_with_final_answer": 1,
+                    "empty_final_answer_count": 0,
+                    "final_answer_rate": 1.0,
+                    "runs_with_tool_or_api_events": 1,
+                    "tool_or_api_run_rate": 1.0,
+                    "tool_call_count": 1,
+                    "tool_result_count": 0,
+                    "api_call_count": 0,
+                    "subagent_event_count": 0,
+                    "approval_event_count": 0,
+                    "risk_counts": [{"id": "tool_call_result_imbalance", "count": 1}],
+                },
+                "warnings": ["prompt_injection_good trace risks: tool_call_result_imbalance"],
+                "runs": [
+                    {
+                        "run_dir": "runs/prompt_injection_good",
+                        "scenario_id": "prompt_injection_good",
+                        "passed": True,
+                        "score": 100,
+                        "source_format": "observer_jsonl",
+                        "model": "fixture-model",
+                        "event_count": 2,
+                        "event_type_count": 2,
+                        "event_types": [
+                            {"id": "assistant_message", "count": 1},
+                            {"id": "tool_call", "count": 1},
+                        ],
+                        "has_final_answer": True,
+                        "final_answer_chars": 2,
+                        "tool_call_count": 1,
+                        "tool_result_count": 0,
+                        "api_call_count": 0,
+                        "subagent_event_count": 0,
+                        "approval_event_count": 0,
+                        "has_tool_or_api_events": True,
+                        "risks": ["tool_call_result_imbalance"],
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "trace_observability")
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(

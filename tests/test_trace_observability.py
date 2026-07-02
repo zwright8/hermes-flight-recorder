@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +60,9 @@ class TraceObservabilityTests(unittest.TestCase):
             self.assertIn("subagent_claim_bad trace risks: no_tool_or_api_events", observability["warnings"])
 
             self.assertEqual(run_cli(["validate", "--trace-observability", str(out), "--strict"]), 0)
+            schema = check_schema_file(out)
+            self.assertTrue(schema["passed"], schema["errors"])
+            self.assertEqual(schema["schema"]["name"], "trace_observability")
 
     def test_trace_observability_fails_unmet_threshold(self):
         with tempfile.TemporaryDirectory() as tmp:
