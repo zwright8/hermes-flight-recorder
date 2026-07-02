@@ -111,6 +111,20 @@
   "license_status": "approved",
   "links": {
     "adapters": [],
+    "compatibility_reports": [
+      {
+        "id": "qwen3_4b_instruct_2507_compatibility_report",
+        "kind": "model_compatibility_report",
+        "metadata": {
+          "readiness": "metadata_recorded",
+          "recommendation": "ready_for_registry_dry_run"
+        },
+        "path": "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json",
+        "recorded_at": "2026-07-02T20:25:59Z",
+        "sha256": "d0420af1dc9d5cbd8d7bb584b7f0774bc101d187ca78a1fc16e30da8b46c49b1",
+        "status": "metadata_report"
+      }
+    ],
     "datasets": [
       {
         "id": "local_mock_dataset_v1",
@@ -151,8 +165,8 @@
           "trainer": "local-dry-run"
         },
         "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
-        "recorded_at": "2026-07-02T15:37:36Z",
-        "sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a",
+        "recorded_at": "2026-07-02T20:26:28Z",
+        "sha256": "62868b513a689fc8e3768679f3abaa25c21d62ec1f973360b183a2c4cf2a81ab",
         "status": "dry_run_plan"
       }
     ]
@@ -162,5 +176,5 @@
   "schema_version": "hfr.model_registry_entry.v1",
   "status": "metadata_reviewed",
   "training_eligible": true,
-  "updated_at": "2026-07-02T16:22:00Z"
+  "updated_at": "2026-07-02T20:26:28Z"
 }

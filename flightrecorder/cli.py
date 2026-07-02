@@ -2463,7 +2463,10 @@ def _parser() -> argparse.ArgumentParser:
     model_registry_alias.add_argument("--rollback-target", help="Required when moving champion")
     model_registry_alias.add_argument("--reason", default="", help="Reason recorded in alias history")
     model_registry_alias.set_defaults(func=cmd_model_registry_alias)
-    model_registry_link = model_registry_subparsers.add_parser("link", help="Link dataset, training, adapter, eval, serving, or promotion artifacts")
+    model_registry_link = model_registry_subparsers.add_parser(
+        "link",
+        help="Link dataset, compatibility, training, adapter, eval, serving, or promotion artifacts",
+    )
     model_registry_link.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
     model_registry_link.add_argument("--entry", required=True, help="Model registry entry id to update")
     model_registry_link.add_argument("--collection", choices=list(MODEL_REGISTRY_LINK_COLLECTIONS), required=True, help="Link collection to update")

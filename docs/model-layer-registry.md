@@ -16,7 +16,8 @@ or launch GPU work.
   receipts that bind registry entries to endpoint/profile metadata without
   launching a server, opening a network connection, or running GPU work.
 - `experiments/registry/model_registry.json`: local registry with `candidate`,
-  `champion`, and `rollback` aliases.
+  `champion`, and `rollback` aliases plus linked dataset, compatibility,
+  serving, training, adapter, eval, and promotion artifacts.
 - `experiments/registry/training_plans/*.json`: dry-run plans that bind a
   training candidate to a dataset manifest and optional compatibility report.
 
@@ -36,6 +37,25 @@ flightrecorder model-registry alias \
   --alias candidate \
   --target local_mock_tiny_chat \
   --reason "metadata-only local fixture ready for dry-run planning"
+flightrecorder model-registry link \
+  --registry experiments/registry/model_registry.json \
+  --entry local_mock_tiny_chat \
+  --collection datasets \
+  --artifact-id local_mock_dataset_v1 \
+  --kind dataset_manifest \
+  --status dry_run_stub \
+  --path experiments/registry/datasets/local_mock_dataset_manifest.json \
+  --entry-out experiments/registry/model_registry_entries/local_mock_tiny_chat.json \
+  --metadata role=training_input
+flightrecorder model-registry link \
+  --registry experiments/registry/model_registry.json \
+  --entry local_mock_tiny_chat \
+  --collection compatibility_reports \
+  --artifact-id local_mock_tiny_chat_compatibility_report \
+  --kind model_compatibility_report \
+  --status metadata_report \
+  --path experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json \
+  --entry-out experiments/registry/model_registry_entries/local_mock_tiny_chat.json
 flightrecorder training-plan dry-run \
   --registry experiments/registry/model_registry.json \
   --model-ref candidate \
@@ -58,16 +78,6 @@ flightrecorder model-registry serving-probe-receipt \
   --link \
   --artifact-id local_mock_tiny_chat_metadata_serving_probe \
   --entry-out experiments/registry/model_registry_entries/local_mock_tiny_chat.json
-flightrecorder model-registry link \
-  --registry experiments/registry/model_registry.json \
-  --entry local_mock_tiny_chat \
-  --collection datasets \
-  --artifact-id local_mock_dataset_v1 \
-  --kind dataset_manifest \
-  --status dry_run_stub \
-  --path experiments/registry/datasets/local_mock_dataset_manifest.json \
-  --entry-out experiments/registry/model_registry_entries/local_mock_tiny_chat.json \
-  --metadata role=training_input
 flightrecorder model-registry link \
   --registry experiments/registry/model_registry.json \
   --entry local_mock_tiny_chat \
@@ -110,6 +120,11 @@ profile and compatibility-report hash, but it does not launch a server, open a
 health-check connection, or verify endpoint behavior. Any real trainer must
 re-check license, serving compatibility, runtime memory, dataset gates, and
 output paths before execution.
+
+Dry-run plan generation requires the selected registry entry to already link
+the dataset manifest and, when supplied, the compatibility report by matching
+SHA-256. This keeps training plans tied to registry-visible evidence instead
+of untracked local files.
 
 Unknown license status can be recorded for scouting, but it is blocked from
 training selection. Moving `champion` requires an explicit, different
