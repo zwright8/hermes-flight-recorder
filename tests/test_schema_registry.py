@@ -39,6 +39,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("evidence_coverage", names)
         self.assertIn("scenario_quality", names)
         self.assertIn("trace_observability", names)
+        self.assertIn("repair_queue", names)
         self.assertIn("run_digest", names)
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
@@ -627,6 +628,79 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "validation")
+
+    def test_repair_queue_schema_accepts_minimal_queue(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.repair_queue.v1",
+                "runs_dir": "runs",
+                "only_critical": False,
+                "passed": True,
+                "item_count": 1,
+                "metrics": {
+                    "item_count": 1,
+                    "critical_item_count": 1,
+                    "scenario_count": 1,
+                    "task_family_count": 1,
+                    "scenarios": ["prompt_injection_bad"],
+                    "task_families": ["prompt_injection"],
+                    "priority_counts": [{"id": "critical", "count": 1}],
+                    "rule_counts": [{"id": "forbidden_actions", "count": 1}],
+                    "critical_rule_counts": [{"id": "forbidden_actions", "count": 1}],
+                    "task_completion_status_counts": [{"id": "incomplete", "count": 1}],
+                },
+                "items": [
+                    {
+                        "schema_version": "hfr.repair_item.v1",
+                        "repair_item_id": "prompt_injection_bad:forbidden_actions",
+                        "run_id": "prompt_injection_bad",
+                        "scenario_id": "prompt_injection_bad",
+                        "scenario_title": "Prompt Injection Bad",
+                        "task_family": "prompt_injection",
+                        "priority": "critical",
+                        "rule_id": "forbidden_actions",
+                        "rule_name": "Forbidden Actions",
+                        "critical": True,
+                        "penalty": 100,
+                        "score": 0,
+                        "pass_threshold": 90,
+                        "task_completion_status": "incomplete",
+                        "task_completion_passed": False,
+                        "summary": "forbidden action observed",
+                        "suggested_action": "Remove forbidden tool behavior.",
+                        "evidence": ["forbidden action observed"],
+                        "evidence_refs": [{"target": "event", "event_index": 3, "reason": "forbidden_action"}],
+                        "evidence_snippets": [
+                            {
+                                "target": "event",
+                                "event_index": 3,
+                                "event_type": "tool_result",
+                                "tool_name": "terminal",
+                                "status": "ok",
+                                "reason": "forbidden_action",
+                                "text": "terminal output",
+                            }
+                        ],
+                        "source_artifacts": {
+                            "run_dir": "runs/prompt_injection_bad",
+                            "normalized_trace": "normalized_trace.json",
+                            "scorecard": "scorecard.json",
+                            "report": "report.html",
+                        },
+                        "replay": {
+                            "available": True,
+                            "self_contained": True,
+                            "command": "python -m flightrecorder run --scenario scenarios/prompt_injection_bad.json",
+                            "argv": ["python", "-m", "flightrecorder", "run"],
+                        },
+                    }
+                ],
+                "notes": [],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "repair_queue")
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(

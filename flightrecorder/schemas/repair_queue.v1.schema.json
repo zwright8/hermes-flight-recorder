@@ -1,0 +1,186 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/repair_queue.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Concrete failed-rule repair queue emitted as repair_queue.json.",
+  "properties": {
+    "item_count": { "minimum": 0, "type": "integer" },
+    "items": {
+      "items": { "$ref": "#/$defs/repair_item" },
+      "type": "array"
+    },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "only_critical": { "type": "boolean" },
+    "passed": { "type": "boolean" },
+    "runs_dir": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.repair_queue.v1" }
+  },
+  "required": ["schema_version", "runs_dir", "only_critical", "passed", "item_count", "metrics", "items"],
+  "title": "Hermes Flight Recorder Repair Queue",
+  "type": "object",
+  "$defs": {
+    "count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    },
+    "evidence_snippet": {
+      "additionalProperties": true,
+      "properties": {
+        "event_index": { "minimum": 0, "type": "integer" },
+        "event_type": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" },
+        "target": { "enum": ["event", "final_answer", "episode", "state_snapshot"], "type": "string" },
+        "text": { "type": "string" },
+        "tool_name": { "type": "string" }
+      },
+      "required": ["target", "reason", "text"],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_item_count": { "minimum": 0, "type": "integer" },
+        "critical_rule_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "item_count": { "minimum": 0, "type": "integer" },
+        "priority_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "rule_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "scenario_count": { "minimum": 0, "type": "integer" },
+        "scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "task_completion_status_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "task_families": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "task_family_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "item_count",
+        "critical_item_count",
+        "scenario_count",
+        "task_family_count",
+        "scenarios",
+        "task_families",
+        "priority_counts",
+        "rule_counts",
+        "critical_rule_counts",
+        "task_completion_status_counts"
+      ],
+      "type": "object"
+    },
+    "repair_item": {
+      "additionalProperties": true,
+      "properties": {
+        "critical": { "type": "boolean" },
+        "evidence": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "evidence_refs": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "evidence_snippets": {
+          "items": { "$ref": "#/$defs/evidence_snippet" },
+          "type": "array"
+        },
+        "pass_threshold": { "type": ["integer", "null"] },
+        "penalty": { "minimum": 0, "type": "integer" },
+        "priority": { "enum": ["critical", "high", "medium", "low"], "type": "string" },
+        "repair_item_id": { "minLength": 1, "type": "string" },
+        "replay": { "$ref": "#/$defs/replay" },
+        "rule_id": { "minLength": 1, "type": "string" },
+        "rule_name": { "minLength": 1, "type": "string" },
+        "run_id": { "minLength": 1, "type": "string" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "scenario_title": { "minLength": 1, "type": "string" },
+        "schema_version": { "const": "hfr.repair_item.v1" },
+        "score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "source_artifacts": { "$ref": "#/$defs/source_artifacts" },
+        "suggested_action": { "minLength": 1, "type": "string" },
+        "summary": { "minLength": 1, "type": "string" },
+        "task_completion_passed": { "type": "boolean" },
+        "task_completion_status": { "minLength": 1, "type": "string" },
+        "task_family": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "schema_version",
+        "repair_item_id",
+        "run_id",
+        "scenario_id",
+        "scenario_title",
+        "task_family",
+        "priority",
+        "rule_id",
+        "rule_name",
+        "critical",
+        "penalty",
+        "score",
+        "task_completion_status",
+        "task_completion_passed",
+        "summary",
+        "suggested_action",
+        "evidence",
+        "evidence_refs",
+        "evidence_snippets",
+        "source_artifacts",
+        "replay"
+      ],
+      "type": "object"
+    },
+    "replay": {
+      "additionalProperties": true,
+      "properties": {
+        "argv": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "available": { "type": "boolean" },
+        "command": { "type": "string" },
+        "self_contained": { "type": ["boolean", "null"] }
+      },
+      "required": ["available", "self_contained", "command", "argv"],
+      "type": "object"
+    },
+    "source_artifacts": {
+      "additionalProperties": { "type": "string" },
+      "properties": {
+        "lineage": { "type": "string" },
+        "normalized_trace": { "minLength": 1, "type": "string" },
+        "regression_scenario": { "type": "string" },
+        "report": { "minLength": 1, "type": "string" },
+        "run_dir": { "minLength": 1, "type": "string" },
+        "scorecard": { "minLength": 1, "type": "string" }
+      },
+      "required": ["run_dir", "normalized_trace", "scorecard", "report"],
+      "type": "object"
+    }
+  }
+}

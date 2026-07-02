@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,9 @@ class RepairQueueTests(unittest.TestCase):
             self.assertLessEqual(len(event_snippet["text"]), 600)
 
             self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict"]), 0)
+            schema = check_schema_file(queue_path)
+            self.assertTrue(schema["passed"], schema["errors"])
+            self.assertEqual(schema["schema"]["name"], "repair_queue")
 
     def test_run_suite_evidence_handoff_writes_repair_queue(self):
         with tempfile.TemporaryDirectory() as tmp:

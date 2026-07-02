@@ -504,6 +504,7 @@ flightrecorder schemas --write-dir artifact_schemas
 flightrecorder schemas --name evidence_bundle --out evidence_bundle.schema.json
 flightrecorder schemas --check runs/evidence_bundle.json
 flightrecorder schemas --check runs/captured_state.json
+flightrecorder schemas --check runs/repair_queue.json
 ```
 
 Use `flightrecorder schemas --check` for shape validation and

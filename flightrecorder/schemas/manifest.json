@@ -122,6 +122,14 @@
       "name": "trace_observability"
     },
     {
+      "artifact": "repair_queue",
+      "artifact_schema_version": "hfr.repair_queue.v1",
+      "description": "Concrete failed-rule repair queue emitted as repair_queue.json.",
+      "filename": "repair_queue.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/repair_queue.v1.schema.json",
+      "name": "repair_queue"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",
