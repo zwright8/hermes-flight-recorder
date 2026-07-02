@@ -9,6 +9,52 @@
       "status": "blocked",
       "summary": "The migrated dedicated worktree does not contain docs/agentic-finetune-*.md or a prior experiments/autonomy state directory; supervisor state was bootstrapped from the migration directive and current branch contents.",
       "title": "Recover missing source goal docs in dedicated worktree"
+    },
+    {
+      "blocked_at": "2026-07-02T15:07:18Z",
+      "branch": "codex/hermes-goal-4-model-20260702-1027",
+      "branch_sha": "9e2864480a4ae2ebd2eeb0ce8e557fbc8c5b11a6",
+      "blocker": "Main integration lock is held at /tmp/hermes-flight-recorder-main-push.lock; mkdir returned 'File exists' and a bounded 20-attempt poll ended with 'lock still held after polling'.",
+      "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
+      "current_origin_main_sha_observed": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+      "id": "model_main_integration_lock_20260702T150718Z",
+      "layer": "model",
+      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+      "lock_status": "held",
+      "main_integration_status": "blocked",
+      "pr_status": "open",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/8",
+      "remote_branch_verified": true,
+      "remote_branch_verified_at": "2026-07-02T15:00:00Z",
+      "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1027",
+      "status": "blocked",
+      "summary": "The verified Goal 4 branch was rebased onto updated delivery docs, pushed, and verified remotely, but could not be landed on main because the main-push lock remained held.",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+          "completed_at": "2026-07-02T14:59:00Z",
+          "status": "pass",
+          "summary": "51 model, schema registry, and validation tests passed after rebasing onto origin/main."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+          "completed_at": "2026-07-02T14:59:00Z",
+          "status": "pass",
+          "summary": "Touched Python files compile successfully after rebase."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --out /tmp/model_layer_validation_check.json --strict",
+          "completed_at": "2026-07-02T14:59:00Z",
+          "status": "pass",
+          "summary": "Strict semantic validation passed for all sample model-layer artifacts after rebase."
+        },
+        {
+          "command": "gh pr view 8 --json statusCheckRollup",
+          "completed_at": "2026-07-02T15:07:18Z",
+          "status": "pass",
+          "summary": "GitHub CI checks for Python 3.11, 3.12, and 3.13 reported success on the rebased branch."
+        }
+      ]
     }
   ],
   "completed_packets": [
@@ -565,7 +611,7 @@
       ]
     }
   ],
-  "current_packet": "model registry link slots and artifact hashing",
+  "current_packet": "model main integration blocked by main-push lock",
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
@@ -666,9 +712,9 @@
       "summary": "Offline mock harness now emits typed manifest/result artifacts, validates hashes and scorecard consistency, and can feed Data/Training handoffs without live providers."
     },
     "model": {
-      "next_packet": "model_real_metadata_scout_packet",
-      "status": "in_progress",
-      "summary": "Goal 4 model registry contracts, lifecycle links, and dry-run planning are being integrated with current main."
+      "next_packet": "retry_model_main_integration",
+      "status": "blocked",
+      "summary": "Verified Goal 4 model registry branch is waiting for main integration lock retry."
     },
     "serving_demo": {
       "next_packet": null,
@@ -723,22 +769,29 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:53:38Z",
+  "updated_at": "2026-07-02T15:07:18Z",
   "github_delivery": {
     "branch": "codex/hermes-goal-4-model-20260702-1027",
-    "implementation_commit_sha": "40d65821216487b52f9ee045477d2197748bab39",
-    "latest_model_commit_sha": "f205afba87065981c4d31fcaa5fb28d0901edab7",
+    "implementation_commit_sha": "d1c56bdcfcdf4040e749e8e42cbfe9a642681d95",
+    "latest_checkpoint_commit_sha": "9e2864480a4ae2ebd2eeb0ce8e557fbc8c5b11a6",
+    "latest_model_commit_sha": "7513df43a9e2b1b36ab5daebc3f0301950918e8b",
+    "main_integration_blocker": "mkdir /tmp/hermes-flight-recorder-main-push.lock returned File exists, then a bounded 20-attempt poll ended with lock still held after polling.",
+    "main_integration_status": "blocked_by_lock",
+    "main_sha": null,
+    "main_sha_status": "not_landed",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/8",
+    "pr_status": "open",
     "push_command": "git push -u origin codex/hermes-goal-4-model-20260702-1027",
     "remote_branch_verified": true,
-    "remote_branch_verified_at": "2026-07-02T14:53:38Z",
+    "remote_branch_verified_at": "2026-07-02T15:00:00Z",
     "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1027"
   },
   "risks": [
     "Real upstream model licenses and terms still need explicit review artifacts before selection.",
     "Compatibility probes are metadata-only until tokenizer and serving checks are connected.",
     "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry.",
-    "Adapter, eval, and promotion link slots are present but await real downstream artifacts."
+    "Adapter, eval, and promotion link slots are present but await real downstream artifacts.",
+    "Main integration is blocked because /tmp/hermes-flight-recorder-main-push.lock remained held; branch codex/hermes-goal-4-model-20260702-1027 is pushed and verified but not landed on main."
   ],
   "safety_guardrails": {
     "gpu_work_launched": false,
