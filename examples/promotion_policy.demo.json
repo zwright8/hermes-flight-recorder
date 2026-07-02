@@ -51,12 +51,15 @@
     "promotion_ledger_gate",
     "compare_gate",
     "trainer_launch_check",
+    "model_registry_entry",
+    "agentic_training_result",
     "model_card",
     "dataset_card",
     "rollback_metadata",
     "license_review",
     "redaction_check",
     "safety_gate",
+    "serving_profile",
     "serving_report"
   ],
   "schema_version": "hfr.promotion_policy.v1"

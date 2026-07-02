@@ -8,8 +8,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .agentic_training_result import AGENTIC_TRAINING_RESULT_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .compare_gate import COMPARE_GATE_SCHEMA_VERSION
+from .model_registry import MODEL_REGISTRY_ENTRY_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 
@@ -20,6 +22,7 @@ PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION = "hfr.promotion_rollback_receipt.v1"
 PROMOTION_RELEASE_RECORD_SCHEMA_VERSION = "hfr.promotion_release_record.v1"
 PROMOTION_POLICY_SCHEMA_VERSION = "hfr.promotion_policy.v1"
 MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
+SERVING_PROFILE_SCHEMA_VERSION = "hfr.serving_profile.v1"
 
 MODEL_CLASSES = {"base", "trace-only", "frontier", "champion", "candidate"}
 PROMOTION_CARDS_REQUIRED_INPUTS = (
@@ -34,12 +37,15 @@ PROMOTION_DECISION_REQUIRED_ARTIFACTS = (
     "promotion_ledger_gate",
     "compare_gate",
     "trainer_launch_check",
+    "model_registry_entry",
+    "agentic_training_result",
     "model_card",
     "dataset_card",
     "rollback_metadata",
     "license_review",
     "redaction_check",
     "safety_gate",
+    "serving_profile",
     "serving_report",
 )
 PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS = (
@@ -103,6 +109,9 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
     "promotion_ledger_gate_schema",
     "compare_gate_schema",
     "trainer_launch_check_schema",
+    "model_registry_entry_schema",
+    "agentic_training_result_schema",
+    "serving_profile_schema",
     *(
         f"{role}_passed"
         for role in (
@@ -110,6 +119,7 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
             "promotion_ledger_gate",
             "compare_gate",
             "trainer_launch_check",
+            "agentic_training_result",
             "license_review",
             "redaction_check",
             "safety_gate",
@@ -127,6 +137,8 @@ PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS = (
     *(f"regression_{rule_id}_absent" for rule_id in PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES),
     "license_status_known",
     "license_terms_accepted",
+    "model_registry_entry_matches_candidate",
+    "serving_profile_ready",
     "rollback_metadata_matches_target",
     "model_card_claims_supported",
     "dataset_card_claims_supported",
@@ -137,12 +149,16 @@ _JSON_ARTIFACT_ROLES = {
     "promotion_ledger_gate": PROMOTION_LEDGER_GATE_SCHEMA_VERSION,
     "compare_gate": COMPARE_GATE_SCHEMA_VERSION,
     "trainer_launch_check": TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
+    "model_registry_entry": MODEL_REGISTRY_ENTRY_SCHEMA_VERSION,
+    "agentic_training_result": AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
+    "serving_profile": SERVING_PROFILE_SCHEMA_VERSION,
 }
 _PASSED_JSON_ROLES = (
     "evidence_bundle",
     "promotion_ledger_gate",
     "compare_gate",
     "trainer_launch_check",
+    "agentic_training_result",
     "license_review",
     "redaction_check",
     "safety_gate",
@@ -167,12 +183,15 @@ def build_promotion_decision(
     promotion_ledger_gate_path: str | Path | None = None,
     compare_gate_path: str | Path | None = None,
     trainer_launch_check_path: str | Path | None = None,
+    model_registry_entry_path: str | Path | None = None,
+    agentic_training_result_path: str | Path | None = None,
     model_card_path: str | Path | None = None,
     dataset_card_path: str | Path | None = None,
     rollback_metadata_path: str | Path | None = None,
     license_review_path: str | Path | None = None,
     redaction_check_path: str | Path | None = None,
     safety_gate_path: str | Path | None = None,
+    serving_profile_path: str | Path | None = None,
     serving_report_path: str | Path | None = None,
     promotion_policy_path: str | Path | None = None,
     preserve_paths: bool = False,
@@ -189,12 +208,15 @@ def build_promotion_decision(
         "promotion_ledger_gate": promotion_ledger_gate_path,
         "compare_gate": compare_gate_path,
         "trainer_launch_check": trainer_launch_check_path,
+        "model_registry_entry": model_registry_entry_path,
+        "agentic_training_result": agentic_training_result_path,
         "model_card": model_card_path,
         "dataset_card": dataset_card_path,
         "rollback_metadata": rollback_metadata_path,
         "license_review": license_review_path,
         "redaction_check": redaction_check_path,
         "safety_gate": safety_gate_path,
+        "serving_profile": serving_profile_path,
         "serving_report": serving_report_path,
     }
     artifacts = {
@@ -204,7 +226,7 @@ def build_promotion_decision(
     json_artifacts = {
         role: _read_json_artifact(Path(raw_path)) if raw_path else None
         for role, raw_path in paths.items()
-        if role in _PASSED_JSON_ROLES or role == "rollback_metadata"
+        if role in _JSON_ARTIFACT_ROLES or role in _PASSED_JSON_ROLES or role == "rollback_metadata"
     }
     policy_path = Path(promotion_policy_path) if promotion_policy_path else None
     policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths) if policy_path else None
@@ -257,10 +279,8 @@ def build_promotion_decision(
             summary=f"{role} artifact is present and fingerprinted",
         )
 
-    _add_schema_check(checks, "evidence_bundle", json_artifacts.get("evidence_bundle"))
-    _add_schema_check(checks, "promotion_ledger_gate", json_artifacts.get("promotion_ledger_gate"))
-    _add_schema_check(checks, "compare_gate", json_artifacts.get("compare_gate"))
-    _add_schema_check(checks, "trainer_launch_check", json_artifacts.get("trainer_launch_check"))
+    for role in _JSON_ARTIFACT_ROLES:
+        _add_schema_check(checks, role, json_artifacts.get(role))
     for role in _PASSED_JSON_ROLES:
         _add_passed_json_check(checks, role, json_artifacts.get(role))
 
@@ -301,6 +321,8 @@ def build_promotion_decision(
         _add_forbidden_rule_check(checks, compare_metrics.get("regressed_rule_counts"), "regression", rule_id)
 
     _add_license_check(checks, json_artifacts.get("license_review"))
+    _add_model_registry_entry_check(checks, json_artifacts.get("model_registry_entry"), candidate_id)
+    _add_serving_profile_check(checks, json_artifacts.get("serving_profile"))
     _add_rollback_metadata_check(checks, json_artifacts.get("rollback_metadata"), rollback_id)
     _add_card_claims_check(checks, "model_card", Path(model_card_path) if model_card_path else None)
     _add_card_claims_check(checks, "dataset_card", Path(dataset_card_path) if dataset_card_path else None)
@@ -1598,6 +1620,35 @@ def _add_license_check(checks: list[dict[str, Any]], payload: dict[str, Any] | N
         expected={"accepted_terms": True},
         scope={"artifact_role": "license_review"},
         summary="license review explicitly accepts required terms",
+    )
+
+
+def _add_model_registry_entry_check(checks: list[dict[str, Any]], payload: dict[str, Any] | None, candidate_id: str) -> None:
+    entry_candidate_id = payload.get("candidate_id") if isinstance(payload, dict) else None
+    _add_check(
+        checks,
+        "model_registry_entry_matches_candidate",
+        bool(candidate_id) and entry_candidate_id == candidate_id,
+        actual={"candidate_id": candidate_id, "entry_candidate_id": entry_candidate_id},
+        expected={"same_candidate_id": True},
+        scope={"artifact_role": "model_registry_entry"},
+        summary="model registry entry is bound to the promoted candidate",
+    )
+
+
+def _add_serving_profile_check(checks: list[dict[str, Any]], payload: dict[str, Any] | None) -> None:
+    eval_preflight = payload.get("eval_preflight") if isinstance(payload, dict) and isinstance(payload.get("eval_preflight"), dict) else {}
+    ready = eval_preflight.get("ready")
+    readiness = eval_preflight.get("readiness")
+    failed_checks = eval_preflight.get("failed_checks")
+    _add_check(
+        checks,
+        "serving_profile_ready",
+        ready is True and readiness == "ready",
+        actual={"ready": ready, "readiness": readiness, "failed_checks": failed_checks if isinstance(failed_checks, list) else []},
+        expected={"ready": True, "readiness": "ready"},
+        scope={"artifact_role": "serving_profile"},
+        summary="serving profile is ready for evaluation and promotion",
     )
 
 

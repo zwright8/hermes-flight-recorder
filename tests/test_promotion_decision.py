@@ -569,6 +569,29 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertFalse(decision["alias_update"]["authorized"])
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
 
+    def test_promotion_decision_blocks_missing_registry_training_and_serving_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            artifacts["model_registry_entry"] = None
+            artifacts["agentic_training_result"] = None
+            artifacts["serving_profile"] = None
+            decision_path = root / "promotion_decision.json"
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            failed_ids = failed_check_ids(decision)
+            self.assertIn("model_registry_entry_present", failed_ids)
+            self.assertIn("agentic_training_result_present", failed_ids)
+            self.assertIn("serving_profile_present", failed_ids)
+            self.assertIn("agentic_training_result_passed", failed_ids)
+            self.assertIn("model_registry_entry_matches_candidate", failed_ids)
+            self.assertIn("serving_profile_ready", failed_ids)
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
     def test_promotion_decision_blocks_unknown_license(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -757,6 +780,23 @@ def write_governance_artifacts(
         json.dumps({"schema_version": "hfr.trainer_launch_check.v1", "passed": True}),
         encoding="utf-8",
     )
+    model_registry_entry = root / "model_registry_entry.json"
+    model_registry_entry.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.model_registry_entry.v1",
+                "candidate_id": "candidate-v2",
+                "entry_id": "candidate-v2",
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    agentic_training_result = root / "agentic_training_result.json"
+    agentic_training_result.write_text(
+        json.dumps({"schema_version": "hfr.agentic_training_result.v1", "passed": True}),
+        encoding="utf-8",
+    )
     model_card = root / "MODEL_CARD.md"
     model_card.write_text("# Model Card\n\nEvidence-backed candidate model.\n", encoding="utf-8")
     dataset_card = root / "DATASET_CARD.md"
@@ -772,6 +812,17 @@ def write_governance_artifacts(
     redaction_check.write_text(json.dumps({"passed": True}), encoding="utf-8")
     safety_gate = root / "safety_gate.json"
     safety_gate.write_text(json.dumps({"passed": True}), encoding="utf-8")
+    serving_profile = root / "serving_profile.json"
+    serving_profile.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.serving_profile.v1",
+                "eval_preflight": {"ready": True, "readiness": "ready", "failed_checks": []},
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
     serving_report = root / "serving_report.json"
     serving_report.write_text(json.dumps({"passed": True}), encoding="utf-8")
     return {
@@ -779,12 +830,15 @@ def write_governance_artifacts(
         "promotion_ledger_gate": promotion_ledger_gate,
         "compare_gate": compare_gate,
         "trainer_launch_check": trainer_launch_check,
+        "model_registry_entry": model_registry_entry,
+        "agentic_training_result": agentic_training_result,
         "model_card": model_card,
         "dataset_card": dataset_card,
         "rollback_metadata": rollback_metadata,
         "license_review": license_review,
         "redaction_check": redaction_check,
         "safety_gate": safety_gate,
+        "serving_profile": serving_profile,
         "serving_report": serving_report,
     }
 
@@ -889,12 +943,15 @@ def promotion_decision_required_artifacts() -> list[str]:
         "promotion_ledger_gate",
         "compare_gate",
         "trainer_launch_check",
+        "model_registry_entry",
+        "agentic_training_result",
         "model_card",
         "dataset_card",
         "rollback_metadata",
         "license_review",
         "redaction_check",
         "safety_gate",
+        "serving_profile",
         "serving_report",
     ]
 
@@ -1030,12 +1087,15 @@ def promotion_decision_args(
         "promotion_ledger_gate": "--promotion-ledger-gate",
         "compare_gate": "--compare-gate",
         "trainer_launch_check": "--trainer-launch-check",
+        "model_registry_entry": "--model-registry-entry",
+        "agentic_training_result": "--agentic-training-result",
         "model_card": "--model-card",
         "dataset_card": "--dataset-card",
         "rollback_metadata": "--rollback-metadata",
         "license_review": "--license-review",
         "redaction_check": "--redaction-check",
         "safety_gate": "--safety-gate",
+        "serving_profile": "--serving-profile",
         "serving_report": "--serving-report",
     }
     for role, flag in flag_by_role.items():

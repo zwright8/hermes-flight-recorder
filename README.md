@@ -841,12 +841,15 @@ flightrecorder promotion-decision \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --compare-gate runs/compare_gate.json \
   --trainer-launch-check runs/trainer_launch_check.json \
+  --model-registry-entry registry/model_registry_entry.json \
+  --agentic-training-result runs/agentic_training_result.json \
   --model-card runs/promotion_cards/MODEL_CARD.md \
   --dataset-card runs/promotion_cards/DATASET_CARD.md \
   --rollback-metadata runs/rollback.json \
   --license-review runs/license_review.json \
   --redaction-check runs/redaction_check.json \
   --safety-gate runs/safety_gate.json \
+  --serving-profile runs/serving_profile.json \
   --serving-report runs/serving_report.json \
   --promotion-policy examples/promotion_policy.demo.json \
   --out runs/promotion_decision.json
