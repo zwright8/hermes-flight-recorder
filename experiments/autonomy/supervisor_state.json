@@ -1,5 +1,5 @@
 {
-  "active_layer": "eval",
+  "active_layer": "governance",
   "blocked_packets": [
     {
       "blocked_at": "2026-07-02T14:32:48Z",
@@ -356,9 +356,9 @@
       "id": "eval_pr6_main_delivery_lock_contention",
       "layer": "eval",
       "priority": "critical",
-      "status": "resolved_verified_pending_main_delivery",
+      "status": "resolved_landed_on_main",
       "blocked_at": "2026-07-02T15:09:32Z",
-      "resolved_at": "2026-07-02T17:22:44Z",
+      "resolved_at": "2026-07-02T17:25:37Z",
       "resolved_by_branch": "codex/hermes-goal-0-supervisor-20260702-1316",
       "source_branch": "codex/hermes-goal-7-eval-20260702-1027",
       "source_branch_sha": "929e8b371ae617fd3c48f3f54f749a097b80ac5b",
@@ -368,7 +368,7 @@
         "experiments/autonomy/supervisor_state.json",
         "flightrecorder/cli.py"
       ],
-      "summary": "Supervisor acquired the main lock, resolved Eval PR #6 current-main CLI/autonomy conflicts, and reran focused plus release verification; main delivery cleanup remains pending.",
+      "summary": "Resolved by supervisor current-main merge, locked verification, origin/main push, PR #6 merge observation, and remote source/supervisor branch deletion.",
       "verification": [
         {
           "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/eval_summary.py flightrecorder/external_eval.py flightrecorder/heldout_manifest.py flightrecorder/cli.py flightrecorder/validation.py tests/test_eval_summary.py tests/test_external_eval_plan.py tests/test_heldout_manifest.py",
@@ -419,8 +419,34 @@
           "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
           "status": "pass",
           "summary": "Release check passed, including Python 3.11 unit discovery with 372 tests and installed-CLI/demo gates."
+        },
+        {
+          "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1316",
+          "status": "pass",
+          "summary": "Supervisor branch pushed and verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 before main delivery."
+        },
+        {
+          "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+          "status": "pass",
+          "summary": "Fetched origin; current origin/main remained 1d66d4ecf6b787725d0082d4c36016301948120c, integrated HEAD was a clean descendant, and the worktree was clean."
+        },
+        {
+          "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+          "status": "pass",
+          "summary": "origin/main verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 after the locked Eval PR #6 push."
+        },
+        {
+          "command": "gh pr view 6 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+          "status": "pass",
+          "summary": "PR #6 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/6 with merge commit 1b2bae2f87c00e749d467a140b318bd8a55ae8b0."
+        },
+        {
+          "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
         }
-      ]
+      ],
+      "resolved_by_main_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0"
     }
   ],
   "completed_packets": [
@@ -2845,27 +2871,175 @@
       "branch": "codex/hermes-goal-7-eval-20260702-1027",
       "source_branch_sha": "929e8b371ae617fd3c48f3f54f749a097b80ac5b",
       "main_delivery_status": "verified_pending_main_delivery"
+    },
+    {
+      "id": "eval_pr6_main_delivery",
+      "layer": "eval",
+      "priority": "high",
+      "status": "landed_on_main",
+      "title": "Land governance eval summary enforcement",
+      "summary": "Landed Eval PR #6 on main: eval summaries, fail-closed external eval plans, held-out scenario manifests, validation hooks, docs, and tests.",
+      "branch": "codex/hermes-goal-7-eval-20260702-1027",
+      "source_branch_sha": "929e8b371ae617fd3c48f3f54f749a097b80ac5b",
+      "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1316",
+      "integration_branch_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+      "main_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+      "merge_commit_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
+      "remote_branch_status": "deleted",
+      "integration_branch_remote_status": "deleted",
+      "completed_at": "2026-07-02T17:25:37Z",
+      "artifacts": [
+        {
+          "kind": "doc",
+          "layer": "eval",
+          "path": "docs/agentic-finetune-eval-layer.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "eval",
+          "path": "README.md"
+        },
+        {
+          "kind": "module",
+          "layer": "eval",
+          "path": "flightrecorder/eval_summary.py"
+        },
+        {
+          "kind": "module",
+          "layer": "eval",
+          "path": "flightrecorder/external_eval.py"
+        },
+        {
+          "kind": "module",
+          "layer": "eval",
+          "path": "flightrecorder/heldout_manifest.py"
+        },
+        {
+          "kind": "module",
+          "layer": "eval",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "eval",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "eval",
+          "path": "tests/test_eval_summary.py"
+        },
+        {
+          "kind": "test",
+          "layer": "eval",
+          "path": "tests/test_external_eval_plan.py"
+        },
+        {
+          "kind": "test",
+          "layer": "eval",
+          "path": "tests/test_heldout_manifest.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/eval_summary.py flightrecorder/external_eval.py flightrecorder/heldout_manifest.py flightrecorder/cli.py flightrecorder/validation.py tests/test_eval_summary.py tests/test_external_eval_plan.py tests/test_heldout_manifest.py",
+          "status": "pass",
+          "summary": "Touched Eval modules, CLI, validation, and tests compile after locked merge."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_heldout_manifest tests.test_external_eval_plan tests.test_eval_summary tests.test_compare_rl_export tests.test_compare_gate tests.test_validation tests.test_schema_registry",
+          "status": "pass",
+          "summary": "75 focused Eval, compare, schema registry, and validation tests passed under the lock."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder heldout-manifest --suite-summary demo=runs/suite_summary.json --out /tmp/hfr-heldout-manifest-locked.json",
+          "status": "pass",
+          "summary": "Held-out manifest CLI wrote a ready single-source manifest from the demo suite summary."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder external-eval-plan --scenario-manifest /tmp/hfr-heldout-manifest-locked.json --model-endpoint mock://serving-demo --model hfr-managed-mock --out /tmp/hfr-external-eval-plan-locked.json (expected exit 1)",
+          "status": "pass",
+          "summary": "External eval plan CLI failed closed with ready=false and blocking reasons for BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench readiness gaps."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --heldout-manifest /tmp/hfr-heldout-manifest-locked.json --strict && /opt/homebrew/bin/python3.11 -m flightrecorder validate --external-eval-plan /tmp/hfr-external-eval-plan-locked.json --strict",
+          "status": "pass",
+          "summary": "Held-out manifest and blocked external eval plan validate with zero strict errors or warnings."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder eval-summary --suite-summary demo=runs/suite_summary.json --external-adapter-plan external=/tmp/hfr-external-eval-plan-locked.json --out /tmp/hfr-eval-summary-locked.json (expected exit 1)",
+          "status": "pass",
+          "summary": "Eval summary CLI emitted blocked governance readiness because external adapter plans were not ready and cross-arm claims are disallowed."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --eval-summary /tmp/hfr-eval-summary-locked.json --strict && jq claim-suppression guard",
+          "status": "pass",
+          "summary": "Blocked eval summary validates structurally while jq confirms passed=false, governance_ready=false, cross_arm_claims_allowed=false, and external adapter ready=false."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json and generated Eval artifacts",
+          "status": "pass",
+          "summary": "Supervisor state and generated held-out manifest, external eval plan, and eval summary JSON parse."
+        },
+        {
+          "command": "git diff --cached --check && git diff --check",
+          "status": "pass",
+          "summary": "No staged or unstaged whitespace errors before the verified merge commit."
+        },
+        {
+          "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+          "status": "pass",
+          "summary": "Release check passed, including Python 3.11 unit discovery with 372 tests and installed-CLI/demo gates."
+        },
+        {
+          "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1316",
+          "status": "pass",
+          "summary": "Supervisor branch pushed and verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 before main delivery."
+        },
+        {
+          "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+          "status": "pass",
+          "summary": "Fetched origin; current origin/main remained 1d66d4ecf6b787725d0082d4c36016301948120c, integrated HEAD was a clean descendant, and the worktree was clean."
+        },
+        {
+          "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+          "status": "pass",
+          "summary": "origin/main verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 after the locked Eval PR #6 push."
+        },
+        {
+          "command": "gh pr view 6 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+          "status": "pass",
+          "summary": "PR #6 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/6 with merge commit 1b2bae2f87c00e749d467a140b318bd8a55ae8b0."
+        },
+        {
+          "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
+        }
+      ],
+      "risks": [
+        "External BFCL/Inspect AI/lm-evaluation-harness/SWE-bench execution remains unrun; plans are readiness artifacts only.",
+        "Eval summary success claims must remain suppressed unless held-out scenario manifests are identical and compare contracts are clean.",
+        "System python3 is 3.9.6 and cannot run full discovery; Python 3.11 release_check remains the verification floor."
+      ]
     }
   ],
   "current_packet": {
-    "id": "land_goal7_eval_pr6",
-    "layer": "eval",
+    "id": "governance_rollback_target_receipts",
+    "layer": "governance",
     "priority": "high",
-    "status": "verified_pending_commit_and_main_delivery",
-    "title": "Land Eval PR #6",
-    "summary": "Eval PR #6 is verified under the main-push lock after supervisor conflict resolution; commit and main delivery are next.",
-    "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
-    "source_branch": "codex/hermes-goal-7-eval-20260702-1027",
-    "source_branch_sha": "929e8b371ae617fd3c48f3f54f749a097b80ac5b",
-    "implementation_commit_sha": "4fab553cbfc1dc97b40f8ebc2abab9d303fbe17e",
-    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1316",
-    "base_main_sha": "1d66d4ecf6b787725d0082d4c36016301948120c",
-    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock"
+    "status": "ready",
+    "summary": "Next dependency-order packet after Eval PR #6; add explicit rollback target receipts and validation hooks.",
+    "title": "Require rollback target receipts",
+    "depends_on": [
+      "governance_policy_schema_registry"
+    ]
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1316",
-    "branch_sha": "1d66d4ecf6b787725d0082d4c36016301948120c",
+    "branch_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
     "commit_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "main_delivery": {
       "attempted_at": "2026-07-02T15:09:17Z",
@@ -2953,9 +3127,9 @@
       "lock_released_at": "2026-07-02T16:03:36Z",
       "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     },
-    "latest_origin_main_sha": "1d66d4ecf6b787725d0082d4c36016301948120c",
+    "latest_origin_main_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "acquired"
+    "lock_status": "held_until_post_delivery_checkpoint_push"
   },
   "governance_main_delivery": {
     "attempted_at": "2026-07-02T15:09:17Z",
@@ -3420,6 +3594,31 @@
       "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
       "status": "pass",
       "summary": "Release check passed, including Python 3.11 unit discovery with 372 tests and installed-CLI/demo gates."
+    },
+    {
+      "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1316",
+      "status": "pass",
+      "summary": "Supervisor branch pushed and verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 before main delivery."
+    },
+    {
+      "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+      "status": "pass",
+      "summary": "Fetched origin; current origin/main remained 1d66d4ecf6b787725d0082d4c36016301948120c, integrated HEAD was a clean descendant, and the worktree was clean."
+    },
+    {
+      "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+      "status": "pass",
+      "summary": "origin/main verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 after the locked Eval PR #6 push."
+    },
+    {
+      "command": "gh pr view 6 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+      "status": "pass",
+      "summary": "PR #6 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/6 with merge commit 1b2bae2f87c00e749d467a140b318bd8a55ae8b0."
+    },
+    {
+      "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+      "status": "pass",
+      "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
     }
   ],
   "layer_status": {
@@ -3429,9 +3628,10 @@
       "summary": "Add manifest-backed dataset versions, dataset_registry.json, redaction proof, label provenance, split scenario leakage checks, and exact trainer-preflight dataset selection."
     },
     "eval": {
-      "next_packet": "land_goal7_eval_pr6",
-      "status": "verified_pending_main_delivery",
-      "summary": "Eval PR #6 passed focused Eval/CLI/validation checks, fail-closed external adapter checks, blocked governance summary checks, and release_check under the lock; commit, branch push, main push, PR observation, and branch cleanup remain."
+      "next_packet": null,
+      "status": "completed_landed_on_main",
+      "summary": "Eval PR #6 landed on origin/main at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0; PR #6 is merged and the source plus supervisor remote branches are deleted.",
+      "latest_packet": "eval_pr6_main_delivery"
     },
     "evidence": {
       "next_packet": null,
@@ -3441,8 +3641,8 @@
     },
     "governance": {
       "next_packet": "governance_rollback_target_receipts",
-      "status": "in_progress",
-      "summary": "Promotion policy schema landed on main; PR #14 is merged and the remote packet branch is deleted. Rollback target receipts are queued next."
+      "status": "ready",
+      "summary": "Evidence, Harness, Data, Model, Training, Serving/Demo, and Eval are landed; next packet is Governance rollback target receipts."
     },
     "harness": {
       "next_packet": null,
@@ -3556,20 +3756,24 @@
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
       "source_branch": "codex/hermes-goal-7-eval-20260702-1027",
       "source_branch_sha": "929e8b371ae617fd3c48f3f54f749a097b80ac5b",
-      "status": "verified_pending_main_delivery",
-      "summary": "Eval PR #6 passed locked supervisor verification; pending commit, branch push, origin/main push, PR observation, and branch cleanup.",
+      "status": "landed_on_main",
+      "summary": "Eval PR #6 landed on origin/main and both remote temporary branches were deleted.",
       "title": "Land Eval PR #6",
       "implementation_commit_sha": "4fab553cbfc1dc97b40f8ebc2abab9d303fbe17e",
       "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1316",
       "base_main_sha": "1d66d4ecf6b787725d0082d4c36016301948120c",
-      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock"
+      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+      "main_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+      "merge_commit_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+      "remote_branch_deleted": true,
+      "completed_at": "2026-07-02T17:25:37Z"
     },
     {
       "id": "governance_rollback_target_receipts",
       "layer": "governance",
       "priority": "high",
       "status": "ready",
-      "summary": "Add explicit rollback target receipts and validation hooks so alias movement and release records cannot proceed without reversible rollback evidence.",
+      "summary": "Next dependency-order packet after Eval PR #6; add explicit rollback target receipts and validation hooks.",
       "title": "Require rollback target receipts",
       "depends_on": [
         "governance_policy_schema_registry"
@@ -3587,7 +3791,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T17:22:44Z",
+  "updated_at": "2026-07-02T17:25:37Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -3665,10 +3869,10 @@
     "base_main_sha": "1d66d4ecf6b787725d0082d4c36016301948120c",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "verified_pending_commit_and_main_delivery",
+    "main_integration_status": "pushed_and_verified",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1316",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
-    "pr_status": "OPEN_CONFLICTING_BEFORE_SUPERVISOR_MAIN_PUSH",
+    "pr_status": "MERGED",
     "merged_under_lock_at": "2026-07-02T17:19:12Z",
     "conflict_resolution": [
       "Preserved current main autonomy state and journal as the authoritative delivery history through Serving/Demo PR #7.",
@@ -3725,6 +3929,31 @@
         "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
         "status": "pass",
         "summary": "Release check passed, including Python 3.11 unit discovery with 372 tests and installed-CLI/demo gates."
+      },
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 1d66d4ecf6b787725d0082d4c36016301948120c, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 after the locked Eval PR #6 push."
+      },
+      {
+        "command": "gh pr view 6 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #6 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/6 with merge commit 1b2bae2f87c00e749d467a140b318bd8a55ae8b0."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
       }
     ],
     "risks": [
@@ -3737,7 +3966,47 @@
       "Commit the verified merge with Lore trailers and push the supervisor branch.",
       "Push the integrated HEAD to origin/main, verify the remote SHA, observe PR #6 as merged/closed, delete source and supervisor branches, and record a post-delivery checkpoint."
     ],
-    "verified_at": "2026-07-02T17:22:44Z"
+    "verified_at": "2026-07-02T17:22:44Z",
+    "merged_at": "2026-07-02T17:25:07Z",
+    "main_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+    "merge_commit_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+    "remote_main_verified_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+    "remote_main_verified_at": "2026-07-02T17:25:37Z",
+    "branch_remote_status": "deleted",
+    "integration_branch_remote_status": "deleted",
+    "remote_branch_verified_deleted": true,
+    "branch_remote_deleted_at": "2026-07-02T17:25:37Z",
+    "integration_branch_remote_deleted_at": "2026-07-02T17:25:37Z",
+    "completed_at": "2026-07-02T17:25:37Z",
+    "post_delivery_verification": [
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 1d66d4ecf6b787725d0082d4c36016301948120c, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 after the locked Eval PR #6 push."
+      },
+      {
+        "command": "gh pr view 6 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #6 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/6 with merge commit 1b2bae2f87c00e749d467a140b318bd8a55ae8b0."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
+      }
+    ],
+    "local_branch_status": "source branch is checked out in /Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-7-eval and was not deleted by Goal 0; remote branch is retired",
+    "post_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the checkpoint commit SHA is verified after push because a commit cannot self-record its final SHA."
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
@@ -3970,6 +4239,25 @@
           "command": "git push origin --delete codex/hermes-goal-6-serving-demo-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1304 && git ls-remote --heads origin main codex/hermes-goal-6-serving-demo-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1304",
           "status": "pass",
           "summary": "Only refs/heads/main remained; the Serving/Demo source and supervisor remote branches were absent."
+        }
+      ]
+    },
+    {
+      "id": "eval_pr6_remote_branches_retired",
+      "source_branch": "codex/hermes-goal-7-eval-20260702-1027",
+      "source_branch_sha": "929e8b371ae617fd3c48f3f54f749a097b80ac5b",
+      "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1316",
+      "integration_branch_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+      "status": "remote_deleted_after_main_delivery",
+      "deleted_at": "2026-07-02T17:25:37Z",
+      "main_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+      "remote_branch_verified_deleted": true,
+      "local_branch_status": "source local branch remains checked out in its dedicated worktree; supervisor local branch will be retired after checkpoint push and fresh branch creation",
+      "verification": [
+        {
+          "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
         }
       ]
     }
@@ -4451,10 +4739,10 @@
     "base_main_sha": "1d66d4ecf6b787725d0082d4c36016301948120c",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "verified_pending_commit_and_main_delivery",
+    "main_integration_status": "pushed_and_verified",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1316",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
-    "pr_status": "OPEN_CONFLICTING_BEFORE_SUPERVISOR_MAIN_PUSH",
+    "pr_status": "MERGED",
     "merged_under_lock_at": "2026-07-02T17:19:12Z",
     "conflict_resolution": [
       "Preserved current main autonomy state and journal as the authoritative delivery history through Serving/Demo PR #7.",
@@ -4511,6 +4799,31 @@
         "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
         "status": "pass",
         "summary": "Release check passed, including Python 3.11 unit discovery with 372 tests and installed-CLI/demo gates."
+      },
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 1d66d4ecf6b787725d0082d4c36016301948120c, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 after the locked Eval PR #6 push."
+      },
+      {
+        "command": "gh pr view 6 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #6 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/6 with merge commit 1b2bae2f87c00e749d467a140b318bd8a55ae8b0."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
       }
     ],
     "risks": [
@@ -4523,6 +4836,46 @@
       "Commit the verified merge with Lore trailers and push the supervisor branch.",
       "Push the integrated HEAD to origin/main, verify the remote SHA, observe PR #6 as merged/closed, delete source and supervisor branches, and record a post-delivery checkpoint."
     ],
-    "verified_at": "2026-07-02T17:22:44Z"
+    "verified_at": "2026-07-02T17:22:44Z",
+    "merged_at": "2026-07-02T17:25:07Z",
+    "main_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+    "merge_commit_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+    "remote_main_verified_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
+    "remote_main_verified_at": "2026-07-02T17:25:37Z",
+    "branch_remote_status": "deleted",
+    "integration_branch_remote_status": "deleted",
+    "remote_branch_verified_deleted": true,
+    "branch_remote_deleted_at": "2026-07-02T17:25:37Z",
+    "integration_branch_remote_deleted_at": "2026-07-02T17:25:37Z",
+    "completed_at": "2026-07-02T17:25:37Z",
+    "post_delivery_verification": [
+      {
+        "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Supervisor branch pushed and verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 before main delivery."
+      },
+      {
+        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+        "status": "pass",
+        "summary": "Fetched origin; current origin/main remained 1d66d4ecf6b787725d0082d4c36016301948120c, integrated HEAD was a clean descendant, and the worktree was clean."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 1b2bae2f87c00e749d467a140b318bd8a55ae8b0 after the locked Eval PR #6 push."
+      },
+      {
+        "command": "gh pr view 6 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #6 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/6 with merge commit 1b2bae2f87c00e749d467a140b318bd8a55ae8b0."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316 && git ls-remote --heads origin main codex/hermes-goal-7-eval-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1316",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the Eval source and supervisor remote branches were absent."
+      }
+    ],
+    "local_branch_status": "source branch is checked out in /Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-7-eval and was not deleted by Goal 0; remote branch is retired",
+    "post_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the checkpoint commit SHA is verified after push because a commit cannot self-record its final SHA."
   }
 }
