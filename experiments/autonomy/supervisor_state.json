@@ -147,6 +147,78 @@
       ],
       "resolved_at": "2026-07-02T16:26:16Z",
       "resolved_by_main_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886"
+    },
+    {
+      "id": "training_pr4_main_delivery_conflicts",
+      "layer": "training",
+      "priority": "critical",
+      "status": "resolved_verified_pending_main_delivery",
+      "blocked_at": "2026-07-02T15:49:29Z",
+      "resolved_at": "2026-07-02T16:57:59Z",
+      "resolved_by_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+      "source_branch": "codex/hermes-goal-5-training-20260702-1027",
+      "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+      "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+      "origin_main_sha_at_resolution": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
+      "conflicting_paths": [
+        "experiments/autonomy/journal/2026-07-02.md",
+        "experiments/autonomy/supervisor_state.json",
+        "flightrecorder/schemas/manifest.json",
+        "tests/test_schema_registry.py"
+      ],
+      "summary": "Supervisor resolved the repeated Training PR #4 current-main conflicts and reran focused plus release verification under the lock; main delivery cleanup remains pending.",
+      "verification": [
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py tests/test_trainer_preflight.py tests/test_schema_registry.py",
+          "status": "pass",
+          "summary": "Touched Training planner/runtime/preflight/CLI/scripts/tests compile after locked merge."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_agentic_training_plan tests.test_agentic_training_runtime tests.test_trainer_preflight tests.test_schema_registry tests.test_validation",
+          "status": "pass",
+          "summary": "76 focused Training, schema registry, and validation tests passed under the lock."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check examples/agentic_training/plans/sft_then_dpo_plan.json and --check-jsonl for sft/action_sft/dpo/reward_model/step_rewards/episodes",
+          "status": "pass",
+          "summary": "Example agentic training plan and all committed trainer-view JSONL samples validate against their registered schemas."
+        },
+        {
+          "command": "rm -rf /tmp/hfr-agentic-training-schema-locked && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name agentic_training_plan --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-training-schema-locked --force",
+          "status": "pass",
+          "summary": "Selected schema bundle export wrote agentic training plan/runtime schemas plus manifest."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 scripts/plan_agentic_training.py --mode sft_then_dpo --model-manifest examples/agentic_training/model_manifest.json --dataset-manifest examples/agentic_training/dataset_manifest.json --trainer-backend no_launch_demo --output-dir /tmp/hfr-agentic-training-output --limit 2 --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-training-plan-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan-locked.json",
+          "status": "pass",
+          "summary": "No-launch planner CLI emitted a ready SFT-then-DPO external-trainer plan and the artifact validated against hfr.agentic_training_plan.v1."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-ready-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-ready-locked.json",
+          "status": "pass",
+          "summary": "Ready runtime preflight emitted ready_for_tiny_smoke_launch while using importlib metadata checks only; no trainer imports, model downloads, or training launches occurred."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-blocked-locked.json (expected exit 1) plus schema and jq guard checks",
+          "status": "pass",
+          "summary": "Blocked runtime preflight emitted block_tiny_smoke_launch, recorded no trainer imports/training starts, and still validated against hfr.agentic_training_runtime_preflight.v1."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json",
+          "status": "pass",
+          "summary": "Supervisor state, schema catalog, and new Training schemas parse as JSON after locked merge resolution."
+        },
+        {
+          "command": "git diff --cached --check && git diff --check",
+          "status": "pass",
+          "summary": "No staged or unstaged whitespace errors before the verified merge commit."
+        },
+        {
+          "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+          "status": "pass",
+          "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
+        }
+      ]
     }
   ],
   "completed_packets": [
@@ -1685,23 +1757,259 @@
       "remote_branch_status": "deleted",
       "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1238",
       "integration_branch_remote_status": "deleted"
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/agentic_training_plan.py"
+        },
+        {
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/plan_agentic_training.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_training_plan.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_training_plan.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:33:59Z",
+      "id": "training_registry_backed_agentic_plans",
+      "layer": "training",
+      "priority": "high",
+      "status": "completed_on_packet_branch_verified_in_supervisor_merge_pending_main_delivery",
+      "summary": "Added a dependency-free dry-run planner for SFT, action SFT, DPO, SFT-then-DPO, reward-model, process-reward, GRPO, and RL training paths from registered model and dataset manifests. The planner blocks unknown licenses, unredacted traces, missing compatibility, missing mode views, and future RL modes without explicit enablement.",
+      "title": "Plan agentic training paths from registered inputs",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_training_plan tests.test_schema_registry",
+          "status": "pass",
+          "summary": "21 focused tests passed, including agentic training plan behavior and schema catalog coverage."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py",
+          "status": "pass",
+          "summary": "Planner module, script, and tests compile successfully."
+        },
+        {
+          "command": "python3 -m unittest tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "status": "pass",
+          "summary": "Schema catalog test passed with agentic_training_plan registered."
+        },
+        {
+          "command": "python3 scripts/plan_agentic_training.py --mode sft_then_dpo ... --out /tmp/hfr-agentic-training-plan/plan.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan/plan.json",
+          "status": "pass",
+          "summary": "Direct CLI smoke wrote a ready SFT-then-DPO plan from registered demo manifests and validated it against hfr.agentic_training_plan.v1."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force",
+          "status": "pass",
+          "summary": "Schema export wrote the agentic training plan schema and catalog manifest."
+        },
+        {
+          "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && python3 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && git diff --check",
+          "status": "pass",
+          "summary": "State/schema JSON parse and whitespace checks passed."
+        }
+      ],
+      "branch": "codex/hermes-goal-5-training-20260702-1027",
+      "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+      "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+      "main_delivery_status": "verified_pending_main_delivery"
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/preflight.py"
+        },
+        {
+          "kind": "cli",
+          "layer": "training",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/model_manifest.json"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/dataset_manifest.json"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/plans/sft_then_dpo_plan.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_trainer_preflight.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:46:51Z",
+      "id": "training_schema_checked_plan_artifacts",
+      "layer": "training",
+      "priority": "medium",
+      "status": "completed_on_packet_branch_verified_in_supervisor_merge_pending_main_delivery",
+      "summary": "Published durable synthetic registered model/dataset manifests, schema-conforming trainer-view JSONL samples, and a reproducible SFT-then-DPO agentic training plan. Added trainer-preflight --agentic-training-plan support so ready plans are hashed, schema-checked, archived, archive-checked, and exposed to trainer consumer plans without launching trainers.",
+      "title": "Publish schema-checked training plan artifacts",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_training_plan tests.test_trainer_preflight tests.test_schema_registry",
+          "status": "pass",
+          "summary": "38 tests passed, including full agentic-plan preflight/archive/consumer-plan coverage."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py tests/test_trainer_preflight.py",
+          "status": "pass",
+          "summary": "Touched planner, preflight, CLI, script, and tests compile."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check examples/agentic_training/plans/sft_then_dpo_plan.json and --check-jsonl for each sample trainer view",
+          "status": "pass",
+          "summary": "Committed plan plus SFT, action SFT, DPO, reward-model, step-reward, and episode sample views validate against bundled schemas."
+        },
+        {
+          "command": "python3 scripts/plan_agentic_training.py ... --out examples/agentic_training/plans/sft_then_dpo_plan.json && git diff --exit-code -- examples/agentic_training/plans/sft_then_dpo_plan.json",
+          "status": "pass",
+          "summary": "Committed example plan regenerates cleanly with the fixed timestamp."
+        }
+      ],
+      "branch": "codex/hermes-goal-5-training-20260702-1027",
+      "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+      "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+      "main_delivery_status": "verified_pending_main_delivery"
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/agentic_training_runtime.py"
+        },
+        {
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/preflight_agentic_training_runtime.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_training_runtime.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "TRAINING_PIPELINE.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "examples/agentic_training/README.md"
+        }
+      ],
+      "completed_at": "2026-07-02T15:01:51Z",
+      "id": "training_tiny_smoke_runtime_resolution",
+      "layer": "training",
+      "priority": "medium",
+      "status": "completed_on_packet_branch_verified_in_supervisor_merge_pending_main_delivery",
+      "summary": "Added a side-effect-free runtime preflight for ready agentic training plans. It validates selected trainer-view JSONL files against bundled schemas, checks backend or override Python module discoverability with importlib.util.find_spec, and emits ready_for_tiny_smoke_launch or block_tiny_smoke_launch without importing trainer stacks, downloading models, or launching training.",
+      "title": "Resolve tiny smoke training runtime dependencies",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_training_runtime tests.test_agentic_training_plan tests.test_trainer_preflight tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "status": "pass",
+          "summary": "28 focused tests passed across runtime preflight, existing plan/preflight behavior, and schema catalog registration."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/agentic_training_runtime.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_runtime.py flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py",
+          "status": "pass",
+          "summary": "Runtime preflight module, script, tests, and adjacent planner files compile."
+        },
+        {
+          "command": "python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-preflight/ready.json",
+          "status": "pass",
+          "summary": "Ready CLI path emitted hfr.agentic_training_runtime_preflight.v1 with ready_for_tiny_smoke_launch and no training/model-download side effects."
+        },
+        {
+          "command": "python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-preflight/blocked.json",
+          "status": "pass",
+          "summary": "Blocked CLI path exited 1, emitted block_tiny_smoke_launch, and classified the missing dependency."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-preflight/ready.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-preflight/blocked.json && python3 -m flightrecorder schemas --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-runtime-preflight/schema --force",
+          "status": "pass",
+          "summary": "Ready and blocked runtime-preflight artifacts validate, and the bundled schema exports through the registry."
+        },
+        {
+          "command": "python3 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json && python3 -m json.tool flightrecorder/schemas/manifest.json && git diff --check",
+          "status": "pass",
+          "summary": "New runtime schema, schema manifest, and whitespace checks passed."
+        }
+      ],
+      "branch": "codex/hermes-goal-5-training-20260702-1027",
+      "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+      "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+      "main_delivery_status": "verified_pending_main_delivery"
     }
   ],
   "current_packet": {
     "id": "land_goal5_training_pr4",
     "layer": "training",
     "priority": "high",
-    "status": "ready",
+    "status": "verified_pending_commit_and_main_delivery",
     "title": "Land Training PR #4",
-    "summary": "Model serving-probe receipts landed on main; next dependency-order packet is registry-backed agentic training plans without launching expensive training.",
+    "summary": "Training PR #4 is verified under the main-push lock after supervisor conflict resolution; commit and main delivery are next.",
     "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
     "source_branch": "codex/hermes-goal-5-training-20260702-1027",
-    "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41"
+    "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+    "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+    "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
+    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+    "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
+    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
-    "branch": "codex/hermes-goal-0-supervisor-20260702-1158",
-    "branch_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
+    "branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+    "branch_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
     "commit_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "main_delivery": {
       "attempted_at": "2026-07-02T15:09:17Z",
@@ -1789,7 +2097,7 @@
       "lock_released_at": "2026-07-02T16:03:36Z",
       "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     },
-    "latest_origin_main_sha": "c4f10cf56f887cb83e1aec946397851a6f05a980",
+    "latest_origin_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "acquired"
   },
@@ -2156,135 +2464,181 @@
   },
   "latest_artifacts": [
     {
-      "kind": "schema",
-      "layer": "governance",
-      "path": "flightrecorder/schemas/promotion_policy.v1.schema.json",
-      "sha256": "3ea8e913e723cd6af3682b8d697a1de00adf25daccbb394e57044f7ae87d9363"
+      "kind": "module",
+      "layer": "training",
+      "path": "flightrecorder/agentic_training_plan.py"
+    },
+    {
+      "kind": "script",
+      "layer": "training",
+      "path": "scripts/plan_agentic_training.py"
     },
     {
       "kind": "schema",
-      "layer": "governance",
-      "path": "flightrecorder/schemas/manifest.json",
-      "sha256": "7432e8591fe8a7fceffe18ca3a04a46b14ea5c856793457bf6c76b6c46659145"
+      "layer": "training",
+      "path": "flightrecorder/schemas/agentic_training_plan.v1.schema.json"
+    },
+    {
+      "kind": "test",
+      "layer": "training",
+      "path": "tests/test_agentic_training_plan.py"
     },
     {
       "kind": "doc",
-      "layer": "governance",
-      "path": "README.md",
-      "sha256": "e9416ac0b3736f6b5dd46e1055347e85679fc4e27bb871292823b2aa3ca8ea9a"
-    },
-    {
-      "kind": "doc",
-      "layer": "governance",
-      "path": "TRAINING_PIPELINE.md",
-      "sha256": "d41f450e2a9cd3cc9a82d37256d67e5211da8537db36c37a142b9a256d92a53a"
-    },
-    {
-      "kind": "schema",
-      "layer": "model",
-      "path": "flightrecorder/schemas/model_serving_probe_receipt.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "model",
-      "path": "flightrecorder/schemas/model_registry_entry.v1.schema.json"
+      "layer": "training",
+      "path": "docs/agentic-finetune-training-layer.md"
     },
     {
       "kind": "module",
-      "layer": "model",
-      "path": "flightrecorder/model_registry.py"
+      "layer": "training",
+      "path": "flightrecorder/preflight.py"
     },
     {
-      "kind": "module",
-      "layer": "model",
-      "path": "flightrecorder/validation.py"
-    },
-    {
-      "kind": "module",
-      "layer": "model",
+      "kind": "cli",
+      "layer": "training",
       "path": "flightrecorder/cli.py"
     },
     {
-      "kind": "serving_probe_receipt",
-      "layer": "model",
-      "path": "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json"
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/model_manifest.json"
     },
     {
-      "kind": "registry_entry",
-      "layer": "model",
-      "path": "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/dataset_manifest.json"
     },
     {
-      "kind": "registry_entry",
-      "layer": "model",
-      "path": "experiments/registry/model_registry_entries/local_mock_tiny_chat.json"
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/plans/sft_then_dpo_plan.json"
     },
     {
-      "kind": "registry",
-      "layer": "model",
-      "path": "experiments/registry/model_registry.json"
-    },
-    {
-      "kind": "validation_summary",
-      "layer": "model",
-      "path": "experiments/registry/model_layer_validation.json"
+      "kind": "test",
+      "layer": "training",
+      "path": "tests/test_trainer_preflight.py"
     },
     {
       "kind": "doc",
-      "layer": "model",
-      "path": "docs/model-layer-registry.md"
+      "layer": "training",
+      "path": "TRAINING_PIPELINE.md"
+    },
+    {
+      "kind": "module",
+      "layer": "training",
+      "path": "flightrecorder/agentic_training_runtime.py"
+    },
+    {
+      "kind": "script",
+      "layer": "training",
+      "path": "scripts/preflight_agentic_training_runtime.py"
+    },
+    {
+      "kind": "schema",
+      "layer": "training",
+      "path": "flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json"
     },
     {
       "kind": "test",
-      "layer": "model",
-      "path": "tests/test_model_registry.py"
+      "layer": "training",
+      "path": "tests/test_agentic_training_runtime.py"
+    },
+    {
+      "kind": "doc",
+      "layer": "training",
+      "path": "examples/agentic_training/README.md"
+    },
+    {
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/data/sft.jsonl"
+    },
+    {
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/data/action_sft.jsonl"
+    },
+    {
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/data/dpo.jsonl"
+    },
+    {
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/data/reward_model.jsonl"
+    },
+    {
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/data/step_rewards.jsonl"
+    },
+    {
+      "kind": "example",
+      "layer": "training",
+      "path": "examples/agentic_training/data/episodes.jsonl"
+    },
+    {
+      "kind": "manifest",
+      "layer": "training",
+      "path": "flightrecorder/schemas/manifest.json"
     },
     {
       "kind": "test",
-      "layer": "model",
+      "layer": "training",
       "path": "tests/test_schema_registry.py"
     }
   ],
   "latest_verification": [
     {
-      "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+      "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py tests/test_trainer_preflight.py tests/test_schema_registry.py",
       "status": "pass",
-      "summary": "Touched model registry, validation, CLI, and model/schema tests compile after locked merge."
+      "summary": "Touched Training planner/runtime/preflight/CLI/scripts/tests compile after locked merge."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_agentic_training_plan tests.test_agentic_training_runtime tests.test_trainer_preflight tests.test_schema_registry tests.test_validation",
       "status": "pass",
-      "summary": "57 focused model, schema registry, and validation tests passed after locked merge."
+      "summary": "76 focused Training, schema registry, and validation tests passed under the lock."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-serving-probe-receipt experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out /tmp/hfr_model_layer_validation_pr15_locked.json --strict",
+      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check examples/agentic_training/plans/sft_then_dpo_plan.json and --check-jsonl for sft/action_sft/dpo/reward_model/step_rewards/episodes",
       "status": "pass",
-      "summary": "Strict semantic validation passed for model-layer artifacts including the new Qwen serving-probe receipt."
+      "summary": "Example agentic training plan and all committed trainer-view JSONL samples validate against their registered schemas."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check on Qwen model artifacts plus examples/promotion_policy.demo.json",
+      "command": "rm -rf /tmp/hfr-agentic-training-schema-locked && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name agentic_training_plan --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-training-schema-locked --force",
       "status": "pass",
-      "summary": "Public schema checks passed for candidate, compatibility report, serving-probe receipt, registry entry, registry, scout manifest, training plan, and promotion policy."
+      "summary": "Selected schema bundle export wrote agentic training plan/runtime schemas plus manifest."
     },
     {
-      "command": "rm -rf /tmp/hfr-serving-schema-bundle-locked && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name model_serving_probe_receipt --name model_registry_entry --name promotion_policy --write-dir /tmp/hfr-serving-schema-bundle-locked",
+      "command": "/opt/homebrew/bin/python3.11 scripts/plan_agentic_training.py --mode sft_then_dpo --model-manifest examples/agentic_training/model_manifest.json --dataset-manifest examples/agentic_training/dataset_manifest.json --trainer-backend no_launch_demo --output-dir /tmp/hfr-agentic-training-output --limit 2 --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-training-plan-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan-locked.json",
       "status": "pass",
-      "summary": "Selected schema bundle export wrote model serving-probe, model registry entry, promotion policy, and manifest schemas."
+      "summary": "No-launch planner CLI emitted a ready SFT-then-DPO external-trainer plan and the artifact validated against hfr.agentic_training_plan.v1."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/model_serving_probe_receipt.v1.schema.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json && /opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json",
+      "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-ready-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-ready-locked.json",
       "status": "pass",
-      "summary": "New schema, schema catalog, and supervisor state JSON parse."
+      "summary": "Ready runtime preflight emitted ready_for_tiny_smoke_launch while using importlib metadata checks only; no trainer imports, model downloads, or training launches occurred."
     },
     {
-      "command": "git diff --check",
+      "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-blocked-locked.json (expected exit 1) plus schema and jq guard checks",
       "status": "pass",
-      "summary": "No whitespace errors after locked merge resolution."
+      "summary": "Blocked runtime preflight emitted block_tiny_smoke_launch, recorded no trainer imports/training starts, and still validated against hfr.agentic_training_runtime_preflight.v1."
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json",
+      "status": "pass",
+      "summary": "Supervisor state, schema catalog, and new Training schemas parse as JSON after locked merge resolution."
+    },
+    {
+      "command": "git diff --cached --check && git diff --check",
+      "status": "pass",
+      "summary": "No staged or unstaged whitespace errors before the verified merge commit."
     },
     {
       "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
       "status": "pass",
-      "summary": "Release check passed, including Python 3.11 discovery with 341 tests and installed-CLI/demo gates."
+      "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
     }
   ],
   "layer_status": {
@@ -2326,8 +2680,8 @@
     },
     "training": {
       "next_packet": "land_goal5_training_pr4",
-      "status": "ready",
-      "summary": "Training PR #4 is the next dependency-order landing packet; no expensive training is authorized."
+      "status": "verified_pending_main_delivery",
+      "summary": "Training PR #4 passed focused Training/schema checks and release_check under the lock; commit, branch push, main push, PR observation, and branch cleanup remain."
     }
   },
   "model_main_delivery": {
@@ -2380,9 +2734,14 @@
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
       "source_branch": "codex/hermes-goal-5-training-20260702-1027",
       "source_branch_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
-      "status": "ready",
-      "summary": "Next dependency-order landing packet; registry-backed agentic training plans remain open, with no expensive training authorized.",
-      "title": "Land Training PR #4"
+      "status": "verified_pending_main_delivery",
+      "summary": "Training PR #4 passed locked supervisor verification; pending commit, branch push, origin/main push, PR observation, and branch cleanup.",
+      "title": "Land Training PR #4",
+      "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+      "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
+      "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+      "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
+      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock"
     },
     {
       "id": "land_goal6_serving_demo_pr7",
@@ -2429,7 +2788,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:47:06Z",
+  "updated_at": "2026-07-02T16:57:59Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2499,93 +2858,88 @@
     ]
   },
   "github_delivery": {
-    "id": "model_serving_receipts_main_delivery",
-    "branch": "codex/hermes-goal-4-model-20260702-1614",
-    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1614",
-    "branch_head_before_locked_merge_sha": "17412934e733f594737e0781ee5f936e872c18bd",
-    "implementation_commit_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
-    "base_main_sha": "b904f0476f706afa00bf11463db3af760c46dc31",
+    "id": "training_pr4_main_delivery",
+    "branch": "codex/hermes-goal-5-training-20260702-1027",
+    "remote_ref": "refs/heads/codex/hermes-goal-5-training-20260702-1027",
+    "branch_head_before_locked_merge_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+    "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+    "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
+    "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "pushed_and_verified",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/15",
-    "pr_status": "MERGED",
+    "main_integration_status": "verified_pending_commit_and_main_delivery",
+    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
+    "pr_status": "OPEN_CONFLICTING_BEFORE_SUPERVISOR_MAIN_PUSH",
+    "merged_under_lock_at": "2026-07-02T16:53:41Z",
+    "conflict_resolution": [
+      "Preserved current main autonomy state and journal as the authoritative delivery history.",
+      "Folded in Goal 5 worker evidence for registry-backed agentic training plans, schema-checked plan artifacts, and side-effect-free runtime preflight.",
+      "Preserved current Harness/Model/Governance schema catalog entries while adding agentic_training_plan and agentic_training_runtime_preflight registrations plus schema-registry coverage."
+    ],
     "verification": [
       {
-        "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+        "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py tests/test_trainer_preflight.py tests/test_schema_registry.py",
         "status": "pass",
-        "summary": "Touched model registry, validation, CLI, and model/schema tests compile after locked merge."
+        "summary": "Touched Training planner/runtime/preflight/CLI/scripts/tests compile after locked merge."
       },
       {
-        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_agentic_training_plan tests.test_agentic_training_runtime tests.test_trainer_preflight tests.test_schema_registry tests.test_validation",
         "status": "pass",
-        "summary": "57 focused model, schema registry, and validation tests passed after locked merge."
+        "summary": "76 focused Training, schema registry, and validation tests passed under the lock."
       },
       {
-        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-serving-probe-receipt experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out /tmp/hfr_model_layer_validation_pr15_locked.json --strict",
+        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check examples/agentic_training/plans/sft_then_dpo_plan.json and --check-jsonl for sft/action_sft/dpo/reward_model/step_rewards/episodes",
         "status": "pass",
-        "summary": "Strict semantic validation passed for model-layer artifacts including the new Qwen serving-probe receipt."
+        "summary": "Example agentic training plan and all committed trainer-view JSONL samples validate against their registered schemas."
       },
       {
-        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check on Qwen model artifacts plus examples/promotion_policy.demo.json",
+        "command": "rm -rf /tmp/hfr-agentic-training-schema-locked && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name agentic_training_plan --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-training-schema-locked --force",
         "status": "pass",
-        "summary": "Public schema checks passed for candidate, compatibility report, serving-probe receipt, registry entry, registry, scout manifest, training plan, and promotion policy."
+        "summary": "Selected schema bundle export wrote agentic training plan/runtime schemas plus manifest."
       },
       {
-        "command": "rm -rf /tmp/hfr-serving-schema-bundle-locked && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name model_serving_probe_receipt --name model_registry_entry --name promotion_policy --write-dir /tmp/hfr-serving-schema-bundle-locked",
+        "command": "/opt/homebrew/bin/python3.11 scripts/plan_agentic_training.py --mode sft_then_dpo --model-manifest examples/agentic_training/model_manifest.json --dataset-manifest examples/agentic_training/dataset_manifest.json --trainer-backend no_launch_demo --output-dir /tmp/hfr-agentic-training-output --limit 2 --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-training-plan-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan-locked.json",
         "status": "pass",
-        "summary": "Selected schema bundle export wrote model serving-probe, model registry entry, promotion policy, and manifest schemas."
+        "summary": "No-launch planner CLI emitted a ready SFT-then-DPO external-trainer plan and the artifact validated against hfr.agentic_training_plan.v1."
       },
       {
-        "command": "/opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/model_serving_probe_receipt.v1.schema.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json && /opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json",
+        "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-ready-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-ready-locked.json",
         "status": "pass",
-        "summary": "New schema, schema catalog, and supervisor state JSON parse."
+        "summary": "Ready runtime preflight emitted ready_for_tiny_smoke_launch while using importlib metadata checks only; no trainer imports, model downloads, or training launches occurred."
       },
       {
-        "command": "git diff --check",
+        "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-blocked-locked.json (expected exit 1) plus schema and jq guard checks",
         "status": "pass",
-        "summary": "No whitespace errors after locked merge resolution."
+        "summary": "Blocked runtime preflight emitted block_tiny_smoke_launch, recorded no trainer imports/training starts, and still validated against hfr.agentic_training_runtime_preflight.v1."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json",
+        "status": "pass",
+        "summary": "Supervisor state, schema catalog, and new Training schemas parse as JSON after locked merge resolution."
+      },
+      {
+        "command": "git diff --cached --check && git diff --check",
+        "status": "pass",
+        "summary": "No staged or unstaged whitespace errors before the verified merge commit."
       },
       {
         "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
         "status": "pass",
-        "summary": "Release check passed, including Python 3.11 discovery with 341 tests and installed-CLI/demo gates."
-      },
-      {
-        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
-        "status": "pass",
-        "summary": "origin/main verified at 8567c0de92eeac71135e8dddece46ce3f69949d6 after the locked PR #15 push."
-      },
-      {
-        "command": "gh pr view 15 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title,mergeable",
-        "status": "pass",
-        "summary": "PR #15 resolved as MERGED with merge commit 8567c0de92eeac71135e8dddece46ce3f69949d6."
-      },
-      {
-        "command": "git push origin --delete codex/hermes-goal-4-model-20260702-1614 codex/hermes-goal-0-supervisor-20260702-1238 && git ls-remote --heads origin main codex/hermes-goal-4-model-20260702-1614 codex/hermes-goal-0-supervisor-20260702-1238",
-        "status": "pass",
-        "summary": "Only refs/heads/main remained; codex/hermes-goal-4-model-20260702-1614 and codex/hermes-goal-0-supervisor-20260702-1238 were absent."
+        "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
       }
     ],
-    "verified_at": "2026-07-02T16:43:20Z",
     "risks": [
-      "Serving-probe receipt is metadata-only and does not prove live endpoint behavior.",
-      "Fresh release_check is required after merging over current governance schema main."
+      "Runtime preflight checks schema and dependency discoverability only; it does not execute a tiny smoke job or prove trainer version compatibility.",
+      "Default backend dependency probes may remain blocked until an external trainer environment installs Axolotl, LLaMA Factory, Unsloth, or process-reward packages.",
+      "No model downloads, trainer imports, weight updates, serving processes, GPU jobs, or expensive training launches are authorized in this packet."
     ],
-    "source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
-    "latest_source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
-    "latest_source_branch_note": "Folded state-only PR #15 blocker refresh commit into the locked supervisor merge before main push.",
-    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1238",
-    "integration_branch_sha": "8567c0de92eeac71135e8dddece46ce3f69949d6",
-    "branch_remote_status": "deleted",
-    "integration_branch_remote_status": "deleted",
-    "remote_branch_verified_deleted": true,
-    "main_sha": "8567c0de92eeac71135e8dddece46ce3f69949d6",
-    "merge_commit_sha": "8567c0de92eeac71135e8dddece46ce3f69949d6",
-    "remote_main_verified_sha": "8567c0de92eeac71135e8dddece46ce3f69949d6",
-    "remote_main_verified_at": "2026-07-02T16:47:06Z",
-    "branch_remote_deleted_at": "2026-07-02T16:47:06Z",
-    "completed_at": "2026-07-02T16:47:06Z"
+    "remaining_steps": [
+      "Run focused Training/schema/validation checks and release_check.sh under the lock.",
+      "Commit the verified merge with Lore trailers and push the supervisor branch.",
+      "Push the integrated HEAD to origin/main, verify the remote SHA, observe PR #4 as merged/closed, delete source and supervisor branches, and record a post-delivery checkpoint."
+    ],
+    "verified_at": "2026-07-02T16:57:59Z"
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
@@ -2603,7 +2957,10 @@
     "Remote CI may still fail on the pre-existing non-model schema export duplication in release_check.sh unless another lane fixes harness schema registration.",
     "PR #15 cannot be landed by this worker without supervisor integration because current origin/main conflicts with Goal 4 in shared autonomy state plus CLI/validation/schema surfaces.",
     "PR #15 serving-probe receipts are metadata-only; live serving behavior still requires Serving/demo layer receipts.",
-    "Do not release the main-push lock until PR #15 verification, main push, branch deletion, and checkpoint recording complete."
+    "Do not release the main-push lock until PR #15 verification, main push, branch deletion, and checkpoint recording complete.",
+    "Runtime preflight checks schema and dependency discoverability only; it does not execute a tiny smoke job or prove trainer version compatibility.",
+    "Default backend dependency probes may remain blocked until an external trainer environment installs Axolotl, LLaMA Factory, Unsloth, or process-reward packages.",
+    "No model downloads, trainer imports, weight updates, serving processes, GPU jobs, or expensive training launches are authorized in this packet."
   ],
   "safety_guardrails": {
     "gpu_work_launched": false,
@@ -2935,5 +3292,89 @@
     "remote_main_verified_at": "2026-07-02T16:47:06Z",
     "branch_remote_deleted_at": "2026-07-02T16:47:06Z",
     "completed_at": "2026-07-02T16:47:06Z"
+  },
+  "training_pr4_main_delivery": {
+    "id": "training_pr4_main_delivery",
+    "branch": "codex/hermes-goal-5-training-20260702-1027",
+    "remote_ref": "refs/heads/codex/hermes-goal-5-training-20260702-1027",
+    "branch_head_before_locked_merge_sha": "229904b7046d3fde3f62182a0af1e1d7568a8b41",
+    "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7",
+    "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
+    "base_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
+    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+    "lock_status": "held_until_post_delivery_checkpoint_push",
+    "main_integration_status": "verified_pending_commit_and_main_delivery",
+    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1248",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
+    "pr_status": "OPEN_CONFLICTING_BEFORE_SUPERVISOR_MAIN_PUSH",
+    "merged_under_lock_at": "2026-07-02T16:53:41Z",
+    "conflict_resolution": [
+      "Preserved current main autonomy state and journal as the authoritative delivery history.",
+      "Folded in Goal 5 worker evidence for registry-backed agentic training plans, schema-checked plan artifacts, and side-effect-free runtime preflight.",
+      "Preserved current Harness/Model/Governance schema catalog entries while adding agentic_training_plan and agentic_training_runtime_preflight registrations plus schema-registry coverage."
+    ],
+    "verification": [
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py tests/test_trainer_preflight.py tests/test_schema_registry.py",
+        "status": "pass",
+        "summary": "Touched Training planner/runtime/preflight/CLI/scripts/tests compile after locked merge."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_agentic_training_plan tests.test_agentic_training_runtime tests.test_trainer_preflight tests.test_schema_registry tests.test_validation",
+        "status": "pass",
+        "summary": "76 focused Training, schema registry, and validation tests passed under the lock."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check examples/agentic_training/plans/sft_then_dpo_plan.json and --check-jsonl for sft/action_sft/dpo/reward_model/step_rewards/episodes",
+        "status": "pass",
+        "summary": "Example agentic training plan and all committed trainer-view JSONL samples validate against their registered schemas."
+      },
+      {
+        "command": "rm -rf /tmp/hfr-agentic-training-schema-locked && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name agentic_training_plan --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-training-schema-locked --force",
+        "status": "pass",
+        "summary": "Selected schema bundle export wrote agentic training plan/runtime schemas plus manifest."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 scripts/plan_agentic_training.py --mode sft_then_dpo --model-manifest examples/agentic_training/model_manifest.json --dataset-manifest examples/agentic_training/dataset_manifest.json --trainer-backend no_launch_demo --output-dir /tmp/hfr-agentic-training-output --limit 2 --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-training-plan-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan-locked.json",
+        "status": "pass",
+        "summary": "No-launch planner CLI emitted a ready SFT-then-DPO external-trainer plan and the artifact validated against hfr.agentic_training_plan.v1."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-ready-locked.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-ready-locked.json",
+        "status": "pass",
+        "summary": "Ready runtime preflight emitted ready_for_tiny_smoke_launch while using importlib metadata checks only; no trainer imports, model downloads, or training launches occurred."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-blocked-locked.json (expected exit 1) plus schema and jq guard checks",
+        "status": "pass",
+        "summary": "Blocked runtime preflight emitted block_tiny_smoke_launch, recorded no trainer imports/training starts, and still validated against hfr.agentic_training_runtime_preflight.v1."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && /opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json",
+        "status": "pass",
+        "summary": "Supervisor state, schema catalog, and new Training schemas parse as JSON after locked merge resolution."
+      },
+      {
+        "command": "git diff --cached --check && git diff --check",
+        "status": "pass",
+        "summary": "No staged or unstaged whitespace errors before the verified merge commit."
+      },
+      {
+        "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+        "status": "pass",
+        "summary": "Release check passed, including Python 3.11 unit discovery with 353 tests and installed-CLI/demo gates."
+      }
+    ],
+    "risks": [
+      "Runtime preflight checks schema and dependency discoverability only; it does not execute a tiny smoke job or prove trainer version compatibility.",
+      "Default backend dependency probes may remain blocked until an external trainer environment installs Axolotl, LLaMA Factory, Unsloth, or process-reward packages.",
+      "No model downloads, trainer imports, weight updates, serving processes, GPU jobs, or expensive training launches are authorized in this packet."
+    ],
+    "remaining_steps": [
+      "Run focused Training/schema/validation checks and release_check.sh under the lock.",
+      "Commit the verified merge with Lore trailers and push the supervisor branch.",
+      "Push the integrated HEAD to origin/main, verify the remote SHA, observe PR #4 as merged/closed, delete source and supervisor branches, and record a post-delivery checkpoint."
+    ],
+    "verified_at": "2026-07-02T16:57:59Z"
   }
 }

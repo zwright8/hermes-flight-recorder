@@ -1843,6 +1843,7 @@ def cmd_trainer_preflight(args: argparse.Namespace) -> int:
         compare_export_dir=args.compare_export,
         reviewed_export_dir=args.reviewed_export,
         evidence_bundle_path=args.evidence_bundle,
+        agentic_training_plan_path=args.agentic_training_plan,
         validation_summary_paths=args.validation,
         require_gates=args.require_gate,
         required_dataset_versions=args.require_dataset_version,
@@ -3132,6 +3133,7 @@ def _parser() -> argparse.ArgumentParser:
     trainer_preflight.add_argument("--compare-export", help="export-compare-rl directory to fingerprint for the trainer handoff")
     trainer_preflight.add_argument("--reviewed-export", help="apply-review directory to fingerprint for the trainer handoff")
     trainer_preflight.add_argument("--evidence-bundle", help="evidence_bundle.json that must pass before launch")
+    trainer_preflight.add_argument("--agentic-training-plan", help="hfr.agentic_training_plan.v1 dry-run plan to fingerprint for the trainer handoff")
     trainer_preflight.add_argument(
         "--validation",
         action="append",

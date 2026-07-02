@@ -504,6 +504,22 @@ external launcher can validate that plan and emit a dry-run receipt before a
 real trainer takes over. That receipt can also be checked with
 `flightrecorder validate --trainer-wrapper-dry-run`, making the wrapper dry run
 part of the evidence contract rather than an untyped log file.
+Agentic fine-tuning modes can enter this same pipeline through
+`scripts/plan_agentic_training.py`, which emits `hfr.agentic_training_plan.v1`
+dry-run artifacts from registered model and dataset manifests for SFT, action
+SFT, DPO, SFT-then-DPO, reward-model, process-reward, and future GRPO/RL
+paths. Pass `--agentic-training-plan <plan.json>` to `trainer-preflight` to
+fingerprint a ready plan as a trainer input before archiving or handing it to
+an external runner.
+Before a bounded tiny-smoke launch, run
+`scripts/preflight_agentic_training_runtime.py` against that plan. It emits
+`hfr.agentic_training_runtime_preflight.v1`, validates the selected trainer
+views, probes required Python modules with `importlib.util.find_spec`, and
+records `training_started: false`, `model_downloads_started: false`, and
+`trainer_modules_imported: false`. Treat
+`recommendation: ready_for_tiny_smoke_launch` as the next handoff condition;
+blocked runtime-preflight artifacts are still schema-checkable failure
+evidence.
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle
 runs/evidence_bundle_trainer.json --strict` before handing the package to an

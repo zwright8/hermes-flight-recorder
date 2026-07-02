@@ -1,0 +1,48 @@
+{
+  "dataset_id": "synthetic-agentic-redacted-dataset",
+  "dataset_version": "v1",
+  "license": {
+    "allow_training": true,
+    "name": "Synthetic fixture license",
+    "status": "approved"
+  },
+  "redaction": {
+    "contains_unredacted_traces": false,
+    "passed": true,
+    "status": "redacted",
+    "summary": "Rows are synthetic and contain no secrets or raw user traces."
+  },
+  "schema_version": "hfr.dataset_manifest.example.v1",
+  "views": {
+    "action_sft": {
+      "path": "examples/agentic_training/data/action_sft.jsonl",
+      "row_count": 1,
+      "schema_version": "hfr.rl.sft.v1"
+    },
+    "dpo": {
+      "path": "examples/agentic_training/data/dpo.jsonl",
+      "row_count": 2,
+      "schema_version": "hfr.rl.dpo.v1"
+    },
+    "episodes": {
+      "path": "examples/agentic_training/data/episodes.jsonl",
+      "row_count": 1,
+      "schema_version": "hfr.rl.episode.v1"
+    },
+    "reward_model": {
+      "path": "examples/agentic_training/data/reward_model.jsonl",
+      "row_count": 1,
+      "schema_version": "hfr.rl.reward_model.v1"
+    },
+    "sft": {
+      "path": "examples/agentic_training/data/sft.jsonl",
+      "row_count": 2,
+      "schema_version": "hfr.rl.sft.v1"
+    },
+    "step_rewards": {
+      "path": "examples/agentic_training/data/step_rewards.jsonl",
+      "row_count": 2,
+      "schema_version": "hfr.rl.step_reward.v1"
+    }
+  }
+}

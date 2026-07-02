@@ -370,6 +370,22 @@
       "name": "trainer_wrapper_dry_run"
     },
     {
+      "artifact": "agentic_training_plan",
+      "artifact_schema_version": "hfr.agentic_training_plan.v1",
+      "description": "Registry-backed dry-run plan for agentic fine-tuning modes.",
+      "filename": "agentic_training_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_training_plan.v1.schema.json",
+      "name": "agentic_training_plan"
+    },
+    {
+      "artifact": "agentic_training_runtime_preflight",
+      "artifact_schema_version": "hfr.agentic_training_runtime_preflight.v1",
+      "description": "Side-effect-free runtime readiness preflight for an agentic training plan.",
+      "filename": "agentic_training_runtime_preflight.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_training_runtime_preflight.v1.schema.json",
+      "name": "agentic_training_runtime_preflight"
+    },
+    {
       "artifact": "model_candidate",
       "artifact_schema_version": "hfr.model_candidate.v1",
       "description": "Base-model scouting candidate with source, license review, terms, and compatibility metadata.",

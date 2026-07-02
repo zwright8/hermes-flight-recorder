@@ -1,0 +1,351 @@
+{
+  "blocked_reasons": [],
+  "check_count": 11,
+  "checks": [
+    {
+      "actual": {
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "supported_modes": [
+          "sft",
+          "action_sft",
+          "dpo",
+          "sft_then_dpo",
+          "reward_model",
+          "process_rewards",
+          "grpo",
+          "rl"
+        ]
+      },
+      "id": "mode_supported",
+      "passed": true,
+      "summary": "mode_supported: passed=True"
+    },
+    {
+      "actual": {
+        "model_id": "local/synthetic-agentic-candidate"
+      },
+      "expected": {
+        "required": true
+      },
+      "id": "model_manifest_registered",
+      "passed": true,
+      "summary": "model_manifest_registered: passed=True"
+    },
+    {
+      "actual": {
+        "allow_training": true,
+        "status": "approved"
+      },
+      "expected": {
+        "allow_training": true,
+        "status": [
+          "allowed",
+          "approved",
+          "cleared",
+          "open",
+          "permissive"
+        ]
+      },
+      "id": "model_license_allows_training",
+      "passed": true,
+      "summary": "model_license_allows_training: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "model_compatibility_passed",
+      "passed": true,
+      "summary": "model_compatibility_passed: passed=True"
+    },
+    {
+      "actual": {
+        "dataset_id": "synthetic-agentic-redacted-dataset"
+      },
+      "expected": {
+        "required": true
+      },
+      "id": "dataset_manifest_registered",
+      "passed": true,
+      "summary": "dataset_manifest_registered: passed=True"
+    },
+    {
+      "actual": {
+        "allow_training": true,
+        "status": "approved"
+      },
+      "expected": {
+        "allow_training": true,
+        "status": [
+          "allowed",
+          "approved",
+          "cleared",
+          "open",
+          "permissive"
+        ]
+      },
+      "id": "dataset_license_allows_training",
+      "passed": true,
+      "summary": "dataset_license_allows_training: passed=True"
+    },
+    {
+      "actual": {
+        "contains_unredacted_traces": false,
+        "status": "redacted"
+      },
+      "expected": {
+        "contains_unredacted_traces": false,
+        "status": [
+          "clean",
+          "passed",
+          "redacted"
+        ]
+      },
+      "id": "dataset_redaction_passed",
+      "passed": true,
+      "summary": "dataset_redaction_passed: passed=True"
+    },
+    {
+      "actual": {
+        "selected_views": [
+          "sft",
+          "dpo"
+        ]
+      },
+      "expected": {
+        "required_view_groups": [
+          [
+            "sft"
+          ],
+          [
+            "dpo",
+            "preferences"
+          ]
+        ]
+      },
+      "id": "mode_required_views_available",
+      "passed": true,
+      "summary": "mode_required_views_available: passed=True"
+    },
+    {
+      "actual": {
+        "allow_future_rl": false,
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "allow_future_rl": true,
+        "future_rl_modes": [
+          "grpo",
+          "rl"
+        ]
+      },
+      "id": "future_rl_explicitly_enabled",
+      "passed": true,
+      "summary": "future_rl_explicitly_enabled: passed=True"
+    },
+    {
+      "actual": {
+        "training_started": false
+      },
+      "expected": {
+        "training_started": false
+      },
+      "id": "flight_recorder_did_not_launch_training",
+      "passed": true,
+      "summary": "flight_recorder_did_not_launch_training: passed=True"
+    },
+    {
+      "actual": {
+        "model_downloads_started": false
+      },
+      "expected": {
+        "model_downloads_started": false
+      },
+      "id": "model_downloads_not_started",
+      "passed": true,
+      "summary": "model_downloads_not_started: passed=True"
+    }
+  ],
+  "created_at": "2026-07-02T00:00:00+00:00",
+  "execution": {
+    "dry_run_only": true,
+    "external_runner_command": [
+      "<external-runner>",
+      "--mode",
+      "sft_then_dpo",
+      "--backend",
+      "axolotl",
+      "--require-registered-inputs",
+      "--require-redacted-dataset",
+      "--require-license-approved",
+      "--output-dir",
+      "runs/agentic_training/adapters"
+    ],
+    "model_downloads_started": false,
+    "training_started": false
+  },
+  "failed_check_count": 0,
+  "handoff_contract": {
+    "allowed_modes": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "sft_then_dpo",
+      "reward_model",
+      "process_rewards",
+      "grpo",
+      "rl"
+    ],
+    "disallow_unredacted_traces": true,
+    "flight_recorder_executed_training": false,
+    "requires_known_license_status": true,
+    "requires_redacted_dataset": true,
+    "requires_registered_dataset": true,
+    "requires_registered_model": true,
+    "runner_must_require_recommendation": "ready_for_external_trainer_plan",
+    "runner_owns_execution": true
+  },
+  "input_manifests": {
+    "dataset": {
+      "contains_unredacted_traces": false,
+      "id": "synthetic-agentic-redacted-dataset",
+      "license_allow_training": true,
+      "license_allows_training": true,
+      "license_status": "approved",
+      "path": "examples/agentic_training/dataset_manifest.json",
+      "redaction_passed": true,
+      "redaction_status": "redacted",
+      "schema_version": "hfr.dataset_manifest.example.v1",
+      "sha256": "911aee47ba2c586e72a112120fdfb8fbc443f493d9d8371fdebf293d8756b1c8",
+      "version": "v1",
+      "view_count": 6,
+      "views": {
+        "action_sft": {
+          "name": "action_sft",
+          "path": "examples/agentic_training/data/action_sft.jsonl",
+          "row_count": 1,
+          "schema_version": "hfr.rl.sft.v1",
+          "split": ""
+        },
+        "dpo": {
+          "name": "dpo",
+          "path": "examples/agentic_training/data/dpo.jsonl",
+          "row_count": 2,
+          "schema_version": "hfr.rl.dpo.v1",
+          "split": ""
+        },
+        "episodes": {
+          "name": "episodes",
+          "path": "examples/agentic_training/data/episodes.jsonl",
+          "row_count": 1,
+          "schema_version": "hfr.rl.episode.v1",
+          "split": ""
+        },
+        "reward_model": {
+          "name": "reward_model",
+          "path": "examples/agentic_training/data/reward_model.jsonl",
+          "row_count": 1,
+          "schema_version": "hfr.rl.reward_model.v1",
+          "split": ""
+        },
+        "sft": {
+          "name": "sft",
+          "path": "examples/agentic_training/data/sft.jsonl",
+          "row_count": 2,
+          "schema_version": "hfr.rl.sft.v1",
+          "split": ""
+        },
+        "step_rewards": {
+          "name": "step_rewards",
+          "path": "examples/agentic_training/data/step_rewards.jsonl",
+          "row_count": 2,
+          "schema_version": "hfr.rl.step_reward.v1",
+          "split": ""
+        }
+      }
+    },
+    "model": {
+      "base_model": "local/synthetic-agentic-base",
+      "candidate_id": "candidate",
+      "compatibility_passed": true,
+      "id": "local/synthetic-agentic-candidate",
+      "license_allow_training": true,
+      "license_allows_training": true,
+      "license_status": "approved",
+      "path": "examples/agentic_training/model_manifest.json",
+      "schema_version": "hfr.model_candidate.example.v1",
+      "sha256": "ffd580ed90edb518911767f8f5190ad59db1b6d6594e3b12ec6e35b123d46db8"
+    }
+  },
+  "mode": "sft_then_dpo",
+  "notes": [
+    "This is a dry-run plan only; Flight Recorder did not import trainer packages or update weights.",
+    "External runners must revalidate manifests, redaction, license status, and file hashes immediately before launch."
+  ],
+  "passed": true,
+  "plan_path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+  "readiness": "ready",
+  "recommendation": "ready_for_external_trainer_plan",
+  "schema_version": "hfr.agentic_training_plan.v1",
+  "selected_views": [
+    {
+      "name": "sft",
+      "path": "examples/agentic_training/data/sft.jsonl",
+      "row_count": 2,
+      "schema_version": "hfr.rl.sft.v1",
+      "split": ""
+    },
+    {
+      "name": "dpo",
+      "path": "examples/agentic_training/data/dpo.jsonl",
+      "row_count": 2,
+      "schema_version": "hfr.rl.dpo.v1",
+      "split": ""
+    }
+  ],
+  "trainer_plan": {
+    "backend": "axolotl",
+    "extension_points": [
+      {
+        "id": "axolotl",
+        "scope": "sft,dpo,sft_then_dpo",
+        "status": "planned"
+      },
+      {
+        "id": "llama_factory",
+        "scope": "sft,dpo,sft_then_dpo,reward_model",
+        "status": "planned"
+      },
+      {
+        "id": "unsloth",
+        "scope": "sft,dpo,sft_then_dpo",
+        "status": "planned"
+      },
+      {
+        "id": "grpo_rl_runner",
+        "scope": "grpo,rl",
+        "status": "future"
+      }
+    ],
+    "limit": 2,
+    "mode_required_view_groups": [
+      [
+        "sft"
+      ],
+      [
+        "dpo",
+        "preferences"
+      ]
+    ],
+    "output_dir": "runs/agentic_training/adapters",
+    "stage_sequence": [
+      "sft",
+      "dpo"
+    ]
+  }
+}
