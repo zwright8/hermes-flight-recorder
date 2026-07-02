@@ -530,6 +530,14 @@
       "name": "reviewed_manifest"
     },
     {
+      "artifact": "review_calibration",
+      "artifact_schema_version": "hfr.review_calibration.v1",
+      "description": "Calibration report comparing reviewed human labels with deterministic scorecard outcomes.",
+      "filename": "review_calibration.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/review_calibration.v1.schema.json",
+      "name": "review_calibration"
+    },
+    {
       "artifact": "trainer_preflight",
       "artifact_schema_version": "hfr.trainer_preflight.v1",
       "description": "Trainer preflight launch guard over passed gates and trainer-facing artifacts.",

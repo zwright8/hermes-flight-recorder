@@ -1,0 +1,185 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/review_calibration.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Calibration report comparing reviewed human labels with deterministic scorecard outcomes.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "disagreements": {
+      "items": { "$ref": "#/$defs/disagreement" },
+      "type": "array"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "type": "boolean" },
+    "reviewed_export": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.review_calibration.v1" },
+    "source": { "$ref": "#/$defs/source" }
+  },
+  "required": [
+    "schema_version",
+    "reviewed_export",
+    "source",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics",
+    "disagreements",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Review Calibration",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "disagreement": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failures": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "disagreement_type": {
+          "enum": ["scorecard_passed_human_rejected", "scorecard_failed_human_accepted"],
+          "type": "string"
+        },
+        "episode_id": { "minLength": 1, "type": "string" },
+        "failed_rules": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "human_label": { "minLength": 1, "type": "string" },
+        "review_item_id": { "minLength": 1, "type": "string" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "scorecard_passed": { "type": "boolean" },
+        "scorecard_score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "source_lineage": { "type": ["string", "null"] },
+        "source_report": { "type": ["string", "null"] },
+        "task_family": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "review_item_id",
+        "episode_id",
+        "scenario_id",
+        "task_family",
+        "human_label",
+        "scorecard_passed",
+        "scorecard_score",
+        "failed_rules",
+        "critical_failures",
+        "source_report",
+        "source_lineage",
+        "disagreement_type"
+      ],
+      "type": "object"
+    },
+    "label_count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "label": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" }
+      },
+      "required": ["label", "count"],
+      "type": "object"
+    },
+    "mean_score": {
+      "additionalProperties": true,
+      "properties": {
+        "average_score": { "maximum": 100, "minimum": 0, "type": "number" },
+        "count": { "minimum": 0, "type": "integer" },
+        "label": { "minLength": 1, "type": "string" }
+      },
+      "required": ["label", "count", "average_score"],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "agreement_count": { "minimum": 0, "type": "integer" },
+        "agreement_rate": { "maximum": 1, "minimum": 0, "type": "number" },
+        "comparable_label_count": { "minimum": 0, "type": "integer" },
+        "disagreement_count": { "minimum": 0, "type": "integer" },
+        "false_negative_count": { "minimum": 0, "type": "integer" },
+        "false_positive_count": { "minimum": 0, "type": "integer" },
+        "human_negative_count": { "minimum": 0, "type": "integer" },
+        "human_positive_count": { "minimum": 0, "type": "integer" },
+        "label_counts": {
+          "items": { "$ref": "#/$defs/label_count" },
+          "type": "array"
+        },
+        "mean_score_by_human_label": {
+          "items": { "$ref": "#/$defs/mean_score" },
+          "type": "array"
+        },
+        "needs_review_count": { "minimum": 0, "type": "integer" },
+        "reviewed_label_count": { "minimum": 0, "type": "integer" },
+        "scorecard_negative_count": { "minimum": 0, "type": "integer" },
+        "scorecard_positive_count": { "minimum": 0, "type": "integer" },
+        "task_families": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "validation": { "$ref": "#/$defs/validation" }
+      },
+      "required": [
+        "reviewed_label_count",
+        "comparable_label_count",
+        "needs_review_count",
+        "agreement_count",
+        "disagreement_count",
+        "agreement_rate",
+        "scorecard_positive_count",
+        "scorecard_negative_count",
+        "human_positive_count",
+        "human_negative_count",
+        "false_positive_count",
+        "false_negative_count",
+        "label_counts",
+        "mean_score_by_human_label",
+        "task_families"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": true,
+      "properties": {
+        "reviewed_labels": { "minLength": 1, "type": "string" }
+      },
+      "required": ["reviewed_labels"],
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "available": { "type": "boolean" },
+        "error_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" },
+        "strict": { "type": "boolean" },
+        "target_count": { "minimum": 0, "type": "integer" },
+        "warning_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["available", "passed", "strict", "target_count", "error_count", "warning_count"],
+      "type": "object"
+    }
+  }
+}

@@ -878,6 +878,66 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "action_ledger")
 
+    def test_review_calibration_schema_accepts_minimal_report(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.review_calibration.v1",
+                "reviewed_export": "runs/reviewed_export",
+                "source": {"reviewed_labels": "runs/reviewed_export/reviewed_labels.jsonl"},
+                "passed": True,
+                "check_count": 1,
+                "failed_check_count": 0,
+                "checks": [
+                    {
+                        "id": "min_agreement_rate",
+                        "passed": True,
+                        "actual": 1.0,
+                        "expected": {"min": 1.0},
+                        "summary": "min_agreement_rate: actual=1.0, min=1.0",
+                    }
+                ],
+                "metrics": {
+                    "reviewed_label_count": 2,
+                    "comparable_label_count": 2,
+                    "needs_review_count": 0,
+                    "agreement_count": 2,
+                    "disagreement_count": 0,
+                    "agreement_rate": 1.0,
+                    "scorecard_positive_count": 1,
+                    "scorecard_negative_count": 1,
+                    "human_positive_count": 1,
+                    "human_negative_count": 1,
+                    "false_positive_count": 0,
+                    "false_negative_count": 0,
+                    "label_counts": [
+                        {"label": "accept", "count": 1},
+                        {"label": "reject", "count": 1},
+                        {"label": "needs_review", "count": 0},
+                        {"label": "unsafe", "count": 0},
+                        {"label": "incomplete", "count": 0},
+                    ],
+                    "mean_score_by_human_label": [
+                        {"label": "accept", "count": 1, "average_score": 100.0},
+                        {"label": "reject", "count": 1, "average_score": 0.0},
+                    ],
+                    "task_families": ["prompt_injection"],
+                    "validation": {
+                        "available": True,
+                        "passed": True,
+                        "strict": False,
+                        "target_count": 1,
+                        "error_count": 0,
+                        "warning_count": 0,
+                    },
+                },
+                "disagreements": [],
+                "notes": ["Review calibration fixture."],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "review_calibration")
+
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(
             {

@@ -87,6 +87,7 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertEqual(calibration["metrics"]["disagreement_count"], 0)
             self.assertEqual(calibration["disagreements"], [])
             self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
 
     def test_review_calibration_blocks_scorecard_human_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -124,6 +125,7 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertEqual(disagreement["scenario_id"], "prompt_injection_good")
             self.assertEqual(disagreement["disagreement_type"], "scorecard_passed_human_rejected")
             self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
 
     def test_review_calibration_fails_invalid_reviewed_export_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -143,6 +145,7 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertFalse(calibration["metrics"]["validation"]["passed"])
             self.assertGreater(calibration["metrics"]["validation"]["error_count"], 0)
             self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
 
 
 if __name__ == "__main__":

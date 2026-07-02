@@ -1005,6 +1005,7 @@ test -f runs/review_calibration.json
 "$PYTHON" -m flightrecorder validate \
   --review-calibration runs/review_calibration.json \
   --strict >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/review_calibration.json >/dev/null
 if "$PYTHON" -m flightrecorder gate-reviewed \
   --reviewed-export runs/reviewed_export \
   --min-reviewed-labels 999 >/dev/null; then
@@ -1018,6 +1019,8 @@ if "$PYTHON" -m flightrecorder review-calibration \
   echo "review-calibration did not fail a too-high comparable-label threshold" >&2
   exit 1
 fi
+test -f runs/review_calibration_impossible.json
+"$PYTHON" -m flightrecorder schemas --check runs/review_calibration_impossible.json >/dev/null
 if "$PYTHON" -m flightrecorder gate-export \
   --training-export runs/training_export \
   --min-pass-rate 0.9 >/dev/null; then
