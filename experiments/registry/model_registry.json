@@ -129,10 +129,160 @@
       "status": "registered",
       "training_eligible": true,
       "updated_at": "2026-07-02T14:52:35Z"
+    },
+    "qwen3_4b_instruct_2507": {
+      "candidate": {
+        "candidate_id": "qwen3_4b_instruct_2507",
+        "compatibility": {
+          "chat_template": {
+            "notes": "tokenizer_config.json contains a chat_template; metadata only, no tokenizer vocabulary or tokenizer model files were downloaded.",
+            "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/tokenizer_config.json",
+            "status": "metadata_only",
+            "verified": false
+          },
+          "context_length": 262144,
+          "memory": {
+            "notes": "4.0B bfloat16 model metadata; README warns to reduce context length, for example to 32768, if out-of-memory occurs. No runtime memory probe was executed.",
+            "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+            "status": "metadata_only",
+            "verified": false
+          },
+          "quantization": {
+            "notes": "No quantized artifacts were fetched. vLLM/SGLang serving compatibility is documented by the model card, but quantization choice remains trainer/serving-runner owned.",
+            "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+            "status": "metadata_only",
+            "verified": false
+          },
+          "serving": {
+            "notes": "Model card documents SGLang and vLLM commands with 262144 context length. No serving process was launched.",
+            "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+            "status": "metadata_only",
+            "supported": true,
+            "verified": false
+          },
+          "structured_outputs": {
+            "notes": "Structured-output behavior is not explicitly verified by metadata. Treat as unsupported until a serving/tool parser receipt proves it.",
+            "source": "metadata_review",
+            "status": "metadata_only",
+            "supported": false,
+            "verified": false
+          },
+          "tokenizer": {
+            "notes": "tokenizer_config.json metadata was reviewed; tokenizer vocabulary/model payloads were not downloaded.",
+            "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/tokenizer_config.json",
+            "status": "metadata_only",
+            "verified": false
+          },
+          "tool_calls": {
+            "notes": "Model card Agentic Use section says Qwen3 excels in tool calling and recommends Qwen-Agent; tokenizer_config.json includes tool-call chat template metadata. No runtime tool-call probe was executed.",
+            "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+            "status": "metadata_only",
+            "supported": true,
+            "verified": false
+          }
+        },
+        "license": {
+          "accepted_terms": true,
+          "license_id": "apache-2.0",
+          "notes": [
+            "Hugging Face model card front matter declares license: apache-2.0.",
+            "LICENSE file fetched as small text metadata only; no weights were downloaded.",
+            "License status is approved for dry-run training selection, but downstream trainers must re-check license and terms before launch."
+          ],
+          "review_status": "approved",
+          "reviewed_at": "2026-07-02T15:23:41Z",
+          "reviewer": "codex-goal-4-model",
+          "source_url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE",
+          "status": "approved",
+          "terms_url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+          "training_allowed": true
+        },
+        "metadata_evidence": {
+          "fetched_at": "2026-07-02T15:23:41Z",
+          "files": [
+            {
+              "name": "README.md",
+              "sha256": "8e3dd0c3b5b11897cc71092ccfe517bb7a9783479baa3665aad73c8d1a2041cd",
+              "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md"
+            },
+            {
+              "name": "config.json",
+              "sha256": "5beea1a4a34c62782bfb2f911c606741a3bab8f92d80a118fa053c28af12e8ba",
+              "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/config.json"
+            },
+            {
+              "name": "tokenizer_config.json",
+              "sha256": "a62ff0a2472a0fa1b8eaabcb57c59b58afa42a22831dc141400b6e0cf2b65ce3",
+              "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/tokenizer_config.json"
+            },
+            {
+              "name": "LICENSE",
+              "sha256": "832dd9e00a68dd83b3c3fb9f5588dad7dcf337a0db50f7d9483f310cd292e92e",
+              "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/LICENSE"
+            }
+          ]
+        },
+        "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+        "notes": [
+          "Real upstream metadata-only candidate for base-model scouting.",
+          "Config metadata: qwen3 causal LM, 4.0B parameter model card claim, 36 layers, 32 attention heads, 8 key/value heads, 262144 max_position_embeddings.",
+          "This artifact does not authorize weight download or GPU work by Flight Recorder."
+        ],
+        "schema_version": "hfr.model_candidate.v1",
+        "source": {
+          "config_model_type": "qwen3",
+          "max_position_embeddings": 262144,
+          "revision": "main",
+          "type": "huggingface_model",
+          "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+          "weight_download_allowed": false
+        }
+      },
+      "candidate_id": "qwen3_4b_instruct_2507",
+      "entry_id": "qwen3_4b_instruct_2507",
+      "license_status": "approved",
+      "links": {
+        "adapters": [],
+        "datasets": [
+          {
+            "id": "local_mock_dataset_v1",
+            "kind": "dataset_manifest",
+            "metadata": {
+              "role": "training_input"
+            },
+            "path": "experiments/registry/datasets/local_mock_dataset_manifest.json",
+            "recorded_at": "2026-07-02T15:37:30Z",
+            "sha256": "a13e8bd2c3cd18b7dc164824a9f7fd6feedda4a7002822efbe39c06c1605c281",
+            "status": "dry_run_stub"
+          }
+        ],
+        "evals": [],
+        "promotion_decisions": [],
+        "training_runs": [
+          {
+            "id": "qwen3_4b_instruct_2507_sft_dry_run",
+            "kind": "training_plan",
+            "metadata": {
+              "mode": "sft",
+              "trainer": "local-dry-run"
+            },
+            "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
+            "recorded_at": "2026-07-02T15:37:36Z",
+            "sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a",
+            "status": "dry_run_plan"
+          }
+        ]
+      },
+      "notes": [],
+      "registered_at": "2026-07-02T15:37:16Z",
+      "schema_version": "hfr.model_registry_entry.v1",
+      "status": "metadata_reviewed",
+      "training_eligible": true,
+      "updated_at": "2026-07-02T15:37:36Z"
     }
   },
   "notes": [],
   "registry_path": "experiments/registry/model_registry.json",
   "schema_version": "hfr.model_registry.v1",
-  "updated_at": "2026-07-02T14:52:35Z"
+  "updated_at": "2026-07-02T15:37:36Z"
 }

@@ -1,0 +1,142 @@
+{
+  "candidate_id": "qwen3_4b_instruct_2507",
+  "download_policy": {
+    "downloaded_tokenizer": false,
+    "downloaded_weights": false,
+    "gpu_execution": false,
+    "imported_heavy_ml": false
+  },
+  "generated_at": "2026-07-02T15:37:10Z",
+  "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+  "notes": [
+    "This compatibility report records metadata without downloading model weights or tokenizers.",
+    "Future serving checks should replace metadata_only probes with verified tokenizer and serving evidence."
+  ],
+  "passed": true,
+  "probes": [
+    {
+      "id": "context",
+      "metadata": {
+        "context_length": 262144
+      },
+      "notes": "Recorded context length is 262144 tokens.",
+      "source": "model_candidate.compatibility.context_length",
+      "status": "recorded",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "tokenizer",
+      "metadata": {
+        "notes": "tokenizer_config.json metadata was reviewed; tokenizer vocabulary/model payloads were not downloaded.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/tokenizer_config.json",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "tokenizer_config.json metadata was reviewed; tokenizer vocabulary/model payloads were not downloaded.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "chat_template",
+      "metadata": {
+        "notes": "tokenizer_config.json contains a chat_template; metadata only, no tokenizer vocabulary or tokenizer model files were downloaded.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/tokenizer_config.json",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "tokenizer_config.json contains a chat_template; metadata only, no tokenizer vocabulary or tokenizer model files were downloaded.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "serving",
+      "metadata": {
+        "notes": "Model card documents SGLang and vLLM commands with 262144 context length. No serving process was launched.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      },
+      "notes": "Model card documents SGLang and vLLM commands with 262144 context length. No serving process was launched.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "tool_calls",
+      "metadata": {
+        "notes": "Model card Agentic Use section says Qwen3 excels in tool calling and recommends Qwen-Agent; tokenizer_config.json includes tool-call chat template metadata. No runtime tool-call probe was executed.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      },
+      "notes": "Model card Agentic Use section says Qwen3 excels in tool calling and recommends Qwen-Agent; tokenizer_config.json includes tool-call chat template metadata. No runtime tool-call probe was executed.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "structured_outputs",
+      "metadata": {
+        "notes": "Structured-output behavior is not explicitly verified by metadata. Treat as unsupported until a serving/tool parser receipt proves it.",
+        "source": "metadata_review",
+        "status": "metadata_only",
+        "supported": false,
+        "verified": false
+      },
+      "notes": "Structured-output behavior is not explicitly verified by metadata. Treat as unsupported until a serving/tool parser receipt proves it.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": false,
+      "verified": false
+    },
+    {
+      "id": "quantization",
+      "metadata": {
+        "notes": "No quantized artifacts were fetched. vLLM/SGLang serving compatibility is documented by the model card, but quantization choice remains trainer/serving-runner owned.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "No quantized artifacts were fetched. vLLM/SGLang serving compatibility is documented by the model card, but quantization choice remains trainer/serving-runner owned.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "memory",
+      "metadata": {
+        "notes": "4.0B bfloat16 model metadata; README warns to reduce context length, for example to 32768, if out-of-memory occurs. No runtime memory probe was executed.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "4.0B bfloat16 model metadata; README warns to reduce context length, for example to 32768, if out-of-memory occurs. No runtime memory probe was executed.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    }
+  ],
+  "readiness": "metadata_recorded",
+  "recommendation": "ready_for_registry_dry_run",
+  "report_path": "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json",
+  "schema_version": "hfr.model_compatibility_report.v1",
+  "summary": {
+    "context_length": 262144,
+    "metadata_only_count": 7,
+    "missing_count": 0,
+    "probe_count": 8,
+    "unsupported_count": 1,
+    "verified_count": 0
+  }
+}
