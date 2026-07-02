@@ -807,6 +807,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
         state_snapshot_paths=args.state_snapshot,
         state_diff_paths=args.state_diff,
         run_digest_paths=args.run_digest,
+        harness_manifest_paths=args.harness_manifest,
+        harness_result_paths=args.harness_result,
+        harness_replay_result_paths=args.harness_replay_result,
         live_smoke_summary_paths=args.live_smoke_summary,
         strict=args.strict,
     )
@@ -1898,6 +1901,9 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--state-snapshot", action="append", default=[], help="Validate one hfr.state_snapshot.v1 JSON file; may be repeated")
     validate.add_argument("--state-diff", action="append", default=[], help="Validate one hfr.state_diff.v1 JSON file; may be repeated")
     validate.add_argument("--run-digest", action="append", default=[], help="Validate one hfr.run_digest.v1 JSON file; may be repeated")
+    validate.add_argument("--harness-manifest", action="append", default=[], help="Validate one harness_manifest.json; may be repeated")
+    validate.add_argument("--harness-result", action="append", default=[], help="Validate one harness_result.json; may be repeated")
+    validate.add_argument("--harness-replay-result", action="append", default=[], help="Validate one harness_replay_result.json; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")

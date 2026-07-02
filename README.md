@@ -612,6 +612,48 @@ flightrecorder evidence-bundle \
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI
 promotion-gate example.
 
+## Harness Runner
+
+Use `scripts/hermes_harness.py` when Eval or Evidence workers need an isolated
+scenario run without hand-edited config. The harness writes:
+
+- `harness_manifest.json` with runner, provider, model, scenario, sandbox,
+  fake-secret canaries, and effective tool policy metadata.
+- `harness_result.json` with sandbox, tool policy, trace, scorecard, standard
+  Flight Recorder artifacts, and replay lineage.
+- `harness_replay_result.json` when replaying from `artifact_lineage.json`.
+
+Run a local mock scenario without an external model endpoint:
+
+```bash
+python3.11 scripts/hermes_harness.py run-scenario \
+  --scenario scenarios/prompt_injection_good.json \
+  --out runs/harness_prompt_injection_good \
+  --mock-response "Summary: autonomous evidence quality gates." \
+  --force
+
+flightrecorder validate \
+  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
+  --strict
+```
+
+Replay from a generated lineage:
+
+```bash
+python3.11 scripts/hermes_harness.py replay-trace \
+  --lineage runs/harness_prompt_injection_good/artifact_lineage.json \
+  --out runs/harness_prompt_injection_good_replay
+
+flightrecorder validate \
+  --harness-replay-result runs/harness_prompt_injection_good_replay/harness_replay_result.json \
+  --strict
+```
+
+The live Hermes, OpenClaw, and Coven smoke scripts keep their existing summary
+files and also write the same harness manifest/result artifacts in the smoke
+output directory.
+
 ## Live Hermes Collection
 
 The guaranteed demo path is fixture-based. Live Hermes integration is optional.

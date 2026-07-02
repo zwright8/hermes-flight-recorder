@@ -1,0 +1,82 @@
+{
+  "active_layer": "harness",
+  "blocked_packets": [],
+  "branch": "codex/hermes-goal-2-harness-20260702-1027",
+  "completed_packets": [
+    {
+      "artifacts": [
+        {
+          "kind": "script",
+          "path": "scripts/hermes_harness.py"
+        },
+        {
+          "kind": "schema",
+          "path": "flightrecorder/schemas/harness_run_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "path": "flightrecorder/schemas/harness_replay_result.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "path": "tests/test_deployment_hardening.py"
+        },
+        {
+          "kind": "doc",
+          "path": "README.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:36:12Z",
+      "id": "harness_manifest_mock_live_contracts",
+      "layer": "harness",
+      "status": "completed",
+      "summary": "Added a common harness manifest/result/replay contract, mock harness runner, validation flags, schema catalog entries, live Hermes/OpenClaw/Coven smoke publication hooks, and focused regression coverage.",
+      "verification": [
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py flightrecorder/cli.py flightrecorder/validation.py tests/test_deployment_hardening.py tests/test_schema_registry.py",
+          "status": "pass"
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_deployment_hardening tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "status": "pass"
+        },
+        {
+          "command": "scripts/hermes_harness.py run-scenario + flightrecorder validate --harness-manifest --harness-result + replay-trace + validate --harness-replay-result",
+          "status": "pass"
+        },
+        {
+          "command": "flightrecorder schemas --name harness_run_manifest/harness_run_result/harness_replay_result",
+          "status": "pass"
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass"
+        }
+      ]
+    }
+  ],
+  "current_packet": null,
+  "latest_commit_sha": "pending_commit",
+  "latest_pr_url": "pending_push",
+  "latest_risks": [
+    "Real Hermes, OpenClaw, and Coven runtimes were not launched in this packet; coverage uses mock and artifact-writer paths.",
+    "The dedicated worktree did not include the broader autonomous docs/state files from the shared checkout, so this branch starts its own scoped state handoff."
+  ],
+  "next_packets": [
+    {
+      "id": "harness_live_replay_matrix",
+      "layer": "harness",
+      "status": "ready",
+      "summary": "Add fixture-backed replay matrix coverage across Hermes-style observer, OpenClaw, and Coven harness outputs."
+    }
+  ],
+  "promotion_readiness": {
+    "harness": "in_progress"
+  },
+  "schema_version": "hfr.autonomy.supervisor_state.v1",
+  "updated_at": "2026-07-02T14:36:12Z"
+}

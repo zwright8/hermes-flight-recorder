@@ -1,0 +1,70 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_run_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Common harness-run manifest emitted before mock or live scenario execution.",
+  "properties": {
+    "created_at": { "type": "string" },
+    "force": { "type": "boolean" },
+    "model": {
+      "additionalProperties": true,
+      "properties": {
+        "base_url": { "type": ["string", "null"] },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "outputs": {
+      "additionalProperties": true,
+      "properties": {
+        "manifest": { "minLength": 1, "type": "string" },
+        "result": { "minLength": 1, "type": "string" },
+        "run_dir": { "minLength": 1, "type": "string" }
+      },
+      "required": ["run_dir", "manifest", "result"],
+      "type": "object"
+    },
+    "provider": { "minLength": 1, "type": "string" },
+    "runner": { "minLength": 1, "type": "string" },
+    "sandbox": {
+      "additionalProperties": true,
+      "properties": {
+        "audit_artifacts_kept": { "type": "boolean" },
+        "ephemeral": { "type": "boolean" },
+        "events": { "minLength": 1, "type": "string" },
+        "fake_secret_canaries": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "name": { "minLength": 1, "type": "string" },
+              "sha256": { "minLength": 64, "type": "string" }
+            },
+            "required": ["name", "sha256"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "home": { "minLength": 1, "type": "string" },
+        "root": { "minLength": 1, "type": "string" },
+        "workspace": { "minLength": 1, "type": "string" }
+      },
+      "required": ["root", "home", "workspace", "events", "fake_secret_canaries"],
+      "type": "object"
+    },
+    "scenario": {
+      "additionalProperties": true,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "path"],
+      "type": "object"
+    },
+    "schema_version": { "const": "hfr.harness_run_manifest.v1" },
+    "tool_policy": { "type": "object" }
+  },
+  "required": ["schema_version", "runner", "provider", "model", "scenario", "outputs", "sandbox", "tool_policy"],
+  "title": "Hermes Flight Recorder Harness Run Manifest",
+  "type": "object"
+}

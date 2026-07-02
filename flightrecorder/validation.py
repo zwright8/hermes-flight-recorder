@@ -85,6 +85,9 @@ VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
+HARNESS_RUN_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
+HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
+HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
 _COMPANION_NOT_PROVIDED = object()
 
 
@@ -142,6 +145,9 @@ def validate_artifacts(
     state_snapshot_paths: list[str | Path] | None = None,
     state_diff_paths: list[str | Path] | None = None,
     run_digest_paths: list[str | Path] | None = None,
+    harness_manifest_paths: list[str | Path] | None = None,
+    harness_result_paths: list[str | Path] | None = None,
+    harness_replay_result_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
@@ -213,6 +219,12 @@ def validate_artifacts(
         targets.append(validate_state_diff(state_diff_path))
     for run_digest_path in run_digest_paths or []:
         targets.append(validate_run_digest(run_digest_path))
+    for harness_manifest_path in harness_manifest_paths or []:
+        targets.append(validate_harness_run_manifest(harness_manifest_path))
+    for harness_result_path in harness_result_paths or []:
+        targets.append(validate_harness_run_result(harness_result_path))
+    for harness_replay_result_path in harness_replay_result_paths or []:
+        targets.append(validate_harness_replay_result(harness_replay_result_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     if not targets:
@@ -891,6 +903,36 @@ def validate_run_digest(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_harness_run_manifest(path: str | Path) -> ValidationTarget:
+    """Validate a harness_manifest.json artifact."""
+    manifest_path = Path(path)
+    target = ValidationTarget("harness_run_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "harness_manifest.json")
+    if manifest is not None:
+        _validate_harness_run_manifest(manifest, target)
+    return target
+
+
+def validate_harness_run_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness_result.json artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_run_result", str(result_path))
+    result = _read_object(result_path, target, "harness_result.json")
+    if result is not None:
+        _validate_harness_run_result(result, target)
+    return target
+
+
+def validate_harness_replay_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness_replay_result.json artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_replay_result", str(result_path))
+    result = _read_object(result_path, target, "harness_replay_result.json")
+    if result is not None:
+        _validate_harness_replay_result(result, target)
+    return target
+
+
 def validate_review_calibration(path: str | Path) -> ValidationTarget:
     """Validate a review-calibration report."""
     calibration_path = Path(path)
@@ -909,6 +951,93 @@ def validate_scenario_quality(path: str | Path) -> ValidationTarget:
     if quality is not None:
         _validate_scenario_quality(quality, target)
     return target
+
+
+def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+    if manifest.get("schema_version") != HARNESS_RUN_MANIFEST_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_manifest.schema_version must be {HARNESS_RUN_MANIFEST_SCHEMA_VERSION!r}, got {manifest.get('schema_version')!r}."
+        )
+    for field_name in ("runner", "provider"):
+        if not isinstance(manifest.get(field_name), str) or not manifest.get(field_name):
+            target.errors.append(f"harness_manifest.{field_name} must be a non-empty string.")
+    for field_name in ("model", "scenario", "outputs", "sandbox", "tool_policy"):
+        if not isinstance(manifest.get(field_name), dict):
+            target.errors.append(f"harness_manifest.{field_name} must be an object.")
+    model = manifest.get("model") if isinstance(manifest.get("model"), dict) else {}
+    if not isinstance(model.get("id"), str) or not model.get("id"):
+        target.errors.append("harness_manifest.model.id must be a non-empty string.")
+    scenario = manifest.get("scenario") if isinstance(manifest.get("scenario"), dict) else {}
+    for field_name in ("id", "path"):
+        if not isinstance(scenario.get(field_name), str) or not scenario.get(field_name):
+            target.errors.append(f"harness_manifest.scenario.{field_name} must be a non-empty string.")
+    outputs = manifest.get("outputs") if isinstance(manifest.get("outputs"), dict) else {}
+    for field_name in ("run_dir", "manifest", "result"):
+        if not isinstance(outputs.get(field_name), str) or not outputs.get(field_name):
+            target.errors.append(f"harness_manifest.outputs.{field_name} must be a non-empty string.")
+    sandbox = manifest.get("sandbox") if isinstance(manifest.get("sandbox"), dict) else {}
+    for field_name in ("root", "home", "workspace", "events"):
+        if not isinstance(sandbox.get(field_name), str) or not sandbox.get(field_name):
+            target.errors.append(f"harness_manifest.sandbox.{field_name} must be a non-empty string.")
+    canaries = sandbox.get("fake_secret_canaries")
+    if not isinstance(canaries, list) or not canaries:
+        target.errors.append("harness_manifest.sandbox.fake_secret_canaries must be a non-empty list.")
+
+
+def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarget) -> None:
+    if result.get("schema_version") != HARNESS_RUN_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_result.schema_version must be {HARNESS_RUN_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
+        )
+    for field_name in ("runner", "provider", "scenario_id"):
+        if not isinstance(result.get(field_name), str) or not result.get(field_name):
+            target.errors.append(f"harness_result.{field_name} must be a non-empty string.")
+    for field_name in ("model", "sandbox", "tool_policy", "trace", "scorecard", "artifacts", "replay"):
+        if not isinstance(result.get(field_name), dict):
+            target.errors.append(f"harness_result.{field_name} must be an object.")
+    trace = result.get("trace") if isinstance(result.get("trace"), dict) else {}
+    _validate_existing_path_field(trace, "path", target, "harness_result.trace.path")
+    scorecard = result.get("scorecard") if isinstance(result.get("scorecard"), dict) else {}
+    _validate_existing_path_field(scorecard, "path", target, "harness_result.scorecard.path")
+    if not isinstance(scorecard.get("passed"), bool):
+        target.errors.append("harness_result.scorecard.passed must be a boolean.")
+    if not isinstance(scorecard.get("score"), (int, float)) or isinstance(scorecard.get("score"), bool):
+        target.errors.append("harness_result.scorecard.score must be numeric.")
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
+        _validate_existing_path_field(artifacts, field_name, target, f"harness_result.artifacts.{field_name}")
+    replay = result.get("replay") if isinstance(result.get("replay"), dict) else {}
+    _validate_existing_path_field(replay, "lineage", target, "harness_result.replay.lineage")
+    if not isinstance(replay.get("self_contained"), bool):
+        target.errors.append("harness_result.replay.self_contained must be a boolean.")
+
+
+def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTarget) -> None:
+    if result.get("schema_version") != HARNESS_REPLAY_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_replay_result.schema_version must be {HARNESS_REPLAY_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
+        )
+    _validate_existing_path_field(result, "lineage", target, "harness_replay_result.lineage")
+    out_dir = result.get("out_dir")
+    if not isinstance(out_dir, str) or not out_dir:
+        target.errors.append("harness_replay_result.out_dir must be a non-empty string.")
+    elif not Path(out_dir).is_dir():
+        target.errors.append(f"harness_replay_result.out_dir does not exist or is not a directory: {out_dir}.")
+    if not _is_non_negative_int(result.get("exit_code")):
+        target.errors.append("harness_replay_result.exit_code must be a non-negative integer.")
+    if result.get("scorecard") is not None:
+        _validate_existing_path_field(result, "scorecard", target, "harness_replay_result.scorecard")
+    if not isinstance(result.get("passed"), bool):
+        target.errors.append("harness_replay_result.passed must be a boolean.")
+
+
+def _validate_existing_path_field(value: dict[str, Any], field_name: str, target: ValidationTarget, label: str) -> None:
+    path_value = value.get(field_name)
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label} must be a non-empty string.")
+        return
+    if not Path(path_value).exists():
+        target.errors.append(f"{label} does not exist: {path_value}.")
 
 
 def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
