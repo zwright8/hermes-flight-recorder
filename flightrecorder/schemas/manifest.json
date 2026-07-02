@@ -82,6 +82,14 @@
       "name": "validation"
     },
     {
+      "artifact": "goal3_handoff",
+      "artifact_schema_version": "hfr.goal3_handoff.v1",
+      "description": "Goal 3 training-data handoff summary emitted by goal3-handoff.",
+      "filename": "goal3_handoff.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/goal3_handoff.v1.schema.json",
+      "name": "goal3_handoff"
+    },
+    {
       "artifact": "run_suite",
       "artifact_schema_version": "hfr.run_suite.v1",
       "description": "Suite-level evidence summary emitted as suite_summary.json by run-suite.",

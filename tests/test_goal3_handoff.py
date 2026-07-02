@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +53,9 @@ class Goal3HandoffTests(unittest.TestCase):
             self.assertEqual(handoff["artifacts"]["evidence_bundle"], "<redacted:evidence_bundle.json>")
             self.assertEqual(handoff["metadata"]["launcher"], "dry-run")
             self.assertNotIn(str(tmp), json.dumps(handoff))
+            schema = check_schema_file(out / "goal3_handoff.json")
+            self.assertTrue(schema["passed"], schema["errors"])
+            self.assertEqual(schema["schema"]["name"], "goal3_handoff")
             self.assertTrue((out / "training_export" / "manifest.json").exists())
             self.assertTrue((out / "validation.json").exists())
             self.assertTrue((out / "training_gate.json").exists())

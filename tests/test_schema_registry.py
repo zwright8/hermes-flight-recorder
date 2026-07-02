@@ -34,6 +34,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("state_validator_assertions", names)
         self.assertIn("supervisor_state", names)
         self.assertIn("validation", names)
+        self.assertIn("goal3_handoff", names)
         self.assertIn("run_suite", names)
         self.assertIn("evidence_coverage", names)
         self.assertIn("scenario_quality", names)
@@ -626,6 +627,40 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "validation")
+
+    def test_goal3_handoff_schema_accepts_minimal_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.goal3_handoff.v1",
+                "generated_at": "2026-07-02T00:00:00+00:00",
+                "passed": True,
+                "recommendation": "handoff_ready",
+                "output_dir": "<redacted:handoff>",
+                "dataset_version": "hfrds-0123456789ab",
+                "metadata": {"launcher": "dry-run"},
+                "artifacts": {
+                    "runs": "<redacted:runs>",
+                    "suite_summary": "<redacted:suite_summary.json>",
+                    "training_export": "<redacted:training_export>",
+                    "validation": "<redacted:validation.json>",
+                    "evidence_bundle": "<redacted:evidence_bundle.json>",
+                    "training_gate": "<redacted:training_gate.json>",
+                    "trainer_preflight": "<redacted:trainer_preflight.json>",
+                },
+                "stages": [
+                    {
+                        "id": "training_export",
+                        "passed": True,
+                        "artifact": "<redacted:training_export>",
+                        "summary": "Trainer-ready RL dataset export.",
+                    }
+                ],
+                "notes": ["Trainer command is recorded but not executed."],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "goal3_handoff")
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(

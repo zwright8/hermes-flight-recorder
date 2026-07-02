@@ -1,0 +1,77 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/goal3_handoff.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Goal 3 training-data handoff summary emitted by goal3-handoff.",
+  "properties": {
+    "artifacts": { "$ref": "#/$defs/artifacts" },
+    "dataset_version": { "type": "string" },
+    "generated_at": { "minLength": 1, "type": "string" },
+    "metadata": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "output_dir": { "minLength": 1, "type": "string" },
+    "passed": { "type": "boolean" },
+    "recommendation": { "enum": ["handoff_ready", "fix_handoff"], "type": "string" },
+    "schema_version": { "const": "hfr.goal3_handoff.v1" },
+    "stages": {
+      "items": { "$ref": "#/$defs/stage" },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "passed",
+    "recommendation",
+    "output_dir",
+    "dataset_version",
+    "metadata",
+    "artifacts",
+    "stages",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Goal 3 Handoff",
+  "type": "object",
+  "$defs": {
+    "artifacts": {
+      "additionalProperties": { "type": "string" },
+      "properties": {
+        "evidence_bundle": { "minLength": 1, "type": "string" },
+        "runs": { "minLength": 1, "type": "string" },
+        "suite_summary": { "minLength": 1, "type": "string" },
+        "trainer_preflight": { "minLength": 1, "type": "string" },
+        "training_export": { "minLength": 1, "type": "string" },
+        "training_gate": { "minLength": 1, "type": "string" },
+        "training_gate_policy": { "type": "string" },
+        "validation": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "runs",
+        "suite_summary",
+        "training_export",
+        "validation",
+        "evidence_bundle",
+        "training_gate",
+        "trainer_preflight"
+      ],
+      "type": "object"
+    },
+    "stage": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact": { "minLength": 1, "type": "string" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "artifact", "summary"],
+      "type": "object"
+    }
+  }
+}
