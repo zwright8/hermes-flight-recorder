@@ -1,6 +1,6 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:44:54Z",
+  "updated_at": "2026-07-02T14:46:35Z",
   "active_layer": "governance",
   "current_packet": "governance promotion-decision artifact",
   "completed_packets": [
@@ -11,8 +11,8 @@
       "title": "Top-level promotion decision artifact",
       "summary": "Added a side-effect-free promotion-decision command that blocks alias movement on missing or stale evidence, unknown license, redaction or safety failure, missing cards, missing rollback, eval mismatch, task-completion regression, new critical failures, secret exposure, forbidden actions, or unsupported card claims.",
       "branch": "codex/hermes-goal-8-governance-20260702-1027",
-      "commit_sha": "pending",
-      "pull_request": "pending"
+      "commit_sha": "eb2b97cfe046b909b04e3ae114a96f5355ea13a5",
+      "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9"
     }
   ],
   "blocked_packets": [],
@@ -126,9 +126,9 @@
   ],
   "github_persistence": {
     "branch": "codex/hermes-goal-8-governance-20260702-1027",
-    "commit_sha": "pending",
-    "remote_branch": "pending",
-    "pull_request": "pending",
+    "commit_sha": "eb2b97cfe046b909b04e3ae114a96f5355ea13a5",
+    "remote_branch": "verified",
+    "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9",
     "risks": [
       "Dedicated worktree does not contain the source docs/ tree; README.md and TRAINING_PIPELINE.md were updated instead.",
       "flightrecorder schemas --check cannot validate supervisor_state.json because hfr.autonomy.supervisor_state.v1 is not bundled in this branch.",
