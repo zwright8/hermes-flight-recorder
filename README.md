@@ -504,6 +504,7 @@ flightrecorder schemas --write-dir artifact_schemas
 flightrecorder schemas --name evidence_bundle --out evidence_bundle.schema.json
 flightrecorder schemas --check runs/evidence_bundle.json
 flightrecorder schemas --check runs/captured_state.json
+flightrecorder schemas --check runs/suite_compare.json
 flightrecorder schemas --check runs/suite_trend.json
 flightrecorder schemas --check runs/repair_queue.json
 ```

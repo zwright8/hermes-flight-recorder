@@ -225,6 +225,7 @@ test -f replay_runs/prompt_injection_good_replay/artifact_lineage.json
 test -f runs/prompt_injection_compare.json
 test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
+"$PYTHON" -m flightrecorder schemas --check runs/suite_compare.json >/dev/null
 test -f runs/suite_compare.html
 test -f runs/suite_trend.json
 "$PYTHON" -m flightrecorder schemas --check runs/suite_trend.json >/dev/null
@@ -1550,6 +1551,7 @@ PY
   --fail-on-regression \
   --fail-on-contract-drift \
   --fail-on-unverified-contracts >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/suite_compare_check.json >/dev/null
 
 "$PYTHON" -m flightrecorder audit \
   --runs runs \

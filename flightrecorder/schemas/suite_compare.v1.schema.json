@@ -1,0 +1,236 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/suite_compare.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Suite-level regression and contract-drift comparison emitted as suite_compare.json by compare-suite.",
+  "properties": {
+    "aggregate": { "$ref": "#/$defs/aggregate" },
+    "baseline": { "$ref": "#/$defs/experiment" },
+    "candidate": { "$ref": "#/$defs/experiment" },
+    "contract_drifts": {
+      "items": { "$ref": "#/$defs/contract_fingerprint_change" },
+      "type": "array"
+    },
+    "contract_scope": { "enum": ["scenario", "scenario-and-trace"], "type": "string" },
+    "improvements": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "missing_in_candidate": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "new_in_candidate": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "regressed": { "type": "boolean" },
+    "regressions": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "scenario_changes": {
+      "items": { "$ref": "#/$defs/scenario_change" },
+      "type": "array"
+    },
+    "schema_version": { "const": "hfr.suite_compare.v1" },
+    "summary": { "minLength": 1, "type": "string" },
+    "unverified_contracts": {
+      "items": { "$ref": "#/$defs/contract_fingerprint_change" },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "baseline",
+    "candidate",
+    "aggregate",
+    "contract_scope",
+    "scenario_changes",
+    "regressions",
+    "improvements",
+    "missing_in_candidate",
+    "new_in_candidate",
+    "contract_drifts",
+    "unverified_contracts",
+    "regressed",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder Suite Compare",
+  "type": "object",
+  "$defs": {
+    "aggregate": {
+      "additionalProperties": true,
+      "properties": {
+        "avg_score_delta": { "type": ["number", "null"] },
+        "baseline_avg_score": { "type": ["number", "null"] },
+        "baseline_count": { "minimum": 0, "type": "integer" },
+        "baseline_pass_rate": { "maximum": 1, "minimum": 0, "type": ["number", "null"] },
+        "candidate_avg_score": { "type": ["number", "null"] },
+        "candidate_count": { "minimum": 0, "type": "integer" },
+        "candidate_pass_rate": { "maximum": 1, "minimum": 0, "type": ["number", "null"] },
+        "contract_drift_count": { "minimum": 0, "type": "integer" },
+        "critical_failure_deltas": {
+          "items": { "$ref": "#/$defs/rule_delta" },
+          "type": "array"
+        },
+        "failed_rule_deltas": {
+          "items": { "$ref": "#/$defs/rule_delta" },
+          "type": "array"
+        },
+        "paired_count": { "minimum": 0, "type": "integer" },
+        "total_score_delta": { "type": "integer" },
+        "unverified_contract_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "baseline_count",
+        "candidate_count",
+        "paired_count",
+        "baseline_avg_score",
+        "candidate_avg_score",
+        "avg_score_delta",
+        "total_score_delta",
+        "baseline_pass_rate",
+        "candidate_pass_rate",
+        "failed_rule_deltas",
+        "critical_failure_deltas",
+        "contract_drift_count",
+        "unverified_contract_count"
+      ],
+      "type": "object"
+    },
+    "contract_fingerprint_change": {
+      "additionalProperties": true,
+      "properties": {
+        "fingerprints": { "$ref": "#/$defs/contract_fingerprints" },
+        "reasons": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "scope": { "enum": ["scenario", "scenario-and-trace"], "type": "string" },
+        "status": { "enum": ["drifted", "matched", "unverified"], "type": "string" }
+      },
+      "required": ["scenario_id", "status", "scope", "reasons", "fingerprints"],
+      "type": "object"
+    },
+    "contract_fingerprint_input": {
+      "additionalProperties": true,
+      "properties": {
+        "path": { "type": ["string", "null"] },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] }
+      },
+      "required": ["path", "sha256"],
+      "type": "object"
+    },
+    "contract_fingerprint_set": {
+      "additionalProperties": true,
+      "properties": {
+        "scenario": { "$ref": "#/$defs/contract_fingerprint_input" },
+        "source_state_snapshot": { "$ref": "#/$defs/contract_fingerprint_input" },
+        "source_trace": { "$ref": "#/$defs/contract_fingerprint_input" }
+      },
+      "required": ["scenario", "source_trace", "source_state_snapshot"],
+      "type": "object"
+    },
+    "contract_fingerprints": {
+      "additionalProperties": true,
+      "properties": {
+        "baseline": { "$ref": "#/$defs/contract_fingerprint_set" },
+        "candidate": { "$ref": "#/$defs/contract_fingerprint_set" }
+      },
+      "required": ["baseline", "candidate"],
+      "type": "object"
+    },
+    "experiment": {
+      "additionalProperties": true,
+      "properties": {
+        "label": { "minLength": 1, "type": "string" },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "path": { "minLength": 1, "type": "string" },
+        "scenario_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["label", "path", "scenario_count", "metadata"],
+      "type": "object"
+    },
+    "metadata": {
+      "additionalProperties": { "type": "string" },
+      "type": "object"
+    },
+    "rule_delta": {
+      "additionalProperties": true,
+      "properties": {
+        "baseline_count": { "minimum": 0, "type": "integer" },
+        "baseline_scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "candidate_count": { "minimum": 0, "type": "integer" },
+        "candidate_scenarios": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "delta": { "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "baseline_count", "candidate_count", "delta", "baseline_scenarios", "candidate_scenarios"],
+      "type": "object"
+    },
+    "scenario_change": {
+      "additionalProperties": true,
+      "properties": {
+        "baseline_passed": { "type": "boolean" },
+        "baseline_run": { "minLength": 1, "type": "string" },
+        "baseline_score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "candidate_passed": { "type": "boolean" },
+        "candidate_run": { "minLength": 1, "type": "string" },
+        "candidate_score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "contract_fingerprint_reasons": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "contract_fingerprint_scope": { "enum": ["scenario", "scenario-and-trace"], "type": "string" },
+        "contract_fingerprint_status": { "enum": ["drifted", "matched", "unverified"], "type": "string" },
+        "contract_fingerprints": { "$ref": "#/$defs/contract_fingerprints" },
+        "new_critical_failures": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "regressed": { "type": "boolean" },
+        "rule_fixes": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "rule_regressions": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "score_delta": { "type": "integer" },
+        "status": { "enum": ["improved", "regressed", "unchanged"], "type": "string" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "scenario_id",
+        "status",
+        "baseline_run",
+        "candidate_run",
+        "baseline_score",
+        "candidate_score",
+        "score_delta",
+        "baseline_passed",
+        "candidate_passed",
+        "rule_regressions",
+        "rule_fixes",
+        "new_critical_failures",
+        "regressed",
+        "contract_fingerprint_status",
+        "contract_fingerprint_scope",
+        "contract_fingerprint_reasons",
+        "contract_fingerprints",
+        "summary"
+      ],
+      "type": "object"
+    }
+  }
+}

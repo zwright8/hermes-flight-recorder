@@ -36,6 +36,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("supervisor_state", names)
         self.assertIn("validation", names)
         self.assertIn("run_suite", names)
+        self.assertIn("suite_compare", names)
         self.assertIn("suite_trend", names)
         self.assertIn("evidence_coverage", names)
         self.assertIn("scenario_quality", names)
@@ -440,6 +441,86 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "suite_trend")
+
+    def test_suite_compare_schema_accepts_minimal_comparison(self):
+        contract_fingerprints = {
+            "baseline": {
+                "scenario": {"path": "scenarios/prompt_injection_good.json", "sha256": "0" * 64},
+                "source_trace": {"path": "fixtures/prompt_injection_good.jsonl", "sha256": "1" * 64},
+                "source_state_snapshot": {"path": None, "sha256": None},
+            },
+            "candidate": {
+                "scenario": {"path": "scenarios/prompt_injection_good.json", "sha256": "0" * 64},
+                "source_trace": {"path": "fixtures/prompt_injection_good.jsonl", "sha256": "1" * 64},
+                "source_state_snapshot": {"path": None, "sha256": None},
+            },
+        }
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.suite_compare.v1",
+                "baseline": {
+                    "label": "baseline",
+                    "path": "runs/baseline",
+                    "scenario_count": 1,
+                    "metadata": {"candidate": "baseline"},
+                },
+                "candidate": {
+                    "label": "candidate",
+                    "path": "runs/candidate",
+                    "scenario_count": 1,
+                    "metadata": {"candidate": "candidate"},
+                },
+                "aggregate": {
+                    "baseline_count": 1,
+                    "candidate_count": 1,
+                    "paired_count": 1,
+                    "baseline_avg_score": 100.0,
+                    "candidate_avg_score": 100.0,
+                    "avg_score_delta": 0.0,
+                    "total_score_delta": 0,
+                    "baseline_pass_rate": 1.0,
+                    "candidate_pass_rate": 1.0,
+                    "failed_rule_deltas": [],
+                    "critical_failure_deltas": [],
+                    "contract_drift_count": 0,
+                    "unverified_contract_count": 0,
+                },
+                "contract_scope": "scenario",
+                "scenario_changes": [
+                    {
+                        "scenario_id": "prompt_injection_good",
+                        "status": "unchanged",
+                        "baseline_run": "prompt_injection_good",
+                        "candidate_run": "prompt_injection_good",
+                        "baseline_score": 100,
+                        "candidate_score": 100,
+                        "score_delta": 0,
+                        "baseline_passed": True,
+                        "candidate_passed": True,
+                        "rule_regressions": [],
+                        "rule_fixes": [],
+                        "new_critical_failures": [],
+                        "regressed": False,
+                        "contract_fingerprint_status": "matched",
+                        "contract_fingerprint_scope": "scenario",
+                        "contract_fingerprint_reasons": [],
+                        "contract_fingerprints": contract_fingerprints,
+                        "summary": "NO REGRESSION: score delta 0; rule outcomes unchanged.",
+                    }
+                ],
+                "regressions": [],
+                "improvements": [],
+                "missing_in_candidate": [],
+                "new_in_candidate": [],
+                "contract_drifts": [],
+                "unverified_contracts": [],
+                "regressed": False,
+                "summary": "NO REGRESSION: avg score delta 0.0; paired scenarios unchanged.",
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "suite_compare")
 
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(

@@ -1112,6 +1112,8 @@ class CliReportTests(unittest.TestCase):
             code = run_cli(["compare-suite", "--baseline", str(runs), "--candidate", str(runs), "--out", str(out)])
 
             self.assertEqual(code, 0)
+            schema_result = check_schema_file(out, "suite_compare")
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             comparison = json.loads(out.read_text(encoding="utf-8"))
             self.assertFalse(comparison["regressed"])
             self.assertEqual(comparison["aggregate"]["avg_score_delta"], 0.0)
