@@ -9103,6 +9103,13 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
     registry_artifact = artifacts.get("registry") if isinstance(artifacts.get("registry"), dict) else {}
     if registry_snapshot.get("sha256") != registry_artifact.get("sha256"):
         target.errors.append("promotion_rollback_receipt.registry.sha256 must match artifacts.registry.sha256.")
+    _validate_registry_artifact_matches_alias_snapshot(
+        registry_artifact,
+        registry_snapshot["aliases"],
+        target,
+        source_path,
+        "promotion_rollback_receipt",
+    )
     champion_id = receipt.get("champion_id")
     rollback_id = receipt.get("rollback_id")
     if expected_passed and registry_snapshot["aliases"].get("champion") != champion_id:
@@ -9449,6 +9456,37 @@ def _validate_current_registry_matches_alias_receipt(
             target.errors.append("promotion_alias_apply.artifacts.registry.alias_history must be a list for applied receipts.")
         elif not any(isinstance(entry, dict) and entry == expected_history_entry for entry in history):
             target.errors.append("promotion_alias_apply.artifacts.registry.alias_history must contain alias_history_entry.")
+
+
+def _validate_registry_artifact_matches_alias_snapshot(
+    registry_artifact: dict[str, Any],
+    expected_aliases: dict[str, str],
+    target: ValidationTarget,
+    source_path: Path,
+    label: str,
+) -> None:
+    registry_path = _resolve_promotion_decision_artifact_path(registry_artifact.get("path"), source_path, "file")
+    if registry_path is None or not registry_path.exists() or not registry_path.is_file():
+        return
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"{label}.artifacts.registry contains invalid JSON: {exc}")
+        return
+    if not isinstance(registry, dict):
+        target.errors.append(f"{label}.artifacts.registry must contain a JSON object.")
+        return
+    aliases = registry.get("aliases")
+    if not isinstance(aliases, dict):
+        target.errors.append(f"{label}.artifacts.registry.aliases must be an object.")
+        return
+    current_aliases = {alias: target_id for alias, target_id in aliases.items() if isinstance(alias, str) and isinstance(target_id, str)}
+    for alias, expected_target in expected_aliases.items():
+        if current_aliases.get(alias) != expected_target:
+            target.errors.append(
+                f"{label}.registry.aliases.{alias} must match artifacts.registry.aliases.{alias}: "
+                f"expected {current_aliases.get(alias)!r}, got {expected_target!r}."
+            )
 
 
 def _validate_promotion_alias_apply_metrics(

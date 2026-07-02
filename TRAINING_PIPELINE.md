@@ -425,7 +425,9 @@ passing decision is still side-effect free: it authorizes an alias-update
 receipt, leaving the actual registry write to a later guarded step.
 `promotion-rollback-receipt` is side-effect free: it fingerprints the model
 registry, proves the rollback target is registered, and blocks when the target
-no longer matches the current champion before promotion.
+no longer matches the current champion before promotion. Validation also reads
+the fingerprinted registry artifact and rejects stale embedded alias snapshots
+that no longer match the registry file.
 `--promotion-policy` records the policy artifact that declares the required
 decision/release artifact contract, allowed model classes, zero-tolerance eval
 limits, required forbidden-rule blockers, license, rollback, card, and

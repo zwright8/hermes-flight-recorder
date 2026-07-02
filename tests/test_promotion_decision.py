@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -196,6 +197,30 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(receipt["registry"]["aliases"]["champion"], "champion-v1")
             self.assertEqual(run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
+
+    def test_validate_promotion_rollback_receipt_rejects_stale_registry_alias_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = write_model_registry(root)
+            receipt_path = root / "rollback.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_rollback_receipt_args(registry_path, receipt_path)), 0)
+
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["aliases"]["champion"] = "other-model"
+            registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            registry_sha = hashlib.sha256(registry_path.read_bytes()).hexdigest()
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["artifacts"]["registry"]["sha256"] = registry_sha
+            receipt["registry"]["sha256"] = registry_sha
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_rollback_receipt.registry.aliases", errors)
 
     def test_promotion_decision_accepts_passing_rollback_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
