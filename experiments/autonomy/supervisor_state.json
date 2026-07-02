@@ -800,7 +800,7 @@
       ]
     }
   ],
-  "current_packet": "governance policy artifact packet verified on branch; main integration pending",
+  "current_packet": "governance policy artifact packet verified on branch; main integration blocked by held lock",
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
@@ -1055,18 +1055,25 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:03:15Z",
+  "updated_at": "2026-07-02T16:09:48Z",
   "github_delivery": {
     "base_main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
     "branch": "codex/hermes-goal-8-governance-policy-20260702-1549",
     "branch_head_before_locked_merge_sha": "3a1f4cc58693fa2393c58b2a98eebe20b0cb8b23",
-    "branch_remote_status": "pending_push",
+    "branch_remote_status": "pushed_and_verified_before_blocker_checkpoint",
+    "branch_remote_verified_at": "2026-07-02T16:09:48Z",
+    "branch_remote_verified_sha": "293aebdd054ad856a84f71601c63f29da564645d",
     "implementation_commit_sha": "3a1f4cc58693fa2393c58b2a98eebe20b0cb8b23",
+    "latest_origin_main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "lock_blocker_at": "2026-07-02T16:09:48Z",
+    "lock_blocker_summary": "Could not acquire /tmp/hermes-flight-recorder-main-push.lock after three polling windows; another worker appears to be integrating main.",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "not_acquired_for_this_packet_yet",
-    "main_integration_status": "pending_branch_push_and_locked_current_main_merge",
+    "lock_status": "held_by_other_worker",
+    "main_integration_status": "blocked_waiting_for_main_push_lock",
+    "post_blocker_checkpoint_branch_sha_status": "verify after pushing this checkpoint because a commit cannot self-record its final SHA",
     "previous_packet_lock_status": "released_after_post_delivery_checkpoint_push",
-    "pr_status": "pending",
+    "pr_status": "OPEN",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/13",
     "remote_ref": "refs/heads/codex/hermes-goal-8-governance-policy-20260702-1549"
   },
   "risks": [
