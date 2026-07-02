@@ -26,6 +26,14 @@ from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_k
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
+from .governance import (
+    MODEL_REGISTRY_SCHEMA_VERSION,
+    PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
+    PROMOTION_CARDS_REQUIRED_INPUTS,
+    PROMOTION_CARDS_SCHEMA_VERSION,
+    PROMOTION_DECISION_REQUIRED_ARTIFACTS,
+    PROMOTION_DECISION_SCHEMA_VERSION,
+)
 from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
@@ -124,6 +132,9 @@ def validate_artifacts(
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
+    promotion_cards_paths: list[str | Path] | None = None,
+    promotion_decision_paths: list[str | Path] | None = None,
+    promotion_alias_apply_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
     promotion_ledger_gate_paths: list[str | Path] | None = None,
     promotion_archive_paths: list[str | Path] | None = None,
@@ -178,6 +189,12 @@ def validate_artifacts(
         targets.append(validate_action_ledger_gate(action_ledger_gate_path))
     for decision_gate_path in decision_gate_paths or []:
         targets.append(validate_decision_gate(decision_gate_path))
+    for promotion_cards_path in promotion_cards_paths or []:
+        targets.append(validate_promotion_cards(promotion_cards_path))
+    for promotion_decision_path in promotion_decision_paths or []:
+        targets.append(validate_promotion_decision(promotion_decision_path))
+    for promotion_alias_apply_path in promotion_alias_apply_paths or []:
+        targets.append(validate_promotion_alias_apply(promotion_alias_apply_path))
     for promotion_ledger_path in promotion_ledger_paths or []:
         targets.append(validate_promotion_ledger(promotion_ledger_path))
     for promotion_ledger_gate_path in promotion_ledger_gate_paths or []:
@@ -739,6 +756,37 @@ def validate_promotion_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "promotion_ledger.json")
     if ledger is not None:
         _validate_promotion_ledger(ledger, target, ledger_path)
+    return target
+
+
+def validate_promotion_cards(path: str | Path) -> ValidationTarget:
+    """Validate a promotion-cards directory or manifest."""
+    cards_path = Path(path)
+    manifest_path = cards_path / "promotion_cards.json" if cards_path.is_dir() else cards_path
+    target = ValidationTarget("promotion_cards", str(path))
+    cards = _read_object(manifest_path, target, "promotion_cards.json")
+    if cards is not None:
+        _validate_promotion_cards(cards, target, manifest_path)
+    return target
+
+
+def validate_promotion_decision(path: str | Path) -> ValidationTarget:
+    """Validate a top-level governance promotion decision artifact."""
+    decision_path = Path(path)
+    target = ValidationTarget("promotion_decision", str(decision_path))
+    decision = _read_object(decision_path, target, "promotion_decision.json")
+    if decision is not None:
+        _validate_promotion_decision(decision, target, decision_path)
+    return target
+
+
+def validate_promotion_alias_apply(path: str | Path) -> ValidationTarget:
+    """Validate a guarded promotion alias application receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("promotion_alias_apply", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "promotion_alias_apply.json")
+    if receipt is not None:
+        _validate_promotion_alias_apply(receipt, target, receipt_path)
     return target
 
 
@@ -6771,6 +6819,624 @@ def _validate_decision_gate_source_decision_matches_artifact(
             target.errors.append(f"decision_gate.source_decision.{field_name} must match current source artifact.")
 
 
+def _validate_promotion_cards(cards: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(cards, "schema_version", PROMOTION_CARDS_SCHEMA_VERSION, target)
+    for field_name in ("manifest_path", "cards_dir"):
+        if not isinstance(cards.get(field_name), str) or not cards.get(field_name):
+            target.errors.append(f"promotion_cards.{field_name} must be a non-empty string.")
+    if not isinstance(cards.get("passed"), bool):
+        target.errors.append("promotion_cards.passed must be a boolean.")
+    checks = cards.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_cards.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "promotion_cards.checks")
+    if cards.get("check_count") != len(checks):
+        target.errors.append(f"promotion_cards.check_count expected {len(checks)}, got {cards.get('check_count')!r}.")
+    if cards.get("failed_check_count") != failed_checks:
+        target.errors.append(f"promotion_cards.failed_check_count expected {failed_checks}, got {cards.get('failed_check_count')!r}.")
+    expected_passed = failed_checks == 0
+    if isinstance(cards.get("passed"), bool) and cards["passed"] != expected_passed:
+        target.errors.append("promotion_cards.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "use_cards_for_promotion_decision" if expected_passed else "regenerate_or_block_promotion"
+    if cards.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_cards.readiness expected {expected_readiness!r}, got {cards.get('readiness')!r}.")
+    if cards.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_cards.recommendation expected {expected_recommendation!r}, got {cards.get('recommendation')!r}."
+        )
+
+    candidate = cards.get("candidate")
+    if not isinstance(candidate, dict):
+        target.errors.append("promotion_cards.candidate must be an object.")
+        candidate = {}
+    for field_name in ("id", "model_source", "license_status"):
+        if not isinstance(candidate.get(field_name), str):
+            target.errors.append(f"promotion_cards.candidate.{field_name} must be a string.")
+    dataset = cards.get("dataset")
+    if not isinstance(dataset, dict):
+        target.errors.append("promotion_cards.dataset must be an object.")
+        dataset = {}
+    if not isinstance(dataset.get("id"), str):
+        target.errors.append("promotion_cards.dataset.id must be a string.")
+
+    artifacts = cards.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("promotion_cards.artifacts must be an object.")
+        artifacts = {}
+    for role in ("model_card", "dataset_card", *PROMOTION_CARDS_REQUIRED_INPUTS):
+        _validate_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_cards.artifacts")
+    _validate_promotion_card_text(artifacts.get("model_card"), target, source_path, "promotion_cards.artifacts.model_card")
+    _validate_promotion_card_text(artifacts.get("dataset_card"), target, source_path, "promotion_cards.artifacts.dataset_card")
+    _validate_promotion_cards_metrics(cards.get("metrics"), checks, target)
+    if not _is_string_list(cards.get("notes")):
+        target.errors.append("promotion_cards.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": cards.get("passed"),
+            "recommendation": cards.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "candidate_id": candidate.get("id"),
+            "dataset_id": dataset.get("id"),
+        }
+    )
+
+
+def _validate_promotion_card_text(value: Any, target: ValidationTarget, source_path: Path, label: str) -> None:
+    if not isinstance(value, dict) or value.get("exists") is not True:
+        return
+    card_path = _resolve_promotion_decision_artifact_path(value.get("path"), source_path, "file")
+    if card_path is None or not card_path.exists() or not card_path.is_file():
+        return
+    try:
+        text = card_path.read_text(encoding="utf-8").lower()
+    except OSError:
+        return
+    markers = [marker for marker in ("unsupported claim", "todo", "tbd") if marker in text]
+    if markers:
+        target.errors.append(f"{label} contains unsupported claim marker(s): {', '.join(markers)}.")
+
+
+def _validate_promotion_cards_metrics(value: Any, checks: list[Any], target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_cards.metrics must be an object.")
+        return
+    expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
+    expected = {
+        "check_count": len(checks),
+        "failed_check_count": expected_failed,
+        "required_input_count": len(PROMOTION_CARDS_REQUIRED_INPUTS),
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"promotion_cards.metrics.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
+    for field_name in ("task_completion_regression_count", "new_critical_failure_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"promotion_cards.metrics.{field_name} must be a non-negative integer.")
+
+
+def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(receipt, "schema_version", PROMOTION_ALIAS_APPLY_SCHEMA_VERSION, target)
+    if not isinstance(receipt.get("receipt_path"), str):
+        target.errors.append("promotion_alias_apply.receipt_path must be a string.")
+    if not isinstance(receipt.get("passed"), bool):
+        target.errors.append("promotion_alias_apply.passed must be a boolean.")
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_alias_apply.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "promotion_alias_apply.checks")
+    if receipt.get("check_count") != len(checks):
+        target.errors.append(f"promotion_alias_apply.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
+    if receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_alias_apply.failed_check_count expected {failed_checks}, got {receipt.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(receipt.get("passed"), bool) and receipt["passed"] != expected_passed:
+        target.errors.append("promotion_alias_apply.passed must match failed_check_count.")
+    expected_readiness = "applied" if expected_passed else "blocked"
+    expected_recommendation = "alias_update_applied" if expected_passed else "hold_aliases"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_alias_apply.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}.")
+    if receipt.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_alias_apply.recommendation expected {expected_recommendation!r}, got {receipt.get('recommendation')!r}."
+        )
+
+    artifacts = receipt.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("promotion_alias_apply.artifacts must be an object.")
+        artifacts = {}
+    for role in ("registry", "promotion_decision"):
+        _validate_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_alias_apply.artifacts")
+
+    decision_ref = receipt.get("promotion_decision")
+    if not isinstance(decision_ref, dict):
+        target.errors.append("promotion_alias_apply.promotion_decision must be an object.")
+        decision_ref = {}
+    for field_name in ("path", "candidate_id", "champion_previous_target", "rollback_id"):
+        if not isinstance(decision_ref.get(field_name), str):
+            target.errors.append(f"promotion_alias_apply.promotion_decision.{field_name} must be a string.")
+    if decision_ref.get("sha256") is not None and not _is_sha256(decision_ref.get("sha256")):
+        target.errors.append("promotion_alias_apply.promotion_decision.sha256 must be a SHA-256 hex string or null.")
+    decision_artifact = artifacts.get("promotion_decision") if isinstance(artifacts.get("promotion_decision"), dict) else {}
+    if decision_ref.get("sha256") != decision_artifact.get("sha256"):
+        target.errors.append("promotion_alias_apply.promotion_decision.sha256 must match artifacts.promotion_decision.sha256.")
+    _validate_promotion_alias_apply_decision_validation(
+        receipt.get("promotion_decision_validation"),
+        expected_passed,
+        target,
+    )
+
+    before = _validate_alias_snapshot(receipt.get("registry_before"), target, "promotion_alias_apply.registry_before")
+    after = _validate_alias_snapshot(receipt.get("registry_after"), target, "promotion_alias_apply.registry_after")
+    registry_artifact = artifacts.get("registry") if isinstance(artifacts.get("registry"), dict) else {}
+    if after.get("sha256") != registry_artifact.get("sha256"):
+        target.errors.append("promotion_alias_apply.registry_after.sha256 must match artifacts.registry.sha256.")
+    if expected_passed:
+        expected_aliases = {
+            "candidate": str(decision_ref.get("candidate_id") or ""),
+            "champion": str(decision_ref.get("candidate_id") or ""),
+            "rollback": str(decision_ref.get("rollback_id") or ""),
+        }
+        for alias, expected_target in expected_aliases.items():
+            if after["aliases"].get(alias) != expected_target:
+                target.errors.append(
+                    f"promotion_alias_apply.registry_after.aliases.{alias} expected {expected_target!r}, got {after['aliases'].get(alias)!r}."
+                )
+        previous_target = decision_ref.get("champion_previous_target")
+        if before["aliases"].get("champion") != previous_target:
+            target.errors.append("promotion_alias_apply.registry_before.aliases.champion must match promotion_decision champion_previous_target.")
+    elif before["aliases"] != after["aliases"]:
+        target.errors.append("promotion_alias_apply blocked receipts must not change registry aliases.")
+    history_entry = _validate_alias_history_entry(
+        receipt.get("alias_history_entry"),
+        expected_passed,
+        decision_ref.get("sha256"),
+        before["aliases"],
+        after["aliases"],
+        target,
+    )
+    _validate_current_registry_matches_alias_receipt(registry_artifact, after["aliases"], history_entry, target, source_path)
+    _validate_promotion_alias_apply_metrics(receipt.get("metrics"), checks, before["aliases"], after["aliases"], expected_passed, target)
+    if not _is_string_list(receipt.get("notes")):
+        target.errors.append("promotion_alias_apply.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": receipt.get("passed"),
+            "recommendation": receipt.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "candidate_id": decision_ref.get("candidate_id"),
+            "rollback_id": decision_ref.get("rollback_id"),
+        }
+    )
+
+
+def _validate_alias_snapshot(value: Any, target: ValidationTarget, label: str) -> dict[str, Any]:
+    snapshot = {"aliases": {}, "sha256": None}
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return snapshot
+    if not isinstance(value.get("path"), str):
+        target.errors.append(f"{label}.path must be a string.")
+    if value.get("sha256") is not None and not _is_sha256(value.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+    aliases = value.get("aliases")
+    if not isinstance(aliases, dict) or not all(isinstance(alias, str) and isinstance(target_id, str) for alias, target_id in aliases.items()):
+        target.errors.append(f"{label}.aliases must be an object of string values.")
+        aliases = {}
+    snapshot["aliases"] = dict(aliases)
+    snapshot["sha256"] = value.get("sha256")
+    return snapshot
+
+
+def _validate_alias_history_entry(
+    value: Any,
+    expected_passed: bool,
+    expected_decision_sha: Any,
+    aliases_before: dict[str, str],
+    aliases_after: dict[str, str],
+    target: ValidationTarget,
+) -> dict[str, Any] | None:
+    if not expected_passed:
+        if value is not None:
+            target.errors.append("promotion_alias_apply.alias_history_entry must be null for blocked receipts.")
+        return None
+    if not isinstance(value, dict):
+        target.errors.append("promotion_alias_apply.alias_history_entry must be an object for applied receipts.")
+        return None
+    if value.get("promotion_decision_sha256") != expected_decision_sha:
+        target.errors.append("promotion_alias_apply.alias_history_entry.promotion_decision_sha256 must match promotion_decision.sha256.")
+    previous_aliases = value.get("previous_aliases")
+    if previous_aliases != aliases_before:
+        target.errors.append("promotion_alias_apply.alias_history_entry.previous_aliases must match registry_before.aliases.")
+    updated_aliases = value.get("updated_aliases")
+    if not isinstance(updated_aliases, dict) or not all(
+        isinstance(alias, str) and isinstance(target_id, str) for alias, target_id in updated_aliases.items()
+    ):
+        target.errors.append("promotion_alias_apply.alias_history_entry.updated_aliases must be an object of string values.")
+    else:
+        for alias in ("candidate", "champion", "rollback"):
+            if updated_aliases.get(alias) != aliases_after.get(alias):
+                target.errors.append(
+                    f"promotion_alias_apply.alias_history_entry.updated_aliases.{alias} expected {aliases_after.get(alias)!r}, got {updated_aliases.get(alias)!r}."
+                )
+    return value
+
+
+def _validate_promotion_alias_apply_decision_validation(value: Any, expected_passed: bool, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_alias_apply.promotion_decision_validation must be an object.")
+        return
+    if value.get("passed") is not None and not isinstance(value.get("passed"), bool):
+        target.errors.append("promotion_alias_apply.promotion_decision_validation.passed must be a boolean or null.")
+    if expected_passed and value.get("passed") is not True:
+        target.errors.append("promotion_alias_apply.promotion_decision_validation.passed must be true when aliases were applied.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"promotion_alias_apply.promotion_decision_validation.{field_name} must be a non-negative integer.")
+
+
+def _validate_current_registry_matches_alias_receipt(
+    registry_artifact: dict[str, Any],
+    expected_aliases: dict[str, str],
+    expected_history_entry: dict[str, Any] | None,
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    registry_path = _resolve_promotion_decision_artifact_path(registry_artifact.get("path"), source_path, "file")
+    if registry_path is None or not registry_path.exists() or not registry_path.is_file():
+        return
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"promotion_alias_apply.artifacts.registry contains invalid JSON: {exc}")
+        return
+    if not isinstance(registry, dict):
+        target.errors.append("promotion_alias_apply.artifacts.registry must contain a JSON object.")
+        return
+    if registry.get("schema_version") != MODEL_REGISTRY_SCHEMA_VERSION:
+        target.errors.append(
+            f"promotion_alias_apply.artifacts.registry.schema_version expected {MODEL_REGISTRY_SCHEMA_VERSION!r}, got {registry.get('schema_version')!r}."
+        )
+    aliases = registry.get("aliases")
+    if not isinstance(aliases, dict):
+        target.errors.append("promotion_alias_apply.artifacts.registry.aliases must be an object.")
+        return
+    current_aliases = {str(alias): str(target_id) for alias, target_id in aliases.items() if isinstance(alias, str) and isinstance(target_id, str)}
+    for alias, expected_target in expected_aliases.items():
+        if current_aliases.get(alias) != expected_target:
+            target.errors.append(
+                f"promotion_alias_apply current registry alias {alias!r} expected {expected_target!r}, got {current_aliases.get(alias)!r}."
+            )
+    if expected_history_entry is not None:
+        history = registry.get("alias_history")
+        if not isinstance(history, list):
+            target.errors.append("promotion_alias_apply.artifacts.registry.alias_history must be a list for applied receipts.")
+        elif not any(isinstance(entry, dict) and entry == expected_history_entry for entry in history):
+            target.errors.append("promotion_alias_apply.artifacts.registry.alias_history must contain alias_history_entry.")
+
+
+def _validate_promotion_alias_apply_metrics(
+    value: Any,
+    checks: list[Any],
+    aliases_before: dict[str, str],
+    aliases_after: dict[str, str],
+    expected_passed: bool,
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_alias_apply.metrics must be an object.")
+        return
+    expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
+    expected = {
+        "check_count": len(checks),
+        "failed_check_count": expected_failed,
+        "alias_count_before": len(aliases_before),
+        "alias_count_after": len(aliases_after),
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"promotion_alias_apply.metrics.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
+    if not _is_non_negative_int(value.get("registered_model_count")):
+        target.errors.append("promotion_alias_apply.metrics.registered_model_count must be a non-negative integer.")
+    for field_name in ("alias_history_count_before", "alias_history_count_after"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"promotion_alias_apply.metrics.{field_name} must be a non-negative integer.")
+    if _is_non_negative_int(value.get("alias_history_count_before")) and _is_non_negative_int(value.get("alias_history_count_after")):
+        expected_after = value["alias_history_count_before"] + (1 if expected_passed else 0)
+        if value["alias_history_count_after"] != expected_after:
+            target.errors.append(
+                f"promotion_alias_apply.metrics.alias_history_count_after expected {expected_after!r}, got {value['alias_history_count_after']!r}."
+            )
+
+
+def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(decision, "schema_version", PROMOTION_DECISION_SCHEMA_VERSION, target)
+    if not isinstance(decision.get("decision_path"), str):
+        target.errors.append("promotion_decision.decision_path must be a string.")
+    if not isinstance(decision.get("passed"), bool):
+        target.errors.append("promotion_decision.passed must be a boolean.")
+    checks = decision.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_decision.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "promotion_decision.checks")
+    if decision.get("check_count") != len(checks):
+        target.errors.append(f"promotion_decision.check_count expected {len(checks)}, got {decision.get('check_count')!r}.")
+    if decision.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_decision.failed_check_count expected {failed_checks}, got {decision.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(decision.get("passed"), bool) and decision["passed"] != expected_passed:
+        target.errors.append("promotion_decision.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "apply_alias_update" if expected_passed else "block_promotion"
+    if decision.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_decision.readiness expected {expected_readiness!r}, got {decision.get('readiness')!r}.")
+    if decision.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_decision.recommendation expected {expected_recommendation!r}, got {decision.get('recommendation')!r}."
+        )
+
+    models = decision.get("models")
+    if not isinstance(models, dict):
+        target.errors.append("promotion_decision.models must be an object.")
+        models = {}
+    for role in ("candidate", "champion", "rollback"):
+        _validate_promotion_decision_model(models.get(role), target, f"promotion_decision.models.{role}")
+    candidate_id = _promotion_model_id(models.get("candidate"))
+    champion_id = _promotion_model_id(models.get("champion"))
+    rollback_id = _promotion_model_id(models.get("rollback"))
+    if candidate_id and champion_id and candidate_id == champion_id:
+        target.errors.append("promotion_decision.models.candidate.id must differ from models.champion.id.")
+    if expected_passed and not rollback_id:
+        target.errors.append("promotion_decision.models.rollback.id must be present when promotion passed.")
+
+    decision_block = decision.get("decision")
+    _validate_promotion_decision_block(decision_block, expected_readiness, expected_recommendation, failed_checks, target)
+    artifacts = decision.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("promotion_decision.artifacts must be an object.")
+        artifacts = {}
+    for role in PROMOTION_DECISION_REQUIRED_ARTIFACTS:
+        _validate_promotion_decision_artifact(artifacts.get(role), role, target, source_path)
+    metrics = decision.get("metrics")
+    _validate_promotion_decision_metrics(metrics, checks, target)
+    _validate_promotion_decision_alias_update(
+        decision.get("alias_update"),
+        expected_passed,
+        candidate_id,
+        champion_id,
+        rollback_id,
+        target,
+    )
+    notes = decision.get("notes")
+    if not _is_string_list(notes):
+        target.errors.append("promotion_decision.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": decision.get("passed"),
+            "recommendation": decision.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "candidate_id": candidate_id,
+            "champion_id": champion_id,
+            "rollback_id": rollback_id,
+        }
+    )
+
+
+def _validate_promotion_decision_model(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(value.get("id"), str):
+        target.errors.append(f"{label}.id must be a string.")
+    if not isinstance(value.get("class"), str) or not value.get("class"):
+        target.errors.append(f"{label}.class must be a non-empty string.")
+
+
+def _promotion_model_id(value: Any) -> str:
+    if isinstance(value, dict) and isinstance(value.get("id"), str):
+        return value["id"]
+    return ""
+
+
+def _validate_promotion_decision_block(
+    value: Any,
+    expected_readiness: str,
+    expected_recommendation: str,
+    failed_checks: int,
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_decision.decision must be an object.")
+        return
+    if value.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_decision.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_decision.decision.recommendation expected {expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    if not isinstance(value.get("summary"), str) or not value.get("summary"):
+        target.errors.append("promotion_decision.decision.summary must be a non-empty string.")
+    if value.get("blocking_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_decision.decision.blocking_check_count expected {failed_checks}, got {value.get('blocking_check_count')!r}."
+        )
+    blocking_checks = value.get("blocking_checks")
+    if not isinstance(blocking_checks, list):
+        target.errors.append("promotion_decision.decision.blocking_checks must be a list.")
+        blocking_checks = []
+    if len(blocking_checks) != failed_checks:
+        target.errors.append(
+            f"promotion_decision.decision.blocking_checks expected {failed_checks} entries, got {len(blocking_checks)}."
+        )
+    for index, check in enumerate(blocking_checks):
+        label = f"promotion_decision.decision.blocking_checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("id", "summary"):
+            if not isinstance(check.get(field_name), str) or not check.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not isinstance(check.get("scope"), dict):
+            target.errors.append(f"{label}.scope must be an object.")
+    if not isinstance(value.get("key_metrics"), dict):
+        target.errors.append("promotion_decision.decision.key_metrics must be an object.")
+
+
+def _validate_promotion_decision_artifact(value: Any, role: str, target: ValidationTarget, source_path: Path) -> None:
+    _validate_fingerprinted_artifact(value, role, target, source_path, "promotion_decision.artifacts")
+
+
+def _validate_fingerprinted_artifact(
+    value: Any,
+    role: str,
+    target: ValidationTarget,
+    source_path: Path,
+    prefix: str,
+) -> None:
+    label = f"{prefix}.{role}"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if value.get("role") != role:
+        target.errors.append(f"{label}.role expected {role!r}, got {value.get('role')!r}.")
+    if not isinstance(value.get("path"), str):
+        target.errors.append(f"{label}.path must be a string.")
+    if not isinstance(value.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    kind = value.get("kind")
+    if kind not in {"file", "directory", "missing", "other"}:
+        target.errors.append(f"{label}.kind must be file, directory, missing, or other.")
+    if value.get("exists") is True:
+        if kind not in {"file", "directory"}:
+            target.errors.append(f"{label}.kind must be file or directory when exists is true.")
+        if not _is_sha256(value.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+    if kind == "file" and not _is_non_negative_int(value.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer for files.")
+    if kind == "directory" and not _is_non_negative_int(value.get("file_count")):
+        target.errors.append(f"{label}.file_count must be a non-negative integer for directories.")
+    _validate_promotion_decision_artifact_hash(value, target, label, source_path)
+
+
+def _validate_promotion_decision_artifact_hash(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if record.get("exists") is not True:
+        return
+    kind = record.get("kind")
+    current_path = _resolve_promotion_decision_artifact_path(record.get("path"), source_path, kind)
+    if current_path is None:
+        return
+    if not current_path.exists():
+        target.errors.append(f"{label}.path does not exist at validation time.")
+        return
+    if kind == "file":
+        if not current_path.is_file():
+            target.errors.append(f"{label}.path is not a file at validation time.")
+            return
+        if _is_non_negative_int(record.get("size_bytes")) and current_path.stat().st_size != record.get("size_bytes"):
+            target.errors.append(f"{label}.size_bytes does not match the current file.")
+        if _is_sha256(record.get("sha256")) and _sha256(current_path) != record.get("sha256"):
+            target.errors.append(f"{label}.sha256 does not match the current file.")
+    if kind == "directory":
+        if not current_path.is_dir():
+            target.errors.append(f"{label}.path is not a directory at validation time.")
+            return
+        file_count = sum(1 for item in current_path.rglob("*") if item.is_file())
+        if _is_non_negative_int(record.get("file_count")) and file_count != record.get("file_count"):
+            target.errors.append(f"{label}.file_count does not match the current directory.")
+        if _is_sha256(record.get("sha256")) and _directory_sha256(current_path) != record.get("sha256"):
+            target.errors.append(f"{label}.sha256 does not match the current directory.")
+
+
+def _resolve_promotion_decision_artifact_path(value: Any, source_path: Path, kind: Any) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+        return None
+    raw = Path(value)
+    candidates = [raw] if raw.is_absolute() else [Path.cwd() / raw, source_path.parent / raw]
+    for candidate in candidates:
+        if kind == "directory" and candidate.exists() and candidate.is_dir():
+            return candidate
+        if kind == "file" and candidate.exists() and candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_decision.metrics must be an object.")
+        return
+    expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
+    expected_fields = {
+        "check_count": len(checks),
+        "failed_check_count": expected_failed,
+        "required_artifact_count": len(PROMOTION_DECISION_REQUIRED_ARTIFACTS),
+    }
+    for field_name, expected in expected_fields.items():
+        if value.get(field_name) != expected:
+            target.errors.append(f"promotion_decision.metrics.{field_name} expected {expected!r}, got {value.get(field_name)!r}.")
+    for field_name in (
+        "task_completion_regression_count",
+        "baseline_win_count",
+        "contract_drift_count",
+        "unverified_contract_count",
+        "new_critical_failure_count",
+        "rule_regression_count",
+    ):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"promotion_decision.metrics.{field_name} must be a non-negative integer.")
+
+
+def _validate_promotion_decision_alias_update(
+    value: Any,
+    expected_passed: bool,
+    candidate_id: str,
+    champion_id: str,
+    rollback_id: str,
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_decision.alias_update must be an object.")
+        return
+    if value.get("authorized") != expected_passed:
+        target.errors.append("promotion_decision.alias_update.authorized must match promotion pass state.")
+    expected_recommendation = "apply_alias_update" if expected_passed else "hold_aliases"
+    if value.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_decision.alias_update.recommendation expected {expected_recommendation!r}, got {value.get('recommendation')!r}."
+        )
+    aliases = value.get("aliases")
+    if not isinstance(aliases, list):
+        target.errors.append("promotion_decision.alias_update.aliases must be a list.")
+        return
+    alias_map = {item.get("alias"): item for item in aliases if isinstance(item, dict) and isinstance(item.get("alias"), str)}
+    expected_targets = {"candidate": candidate_id, "champion": candidate_id, "rollback": rollback_id}
+    for alias, expected_target in expected_targets.items():
+        item = alias_map.get(alias)
+        if not isinstance(item, dict):
+            target.errors.append(f"promotion_decision.alias_update.aliases must include {alias!r}.")
+            continue
+        if item.get("target") != expected_target:
+            target.errors.append(
+                f"promotion_decision.alias_update.aliases[{alias}].target expected {expected_target!r}, got {item.get('target')!r}."
+            )
+    champion_alias = alias_map.get("champion")
+    if isinstance(champion_alias, dict) and champion_alias.get("previous_target") != champion_id:
+        target.errors.append(
+            "promotion_decision.alias_update.aliases[champion].previous_target must match models.champion.id."
+        )
+
+
 def _validate_promotion_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(ledger, "schema_version", PROMOTION_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
@@ -11020,6 +11686,16 @@ def _sha256(path: Path) -> str:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _directory_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
+        digest.update(str(item.relative_to(path)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(_sha256(item).encode("ascii"))
+        digest.update(b"\0")
     return digest.hexdigest()
 
 

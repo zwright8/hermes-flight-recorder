@@ -364,6 +364,81 @@
           "summary": "git diff --check"
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "branch": "codex/hermes-goal-8-governance-20260702-1027",
+      "branch_sha": "edf46ed7cdfda1f329b96d478fe7c96264e103d8",
+      "completed_at": "2026-07-02T15:25:00Z",
+      "id": "governance_promotion_decision_cards_alias_apply",
+      "implementation_shas": [
+        "99440298b3e18ca2186708c5f1a44a974624ce49",
+        "60e8bf5a82fbcb64860bdad27f9a9a8bbd77c0c1",
+        "6f8a045411752f8c930eb266fc6577fda0828fd1"
+      ],
+      "layer": "governance",
+      "main_integration": {
+        "base_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+        "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+        "lock_status": "acquired",
+        "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/9",
+        "remote_branch_status": "pending_delete_after_main_push"
+      },
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added side-effect-free promotion decisions, model/dataset card generation, and guarded promotion-alias-apply so candidate/champion/rollback aliases move only after a validated passing decision, fresh registered targets, matching live champion alias, and alias-history audit evidence.",
+      "title": "Guard promotion decisions, cards, and registry alias movement",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Touched governance modules compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Focused governance, ledger, and validation tests passed before main integration."
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Full suite passed under Python 3.11 before main integration."
+        }
+      ]
     }
   ],
   "current_packet": {
@@ -529,17 +604,27 @@
     {
       "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
       "status": "pass",
-      "summary": "Supervisor state JSON validates after semantic merge."
+      "summary": "Supervisor state JSON validates after Goal 8 merge conflict resolution."
     },
     {
       "command": "git diff --check",
       "status": "pass",
-      "summary": "Integrated diff has no whitespace errors."
+      "summary": "Integrated Goal 8 diff has no whitespace errors."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
       "status": "pass",
-      "summary": "310 tests passed under Python 3.11.14 after merging current origin/main."
+      "summary": "Touched Goal 8 governance modules compile after merging current origin/main."
+    },
+    {
+      "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+      "status": "pass",
+      "summary": "53 focused governance, ledger, and validation tests passed after merging current origin/main."
+    },
+    {
+      "command": "python3.11 -m unittest discover",
+      "status": "pass",
+      "summary": "321 tests passed under Python 3.11 after merging current origin/main."
     }
   ],
   "layer_status": {
@@ -559,9 +644,9 @@
       "summary": "Evidence bundles now require gate decision contracts when gates are included and can require at least one gate summary."
     },
     "governance": {
-      "next_packet": null,
-      "status": "not_started",
-      "summary": "No promotion or alias movement attempted."
+      "next_packet": "governance_release_record",
+      "status": "in_progress",
+      "summary": "Promotion decisions, model/dataset cards, and guarded registry alias application are implemented; release-record binding remains."
     },
     "harness": {
       "next_packet": null,
@@ -595,18 +680,29 @@
       "status": "ready",
       "summary": "Define local model artifact and adapter lineage contracts after dataset registry versions are available.",
       "title": "Bind model artifacts to dataset lineage"
+    },
+    {
+      "depends_on": [
+        "governance_promotion_decision_cards_alias_apply"
+      ],
+      "id": "governance_release_record",
+      "layer": "governance",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Bind promotion decisions, cards, alias receipts, rollback metadata, evals, and release notes into a validated release-record artifact.",
+      "title": "Bind governance release records"
     }
   ],
   "promotion_readiness": {
     "data": "completed",
     "eval": "not_started",
     "evidence": "in_progress",
-    "governance": "not_started",
+    "governance": "in_progress",
     "harness": "in_progress",
     "model": "ready",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:15:04Z"
+  "updated_at": "2026-07-02T15:24:35Z"
 }
