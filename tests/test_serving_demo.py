@@ -139,6 +139,49 @@ class ServingDemoTests(unittest.TestCase):
             validation = validate_artifacts(serving_demo_run_paths=[demo_json], strict=True)
             self.assertTrue(validation["passed"], validation)
 
+    def test_validate_rejects_demo_run_with_inconsistent_arm_metrics(self):
+        build_serving_demo_report = _load_script(DEMO_SCRIPT, "build_serving_demo_report_metrics_validation")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_eval = _write_eval_arm(root, "baseline", "hfr-base", passed=False, score=50)
+            candidate_eval = _write_eval_arm(root, "flightrecorder", "hfr-base+adapter", passed=False, score=20)
+            demo_json = root / "demo_run.json"
+            report_md = root / "DEMO_REPORT.md"
+            with redirect_stdout(StringIO()):
+                code = build_serving_demo_report.main(
+                    [
+                        "--arm",
+                        f"baseline={baseline_eval}",
+                        "--arm",
+                        f"flightrecorder={candidate_eval}",
+                        "--out",
+                        str(demo_json),
+                        "--report",
+                        str(report_md),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            demo = _read_json(demo_json)
+            candidate = next(arm for arm in demo["arms"] if arm["name"] == "flightrecorder")
+            candidate["metrics"].update(
+                {
+                    "total": 1,
+                    "passed": 1,
+                    "failed": 0,
+                    "pass_rate": 1.0,
+                    "average_score": 100,
+                    "critical_failure_total": 0,
+                }
+            )
+            demo_json.write_text(json.dumps(demo, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(serving_demo_run_paths=[demo_json], strict=True)
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("serving_demo_run.arms[1].metrics.passed expected 0", errors)
+            self.assertIn("serving_demo_run.arms[1].metrics.pass_rate expected 0.0", errors)
+
     def test_validate_rejects_inconsistent_serving_endpoint_check(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

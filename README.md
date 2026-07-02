@@ -340,7 +340,9 @@ For owned lifecycle tests, use `scripts/manage_openai_serving.py`. It starts a
 server, polls readiness, runs the serving check, captures logs, writes lifecycle
 metadata, and tears the process down. For human inspection, use
 `scripts/build_serving_demo_report.py` to connect baseline/candidate eval
-summaries back to traces, scorecards, run digests, and HTML reports.
+summaries back to traces, scorecards, run digests, and HTML reports. Demo
+validation recomputes aggregate arm metrics from scenario rows so public claims
+stay tied to the linked replay evidence.
 
 ## Eval And Governance
 

@@ -6073,6 +6073,7 @@ def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -
             require_all_arms=expected_same,
             seen_scenarios=seen_scenarios,
         )
+    _validate_serving_demo_arm_metrics_against_scenarios(arms, scenarios, target)
 
     target.details.update(
         {
@@ -6134,13 +6135,87 @@ def _validate_serving_demo_metrics(metrics: dict[str, Any], index: int, target: 
     for field_name in ("total", "passed", "failed", "critical_failure_total"):
         if field_name in metrics and not _is_non_negative_int(metrics.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer when present.")
-    for field_name in ("pass_rate", "average_score"):
-        if field_name in metrics and metrics.get(field_name) is not None and not _is_optional_non_negative_number(metrics.get(field_name)):
-            target.errors.append(f"{label}.{field_name} must be null or a non-negative number.")
+    if "pass_rate" in metrics and not _is_optional_rate(metrics.get("pass_rate")):
+        target.errors.append(f"{label}.pass_rate must be null or a number from 0.0 to 1.0.")
+    if "average_score" in metrics and not _is_optional_non_negative_number(metrics.get("average_score")):
+        target.errors.append(f"{label}.average_score must be null or a non-negative number.")
     if _is_non_negative_int(metrics.get("passed")) and _is_non_negative_int(metrics.get("failed")):
         expected_total = metrics.get("passed") + metrics.get("failed")
         if metrics.get("total") is not None and metrics.get("total") != expected_total:
             target.errors.append(f"{label}.total expected {expected_total}, got {metrics.get('total')!r}.")
+
+
+def _validate_serving_demo_arm_metrics_against_scenarios(
+    arms: list[Any],
+    scenarios: list[Any],
+    target: ValidationTarget,
+) -> None:
+    expected_by_arm = _serving_demo_expected_arm_metrics(scenarios)
+    for index, arm in enumerate(arms):
+        if not isinstance(arm, dict):
+            continue
+        name = arm.get("name")
+        metrics = arm.get("metrics")
+        if not isinstance(name, str) or not name or not isinstance(metrics, dict):
+            continue
+        expected = expected_by_arm.get(
+            name,
+            {
+                "total": 0,
+                "passed": 0,
+                "failed": 0,
+                "pass_rate": 0.0,
+                "average_score": 0.0,
+                "critical_failure_total": 0,
+            },
+        )
+        label = f"serving_demo_run.arms[{index}].metrics"
+        for field_name in ("total", "passed", "failed", "critical_failure_total"):
+            if _is_non_negative_int(metrics.get(field_name)) and metrics.get(field_name) != expected[field_name]:
+                target.errors.append(f"{label}.{field_name} expected {expected[field_name]!r}, got {metrics.get(field_name)!r}.")
+        for field_name in ("pass_rate", "average_score"):
+            if _is_optional_non_negative_number(metrics.get(field_name)) and metrics.get(field_name) is not None:
+                if metrics.get(field_name) != expected[field_name]:
+                    target.errors.append(f"{label}.{field_name} expected {expected[field_name]!r}, got {metrics.get(field_name)!r}.")
+
+
+def _serving_demo_expected_arm_metrics(scenarios: list[Any]) -> dict[str, dict[str, Any]]:
+    buckets: dict[str, dict[str, Any]] = {}
+    for scenario in scenarios:
+        if not isinstance(scenario, dict):
+            continue
+        runs = scenario.get("arms")
+        if not isinstance(runs, dict):
+            continue
+        for arm_name, run in runs.items():
+            if not isinstance(arm_name, str) or not isinstance(run, dict):
+                continue
+            bucket = buckets.setdefault(
+                arm_name,
+                {"total": 0, "passed": 0, "failed": 0, "scores": [], "critical_failure_total": 0},
+            )
+            bucket["total"] += 1
+            if run.get("passed") is True:
+                bucket["passed"] += 1
+            elif run.get("passed") is False:
+                bucket["failed"] += 1
+            if _is_number_between(run.get("score"), 0, float("inf")):
+                bucket["scores"].append(_number_value(run.get("score")))
+            if isinstance(run.get("critical_failures"), list):
+                bucket["critical_failure_total"] += len(run["critical_failures"])
+    expected: dict[str, dict[str, Any]] = {}
+    for arm_name, bucket in buckets.items():
+        total = int(bucket["total"])
+        scores = bucket["scores"]
+        expected[arm_name] = {
+            "total": total,
+            "passed": bucket["passed"],
+            "failed": bucket["failed"],
+            "pass_rate": round(bucket["passed"] / total, 4) if total else 0.0,
+            "average_score": _average_number(scores),
+            "critical_failure_total": bucket["critical_failure_total"],
+        }
+    return expected
 
 
 def _validate_serving_demo_comparison(

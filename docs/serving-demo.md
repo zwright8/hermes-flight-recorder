@@ -109,7 +109,10 @@ traces, scorecards, run digests, and HTML reports. Local artifact links are
 written relative to the Markdown report directory so committed demo bundles can
 be replayed from a fresh checkout. The JSON and Markdown outputs also include
 base-vs-candidate comparison rows with metric deltas and per-scenario outcomes
-such as `candidate_repaired` or `candidate_regressed`.
+such as `candidate_repaired` or `candidate_regressed`. Semantic validation
+recomputes each arm's aggregate pass/fail metrics from those scenario rows, so
+forged or stale demo summaries cannot claim better serving outcomes than the
+linked evidence supports.
 
 ## Eval Preflight Handoff
 
