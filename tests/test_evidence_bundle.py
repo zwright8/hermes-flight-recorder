@@ -338,6 +338,8 @@ class EvidenceBundleTests(unittest.TestCase):
             preserved_bundle = json.loads(preserved_bundle_path.read_text(encoding="utf-8"))
             self.assertEqual(preserved_bundle["metrics"]["live_smoke_summary"]["hermes_root"], hermes_root)
             self.assertEqual(preserved_bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"], str(ROOT))
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(preserved_bundle_path)]), 0)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(preserved_bundle_path), "--strict"]), 1)
             bundle["metrics"]["training_export"]["top_curriculum_priorities"][0]["priority_band"] = "urgent"
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
@@ -893,6 +895,31 @@ class EvidenceBundleTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_fingerprint does not match", errors)
+
+    def test_strict_validate_rejects_absolute_bundle_artifact_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            strict_summary_path = root / "strict_validation.json"
+            run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["runs_dir"]["path"] = "/" + "Users/example/private-runs"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+            strict_code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(strict_summary_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("evidence_bundle.artifacts.runs_dir.path is absolute", warnings)
+            strict_summary = json.loads(strict_summary_path.read_text(encoding="utf-8"))
+            strict_warnings = "\n".join(warning for target in strict_summary["targets"] for warning in target["warnings"])
+            self.assertIn("evidence_bundle.artifacts.runs_dir.path is absolute", strict_warnings)
 
 
 def _write_harness_handoff_artifacts(

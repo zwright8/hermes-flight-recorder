@@ -12812,8 +12812,11 @@ def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: Va
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return
-    if not isinstance(record.get("path"), str) or not record.get("path"):
+    path_value = record.get("path")
+    if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string.")
+    elif _looks_absolute(path_value):
+        target.warnings.append(f"{label}.path is absolute; use a relative path or redacted placeholder for public bundles.")
     if not isinstance(record.get("exists"), bool):
         target.errors.append(f"{label}.exists must be a boolean.")
     if record.get("kind") not in {"file", "directory"}:
