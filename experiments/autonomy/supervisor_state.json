@@ -1165,12 +1165,12 @@
     }
   ],
   "current_packet": {
-    "id": "governance_policy_artifact_main_integration",
+    "id": "governance_policy_schema_registry",
     "layer": "governance",
-    "priority": "high",
-    "status": "verified_pending_main_push",
-    "summary": "Goal 8 promotion policy packet merged over current origin/main under the main-push lock; verification passed and main push is pending.",
-    "title": "Integrate promotion policy artifacts on main"
+    "priority": "medium",
+    "status": "ready",
+    "summary": "Goal 8 promotion policy packet landed on main; next governance packet should expose hfr.promotion_policy.v1 through the schema catalog.",
+    "title": "Register promotion policy schema"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -1846,18 +1846,18 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:16:33Z",
+  "updated_at": "2026-07-02T16:18:24Z",
   "github_delivery": {
     "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
     "branch": "codex/hermes-goal-8-governance-policy-20260702-1549",
     "branch_head_before_locked_merge_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
-    "branch_remote_status": "pushed_and_verified_before_locked_merge",
+    "branch_remote_status": "deleted",
     "branch_remote_verified_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
     "implementation_commit_sha": "3a1f4cc58693fa2393c58b2a98eebe20b0cb8b23",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "held_until_main_push_and_post_delivery_checkpoint",
-    "main_integration_status": "verified_pending_main_push",
-    "pr_status": "OPEN",
+    "lock_status": "held_until_post_delivery_checkpoint_push",
+    "main_integration_status": "pushed_and_verified",
+    "pr_status": "MERGED",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/13",
     "remote_ref": "refs/heads/codex/hermes-goal-8-governance-policy-20260702-1549",
     "verified_at": "2026-07-02T16:16:33Z",
@@ -1902,7 +1902,16 @@
         "status": "blocked",
         "summary": "System Python 3.9 ran 325 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
       }
-    ]
+    ],
+    "branch_remote_deleted_at": "2026-07-02T16:18:24Z",
+    "integrated_main_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
+    "main_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
+    "main_sha_status": "verified_before_post_delivery_checkpoint",
+    "merge_commit_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
+    "post_delivery_checkpoint_main_sha_status": "verify after pushing this checkpoint because a commit cannot self-record its final SHA",
+    "remote_branch_verified_deleted": true,
+    "remote_main_verified_at": "2026-07-02T16:18:24Z",
+    "remote_main_verified_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1"
   },
   "risks": [
     "Release records are structural governance artifacts; real release publication still requires production promotion decision, cards, alias receipt, rollback metadata, compare gate, and release notes evidence.",
