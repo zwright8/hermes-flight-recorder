@@ -40,6 +40,37 @@
           "summary": "Applied stash@{0} from codex/hermes-goal-1-evidence-20260702-1027 and kept the stash due conflicts."
         }
       ]
+    },
+    {
+      "blocked_at": "2026-07-02T15:09:16Z",
+      "branch": "codex/hermes-goal-2-harness-20260702-1027",
+      "branch_head": "989ca7bc4eab0dc7a99c07b51026300d450642fc",
+      "id": "main_integration_lock_held",
+      "integration_lock": "/tmp/hermes-flight-recorder-main-push.lock",
+      "layer": "harness",
+      "lock_status": "held_by_existing_process_or_stale_directory",
+      "main_push": "not_attempted",
+      "origin_main_at_block": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+      "pr_status": "open_not_closed",
+      "remote_branch_head": "989ca7bc4eab0dc7a99c07b51026300d450642fc",
+      "status": "blocked",
+      "summary": "Verified Goal 2 branch was pushed, but the required main integration lock already existed and remained held through a bounded wait. Main integration was not attempted. Before retrying, fetch origin, rebase onto current origin/main, rerun verification, then acquire the lock.",
+      "verification": [
+        {
+          "command": "git push --force-with-lease -u origin codex/hermes-goal-2-harness-20260702-1027 && git ls-remote --heads origin codex/hermes-goal-2-harness-20260702-1027",
+          "status": "pass"
+        },
+        {
+          "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
+          "status": "blocked",
+          "summary": "Lock directory already existed."
+        },
+        {
+          "command": "bounded 120-second lock acquisition retry",
+          "status": "blocked",
+          "summary": "Lock remained held; no push to origin/main attempted."
+        }
+      ]
     }
   ],
   "branch": "codex/hermes-goal-2-harness-20260702-1027",
@@ -237,10 +268,15 @@
       ]
     }
   ],
-  "current_packet": null,
+  "current_packet": {
+    "id": "main_delivery_for_verified_harness_branch",
+    "status": "blocked",
+    "summary": "Verified Goal 2 branch is pushed at 989ca7bc4eab0dc7a99c07b51026300d450642fc, but main integration is waiting on /tmp/hermes-flight-recorder-main-push.lock. Re-fetch/rebase/re-verify before retrying because origin/main advanced to b671b9671fff7e891fa0ee58a69f64e818694b11."
+  },
   "latest_commit_sha": "938c053b1e5ab97058fc28b443cfd6ec0828ccbb",
   "latest_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
   "latest_risks": [
+    "Main delivery is pending because /tmp/hermes-flight-recorder-main-push.lock was already held; no origin/main push, PR close, or branch deletion has been attempted.",
     "A wrong-stash application was recovered locally; stale Goal 0/Goal 1 stashes remain in the repository stash list and should not be applied by index.",
     "Real Hermes, OpenClaw, and Coven runtimes were not launched in the latest packets; coverage uses mock and fixture-backed live-shaped artifact writers with replay.",
     "The dedicated worktree did not include the broader autonomous docs/state files from the shared checkout, so this branch starts its own scoped state handoff."
@@ -257,5 +293,5 @@
     "harness": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:04:34Z"
+  "updated_at": "2026-07-02T15:09:16Z"
 }
