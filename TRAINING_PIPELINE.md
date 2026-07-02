@@ -174,9 +174,10 @@ The resulting `metrics.trainer_handoff` section records included stages,
 readiness counts, missing stage ids, and whether all included trainer artifacts
 match their expected recommendation. The result receipt may recommend either
 `register_training_result` for completed runs or `register_training_failure`
-for classified non-completed runs. The bundle blocks only included stages that
-are no longer ready, while partial chains remain visible as advisory next
-actions.
+for classified non-completed runs. Included stages are ready only when their
+schema, recommendation, pass flag, and failed-check count all agree. The bundle
+blocks only included stages that are no longer ready, while partial chains
+remain visible as advisory next actions.
 When included gates can validate trainer-facing exports, such as training,
 compare, reviewed, and review-calibration gates, the bundle blocks handoff if
 those gates skipped validation.

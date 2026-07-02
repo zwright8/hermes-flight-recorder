@@ -593,6 +593,88 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("complete_trainer_handoff_chain", action_ids)
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
+    def test_evidence_bundle_blocks_trainer_stage_with_failed_check_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preflight_path = root / "trainer_preflight.json"
+            preflight_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.trainer_preflight.v1",
+                        "passed": True,
+                        "readiness": "ready",
+                        "recommendation": "launch_allowed",
+                        "check_count": 2,
+                        "failed_check_count": 1,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--trainer-preflight",
+                    str(preflight_path),
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            stage = bundle["metrics"]["trainer_handoff"]["stages"][0]
+            self.assertTrue(stage["passed"])
+            self.assertEqual(stage["failed_check_count"], 1)
+            self.assertFalse(stage["handoff_ready"])
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("trainer_preflight_ready", failed_checks)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_validate_rejects_trainer_stage_ready_with_failed_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = _write_trainer_handoff_artifacts(root)
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "evidence-bundle",
+                        "--trainer-preflight",
+                        str(artifacts["trainer_preflight"]),
+                        "--trainer-launch-check",
+                        str(artifacts["trainer_launch_check"]),
+                        "--trainer-archive",
+                        str(artifacts["trainer_archive"]),
+                        "--trainer-archive-check",
+                        str(artifacts["trainer_archive_check"]),
+                        "--trainer-consumer-plan",
+                        str(artifacts["trainer_consumer_plan"]),
+                        "--trainer-wrapper-dry-run",
+                        str(artifacts["trainer_wrapper_dry_run"]),
+                        "--agentic-training-result",
+                        str(artifacts["agentic_training_result"]),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                ),
+                0,
+            )
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["metrics"]["trainer_handoff"]["stages"][0]["failed_check_count"] = 1
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("handoff_ready cannot be true when failed_check_count is greater than 0", errors)
+
     def test_evidence_bundle_accepts_classified_agentic_training_failure_result(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

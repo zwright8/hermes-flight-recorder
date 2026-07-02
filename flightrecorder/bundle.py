@@ -1561,9 +1561,11 @@ def _trainer_stage_metrics(
         else " or ".join(expected_recommendations)
     )
     schema_supported = schema_version == expected_schema
+    failed_check_count = _non_negative_int(artifact.get("failed_check_count"))
     handoff_ready = (
         schema_supported
         and artifact.get("passed") is True
+        and failed_check_count == 0
         and readiness == "ready"
         and recommendation in expected_recommendations
     )
@@ -1580,7 +1582,7 @@ def _trainer_stage_metrics(
         "expected_recommendation": expected_recommendation,
         "handoff_ready": handoff_ready,
         "check_count": _non_negative_int(artifact.get("check_count")),
-        "failed_check_count": _non_negative_int(artifact.get("failed_check_count")),
+        "failed_check_count": failed_check_count,
     }
     if len(expected_recommendations) > 1:
         stage["expected_recommendations"] = list(expected_recommendations)

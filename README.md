@@ -527,6 +527,7 @@ Strict public handoffs should use relative paths or redacted placeholders.
 Commands that preserve absolute paths are for private local debugging only.
 Validation summaries included in evidence bundles must have target-bearing,
 internally consistent `passed`, `strict`, error, and warning counts.
+Trainer handoff stages with failed checks are blockers, not readiness evidence.
 
 ## Project Docs
 

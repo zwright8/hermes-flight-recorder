@@ -13296,6 +13296,12 @@ def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTa
         for field_name in ("check_count", "failed_check_count"):
             if not _is_non_negative_int(stage.get(field_name)):
                 target.errors.append(f"{stage_label}.{field_name} must be a non-negative integer.")
+        if (
+            stage.get("handoff_ready") is True
+            and _is_non_negative_int(stage.get("failed_check_count"))
+            and int(stage["failed_check_count"]) > 0
+        ):
+            target.errors.append(f"{stage_label}.handoff_ready cannot be true when failed_check_count is greater than 0.")
         for field_name in (
             "gate_count",
             "passed_gate_count",
