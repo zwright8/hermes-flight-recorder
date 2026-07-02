@@ -148,6 +148,34 @@
           "summary": "PR #3 CI is green for Python 3.11, 3.12, and 3.13 at branch 9441c04fa03655a4abc8be8a55e3baae0c9fb52b."
         }
       ]
+    },
+    {
+      "blocked_at": "2026-07-02T15:27:40Z",
+      "branch": "codex/hermes-goal-2-harness-20260702-1027",
+      "branch_head": "dd08db12f0049079de61454364474fa60847c03e",
+      "id": "persistent_main_delivery_blocker",
+      "integration_lock": "/tmp/hermes-flight-recorder-main-push.lock",
+      "known_rebase_blocker": "main_integration_conflicts_origin_main_53357ff",
+      "layer": "harness",
+      "lock_status": "held_through_repeated_bounded_retries",
+      "main_push": "not_attempted",
+      "origin_main_at_block": "63116fb63a0402f9ba362a92591058261354934c",
+      "pr_status": "open_ci_green",
+      "remote_branch_head": "dd08db12f0049079de61454364474fa60847c03e",
+      "status": "blocked",
+      "summary": "Goal 2 branch remains pushed and PR #3 CI is green, but the required main integration lock remained held through another bounded retry. The branch also still requires supervisor rebase conflict resolution against current origin/main before any main push.",
+      "verification": [
+        {
+          "command": "bounded 120-second lock acquisition retry at 2026-07-02T15:27:40Z",
+          "status": "blocked",
+          "summary": "Lock remained held; no push to origin/main attempted."
+        },
+        {
+          "command": "gh pr view 3 --json statusCheckRollup",
+          "status": "pass",
+          "summary": "PR #3 CI is green for Python 3.11, 3.12, and 3.13 at branch dd08db12f0049079de61454364474fa60847c03e."
+        }
+      ]
     }
   ],
   "branch": "codex/hermes-goal-2-harness-20260702-1027",
@@ -348,11 +376,12 @@
   "current_packet": {
     "id": "main_delivery_for_verified_harness_branch",
     "status": "blocked",
-    "summary": "Verified Goal 2 branch is pushed at 9441c04fa03655a4abc8be8a55e3baae0c9fb52b with PR #3 CI green. Current main delivery is blocked by the held integration lock and by known non-trivial rebase conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c."
+    "summary": "Verified Goal 2 branch is pushed at dd08db12f0049079de61454364474fa60847c03e with PR #3 CI green. Current main delivery is blocked by the held integration lock and by known non-trivial rebase conflicts against origin/main; current origin/main is 63116fb63a0402f9ba362a92591058261354934c."
   },
   "latest_commit_sha": "938c053b1e5ab97058fc28b443cfd6ec0828ccbb",
   "latest_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
   "latest_risks": [
+    "Goal 2 is now blocked under the active-goal blocked audit: the same main-delivery lock/conflict condition has recurred across consecutive continuations and cannot be resolved safely inside this worker.",
     "A fresh 2026-07-02T15:23:14Z retry still could not acquire /tmp/hermes-flight-recorder-main-push.lock; no origin/main push, PR close, or branch deletion has been attempted.",
     "Main delivery is blocked by non-trivial rebase conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c in shared harness/state files; supervisor conflict resolution is required.",
     "Main delivery is pending because /tmp/hermes-flight-recorder-main-push.lock was already held; no origin/main push, PR close, or branch deletion has been attempted.",
@@ -372,5 +401,5 @@
     "harness": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:23:14Z"
+  "updated_at": "2026-07-02T15:27:40Z"
 }
