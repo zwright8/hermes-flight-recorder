@@ -3518,9 +3518,9 @@
     "id": "supervisor_cross_layer_completion_audit",
     "layer": "supervisor",
     "priority": "high",
-    "status": "completed_landed_on_main",
+    "status": "complete",
     "title": "Audit cross-layer completion and remaining blockers",
-    "summary": "Cross-layer completion audit landed on main; PR #18 is merged and the audit remote branch is deleted.",
+    "summary": "Goal 0 cross-layer completion audit is landed; final lock-release checkpoint is being delivered to main.",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1351",
     "base_main_sha": "3f67adf35da399a2b3a8598e6518c6814e0eeb86",
     "verification": [
@@ -3661,9 +3661,9 @@
       "lock_released_at": "2026-07-02T16:03:36Z",
       "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     },
-    "latest_origin_main_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
+    "latest_origin_main_sha": "7a03270db610fa34c10620575a54b4989c6c34eb",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "held_until_final_checkpoint_push"
+    "lock_status": "released_after_this_checkpoint_push"
   },
   "governance_main_delivery": {
     "attempted_at": "2026-07-02T15:09:17Z",
@@ -4080,19 +4080,14 @@
   ],
   "latest_verification": [
     {
-      "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
-      "status": "pass",
-      "summary": "origin/main verified at 29a573e4afe07cd458703947a842a42a9bb62fd5 after final audit push."
+      "command": "test ! -d /tmp/hermes-flight-recorder-main-push.lock after final checkpoint push",
+      "status": "pending_until_release_after_push",
+      "summary": "This checkpoint records the intended lock release; final terminal verification confirms the directory is absent."
     },
     {
-      "command": "gh pr view 18 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
-      "status": "pass",
-      "summary": "PR #18 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/18 with merge commit 29a573e4afe07cd458703947a842a42a9bb62fd5."
-    },
-    {
-      "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1351 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
-      "status": "pass",
-      "summary": "Only refs/heads/main remained; the final audit remote branch was absent."
+      "command": "git ls-remote --heads origin main",
+      "status": "pending_until_push",
+      "summary": "Remote main SHA is verified immediately after this checkpoint is pushed."
     }
   ],
   "layer_status": {
@@ -4161,7 +4156,7 @@
     "training": "completed"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T17:55:33Z",
+  "updated_at": "2026-07-02T17:56:37Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -5467,7 +5462,7 @@
     "post_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the checkpoint commit SHA is verified after push because a commit cannot self-record its final SHA."
   },
   "supervisor_cross_layer_completion_audit": {
-    "status": "completed_landed_on_main",
+    "status": "complete",
     "verified_at": "2026-07-02T17:52:53Z",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1351",
     "base_main_sha": "3f67adf35da399a2b3a8598e6518c6814e0eeb86",
@@ -5525,7 +5520,7 @@
     "main_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
     "merge_commit_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
     "remote_branch_status": "deleted",
-    "completed_at": "2026-07-02T17:55:33Z",
+    "completed_at": "2026-07-02T17:56:37Z",
     "post_delivery_verification": [
       {
         "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
@@ -5542,10 +5537,12 @@
         "status": "pass",
         "summary": "Only refs/heads/main remained; the final audit remote branch was absent."
       }
-    ]
+    ],
+    "final_delivery_checkpoint_sha": "7a03270db610fa34c10620575a54b4989c6c34eb",
+    "lock_release_status": "released_after_this_checkpoint_push"
   },
   "goal0_completion": {
-    "status": "complete_after_final_checkpoint_push",
+    "status": "complete",
     "completed_layers": [
       "evidence",
       "harness",
@@ -5581,6 +5578,9 @@
         "status": "pass",
         "summary": "Only refs/heads/main remained; the final audit remote branch was absent."
       }
-    ]
+    ],
+    "final_delivery_checkpoint_sha": "7a03270db610fa34c10620575a54b4989c6c34eb",
+    "lock_release_status": "released_after_this_checkpoint_push",
+    "completed_at": "2026-07-02T17:56:37Z"
   }
 }
