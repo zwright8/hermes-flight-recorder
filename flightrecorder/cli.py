@@ -43,7 +43,13 @@ from .compare_gate import (
 from .decision_gate import DecisionGateError, evaluate_decision_gate
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
-from .governance import PromotionDecisionError, apply_promotion_aliases, build_promotion_cards, build_promotion_decision
+from .governance import (
+    PromotionDecisionError,
+    apply_promotion_aliases,
+    build_promotion_cards,
+    build_promotion_decision,
+    build_promotion_release_record,
+)
 from .improvement_gate import (
     IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION,
     ImprovementLedgerGateError,
@@ -807,6 +813,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         promotion_cards_paths=args.promotion_cards,
         promotion_decision_paths=args.promotion_decision,
         promotion_alias_apply_paths=args.promotion_alias_apply,
+        promotion_release_record_paths=args.promotion_release_record,
         promotion_ledger_paths=args.promotion_ledger,
         promotion_ledger_gate_paths=args.promotion_ledger_gate,
         promotion_archive_paths=args.promotion_archive,
@@ -1227,6 +1234,34 @@ def cmd_promotion_alias_apply(args: argparse.Namespace) -> int:
         f"out={args.out}"
     )
     return 0 if receipt["passed"] else 1
+
+
+def cmd_promotion_release_record(args: argparse.Namespace) -> int:
+    validation_summary = validate_artifacts(
+        promotion_decision_paths=[args.promotion_decision],
+        promotion_cards_paths=[args.promotion_cards],
+        promotion_alias_apply_paths=[args.promotion_alias_apply],
+        strict=True,
+    )
+    record = build_promotion_release_record(
+        release_id=args.release_id,
+        promotion_decision_path=args.promotion_decision,
+        promotion_cards_path=args.promotion_cards,
+        promotion_alias_apply_path=args.promotion_alias_apply,
+        rollback_metadata_path=args.rollback_metadata,
+        compare_gate_path=args.compare_gate,
+        release_notes_path=args.release_notes,
+        out_path=args.out,
+        artifact_validation=validation_summary,
+        preserve_paths=args.preserve_paths,
+        metadata=_metadata_options(args.metadata),
+    )
+    print(
+        f"{'READY' if record['passed'] else 'BLOCKED'} promotion-release-record "
+        f"checks={record['check_count'] - record['failed_check_count']}/{record['check_count']} "
+        f"out={args.out}"
+    )
+    return 0 if record["passed"] else 1
 
 
 def cmd_promotion_decision(args: argparse.Namespace) -> int:
@@ -2118,6 +2153,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--promotion-cards", action="append", default=[], help="Validate one promotion-cards directory or manifest; may be repeated")
     validate.add_argument("--promotion-decision", action="append", default=[], help="Validate one promotion_decision.json; may be repeated")
     validate.add_argument("--promotion-alias-apply", action="append", default=[], help="Validate one promotion_alias_apply.json receipt; may be repeated")
+    validate.add_argument("--promotion-release-record", action="append", default=[], help="Validate one promotion_release_record.json; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
     validate.add_argument("--promotion-archive", action="append", default=[], help="Validate one promotion archive directory or manifest; may be repeated")
@@ -2534,6 +2570,29 @@ def _parser() -> argparse.ArgumentParser:
     )
     promotion_alias_apply.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the receipt")
     promotion_alias_apply.set_defaults(func=cmd_promotion_alias_apply)
+
+    promotion_release_record = subparsers.add_parser(
+        "promotion-release-record",
+        help="Bind promotion decisions, cards, alias receipts, rollback, evals, and release notes",
+    )
+    promotion_release_record.add_argument("--release-id", required=True, help="Release identifier to bind to the governance artifacts")
+    promotion_release_record.add_argument("--promotion-decision", required=True, help="Passing promotion_decision.json")
+    promotion_release_record.add_argument("--promotion-cards", required=True, help="Promotion cards directory or promotion_cards.json")
+    promotion_release_record.add_argument("--promotion-alias-apply", required=True, help="Passing promotion_alias_apply.json receipt")
+    promotion_release_record.add_argument("--rollback-metadata", required=True, help="Rollback metadata JSON used by the promotion decision")
+    promotion_release_record.add_argument("--compare-gate", required=True, help="compare_gate.json used as eval movement evidence")
+    promotion_release_record.add_argument("--release-notes", required=True, help="Release notes markdown or text file")
+    promotion_release_record.add_argument("--out", required=True, help="Write promotion_release_record.json")
+    promotion_release_record.add_argument(
+        "--metadata",
+        action="append",
+        nargs=2,
+        metavar=("KEY", "VALUE"),
+        default=[],
+        help="Attach metadata to the release record; may be repeated",
+    )
+    promotion_release_record.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the release record")
+    promotion_release_record.set_defaults(func=cmd_promotion_release_record)
 
     promotion_decision = subparsers.add_parser(
         "promotion-decision",

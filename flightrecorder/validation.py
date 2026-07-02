@@ -48,6 +48,8 @@ from .governance import (
     PROMOTION_CARDS_SCHEMA_VERSION,
     PROMOTION_DECISION_REQUIRED_ARTIFACTS,
     PROMOTION_DECISION_SCHEMA_VERSION,
+    PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
+    PROMOTION_RELEASE_RECORD_SCHEMA_VERSION,
 )
 from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, PROMOTION_LEDGER_GATE_SCHEMA_VERSION
@@ -150,6 +152,7 @@ def validate_artifacts(
     promotion_cards_paths: list[str | Path] | None = None,
     promotion_decision_paths: list[str | Path] | None = None,
     promotion_alias_apply_paths: list[str | Path] | None = None,
+    promotion_release_record_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
     promotion_ledger_gate_paths: list[str | Path] | None = None,
     promotion_archive_paths: list[str | Path] | None = None,
@@ -216,6 +219,8 @@ def validate_artifacts(
         targets.append(validate_promotion_decision(promotion_decision_path))
     for promotion_alias_apply_path in promotion_alias_apply_paths or []:
         targets.append(validate_promotion_alias_apply(promotion_alias_apply_path))
+    for promotion_release_record_path in promotion_release_record_paths or []:
+        targets.append(validate_promotion_release_record(promotion_release_record_path))
     for promotion_ledger_path in promotion_ledger_paths or []:
         targets.append(validate_promotion_ledger(promotion_ledger_path))
     for promotion_ledger_gate_path in promotion_ledger_gate_paths or []:
@@ -820,6 +825,16 @@ def validate_promotion_alias_apply(path: str | Path) -> ValidationTarget:
     receipt = _read_object(receipt_path, target, "promotion_alias_apply.json")
     if receipt is not None:
         _validate_promotion_alias_apply(receipt, target, receipt_path)
+    return target
+
+
+def validate_promotion_release_record(path: str | Path) -> ValidationTarget:
+    """Validate a promotion release record."""
+    record_path = Path(path)
+    target = ValidationTarget("promotion_release_record", str(record_path))
+    record = _read_object(record_path, target, "promotion_release_record.json")
+    if record is not None:
+        _validate_promotion_release_record(record, target, record_path)
     return target
 
 
@@ -7292,6 +7307,122 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
             "rollback_id": decision_ref.get("rollback_id"),
         }
     )
+
+
+def _validate_promotion_release_record(record: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(record, "schema_version", PROMOTION_RELEASE_RECORD_SCHEMA_VERSION, target)
+    if not isinstance(record.get("release_record_path"), str):
+        target.errors.append("promotion_release_record.release_record_path must be a string.")
+    if not isinstance(record.get("passed"), bool):
+        target.errors.append("promotion_release_record.passed must be a boolean.")
+    checks = record.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_release_record.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "promotion_release_record.checks")
+    if record.get("check_count") != len(checks):
+        target.errors.append(f"promotion_release_record.check_count expected {len(checks)}, got {record.get('check_count')!r}.")
+    if record.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_release_record.failed_check_count expected {failed_checks}, got {record.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(record.get("passed"), bool) and record["passed"] != expected_passed:
+        target.errors.append("promotion_release_record.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "publish_release" if expected_passed else "hold_release"
+    if record.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_release_record.readiness expected {expected_readiness!r}, got {record.get('readiness')!r}.")
+    if record.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_release_record.recommendation expected {expected_recommendation!r}, got {record.get('recommendation')!r}."
+        )
+
+    release = record.get("release")
+    if not isinstance(release, dict):
+        target.errors.append("promotion_release_record.release must be an object.")
+        release = {}
+    for field_name in ("id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"):
+        if not isinstance(release.get(field_name), str):
+            target.errors.append(f"promotion_release_record.release.{field_name} must be a string.")
+
+    artifacts = record.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("promotion_release_record.artifacts must be an object.")
+        artifacts = {}
+    for role in PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS:
+        _validate_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_release_record.artifacts")
+
+    _validate_promotion_release_record_validation(record.get("artifact_validation"), expected_passed, target)
+    _validate_promotion_release_record_bindings(record.get("bindings"), artifacts, target)
+    _validate_promotion_release_record_metrics(record.get("metrics"), checks, target)
+    if not _is_string_list(record.get("notes")):
+        target.errors.append("promotion_release_record.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": record.get("passed"),
+            "recommendation": record.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "release_id": release.get("id"),
+            "candidate_id": release.get("candidate_id"),
+            "rollback_id": release.get("rollback_id"),
+        }
+    )
+
+
+def _validate_promotion_release_record_validation(value: Any, expected_passed: bool, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_release_record.artifact_validation must be an object.")
+        return
+    if value.get("passed") is not None and not isinstance(value.get("passed"), bool):
+        target.errors.append("promotion_release_record.artifact_validation.passed must be a boolean or null.")
+    if expected_passed and value.get("passed") is not True:
+        target.errors.append("promotion_release_record.artifact_validation.passed must be true when the release record passed.")
+    for field_name in ("target_count", "error_count", "warning_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"promotion_release_record.artifact_validation.{field_name} must be a non-negative integer.")
+
+
+def _validate_promotion_release_record_bindings(value: Any, artifacts: dict[str, Any], target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_release_record.bindings must be an object.")
+        return
+    expected_artifact_fields = {
+        "promotion_decision_sha256": "promotion_decision",
+        "promotion_cards_sha256": "promotion_cards",
+        "promotion_alias_apply_sha256": "promotion_alias_apply",
+        "rollback_metadata_sha256": "rollback_metadata",
+        "compare_gate_sha256": "compare_gate",
+        "release_notes_sha256": "release_notes",
+    }
+    for field_name, artifact_role in expected_artifact_fields.items():
+        actual = value.get(field_name)
+        if not _is_sha256(actual):
+            target.errors.append(f"promotion_release_record.bindings.{field_name} must be a SHA-256 hex string.")
+            continue
+        artifact = artifacts.get(artifact_role) if isinstance(artifacts.get(artifact_role), dict) else {}
+        if actual != artifact.get("sha256"):
+            target.errors.append(f"promotion_release_record.bindings.{field_name} must match artifacts.{artifact_role}.sha256.")
+    for field_name in ("model_card_sha256", "dataset_card_sha256"):
+        if value.get(field_name) and not _is_sha256(value.get(field_name)):
+            target.errors.append(f"promotion_release_record.bindings.{field_name} must be a SHA-256 hex string when present.")
+
+
+def _validate_promotion_release_record_metrics(value: Any, checks: list[Any], target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_release_record.metrics must be an object.")
+        return
+    expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
+    expected = {
+        "check_count": len(checks),
+        "failed_check_count": expected_failed,
+        "required_artifact_count": len(PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS),
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"promotion_release_record.metrics.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
+    if not _is_non_negative_int(value.get("release_notes_size_bytes")):
+        target.errors.append("promotion_release_record.metrics.release_notes_size_bytes must be a non-negative integer.")
 
 
 def _validate_alias_snapshot(value: Any, target: ValidationTarget, label: str) -> dict[str, Any]:

@@ -642,9 +642,78 @@
           "summary": "Full suite passed under Python 3.11 before main integration."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "branch": "codex/hermes-goal-8-governance-release-record-20260702-1528",
+      "completed_at": "2026-07-02T15:35:00Z",
+      "id": "governance_release_record",
+      "implementation_commit_sha": "321a9b639dbb79c85b832e7fba72926e0e55936d",
+      "layer": "governance",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added promotion-release-record to bind a passing promotion decision, generated cards, alias receipt, rollback metadata, eval compare gate, and release notes into a validated release artifact that rehashes each input.",
+      "title": "Bind governance release records",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "Touched governance modules compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "55 focused governance, ledger, and validation tests passed."
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "323 tests passed under Python 3.11."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "blocked",
+          "summary": "System Python 3.9 cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
+        }
+      ]
     }
   ],
-  "current_packet": "model packet landed on main; prepare next metadata scout packet",
+  "current_packet": "governance release-record packet is in locked current-main integration; prepare governance policy artifact next",
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
@@ -702,23 +771,73 @@
     "require_verification_before_completion": true
   },
   "latest_artifacts": [
-    "experiments/registry/model_candidates/local_mock_tiny_chat.json",
-    "experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json",
-    "experiments/registry/model_registry.json",
-    "experiments/registry/model_registry_entries/local_mock_tiny_chat.json",
-    "experiments/registry/model_scout_manifest.json",
-    "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
-    "experiments/registry/model_layer_validation.json"
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/governance.py"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/cli.py"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/validation.py"
+    },
+    {
+      "kind": "test",
+      "layer": "governance",
+      "path": "tests/test_promotion_decision.py"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "README.md"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "TRAINING_PIPELINE.md"
+    }
   ],
   "latest_verification": [
-    "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation tests.test_promotion_decision",
-    "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py flightrecorder/governance.py tests/test_model_registry.py tests/test_schema_registry.py tests/test_promotion_decision.py",
-    "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --out /tmp/model_layer_validation_check.json --strict",
-    "python3 -m json.tool experiments/autonomy/supervisor_state.json >/tmp/hfr_goal4_locked_merge_state.json",
-    "git diff --check",
-    "/opt/homebrew/bin/python3.11 -m unittest discover",
-    "git ls-remote --heads origin main",
-    "git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1027"
+    {
+      "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+      "status": "pass",
+      "summary": "Touched release-record modules compile after merging current origin/main."
+    },
+    {
+      "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+      "status": "pass",
+      "summary": "55 focused governance, ledger, and validation tests passed after merging current origin/main."
+    },
+    {
+      "command": "python3 -m flightrecorder promotion-release-record --help && python3 -m flightrecorder validate --help",
+      "status": "pass",
+      "summary": "promotion-release-record and validate --promotion-release-record are advertised."
+    },
+    {
+      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+      "status": "pass",
+      "summary": "Supervisor state parses after semantic conflict resolution."
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass",
+      "summary": "Merged diff has no whitespace errors."
+    },
+    {
+      "command": "python3.11 -m unittest discover",
+      "status": "pass",
+      "summary": "330 tests passed under Python 3.11 after merging current origin/main."
+    },
+    {
+      "command": "python3 -m unittest discover",
+      "status": "blocked",
+      "summary": "System Python 3.9 ran 319 tests but cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
+    }
   ],
   "layer_status": {
     "data": {
@@ -737,9 +856,9 @@
       "summary": "Evidence bundles now require gate decision contracts when gates are included and can require at least one gate summary."
     },
     "governance": {
-      "next_packet": "governance_release_record",
+      "next_packet": "governance_policy_artifact",
       "status": "in_progress",
-      "summary": "Promotion decisions, model/dataset cards, and guarded registry alias application are implemented; release-record binding remains."
+      "summary": "Promotion decisions, model/dataset cards, guarded registry alias application, and release-record binding are implemented; explicit promotion policy artifacts remain."
     },
     "harness": {
       "next_packet": null,
@@ -799,9 +918,20 @@
       "id": "governance_release_record",
       "layer": "governance",
       "priority": "high",
-      "status": "ready",
+      "status": "completed",
       "summary": "Bind promotion decisions, cards, alias receipts, rollback metadata, evals, and release notes into a validated release-record artifact.",
       "title": "Bind governance release records"
+    },
+    {
+      "depends_on": [
+        "governance_release_record"
+      ],
+      "id": "governance_policy_artifact",
+      "layer": "governance",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Externalize the promotion policy thresholds and required artifact contract consumed by promotion-decision and release-record checks.",
+      "title": "Externalize promotion policy artifacts"
     }
   ],
   "promotion_readiness": {
@@ -815,34 +945,25 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:32:33Z",
+  "updated_at": "2026-07-02T15:45:40Z",
   "github_delivery": {
-    "branch": "codex/hermes-goal-4-model-20260702-1027",
-    "branch_head_before_locked_merge_sha": "949bf4778020233e3dc8e6220a2dcaea8eb701b0",
-    "branch_remote_status": "deleted",
-    "branch_remote_deleted_at": "2026-07-02T15:32:33Z",
-    "base_main_sha": "63116fb63a0402f9ba362a92591058261354934c",
-    "implementation_commit_sha": "500766b2efb78cd28605f298e47dc5753fe41e9a",
-    "integrated_main_sha": "26ef4aa775e7b0cf9e819f6d4a556ae7351457c2",
-    "latest_model_commit_sha": "4e28d9873c445ebd036d2205fa93f9e969040beb",
+    "base_main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
+    "branch": "codex/hermes-goal-8-governance-release-record-20260702-1528",
+    "branch_head_before_locked_merge_sha": "139a108d538353e32cb33b34054b2a56f76416e0",
+    "implementation_commit_sha": "321a9b639dbb79c85b832e7fba72926e0e55936d",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "pushed_and_verified",
-    "main_sha": "26ef4aa775e7b0cf9e819f6d4a556ae7351457c2",
-    "main_sha_status": "verified_before_post_delivery_checkpoint",
-    "post_delivery_checkpoint_main_sha_status": "verify after pushing this checkpoint because a commit cannot self-record its final SHA",
-    "pr_status": "MERGED",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/8",
-    "remote_branch_verified_deleted": true,
-    "remote_main_verified_at": "2026-07-02T15:32:33Z",
-    "remote_main_verified_sha": "26ef4aa775e7b0cf9e819f6d4a556ae7351457c2",
-    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1027"
+    "lock_status": "held_for_locked_merge_verification",
+    "main_integration_status": "pending_merge_commit_verification_push",
+    "pr_status": "OPEN",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/11",
+    "remote_branch_verified_sha": "139a108d538353e32cb33b34054b2a56f76416e0",
+    "remote_ref": "refs/heads/codex/hermes-goal-8-governance-release-record-20260702-1528"
   },
   "risks": [
+    "Release records are structural governance artifacts; real release publication still requires production promotion decision, cards, alias receipt, rollback metadata, compare gate, and release notes evidence.",
     "Real upstream model licenses and terms still need explicit review artifacts before selection.",
     "Compatibility probes are metadata-only until tokenizer and serving checks are connected.",
-    "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry.",
-    "Adapter, eval, and promotion link slots are present but await real downstream artifacts."
+    "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry."
   ],
   "safety_guardrails": {
     "gpu_work_launched": false,
