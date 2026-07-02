@@ -81,6 +81,45 @@
           "summary": "PR #3 CI completed successfully for Python 3.11, 3.12, and 3.13 while waiting on the lock."
         }
       ]
+    },
+    {
+      "blocked_at": "2026-07-02T15:18:05Z",
+      "branch": "codex/hermes-goal-2-harness-20260702-1027",
+      "branch_head": "b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce",
+      "conflicts": [
+        "experiments/autonomy/journal/2026-07-02.md",
+        "experiments/autonomy/supervisor_state.json",
+        "flightrecorder/schemas/harness_run_manifest.v1.schema.json",
+        "flightrecorder/schemas/harness_run_result.v1.schema.json",
+        "flightrecorder/validation.py",
+        "scripts/hermes_harness.py",
+        "tests/test_deployment_hardening.py"
+      ],
+      "id": "main_integration_conflicts_origin_main_53357ff",
+      "integration_lock": "acquired_then_released",
+      "layer": "harness",
+      "main_push": "not_attempted",
+      "origin_main_at_block": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+      "pr_status": "open_ci_green",
+      "remote_branch_head": "b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce",
+      "status": "blocked",
+      "summary": "Acquired the required integration lock and attempted to rebase the verified Goal 2 branch onto current origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c. The first harness commit conflicted in shared autonomy state, harness schemas, validation, harness script, and deployment-hardening tests. Per protocol, the rebase was aborted, the lock was released, and no origin/main push was attempted.",
+      "verification": [
+        {
+          "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
+          "status": "pass"
+        },
+        {
+          "command": "git fetch origin && git rebase origin/main",
+          "status": "blocked",
+          "summary": "Non-trivial conflicts in shared harness/state surfaces; rebase aborted."
+        },
+        {
+          "command": "gh pr view 3 --json statusCheckRollup",
+          "status": "pass",
+          "summary": "PR #3 CI is green for Python 3.11, 3.12, and 3.13 at branch b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce."
+        }
+      ]
     }
   ],
   "branch": "codex/hermes-goal-2-harness-20260702-1027",
@@ -281,11 +320,12 @@
   "current_packet": {
     "id": "main_delivery_for_verified_harness_branch",
     "status": "blocked",
-    "summary": "Verified Goal 2 branch is pushed at e6b785c18df2e207246d9cb50564643186c839b7 with PR #3 CI green, but main integration is waiting on /tmp/hermes-flight-recorder-main-push.lock. Re-fetch/rebase/re-verify before retrying; origin/main is b671b9671fff7e891fa0ee58a69f64e818694b11."
+    "summary": "Verified Goal 2 branch is pushed at b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce with PR #3 CI green, but rebase onto origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c has non-trivial shared harness/state conflicts. Main push, PR close, and branch deletion were not attempted."
   },
   "latest_commit_sha": "938c053b1e5ab97058fc28b443cfd6ec0828ccbb",
   "latest_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
   "latest_risks": [
+    "Main delivery is blocked by non-trivial rebase conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c in shared harness/state files; supervisor conflict resolution is required.",
     "Main delivery is pending because /tmp/hermes-flight-recorder-main-push.lock was already held; no origin/main push, PR close, or branch deletion has been attempted.",
     "A wrong-stash application was recovered locally; stale Goal 0/Goal 1 stashes remain in the repository stash list and should not be applied by index.",
     "Real Hermes, OpenClaw, and Coven runtimes were not launched in the latest packets; coverage uses mock and fixture-backed live-shaped artifact writers with replay.",
@@ -303,5 +343,5 @@
     "harness": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:14:03Z"
+  "updated_at": "2026-07-02T15:18:05Z"
 }
