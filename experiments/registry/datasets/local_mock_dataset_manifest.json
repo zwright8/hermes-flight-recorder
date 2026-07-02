@@ -1,0 +1,11 @@
+{
+  "dataset_id": "local_mock_dataset_v1",
+  "label_provenance": "synthetic metadata-only fixture",
+  "notes": [
+    "Tiny manifest stub used only for dry-run training-plan generation.",
+    "Real training workers must use a validated dataset registry manifest."
+  ],
+  "redaction_status": "not_applicable",
+  "schema_version": "hfr.model_layer.dataset_manifest_stub.v1",
+  "source_artifacts": []
+}

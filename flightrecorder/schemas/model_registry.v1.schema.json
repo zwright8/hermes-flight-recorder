@@ -1,0 +1,18 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_registry.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Local model registry container with entries, aliases, rollback target, and alias history.",
+  "properties": {
+    "alias_history": {"items": {"type": "object"}, "type": "array"},
+    "aliases": {"type": "object"},
+    "entries": {"type": "object"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "registry_path": {"minLength": 1, "type": "string"},
+    "schema_version": {"const": "hfr.model_registry.v1"},
+    "updated_at": {"minLength": 1, "type": "string"}
+  },
+  "required": ["schema_version", "registry_path", "updated_at", "entries", "aliases", "alias_history"],
+  "title": "Hermes Flight Recorder Model Registry",
+  "type": "object"
+}

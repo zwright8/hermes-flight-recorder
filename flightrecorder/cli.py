@@ -53,6 +53,17 @@ from .improvement_gate import (
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
+from .model_registry import (
+    ALIAS_NAMES,
+    ModelRegistryError,
+    build_dry_run_training_plan,
+    build_model_compatibility_report,
+    list_model_registry_entries,
+    load_model_registry,
+    model_candidate_errors,
+    move_model_alias,
+    register_model_candidate,
+)
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -178,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionArchiveError,
         ReplayError,
         SchemaRegistryError,
+        ModelRegistryError,
         OSError,
         json.JSONDecodeError,
     ) as exc:
@@ -797,6 +809,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
         trainer_archive_check_paths=args.trainer_archive_check,
         trainer_consumer_plan_paths=args.trainer_consumer_plan,
         trainer_wrapper_dry_run_paths=args.trainer_wrapper_dry_run,
+        model_scout_manifest_paths=args.model_scout_manifest,
+        model_candidate_paths=args.model_candidate,
+        model_compatibility_report_paths=args.model_compatibility_report,
+        model_registry_entry_paths=args.model_registry_entry,
+        model_registry_paths=args.model_registry,
+        training_plan_paths=args.training_plan,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -820,6 +838,139 @@ def cmd_validate(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0 if summary["passed"] else 1
+
+
+def cmd_model_scout_validate(args: argparse.Namespace) -> int:
+    summary = validate_artifacts(model_scout_manifest_paths=[args.manifest], strict=args.strict)
+    _emit_json_payload(summary, args.out)
+    return 0 if summary["passed"] else 1
+
+
+def cmd_model_candidate_validate(args: argparse.Namespace) -> int:
+    candidate_path = Path(args.candidate)
+    candidate = _read_json(candidate_path)
+    errors = model_candidate_errors(candidate, require_training_eligible=args.require_training_eligible)
+    target = {
+        "type": "model_candidate",
+        "path": str(candidate_path),
+        "passed": not errors,
+        "errors": errors,
+        "warnings": [],
+        "details": {
+            "candidate_id": candidate.get("candidate_id") if isinstance(candidate, dict) else None,
+            "model_id": candidate.get("model_id") if isinstance(candidate, dict) else None,
+            "require_training_eligible": args.require_training_eligible,
+        },
+    }
+    summary = {
+        "schema_version": "hfr.validation.v1",
+        "passed": not errors,
+        "strict": False,
+        "target_count": 1,
+        "error_count": len(errors),
+        "warning_count": 0,
+        "targets": [target],
+    }
+    _emit_json_payload(summary, args.out)
+    return 0 if summary["passed"] else 1
+
+
+def cmd_model_candidate_compatibility_report(args: argparse.Namespace) -> int:
+    candidate = _read_json(Path(args.candidate))
+    report = build_model_compatibility_report(candidate, out_path=args.out, preserve_paths=args.preserve_paths)
+    _write_json(Path(args.out), report)
+    print(f"wrote {args.out}")
+    return 0 if report["passed"] else 1
+
+
+def cmd_model_registry_validate(args: argparse.Namespace) -> int:
+    summary = validate_artifacts(model_registry_paths=[args.registry], strict=args.strict)
+    _emit_json_payload(summary, args.out)
+    return 0 if summary["passed"] else 1
+
+
+def cmd_model_registry_register(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    candidate = _read_json(Path(args.candidate))
+    registry = register_model_candidate(registry, candidate, status=args.status)
+    _write_json(registry_path, registry)
+    entry = registry["entries"][candidate["candidate_id"]]
+    if args.entry_out:
+        _write_json(Path(args.entry_out), entry)
+    print(f"registered {candidate['candidate_id']} in {registry_path}")
+    return 0
+
+
+def cmd_model_registry_list(args: argparse.Namespace) -> int:
+    registry = load_model_registry(args.registry)
+    rows = list_model_registry_entries(registry)
+    if args.json:
+        print(json.dumps(rows, indent=2, sort_keys=True, ensure_ascii=False))
+    elif rows:
+        print("entry_id\tmodel_id\tstatus\ttraining_eligible\tlicense_status\taliases")
+        for row in rows:
+            print(
+                "\t".join(
+                    [
+                        str(row["entry_id"]),
+                        str(row["model_id"]),
+                        str(row["status"]),
+                        str(row["training_eligible"]).lower(),
+                        str(row["license_status"]),
+                        ",".join(row["aliases"]),
+                    ]
+                )
+            )
+    else:
+        print("no model registry entries")
+    return 0
+
+
+def cmd_model_registry_alias(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    registry = move_model_alias(
+        registry,
+        alias=args.alias,
+        target=args.target,
+        rollback_target=args.rollback_target,
+        reason=args.reason or "",
+    )
+    _write_json(registry_path, registry)
+    print(f"moved {args.alias} -> {args.target} in {registry_path}")
+    return 0
+
+
+def cmd_training_plan_dry_run(args: argparse.Namespace) -> int:
+    registry = load_model_registry(args.registry)
+    compatibility_report = _read_json(Path(args.compatibility_report)) if args.compatibility_report else None
+    plan = build_dry_run_training_plan(
+        registry,
+        model_ref=args.model_ref,
+        dataset_id=args.dataset_id,
+        dataset_manifest=args.dataset_manifest,
+        trainer=args.trainer,
+        mode=args.mode,
+        output_dir=args.output_dir,
+        out_path=args.out,
+        hyperparameters=dict(args.hyperparameter),
+        compute=dict(args.compute),
+        compatibility_report=compatibility_report,
+        compatibility_report_path=args.compatibility_report,
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(Path(args.out), plan)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def _emit_json_payload(payload: dict[str, Any], out: str | None) -> None:
+    if out:
+        _write_json(Path(out), payload)
+        print(f"wrote {out}")
+    else:
+        print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False))
 
 
 def cmd_schemas(args: argparse.Namespace) -> int:
@@ -1891,6 +2042,27 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one trainer_wrapper_dry_run.json; may be repeated",
     )
+    validate.add_argument(
+        "--model-scout-manifest",
+        action="append",
+        default=[],
+        help="Validate one model_scout_manifest.json; may be repeated",
+    )
+    validate.add_argument("--model-candidate", action="append", default=[], help="Validate one model candidate JSON; may be repeated")
+    validate.add_argument(
+        "--model-compatibility-report",
+        action="append",
+        default=[],
+        help="Validate one model compatibility report JSON; may be repeated",
+    )
+    validate.add_argument(
+        "--model-registry-entry",
+        action="append",
+        default=[],
+        help="Validate one model registry entry JSON; may be repeated",
+    )
+    validate.add_argument("--model-registry", action="append", default=[], help="Validate one model registry JSON; may be repeated")
+    validate.add_argument("--training-plan", action="append", default=[], help="Validate one dry-run training plan JSON; may be repeated")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -1907,6 +2079,91 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
+
+    model_scout = subparsers.add_parser("model-scout", help="Validate model-scout manifests")
+    model_scout_subparsers = model_scout.add_subparsers(dest="model_scout_command", required=True)
+    model_scout_validate = model_scout_subparsers.add_parser("validate", help="Validate a model-scout manifest")
+    model_scout_validate.add_argument("manifest", help="Path to model_scout_manifest.json")
+    model_scout_validate.add_argument("--out", help="Write validation summary JSON to this path")
+    model_scout_validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
+    model_scout_validate.set_defaults(func=cmd_model_scout_validate)
+
+    model_candidate = subparsers.add_parser("model-candidate", help="Validate and report model-candidate artifacts")
+    model_candidate_subparsers = model_candidate.add_subparsers(dest="model_candidate_command", required=True)
+    model_candidate_validate = model_candidate_subparsers.add_parser("validate", help="Validate one model candidate")
+    model_candidate_validate.add_argument("candidate", help="Path to model candidate JSON")
+    model_candidate_validate.add_argument(
+        "--require-training-eligible",
+        action="store_true",
+        help="Require license and terms posture that allows training selection",
+    )
+    model_candidate_validate.add_argument("--out", help="Write validation summary JSON to this path")
+    model_candidate_validate.set_defaults(func=cmd_model_candidate_validate)
+    model_candidate_report = model_candidate_subparsers.add_parser(
+        "compatibility-report",
+        help="Write metadata-only compatibility report for a model candidate",
+    )
+    model_candidate_report.add_argument("--candidate", required=True, help="Path to model candidate JSON")
+    model_candidate_report.add_argument("--out", required=True, help="Write model compatibility report JSON to this path")
+    model_candidate_report.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated report")
+    model_candidate_report.set_defaults(func=cmd_model_candidate_compatibility_report)
+
+    model_registry = subparsers.add_parser("model-registry", help="Manage the local model registry")
+    model_registry_subparsers = model_registry.add_subparsers(dest="model_registry_command", required=True)
+    model_registry_validate = model_registry_subparsers.add_parser("validate", help="Validate a model registry")
+    model_registry_validate.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    model_registry_validate.add_argument("--out", help="Write validation summary JSON to this path")
+    model_registry_validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
+    model_registry_validate.set_defaults(func=cmd_model_registry_validate)
+    model_registry_register = model_registry_subparsers.add_parser("register", help="Register or update a model candidate")
+    model_registry_register.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    model_registry_register.add_argument("--candidate", required=True, help="Path to model candidate JSON")
+    model_registry_register.add_argument("--status", default="registered", help="Registry entry status")
+    model_registry_register.add_argument("--entry-out", help="Optionally write the resulting registry entry JSON")
+    model_registry_register.set_defaults(func=cmd_model_registry_register)
+    model_registry_list = model_registry_subparsers.add_parser("list", help="List registered model candidates")
+    model_registry_list.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    model_registry_list.add_argument("--json", action="store_true", help="Print machine-readable JSON rows")
+    model_registry_list.set_defaults(func=cmd_model_registry_list)
+    model_registry_alias = model_registry_subparsers.add_parser("alias", help="Move candidate, champion, or rollback aliases")
+    model_registry_alias.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    model_registry_alias.add_argument("--alias", choices=list(ALIAS_NAMES), required=True, help="Alias to move")
+    model_registry_alias.add_argument("--target", required=True, help="Registry entry id to target")
+    model_registry_alias.add_argument("--rollback-target", help="Required when moving champion")
+    model_registry_alias.add_argument("--reason", default="", help="Reason recorded in alias history")
+    model_registry_alias.set_defaults(func=cmd_model_registry_alias)
+
+    training_plan = subparsers.add_parser("training-plan", help="Generate dry-run training plans")
+    training_plan_subparsers = training_plan.add_subparsers(dest="training_plan_command", required=True)
+    training_plan_dry_run = training_plan_subparsers.add_parser(
+        "dry-run",
+        help="Write a registry-backed dry-run training plan without downloads or GPU work",
+    )
+    training_plan_dry_run.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    training_plan_dry_run.add_argument("--model-ref", required=True, help="Registry entry id or alias, such as candidate")
+    training_plan_dry_run.add_argument("--dataset-id", required=True, help="Dataset version id to record in the plan")
+    training_plan_dry_run.add_argument("--dataset-manifest", required=True, help="Dataset manifest file to fingerprint")
+    training_plan_dry_run.add_argument("--trainer", required=True, help="Trainer or recipe name")
+    training_plan_dry_run.add_argument("--mode", required=True, help="Training mode, such as sft, action_sft, dpo, or sft_then_dpo")
+    training_plan_dry_run.add_argument("--output-dir", required=True, help="Planned trainer output directory")
+    training_plan_dry_run.add_argument("--out", required=True, help="Write dry-run training plan JSON to this path")
+    training_plan_dry_run.add_argument("--compatibility-report", help="Optional model compatibility report JSON to bind by hash")
+    training_plan_dry_run.add_argument(
+        "--hyperparameter",
+        action="append",
+        default=[],
+        type=_state_set_arg,
+        help="Attach trainer hyperparameter KEY=JSON_VALUE; may be repeated",
+    )
+    training_plan_dry_run.add_argument(
+        "--compute",
+        action="append",
+        default=[],
+        type=_state_set_arg,
+        help="Attach compute assumption KEY=JSON_VALUE; may be repeated",
+    )
+    training_plan_dry_run.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated plan")
+    training_plan_dry_run.set_defaults(func=cmd_training_plan_dry_run)
 
     schemas = subparsers.add_parser("schemas", help="List or export bundled JSON Schema contracts")
     schemas.add_argument("--name", action="append", default=[], help="Schema name, filename, schema version, or $id; may be repeated with --write-dir")
