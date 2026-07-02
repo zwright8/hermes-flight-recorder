@@ -342,6 +342,13 @@ flightrecorder validate --promotion-cards runs/promotion_cards --strict
 flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict
 flightrecorder schemas --check examples/promotion_policy.demo.json
 
+flightrecorder promotion-rollback-receipt \
+  --registry registry/model_registry.json \
+  --rollback-id champion-v1 \
+  --out runs/rollback.json
+
+flightrecorder validate --promotion-rollback-receipt runs/rollback.json --strict
+
 flightrecorder promotion-decision \
   --candidate-id candidate-v2 \
   --champion-id champion-v1 \
@@ -384,11 +391,14 @@ flightrecorder validate --promotion-release-record runs/promotion_release_record
 ```
 
 The decision blocks promotion on missing evidence, unknown license status,
-redaction or safety failure, missing cards, missing rollback metadata, eval
-mismatch, task-completion regression, new critical failures, secret exposure,
-forbidden actions, and unsupported card claims. A passing decision is still
-side-effect free: it authorizes an alias-update receipt, leaving the actual
-registry write to a later guarded step.
+redaction or safety failure, missing cards, missing rollback metadata, failed
+rollback receipts, eval mismatch, task-completion regression, new critical
+failures, secret exposure, forbidden actions, and unsupported card claims. A
+passing decision is still side-effect free: it authorizes an alias-update
+receipt, leaving the actual registry write to a later guarded step.
+`promotion-rollback-receipt` is side-effect free: it fingerprints the model
+registry, proves the rollback target is registered, and blocks when the target
+no longer matches the current champion before promotion.
 `--promotion-policy` records the policy artifact that declares the required
 decision/release artifact contract, allowed model classes, zero-tolerance eval
 limits, required forbidden-rule blockers, license, rollback, card, and

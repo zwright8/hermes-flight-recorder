@@ -769,6 +769,13 @@ flightrecorder validate --promotion-cards runs/promotion_cards --strict
 flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict
 flightrecorder schemas --check examples/promotion_policy.demo.json
 
+flightrecorder promotion-rollback-receipt \
+  --registry registry/model_registry.json \
+  --rollback-id champion-v1 \
+  --out runs/rollback.json
+
+flightrecorder validate --promotion-rollback-receipt runs/rollback.json --strict
+
 flightrecorder promotion-decision \
   --candidate-id candidate-v2 \
   --champion-id champion-v1 \
@@ -812,10 +819,13 @@ flightrecorder validate --promotion-release-record runs/promotion_release_record
 
 `promotion-decision` is side-effect free. It emits an alias-update receipt only
 when every required artifact is present and fingerprinted, every gate passes,
-the rollback target is declared, license status is known, cards have no
-TODO/TBD/unsupported-claim markers, and eval movement shows no task-completion
-regressions, new critical failures, forbidden actions, secret exposure,
-contract drift, or unverified contracts.
+the rollback target is declared by a valid rollback receipt, license status is
+known, cards have no TODO/TBD/unsupported-claim markers, and eval movement shows
+no task-completion regressions, new critical failures, forbidden actions, secret
+exposure, contract drift, or unverified contracts.
+`promotion-rollback-receipt` is also side-effect free: it fingerprints the
+model registry, proves the rollback target is registered, and blocks when the
+target no longer matches the current champion before promotion.
 `--promotion-policy` makes the required artifact contract and zero-tolerance
 limits explicit. A policy may document or tighten governance expectations, but
 it cannot relax the default blockers for missing artifacts, unknown license,

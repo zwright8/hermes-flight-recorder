@@ -53,6 +53,7 @@ from .governance import (
     PROMOTION_DECISION_REQUIRED_ARTIFACTS,
     PROMOTION_DECISION_SCHEMA_VERSION,
     PROMOTION_POLICY_SCHEMA_VERSION,
+    PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION,
     PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
     PROMOTION_RELEASE_RECORD_SCHEMA_VERSION,
 )
@@ -160,6 +161,7 @@ def validate_artifacts(
     promotion_cards_paths: list[str | Path] | None = None,
     promotion_decision_paths: list[str | Path] | None = None,
     promotion_alias_apply_paths: list[str | Path] | None = None,
+    promotion_rollback_receipt_paths: list[str | Path] | None = None,
     promotion_release_record_paths: list[str | Path] | None = None,
     promotion_policy_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
@@ -233,6 +235,8 @@ def validate_artifacts(
         targets.append(validate_promotion_decision(promotion_decision_path))
     for promotion_alias_apply_path in promotion_alias_apply_paths or []:
         targets.append(validate_promotion_alias_apply(promotion_alias_apply_path))
+    for promotion_rollback_receipt_path in promotion_rollback_receipt_paths or []:
+        targets.append(validate_promotion_rollback_receipt(promotion_rollback_receipt_path))
     for promotion_release_record_path in promotion_release_record_paths or []:
         targets.append(validate_promotion_release_record(promotion_release_record_path))
     for promotion_policy_path in promotion_policy_paths or []:
@@ -881,6 +885,16 @@ def validate_promotion_alias_apply(path: str | Path) -> ValidationTarget:
     receipt = _read_object(receipt_path, target, "promotion_alias_apply.json")
     if receipt is not None:
         _validate_promotion_alias_apply(receipt, target, receipt_path)
+    return target
+
+
+def validate_promotion_rollback_receipt(path: str | Path) -> ValidationTarget:
+    """Validate a promotion rollback target receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("promotion_rollback_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "promotion_rollback_receipt.json")
+    if receipt is not None:
+        _validate_promotion_rollback_receipt(receipt, target, receipt_path)
     return target
 
 
@@ -7732,6 +7746,109 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
             "failed_check_count": failed_checks,
             "candidate_id": decision_ref.get("candidate_id"),
             "rollback_id": decision_ref.get("rollback_id"),
+        }
+    )
+
+
+def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(receipt, "schema_version", PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION, target)
+    if not isinstance(receipt.get("receipt_path"), str):
+        target.errors.append("promotion_rollback_receipt.receipt_path must be a string.")
+    if not isinstance(receipt.get("passed"), bool):
+        target.errors.append("promotion_rollback_receipt.passed must be a boolean.")
+    if not isinstance(receipt.get("available"), bool):
+        target.errors.append("promotion_rollback_receipt.available must be a boolean.")
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_rollback_receipt.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "promotion_rollback_receipt.checks")
+    if receipt.get("check_count") != len(checks):
+        target.errors.append(f"promotion_rollback_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
+    if receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"promotion_rollback_receipt.failed_check_count expected {failed_checks}, got {receipt.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if isinstance(receipt.get("passed"), bool) and receipt["passed"] != expected_passed:
+        target.errors.append("promotion_rollback_receipt.passed must match failed_check_count.")
+    if isinstance(receipt.get("available"), bool) and receipt["available"] != expected_passed:
+        target.errors.append("promotion_rollback_receipt.available must match pass state.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "use_rollback_target" if expected_passed else "block_promotion"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"promotion_rollback_receipt.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}."
+        )
+    if receipt.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_rollback_receipt.recommendation expected {expected_recommendation!r}, got {receipt.get('recommendation')!r}."
+        )
+    for field_name in ("rollback_id", "target_model_id", "champion_id"):
+        if not isinstance(receipt.get(field_name), str):
+            target.errors.append(f"promotion_rollback_receipt.{field_name} must be a string.")
+
+    rollback = receipt.get("rollback")
+    if not isinstance(rollback, dict):
+        target.errors.append("promotion_rollback_receipt.rollback must be an object.")
+        rollback = {}
+    for field_name in ("id", "target_model_id", "champion_id"):
+        if not isinstance(rollback.get(field_name), str):
+            target.errors.append(f"promotion_rollback_receipt.rollback.{field_name} must be a string.")
+    if rollback.get("available") != expected_passed:
+        target.errors.append("promotion_rollback_receipt.rollback.available must match pass state.")
+    if rollback.get("id") != receipt.get("rollback_id"):
+        target.errors.append("promotion_rollback_receipt.rollback.id must match rollback_id.")
+    if receipt.get("target_model_id") != receipt.get("rollback_id") or rollback.get("target_model_id") != receipt.get("rollback_id"):
+        target.errors.append("promotion_rollback_receipt target_model_id fields must match rollback_id.")
+    if rollback.get("champion_id") != receipt.get("champion_id"):
+        target.errors.append("promotion_rollback_receipt.rollback.champion_id must match champion_id.")
+
+    artifacts = receipt.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("promotion_rollback_receipt.artifacts must be an object.")
+        artifacts = {}
+    _validate_fingerprinted_artifact(
+        artifacts.get("registry"),
+        "registry",
+        target,
+        source_path,
+        "promotion_rollback_receipt.artifacts",
+    )
+    registry_snapshot = _validate_alias_snapshot(receipt.get("registry"), target, "promotion_rollback_receipt.registry")
+    registry_artifact = artifacts.get("registry") if isinstance(artifacts.get("registry"), dict) else {}
+    if registry_snapshot.get("sha256") != registry_artifact.get("sha256"):
+        target.errors.append("promotion_rollback_receipt.registry.sha256 must match artifacts.registry.sha256.")
+    champion_id = receipt.get("champion_id")
+    rollback_id = receipt.get("rollback_id")
+    if expected_passed and registry_snapshot["aliases"].get("champion") != champion_id:
+        target.errors.append("promotion_rollback_receipt.registry.aliases.champion must match champion_id when passed.")
+    if expected_passed and rollback_id != champion_id:
+        target.errors.append("promotion_rollback_receipt.rollback_id must match champion_id when passed.")
+
+    metrics = receipt.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("promotion_rollback_receipt.metrics must be an object.")
+    else:
+        expected_metrics = {
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+        }
+        for field_name, expected_value in expected_metrics.items():
+            if metrics.get(field_name) != expected_value:
+                target.errors.append(f"promotion_rollback_receipt.metrics.{field_name} expected {expected_value!r}, got {metrics.get(field_name)!r}.")
+        for field_name in ("registered_model_count", "alias_count"):
+            if not _is_non_negative_int(metrics.get(field_name)):
+                target.errors.append(f"promotion_rollback_receipt.metrics.{field_name} must be a non-negative integer.")
+    if not _is_string_list(receipt.get("notes")):
+        target.errors.append("promotion_rollback_receipt.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": receipt.get("passed"),
+            "recommendation": receipt.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "rollback_id": receipt.get("rollback_id"),
+            "champion_id": receipt.get("champion_id"),
         }
     )
 

@@ -79,6 +79,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("model_registry_entry", names)
         self.assertIn("model_registry", names)
         self.assertIn("promotion_policy", names)
+        self.assertIn("promotion_rollback_receipt", names)
         self.assertIn("training_plan", names)
         for record in records:
             schema = load_schema(record["name"])
