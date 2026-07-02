@@ -776,6 +776,27 @@ class EvidenceBundleTests(unittest.TestCase):
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
 
+    def test_validate_evidence_bundle_rejects_forged_run_digest_outcome_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            bundle_path = runs / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)]), 0)
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)]), 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            coverage = bundle["metrics"]["run_digest_coverage"]
+            coverage["passed_digest_count"] = coverage["digest_count"]
+            coverage["failed_digest_count"] = coverage["digest_count"]
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("passed_digest_count + failed_digest_count", errors)
+
     def test_evidence_bundle_blocks_failed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

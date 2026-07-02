@@ -91,7 +91,9 @@ unredacted absolute artifact paths, including nested harness, trainer, gate,
 digest, and live-smoke metric paths, so public bundles should carry relative
 paths or `<redacted:...>` placeholders. Validation summaries included in
 evidence bundles must have at least one target and counts that match their
-`passed` and `strict` flags.
+`passed` and `strict` flags. Run-digest coverage metrics are also checked for
+consistent digest, outcome, and task-status counts, so forged summary totals
+cannot hide low-signal or malformed per-run digests.
 `flightrecorder compare-suite` carries this metadata into its JSON and HTML
 outputs so baseline/candidate comparisons remain tied to the evaluated configs.
 It also emits aggregate failed-rule and critical-failure deltas across paired

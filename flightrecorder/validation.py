@@ -13392,6 +13392,8 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
     digest_count = value.get("digest_count")
     missing_count = value.get("missing_digest_count")
     invalid_count = value.get("invalid_digest_count")
+    passed_count = value.get("passed_digest_count")
+    failed_count = value.get("failed_digest_count")
     if (
         _is_non_negative_int(run_count)
         and _is_non_negative_int(digest_count)
@@ -13403,8 +13405,13 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
         expected_rate = 1.0 if int(run_count) == 0 else round(int(digest_count) / int(run_count), 4)
         if value.get("digest_coverage_rate") != expected_rate:
             target.errors.append(f"{label}.digest_coverage_rate expected {expected_rate!r}, got {value.get('digest_coverage_rate')!r}.")
-    for field_name in ("task_completion_status_counts", "recommended_action_counts"):
-        _validate_count_rows(value.get(field_name), target, f"{label}.{field_name}")
+    if _is_non_negative_int(digest_count) and _is_non_negative_int(passed_count) and _is_non_negative_int(failed_count):
+        if int(passed_count) + int(failed_count) != int(digest_count):
+            target.errors.append(f"{label}.passed_digest_count + failed_digest_count must equal digest_count.")
+    task_status_counts = _validate_count_rows(value.get("task_completion_status_counts"), target, f"{label}.task_completion_status_counts")
+    if _is_non_negative_int(digest_count) and sum(task_status_counts.values()) != int(digest_count):
+        target.errors.append(f"{label}.task_completion_status_counts total must equal digest_count.")
+    _validate_count_rows(value.get("recommended_action_counts"), target, f"{label}.recommended_action_counts")
     for field_name in ("missing_digest_scenarios", "invalid_digest_scenarios"):
         if not _is_string_list(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a list of strings.")
