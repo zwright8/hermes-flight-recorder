@@ -762,6 +762,16 @@ python3.11 scripts/hermes_harness.py run-scenario \
   --force
 ```
 
+Run all checked-in harness examples as a mock suite:
+
+```bash
+python3.11 scripts/hermes_harness.py run-suite \
+  --scenarios harness/scenarios \
+  --out runs/harness_examples \
+  --relative-paths \
+  --force
+```
+
 Run a directory through the mock harness interface:
 
 ```bash

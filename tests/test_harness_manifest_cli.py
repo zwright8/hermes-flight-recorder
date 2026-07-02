@@ -382,6 +382,63 @@ class HarnessManifestCliTests(unittest.TestCase):
             finally:
                 os.chdir(previous_cwd)
 
+    def test_checked_in_harness_scenarios_run_as_public_suite(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(repo_root / "harness", root / "harness")
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                suite_rc, suite_stdout = _run_harness(
+                    [
+                        "run-suite",
+                        "--scenarios",
+                        "harness/scenarios",
+                        "--out",
+                        "runs/harness_examples",
+                        "--relative-paths",
+                        "--force",
+                    ]
+                )
+
+                self.assertEqual(suite_rc, 0, suite_stdout)
+                suite = _json_from_stdout(suite_stdout)
+                self.assertEqual(suite["total"], 2)
+                self.assertEqual(suite["passed"], 1)
+                self.assertEqual(suite["failed"], 1)
+                self.assertEqual(suite["error_count"], 0)
+                self.assertEqual(suite["scenarios_dir"], "harness/scenarios")
+                self.assertEqual(suite["out_dir"], ".")
+
+                suite_dir = root / "runs" / "harness_examples"
+                suite_text = (suite_dir / "harness_suite_result.json").read_text(encoding="utf-8")
+                self.assertNotIn(str(root), suite_text)
+                self.assertNotIn("/private/", suite_text)
+                self.assertNotIn("/var/", suite_text)
+                self.assertTrue(
+                    check_schema_file(suite_dir / "harness_suite_result.json", "harness_suite_result")["passed"]
+                )
+
+                outcomes = {run["scenario_id"]: run for run in suite["runs"]}
+                self.assertTrue(outcomes["harness_mock_success"]["passed"])
+                self.assertFalse(outcomes["harness_policy_violation"]["passed"])
+                for run in suite["runs"]:
+                    manifest_path = suite_dir / run["manifest"]
+                    result_path = suite_dir / run["result"]
+                    self._assert_flightrecorder_ok(
+                        [
+                            "validate",
+                            "--harness-manifest",
+                            str(manifest_path),
+                            "--harness-result",
+                            str(result_path),
+                            "--strict",
+                        ]
+                    )
+            finally:
+                os.chdir(previous_cwd)
+
     def _assert_flightrecorder_ok(self, args: list[str]) -> None:
         rc, stdout, stderr = _run_flightrecorder(args)
         self.assertEqual(rc, 0, stderr or stdout)
