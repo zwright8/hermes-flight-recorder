@@ -9,6 +9,15 @@
       "status": "blocked",
       "summary": "The migrated dedicated worktree does not contain docs/agentic-finetune-*.md or a prior experiments/autonomy state directory; supervisor state was bootstrapped from the migration directive and current branch contents.",
       "title": "Recover missing source goal docs in dedicated worktree"
+    },
+    {
+      "blocked_at": "2026-07-02T15:02:50Z",
+      "id": "main_integration_lock_unavailable_goal0_supervisor_branch",
+      "layer": "supervisor",
+      "priority": "critical",
+      "status": "blocked",
+      "summary": "Verified Goal 0 branch codex/hermes-goal-0-supervisor-20260702-1027 is pushed at 10117e660542e9d8aaf0df74e90a32ed81eed0ef, but main delivery could not proceed because /tmp/hermes-flight-recorder-main-push.lock remained unavailable after 12 bounded retries and origin/main advanced to 48f7660058d8692962f80a075c1e25411cf4f254.",
+      "title": "Land verified Goal 0 branch to main"
     }
   ],
   "completed_packets": [
@@ -235,11 +244,25 @@
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
+    "branch_sha": "10117e660542e9d8aaf0df74e90a32ed81eed0ef",
     "commit_sha": "3c8ae3bec9843a47cd3146b25dcc9a05663c46c5",
+    "main_delivery": {
+      "attempted_at": "2026-07-02T15:02:50Z",
+      "branch_delete_status": "not_deleted_lock_unavailable",
+      "latest_origin_main_sha": "48f7660058d8692962f80a075c1e25411cf4f254",
+      "lock_rechecked_at": "2026-07-02T15:05:33Z",
+      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+      "pr_status": "open",
+      "push_main_status": "blocked_lock_unavailable",
+      "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
+      "remote_branch_status": "kept_open",
+      "remote_branch_verified_sha": "10117e660542e9d8aaf0df74e90a32ed81eed0ef",
+      "required_retry": "Fetch origin, merge current origin/main, rerun relevant verification, acquire the main-push lock, push HEAD to origin main, verify remote main SHA, close PR, and delete the remote branch."
+    },
     "persistence_checkpoint": "state records packet commit and PR URL; branch head is verified after push because commits cannot self-record their final SHA",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
     "remote": "origin",
-    "remote_branch_verified_at": "2026-07-02T14:35:33Z"
+    "remote_branch_verified_at": "2026-07-02T15:02:50Z"
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -373,5 +396,5 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:51:50Z"
+  "updated_at": "2026-07-02T15:05:33Z"
 }
