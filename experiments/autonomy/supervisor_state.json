@@ -1749,6 +1749,12 @@
     "remote_branch_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
     "remote_main_verified_at": "2026-07-02T16:06:00Z",
     "remote_main_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "remote_ci": {
+      "checked_at": "2026-07-02T16:10:00Z",
+      "run_id": "28604441425",
+      "status": "failed_preexisting_non_model_release_check",
+      "summary": "GitHub CI passed 335 tests, then release_check.sh failed while writing schema_contracts_check because the harness_run_manifest.v1.schema.json output path was encountered twice during schema export. The same failure appears on pre-Qwen harness main runs 28603801361 and 28604266200."
+    },
     "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1534",
     "verification": [
       {
@@ -1786,6 +1792,7 @@
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
     "Qwen compatibility is metadata-only; tokenizer, serving, tool-call, structured-output, quantization, and memory behavior still need runtime receipts.",
+    "Remote CI is failing on a pre-existing non-model schema export duplication in release_check.sh after unit tests pass; Goal 4 did not modify harness schema registration.",
     "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry.",
     "Adapter, eval, and promotion link slots are present but await real downstream artifacts."
   ],
