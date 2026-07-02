@@ -1045,7 +1045,7 @@ summary = {
         "hermes_root": "/tmp/hermes-agent",
         "hermes_git_commit": "abcdef123456",
         "hermes_git_dirty": False,
-        "flight_recorder_root": str(Path.cwd()),
+        "flight_recorder_root": "<repo-root>",
         "flight_recorder_git_commit": "123456abcdef",
         "flight_recorder_git_dirty": False,
     },
@@ -1392,7 +1392,7 @@ assert bundle["metrics"]["compare_export"]["regressed_rule_counts"] == {}
 assert bundle["metrics"]["compare_export"]["new_critical_failure_counts"] == {}
 assert bundle["metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["unverified"] == 0
 assert bundle["metrics"]["live_smoke_summary"]["chat_completion_request_count"] == 1
-assert bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"] == str(Path.cwd())
+assert bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"] == "<repo-root>"
 assert bundle["metrics"]["trace_observability"]["final_answer_rate"] == 1.0
 assert bundle["metrics"]["review_export"]["item_count"] >= 6
 assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]
@@ -1461,7 +1461,8 @@ PY
   --runs runs \
   --forbid-text hfr_fixture_secret_value_123 \
   --forbid-text DEMO_API_KEY=hfr_fixture \
-  --fail-on-leak >/dev/null
+  --fail-on-leak \
+  --fail-on-privacy >/dev/null
 
 INSTALL_DIR="$(mktemp -d)"
 VENV_DIR="$(mktemp -d)"

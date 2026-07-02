@@ -1327,10 +1327,34 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(audit["passed"], 1)
             self.assertEqual(audit["failed"], 1)
             self.assertEqual(audit["leaks"], [])
+            self.assertEqual(audit["privacy_findings"], [])
 
             (bad / "leak.txt").write_text("do-not-ship", encoding="utf-8")
             leak_code = run_cli(["audit", "--runs", str(runs), "--forbid-text", "do-not-ship", "--fail-on-leak"])
             self.assertEqual(leak_code, 1)
+
+            example_email = "customer" + "@" + "example.com"
+            (bad / "example_email.txt").write_text(example_email, encoding="utf-8")
+            example_out = Path(tmp) / "example_audit.json"
+            example_code = run_cli(["audit", "--runs", str(runs), "--out", str(example_out), "--fail-on-privacy"])
+            self.assertEqual(example_code, 0)
+            example_audit = json.loads(example_out.read_text(encoding="utf-8"))
+            self.assertEqual(example_audit["privacy_findings"], [])
+
+            private_path = "/" + "Users/alice/" + "Documents/" + "GitHub/private"
+            (bad / "local_path.txt").write_text(f"workspace={private_path}", encoding="utf-8")
+            privacy_out = Path(tmp) / "privacy_audit.json"
+
+            privacy_code = run_cli(
+                ["audit", "--runs", str(runs), "--out", str(privacy_out), "--fail-on-privacy"]
+            )
+
+            self.assertEqual(privacy_code, 1)
+            privacy_audit = json.loads(privacy_out.read_text(encoding="utf-8"))
+            privacy_patterns = {finding["pattern"] for finding in privacy_audit["privacy_findings"]}
+            self.assertIn("posix_home_path", privacy_patterns)
+            self.assertIn("local_workspace_path", privacy_patterns)
+            self.assertNotIn("alice", json.dumps(privacy_audit))
 
     def test_audit_command_can_fail_when_any_scorecard_failed(self):
         with tempfile.TemporaryDirectory() as tmp:
