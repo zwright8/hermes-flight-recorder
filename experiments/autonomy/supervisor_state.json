@@ -1,8 +1,8 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:06:17Z",
+  "updated_at": "2026-07-02T15:09:32Z",
   "active_goal": "Goal 7 Eval Layer",
-  "status": "in_progress",
+  "status": "blocked",
   "worktree": "/Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-7-eval",
   "branch": "codex/hermes-goal-7-eval-20260702-1027",
   "remote": "origin https://github.com/zwright8/hermes-flight-recorder.git",
@@ -45,7 +45,7 @@
     ],
     "persistence": {
       "branch_commit_sha": "4fab553cbfc1dc97b40f8ebc2abab9d303fbe17e",
-      "main_commit_sha": "pending; latest fetched origin/main 48f7660058d8692962f80a075c1e25411cf4f254",
+      "main_commit_sha": "pending; latest fetched origin/main b671b9671fff7e891fa0ee58a69f64e818694b11",
       "pushed_branch": "codex/hermes-goal-7-eval-20260702-1027",
       "remote_branch_verified": true,
       "remote_main_verified": false,
@@ -53,7 +53,7 @@
       "pr_status": "open; pending main integration",
       "remote_branch_deleted": false,
       "integration_lock": "/tmp/hermes-flight-recorder-main-push.lock",
-      "integration_blocker": "main integration lock already exists after retries on 2026-07-02T15:06:17Z; main was not pushed and branch/PR remain open"
+      "integration_blocker": "main integration lock already exists after three consecutive Goal 7 continuation attempts; latest retry at 2026-07-02T15:09:32Z, main was not pushed and branch/PR remain open"
     }
   }
 }
