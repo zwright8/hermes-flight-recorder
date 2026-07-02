@@ -3337,168 +3337,195 @@
       "merge_commit_sha": "fd44030341305acfb133ed15996101bf9e75117e",
       "remote_branch_deleted": true,
       "completed_at": "2026-07-02T17:37:42Z"
+    },
+    {
+      "id": "governance_promotion_artifact_schemas",
+      "layer": "governance",
+      "priority": "medium",
+      "status": "landed_on_main",
+      "title": "Register promotion artifact schemas",
+      "summary": "Promotion artifact schemas landed on origin/main; PR #17 is merged and the remote branch is deleted.",
+      "branch": "codex/hermes-goal-0-supervisor-20260702-1338",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/17",
+      "artifacts": [
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md",
+          "sha256": "15069734b23074740ca25730ede5968c17f56a114c7ecae2836e86bce3bd2ab4"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md",
+          "sha256": "3ca17394443d282be882c2afe8aca47eba7dc493f607a2b9ad9037a070926218"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/manifest.json",
+          "sha256": "5ee9156e797b15ae0786a67eb789059f468a7518c56028a8c8a232084331faee"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/promotion_alias_apply.v1.schema.json",
+          "sha256": "7155c818d35a81e13d38cd82668a37ebeb96e1ddacc4d9a01142d2b75b606955"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/promotion_cards.v1.schema.json",
+          "sha256": "ea23c0e37044ffe12625851f02bbbfe251cfb0f7b5d841a09e00049c5ca99648"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/promotion_decision.v1.schema.json",
+          "sha256": "6409d4b19581eaf9447fcd7b71d8c2e4a0697a34d0d7a246d1fa00e30ee04bfa"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/promotion_ledger.v1.schema.json",
+          "sha256": "19465996ee623477f313239285e7295c46a0121700da41d399eb377d7042a236"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/promotion_ledger_gate.v1.schema.json",
+          "sha256": "182b7a761d1a72a9b132ed66f2c4c7b828e24519d839020cba844df02e1e9f0d"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/promotion_release_record.v1.schema.json",
+          "sha256": "1a3603a4667ea898bde8605dced1a7adcaed870511e23b7e7b4368fe4ffffa2b"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py",
+          "sha256": "d3399430dc537e437fc5730d92ddb5d583e317319069a906725559acbd17f1a8"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_ledger.py",
+          "sha256": "3418878cfb36bcb2b7828a069483019029eb72671c158b8c4760e89f92925411"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_schema_registry.py",
+          "sha256": "d103006e9210f9f6e3cf41edb52761144c213d602441e48c251f1c959992a5c2"
+        }
+      ],
+      "verification": [
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json and all six new promotion artifact schema files",
+          "status": "pass",
+          "summary": "Schema manifest and promotion_alias_apply/cards/decision/ledger/ledger_gate/release_record schema files parse as JSON."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m py_compile tests/test_schema_registry.py tests/test_promotion_decision.py tests/test_promotion_ledger.py",
+          "status": "pass",
+          "summary": "Touched test modules compile."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_schema_registry tests.test_promotion_decision tests.test_promotion_ledger",
+          "status": "pass",
+          "summary": "48 focused schema registry, promotion decision, and promotion ledger tests passed."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --name promotion_decision --name promotion_cards --name promotion_alias_apply --name promotion_release_record --name promotion_ledger --name promotion_ledger_gate --write-dir /tmp/hfr-governance-promotion-schema-bundle --force",
+          "status": "pass",
+          "summary": "Selected schema bundle export wrote six promotion artifact schemas plus manifest."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check runs/promotion_ledger.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check runs/promotion_ledger_gate.json",
+          "status": "pass",
+          "summary": "Generated promotion ledger and promotion ledger gate artifacts pass schema inference checks."
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass",
+          "summary": "Working diff has no whitespace errors."
+        },
+        {
+          "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+          "status": "pass",
+          "summary": "Release check passed, including 375 Python 3.11 unit tests and installed-CLI/demo gates."
+        },
+        {
+          "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+          "status": "pass",
+          "summary": "origin/main remained fe8e86add8e7d897d30aa9b501457c8648826f6c; branch a0b667a97c5d6e3e037a4edef0865b7b2f3f6fc4 is a clean descendant and worktree was clean."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json, flightrecorder/schemas/manifest.json, and all six promotion schema files",
+          "status": "pass",
+          "summary": "Supervisor state, schema manifest, and six promotion artifact schemas parse under the lock."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --name promotion_decision --name promotion_cards --name promotion_alias_apply --name promotion_release_record --name promotion_ledger --name promotion_ledger_gate --write-dir /tmp/hfr-governance-promotion-schema-bundle-locked --force",
+          "status": "pass",
+          "summary": "Selected schema bundle export wrote six promotion artifact schemas plus manifest under the lock."
+        },
+        {
+          "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1338",
+          "status": "pass",
+          "summary": "origin/main verified at a4b004298444c7bed09b2c8d5bebdb94613e8f06 after the locked promotion schema push."
+        },
+        {
+          "command": "gh pr view 17 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+          "status": "pass",
+          "summary": "PR #17 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/17 with merge commit a4b004298444c7bed09b2c8d5bebdb94613e8f06."
+        },
+        {
+          "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1338 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1338",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the promotion schema supervisor remote branch was absent."
+        }
+      ],
+      "risks": [
+        "Public schemas intentionally validate shape only; semantic validation remains in flightrecorder validate.",
+        "The generic decision_gate and promotion_archive schemas remain separate follow-up candidates if Governance decides to publish those shapes too."
+      ],
+      "github_persistence": {
+        "branch": "codex/hermes-goal-0-supervisor-20260702-1338",
+        "pushed": true,
+        "remote_branch_verified": true,
+        "remote_branch_deleted": true,
+        "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/17",
+        "pr_state": "MERGED",
+        "main_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+        "remote_main_verified": true,
+        "branch_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+        "remote_branch_verified_sha": "a0b667a97c5d6e3e037a4edef0865b7b2f3f6fc4",
+        "main_delivery_status": "landed_on_main",
+        "base_main_sha": "fe8e86add8e7d897d30aa9b501457c8648826f6c"
+      },
+      "verified_at": "2026-07-02T17:45:19Z",
+      "branch_sha": "b8408f3841c8e8ccf6f654a2137a2d58a5fa549b",
+      "main_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+      "merge_commit_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+      "completed_at": "2026-07-02T17:50:53Z",
+      "remote_branch_status": "deleted"
     }
   ],
   "current_packet": {
-    "id": "governance_promotion_artifact_schemas",
-    "layer": "governance",
-    "priority": "medium",
-    "status": "verified_under_lock_pending_main_push",
-    "title": "Register promotion artifact schemas",
-    "summary": "Promotion artifact schema packet is branch-pushed, PR #17 is open, and current-main verification passed under the main-push lock.",
-    "branch": "codex/hermes-goal-0-supervisor-20260702-1338",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/17",
-    "artifacts": [
-      {
-        "kind": "doc",
-        "layer": "governance",
-        "path": "README.md",
-        "sha256": "15069734b23074740ca25730ede5968c17f56a114c7ecae2836e86bce3bd2ab4"
-      },
-      {
-        "kind": "doc",
-        "layer": "governance",
-        "path": "TRAINING_PIPELINE.md",
-        "sha256": "3ca17394443d282be882c2afe8aca47eba7dc493f607a2b9ad9037a070926218"
-      },
-      {
-        "kind": "schema",
-        "layer": "governance",
-        "path": "flightrecorder/schemas/manifest.json",
-        "sha256": "5ee9156e797b15ae0786a67eb789059f468a7518c56028a8c8a232084331faee"
-      },
-      {
-        "kind": "schema",
-        "layer": "governance",
-        "path": "flightrecorder/schemas/promotion_alias_apply.v1.schema.json",
-        "sha256": "7155c818d35a81e13d38cd82668a37ebeb96e1ddacc4d9a01142d2b75b606955"
-      },
-      {
-        "kind": "schema",
-        "layer": "governance",
-        "path": "flightrecorder/schemas/promotion_cards.v1.schema.json",
-        "sha256": "ea23c0e37044ffe12625851f02bbbfe251cfb0f7b5d841a09e00049c5ca99648"
-      },
-      {
-        "kind": "schema",
-        "layer": "governance",
-        "path": "flightrecorder/schemas/promotion_decision.v1.schema.json",
-        "sha256": "6409d4b19581eaf9447fcd7b71d8c2e4a0697a34d0d7a246d1fa00e30ee04bfa"
-      },
-      {
-        "kind": "schema",
-        "layer": "governance",
-        "path": "flightrecorder/schemas/promotion_ledger.v1.schema.json",
-        "sha256": "19465996ee623477f313239285e7295c46a0121700da41d399eb377d7042a236"
-      },
-      {
-        "kind": "schema",
-        "layer": "governance",
-        "path": "flightrecorder/schemas/promotion_ledger_gate.v1.schema.json",
-        "sha256": "182b7a761d1a72a9b132ed66f2c4c7b828e24519d839020cba844df02e1e9f0d"
-      },
-      {
-        "kind": "schema",
-        "layer": "governance",
-        "path": "flightrecorder/schemas/promotion_release_record.v1.schema.json",
-        "sha256": "1a3603a4667ea898bde8605dced1a7adcaed870511e23b7e7b4368fe4ffffa2b"
-      },
-      {
-        "kind": "test",
-        "layer": "governance",
-        "path": "tests/test_promotion_decision.py",
-        "sha256": "d3399430dc537e437fc5730d92ddb5d583e317319069a906725559acbd17f1a8"
-      },
-      {
-        "kind": "test",
-        "layer": "governance",
-        "path": "tests/test_promotion_ledger.py",
-        "sha256": "3418878cfb36bcb2b7828a069483019029eb72671c158b8c4760e89f92925411"
-      },
-      {
-        "kind": "test",
-        "layer": "governance",
-        "path": "tests/test_schema_registry.py",
-        "sha256": "d103006e9210f9f6e3cf41edb52761144c213d602441e48c251f1c959992a5c2"
-      }
-    ],
-    "verification": [
-      {
-        "command": "/opt/homebrew/bin/python3.11 -m json.tool flightrecorder/schemas/manifest.json and all six new promotion artifact schema files",
-        "status": "pass",
-        "summary": "Schema manifest and promotion_alias_apply/cards/decision/ledger/ledger_gate/release_record schema files parse as JSON."
-      },
-      {
-        "command": "/opt/homebrew/bin/python3.11 -m py_compile tests/test_schema_registry.py tests/test_promotion_decision.py tests/test_promotion_ledger.py",
-        "status": "pass",
-        "summary": "Touched test modules compile."
-      },
-      {
-        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_schema_registry tests.test_promotion_decision tests.test_promotion_ledger",
-        "status": "pass",
-        "summary": "48 focused schema registry, promotion decision, and promotion ledger tests passed."
-      },
-      {
-        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --name promotion_decision --name promotion_cards --name promotion_alias_apply --name promotion_release_record --name promotion_ledger --name promotion_ledger_gate --write-dir /tmp/hfr-governance-promotion-schema-bundle --force",
-        "status": "pass",
-        "summary": "Selected schema bundle export wrote six promotion artifact schemas plus manifest."
-      },
-      {
-        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check runs/promotion_ledger.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check runs/promotion_ledger_gate.json",
-        "status": "pass",
-        "summary": "Generated promotion ledger and promotion ledger gate artifacts pass schema inference checks."
-      },
-      {
-        "command": "git diff --check",
-        "status": "pass",
-        "summary": "Working diff has no whitespace errors."
-      },
-      {
-        "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
-        "status": "pass",
-        "summary": "Release check passed, including 375 Python 3.11 unit tests and installed-CLI/demo gates."
-      },
-      {
-        "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
-        "status": "pass",
-        "summary": "origin/main remained fe8e86add8e7d897d30aa9b501457c8648826f6c; branch a0b667a97c5d6e3e037a4edef0865b7b2f3f6fc4 is a clean descendant and worktree was clean."
-      },
-      {
-        "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json, flightrecorder/schemas/manifest.json, and all six promotion schema files",
-        "status": "pass",
-        "summary": "Supervisor state, schema manifest, and six promotion artifact schemas parse under the lock."
-      },
-      {
-        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --name promotion_decision --name promotion_cards --name promotion_alias_apply --name promotion_release_record --name promotion_ledger --name promotion_ledger_gate --write-dir /tmp/hfr-governance-promotion-schema-bundle-locked --force",
-        "status": "pass",
-        "summary": "Selected schema bundle export wrote six promotion artifact schemas plus manifest under the lock."
-      }
-    ],
-    "risks": [
-      "Public schemas intentionally validate shape only; semantic validation remains in flightrecorder validate.",
-      "The generic decision_gate and promotion_archive schemas remain separate follow-up candidates if Governance decides to publish those shapes too."
-    ],
-    "github_persistence": {
-      "branch": "codex/hermes-goal-0-supervisor-20260702-1338",
-      "pushed": true,
-      "remote_branch_verified": true,
-      "remote_branch_deleted": false,
-      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/17",
-      "pr_state": "OPEN",
-      "main_sha": null,
-      "remote_main_verified": false,
-      "branch_sha": "a0b667a97c5d6e3e037a4edef0865b7b2f3f6fc4",
-      "remote_branch_verified_sha": "a0b667a97c5d6e3e037a4edef0865b7b2f3f6fc4",
-      "main_delivery_status": "verified_under_lock_pending_main_push",
-      "base_main_sha": "fe8e86add8e7d897d30aa9b501457c8648826f6c"
-    },
-    "verified_at": "2026-07-02T17:45:19Z",
-    "branch_sha": "b8408f3841c8e8ccf6f654a2137a2d58a5fa549b"
+    "id": "supervisor_cross_layer_completion_audit",
+    "layer": "supervisor",
+    "priority": "high",
+    "status": "ready",
+    "title": "Audit cross-layer completion and remaining blockers",
+    "summary": "All named layers show landed infrastructure; audit supervisor_state, docs, release_check, and remote branches before declaring the infrastructure connected."
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1338",
-    "branch_sha": "a0b667a97c5d6e3e037a4edef0865b7b2f3f6fc4",
+    "branch_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
     "commit_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "main_delivery": {
       "attempted_at": "2026-07-02T15:09:17Z",
@@ -3586,9 +3613,9 @@
       "lock_released_at": "2026-07-02T16:03:36Z",
       "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     },
-    "latest_origin_main_sha": "fe8e86add8e7d897d30aa9b501457c8648826f6c",
+    "latest_origin_main_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "acquired_verified_pending_main_push"
+    "lock_status": "held_until_post_delivery_checkpoint_push"
   },
   "governance_main_delivery": {
     "attempted_at": "2026-07-02T15:09:17Z",
@@ -4005,34 +4032,19 @@
   ],
   "latest_verification": [
     {
-      "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
+      "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1338",
       "status": "pass",
-      "summary": "origin/main remained fe8e86add8e7d897d30aa9b501457c8648826f6c; branch a0b667a97c5d6e3e037a4edef0865b7b2f3f6fc4 is a clean descendant and worktree was clean."
+      "summary": "origin/main verified at a4b004298444c7bed09b2c8d5bebdb94613e8f06 after the locked promotion schema push."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json, flightrecorder/schemas/manifest.json, and all six promotion schema files",
+      "command": "gh pr view 17 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
       "status": "pass",
-      "summary": "Supervisor state, schema manifest, and six promotion artifact schemas parse under the lock."
+      "summary": "PR #17 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/17 with merge commit a4b004298444c7bed09b2c8d5bebdb94613e8f06."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_schema_registry tests.test_promotion_decision tests.test_promotion_ledger",
+      "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1338 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1338",
       "status": "pass",
-      "summary": "48 focused schema registry, promotion decision, and promotion ledger tests passed under the lock."
-    },
-    {
-      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --name promotion_decision --name promotion_cards --name promotion_alias_apply --name promotion_release_record --name promotion_ledger --name promotion_ledger_gate --write-dir /tmp/hfr-governance-promotion-schema-bundle-locked --force",
-      "status": "pass",
-      "summary": "Selected schema bundle export wrote six promotion artifact schemas plus manifest under the lock."
-    },
-    {
-      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check runs/promotion_ledger.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check runs/promotion_ledger_gate.json",
-      "status": "pass",
-      "summary": "Generated promotion ledger and promotion ledger gate artifacts pass schema inference under the lock."
-    },
-    {
-      "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
-      "status": "pass",
-      "summary": "Release check passed under the lock, including 375 Python 3.11 unit tests and installed-CLI/demo gates."
+      "summary": "Only refs/heads/main remained; the promotion schema supervisor remote branch was absent."
     }
   ],
   "layer_status": {
@@ -4054,10 +4066,10 @@
       "latest_packet": "evidence_pr5_main_delivery"
     },
     "governance": {
-      "next_packet": "governance_promotion_artifact_schemas",
-      "status": "verified_under_lock_pending_main_push",
-      "summary": "Promotion artifact schemas passed current-main verification under the main-push lock; main push and cleanup are next.",
-      "latest_packet": "governance_rollback_target_receipts"
+      "next_packet": null,
+      "status": "completed_landed_on_main",
+      "summary": "Governance infrastructure is landed through policy, decisions, cards, rollback receipts, alias receipts, release records, ledgers, and public schemas for promotion artifacts.",
+      "latest_packet": "governance_promotion_artifact_schemas"
     },
     "harness": {
       "next_packet": null,
@@ -4182,34 +4194,20 @@
       "merge_commit_sha": "1b2bae2f87c00e749d467a140b318bd8a55ae8b0",
       "remote_branch_deleted": true,
       "completed_at": "2026-07-02T17:25:37Z"
-    },
-    {
-      "id": "governance_promotion_artifact_schemas",
-      "layer": "governance",
-      "priority": "medium",
-      "status": "verified_branch_pushed_pending_main_delivery",
-      "title": "Register promotion artifact schemas",
-      "summary": "Public schemas and schema-check coverage for promotion decision/cards/alias/release/ledger artifacts are verified and pending main delivery.",
-      "depends_on": [
-        "governance_rollback_target_receipts"
-      ],
-      "branch": "codex/hermes-goal-0-supervisor-20260702-1338",
-      "branch_sha": "b8408f3841c8e8ccf6f654a2137a2d58a5fa549b",
-      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/17"
     }
   ],
   "promotion_readiness": {
     "data": "completed",
     "eval": "not_started",
     "evidence": "in_progress",
-    "governance": "in_progress",
+    "governance": "completed",
     "harness": "verified_pending_main_push",
     "model": "in_progress",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T17:49:00Z",
+  "updated_at": "2026-07-02T17:50:53Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -4695,6 +4693,22 @@
           "command": "git push origin --delete codex/hermes-goal-8-governance-rollback-receipts-20260702-1638 codex/hermes-goal-0-supervisor-20260702-1328 && git ls-remote --heads origin main codex/hermes-goal-8-governance-rollback-receipts-20260702-1638 codex/hermes-goal-0-supervisor-20260702-1328",
           "status": "pass",
           "summary": "Only refs/heads/main remained; the Governance rollback source and supervisor remote branches were absent."
+        }
+      ]
+    },
+    {
+      "id": "governance_promotion_artifact_schemas_remote_branch_retired",
+      "source_branch": "codex/hermes-goal-0-supervisor-20260702-1338",
+      "source_branch_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+      "status": "remote_deleted_after_main_delivery",
+      "deleted_at": "2026-07-02T17:50:53Z",
+      "main_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+      "remote_branch_verified_deleted": true,
+      "verification": [
+        {
+          "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1338 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1338",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; the promotion schema supervisor remote branch was absent."
         }
       ]
     }
@@ -5432,9 +5446,9 @@
     "base_main_sha": "fe8e86add8e7d897d30aa9b501457c8648826f6c",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "acquired",
-    "main_integration_status": "verified_under_lock_pending_main_push",
+    "main_integration_status": "pushed_and_verified",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/17",
-    "pr_status": "OPEN_BEFORE_SUPERVISOR_MAIN_PUSH",
+    "pr_status": "MERGED",
     "verification": [
       {
         "command": "git fetch origin && git merge-base --is-ancestor origin/main HEAD && git diff --check origin/main HEAD && git status --short",
@@ -5469,6 +5483,33 @@
     ],
     "risks": [
       "Public schemas validate artifact shape only; semantic validation remains in flightrecorder validate."
-    ]
+    ],
+    "merged_at": "2026-07-02T17:49:44Z",
+    "main_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+    "merge_commit_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+    "remote_main_verified_sha": "a4b004298444c7bed09b2c8d5bebdb94613e8f06",
+    "remote_main_verified_at": "2026-07-02T17:50:53Z",
+    "branch_remote_status": "deleted",
+    "remote_branch_verified_deleted": true,
+    "branch_remote_deleted_at": "2026-07-02T17:50:53Z",
+    "completed_at": "2026-07-02T17:50:53Z",
+    "post_delivery_verification": [
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1338",
+        "status": "pass",
+        "summary": "origin/main verified at a4b004298444c7bed09b2c8d5bebdb94613e8f06 after the locked promotion schema push."
+      },
+      {
+        "command": "gh pr view 17 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #17 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/17 with merge commit a4b004298444c7bed09b2c8d5bebdb94613e8f06."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1338 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1338",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the promotion schema supervisor remote branch was absent."
+      }
+    ],
+    "post_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the checkpoint commit SHA is verified after push because a commit cannot self-record its final SHA."
   }
 }
