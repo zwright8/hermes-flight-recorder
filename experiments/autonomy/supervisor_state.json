@@ -1,6 +1,22 @@
 {
   "active_layer": "serving_demo",
-  "blocked_packets": [],
+  "blocked_packets": [
+    {
+      "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+      "branch_sha_before_conflict_record": "264c4edf7ebe6a711bbde2c46ffff4e4e89df92f",
+      "conflicted_files": [
+        "experiments/autonomy/journal/2026-07-02.md",
+        "experiments/autonomy/supervisor_state.json"
+      ],
+      "id": "serving_main_delivery_rebase_conflict",
+      "layer": "serving_demo",
+      "origin_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+      "priority": "high",
+      "recorded_at": "2026-07-02T15:12:49Z",
+      "status": "blocked",
+      "summary": "Main delivery of verified Goal 6 branch is blocked by add/add conflicts in shared autonomy state and journal after origin/main advanced."
+    }
+  ],
   "completed_packets": [
     {
       "artifacts": [
@@ -70,10 +86,17 @@
       "main_delivery": {
         "attempted_at": "2026-07-02T15:05:39Z",
         "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+        "branch_sha_before_conflict_record": "264c4edf7ebe6a711bbde2c46ffff4e4e89df92f",
+        "conflict_kind": "add/add during git rebase origin/main",
+        "conflicted_files": [
+          "experiments/autonomy/journal/2026-07-02.md",
+          "experiments/autonomy/supervisor_state.json"
+        ],
         "latest_observed_remote_main_at": "2026-07-02T15:09:25Z",
         "latest_observed_remote_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
         "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
         "lock_status": "not_acquired_after_retries",
+        "lock_status_at_record": "exists_not_acquired",
         "main_sha": null,
         "notes": [
           "git fetch origin completed before rebase",
@@ -83,12 +106,16 @@
         ],
         "observed_remote_main_at": "2026-07-02T15:07:12Z",
         "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
+        "origin_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
         "pr_state": "OPEN",
         "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
+        "rebase_head": "071128c1c84fb37101a5762f20b98d14498dd7b3",
+        "recorded_at": "2026-07-02T15:12:49Z",
         "remote_branch_deleted": false,
         "remote_branch_verified": true,
         "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
-        "status": "blocked_lock_not_acquired",
+        "resolution": "rebase aborted; main not pushed; branch and PR left open for supervisor integration",
+        "status": "blocked_rebase_conflict",
         "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
       },
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
@@ -97,7 +124,8 @@
       "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
       "risks": [
         "Real Qwen/vLLM/SGLang launch was not executed in this worktree; the wrapper and launch profiles are tested against a managed OpenAI-compatible mock process.",
-        "System python3 is 3.9.6 and cannot run tests.test_deployment_hardening because tomllib requires Python 3.11+; full discovery passed with /opt/homebrew/bin/python3.11."
+        "System python3 is 3.9.6 and cannot run tests.test_deployment_hardening because tomllib requires Python 3.11+; full discovery passed with /opt/homebrew/bin/python3.11.",
+        "Main integration now has add/add conflicts in autonomy journal/supervisor state against origin/main; protocol says supervisor should resolve non-trivial conflicts."
       ],
       "status": "completed",
       "summary": "Added managed process lifecycle wrapper, reusable OpenAI-compatible mock server, vLLM/SGLang launch profiles, lifecycle schema, tests, and replay artifacts that link behavior reports to serving readiness evidence.",
@@ -120,7 +148,10 @@
         "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
         "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired",
         "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90",
-        "final git ls-remote --heads origin main # b671b9671fff7e891fa0ee58a69f64e818694b11"
+        "final git ls-remote --heads origin main # b671b9671fff7e891fa0ee58a69f64e818694b11",
+        "git fetch origin",
+        "git rebase origin/main # blocked: add/add conflicts in experiments/autonomy/journal/2026-07-02.md and experiments/autonomy/supervisor_state.json",
+        "git rebase --abort"
       ]
     }
   ],
@@ -134,11 +165,11 @@
   },
   "github_persistence": {
     "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-    "main_delivery_status": "blocked_lock_not_acquired",
+    "main_delivery_status": "blocked_rebase_conflict",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
     "remote_branch_verified": true,
     "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
-    "verified_at": "2026-07-02T15:05:39Z",
+    "verified_at": "2026-07-02T15:12:49Z",
     "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
   },
   "guardrails": {
@@ -175,7 +206,10 @@
     "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
     "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired",
     "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90",
-    "final git ls-remote --heads origin main # b671b9671fff7e891fa0ee58a69f64e818694b11"
+    "final git ls-remote --heads origin main # b671b9671fff7e891fa0ee58a69f64e818694b11",
+    "git fetch origin",
+    "git rebase origin/main # blocked: add/add conflicts in experiments/autonomy/journal/2026-07-02.md and experiments/autonomy/supervisor_state.json",
+    "git rebase --abort"
   ],
   "layer_status": {
     "serving_demo": {
@@ -187,10 +221,17 @@
   },
   "main_delivery": {
     "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+    "branch_sha_before_conflict_record": "264c4edf7ebe6a711bbde2c46ffff4e4e89df92f",
+    "conflict_kind": "add/add during git rebase origin/main",
+    "conflicted_files": [
+      "experiments/autonomy/journal/2026-07-02.md",
+      "experiments/autonomy/supervisor_state.json"
+    ],
     "latest_observed_remote_main_at": "2026-07-02T15:09:25Z",
     "latest_observed_remote_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "not_acquired_after_retries",
+    "lock_status_at_record": "exists_not_acquired",
     "main_sha": null,
     "notes": [
       "git ls-remote --heads origin main after lock blocker returned ebd562fc39251d32778f6d2265e257dbf5a60b90; future integration must fetch/rebase again.",
@@ -198,11 +239,14 @@
     ],
     "observed_remote_main_at": "2026-07-02T15:07:12Z",
     "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
+    "origin_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
     "pr_state": "OPEN",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
-    "recorded_at": "2026-07-02T15:05:39Z",
+    "rebase_head": "071128c1c84fb37101a5762f20b98d14498dd7b3",
+    "recorded_at": "2026-07-02T15:12:49Z",
     "remote_branch_deleted": false,
-    "status": "blocked_lock_not_acquired",
+    "resolution": "rebase aborted; main not pushed; branch and PR left open for supervisor integration",
+    "status": "blocked_rebase_conflict",
     "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
   },
   "next_packets": [
@@ -223,5 +267,5 @@
     "serving_demo": "managed_mock_lifecycle_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:09:25Z"
+  "updated_at": "2026-07-02T15:12:49Z"
 }
