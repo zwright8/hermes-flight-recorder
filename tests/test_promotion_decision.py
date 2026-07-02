@@ -9,6 +9,8 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def run_cli(args):
     with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
@@ -248,6 +250,143 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(record["artifact_validation"]["passed"], True)
             self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(release_record_path)]), 0)
+
+    def test_governance_smoke_path_archives_release_record_with_promotion_history(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            action_gate_path = root / "action_ledger_gate.json"
+            decision_gate_path = root / "decision_gate.json"
+            promotion_ledger_path = root / "promotion_ledger.json"
+            promotion_ledger_gate_path = root / "promotion_ledger_gate.json"
+            cards_dir = root / "cards"
+            decision_path = root / "promotion_decision.json"
+            registry_path = write_model_registry(root)
+            alias_receipt_path = root / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(root)
+            release_record_path = root / "promotion_release_record.json"
+            archive_dir = root / "promotion_archive"
+            action_gate_ref = str(action_gate_path.relative_to(ROOT))
+            decision_gate_ref = str(decision_gate_path.relative_to(ROOT))
+            action_gate_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger_gate.v1",
+                        "passed": True,
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_iteration",
+                            "summary": "ready for promotion history",
+                            "blocking_check_count": 0,
+                            "key_metrics": {"recurring_action_count": 0},
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        action_gate_ref,
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(["promotion-ledger", "--decision-gate", decision_gate_ref, "--out", str(promotion_ledger_path)]),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-promotion-ledger",
+                        "--promotion-ledger",
+                        str(promotion_ledger_path),
+                        "--policy",
+                        str(ROOT / "examples" / "promotion_ledger_gate_policy.demo.json"),
+                        "--out",
+                        str(promotion_ledger_gate_path),
+                    ]
+                ),
+                0,
+            )
+            artifacts["promotion_ledger_gate"] = promotion_ledger_gate_path
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+            self.assertEqual(
+                run_cli(
+                    promotion_release_record_args(
+                        artifacts,
+                        cards_dir,
+                        decision_path,
+                        alias_receipt_path,
+                        release_notes_path,
+                        release_record_path,
+                    )
+                ),
+                0,
+            )
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(promotion_ledger_path),
+                    "--promotion-ledger-gate",
+                    str(promotion_ledger_gate_path),
+                    "--decision-gate",
+                    str(decision_gate_path),
+                    "--promotion-release-record",
+                    str(release_record_path),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            roles = {artifact["role"] for artifact in archive["artifacts"]}
+            self.assertEqual(
+                roles,
+                {"promotion_ledger", "promotion_ledger_gate", "decision_gate", "source_artifact", "promotion_release_record"},
+            )
+            self.assertTrue(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["promotion_release_record_count"], 1)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "validate",
+                        "--promotion-cards",
+                        str(cards_dir),
+                        "--promotion-decision",
+                        str(decision_path),
+                        "--promotion-alias-apply",
+                        str(alias_receipt_path),
+                        "--promotion-release-record",
+                        str(release_record_path),
+                        "--promotion-archive",
+                        str(archive_dir),
+                        "--strict",
+                    ]
+                ),
+                0,
+            )
 
     def test_validate_promotion_release_record_rejects_stale_release_notes(self):
         with tempfile.TemporaryDirectory() as tmp:
