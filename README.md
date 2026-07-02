@@ -661,6 +661,8 @@ flightrecorder promotion-cards \
 
 flightrecorder validate --promotion-cards runs/promotion_cards --strict
 
+flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict
+
 flightrecorder promotion-decision \
   --candidate-id candidate-v2 \
   --champion-id champion-v1 \
@@ -676,6 +678,7 @@ flightrecorder promotion-decision \
   --redaction-check runs/redaction_check.json \
   --safety-gate runs/safety_gate.json \
   --serving-report runs/serving_report.json \
+  --promotion-policy examples/promotion_policy.demo.json \
   --out runs/promotion_decision.json
 
 flightrecorder validate --promotion-decision runs/promotion_decision.json --strict
@@ -695,6 +698,7 @@ flightrecorder promotion-release-record \
   --rollback-metadata runs/rollback.json \
   --compare-gate runs/compare_gate.json \
   --release-notes runs/RELEASE_NOTES.md \
+  --promotion-policy examples/promotion_policy.demo.json \
   --out runs/promotion_release_record.json
 
 flightrecorder validate --promotion-release-record runs/promotion_release_record.json --strict
@@ -706,6 +710,10 @@ the rollback target is declared, license status is known, cards have no
 TODO/TBD/unsupported-claim markers, and eval movement shows no task-completion
 regressions, new critical failures, forbidden actions, secret exposure,
 contract drift, or unverified contracts.
+`--promotion-policy` makes the required artifact contract and zero-tolerance
+limits explicit. A policy may document or tighten governance expectations, but
+it cannot relax the default blockers for missing artifacts, unknown license,
+unsafe eval movement, unsupported claims, rollback, cards, or validation.
 `promotion-alias-apply` performs the guarded registry write after validating
 that receipt. The model registry must use `hfr.model_registry.v1`, register all
 alias targets, expose aliases as an object, and have a missing or list-valued
@@ -718,7 +726,8 @@ live registry.
 it binds the exact promotion decision, generated cards, alias-apply receipt,
 rollback metadata, eval compare gate, and release notes. Validation rehashes
 each referenced artifact, so changed release notes, stale cards, mismatched eval
-evidence, or a different alias receipt block publication.
+evidence, a different alias receipt, or a policy file that does not match the
+policy embedded in the promotion decision block publication.
 `promotion-cards` is also side-effect free: it writes `MODEL_CARD.md`,
 `DATASET_CARD.md`, and `promotion_cards.json`, and validation rejects stale card
 hashes after generation.

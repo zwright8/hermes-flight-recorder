@@ -814,6 +814,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         promotion_decision_paths=args.promotion_decision,
         promotion_alias_apply_paths=args.promotion_alias_apply,
         promotion_release_record_paths=args.promotion_release_record,
+        promotion_policy_paths=args.promotion_policy,
         promotion_ledger_paths=args.promotion_ledger,
         promotion_ledger_gate_paths=args.promotion_ledger_gate,
         promotion_archive_paths=args.promotion_archive,
@@ -1252,6 +1253,7 @@ def cmd_promotion_release_record(args: argparse.Namespace) -> int:
         compare_gate_path=args.compare_gate,
         release_notes_path=args.release_notes,
         out_path=args.out,
+        promotion_policy_path=args.promotion_policy,
         artifact_validation=validation_summary,
         preserve_paths=args.preserve_paths,
         metadata=_metadata_options(args.metadata),
@@ -1283,6 +1285,7 @@ def cmd_promotion_decision(args: argparse.Namespace) -> int:
         redaction_check_path=args.redaction_check,
         safety_gate_path=args.safety_gate,
         serving_report_path=args.serving_report,
+        promotion_policy_path=args.promotion_policy,
         preserve_paths=args.preserve_paths,
         metadata=_metadata_options(args.metadata),
     )
@@ -2154,6 +2157,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--promotion-decision", action="append", default=[], help="Validate one promotion_decision.json; may be repeated")
     validate.add_argument("--promotion-alias-apply", action="append", default=[], help="Validate one promotion_alias_apply.json receipt; may be repeated")
     validate.add_argument("--promotion-release-record", action="append", default=[], help="Validate one promotion_release_record.json; may be repeated")
+    validate.add_argument("--promotion-policy", action="append", default=[], help="Validate one promotion_policy.json; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
     validate.add_argument("--promotion-archive", action="append", default=[], help="Validate one promotion archive directory or manifest; may be repeated")
@@ -2582,6 +2586,7 @@ def _parser() -> argparse.ArgumentParser:
     promotion_release_record.add_argument("--rollback-metadata", required=True, help="Rollback metadata JSON used by the promotion decision")
     promotion_release_record.add_argument("--compare-gate", required=True, help="compare_gate.json used as eval movement evidence")
     promotion_release_record.add_argument("--release-notes", required=True, help="Release notes markdown or text file")
+    promotion_release_record.add_argument("--promotion-policy", help="Promotion policy JSON expected to match the decision policy fingerprint")
     promotion_release_record.add_argument("--out", required=True, help="Write promotion_release_record.json")
     promotion_release_record.add_argument(
         "--metadata",
@@ -2624,6 +2629,7 @@ def _parser() -> argparse.ArgumentParser:
     promotion_decision.add_argument("--redaction-check", help="Redaction gate JSON")
     promotion_decision.add_argument("--safety-gate", help="Safety gate JSON")
     promotion_decision.add_argument("--serving-report", help="Serving smoke or readiness JSON")
+    promotion_decision.add_argument("--promotion-policy", help="Promotion policy JSON declaring required artifacts and zero-tolerance limits")
     promotion_decision.add_argument("--out", help="Write promotion decision JSON to this path")
     promotion_decision.add_argument(
         "--metadata",

@@ -48,6 +48,7 @@ from .governance import (
     PROMOTION_CARDS_SCHEMA_VERSION,
     PROMOTION_DECISION_REQUIRED_ARTIFACTS,
     PROMOTION_DECISION_SCHEMA_VERSION,
+    PROMOTION_POLICY_SCHEMA_VERSION,
     PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
     PROMOTION_RELEASE_RECORD_SCHEMA_VERSION,
 )
@@ -153,6 +154,7 @@ def validate_artifacts(
     promotion_decision_paths: list[str | Path] | None = None,
     promotion_alias_apply_paths: list[str | Path] | None = None,
     promotion_release_record_paths: list[str | Path] | None = None,
+    promotion_policy_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
     promotion_ledger_gate_paths: list[str | Path] | None = None,
     promotion_archive_paths: list[str | Path] | None = None,
@@ -221,6 +223,8 @@ def validate_artifacts(
         targets.append(validate_promotion_alias_apply(promotion_alias_apply_path))
     for promotion_release_record_path in promotion_release_record_paths or []:
         targets.append(validate_promotion_release_record(promotion_release_record_path))
+    for promotion_policy_path in promotion_policy_paths or []:
+        targets.append(validate_promotion_policy(promotion_policy_path))
     for promotion_ledger_path in promotion_ledger_paths or []:
         targets.append(validate_promotion_ledger(promotion_ledger_path))
     for promotion_ledger_gate_path in promotion_ledger_gate_paths or []:
@@ -835,6 +839,16 @@ def validate_promotion_release_record(path: str | Path) -> ValidationTarget:
     record = _read_object(record_path, target, "promotion_release_record.json")
     if record is not None:
         _validate_promotion_release_record(record, target, record_path)
+    return target
+
+
+def validate_promotion_policy(path: str | Path) -> ValidationTarget:
+    """Validate a raw promotion policy artifact."""
+    policy_path = Path(path)
+    target = ValidationTarget("promotion_policy", str(policy_path))
+    policy = _read_object(policy_path, target, "promotion_policy.json")
+    if policy is not None:
+        _validate_raw_promotion_policy(policy, target)
     return target
 
 
@@ -7356,6 +7370,7 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
     _validate_promotion_release_record_validation(record.get("artifact_validation"), expected_passed, target)
     _validate_promotion_release_record_bindings(record.get("bindings"), artifacts, target)
     _validate_promotion_release_record_metrics(record.get("metrics"), checks, target)
+    _validate_promotion_release_record_policy(record.get("policy"), target, source_path)
     if not _is_string_list(record.get("notes")):
         target.errors.append("promotion_release_record.notes must be a list of strings.")
     target.details.update(
@@ -7423,6 +7438,27 @@ def _validate_promotion_release_record_metrics(value: Any, checks: list[Any], ta
             target.errors.append(f"promotion_release_record.metrics.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
     if not _is_non_negative_int(value.get("release_notes_size_bytes")):
         target.errors.append("promotion_release_record.metrics.release_notes_size_bytes must be a non-negative integer.")
+
+
+def _validate_promotion_release_record_policy(value: Any, target: ValidationTarget, source_path: Path) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        target.errors.append("promotion_release_record.policy must be an object.")
+        return
+    decision_policy = value.get("promotion_decision_policy")
+    if isinstance(decision_policy, dict) and decision_policy:
+        _validate_promotion_policy_section(
+            decision_policy,
+            target,
+            source_path,
+            "promotion_release_record.policy.promotion_decision_policy",
+        )
+    elif decision_policy not in ({}, None):
+        target.errors.append("promotion_release_record.policy.promotion_decision_policy must be an object.")
+    release_policy = value.get("release_policy")
+    if release_policy is not None:
+        _validate_promotion_policy_section(release_policy, target, source_path, "promotion_release_record.policy.release_policy")
 
 
 def _validate_alias_snapshot(value: Any, target: ValidationTarget, label: str) -> dict[str, Any]:
@@ -7615,8 +7651,10 @@ def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTar
         artifacts = {}
     for role in PROMOTION_DECISION_REQUIRED_ARTIFACTS:
         _validate_promotion_decision_artifact(artifacts.get(role), role, target, source_path)
+    policy = decision.get("policy")
+    _validate_promotion_policy_section(policy, target, source_path, "promotion_decision.policy")
     metrics = decision.get("metrics")
-    _validate_promotion_decision_metrics(metrics, checks, target)
+    _validate_promotion_decision_metrics(metrics, checks, target, policy)
     _validate_promotion_decision_alias_update(
         decision.get("alias_update"),
         expected_passed,
@@ -7704,6 +7742,117 @@ def _validate_promotion_decision_artifact(value: Any, role: str, target: Validat
     _validate_fingerprinted_artifact(value, role, target, source_path, "promotion_decision.artifacts")
 
 
+def _validate_raw_promotion_policy(policy: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(policy, "schema_version", PROMOTION_POLICY_SCHEMA_VERSION, target, prefix="promotion_policy.")
+    for field_name in ("id", "description"):
+        if not isinstance(policy.get(field_name), str) or not policy.get(field_name):
+            target.errors.append(f"promotion_policy.{field_name} must be a non-empty string.")
+    _validate_policy_role_list(policy.get("required_artifacts"), target, "promotion_policy.required_artifacts")
+    _validate_policy_role_list(policy.get("release_required_artifacts"), target, "promotion_policy.release_required_artifacts")
+    _validate_policy_class_list(policy.get("allowed_candidate_classes"), target, "promotion_policy.allowed_candidate_classes")
+    _validate_policy_class_list(policy.get("allowed_champion_classes"), target, "promotion_policy.allowed_champion_classes")
+    _validate_policy_limits(policy.get("limits"), target, "promotion_policy.limits")
+    _validate_policy_forbidden_rules(policy.get("forbid_new_critical_rules"), target, "promotion_policy.forbid_new_critical_rules")
+    _validate_policy_forbidden_rules(policy.get("forbid_regressed_rules"), target, "promotion_policy.forbid_regressed_rules")
+    for field_name in (
+        "require_known_license",
+        "require_accepted_terms",
+        "require_rollback_metadata",
+        "require_supported_cards",
+        "require_artifact_validation",
+    ):
+        if not isinstance(policy.get(field_name), bool):
+            target.errors.append(f"promotion_policy.{field_name} must be a boolean.")
+    target.details.update({"policy_id": policy.get("id"), "schema_version": policy.get("schema_version")})
+
+
+def _validate_promotion_policy_section(value: Any, target: ValidationTarget, source_path: Path, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _require_equal(value, "schema_version", PROMOTION_POLICY_SCHEMA_VERSION, target, prefix=f"{label}.")
+    for field_name in ("id", "description", "source"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    source = value.get("source")
+    if source not in {"default", "file"}:
+        target.errors.append(f"{label}.source must be default or file.")
+    required_artifacts = _validate_policy_role_list(value.get("required_artifacts"), target, f"{label}.required_artifacts")
+    release_required_artifacts = _validate_policy_role_list(
+        value.get("release_required_artifacts"),
+        target,
+        f"{label}.release_required_artifacts",
+    )
+    _validate_policy_class_list(value.get("allowed_candidate_classes"), target, f"{label}.allowed_candidate_classes")
+    _validate_policy_class_list(value.get("allowed_champion_classes"), target, f"{label}.allowed_champion_classes")
+    _validate_policy_limits(value.get("limits"), target, f"{label}.limits")
+    _validate_policy_forbidden_rules(value.get("forbid_new_critical_rules"), target, f"{label}.forbid_new_critical_rules")
+    _validate_policy_forbidden_rules(value.get("forbid_regressed_rules"), target, f"{label}.forbid_regressed_rules")
+    _validate_policy_requirements(value.get("requirements"), target, f"{label}.requirements")
+    artifact = value.get("artifact")
+    if source == "file":
+        _validate_fingerprinted_artifact(artifact, "promotion_policy", target, source_path, label)
+    elif artifact is not None:
+        target.errors.append(f"{label}.artifact must be absent for default policy sources.")
+    if not required_artifacts or not release_required_artifacts:
+        target.errors.append(f"{label} must declare non-empty decision and release artifact contracts.")
+
+
+def _validate_policy_role_list(value: Any, target: ValidationTarget, label: str) -> list[str]:
+    if not _is_string_list(value):
+        target.errors.append(f"{label} must be a list of strings.")
+        return []
+    return list(value)
+
+
+def _validate_policy_class_list(value: Any, target: ValidationTarget, label: str) -> None:
+    allowed = {"base", "trace-only", "frontier", "champion", "candidate"}
+    if not _is_string_list(value):
+        target.errors.append(f"{label} must be a list of strings.")
+        return
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        target.errors.append(f"{label} contains unknown model classes: {unknown!r}.")
+
+
+def _validate_policy_limits(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    expected_fields = (
+        "max_task_completion_regressions",
+        "max_baseline_wins",
+        "max_contract_drifts",
+        "max_unverified_contracts",
+        "max_new_critical_failures",
+        "max_rule_regressions",
+    )
+    for field_name in expected_fields:
+        field_value = value.get(field_name)
+        if not _is_non_negative_int(field_value):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+
+
+def _validate_policy_forbidden_rules(value: Any, target: ValidationTarget, label: str) -> None:
+    if not _is_string_list(value):
+        target.errors.append(f"{label} must be a list of strings.")
+
+
+def _validate_policy_requirements(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in (
+        "require_known_license",
+        "require_accepted_terms",
+        "require_rollback_metadata",
+        "require_supported_cards",
+        "require_artifact_validation",
+    ):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+
+
 def _validate_fingerprinted_artifact(
     value: Any,
     role: str,
@@ -7783,15 +7932,20 @@ def _resolve_promotion_decision_artifact_path(value: Any, source_path: Path, kin
     return candidates[0]
 
 
-def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: ValidationTarget) -> None:
+def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: ValidationTarget, policy: Any) -> None:
     if not isinstance(value, dict):
         target.errors.append("promotion_decision.metrics must be an object.")
         return
     expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
+    policy_obj = policy if isinstance(policy, dict) else {}
     expected_fields = {
         "check_count": len(checks),
         "failed_check_count": expected_failed,
         "required_artifact_count": len(PROMOTION_DECISION_REQUIRED_ARTIFACTS),
+        "policy_required_artifact_count": len(policy_obj.get("required_artifacts", [])) if isinstance(policy_obj.get("required_artifacts"), list) else 0,
+        "policy_release_required_artifact_count": (
+            len(policy_obj.get("release_required_artifacts", [])) if isinstance(policy_obj.get("release_required_artifacts"), list) else 0
+        ),
     }
     for field_name, expected in expected_fields.items():
         if value.get(field_name) != expected:
