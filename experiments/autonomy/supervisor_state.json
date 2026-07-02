@@ -1,0 +1,62 @@
+{
+  "schema_version": "hfr.autonomy.supervisor_state.v1",
+  "updated_at": "2026-07-02T11:03:03-04:00",
+  "active_goal": "Goal 3 Data Layer",
+  "worktree": "/Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-3-data",
+  "branch": "codex/hermes-goal-3-data-20260702-1027",
+  "remote": "origin",
+  "latest_packet": {
+    "status": "complete",
+    "summary": "Add manifest-backed dataset versions, dataset_registry.json, redaction proof, label provenance, split scenario leakage checks, and exact trainer-preflight dataset selection.",
+    "code_paths": [
+      "flightrecorder/training.py",
+      "flightrecorder/validation.py",
+      "flightrecorder/preflight.py",
+      "flightrecorder/review.py",
+      "flightrecorder/cli.py"
+    ],
+    "schema_paths": [
+      "flightrecorder/schemas/dataset_registry.v1.schema.json",
+      "flightrecorder/schemas/training_manifest.v1.schema.json",
+      "flightrecorder/schemas/rl_dataset_metrics.v1.schema.json",
+      "flightrecorder/schemas/dataset_splits.v1.schema.json",
+      "flightrecorder/schemas/reviewed_manifest.v1.schema.json",
+      "flightrecorder/schemas/trainer_preflight.v1.schema.json",
+      "flightrecorder/schemas/trainer_launch_check.v1.schema.json",
+      "flightrecorder/schemas/manifest.json"
+    ]
+  },
+  "verification": {
+    "completed": [
+      "python3 -m py_compile flightrecorder/preflight.py flightrecorder/cli.py flightrecorder/validation.py flightrecorder/review.py flightrecorder/training.py",
+      "python3 -m json.tool selected schema files and schema catalog",
+      "python3 -m unittest tests.test_training_export tests.test_validation tests.test_review_export tests.test_trainer_preflight tests.test_schema_registry",
+      "python3 -m flightrecorder run-suite --scenarios scenarios --out /tmp/hfr-goal3-main.QJ4Kd0/runs --export-rl",
+      "python3 -m flightrecorder validate --training-export /tmp/hfr-goal3-main.QJ4Kd0/runs/training_export --strict --out /tmp/hfr-goal3-main.QJ4Kd0/validation.json",
+      "python3 -m flightrecorder schemas --check/--check-jsonl over generated manifest, dataset_registry, dataset_metrics, dataset_splits, sft, dpo, reward_model",
+      "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "git diff --check"
+    ],
+    "pending": []
+  },
+  "github_persistence": {
+    "branch_sha": "48f7660058d8692962f80a075c1e25411cf4f254",
+    "main_sha": "48f7660058d8692962f80a075c1e25411cf4f254",
+    "pushed": true,
+    "remote_branch_verified": true,
+    "remote_main_verified": true,
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/10",
+    "pr_state": "MERGED",
+    "remote_branch_deleted": true,
+    "local_branch_retired": false,
+    "pr_blocker": null
+  },
+  "risks": [
+    "System python3 is Python 3.9.6 and cannot run tests/test_deployment_hardening.py because it imports Python 3.11 tomllib; full suite passed under /opt/homebrew/bin/python3.11.",
+    "Legacy training exports without dataset_version are still accepted in non-strict validation with warnings for backward compatibility."
+  ],
+  "next_actions": [
+    "Retire the local temporary branch after the state checkpoint lands on main.",
+    "Continue Goal 3 with the next data-layer gap from current main."
+  ]
+}
