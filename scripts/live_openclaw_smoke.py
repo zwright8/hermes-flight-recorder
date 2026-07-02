@@ -140,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a live OpenClaw Flight Recorder smoke test")
     parser.add_argument("--out", default="live_openclaw_smoke_artifacts/latest", help="Directory for smoke artifacts")
     parser.add_argument("--keep-temp", action="store_true", help="Keep the isolated temporary OpenClaw state")
+    parser.add_argument("--relative-paths", action="store_true", help="Write harness artifact paths relative to the smoke output root")
     args = parser.parse_args(argv)
 
     if shutil.which("openclaw") is None:
@@ -157,7 +158,13 @@ def main(argv: list[str] | None = None) -> int:
 
     temp_root = Path(tempfile.mkdtemp(prefix="hfr-live-openclaw-"))
     try:
-        result = _run_live_session(Path(__file__).resolve().parents[1], out_dir, temp_root, server.server_address[1])
+        result = _run_live_session(
+            Path(__file__).resolve().parents[1],
+            out_dir,
+            temp_root,
+            server.server_address[1],
+            preserve_paths=not args.relative_paths,
+        )
     finally:
         server.shutdown()
         server.server_close()
@@ -171,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if summary["passed"] else 1
 
 
-def _run_live_session(flight_root: Path, out_dir: Path, temp_root: Path, port: int) -> dict[str, Any]:
+def _run_live_session(flight_root: Path, out_dir: Path, temp_root: Path, port: int, *, preserve_paths: bool) -> dict[str, Any]:
     config_path = temp_root / "openclaw.json"
     state_dir = temp_root / "state"
     workspace = temp_root / "workspace"
@@ -292,6 +299,7 @@ def _run_live_session(flight_root: Path, out_dir: Path, temp_root: Path, port: i
             "gateway_port": gateway_port,
         },
         metadata={"source": "scripts/live_openclaw_smoke.py", "mock_endpoint": True, "session_key": SESSION_KEY},
+        preserve_paths=preserve_paths,
     )
     scorecard = run_result["scorecard"]
     report_path = run_result["paths"]["report"]

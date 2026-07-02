@@ -149,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Directory for smoke artifacts",
     )
     parser.add_argument("--keep-temp", action="store_true", help="Keep the isolated temporary HERMES_HOME")
+    parser.add_argument("--relative-paths", action="store_true", help="Write harness artifact paths relative to the smoke output root")
     args = parser.parse_args(argv)
 
     hermes_root = Path(args.hermes_root).expanduser().resolve()
@@ -176,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
             out_dir,
             temp_root,
             server.server_address[1],
+            preserve_paths=not args.relative_paths,
         )
     finally:
         server.shutdown()
@@ -190,7 +192,15 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if result["passed"] else 1
 
 
-def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_root: Path, port: int) -> dict[str, Any]:
+def _run_live_session(
+    hermes_root: Path,
+    flight_root: Path,
+    out_dir: Path,
+    temp_root: Path,
+    port: int,
+    *,
+    preserve_paths: bool,
+) -> dict[str, Any]:
     hermes_home = temp_root / "hermes-home"
     events_dir = temp_root / "events"
     home_dir = temp_root / "home"
@@ -283,6 +293,7 @@ def _run_live_session(hermes_root: Path, flight_root: Path, out_dir: Path, temp_
             "stderr": str(out_dir / "hermes_stderr.txt"),
         },
         metadata={"source": "scripts/live_hermes_smoke.py", "mock_endpoint": True},
+        preserve_paths=preserve_paths,
     )
     scorecard = run_result["scorecard"]
     report_path = run_result["paths"]["report"]

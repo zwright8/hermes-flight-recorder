@@ -41,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--node-bin-dir", help="Directory containing node when it is not already on PATH")
     parser.add_argument("--coven-package", default=DEFAULT_COVEN_PACKAGE, help="npm package spec used when installing Coven")
     parser.add_argument("--keep-temp", action="store_true", help="Keep the isolated temporary Coven state")
+    parser.add_argument("--relative-paths", action="store_true", help="Write harness artifact paths relative to the smoke output root")
     args = parser.parse_args(argv)
 
     out_dir = Path(args.out).expanduser().resolve()
@@ -54,7 +55,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         base_env = _node_env(os.environ.copy(), args.node_bin_dir)
         coven_bin = _resolve_coven_binary(args, temp_root, out_dir, base_env)
-        result, env = _run_live_session(coven_bin, out_dir, temp_root, base_env, keep_temp=args.keep_temp)
+        result, env = _run_live_session(
+            coven_bin,
+            out_dir,
+            temp_root,
+            base_env,
+            keep_temp=args.keep_temp,
+            preserve_paths=not args.relative_paths,
+        )
     finally:
         if coven_bin is not None and env is not None:
             _run_coven(coven_bin, ["daemon", "stop"], env, out_dir, "coven_daemon_stop", timeout=30)
@@ -115,6 +123,7 @@ def _run_live_session(
     base_env: dict[str, str],
     *,
     keep_temp: bool,
+    preserve_paths: bool,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     flight_root = Path(__file__).resolve().parents[1]
     coven_home = temp_root / "coven-home"
@@ -204,6 +213,7 @@ def _run_live_session(
             "sessions_stderr": str(out_dir / "coven_sessions_json_stderr.txt"),
         },
         metadata={"source": "scripts/live_coven_smoke.py", "detached": True},
+        preserve_paths=preserve_paths,
     )
     scorecard = run_result["scorecard"]
     report_path = run_result["paths"]["report"]

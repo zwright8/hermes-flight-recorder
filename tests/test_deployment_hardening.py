@@ -56,17 +56,25 @@ class DeploymentHardeningTests(unittest.TestCase):
         self.assertEqual(scripts["hermes-flight-recorder"], "flightrecorder.cli:main")
         self.assertEqual(scripts["hermes-harness"], "flightrecorder.harness:main")
 
-    def test_live_hermes_smoke_script_help_is_available(self):
-        completed = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "live_hermes_smoke.py"), "--help"],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=10,
-        )
+    def test_live_smoke_script_help_exposes_relative_paths(self):
+        scripts = [
+            ("live_hermes_smoke.py", "live Hermes Flight Recorder observer smoke test"),
+            ("live_openclaw_smoke.py", "live OpenClaw Flight Recorder smoke test"),
+            ("live_coven_smoke.py", "live Coven Flight Recorder smoke test"),
+        ]
+        for script, description in scripts:
+            with self.subTest(script=script):
+                completed = subprocess.run(
+                    [sys.executable, str(ROOT / "scripts" / script), "--help"],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=10,
+                )
 
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("live Hermes Flight Recorder observer smoke test", completed.stdout)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertIn(description, completed.stdout)
+                self.assertIn("--relative-paths", completed.stdout)
 
     def test_mock_harness_runner_writes_auditable_artifacts_and_replays(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,18 +200,24 @@ class DeploymentHardeningTests(unittest.TestCase):
                     "home": out / "home",
                     "workspace": out / "workspace",
                     "events": out / "events",
+                    "config": str(out / "runtime" / "config.json"),
                     "ephemeral": True,
                     "audit_artifacts_kept": True,
                 },
                 fake_secret_files=fake_secret_files,
                 process={"exit_code": 0, "stdout": str(out / "stdout.txt"), "stderr": str(out / "stderr.txt")},
                 metadata={"source": "test", "mock_endpoint": True},
+                preserve_paths=False,
             )
 
             self.assertTrue(result["scorecard"]["passed"])
             self.assertEqual(harness_result["runner"], "hermes_live_smoke")
             self.assertEqual(harness_result["trace"]["format"], "observer_jsonl")
+            self.assertEqual(harness_result["trace"]["path"], "live_observer.jsonl")
+            self.assertEqual(harness_result["sandbox"]["config"], "runtime/config.json")
             self.assertEqual(harness_result["process"]["exit_code"], 0)
+            self.assertEqual(harness_result["process"]["stdout"], "stdout.txt")
+            self.assertEqual(harness_result["process"]["stderr"], "stderr.txt")
             self.assertTrue((out / "live_scenario.json").exists())
             self.assertTrue((out / "normalized_trace.json").exists())
             self.assertTrue((out / "scorecard.json").exists())
@@ -213,6 +227,11 @@ class DeploymentHardeningTests(unittest.TestCase):
             self.assertTrue((out / "report.html").exists())
             self.assertTrue((out / "harness_manifest.json").exists())
             self.assertTrue((out / "harness_result.json").exists())
+            for name in ("harness_manifest.json", "harness_result.json"):
+                text = (out / name).read_text(encoding="utf-8")
+                self.assertNotIn(str(out), text)
+                self.assertNotIn("/private/", text)
+                self.assertNotIn("/var/", text)
             self.assertEqual(_run_cli(["validate", "--run", str(out), "--strict"]), 0)
             self.assertEqual(
                 _run_cli(

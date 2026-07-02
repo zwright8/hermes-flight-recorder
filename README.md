@@ -947,7 +947,8 @@ Run the live smoke script when a local Hermes checkout/provider is available:
 ```bash
 python3.11 scripts/live_hermes_smoke.py \
   --hermes-root ../upstream-hermes-agent \
-  --out live_smoke_artifacts
+  --out live_smoke_artifacts \
+  --relative-paths
 ```
 
 The observer plugin is designed to fail open and record events. It must not be
@@ -1001,7 +1002,8 @@ without API keys:
 
 ```bash
 python3.11 scripts/live_openclaw_smoke.py \
-  --out live_openclaw_smoke_artifacts/latest
+  --out live_openclaw_smoke_artifacts/latest \
+  --relative-paths
 ```
 
 OpenClaw conversation hooks can include prompts and final answers. Treat raw
@@ -1032,7 +1034,8 @@ standard report:
 
 ```bash
 python3.11 scripts/live_coven_smoke.py \
-  --out live_coven_smoke_artifacts/latest
+  --out live_coven_smoke_artifacts/latest \
+  --relative-paths
 ```
 
 If `coven` or `pnpm` is not on `PATH`, pass `--coven-bin` or `--pnpm-bin`.
@@ -1040,6 +1043,10 @@ If `coven` or `pnpm` is not on `PATH`, pass `--coven-bin` or `--pnpm-bin`.
 Detached Coven runs prove that Coven recorded a project-scoped session and
 prompt. They do not prove model task completion unless the trace contains
 observable assistant/tool/state evidence for that task.
+
+The live smoke scripts still keep raw runtime traces in their output
+directories. `--relative-paths` only scrubs the harness manifest/result path
+labels for public handoff and replay review.
 
 ## Schemas
 

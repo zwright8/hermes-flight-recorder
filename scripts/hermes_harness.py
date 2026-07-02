@@ -155,7 +155,7 @@ def publish_harness_artifacts(
         "replay": _replay_reference(artifact_result["paths"]["lineage"], artifact_result["lineage"], run_dir, preserve_paths),
     }
     if process:
-        result["process"] = process
+        result["process"] = _display_path_values(process, run_dir, preserve_paths)
     if metadata:
         result["metadata"] = metadata
     _write_json(run_dir / "harness_result.json", result)
@@ -798,7 +798,21 @@ def _display_sandbox(sandbox: dict[str, Any], base_dir: Path, preserve_paths: bo
             _display_path(path, base_dir, preserve_paths) if isinstance(path, str) else path
             for path in rendered["fake_secret_files"]
         ]
+    for field_name, value in list(rendered.items()):
+        if field_name in {"root", "home", "workspace", "events", "fake_secret_files", "fake_secret_canaries"}:
+            continue
+        rendered[field_name] = _display_path_values(value, base_dir, preserve_paths)
     return rendered
+
+
+def _display_path_values(value: Any, base_dir: Path, preserve_paths: bool) -> Any:
+    if isinstance(value, dict):
+        return {key: _display_path_values(child, base_dir, preserve_paths) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_display_path_values(child, base_dir, preserve_paths) for child in value]
+    if isinstance(value, str) and _looks_like_path(value):
+        return _display_path(value, base_dir, preserve_paths)
+    return value
 
 
 def _display_argv(argv: list[Any], base_dir: Path, preserve_paths: bool) -> list[str]:
