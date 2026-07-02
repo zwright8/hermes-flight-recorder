@@ -12,12 +12,23 @@
         "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md"
       ],
       "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-      "commit_sha": "pending",
+      "commit_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
       "completed_at": "2026-07-02T14:39:14Z",
+      "github_persistence": {
+        "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+        "implementation_commit_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
+        "note": "A follow-up checkpoint commit records these GitHub persistence fields in-repo.",
+        "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
+        "remote_branch_verified": true,
+        "remote_ref_verified_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
+        "verified_at": "2026-07-02T14:45:00Z"
+      },
       "id": "serving_endpoint_preflight_and_demo_report",
       "layer": "serving_demo",
-      "pr_url": "pending",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
       "priority": "high",
+      "remote_branch": "origin/codex/hermes-goal-6-serving-demo-20260702-1027",
+      "remote_ref_verified_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
       "risks": [
         "Real vLLM/SGLang endpoint launch remains a follow-up packet; this packet verifies mock and artifact-contract readiness.",
         "System python3 is 3.9.6 and cannot run tests.test_deployment_hardening because tomllib requires Python 3.11+; full discovery passed with /opt/homebrew/bin/python3.11."
@@ -33,7 +44,11 @@
         "python3 -m py_compile scripts/check_openai_serving.py scripts/build_serving_demo_report.py tests/test_serving_demo.py",
         "python3 -m unittest tests.test_serving_demo tests.test_schema_registry",
         "/opt/homebrew/bin/python3.11 -m unittest discover",
-        "pgrep -fl 'check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|mock_openai|vllm|sglang' # no matches"
+        "pgrep -fl 'check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|mock_openai|vllm|sglang' # no matches",
+        "git diff --cached --name-status # reviewed before implementation commit",
+        "git push -u origin codex/hermes-goal-6-serving-demo-20260702-1027",
+        "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
+        "gh pr create --base main --head codex/hermes-goal-6-serving-demo-20260702-1027"
       ]
     }
   ],
@@ -44,6 +59,14 @@
     "status": "ready",
     "summary": "Next packet should wrap real vLLM/SGLang startup, readiness polling, smoke checks, and teardown without leaving unmanaged servers.",
     "title": "Add managed lifecycle helpers and real endpoint suite profiles"
+  },
+  "github_persistence": {
+    "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+    "implementation_commit_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
+    "remote_branch_verified": true,
+    "remote_ref_verified_sha": "a3863e4673ef476cab51cc344d64fce3fd0c336f",
+    "verified_at": "2026-07-02T14:45:00Z"
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -67,7 +90,10 @@
     "python3 -m py_compile scripts/check_openai_serving.py scripts/build_serving_demo_report.py tests/test_serving_demo.py",
     "python3 -m unittest tests.test_serving_demo tests.test_schema_registry",
     "/opt/homebrew/bin/python3.11 -m unittest discover",
-    "pgrep -fl 'check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|mock_openai|vllm|sglang' # no matches"
+    "pgrep -fl 'check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|mock_openai|vllm|sglang' # no matches",
+    "git push -u origin codex/hermes-goal-6-serving-demo-20260702-1027",
+    "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
+    "gh pr create --base main --head codex/hermes-goal-6-serving-demo-20260702-1027"
   ],
   "layer_status": {
     "serving_demo": {
@@ -95,5 +121,5 @@
     "serving_demo": "partial_mock_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:39:14Z"
+  "updated_at": "2026-07-02T14:45:00Z"
 }
