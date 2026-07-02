@@ -12,6 +12,16 @@ from typing import Any
 from .action_gate import ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, ACTION_LEDGER_GATE_SCHEMA_VERSION
 from .action_ledger import ACTION_LEDGER_SCHEMA_VERSION
 from .adapters import TRACE_SCHEMA_VERSION
+from .agentic_training_result import (
+    AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
+    BLOCK_REGISTRATION_RECOMMENDATION,
+    FAILURE_CLASSES,
+    OUTPUT_ARTIFACT_ROLES,
+    RECOVERABLE_FAILURE_CLASSES,
+    REGISTER_FAILURE_RECOMMENDATION,
+    REGISTER_RESULT_RECOMMENDATION,
+    RESULT_STATUSES,
+)
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
@@ -185,6 +195,7 @@ def validate_artifacts(
     model_registry_entry_paths: list[str | Path] | None = None,
     model_registry_paths: list[str | Path] | None = None,
     training_plan_paths: list[str | Path] | None = None,
+    agentic_training_result_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -281,6 +292,8 @@ def validate_artifacts(
         targets.append(validate_model_registry(model_registry_path))
     for training_plan_path in training_plan_paths or []:
         targets.append(validate_training_plan(training_plan_path))
+    for agentic_training_result_path in agentic_training_result_paths or []:
+        targets.append(validate_agentic_training_result(agentic_training_result_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -1102,6 +1115,16 @@ def validate_training_plan(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_agentic_training_result(path: str | Path) -> ValidationTarget:
+    """Validate a side-effect-free agentic training result receipt."""
+    result_path = Path(path)
+    target = ValidationTarget("agentic_training_result", str(result_path))
+    result = _read_object(result_path, target, "agentic_training_result.json")
+    if result is not None:
+        _validate_agentic_training_result(result, target)
+    return target
+
+
 def validate_live_smoke_summary(path: str | Path) -> ValidationTarget:
     """Validate a live Hermes observer-smoke summary artifact."""
     summary_path = Path(path)
@@ -1588,6 +1611,270 @@ def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget) -> N
             "no_weight_download": plan.get("no_weight_download"),
         }
     )
+
+
+def _validate_agentic_training_result(result: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(result, "schema_version", AGENTIC_TRAINING_RESULT_SCHEMA_VERSION, target, prefix="agentic_training_result.")
+    checks = result.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("agentic_training_result.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "agentic_training_result.checks")
+    if result.get("check_count") != len(checks):
+        target.errors.append(f"agentic_training_result.check_count expected {len(checks)}, got {result.get('check_count')!r}.")
+    if result.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"agentic_training_result.failed_check_count expected {failed_checks}, got {result.get('failed_check_count')!r}."
+        )
+
+    expected_passed = failed_checks == 0
+    if not isinstance(result.get("passed"), bool):
+        target.errors.append("agentic_training_result.passed must be a boolean.")
+    elif result["passed"] != expected_passed:
+        target.errors.append("agentic_training_result.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    if result.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"agentic_training_result.readiness expected {expected_readiness!r}, got {result.get('readiness')!r}."
+        )
+
+    training_result = result.get("training_result")
+    if not isinstance(training_result, dict):
+        target.errors.append("agentic_training_result.training_result must be an object.")
+        training_result = {}
+    status = training_result.get("status")
+    if status not in RESULT_STATUSES:
+        target.errors.append(f"agentic_training_result.training_result.status must be one of {list(RESULT_STATUSES)!r}.")
+    if training_result.get("external_runner_reported_status") != status:
+        target.errors.append("agentic_training_result.training_result.external_runner_reported_status must match status.")
+    if training_result.get("flight_recorder_executed_training") is not False:
+        target.errors.append("agentic_training_result.training_result.flight_recorder_executed_training must be false.")
+    if training_result.get("model_downloads_started_by_flight_recorder") is not False:
+        target.errors.append("agentic_training_result.training_result.model_downloads_started_by_flight_recorder must be false.")
+
+    failure = result.get("failure")
+    if not isinstance(failure, dict):
+        target.errors.append("agentic_training_result.failure must be an object.")
+        failure = {}
+    failure_class = failure.get("class")
+    failure_message = failure.get("message")
+    if failure_class not in FAILURE_CLASSES:
+        target.errors.append(f"agentic_training_result.failure.class must be one of {list(FAILURE_CLASSES)!r}.")
+    if not isinstance(failure_message, str):
+        target.errors.append("agentic_training_result.failure.message must be a string.")
+        failure_message = ""
+    if isinstance(failure_class, str):
+        expected_recoverable = failure_class in RECOVERABLE_FAILURE_CLASSES
+        if failure.get("recoverable") != expected_recoverable:
+            target.errors.append(
+                f"agentic_training_result.failure.recoverable expected {expected_recoverable!r}, got {failure.get('recoverable')!r}."
+            )
+    if status == "completed" and failure_class != "none":
+        target.errors.append("agentic_training_result.failure.class must be none for completed results.")
+    if status in {"failed", "blocked", "aborted"} and (failure_class in {"none", "unknown"} or not failure_message.strip()):
+        target.errors.append("agentic_training_result non-completed receipts require a classified failure and message.")
+
+    artifact_counts = _validate_agentic_training_result_artifacts(result.get("artifacts"), target)
+    metrics = result.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("agentic_training_result.metrics must be an object.")
+        metrics = {}
+    for field_name, expected in artifact_counts.items():
+        if metrics.get(field_name) != expected:
+            target.errors.append(f"agentic_training_result.metrics.{field_name} expected {expected}, got {metrics.get(field_name)!r}.")
+    if status == "completed" and artifact_counts["output_artifact_count"] == 0:
+        target.errors.append("agentic_training_result completed receipts must include an adapter or checkpoint artifact.")
+
+    if expected_passed and status == "completed":
+        expected_recommendation = REGISTER_RESULT_RECOMMENDATION
+    elif expected_passed:
+        expected_recommendation = REGISTER_FAILURE_RECOMMENDATION
+    else:
+        expected_recommendation = BLOCK_REGISTRATION_RECOMMENDATION
+    if result.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"agentic_training_result.recommendation expected {expected_recommendation!r}, got {result.get('recommendation')!r}."
+        )
+    blocked_reasons = result.get("blocked_reasons")
+    if not _is_string_list(blocked_reasons):
+        target.errors.append("agentic_training_result.blocked_reasons must be a list of strings.")
+    elif expected_passed and blocked_reasons:
+        target.errors.append("agentic_training_result.blocked_reasons must be empty when passed.")
+    elif not expected_passed and len(blocked_reasons) != failed_checks:
+        target.errors.append("agentic_training_result.blocked_reasons must match failed_check_count.")
+
+    _validate_agentic_training_result_lineage(result.get("lineage"), target)
+    _validate_agentic_training_result_boundary(result.get("execution_boundary"), target, "execution_boundary")
+    _validate_agentic_training_result_contract(result.get("handoff_contract"), target)
+    if "registry_update" in result:
+        _validate_agentic_training_result_registry_update(result.get("registry_update"), expected_passed, target)
+    notes = result.get("notes")
+    if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
+        target.errors.append("agentic_training_result.notes must be a list of strings.")
+
+    target.details.update(
+        {
+            "status": status,
+            "recommendation": result.get("recommendation"),
+            "artifact_count": artifact_counts["artifact_count"],
+            "output_artifact_count": artifact_counts["output_artifact_count"],
+        }
+    )
+
+
+def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget) -> dict[str, int]:
+    counts = {
+        "artifact_count": 0,
+        "regular_artifact_count": 0,
+        "output_artifact_count": 0,
+        "config_count": 0,
+        "metrics_file_count": 0,
+        "adapter_count": 0,
+        "checkpoint_count": 0,
+        "log_count": 0,
+        "failure_report_count": 0,
+    }
+    if not isinstance(value, list):
+        target.errors.append("agentic_training_result.artifacts must be a list.")
+        return counts
+    counts["artifact_count"] = len(value)
+    role_metric_fields = {
+        "config": "config_count",
+        "metrics": "metrics_file_count",
+        "adapter": "adapter_count",
+        "checkpoint": "checkpoint_count",
+        "log": "log_count",
+        "failure_report": "failure_report_count",
+    }
+    for index, artifact in enumerate(value):
+        label = f"agentic_training_result.artifacts[{index}]"
+        if not isinstance(artifact, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        role = artifact.get("role")
+        if not isinstance(role, str) or not role:
+            target.errors.append(f"{label}.role must be a non-empty string.")
+        elif role in role_metric_fields:
+            counts[role_metric_fields[role]] += 1
+        if role in OUTPUT_ARTIFACT_ROLES:
+            counts["output_artifact_count"] += 1
+        if not isinstance(artifact.get("path"), str) or not artifact.get("path"):
+            target.errors.append(f"{label}.path must be a non-empty string.")
+        for field_name in ("exists", "regular_file"):
+            if not isinstance(artifact.get(field_name), bool):
+                target.errors.append(f"{label}.{field_name} must be a boolean.")
+        if artifact.get("regular_file") is True:
+            counts["regular_artifact_count"] += 1
+            if not _is_sha256(artifact.get("sha256")):
+                target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for regular files.")
+        elif artifact.get("sha256") is not None and not _is_sha256(artifact.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+        if not _is_non_negative_int(artifact.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    return counts
+
+
+def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_result.lineage must be an object.")
+        return
+    for field_name in ("plan", "runtime_preflight"):
+        ref = value.get(field_name)
+        label = f"agentic_training_result.lineage.{field_name}"
+        if not isinstance(ref, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for string_field in ("path", "schema_name"):
+            if not isinstance(ref.get(string_field), str) or not ref.get(string_field):
+                target.errors.append(f"{label}.{string_field} must be a non-empty string.")
+        for bool_field in ("exists", "regular_file"):
+            if not isinstance(ref.get(bool_field), bool):
+                target.errors.append(f"{label}.{bool_field} must be a boolean.")
+        if ref.get("sha256") is not None and not _is_sha256(ref.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+    for field_name in ("model", "dataset"):
+        ref = value.get(field_name)
+        label = f"agentic_training_result.lineage.{field_name}"
+        if not isinstance(ref, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for string_field in ("id", "path", "sha256"):
+            if not isinstance(ref.get(string_field), str):
+                target.errors.append(f"{label}.{string_field} must be a string.")
+        if ref.get("sha256") and not _is_sha256(ref.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when present.")
+        if ref.get("license_allows_training") is not True:
+            target.errors.append(f"{label}.license_allows_training must be true.")
+
+
+def _validate_agentic_training_result_boundary(value: Any, target: ValidationTarget, field_name: str) -> None:
+    label = f"agentic_training_result.{field_name}"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    expected = {
+        "archive_only": True,
+        "runner_owns_execution": True,
+        "flight_recorder_launched_training": False,
+        "training_started_by_flight_recorder": False,
+        "model_downloads_started_by_flight_recorder": False,
+        "trainer_modules_imported_by_flight_recorder": False,
+    }
+    for key, expected_value in expected.items():
+        if value.get(key) != expected_value:
+            target.errors.append(f"{label}.{key} expected {expected_value!r}, got {value.get(key)!r}.")
+
+
+def _validate_agentic_training_result_contract(value: Any, target: ValidationTarget) -> None:
+    label = "agentic_training_result.handoff_contract"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    expected = {
+        "runner_owns_execution": True,
+        "requires_agentic_training_plan": True,
+        "requires_runtime_preflight": True,
+        "requires_runtime_ready_for_completed": True,
+        "requires_classified_failure_for_non_completed": True,
+        "requires_output_artifact_for_completed": True,
+        "requires_registered_model": True,
+        "requires_registered_dataset": True,
+        "requires_redacted_dataset": True,
+        "flight_recorder_launched_training": False,
+        "model_downloads_started_by_flight_recorder": False,
+    }
+    for key, expected_value in expected.items():
+        if value.get(key) != expected_value:
+            target.errors.append(f"{label}.{key} expected {expected_value!r}, got {value.get(key)!r}.")
+
+
+def _validate_agentic_training_result_registry_update(value: Any, expected_ready: bool, target: ValidationTarget) -> None:
+    label = "agentic_training_result.registry_update"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object when present.")
+        return
+    for key, expected_value in {"applied": False, "side_effect_free": True, "ready_to_apply": expected_ready}.items():
+        if value.get(key) != expected_value:
+            target.errors.append(f"{label}.{key} expected {expected_value!r}, got {value.get(key)!r}.")
+    for field_name in ("target_model_id", "target_dataset_id"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    links = value.get("links")
+    if not isinstance(links, list):
+        target.errors.append(f"{label}.links must be a list.")
+        return
+    if not links:
+        target.errors.append(f"{label}.links must not be empty.")
+    for index, link in enumerate(links):
+        link_label = f"{label}.links[{index}]"
+        if not isinstance(link, dict):
+            target.errors.append(f"{link_label} must be an object.")
+            continue
+        for field_name in ("collection", "artifact_id", "kind", "status", "path"):
+            if not isinstance(link.get(field_name), str) or not link.get(field_name):
+                target.errors.append(f"{link_label}.{field_name} must be a non-empty string.")
+    if links and isinstance(links[0], dict) and links[0].get("collection") != "training_runs":
+        target.errors.append(f"{label}.links[0].collection must be 'training_runs'.")
 
 
 def _model_scout_reference_path(value: Any, source_path: Path) -> Path | None:

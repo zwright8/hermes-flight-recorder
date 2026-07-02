@@ -138,9 +138,11 @@ preflight; Flight Recorder still does not launch trainers, import trainer
 stacks, download models, or mutate weights. The receipt also includes a
 `registry_update` proposal for `flightrecorder model-registry link`, leaving
 `applied: false` until governance accepts the result. After the receipt exists,
-include it in the trainer-facing evidence bundle with `flightrecorder
-evidence-bundle --agentic-training-result runs/agentic_training_result.json` so
-the final preflight, wrapper dry-run, and result receipt are summarized under
+validate it with `flightrecorder validate --agentic-training-result
+runs/agentic_training_result.json --strict`, then include it in the
+trainer-facing evidence bundle with `flightrecorder evidence-bundle
+--agentic-training-result runs/agentic_training_result.json` so the final
+preflight, wrapper dry-run, and result receipt are summarized under
 `metrics.trainer_handoff`.
 
 ## Durable Example

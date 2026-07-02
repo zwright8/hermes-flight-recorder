@@ -902,6 +902,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         model_registry_entry_paths=args.model_registry_entry,
         model_registry_paths=args.model_registry,
         training_plan_paths=args.training_plan,
+        agentic_training_result_paths=args.agentic_training_result,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -2465,6 +2466,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     validate.add_argument("--model-registry", action="append", default=[], help="Validate one model registry JSON; may be repeated")
     validate.add_argument("--training-plan", action="append", default=[], help="Validate one dry-run training plan JSON; may be repeated")
+    validate.add_argument(
+        "--agentic-training-result",
+        action="append",
+        default=[],
+        help="Validate one agentic_training_result.json receipt; may be repeated",
+    )
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
