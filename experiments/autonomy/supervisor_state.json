@@ -364,19 +364,122 @@
           "summary": "git diff --check"
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "model",
+          "path": "flightrecorder/model_registry.py"
+        },
+        {
+          "kind": "cli",
+          "layer": "model",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_candidate.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_scout_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_compatibility_report.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_registry_entry.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/model_registry.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "model",
+          "path": "flightrecorder/schemas/training_plan.v1.schema.json"
+        },
+        {
+          "kind": "sample_artifact",
+          "layer": "model",
+          "path": "experiments/registry/model_layer_validation.json"
+        },
+        {
+          "kind": "doc",
+          "layer": "model",
+          "path": "docs/model-layer-registry.md"
+        },
+        {
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_model_registry.py"
+        }
+      ],
+      "branch": "codex/hermes-goal-4-model-20260702-1027",
+      "completed_at": "2026-07-02T14:46:17Z",
+      "commit_sha": "40d65821216487b52f9ee045477d2197748bab39",
+      "id": "model_registry_contracts_and_dry_run_plan",
+      "layer": "model",
+      "priority": "high",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/8",
+      "status": "completed",
+      "summary": "Added dependency-free model candidate, scout manifest, compatibility report, registry, alias handling, and dry-run training plan contracts with CLI operations, validation hooks, schemas, tests, docs, and metadata-only sample artifacts.",
+      "title": "Add model registry contracts and dry-run planning",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry",
+          "completed_at": "2026-07-02T14:40:00Z",
+          "status": "pass",
+          "summary": "22 model and schema registry tests passed."
+        },
+        {
+          "command": "python3 -m unittest tests.test_validation",
+          "completed_at": "2026-07-02T14:41:00Z",
+          "status": "pass",
+          "summary": "28 existing validation tests passed after adding model-layer target dispatch."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+          "completed_at": "2026-07-02T14:40:00Z",
+          "status": "pass",
+          "summary": "Touched Python files compile successfully."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+          "completed_at": "2026-07-02T14:39:00Z",
+          "status": "pass",
+          "summary": "Strict semantic validation passed for all six sample model-layer artifacts with zero warnings."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check on each new model-layer sample artifact",
+          "completed_at": "2026-07-02T14:40:00Z",
+          "status": "pass",
+          "summary": "Bundled schema checks passed for candidate, scout manifest, compatibility report, registry entry, registry, and training plan."
+        },
+        {
+          "command": "git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1027",
+          "completed_at": "2026-07-02T14:44:00Z",
+          "status": "pass",
+          "summary": "Remote branch exists at 40d65821216487b52f9ee045477d2197748bab39."
+        },
+        {
+          "command": "gh pr create --base main --head codex/hermes-goal-4-model-20260702-1027",
+          "completed_at": "2026-07-02T14:45:00Z",
+          "status": "pass",
+          "summary": "Created PR https://github.com/zwright8/hermes-flight-recorder/pull/8."
+        }
+      ]
     }
   ],
-  "current_packet": {
-    "depends_on": [
-      "data_registry_contracts"
-    ],
-    "id": "model_artifact_contracts",
-    "layer": "model",
-    "priority": "high",
-    "status": "ready",
-    "summary": "Define local model artifact and adapter lineage contracts after dataset registry versions are available.",
-    "title": "Bind model artifacts to dataset lineage"
-  },
+  "current_packet": "model registry contracts and dry-run plan generation",
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
@@ -434,113 +537,20 @@
     "require_verification_before_completion": true
   },
   "latest_artifacts": [
-    {
-      "kind": "module",
-      "layer": "harness",
-      "path": "flightrecorder/harness.py"
-    },
-    {
-      "kind": "test",
-      "layer": "harness",
-      "path": "tests/test_deployment_hardening.py"
-    },
-    {
-      "kind": "schema",
-      "layer": "harness",
-      "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
-    },
-    {
-      "kind": "state",
-      "layer": "supervisor",
-      "path": "experiments/autonomy/supervisor_state.json"
-    },
-    {
-      "kind": "journal",
-      "layer": "supervisor",
-      "path": "experiments/autonomy/journal/2026-07-02.md"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/training.py"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/validation.py"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/preflight.py"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/review.py"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/cli.py"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/dataset_registry.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/training_manifest.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/rl_dataset_metrics.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/dataset_splits.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/reviewed_manifest.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/trainer_preflight.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/trainer_launch_check.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/manifest.json"
-    }
+    "experiments/registry/model_candidates/local_mock_tiny_chat.json",
+    "experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json",
+    "experiments/registry/model_registry.json",
+    "experiments/registry/model_registry_entries/local_mock_tiny_chat.json",
+    "experiments/registry/model_scout_manifest.json",
+    "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+    "experiments/registry/model_layer_validation.json"
   ],
   "latest_verification": [
-    {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
-      "status": "pass",
-      "summary": "Supervisor state JSON validates after semantic merge."
-    },
-    {
-      "command": "git diff --check",
-      "status": "pass",
-      "summary": "Integrated diff has no whitespace errors."
-    },
-    {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
-      "status": "pass",
-      "summary": "310 tests passed under Python 3.11.14 after merging current origin/main."
-    }
+    "python3 -m unittest tests.test_model_registry tests.test_schema_registry",
+    "python3 -m unittest tests.test_validation",
+    "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+    "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+    "python3 -m flightrecorder schemas --check on each new model-layer sample artifact"
   ],
   "layer_status": {
     "data": {
@@ -569,9 +579,9 @@
       "summary": "Offline mock harness now emits typed manifest/result artifacts, validates hashes and scorecard consistency, and can feed Data/Training handoffs without live providers."
     },
     "model": {
-      "next_packet": "model_artifact_contracts",
-      "status": "ready",
-      "summary": "Dataset registry contracts are on main; model artifact lineage is the next dependency-ordered packet."
+      "next_packet": "model_real_metadata_scout_packet",
+      "status": "in_progress",
+      "summary": "Goal 4 model registry contracts and dry-run planning are being integrated with current main."
     },
     "serving_demo": {
       "next_packet": null,
@@ -595,6 +605,24 @@
       "status": "ready",
       "summary": "Define local model artifact and adapter lineage contracts after dataset registry versions are available.",
       "title": "Bind model artifacts to dataset lineage"
+    },
+    {
+      "id": "model_real_metadata_scout_packet",
+      "layer": "model",
+      "priority": "medium",
+      "summary": "Add real Hugging Face metadata-only candidates with explicit license review evidence, still without downloading weights."
+    },
+    {
+      "id": "model_serving_probe_receipts",
+      "layer": "model",
+      "priority": "medium",
+      "summary": "Connect metadata-only compatibility reports to serving/demo smoke receipts when a local endpoint profile exists."
+    },
+    {
+      "id": "model_adapter_registry_links",
+      "layer": "model",
+      "priority": "medium",
+      "summary": "Extend registry entries with adapter, training-run, eval, and promotion-decision link slots."
     }
   ],
   "promotion_readiness": {
@@ -603,10 +631,29 @@
     "evidence": "in_progress",
     "governance": "not_started",
     "harness": "in_progress",
-    "model": "ready",
+    "model": "in_progress",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:15:04Z"
+  "updated_at": "2026-07-02T14:46:17Z",
+  "github_delivery": {
+    "branch": "codex/hermes-goal-4-model-20260702-1027",
+    "implementation_commit_sha": "40d65821216487b52f9ee045477d2197748bab39",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/8",
+    "push_command": "git push -u origin codex/hermes-goal-4-model-20260702-1027",
+    "remote_branch_verified": true,
+    "remote_branch_verified_at": "2026-07-02T14:44:00Z",
+    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1027"
+  },
+  "risks": [
+    "Real upstream model licenses and terms still need explicit review artifacts before selection.",
+    "Compatibility probes are metadata-only until tokenizer and serving checks are connected.",
+    "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry."
+  ],
+  "safety_guardrails": {
+    "gpu_work_launched": false,
+    "large_weights_downloaded": false,
+    "unknown_license_training_selection_blocked": true
+  }
 }
