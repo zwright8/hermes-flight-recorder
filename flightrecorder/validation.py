@@ -1280,7 +1280,7 @@ def validate_harness_replay_result(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("harness_replay_result", str(result_path))
     result = _read_object(result_path, target, "harness_replay_result.json")
     if result is not None:
-        _validate_harness_replay_result(result, target)
+        _validate_harness_replay_result(result, target, source_dir=result_path.parent)
     return target
 
 
@@ -1523,21 +1523,29 @@ def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarge
         target.errors.append(f"{label}.exists must be a boolean.")
 
 
-def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_harness_replay_result(
+    result: dict[str, Any],
+    target: ValidationTarget,
+    source_dir: Path | None = None,
+) -> None:
     if result.get("schema_version") != HARNESS_REPLAY_RESULT_SCHEMA_VERSION:
         target.errors.append(
             f"harness_replay_result.schema_version must be {HARNESS_REPLAY_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
         )
-    _validate_existing_path_field(result, "lineage", target, "harness_replay_result.lineage")
+    _validate_existing_path_field(result, "lineage", target, "harness_replay_result.lineage", base_dir=source_dir)
     out_dir = result.get("out_dir")
     if not isinstance(out_dir, str) or not out_dir:
         target.errors.append("harness_replay_result.out_dir must be a non-empty string.")
-    elif not Path(out_dir).is_dir():
-        target.errors.append(f"harness_replay_result.out_dir does not exist or is not a directory: {out_dir}.")
+    else:
+        out_path = Path(out_dir)
+        if not out_path.is_absolute() and source_dir is not None:
+            out_path = source_dir / out_path
+        if not out_path.is_dir():
+            target.errors.append(f"harness_replay_result.out_dir does not exist or is not a directory: {out_dir}.")
     if not _is_non_negative_int(result.get("exit_code")):
         target.errors.append("harness_replay_result.exit_code must be a non-negative integer.")
     if result.get("scorecard") is not None:
-        _validate_existing_path_field(result, "scorecard", target, "harness_replay_result.scorecard")
+        _validate_existing_path_field(result, "scorecard", target, "harness_replay_result.scorecard", base_dir=source_dir)
     if not isinstance(result.get("passed"), bool):
         target.errors.append("harness_replay_result.passed must be a boolean.")
 

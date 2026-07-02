@@ -429,14 +429,16 @@ def replay_trace(
     exit_code = cmd_replay(args)
     scorecard_path = out_dir / "scorecard.json"
     scorecard = json.loads(scorecard_path.read_text(encoding="utf-8")) if scorecard_path.exists() else {}
-    display_base = Path.cwd().resolve()
+    display_base = out_dir
     summary = {
         "schema_version": HARNESS_REPLAY_RESULT_SCHEMA_VERSION,
         "created_at": _now_iso(),
-        "lineage": _display_path(lineage_path, display_base, preserve_paths),
-        "out_dir": _display_path(out_dir, display_base, preserve_paths),
+        "lineage": _display_replay_result_path(lineage_path, display_base, preserve_paths),
+        "out_dir": _display_replay_result_path(out_dir, display_base, preserve_paths),
         "exit_code": exit_code,
-        "scorecard": _display_path(scorecard_path, display_base, preserve_paths) if scorecard_path.exists() else None,
+        "scorecard": _display_replay_result_path(scorecard_path, display_base, preserve_paths)
+        if scorecard_path.exists()
+        else None,
         "passed": bool(scorecard.get("passed")) if isinstance(scorecard, dict) else False,
     }
     _write_json(out_dir / "harness_replay_result.json", summary)
@@ -471,6 +473,12 @@ def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = True)
     fake_secret_files = write_fake_secret_canaries(home_dir)
     scenario_path = Path(manifest["scenario"]["path"])
     scenario = load_scenario(scenario_path)
+    published_scenario = scenario_path
+    if not preserve_paths:
+        inputs_dir = run_dir / "inputs"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
+        published_scenario = inputs_dir / "scenario.json"
+        shutil.copyfile(scenario_path, published_scenario)
     _write_json(
         workspace / "workspace_manifest.json",
         {
@@ -485,14 +493,24 @@ def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = True)
     _write_jsonl(events_dir / "mock_observer.jsonl", _mock_observer_rows(scenario, manifest))
     shutil.copyfile(events_dir / "mock_observer.jsonl", trace_path)
     artifact_result = _run_scenario_artifacts(
-        scenario_path,
+        published_scenario,
         run_dir,
         trace_override=trace_path,
         trace_format="observer_jsonl",
         preserve_paths=preserve_paths,
     )
+    if not preserve_paths:
+        artifact_result["lineage"] = _rewrite_relative_replay_lineage(
+            artifact_result["lineage"],
+            run_dir,
+            {
+                "scenario": published_scenario,
+                "source_trace": trace_path,
+            },
+        )
+        _write_json(artifact_result["paths"]["lineage"], artifact_result["lineage"])
     return publish_harness_artifacts(
-        scenario_path=scenario_path,
+        scenario_path=published_scenario,
         run_dir=run_dir,
         artifact_result=artifact_result,
         trace_path=trace_path,
@@ -893,6 +911,20 @@ def _display_path(path: str | Path, base_dir: Path, preserve_paths: bool) -> str
         if relative == "." or not relative.startswith(".."):
             return Path(relative).as_posix()
     return f"<redacted:{resolved.name}>"
+
+
+def _display_replay_result_path(path: str | Path, base_dir: Path, preserve_paths: bool) -> str:
+    resolved = Path(path).expanduser().resolve()
+    if preserve_paths:
+        return str(resolved)
+    base = base_dir.expanduser().resolve()
+    try:
+        common = Path(os.path.commonpath([str(resolved), str(base)]))
+    except ValueError:
+        return f"<redacted:{resolved.name}>"
+    if common == Path(common.anchor):
+        return f"<redacted:{resolved.name}>"
+    return Path(os.path.relpath(resolved, base)).as_posix()
 
 
 def _looks_like_path(value: str) -> bool:

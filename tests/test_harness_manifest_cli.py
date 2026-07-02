@@ -147,6 +147,7 @@ class HarnessManifestCliTests(unittest.TestCase):
 
             self.assertEqual(suite["out_dir"], ".")
             self.assertEqual(suite["runs"][0]["manifest"], "harness_suite_one/harness_manifest.json")
+            self.assertTrue(suite["runs"][0]["replay"]["self_contained"])
             self.assertEqual(probe["sandbox"]["root"], "sandbox")
             self.assertEqual(probe["sandbox"]["fake_secret_files"], ["/".join(["sandbox", "home", ".hermes", ".env"])])
 
@@ -177,6 +178,23 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertEqual(rc, 0, stdout)
             cli_text = (root / "suite_cli" / "harness_suite_result.json").read_text(encoding="utf-8")
             self.assertNotIn(str(root), cli_text)
+
+            replay_rc, replay_stdout = _run_harness(
+                [
+                    "replay-trace",
+                    "--lineage",
+                    str(root / "suite" / "harness_suite_one" / "artifact_lineage.json"),
+                    "--out",
+                    str(root / "suite_replay"),
+                    "--relative-paths",
+                ]
+            )
+            self.assertEqual(replay_rc, 0, replay_stdout)
+            replay_result = _json_from_stdout(replay_stdout)
+            self.assertTrue(replay_result["passed"])
+            self._assert_flightrecorder_ok(
+                ["validate", "--harness-replay-result", str(root / "suite_replay" / "harness_replay_result.json"), "--strict"]
+            )
 
     def test_run_scenario_accepts_manifest_file_with_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -353,18 +371,15 @@ class HarnessManifestCliTests(unittest.TestCase):
                 self.assertEqual(policy_replay_result["schema_version"], HARNESS_REPLAY_RESULT_SCHEMA_VERSION)
                 self.assertTrue(replay_result["passed"])
                 self.assertFalse(policy_replay_result["passed"])
-                self.assertEqual(replay_result["lineage"], "runs/harness_mock_manifest/artifact_lineage.json")
-                self.assertEqual(replay_result["out_dir"], "runs/harness_mock_manifest_replay")
-                self.assertEqual(replay_result["scorecard"], "runs/harness_mock_manifest_replay/scorecard.json")
+                self.assertEqual(replay_result["lineage"], "../harness_mock_manifest/artifact_lineage.json")
+                self.assertEqual(replay_result["out_dir"], ".")
+                self.assertEqual(replay_result["scorecard"], "scorecard.json")
                 self.assertEqual(
                     policy_replay_result["lineage"],
-                    "runs/harness_policy_violation/artifact_lineage.json",
+                    "../harness_policy_violation/artifact_lineage.json",
                 )
-                self.assertEqual(policy_replay_result["out_dir"], "runs/harness_policy_violation_replay")
-                self.assertEqual(
-                    policy_replay_result["scorecard"],
-                    "runs/harness_policy_violation_replay/scorecard.json",
-                )
+                self.assertEqual(policy_replay_result["out_dir"], ".")
+                self.assertEqual(policy_replay_result["scorecard"], "scorecard.json")
                 self._assert_flightrecorder_ok(
                     [
                         "validate",
