@@ -502,6 +502,40 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertFalse(plan["execution"]["flight_recorder_downloaded_weights"])
             self.assertFalse(plan["execution"]["flight_recorder_launched_gpu_job"])
 
+    def test_checked_in_qwen_metadata_candidate_is_no_download_training_eligible(self):
+        root = Path(__file__).resolve().parents[1]
+        candidate_path = root / "experiments/registry/model_candidates/qwen3_4b_instruct_2507.json"
+        report_path = root / "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json"
+        registry_path = root / "experiments/registry/model_registry.json"
+        entry_path = root / "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
+        plan_path = root / "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json"
+
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        entry = json.loads(entry_path.read_text(encoding="utf-8"))
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(model_candidate_errors(candidate, require_training_eligible=True), [])
+        self.assertEqual(candidate["license"]["license_id"], "apache-2.0")
+        self.assertFalse(candidate["source"]["weight_download_allowed"])
+        self.assertEqual(candidate["compatibility"]["context_length"], 262144)
+        self.assertEqual(len(candidate["metadata_evidence"]["files"]), 4)
+        self.assertTrue(report["passed"])
+        self.assertEqual(report["download_policy"]["downloaded_weights"], False)
+        self.assertEqual(report["download_policy"]["downloaded_tokenizer"], False)
+        self.assertEqual(report["download_policy"]["gpu_execution"], False)
+        self.assertTrue(entry["training_eligible"])
+        self.assertIn("qwen3_4b_instruct_2507", registry["entries"])
+        self.assertEqual(len(entry["links"]["datasets"]), 1)
+        self.assertEqual(len(entry["links"]["training_runs"]), 1)
+        self.assertTrue(plan["dry_run"])
+        self.assertTrue(plan["no_weight_download"])
+        self.assertFalse(plan["gpu_execution"])
+        self.assertFalse(plan["execution"]["flight_recorder_downloaded_weights"])
+        self.assertFalse(plan["execution"]["flight_recorder_downloaded_tokenizer"])
+        self.assertEqual(plan["model"]["candidate_id"], "qwen3_4b_instruct_2507")
+
 
 def scout_manifest(
     *,

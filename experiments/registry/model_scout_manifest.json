@@ -10,6 +10,17 @@
       "registry_entry_id": "local_mock_tiny_chat",
       "review_status": "approved",
       "training_selection_eligible": true
+    },
+    {
+      "candidate_id": "qwen3_4b_instruct_2507",
+      "compatibility_report_path": "compatibility/qwen3_4b_instruct_2507.compatibility_report.json",
+      "license_status": "approved",
+      "manifest_path": "model_candidates/qwen3_4b_instruct_2507.json",
+      "priority": "medium",
+      "reason": "Real Hugging Face metadata-only candidate with Apache-2.0 license review, 262144 context metadata, tool-call notes, and no weight or GPU work.",
+      "registry_entry_id": "qwen3_4b_instruct_2507",
+      "review_status": "approved",
+      "training_selection_eligible": true
     }
   ],
   "notes": [
@@ -23,5 +34,5 @@
     "require_compatibility_metadata": true,
     "require_terms_review_for_training": true
   },
-  "updated_at": "2026-07-02T00:00:00Z"
+  "updated_at": "2026-07-02T15:23:41Z"
 }

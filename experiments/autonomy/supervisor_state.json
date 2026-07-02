@@ -1,5 +1,5 @@
 {
-  "active_layer": "evidence",
+  "active_layer": "model",
   "blocked_packets": [
     {
       "blocked_at": "2026-07-02T14:32:48Z",
@@ -976,15 +976,112 @@
           "summary": "Only refs/heads/main was returned, at 98dddf36e75a315c3a232e7542ca7a2802d53c96; the source and supervisor remote branches were absent."
         }
       ]
+    },
+    {
+      "id": "model_real_metadata_qwen3_4b_instruct_2507",
+      "layer": "model",
+      "priority": "medium",
+      "status": "completed",
+      "title": "Scout Qwen3 4B metadata without weights",
+      "summary": "Added a real Hugging Face metadata-only Qwen/Qwen3-4B-Instruct-2507 candidate with Apache-2.0 license review, metadata evidence hashes, compatibility report, registry entry, scout-manifest entry, dry-run training plan, docs, and tests; no weights, tokenizer payloads, GPU jobs, or heavy ML imports were used.",
+      "branch": "codex/hermes-goal-4-model-20260702-1534",
+      "completed_at": "2026-07-02T15:39:14Z",
+      "commit_sha": null,
+      "pr_url": null,
+      "artifacts": [
+        {
+          "kind": "model_candidate",
+          "layer": "model",
+          "path": "experiments/registry/model_candidates/qwen3_4b_instruct_2507.json"
+        },
+        {
+          "kind": "compatibility_report",
+          "layer": "model",
+          "path": "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json"
+        },
+        {
+          "kind": "registry_entry",
+          "layer": "model",
+          "path": "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
+        },
+        {
+          "kind": "registry",
+          "layer": "model",
+          "path": "experiments/registry/model_registry.json"
+        },
+        {
+          "kind": "scout_manifest",
+          "layer": "model",
+          "path": "experiments/registry/model_scout_manifest.json"
+        },
+        {
+          "kind": "training_plan",
+          "layer": "model",
+          "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json"
+        },
+        {
+          "kind": "validation_summary",
+          "layer": "model",
+          "path": "experiments/registry/model_layer_validation.json"
+        },
+        {
+          "kind": "doc",
+          "layer": "model",
+          "path": "docs/model-layer-registry.md"
+        },
+        {
+          "kind": "test",
+          "layer": "model",
+          "path": "tests/test_model_registry.py"
+        }
+      ],
+      "verification": [
+        {
+          "command": "python3 -m flightrecorder model-candidate validate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --require-training-eligible --out /tmp/qwen3_candidate_validation.json",
+          "completed_at": "2026-07-02T15:39:14Z",
+          "status": "pass",
+          "summary": "Qwen metadata candidate is training-eligible under approved Apache-2.0 review fields."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+          "completed_at": "2026-07-02T15:39:14Z",
+          "status": "pass",
+          "summary": "Strict semantic validation passed for local and Qwen model-layer artifacts."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, registry entry, registry, scout manifest, and training plan",
+          "completed_at": "2026-07-02T15:39:14Z",
+          "status": "pass",
+          "summary": "Public schema checks passed for all new/updated Qwen artifacts."
+        },
+        {
+          "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+          "completed_at": "2026-07-02T15:39:14Z",
+          "status": "pass",
+          "summary": "54 model, schema registry, and validation tests passed."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+          "completed_at": "2026-07-02T15:39:14Z",
+          "status": "pass",
+          "summary": "Touched Python files compile successfully."
+        },
+        {
+          "command": "git diff --check",
+          "completed_at": "2026-07-02T15:39:14Z",
+          "status": "pass",
+          "summary": "No whitespace errors."
+        }
+      ]
     }
   ],
   "current_packet": {
-    "id": "land_goal1_evidence_pr5",
-    "layer": "evidence",
-    "priority": "critical",
-    "status": "ready_after_harness_main",
-    "summary": "Evidence PR #5 remains open and is the next dependency-ordered packet after landing Harness PR #3 on main.",
-    "title": "Land harness lineage evidence handoff promotion"
+    "id": "deliver_qwen_metadata_scout_packet",
+    "layer": "model",
+    "priority": "medium",
+    "status": "rebased_pending_main_push",
+    "summary": "Qwen metadata-only scout packet is rebased over current main and awaiting branch force-update plus main-push lock delivery.",
+    "title": "Scout Qwen3 metadata without weights"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -1437,195 +1534,81 @@
   },
   "latest_artifacts": [
     {
-      "kind": "module",
-      "layer": "harness",
-      "path": "flightrecorder/harness.py"
+      "kind": "model_candidate",
+      "layer": "model",
+      "path": "experiments/registry/model_candidates/qwen3_4b_instruct_2507.json"
     },
     {
-      "kind": "test",
-      "layer": "harness",
-      "path": "tests/test_deployment_hardening.py"
+      "kind": "compatibility_report",
+      "layer": "model",
+      "path": "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json"
     },
     {
-      "kind": "schema",
-      "layer": "harness",
-      "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
+      "kind": "registry_entry",
+      "layer": "model",
+      "path": "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
     },
     {
-      "kind": "state",
-      "layer": "supervisor",
-      "path": "experiments/autonomy/supervisor_state.json"
+      "kind": "registry",
+      "layer": "model",
+      "path": "experiments/registry/model_registry.json"
     },
     {
-      "kind": "journal",
-      "layer": "supervisor",
-      "path": "experiments/autonomy/journal/2026-07-02.md"
+      "kind": "scout_manifest",
+      "layer": "model",
+      "path": "experiments/registry/model_scout_manifest.json"
     },
     {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/training.py"
+      "kind": "training_plan",
+      "layer": "model",
+      "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json"
     },
     {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/validation.py"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/preflight.py"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/review.py"
-    },
-    {
-      "kind": "module",
-      "layer": "data",
-      "path": "flightrecorder/cli.py"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/dataset_registry.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/training_manifest.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/rl_dataset_metrics.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/dataset_splits.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/reviewed_manifest.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/trainer_preflight.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/trainer_launch_check.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "layer": "data",
-      "path": "flightrecorder/schemas/manifest.json"
-    },
-    {
-      "kind": "script",
-      "path": "scripts/hermes_harness.py"
-    },
-    {
-      "kind": "schema",
-      "path": "flightrecorder/schemas/harness_run_manifest.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
-    },
-    {
-      "kind": "schema",
-      "path": "flightrecorder/schemas/harness_replay_result.v1.schema.json"
-    },
-    {
-      "kind": "test",
-      "path": "tests/test_deployment_hardening.py"
+      "kind": "validation_summary",
+      "layer": "model",
+      "path": "experiments/registry/model_layer_validation.json"
     },
     {
       "kind": "doc",
-      "path": "README.md"
+      "layer": "model",
+      "path": "docs/model-layer-registry.md"
     },
     {
       "kind": "test",
-      "path": "tests/test_harness_replay_matrix.py"
-    },
-    {
-      "kind": "module",
-      "path": "flightrecorder/report.py"
-    },
-    {
-      "kind": "module",
-      "path": "flightrecorder/validation.py"
-    },
-    {
-      "kind": "test",
-      "path": "tests/test_harness_tool_policy.py"
-    },
-    {
-      "kind": "test",
-      "path": "tests/test_harness_manifest_cli.py"
-    },
-    {
-      "kind": "module",
-      "layer": "governance",
-      "path": "flightrecorder/governance.py"
-    },
-    {
-      "kind": "module",
-      "layer": "governance",
-      "path": "flightrecorder/cli.py"
-    },
-    {
-      "kind": "module",
-      "layer": "governance",
-      "path": "flightrecorder/validation.py"
-    },
-    {
-      "kind": "test",
-      "layer": "governance",
-      "path": "tests/test_promotion_decision.py"
-    },
-    {
-      "kind": "doc",
-      "layer": "governance",
-      "path": "README.md"
-    },
-    {
-      "kind": "doc",
-      "layer": "governance",
-      "path": "TRAINING_PIPELINE.md"
+      "layer": "model",
+      "path": "tests/test_model_registry.py"
     }
   ],
   "latest_verification": [
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_replay_matrix tests.test_harness_tool_policy tests.test_deployment_hardening tests.test_promotion_decision tests.test_promotion_ledger",
+      "command": "python3 -m flightrecorder model-candidate validate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --require-training-eligible --out /tmp/qwen3_candidate_validation.json",
       "status": "pass",
-      "summary": "94 focused Model/Harness/Governance tests passed under the main-push lock before the main push."
+      "summary": "Qwen metadata candidate remained training-eligible under approved Apache-2.0 review fields after rebasing over harness main."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
       "status": "pass",
-      "summary": "334 tests passed under the main-push lock after merging origin/main bc15b6bd27e0a8a6649a5c66e19943f20949da7e."
+      "summary": "Strict semantic validation passed for local and Qwen model-layer artifacts after rebase."
     },
     {
-      "command": "git ls-remote --heads origin main codex/hermes-goal-2-harness-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1115",
+      "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, registry entry, registry, scout manifest, and training plan",
       "status": "pass",
-      "summary": "Only refs/heads/main was returned, at 98dddf36e75a315c3a232e7542ca7a2802d53c96; the source and supervisor remote branches were absent."
+      "summary": "Public schema checks passed for all new and updated Qwen artifacts."
     },
     {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+      "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
       "status": "pass",
-      "summary": "Supervisor state JSON validates after the harness landing checkpoint update."
+      "summary": "54 model, schema registry, and validation tests passed after rebase."
     },
     {
-      "command": "git diff --check",
+      "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
       "status": "pass",
-      "summary": "No whitespace errors in the post-delivery checkpoint diff."
+      "summary": "Touched Python files compile successfully."
+    },
+    {
+      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && git diff --check",
+      "status": "pass",
+      "summary": "Supervisor state and diff whitespace checks passed after rebase."
     }
   ],
   "layer_status": {
@@ -1655,9 +1638,9 @@
       "summary": "Harness PR #3 landed on origin/main at 98dddf36e75a315c3a232e7542ca7a2802d53c96; PR #3 is merged and the source plus supervisor remote branches are deleted."
     },
     "model": {
-      "next_packet": "model_real_metadata_scout_packet",
+      "next_packet": "deliver_qwen_metadata_scout_packet",
       "status": "in_progress",
-      "summary": "Model registry contracts, lifecycle links, and dry-run planning landed on main; next Goal 4 packet should add metadata-only real model candidates with explicit license review evidence."
+      "summary": "Qwen metadata-only scout packet is rebased onto current main and awaiting branch delivery/main lock."
     },
     "serving_demo": {
       "next_packet": null,
@@ -1739,11 +1722,34 @@
     "eval": "not_started",
     "evidence": "in_progress",
     "governance": "in_progress",
-    "harness": "verified_pending_main_push",
+    "harness": "completed_landed_on_main",
     "model": "in_progress",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:56:29Z"
+  "updated_at": "2026-07-02T16:03:41Z",
+  "github_delivery": {
+    "branch": "codex/hermes-goal-4-model-20260702-1534",
+    "branch_remote_status": "needs_force_update_after_rebase",
+    "commit_sha": null,
+    "main_integration_status": "pending_rebased_branch_push",
+    "main_sha": null,
+    "observed_origin_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/12",
+    "pr_status": "OPEN",
+    "remote_branch_verified": false,
+    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1534"
+  },
+  "risks": [
+    "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
+    "Qwen compatibility is metadata-only; tokenizer, serving, tool-call, structured-output, quantization, and memory behavior still need runtime receipts.",
+    "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry.",
+    "Adapter, eval, and promotion link slots are present but await real downstream artifacts."
+  ],
+  "safety_guardrails": {
+    "gpu_work_launched": false,
+    "large_weights_downloaded": false,
+    "unknown_license_training_selection_blocked": true
+  }
 }

@@ -72,6 +72,25 @@ flightrecorder validate \
   --strict
 ```
 
+## Metadata-Only Real Candidate
+
+`experiments/registry/model_candidates/qwen3_4b_instruct_2507.json` records a
+real Hugging Face model card review for `Qwen/Qwen3-4B-Instruct-2507` without
+downloading weights, tokenizer vocabulary files, or running GPU work. The
+candidate records SHA-256 hashes for the small metadata files used during
+review: `README.md`, `config.json`, `tokenizer_config.json`, and `LICENSE`.
+
+The corresponding artifacts are:
+
+- `experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json`
+- `experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json`
+- `experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json`
+
+The dry-run plan intentionally sets smoke assumptions such as
+`max_seq_length=32768` while preserving the upstream 262,144-token context
+metadata. Any real trainer must re-check license, serving compatibility,
+runtime memory, dataset gates, and output paths before execution.
+
 Unknown license status can be recorded for scouting, but it is blocked from
 training selection. Moving `champion` requires an explicit, different
 `rollback` target.
