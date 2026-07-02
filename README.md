@@ -544,6 +544,8 @@ flightrecorder gate-compare-export \
 flightrecorder eval-summary \
   --suite-summary baseline=runs_baseline/suite_summary.json \
   --suite-summary candidate=runs_candidate/suite_summary.json \
+  --serving-check candidate=runs/serving_check.json \
+  --require-serving-preflight \
   --compare-export candidate=runs/compare_rl_export \
   --compare-gate candidate=runs/compare_gate.json \
   --out runs/eval_summary.json
@@ -577,6 +579,9 @@ export has no scenario-set mismatch, contract drift, or unverified fingerprints.
 Each arm also includes an `operational_metrics` block for measured or missing
 cost, latency, token usage, and task-completion status. Missing operational
 values are explicit and do not imply success.
+When `--require-serving-preflight` is used, each labeled suite arm must have a
+matching ready `serving_check.json`; missing or blocked endpoint checks become
+eval-summary risks.
 Validate it with `flightrecorder validate --eval-summary runs/eval_summary.json`.
 
 `flightrecorder heldout-manifest` writes the canonical held-out scenario manifest

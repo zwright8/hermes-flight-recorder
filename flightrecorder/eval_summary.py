@@ -14,6 +14,7 @@ EVAL_SUMMARY_SCHEMA_VERSION = "hfr.eval_summary.v1"
 COMPARE_EXPORT_SCHEMA_VERSION = "hfr.compare_rl.manifest.v1"
 COMPARE_GATE_SCHEMA_VERSION = "hfr.compare_gate.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+SERVING_ENDPOINT_CHECK_SCHEMA_VERSION = "hfr.serving_endpoint_check.v1"
 
 _SCENARIO_BLOCKING_STATUSES = {"missing_suite_summaries", "mismatched", "empty"}
 
@@ -34,6 +35,8 @@ def build_eval_summary(
     compare_export_specs: list[str | Path] | None = None,
     compare_gate_specs: list[str | Path] | None = None,
     external_adapter_plan_specs: list[str | Path] | None = None,
+    serving_check_specs: list[str | Path] | None = None,
+    require_serving_preflight: bool = False,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Build a single artifact Governance can consume without reinterpreting raw evals."""
@@ -41,16 +44,37 @@ def build_eval_summary(
     compare_specs = [_labeled_path(spec) for spec in compare_export_specs or []]
     gate_specs = [_labeled_path(spec) for spec in compare_gate_specs or []]
     adapter_specs = [_labeled_path(spec) for spec in external_adapter_plan_specs or []]
-    if not suite_specs and not compare_specs and not gate_specs and not adapter_specs:
+    serving_specs = [_labeled_path(spec) for spec in serving_check_specs or []]
+    if not suite_specs and not compare_specs and not gate_specs and not adapter_specs and not serving_specs:
         raise EvalSummaryError("At least one eval artifact source is required")
 
-    arms = [_suite_arm(spec, preserve_paths) for spec in suite_specs]
+    serving_by_label, duplicate_serving_labels = _serving_preflight_inputs(
+        serving_specs,
+        preserve_paths,
+        required=require_serving_preflight,
+    )
+    arms = [
+        _suite_arm(
+            spec,
+            preserve_paths,
+            serving_preflight=serving_by_label.pop(spec.label, None),
+            require_serving_preflight=require_serving_preflight,
+        )
+        for spec in suite_specs
+    ]
+    serving_preflight = _serving_preflight_summary(
+        required=require_serving_preflight,
+        input_count=len(serving_specs),
+        attached_count=sum(1 for arm in arms if arm.get("serving_preflight", {}).get("provided") is True),
+        unmatched_labels=sorted(serving_by_label),
+        duplicate_labels=sorted(set(duplicate_serving_labels)),
+    )
     heldout = _heldout_scenario_summary(arms)
     comparisons = [_compare_export(spec, heldout, preserve_paths) for spec in compare_specs]
     gates = [_compare_gate(spec, preserve_paths) for spec in gate_specs]
     external_adapters = [_external_adapter_plan(spec, preserve_paths) for spec in adapter_specs]
     repair_curriculum = _repair_curriculum(arms, comparisons, gates, external_adapters)
-    risks = _risks(arms, heldout, comparisons, gates, external_adapters)
+    risks = _risks(arms, heldout, comparisons, gates, external_adapters, serving_preflight)
     passed = not risks
     return {
         "schema_version": EVAL_SUMMARY_SCHEMA_VERSION,
@@ -67,12 +91,19 @@ def build_eval_summary(
         "compare_gates": gates,
         "external_adapter_plans": external_adapters,
         "repair_curriculum": repair_curriculum,
+        "serving_preflight": serving_preflight,
         "risks": risks,
         "conclusion": _conclusion(passed, risks, heldout, comparisons),
     }
 
 
-def _suite_arm(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
+def _suite_arm(
+    spec: LabeledPath,
+    preserve_paths: bool,
+    *,
+    serving_preflight: dict[str, Any] | None,
+    require_serving_preflight: bool,
+) -> dict[str, Any]:
     summary = _read_object(spec.path, "suite summary")
     runs = summary.get("runs") if isinstance(summary.get("runs"), list) else []
     scenario_ids = sorted({str(run.get("scenario_id")) for run in runs if isinstance(run, dict) and run.get("scenario_id")})
@@ -90,6 +121,8 @@ def _suite_arm(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
         blocking_reasons.append("suite_summary_validation_failed")
     if duplicate_count > 0:
         blocking_reasons.append("duplicate_scenario_ids")
+    serving = serving_preflight or _missing_serving_preflight(required=require_serving_preflight)
+    blocking_reasons.extend(serving["blocking_reasons"])
     operational_metrics = _operational_metrics(summary, runs)
     return {
         "label": spec.label,
@@ -106,7 +139,89 @@ def _suite_arm(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
         "failed_rule_counts": _count_rows(metrics.get("failed_rule_counts")),
         "critical_failure_counts": _count_rows(metrics.get("critical_failure_counts")),
         "operational_metrics": operational_metrics,
+        "serving_preflight": serving,
         "validation": _validation_summary(validation),
+        "blocking_reasons": blocking_reasons,
+    }
+
+
+def _serving_preflight_inputs(
+    specs: list[LabeledPath],
+    preserve_paths: bool,
+    *,
+    required: bool,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    by_label: dict[str, dict[str, Any]] = {}
+    duplicate_labels: list[str] = []
+    for spec in specs:
+        if spec.label in by_label:
+            duplicate_labels.append(spec.label)
+        by_label[spec.label] = _serving_preflight(spec, preserve_paths, required=required)
+    return by_label, duplicate_labels
+
+
+def _serving_preflight(spec: LabeledPath, preserve_paths: bool, *, required: bool) -> dict[str, Any]:
+    check = _read_object(spec.path, "serving endpoint check")
+    failed_checks = _string_list(check.get("failed_checks"))
+    blocking_reasons = []
+    if check.get("schema_version") != SERVING_ENDPOINT_CHECK_SCHEMA_VERSION:
+        blocking_reasons.append("invalid_serving_endpoint_check_schema")
+    if check.get("passed") is not True or check.get("readiness") != "ready" or failed_checks:
+        blocking_reasons.append("serving_preflight_blocked")
+    return {
+        "provided": True,
+        "required": required,
+        "path": _display_path(spec.path, preserve_paths),
+        "schema_version": check.get("schema_version"),
+        "passed": check.get("passed") is True,
+        "readiness": check.get("readiness") if check.get("readiness") in {"ready", "blocked"} else "blocked",
+        "profile_id": str(check.get("profile_id") or ""),
+        "model": str(check.get("model") or ""),
+        "served_model_id": str(check.get("served_model_id") or ""),
+        "base_url": str(check.get("base_url") or ""),
+        "failed_checks": failed_checks,
+        "artifacts": check.get("artifacts") if isinstance(check.get("artifacts"), dict) else {},
+        "blocking_reasons": blocking_reasons,
+    }
+
+
+def _missing_serving_preflight(*, required: bool) -> dict[str, Any]:
+    return {
+        "provided": False,
+        "required": required,
+        "path": None,
+        "schema_version": None,
+        "passed": False,
+        "readiness": "missing",
+        "profile_id": "",
+        "model": "",
+        "served_model_id": "",
+        "base_url": "",
+        "failed_checks": [],
+        "artifacts": {},
+        "blocking_reasons": ["serving_preflight_missing"] if required else [],
+    }
+
+
+def _serving_preflight_summary(
+    *,
+    required: bool,
+    input_count: int,
+    attached_count: int,
+    unmatched_labels: list[str],
+    duplicate_labels: list[str],
+) -> dict[str, Any]:
+    blocking_reasons = []
+    if unmatched_labels:
+        blocking_reasons.append("serving_preflight_unmatched_arm")
+    if duplicate_labels:
+        blocking_reasons.append("duplicate_serving_preflight_labels")
+    return {
+        "required": required,
+        "input_count": input_count,
+        "attached_count": attached_count,
+        "unmatched_labels": unmatched_labels,
+        "duplicate_labels": duplicate_labels,
         "blocking_reasons": blocking_reasons,
     }
 
@@ -560,11 +675,12 @@ def _risks(
     comparisons: list[dict[str, Any]],
     gates: list[dict[str, Any]],
     external_adapters: list[dict[str, Any]],
+    serving_preflight: dict[str, Any],
 ) -> list[dict[str, Any]]:
     risks: list[dict[str, Any]] = []
     for arm in arms:
         for reason in arm["blocking_reasons"]:
-            risks.append({"source": "suite_summary", "label": arm["label"], "reason": reason})
+            risks.append({"source": _risk_source(reason), "label": arm["label"], "reason": reason})
     if comparisons and heldout["status"] in _SCENARIO_BLOCKING_STATUSES:
         for reason in heldout["blocking_reasons"]:
             risks.append({"source": "heldout_scenarios", "reason": reason})
@@ -577,7 +693,15 @@ def _risks(
     for plan in external_adapters:
         for reason in plan["blocking_reasons"]:
             risks.append({"source": "external_adapter_plan", "label": plan["label"], "reason": reason})
+    for reason in serving_preflight["blocking_reasons"]:
+        risks.append({"source": "serving_preflight", "reason": reason})
     return _dedupe_risks(risks)
+
+
+def _risk_source(reason: str) -> str:
+    if reason.startswith("serving_preflight_") or reason == "invalid_serving_endpoint_check_schema":
+        return "serving_preflight"
+    return "suite_summary"
 
 
 def _conclusion(

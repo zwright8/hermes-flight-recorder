@@ -15,6 +15,8 @@ from a comparison export remains raw movement until the scenario-set check passe
 flightrecorder eval-summary \
   --suite-summary baseline=runs_baseline/suite_summary.json \
   --suite-summary candidate=runs_candidate/suite_summary.json \
+  --serving-check candidate=runs/serving_check.json \
+  --require-serving-preflight \
   --compare-export candidate=runs/compare_rl_export \
   --compare-gate candidate=runs/compare_gate.json \
   --out runs/eval_summary.json
@@ -29,6 +31,7 @@ The summary reports:
   allowed,
 - per-arm operational metrics for cost, latency, token usage, and
   task-completion status when suite summaries provide them,
+- optional per-arm serving preflight readiness from `serving_check.json`,
 - compare-gate failures,
 - repair/curriculum work items for candidate regressions, failed rules,
   critical failures, gate failures, and adapter blockers,
@@ -119,6 +122,7 @@ Governance claims are suppressed when any of these hold:
 - unverified contract fingerprints,
 - zero comparison pairs.
 - held-out manifests with mismatched or empty scenario sets.
+- required serving preflight checks that are missing or blocked.
 - external adapter plans that are not ready.
 
 The artifact may still show raw movement, but `governance_claims` stays empty and

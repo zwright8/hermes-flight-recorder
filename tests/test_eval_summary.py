@@ -214,6 +214,91 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertIn("new_critical_failure", reasons)
             self.assertTrue(any(item["category"] == "curriculum" for item in repair["items"]))
 
+    def test_eval_summary_can_require_ready_serving_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            serving_check = _serving_check(root / "serving_check.json", passed=True)
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--serving-check",
+                    f"candidate={serving_check}",
+                    "--require-serving-preflight",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(validate_code, 0)
+            summary = _read_json(out)
+            self.assertEqual(summary["repair_curriculum"]["work_item_count"], 0)
+            self.assertTrue(summary["serving_preflight"]["required"])
+            self.assertEqual(summary["serving_preflight"]["attached_count"], 1)
+            self.assertEqual(summary["serving_preflight"]["blocking_reasons"], [])
+            self.assertTrue(summary["arms"][0]["serving_preflight"]["passed"])
+            self.assertEqual(summary["arms"][0]["serving_preflight"]["model"], "hfr-mock-model")
+
+    def test_eval_summary_blocks_missing_required_serving_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--require-serving-preflight",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            summary = _read_json(out)
+            self.assertFalse(summary["passed"])
+            self.assertIn("serving_preflight_missing", summary["arms"][0]["blocking_reasons"])
+            self.assertIn({"source": "serving_preflight", "label": "candidate", "reason": "serving_preflight_missing"}, summary["risks"])
+
+    def test_eval_summary_blocks_failed_serving_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            serving_check = _serving_check(root / "serving_check.json", passed=False)
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--serving-check",
+                    f"candidate={serving_check}",
+                    "--require-serving-preflight",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            summary = _read_json(out)
+            serving = summary["arms"][0]["serving_preflight"]
+            self.assertFalse(serving["passed"])
+            self.assertEqual(serving["failed_checks"], ["chat_completion"])
+            self.assertIn("serving_preflight_blocked", serving["blocking_reasons"])
+
     def test_validate_rejects_eval_summary_with_unsuppressed_disallowed_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -373,6 +458,29 @@ def _compare_export(
         "new_in_candidate": [],
     }
     (path / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _serving_check(path: Path, *, passed: bool) -> Path:
+    payload = {
+        "schema_version": "hfr.serving_endpoint_check.v1",
+        "generated_at": "2026-07-02T00:00:00Z",
+        "passed": passed,
+        "readiness": "ready" if passed else "blocked",
+        "profile_id": "candidate-transformers-hfr-mock-model",
+        "arm": "candidate",
+        "model": "hfr-mock-model",
+        "served_model_id": "hfr-mock-model",
+        "base_url": "http://127.0.0.1:8000/v1",
+        "checks": [{"id": "chat_completion", "passed": passed, "details": {}}],
+        "failed_checks": [] if passed else ["chat_completion"],
+        "artifacts": {
+            "serving_profile": "serving_profile.json",
+            "compatibility_report": "compatibility_report.json",
+            "serving_check": "serving_check.json",
+        },
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
 

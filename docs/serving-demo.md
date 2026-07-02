@@ -104,6 +104,22 @@ traces, scorecards, run digests, and HTML reports. Local artifact links are
 written relative to the Markdown report directory so committed demo bundles can
 be replayed from a fresh checkout.
 
+## Eval Preflight Handoff
+
+Require the serving preflight before summarizing held-out eval results:
+
+```bash
+flightrecorder eval-summary \
+  --suite-summary candidate=<candidate-suite-summary> \
+  --serving-check candidate=<serving-check-json> \
+  --require-serving-preflight \
+  --out <eval-summary-json>
+```
+
+The `LABEL` before `=` must match a suite-summary label. Missing, unmatched, or
+blocked serving checks make the eval summary a valid blocked artifact instead of
+letting eval or governance loops assume the endpoint was ready.
+
 ## Verification
 
 Validate generated artifacts with the bundled schema registry:

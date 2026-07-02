@@ -1179,6 +1179,8 @@ def cmd_eval_summary(args: argparse.Namespace) -> int:
         compare_export_specs=args.compare_export,
         compare_gate_specs=args.compare_gate,
         external_adapter_plan_specs=args.external_adapter_plan,
+        serving_check_specs=args.serving_check,
+        require_serving_preflight=args.require_serving_preflight,
         preserve_paths=args.preserve_paths,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -2701,6 +2703,18 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         metavar="LABEL=PATH",
         help="External eval adapter readiness plan JSON to include; may be repeated",
+    )
+    eval_summary.add_argument(
+        "--serving-check",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="serving_check.json endpoint preflight to attach to a matching suite-summary label; may be repeated",
+    )
+    eval_summary.add_argument(
+        "--require-serving-preflight",
+        action="store_true",
+        help="Block suite arms that do not have a ready serving_check.json preflight attached",
     )
     eval_summary.add_argument("--out", help="Write eval summary JSON to this path")
     eval_summary.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in summary output")

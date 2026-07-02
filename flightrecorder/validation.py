@@ -5372,6 +5372,14 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
     if not isinstance(risks, list):
         target.errors.append("eval_summary.risks must be a list.")
         risks = []
+    serving_preflight = summary.get("serving_preflight") if isinstance(summary.get("serving_preflight"), dict) else None
+    serving_required = False
+    if "serving_preflight" in summary:
+        if serving_preflight is None:
+            target.errors.append("eval_summary.serving_preflight must be an object.")
+        else:
+            serving_required = serving_preflight.get("required") is True
+            _validate_eval_summary_serving_preflight_summary(serving_preflight, target)
 
     expected_counts = {
         "arm_count": len(arms),
@@ -5390,7 +5398,7 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
     _validate_eval_summary_heldout(heldout, target, bool(comparisons))
 
     for index, arm in enumerate(arms):
-        _validate_eval_summary_arm(arm, index, target)
+        _validate_eval_summary_arm(arm, index, target, serving_required=serving_required)
     for index, comparison in enumerate(comparisons):
         _validate_eval_summary_comparison(comparison, index, target, heldout)
     for index, gate in enumerate(gates):
@@ -5410,7 +5418,8 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
     has_blocked_adapter = any(isinstance(item, dict) and item.get("ready") is False for item in adapters)
     has_arm_blockers = any(isinstance(item, dict) and item.get("blocking_reasons") for item in arms)
     has_blocking_status = bool(comparisons) and heldout.get("cross_arm_claims_allowed") is not True
-    expected_passed = not risks and not has_failed_child and not has_blocked_adapter and not has_arm_blockers and not has_blocking_status
+    has_serving_blockers = bool(serving_preflight and serving_preflight.get("blocking_reasons"))
+    expected_passed = not risks and not has_failed_child and not has_blocked_adapter and not has_arm_blockers and not has_blocking_status and not has_serving_blockers
     if isinstance(summary.get("passed"), bool) and summary.get("passed") != expected_passed:
         target.errors.append(f"eval_summary.passed expected {expected_passed}, got {summary.get('passed')!r}.")
 
@@ -5454,7 +5463,7 @@ def _validate_eval_summary_heldout(heldout: dict[str, Any], target: ValidationTa
         target.errors.append("eval_summary.heldout_scenarios.blocking_reasons must explain disallowed comparisons.")
 
 
-def _validate_eval_summary_arm(arm: Any, index: int, target: ValidationTarget) -> None:
+def _validate_eval_summary_arm(arm: Any, index: int, target: ValidationTarget, *, serving_required: bool = False) -> None:
     if not isinstance(arm, dict):
         target.errors.append(f"eval_summary.arms[{index}] must be an object.")
         return
@@ -5469,6 +5478,67 @@ def _validate_eval_summary_arm(arm: Any, index: int, target: ValidationTarget) -
     if not _is_string_list(arm.get("blocking_reasons")):
         target.errors.append(f"eval_summary.arms[{index}].blocking_reasons must be a list of strings.")
     _validate_eval_summary_operational_metrics(arm.get("operational_metrics"), index, target)
+    serving = arm.get("serving_preflight")
+    if serving is None:
+        if serving_required:
+            target.errors.append(f"eval_summary.arms[{index}].serving_preflight is required.")
+    else:
+        _validate_eval_summary_arm_serving_preflight(serving, index, target, serving_required=serving_required)
+
+
+def _validate_eval_summary_serving_preflight_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
+    for field_name in ("required",):
+        if not isinstance(summary.get(field_name), bool):
+            target.errors.append(f"eval_summary.serving_preflight.{field_name} must be a boolean.")
+    for field_name in ("input_count", "attached_count"):
+        if not _is_non_negative_int(summary.get(field_name)):
+            target.errors.append(f"eval_summary.serving_preflight.{field_name} must be a non-negative integer.")
+    for field_name in ("unmatched_labels", "duplicate_labels", "blocking_reasons"):
+        if not _is_string_list(summary.get(field_name)):
+            target.errors.append(f"eval_summary.serving_preflight.{field_name} must be a list of strings.")
+    if summary.get("unmatched_labels") and "serving_preflight_unmatched_arm" not in summary.get("blocking_reasons", []):
+        target.errors.append("eval_summary.serving_preflight.blocking_reasons must include serving_preflight_unmatched_arm when labels are unmatched.")
+    if summary.get("duplicate_labels") and "duplicate_serving_preflight_labels" not in summary.get("blocking_reasons", []):
+        target.errors.append("eval_summary.serving_preflight.blocking_reasons must include duplicate_serving_preflight_labels when labels are duplicated.")
+
+
+def _validate_eval_summary_arm_serving_preflight(
+    serving: Any,
+    index: int,
+    target: ValidationTarget,
+    *,
+    serving_required: bool,
+) -> None:
+    label = f"eval_summary.arms[{index}].serving_preflight"
+    if not isinstance(serving, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("provided", "required", "passed"):
+        if not isinstance(serving.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if serving_required and serving.get("required") is not True:
+        target.errors.append(f"{label}.required must be true when eval_summary requires serving preflight.")
+    if serving.get("readiness") not in {"ready", "blocked", "missing"}:
+        target.errors.append(f"{label}.readiness has an unsupported value.")
+    if serving.get("path") is not None and not isinstance(serving.get("path"), str):
+        target.errors.append(f"{label}.path must be a string or null.")
+    for field_name in ("failed_checks", "blocking_reasons"):
+        if not _is_string_list(serving.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a list of strings.")
+    if not isinstance(serving.get("artifacts"), dict):
+        target.errors.append(f"{label}.artifacts must be an object.")
+    if serving.get("provided") is True:
+        if serving.get("schema_version") != "hfr.serving_endpoint_check.v1":
+            target.errors.append(f"{label}.schema_version must be hfr.serving_endpoint_check.v1 when provided.")
+        for field_name in ("profile_id", "model", "served_model_id", "base_url"):
+            if not isinstance(serving.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+        if serving.get("passed") is True and serving.get("readiness") != "ready":
+            target.errors.append(f"{label}.passed requires readiness ready.")
+        if serving.get("passed") is False and not serving.get("blocking_reasons"):
+            target.errors.append(f"{label}.blocking_reasons must explain failed serving preflight.")
+    if serving_required and serving.get("provided") is not True and "serving_preflight_missing" not in serving.get("blocking_reasons", []):
+        target.errors.append(f"{label}.blocking_reasons must include serving_preflight_missing when required and missing.")
 
 
 def _validate_eval_summary_operational_metrics(value: Any, index: int, target: ValidationTarget) -> None:
