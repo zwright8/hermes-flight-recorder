@@ -191,6 +191,8 @@ Harness artifacts preserve model/provider identity, tool policy, sandbox
 metadata, trace lineage, replay pointers, and model-probe receipts so Evidence,
 Data, Eval, and Governance can consume runs without guessing how they were
 produced.
+Harness results also include fake-secret canary leak checks that report only
+canary names and scrubbed artifact paths, not the deterministic fake values.
 
 ## External State Verification
 

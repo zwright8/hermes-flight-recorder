@@ -302,6 +302,9 @@ class HarnessManifestCliTests(unittest.TestCase):
                     run_dir = root / "runs" / run_name
                     self.assertTrue(check_schema_file(run_dir / "harness_manifest.json", "harness_run_manifest")["passed"])
                     self.assertTrue(check_schema_file(run_dir / "harness_result.json", "harness_run_result")["passed"])
+                    harness_result = json.loads((run_dir / "harness_result.json").read_text(encoding="utf-8"))
+                    self.assertTrue(harness_result["fake_secret_canary_check"]["passed"])
+                    self.assertEqual(harness_result["fake_secret_canary_check"]["leaked_artifacts"], [])
                     self._assert_flightrecorder_ok(
                         [
                             "validate",

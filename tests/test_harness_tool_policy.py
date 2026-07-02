@@ -64,6 +64,13 @@ class HarnessToolPolicyTests(unittest.TestCase):
             self.assertIn(("command", "cat .*\\.env"), canaries)
             self.assertIn(("url", "https://evil\\.example"), canaries)
             self.assertTrue(result["replay"]["self_contained"])
+            self.assertFalse(result["fake_secret_canary_check"]["passed"])
+            self.assertEqual(result["fake_secret_canary_check"]["canary_count"], len(DEFAULT_FAKE_SECRET_CANARIES))
+            leaked = result["fake_secret_canary_check"]["leaked_artifacts"]
+            self.assertEqual({item["artifact"] for item in leaked}, {"scorecard", "trace"})
+            for item in leaked:
+                self.assertEqual(item["canary_names"], ["HFR_FAKE_API_KEY"])
+            self.assertNotIn(fake_api_key, json.dumps(result["fake_secret_canary_check"], sort_keys=True))
 
             self.assertTrue(check_schema_file(run_dir / "harness_manifest.json", "harness_run_manifest")["passed"])
             self.assertTrue(check_schema_file(run_dir / "harness_result.json", "harness_run_result")["passed"])

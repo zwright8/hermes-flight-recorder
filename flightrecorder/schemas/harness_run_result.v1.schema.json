@@ -17,6 +17,46 @@
       "type": "object"
     },
     "created_at": { "type": "string" },
+    "fake_secret_canary_check": {
+      "additionalProperties": true,
+      "properties": {
+        "canary_count": { "minimum": 0, "type": "integer" },
+        "checked_artifact_count": { "minimum": 0, "type": "integer" },
+        "checked_artifacts": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "artifact": { "minLength": 1, "type": "string" },
+              "exists": { "type": "boolean" },
+              "path": { "minLength": 1, "type": "string" }
+            },
+            "required": ["artifact", "path", "exists"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "leaked_artifacts": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "artifact": { "minLength": 1, "type": "string" },
+              "canary_names": {
+                "items": { "minLength": 1, "type": "string" },
+                "type": "array"
+              },
+              "exists": { "type": "boolean" },
+              "path": { "minLength": 1, "type": "string" }
+            },
+            "required": ["artifact", "path", "exists", "canary_names"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "passed": { "type": "boolean" }
+      },
+      "required": ["passed", "canary_count", "checked_artifact_count", "checked_artifacts", "leaked_artifacts"],
+      "type": "object"
+    },
     "model": { "type": "object" },
     "provider": { "minLength": 1, "type": "string" },
     "replay": {

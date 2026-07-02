@@ -1355,6 +1355,12 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
         target.errors.append("harness_result.scorecard.passed must be a boolean.")
     if not isinstance(scorecard.get("score"), (int, float)) or isinstance(scorecard.get("score"), bool):
         target.errors.append("harness_result.scorecard.score must be numeric.")
+    if "fake_secret_canary_check" in result:
+        _validate_harness_fake_secret_canary_check(
+            result.get("fake_secret_canary_check"),
+            target,
+            "harness_result.fake_secret_canary_check",
+        )
     artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
     for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
         _validate_existing_path_field(artifacts, field_name, target, f"harness_result.artifacts.{field_name}", base_dir=source_dir)
@@ -1478,6 +1484,43 @@ def _validate_harness_tool_policy(value: Any, target: ValidationTarget, label: s
         for field_name in ("type", "pattern", "expected"):
             if not isinstance(canary.get(field_name), str) or not canary.get(field_name):
                 target.errors.append(f"{label}.blocked_action_canaries[{index}].{field_name} must be a non-empty string.")
+
+
+def _validate_harness_fake_secret_canary_check(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(value.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    for field_name in ("canary_count", "checked_artifact_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    checked_artifacts = value.get("checked_artifacts")
+    if not isinstance(checked_artifacts, list):
+        target.errors.append(f"{label}.checked_artifacts must be a list.")
+    else:
+        for index, artifact in enumerate(checked_artifacts):
+            _validate_harness_canary_artifact_record(artifact, target, f"{label}.checked_artifacts[{index}]")
+    leaked_artifacts = value.get("leaked_artifacts")
+    if not isinstance(leaked_artifacts, list):
+        target.errors.append(f"{label}.leaked_artifacts must be a list.")
+    else:
+        for index, artifact in enumerate(leaked_artifacts):
+            record_label = f"{label}.leaked_artifacts[{index}]"
+            _validate_harness_canary_artifact_record(artifact, target, record_label)
+            if isinstance(artifact, dict) and not _is_string_list(artifact.get("canary_names")):
+                target.errors.append(f"{record_label}.canary_names must be a list of strings.")
+
+
+def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("artifact", "path"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if not isinstance(value.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
 
 
 def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTarget) -> None:
