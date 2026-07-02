@@ -10,7 +10,7 @@ because a daily report was sent.
 
 Every goal worker must:
 
-- work in `/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder`
+- work in `<repo-root>` or a dedicated goal worktree for this repository
 - read `docs/agentic-finetune-autonomous-operations.md`
 - read `docs/agentic-finetune-autonomous-goals.md`
 - read `experiments/autonomy/supervisor_state.json` if it exists
@@ -20,8 +20,9 @@ Every goal worker must:
 - write or update tests for behavior changes
 - write or update docs for new commands, artifacts, and gates
 - run appropriate verification before marking work complete
-- update `experiments/autonomy/supervisor_state.json`
-- append a checkpoint to `experiments/autonomy/journal/YYYY-MM-DD.md`
+- update the local, gitignored `experiments/autonomy/supervisor_state.json`
+- append a checkpoint to the local, gitignored
+  `experiments/autonomy/journal/YYYY-MM-DD.md`
 - continue to the next unblocked work packet until complete, blocked, or
   cancelled
 - use a dedicated Codex worktree or dedicated git worktree for implementation
@@ -29,6 +30,9 @@ Every goal worker must:
 - commit verified repository changes to a goal-specific branch
 - after verification, integrate the branch to `main`, push `main`, and close or
   delete the temporary branch
+- treat the repository as public and never commit personal email addresses,
+  home-directory paths, local workspace paths, private Codex files, machine
+  names, API keys, or automation recipient configuration
 
 Workers must not:
 
@@ -39,6 +43,8 @@ Workers must not:
 - leave unmanaged serving, training, or eval processes running
 - overwrite unrelated user changes
 - stage or commit files outside the worker's intended scope
+- stage or commit local autonomy state, daily email bodies, or journals unless
+  they have been intentionally scrubbed into public examples
 
 ## GitHub Persistence Protocol
 
@@ -61,22 +67,36 @@ Required workflow:
    - `codex/hermes-goal-8-governance-YYYYMMDD-HHMM`
 4. Stage only files intentionally changed by that worker.
 5. Run `git diff --cached --name-status` before every commit.
-6. Commit with the Lore Commit Protocol from `AGENTS.md`.
-7. Push the branch with `git push -u origin <branch>`.
-8. Verify the remote branch exists.
-9. Acquire the main-integration lock:
-   `mkdir /tmp/hermes-flight-recorder-main-push.lock`
-10. In the lock, fetch `origin`, update a clean local `main` to `origin/main`,
+6. Run a public-repo privacy scan before every commit. Investigate and remove
+   real personal data, absolute home paths, private Codex state, secrets, and
+   local automation details; fixture-only `example.*` values are allowed.
+7. Commit with the Lore Commit Protocol from `AGENTS.md`.
+8. Push the branch with `git push -u origin <branch>`.
+9. Verify the remote branch exists.
+10. Acquire the configured local main-integration lock outside the repository.
+11. In the lock, fetch `origin`, update a clean local `main` to `origin/main`,
     merge or cherry-pick the verified branch, run the packet's verification
     again, and push `main` to `origin`.
-11. After `main` is pushed and verified, close any related PR if one exists,
+12. After `main` is pushed and verified, close any related PR if one exists,
     delete the remote branch, and remove the local temporary branch/worktree
     only when no worker still needs it.
-12. Release the lock with `rmdir /tmp/hermes-flight-recorder-main-push.lock`.
-13. Continue future work from a fresh goal-specific branch based on the updated
+13. Release the local main-integration lock.
+14. Continue future work from a fresh goal-specific branch based on the updated
     `origin/main`.
-14. Record branch, commit SHA, main SHA, branch deletion/PR closure status,
+15. Record branch, commit SHA, main SHA, branch deletion/PR closure status,
     verification commands, and remaining risks in the journal checkpoint.
+
+Suggested privacy scan:
+
+```bash
+git diff --cached -U0 --diff-filter=ACMR \
+  | rg '^\\+' \
+  | rg -n -S '(/U[s]ers/|/h[o]me/[^[:space:]]+|C:/U[s]ers/|Documents/Git[H]ub|[.]codex[-]goal[-]worktrees|[.]codex/automations|[A-Za-z0-9._%+-]+[@][A-Za-z0-9.-]+[.][A-Za-z]{2,})'
+```
+
+The scan is intentionally broad. Remove real findings before committing, and
+leave only documented false positives such as non-routable `example.test`
+fixtures.
 
 If branch push, main integration, remote verification, PR closure, or branch
 deletion fails, keep the branch and record the exact failing command, stderr,
@@ -96,9 +116,8 @@ Main integration safety:
 
 Shared checkout rule:
 
-- The shared checkout at
-  `/Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder` is
-  for coordination, inspection, and emergency recovery only.
+- The shared checkout is for coordination, inspection, and emergency recovery
+  only.
 - Implementation workers should make code changes from their own worktrees.
 - If a worker discovers uncommitted shared-checkout changes, it must treat them
   as user/other-worker changes and not stage or revert them without explicit
@@ -134,7 +153,7 @@ duplicated abstractions, conflicting schemas, or unclear promotion state.
 You are the persistent supervisor for the Hermes agentic fine-tuning
 infrastructure project.
 
-Work continuously in /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder.
+Work continuously in <repo-root>.
 Read docs/agentic-finetune-autonomous-operations.md,
 docs/agentic-finetune-autonomous-goals.md, and
 docs/agentic-finetune-24-7-goals.md. Read
@@ -553,12 +572,12 @@ This is not a build worker. It runs once every morning and reports what the
 You are the daily reporter for the Hermes agentic fine-tuning infrastructure
 project.
 
-Work in /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder.
+Work in <repo-root>.
 Read experiments/autonomy/supervisor_state.json and journal entries from the
 previous 24 hours. Do not run the implementation backlog and do not make
 unrelated code changes.
 
-Send a concise email to zacwright27@gmail.com with subject:
+Send a concise email to the configured daily report recipient with subject:
 Hermes fine-tune infra daily update - YYYY-MM-DD
 
 Include progress, verification, artifacts, current layer status, blockers or

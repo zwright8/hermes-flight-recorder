@@ -5,6 +5,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.codex/
+.codex-*/
 .hfr-events/
 .omx/
 build/
@@ -17,3 +19,6 @@ live_smoke_artifacts/
 live_openclaw_smoke_artifacts/
 live_coven_smoke_artifacts/
 *.sensitive.json
+*.local.json
+*.local.md
+experiments/autonomy/

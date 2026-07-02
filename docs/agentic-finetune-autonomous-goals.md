@@ -35,9 +35,14 @@ Every autonomous run should:
 - perform implementation work in a dedicated Codex worktree or dedicated git
   worktree
 - commit verified repository changes to a goal-specific branch, push that
-  branch, integrate it to `main` under `/tmp/hermes-flight-recorder-main-push.lock`,
+  branch, integrate it to `main` under the configured local main-push lock,
   push `main`, and close or delete the temporary branch
 - never push unverified changes to `main`
+- treat the repository as public: never commit personal email addresses,
+  home-directory paths, machine-specific workspace paths, private Codex state,
+  API keys, or local automation configuration
+- keep autonomy state, journals, and daily report recipient configuration in
+  ignored local files unless a sanitized example is intentionally added
 
 Suggested execution order:
 

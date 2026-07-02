@@ -23,6 +23,12 @@ Implementation workers should run in dedicated Codex worktrees or dedicated git
 worktrees. The shared checkout is a coordination surface, not the place where
 multiple persistent workers should write code.
 
+Treat the repository as public. Do not commit personal email addresses,
+home-directory paths, machine-specific workspace paths, private Codex state,
+API keys, or local automation configuration. Use placeholders such as
+`<repo-root>`, `<goal-worktree-root>`, `<main-push-lock>`, and
+`<daily-report-recipient>` in reusable docs and prompts.
+
 ## Recommended Structure
 
 ### 1. Layer Goals Are Epics
@@ -66,9 +72,13 @@ Each packet should finish with a checkpoint:
 
 ### 3. Persistent Supervisor Owns The Backlog
 
-Maintain a supervisor state file such as:
+Maintain a local supervisor state file such as:
 
 `experiments/autonomy/supervisor_state.json`
+
+This file is runtime coordination state and should remain ignored by git unless
+a sanitized example is intentionally added. Keep private thread ids, local
+worktree paths, lock paths, and email recipients out of public commits.
 
 Suggested shape:
 
@@ -118,7 +128,8 @@ The supervisor should:
 - require each implementation worker to commit verified changes to a
   goal-specific branch, push the branch, integrate it to `main`, push `main`,
   and close or delete the temporary branch
-- serialize `main` pushes through `/tmp/hermes-flight-recorder-main-push.lock`
+- serialize `main` pushes through a configured local main-push lock outside the
+  repository
 - track branch, commit SHA, main SHA, PR/branch closure status, and delivery
   blockers for each packet
 - continue until the layer goals are complete, blocked, or cancelled
@@ -128,6 +139,10 @@ The supervisor should:
 Each autonomous run should append dated journal entries:
 
 `experiments/autonomy/journal/YYYY-MM-DD.md`
+
+These journals are local runtime records. Do not commit them unless they have
+been scrubbed of personal paths, private thread ids, credentials, and local
+automation details.
 
 Suggested sections:
 
@@ -216,9 +231,9 @@ worker is accidentally running in the shared checkout, it should stop
 implementation edits, move to a dedicated worktree, and resume there.
 
 Main integration is allowed only after a packet has been verified. Workers must
-acquire `/tmp/hermes-flight-recorder-main-push.lock`, fetch current `origin/main`,
-merge or cherry-pick their verified branch, rerun relevant verification, push
-`main`, verify the remote SHA, then close/delete the temporary branch.
+acquire the configured local main-push lock, fetch current `origin/main`, merge
+or cherry-pick their verified branch, rerun relevant verification, push `main`,
+verify the remote SHA, then close/delete the temporary branch.
 
 ## Scheduling Options
 
@@ -288,7 +303,7 @@ mail credentials are not available in the automation environment.
 You are the autonomous supervisor for the Hermes agentic fine-tuning
 infrastructure project.
 
-Work in /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder.
+Work in <repo-root>.
 Read docs/agentic-finetune-autonomous-goals.md and
 docs/agentic-finetune-autonomous-operations.md. Read
 experiments/autonomy/supervisor_state.json if it exists.
@@ -307,12 +322,12 @@ without governance gates.
 Do implementation work from a dedicated Codex worktree or dedicated git
 worktree, not from the shared checkout. For verified repository changes, create
 or reuse a goal-specific branch, stage only intended files, commit with the Lore
-Commit Protocol, push the branch to origin, verify the remote branch, acquire
-`/tmp/hermes-flight-recorder-main-push.lock`, integrate the verified branch into
-current `origin/main`, rerun relevant verification, push `main`, verify the
-remote main SHA, close/delete the temporary branch, and release the lock. Record
-branch, commit SHA, main SHA, PR/branch closure status or delivery blocker, and
-verification evidence in the journal.
+Commit Protocol, run the public-repo privacy scan, push the branch to origin,
+verify the remote branch, acquire the configured local main-push lock, integrate
+the verified branch into current `origin/main`, rerun relevant verification,
+push `main`, verify the remote main SHA, close/delete the temporary branch, and
+release the lock. Record branch, commit SHA, main SHA, PR/branch closure status
+or delivery blocker, and verification evidence in the local journal.
 
 After each completed packet:
 1. Update experiments/autonomy/supervisor_state.json.
@@ -335,7 +350,7 @@ checkpoint only. The daily email is handled by the reporter.
 You are the daily reporter for the Hermes agentic fine-tuning infrastructure
 project.
 
-Work in /Users/zacharywright/Documents/GitHub/hermes_dev/hermes-flight-recorder.
+Work in <repo-root>.
 Read experiments/autonomy/supervisor_state.json and all journal entries from
 the previous 24 hours.
 
