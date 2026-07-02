@@ -36,3 +36,21 @@ The runtime preflight remains side-effect-free. It validates the plan and
 selected trainer-view JSONL files, checks module discoverability with
 `importlib.util.find_spec`, and records that Flight Recorder did not start
 training or model downloads.
+
+Record a synthetic external trainer result receipt with the committed
+trainer-output fixture:
+
+```bash
+python3 scripts/archive_agentic_training_result.py \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --runtime-preflight /tmp/hfr-agentic-runtime-preflight/ready.json \
+  --status completed \
+  --adapter examples/agentic_training/trainer_outputs/adapter/adapter_model.safetensors \
+  --metrics examples/agentic_training/trainer_outputs/metrics.json \
+  --log examples/agentic_training/trainer_outputs/trainer.log \
+  --created-at 2026-07-02T00:00:00+00:00 \
+  --out /tmp/hfr-agentic-training-result.json
+```
+
+The result receipt proposes model-registry links but does not mutate registry
+entries, move aliases, download models, or train weights.

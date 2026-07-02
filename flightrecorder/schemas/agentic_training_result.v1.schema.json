@@ -74,6 +74,9 @@
         "block_training_result_registration"
       ]
     },
+    "registry_update": {
+      "$ref": "#/$defs/registryUpdate"
+    },
     "schema_version": {
       "const": "hfr.agentic_training_result.v1"
     },
@@ -423,6 +426,41 @@
         "checkpoint_count",
         "log_count",
         "failure_report_count"
+      ],
+      "type": "object"
+    },
+    "registryUpdate": {
+      "additionalProperties": true,
+      "properties": {
+        "applied": {
+          "const": false
+        },
+        "links": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "ready_to_apply": {
+          "type": "boolean"
+        },
+        "side_effect_free": {
+          "const": true
+        },
+        "target_dataset_id": {
+          "type": "string"
+        },
+        "target_model_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "applied",
+        "side_effect_free",
+        "ready_to_apply",
+        "target_model_id",
+        "target_dataset_id",
+        "links"
       ],
       "type": "object"
     },

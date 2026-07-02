@@ -252,6 +252,14 @@ def build_agentic_training_result(
             "log_count": _role_count(artifact_refs, "log"),
             "failure_report_count": _role_count(artifact_refs, "failure_report"),
         },
+        "registry_update": _registry_update(
+            out_path=out_path,
+            run_id=run_id,
+            status=normalized_status,
+            passed=passed,
+            plan=plan_payload,
+            artifacts=artifact_refs,
+        ),
         "execution_boundary": {
             "archive_only": True,
             "runner_owns_execution": True,
@@ -374,6 +382,75 @@ def _failure_source(status: str, failure_class: str, runtime_preflight: dict[str
 
 def _role_count(artifacts: list[dict[str, Any]], role: str) -> int:
     return sum(1 for artifact in artifacts if artifact.get("role") == role)
+
+
+def _registry_update(
+    *,
+    out_path: str | Path | None,
+    run_id: str,
+    status: str,
+    passed: bool,
+    plan: dict[str, Any],
+    artifacts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    artifact_id = _registry_artifact_id(out_path, run_id, plan, status)
+    model = _manifest_summary(plan, "model")
+    dataset = _manifest_summary(plan, "dataset")
+    link_status = "completed" if status == "completed" else f"classified_{status}"
+    links: list[dict[str, Any]] = [
+        {
+            "collection": "training_runs",
+            "artifact_id": artifact_id,
+            "kind": "agentic_training_result",
+            "status": link_status,
+            "path": str(out_path or ""),
+        }
+    ]
+    if status == "completed":
+        for index, artifact in enumerate(artifacts):
+            role = str(artifact.get("role") or "")
+            if role in OUTPUT_ARTIFACT_ROLES:
+                links.append(
+                    {
+                        "collection": "adapters",
+                        "artifact_id": f"{artifact_id}-{role}-{index}",
+                        "kind": role,
+                        "status": "recorded",
+                        "path": str(artifact.get("path") or ""),
+                        "sha256": artifact.get("sha256"),
+                    }
+                )
+    return {
+        "applied": False,
+        "side_effect_free": True,
+        "ready_to_apply": passed,
+        "target_model_id": model["id"],
+        "target_dataset_id": dataset["id"],
+        "links": links,
+        "notes": [
+            "Apply these links with flightrecorder model-registry link only after governance accepts the result receipt.",
+            "This receipt does not mutate model registry entries or aliases.",
+        ],
+    }
+
+
+def _registry_artifact_id(out_path: str | Path | None, run_id: str, plan: dict[str, Any], status: str) -> str:
+    if run_id:
+        return _slug(run_id)
+    if out_path:
+        stem = Path(out_path).stem
+        if stem:
+            return _slug(stem)
+    mode = str(plan.get("mode") or "training")
+    model = _manifest_summary(plan, "model")["id"] or "model"
+    dataset = _manifest_summary(plan, "dataset")["id"] or "dataset"
+    return _slug(f"{model}-{dataset}-{mode}-{status}")
+
+
+def _slug(value: str) -> str:
+    cleaned = "".join(char.lower() if char.isalnum() else "-" for char in value)
+    cleaned = "-".join(part for part in cleaned.split("-") if part)
+    return cleaned[:96] or "artifact"
 
 
 def _add_check(

@@ -549,7 +549,9 @@ lineage, requires a ready runtime preflight plus an adapter or checkpoint for
 `--status completed`, and requires a classified failure for `failed`, `blocked`,
 or `aborted` outcomes. The result receipt fingerprints supplied configs,
 metrics, adapters, checkpoints, logs, and failure reports without launching a
-trainer or importing trainer stacks.
+trainer or importing trainer stacks. It also records a side-effect-free
+`registry_update` proposal for training-run and adapter links; governance or a
+later guarded registry step must apply those links explicitly.
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle
 runs/evidence_bundle_trainer.json --strict` before handing the package to an
