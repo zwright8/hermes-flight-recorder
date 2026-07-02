@@ -430,9 +430,11 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(harness_manifest["outputs"]["result"], "harness_result.json")
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["pair_count"], 1)
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["passed_pair_count"], 1)
+            self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["artifact_valid_pair_count"], 1)
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["run_suite_pair_count"], 1)
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["run_suite_lineage_valid_pair_count"], 1)
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["runner"], "flightrecorder_run_suite")
+            self.assertTrue(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["artifact_refs_valid"])
             self.assertEqual(
                 evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["handoff_source"],
                 "flightrecorder run-suite --evidence-handoff",

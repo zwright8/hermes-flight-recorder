@@ -11835,16 +11835,25 @@ def _validate_evidence_bundle_harness_checks(metrics: dict[str, Any], checks: li
         and row.get("runner") == "flightrecorder_run_suite"
         and row.get("run_suite_lineage_valid") is False
     ]
-    if not invalid_run_suite_rows:
+    invalid_artifact_rows = [
+        row
+        for row in runs
+        if isinstance(row, dict) and row.get("artifact_refs_valid") is False
+    ]
+    if not invalid_run_suite_rows and not invalid_artifact_rows:
         return
     failed_check_ids = {
         check.get("id")
         for check in checks
         if isinstance(check, dict) and check.get("passed") is False and isinstance(check.get("id"), str)
     }
-    if "run_suite_harness_lineage_valid" not in failed_check_ids:
+    if invalid_run_suite_rows and "run_suite_harness_lineage_valid" not in failed_check_ids:
         target.errors.append(
             "evidence_bundle.checks must include a failed run_suite_harness_lineage_valid check when run-suite lineage is invalid."
+        )
+    if invalid_artifact_rows and "harness_pair_artifacts_valid" not in failed_check_ids:
+        target.errors.append(
+            "evidence_bundle.checks must include a failed harness_pair_artifacts_valid check when harness artifact references are invalid."
         )
 
 
@@ -11961,6 +11970,7 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
         "passed_pair_count",
         "failed_pair_count",
         "schema_valid_pair_count",
+        "artifact_valid_pair_count",
         "consistent_pair_count",
         "missing_pair_count",
         "run_suite_pair_count",
@@ -11980,6 +11990,7 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
     passed_count = 0
     failed_count = 0
     schema_valid_count = 0
+    artifact_valid_count = 0
     consistent_count = 0
     run_suite_count = 0
     run_suite_lineage_valid_count = 0
@@ -12001,7 +12012,7 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
         ):
             if not isinstance(row.get(field_name), str) or not row.get(field_name):
                 target.errors.append(f"{row_label}.{field_name} must be a non-empty string.")
-        for field_name in ("passed", "schema_valid", "consistent", "run_suite_lineage_valid"):
+        for field_name in ("passed", "schema_valid", "artifact_refs_valid", "consistent", "run_suite_lineage_valid"):
             if not isinstance(row.get(field_name), bool):
                 target.errors.append(f"{row_label}.{field_name} must be a boolean.")
         for field_name in ("suite_summary_path", "suite_selected_scenario_id"):
@@ -12014,6 +12025,8 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
             target.errors.append(f"{row_label}.score must be numeric when present.")
         if not _is_string_list(row.get("schema_errors")):
             target.errors.append(f"{row_label}.schema_errors must be a list of strings.")
+        if not _is_string_list(row.get("artifact_ref_errors")):
+            target.errors.append(f"{row_label}.artifact_ref_errors must be a list of strings.")
         if not _is_string_list(row.get("consistency_errors")):
             target.errors.append(f"{row_label}.consistency_errors must be a list of strings.")
         if row.get("passed") is True:
@@ -12022,6 +12035,8 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
             failed_count += 1
         if row.get("schema_valid") is True:
             schema_valid_count += 1
+        if row.get("artifact_refs_valid") is True:
+            artifact_valid_count += 1
         if row.get("consistent") is True:
             consistent_count += 1
         if row.get("runner") == "flightrecorder_run_suite":
@@ -12050,6 +12065,7 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
         "passed_pair_count": passed_count,
         "failed_pair_count": failed_count,
         "schema_valid_pair_count": schema_valid_count,
+        "artifact_valid_pair_count": artifact_valid_count,
         "consistent_pair_count": consistent_count,
         "run_suite_pair_count": run_suite_count,
         "run_suite_lineage_valid_pair_count": run_suite_lineage_valid_count,

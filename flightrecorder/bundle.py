@@ -536,6 +536,7 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "passed_pair_count",
             "failed_pair_count",
             "schema_valid_pair_count",
+            "artifact_valid_pair_count",
             "consistent_pair_count",
             "missing_pair_count",
             "run_suite_pair_count",
@@ -850,6 +851,7 @@ def _next_actions(
     failed_harness_pairs = _non_negative_int(harness.get("failed_pair_count"))
     invalid_harness_pairs = _non_negative_int(harness.get("pair_count")) - min(
         _non_negative_int(harness.get("schema_valid_pair_count")),
+        _non_negative_int(harness.get("artifact_valid_pair_count")),
         _non_negative_int(harness.get("consistent_pair_count")),
     )
     if failed_harness_pairs or invalid_harness_pairs:
@@ -1183,6 +1185,7 @@ def _summarize_harness_handoff(
             "provider": row["provider"],
         }
         _add_presence_check(checks, "harness_pair_schema_valid", bool(row["schema_valid"]), scope)
+        _add_presence_check(checks, "harness_pair_artifacts_valid", bool(row["artifact_refs_valid"]), scope)
         _add_presence_check(checks, "harness_pair_consistent", bool(row["consistent"]), scope)
         _add_presence_check(checks, "harness_result_passed", bool(row["passed"]), scope)
         if is_run_suite_pair:
@@ -1196,6 +1199,7 @@ def _summarize_harness_handoff(
         "passed_pair_count": sum(1 for row in rows if row["passed"]),
         "failed_pair_count": sum(1 for row in rows if not row["passed"]),
         "schema_valid_pair_count": sum(1 for row in rows if row["schema_valid"]),
+        "artifact_valid_pair_count": sum(1 for row in rows if row["artifact_refs_valid"]),
         "consistent_pair_count": sum(1 for row in rows if row["consistent"]),
         "missing_pair_count": missing_pair_count,
         "run_suite_pair_count": run_suite_pair_count,
@@ -1218,6 +1222,7 @@ def _empty_harness_metrics() -> dict[str, Any]:
         "passed_pair_count": 0,
         "failed_pair_count": 0,
         "schema_valid_pair_count": 0,
+        "artifact_valid_pair_count": 0,
         "consistent_pair_count": 0,
         "missing_pair_count": 1,
         "run_suite_pair_count": 0,
@@ -1249,6 +1254,7 @@ def _harness_pair_metrics(
         check = _schema_check_summary(path, schema_name)
         if not check["passed"]:
             schema_errors.extend(f"{schema_name}: {error}" for error in check["errors"])
+    artifact_ref_errors = _harness_artifact_ref_errors(result_path, result)
     consistency_errors = _harness_consistency_errors(manifest_path, manifest, result_path, result)
     run_suite_lineage_valid = _run_suite_harness_lineage_valid(manifest, result)
     return {
@@ -1265,6 +1271,7 @@ def _harness_pair_metrics(
         "score": scorecard.get("score"),
         "passed": scorecard.get("passed") is True,
         "schema_valid": not schema_errors,
+        "artifact_refs_valid": not artifact_ref_errors,
         "consistent": not consistency_errors,
         "run_suite_lineage_valid": run_suite_lineage_valid,
         "suite_summary_path": str(suite.get("summary") or ""),
@@ -1273,10 +1280,35 @@ def _harness_pair_metrics(
         "suite_passed": _optional_non_negative_int(suite.get("passed")),
         "suite_failed": _optional_non_negative_int(suite.get("failed")),
         "schema_errors": schema_errors[:5],
+        "artifact_ref_errors": artifact_ref_errors[:5],
         "consistency_errors": consistency_errors[:5],
         "replay_lineage": str(replay.get("lineage") or ""),
         "replay_self_contained": replay.get("self_contained") if isinstance(replay.get("self_contained"), bool) else None,
     }
+
+
+def _harness_artifact_ref_errors(result_path: Path, result: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    base_dir = result_path.parent
+    trace = result.get("trace") if isinstance(result.get("trace"), dict) else {}
+    _add_harness_ref_error(errors, base_dir, trace.get("path"), "trace.path")
+    scorecard = result.get("scorecard") if isinstance(result.get("scorecard"), dict) else {}
+    _add_harness_ref_error(errors, base_dir, scorecard.get("path"), "scorecard.path")
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
+        _add_harness_ref_error(errors, base_dir, artifacts.get(field_name), f"artifacts.{field_name}")
+    replay = result.get("replay") if isinstance(result.get("replay"), dict) else {}
+    _add_harness_ref_error(errors, base_dir, replay.get("lineage"), "replay.lineage")
+    return errors
+
+
+def _add_harness_ref_error(errors: list[str], base_dir: Path, value: Any, label: str) -> None:
+    if not isinstance(value, str) or not value:
+        errors.append(f"{label} missing")
+        return
+    path = _resolve_harness_path(base_dir, value)
+    if not path.exists() or not path.is_file():
+        errors.append(f"{label} missing file: {value}")
 
 
 def _harness_suite(manifest: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:

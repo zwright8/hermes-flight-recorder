@@ -394,6 +394,38 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("fix_harness_handoff", action_ids)
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
+    def test_evidence_bundle_blocks_missing_harness_artifact_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = _write_harness_handoff_artifacts(root)
+            (artifacts["result"].parent / "normalized_trace.json").unlink()
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--harness-manifest",
+                    str(artifacts["manifest"]),
+                    "--harness-result",
+                    str(artifacts["result"]),
+                    "--require-harness",
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("harness_pair_artifacts_valid", failed_checks)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["artifact_valid_pair_count"], 0)
+            row = bundle["metrics"]["harness_handoff"]["runs"][0]
+            self.assertEqual(row["artifact_refs_valid"], False)
+            self.assertTrue(any("normalized_trace.json" in error for error in row["artifact_ref_errors"]))
+            action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
+            self.assertIn("fix_harness_handoff", action_ids)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
     def test_evidence_bundle_blocks_run_suite_handoff_without_suite_lineage(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

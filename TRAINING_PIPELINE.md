@@ -82,7 +82,9 @@ suite run, so the default handoff is a single command before stricter policy
 gates are applied. The generated harness pair includes a `suite` provenance
 block with the suite summary path, selected passing scenario, and pass/fail
 counts; evidence bundles surface this as `harness_handoff` metrics and block
-run-suite pairs that omit or forge that lineage.
+run-suite pairs that omit or forge that lineage. Bundles also verify the
+referenced harness trace, scorecard, digest, report, and replay-lineage files
+exist before counting a harness pair as artifact-valid.
 `flightrecorder compare-suite` carries this metadata into its JSON and HTML
 outputs so baseline/candidate comparisons remain tied to the evaluated configs.
 It also emits aggregate failed-rule and critical-failure deltas across paired
