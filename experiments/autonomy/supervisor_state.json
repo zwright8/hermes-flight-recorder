@@ -152,16 +152,16 @@
       "id": "governance_rollback_receipts_main_delivery_lock_unavailable",
       "layer": "governance",
       "priority": "high",
-      "status": "blocked",
+      "status": "blocked_threshold_met",
       "blocked_at": "2026-07-02T16:48:37Z",
       "branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
-      "branch_sha": "5759ea86ddeaaa37bd7a34ad184fad9e0a0e87d3",
+      "branch_sha": "7f01cbd28596598ddfdecc643af9cea5edb277c8",
       "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/16",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
       "lock_retry": "bounded 120-second mkdir retry",
       "main_push_status": "not_pushed",
-      "summary": "Rollback receipt packet is verified and published on PR #16, but main integration remains blocked because the serialized main-push lock stayed held through a resumed-turn 120-second retry.",
+      "summary": "Rollback receipt packet is verified and published on PR #16, but main integration is blocked after three consecutive Goal 8 turns because the serialized main-push lock remained held.",
       "verification": [
         {
           "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py tests/test_schema_registry.py",
@@ -209,12 +209,14 @@
           "summary": "System Python 3.9 ran 331 tests but cannot import tomllib or datetime.UTC in existing harness/deployment tests; Python 3.11 discovery passed."
         }
       ],
-      "last_observed_at": "2026-07-02T16:55:16Z",
-      "lock_rechecked_at": "2026-07-02T16:55:16Z",
+      "last_observed_at": "2026-07-02T16:59:18Z",
+      "lock_rechecked_at": "2026-07-02T16:59:18Z",
       "additional_retry": "bounded 60-second mkdir retry also ended lock_unavailable_after_60s",
       "origin_main_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
       "resumed_goal_turn_retry": "bounded 120-second mkdir retry ended lock_unavailable_after_120s",
-      "consecutive_goal_turns_observed": 2
+      "consecutive_goal_turns_observed": 3,
+      "goal_blocked_threshold_met": true,
+      "third_goal_turn_retry": "bounded 120-second mkdir retry ended lock_unavailable_after_120s"
     }
   ],
   "completed_packets": [
@@ -1612,7 +1614,7 @@
       "id": "governance_rollback_target_receipts",
       "layer": "governance",
       "priority": "high",
-      "status": "verified_branch_pushed_main_delivery_blocked",
+      "status": "verified_branch_pushed_main_delivery_blocked_threshold_met",
       "title": "Require rollback target receipts",
       "summary": "Added side-effect-free promotion rollback receipts that fingerprint the model registry, prove the rollback target is registered as the current champion, validate through CLI/schema checks, and block promotion when a receipt fails.",
       "completed_at": "2026-07-02T16:44:47Z",
@@ -1728,7 +1730,7 @@
       "github_persistence": {
         "branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
         "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
-        "branch_sha": "5759ea86ddeaaa37bd7a34ad184fad9e0a0e87d3",
+        "branch_sha": "7f01cbd28596598ddfdecc643af9cea5edb277c8",
         "pushed": true,
         "remote_branch_verified": true,
         "remote_branch_deleted": false,
@@ -1736,8 +1738,8 @@
         "pr_state": "OPEN",
         "main_sha": null,
         "remote_main_verified": false,
-        "remote_branch_verified_sha": "5759ea86ddeaaa37bd7a34ad184fad9e0a0e87d3",
-        "main_delivery_blocker": "main-push lock unavailable after prior retries and resumed-turn 120-second retry"
+        "remote_branch_verified_sha": "7f01cbd28596598ddfdecc643af9cea5edb277c8",
+        "main_delivery_blocker": "main-push lock unavailable after three consecutive Goal 8 turns"
       }
     }
   ],
@@ -1745,9 +1747,9 @@
     "id": "governance_rollback_target_receipts",
     "layer": "governance",
     "priority": "high",
-    "status": "verified_branch_pushed_main_delivery_blocked",
+    "status": "verified_branch_pushed_main_delivery_blocked_threshold_met",
     "title": "Require rollback target receipts",
-    "summary": "Verified rollback receipt packet is published as PR #16 and awaiting the serialized main-push lock for integration."
+    "summary": "Verified rollback receipt packet is published as PR #16 and blocked from main delivery by the serialized main-push lock after three consecutive Goal 8 turns."
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -2327,8 +2329,8 @@
     },
     "governance": {
       "next_packet": "governance_rollback_target_receipts",
-      "status": "in_progress",
-      "summary": "Rollback receipt packet is verified and open as PR #16, but main delivery remains blocked by the held main-push lock after a resumed-turn retry."
+      "status": "blocked_on_main_push_lock",
+      "summary": "Rollback receipt packet is verified and open as PR #16, but Goal 8 is blocked because the main-push lock stayed held for three consecutive Goal 8 turns."
     },
     "harness": {
       "next_packet": null,
@@ -2423,17 +2425,17 @@
       "id": "governance_rollback_target_receipts",
       "layer": "governance",
       "priority": "high",
-      "status": "verified_branch_pushed_main_delivery_blocked",
+      "status": "verified_branch_pushed_main_delivery_blocked_threshold_met",
       "summary": "Added side-effect-free promotion rollback receipts that fingerprint the model registry, prove the rollback target is registered as the current champion, validate through CLI/schema checks, and block promotion when a receipt fails.",
       "title": "Require rollback target receipts",
       "depends_on": [
         "governance_policy_schema_registry"
       ],
       "source_branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
-      "source_branch_sha": "5759ea86ddeaaa37bd7a34ad184fad9e0a0e87d3",
+      "source_branch_sha": "7f01cbd28596598ddfdecc643af9cea5edb277c8",
       "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/16",
-      "main_delivery_blocker": "main-push lock unavailable after prior retries and resumed-turn 120-second retry"
+      "main_delivery_blocker": "main-push lock unavailable after three consecutive Goal 8 turns"
     },
     {
       "id": "governance_promotion_artifact_schemas",
@@ -2458,7 +2460,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:55:16Z",
+  "updated_at": "2026-07-02T16:59:18Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2531,13 +2533,13 @@
     "branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
     "remote_ref": "refs/heads/codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
     "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
-    "branch_head_before_locked_merge_sha": "5759ea86ddeaaa37bd7a34ad184fad9e0a0e87d3",
+    "branch_head_before_locked_merge_sha": "7f01cbd28596598ddfdecc643af9cea5edb277c8",
     "branch_remote_status": "pushed_and_verified",
-    "branch_remote_verified_sha": "5759ea86ddeaaa37bd7a34ad184fad9e0a0e87d3",
+    "branch_remote_verified_sha": "7f01cbd28596598ddfdecc643af9cea5edb277c8",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/16",
     "pr_status": "OPEN",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "unavailable_after_resumed_120s",
+    "lock_status": "blocked_threshold_met_after_third_goal_turn_120s",
     "main_integration_status": "blocked_lock_unavailable",
     "main_sha": null,
     "remote_main_verified_sha": null,
@@ -2594,11 +2596,12 @@
       "System python3 is Python 3.9.6 and cannot run full discovery because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11."
     ],
     "main_push_status": "not_pushed",
-    "blocker": "main-push lock unavailable after prior retries and resumed-turn 120-second retry",
+    "blocker": "main-push lock unavailable after three consecutive Goal 8 turns",
     "blocked_at": "2026-07-02T16:48:37Z",
-    "last_observed_at": "2026-07-02T16:55:16Z",
+    "last_observed_at": "2026-07-02T16:59:18Z",
     "remote_main_observed_sha": "7bd3124f5713bf89259b39f99ef7aa432dd2aa53",
-    "consecutive_goal_turns_observed": 2
+    "consecutive_goal_turns_observed": 3,
+    "goal_blocked_threshold_met": true
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
