@@ -114,6 +114,30 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
 
+    def test_validate_promotion_alias_apply_rejects_forged_decision_validation_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path)), 0)
+
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["promotion_decision_validation"]["warning_count"] = 1
+            receipt["promotion_decision_validation"]["targets"][0]["warning_count"] = 1
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_decision_validation.passed", errors)
+            self.assertIn("promotion_decision_validation.targets[0].passed", errors)
+
     def test_promotion_alias_apply_blocks_stale_champion_alias_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -507,6 +531,49 @@ class PromotionDecisionTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("artifact_validation.targets missing required type", errors)
             self.assertIn("promotion_alias_apply", errors)
+
+    def test_validate_promotion_release_record_rejects_forged_validation_warning_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            decision_path = root / "promotion_decision.json"
+            registry_path = write_model_registry(root)
+            alias_receipt_path = root / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(root)
+            release_record_path = root / "promotion_release_record.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+            self.assertEqual(
+                run_cli(
+                    promotion_release_record_args(
+                        artifacts,
+                        cards_dir,
+                        decision_path,
+                        alias_receipt_path,
+                        release_notes_path,
+                        release_record_path,
+                    )
+                ),
+                0,
+            )
+            record = json.loads(release_record_path.read_text(encoding="utf-8"))
+            record["artifact_validation"]["warning_count"] = 1
+            record["artifact_validation"]["targets"][0]["warning_count"] = 1
+            release_record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("artifact_validation.passed", errors)
+            self.assertIn("artifact_validation.targets[0].passed", errors)
 
     def test_promotion_release_record_blocks_policy_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:

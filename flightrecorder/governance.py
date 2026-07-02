@@ -1858,12 +1858,18 @@ def _validation_target_summaries(value: Any) -> list[dict[str, Any]]:
     for item in value:
         if not isinstance(item, dict):
             continue
+        error_count = _int_value(item.get("error_count"))
+        if "error_count" not in item and isinstance(item.get("errors"), list):
+            error_count = len(item["errors"])
+        warning_count = _int_value(item.get("warning_count"))
+        if "warning_count" not in item and isinstance(item.get("warnings"), list):
+            warning_count = len(item["warnings"])
         targets.append(
             {
                 "type": item.get("type") if isinstance(item.get("type"), str) else "",
                 "passed": item.get("passed") if isinstance(item.get("passed"), bool) else None,
-                "error_count": _int_value(item.get("error_count")),
-                "warning_count": _int_value(item.get("warning_count")),
+                "error_count": error_count,
+                "warning_count": warning_count,
             }
         )
     return targets

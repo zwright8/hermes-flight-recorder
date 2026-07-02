@@ -442,6 +442,10 @@ decision, generated cards, alias receipt, rollback metadata, eval compare gate,
 and release notes. Validation rehashes every referenced artifact so stale
 release notes, mismatched eval evidence, card drift, a different alias receipt,
 or a release policy that differs from the decision policy blocks publication.
+Alias-apply and release-record receipts also preserve compact strict validation
+summaries; validation recomputes their pass state from target, error, and
+warning counts so a forged `passed` flag cannot hide warning-bearing or failed
+nested validation.
 `promotion-cards` generates the model and dataset cards plus
 `promotion_cards.json`; validation rehashes generated cards and inputs so stale
 card evidence is caught before the promotion decision consumes it.

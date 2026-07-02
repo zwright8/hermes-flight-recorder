@@ -9187,60 +9187,90 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
 
 
 def _validate_promotion_release_record_validation(value: Any, expected_passed: bool, target: ValidationTarget) -> None:
+    _validate_strict_compact_validation_summary(
+        value,
+        target,
+        "promotion_release_record.artifact_validation",
+        expected_parent_passed=expected_passed,
+        required_target_types=set(PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS) if expected_passed else set(),
+    )
+
+
+def _validate_strict_compact_validation_summary(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    *,
+    expected_parent_passed: bool,
+    required_target_types: set[str],
+) -> None:
     if not isinstance(value, dict):
-        target.errors.append("promotion_release_record.artifact_validation must be an object.")
+        target.errors.append(f"{label} must be an object.")
         return
-    if value.get("passed") is not None and not isinstance(value.get("passed"), bool):
-        target.errors.append("promotion_release_record.artifact_validation.passed must be a boolean or null.")
-    if expected_passed and value.get("passed") is not True:
-        target.errors.append("promotion_release_record.artifact_validation.passed must be true when the release record passed.")
+    passed = value.get("passed")
+    if passed is not None and not isinstance(passed, bool):
+        target.errors.append(f"{label}.passed must be a boolean or null.")
+    counts_valid = True
     for field_name in ("target_count", "error_count", "warning_count"):
         if not _is_non_negative_int(value.get(field_name)):
-            target.errors.append(f"promotion_release_record.artifact_validation.{field_name} must be a non-negative integer.")
-    if expected_passed and _is_non_negative_int(value.get("target_count")):
-        minimum = len(PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS)
-        if value["target_count"] < minimum:
-            target.errors.append(
-                "promotion_release_record.artifact_validation.target_count "
-                f"must be at least {minimum} for validated release artifacts."
-            )
-    if expected_passed and _is_non_negative_int(value.get("error_count")) and value["error_count"] != 0:
-        target.errors.append("promotion_release_record.artifact_validation.error_count must be 0 when the release record passed.")
+            counts_valid = False
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+
     targets = value.get("targets")
     if not isinstance(targets, list):
-        target.errors.append("promotion_release_record.artifact_validation.targets must be a list.")
+        target.errors.append(f"{label}.targets must be a list.")
         targets = []
     if _is_non_negative_int(value.get("target_count")) and value["target_count"] != len(targets):
-        target.errors.append(
-            f"promotion_release_record.artifact_validation.target_count expected {len(targets)}, got {value.get('target_count')!r}."
-        )
+        target.errors.append(f"{label}.target_count expected {len(targets)}, got {value.get('target_count')!r}.")
+    if required_target_types and _is_non_negative_int(value.get("target_count")) and value["target_count"] < len(required_target_types):
+        target.errors.append(f"{label}.target_count must be at least {len(required_target_types)} for validated artifacts.")
+
     target_types: set[str] = set()
+    target_counts_valid = True
+    aggregate_error_count = 0
+    aggregate_warning_count = 0
     for index, item in enumerate(targets):
-        label = f"promotion_release_record.artifact_validation.targets[{index}]"
+        item_label = f"{label}.targets[{index}]"
         if not isinstance(item, dict):
-            target.errors.append(f"{label} must be an object.")
+            target_counts_valid = False
+            target.errors.append(f"{item_label} must be an object.")
             continue
-        if not isinstance(item.get("type"), str) or not item.get("type"):
-            target.errors.append(f"{label}.type must be a non-empty string.")
+        item_type = item.get("type")
+        if not isinstance(item_type, str) or not item_type:
+            target.errors.append(f"{item_label}.type must be a non-empty string.")
         else:
-            target_types.add(item["type"])
-        if not isinstance(item.get("passed"), bool):
-            target.errors.append(f"{label}.passed must be a boolean.")
+            target_types.add(item_type)
+        item_passed = item.get("passed")
+        if not isinstance(item_passed, bool):
+            target_counts_valid = False
+            target.errors.append(f"{item_label}.passed must be a boolean.")
+        item_counts_valid = True
         for field_name in ("error_count", "warning_count"):
             if not _is_non_negative_int(item.get(field_name)):
-                target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
-        if expected_passed and item.get("type") in PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS:
-            if item.get("passed") is not True:
-                target.errors.append(f"{label}.passed must be true for publishable release records.")
-            if _is_non_negative_int(item.get("error_count")) and item["error_count"] != 0:
-                target.errors.append(f"{label}.error_count must be 0 for publishable release records.")
-    if expected_passed:
-        missing_types = sorted(set(PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS) - target_types)
+                item_counts_valid = False
+                target_counts_valid = False
+                target.errors.append(f"{item_label}.{field_name} must be a non-negative integer.")
+        if item_counts_valid:
+            aggregate_error_count += item["error_count"]
+            aggregate_warning_count += item["warning_count"]
+            expected_item_passed = item["error_count"] == 0 and item["warning_count"] == 0
+            if isinstance(item_passed, bool) and item_passed != expected_item_passed:
+                target.errors.append(f"{item_label}.passed expected {expected_item_passed}, got {item_passed!r}.")
+
+    if counts_valid and target_counts_valid:
+        if value["error_count"] != aggregate_error_count:
+            target.errors.append(f"{label}.error_count expected {aggregate_error_count}, got {value.get('error_count')!r}.")
+        if value["warning_count"] != aggregate_warning_count:
+            target.errors.append(f"{label}.warning_count expected {aggregate_warning_count}, got {value.get('warning_count')!r}.")
+        expected_summary_passed = value["target_count"] > 0 and value["error_count"] == 0 and value["warning_count"] == 0
+        if isinstance(passed, bool) and passed != expected_summary_passed:
+            target.errors.append(f"{label}.passed expected {expected_summary_passed}, got {passed!r}.")
+    if expected_parent_passed and passed is not True:
+        target.errors.append(f"{label}.passed must be true when the parent artifact passed.")
+    if required_target_types:
+        missing_types = sorted(required_target_types - target_types)
         if missing_types:
-            target.errors.append(
-                "promotion_release_record.artifact_validation.targets missing required type(s): "
-                f"{', '.join(missing_types)}."
-            )
+            target.errors.append(f"{label}.targets missing required type(s): {', '.join(missing_types)}.")
 
 
 def _validate_promotion_release_record_bindings(value: Any, artifacts: dict[str, Any], target: ValidationTarget) -> None:
@@ -9359,16 +9389,13 @@ def _validate_alias_history_entry(
 
 
 def _validate_promotion_alias_apply_decision_validation(value: Any, expected_passed: bool, target: ValidationTarget) -> None:
-    if not isinstance(value, dict):
-        target.errors.append("promotion_alias_apply.promotion_decision_validation must be an object.")
-        return
-    if value.get("passed") is not None and not isinstance(value.get("passed"), bool):
-        target.errors.append("promotion_alias_apply.promotion_decision_validation.passed must be a boolean or null.")
-    if expected_passed and value.get("passed") is not True:
-        target.errors.append("promotion_alias_apply.promotion_decision_validation.passed must be true when aliases were applied.")
-    for field_name in ("target_count", "error_count", "warning_count"):
-        if not _is_non_negative_int(value.get(field_name)):
-            target.errors.append(f"promotion_alias_apply.promotion_decision_validation.{field_name} must be a non-negative integer.")
+    _validate_strict_compact_validation_summary(
+        value,
+        target,
+        "promotion_alias_apply.promotion_decision_validation",
+        expected_parent_passed=expected_passed,
+        required_target_types={"promotion_decision"} if expected_passed else set(),
+    )
 
 
 def _validate_current_registry_matches_alias_receipt(
