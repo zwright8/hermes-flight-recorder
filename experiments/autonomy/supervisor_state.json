@@ -240,7 +240,10 @@
         "experiments/autonomy/journal/2026-07-02.md",
         "experiments/autonomy/supervisor_state.json"
       ],
+      "consecutive_goal_turn_conflict_count": 2,
+      "latest_attempt_at": "2026-07-02T15:18:43Z",
       "origin_main_sha_at_conflict": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+      "origin_main_sha_latest_attempt": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
       "reason": "Rebasing the verified Goal 5 branch onto current origin/main hit add/add autonomy state and journal conflicts from earlier packet commits. Per the main delivery protocol, the worker aborted rather than resolving non-trivial cross-worker integration conflicts.",
       "related_pr_status": "open_pending_supervisor_resolution",
       "remote_branch_deletion_status": "deferred_until_main_integration",
@@ -290,7 +293,8 @@
     "No implementation edits were made in the shared checkout after the migration update.",
     "On 2026-07-02T15:01:51Z the branch fetched origin and rebased cleanly onto current origin/main before runtime-preflight work continued, making the shared autonomous docs available locally.",
     "Delivery protocol changed to require verified branch packets to land on origin/main under /tmp/hermes-flight-recorder-main-push.lock before temporary branches and PRs are retired.",
-    "Main integration for the runtime-preflight packet was attempted under the lock and aborted after non-trivial add/add conflicts in autonomy journal/state files against origin/main b671b9671fff7e891fa0ee58a69f64e818694b11."
+    "Main integration for the runtime-preflight packet was attempted under the lock and aborted after non-trivial add/add conflicts in autonomy journal/state files against origin/main b671b9671fff7e891fa0ee58a69f64e818694b11.",
+    "A second locked integration attempt at 2026-07-02T15:18:43Z hit the same add/add conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c."
   ],
   "next_packets": [
     {
@@ -310,8 +314,9 @@
     "Default backend dependency probes may remain blocked until the external trainer environment installs Axolotl, LLaMA Factory, Unsloth, or process-reward packages.",
     "No model downloads, trainer imports, weight updates, or expensive jobs were launched in this packet.",
     "The repository docs recommend schema-checking supervisor_state.json, but no bundled hfr.autonomy.supervisor_state.v1 schema is registered in this branch; this packet verified the state with json.tool instead.",
-    "Main delivery is blocked because rebasing onto current origin/main requires supervisor-level resolution of autonomy state and journal conflicts."
+    "Main delivery is blocked because rebasing onto current origin/main requires supervisor-level resolution of autonomy state and journal conflicts.",
+    "The same non-trivial main integration conflict has recurred for two consecutive Goal 5 continuation turns; one more recurrence without a resolution would satisfy the strict blocked audit threshold."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:08:22Z"
+  "updated_at": "2026-07-02T15:18:43Z"
 }
