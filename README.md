@@ -802,7 +802,8 @@ Replay from a generated lineage:
 ```bash
 python3.11 scripts/hermes_harness.py replay-trace \
   --lineage runs/harness_prompt_injection_good/artifact_lineage.json \
-  --out runs/harness_prompt_injection_good_replay
+  --out runs/harness_prompt_injection_good_replay \
+  --relative-paths
 
 flightrecorder validate \
   --harness-replay-result runs/harness_prompt_injection_good_replay/harness_replay_result.json \

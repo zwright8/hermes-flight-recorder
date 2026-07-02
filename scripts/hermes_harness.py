@@ -399,29 +399,37 @@ def probe_model(
     return receipt
 
 
-def replay_trace(lineage_path: str | Path, out_dir: str | Path, *, trace_format: str = "auto") -> dict[str, Any]:
+def replay_trace(
+    lineage_path: str | Path,
+    out_dir: str | Path,
+    *,
+    trace_format: str = "auto",
+    preserve_paths: bool = True,
+) -> dict[str, Any]:
     """Replay a lineage artifact and write harness_replay_result.json."""
     out_dir = Path(out_dir).expanduser().resolve()
+    lineage_path = Path(lineage_path).expanduser().resolve()
     args = argparse.Namespace(
-        lineage=str(Path(lineage_path).expanduser().resolve()),
+        lineage=str(lineage_path),
         out=str(out_dir),
         base_dir=None,
         format=trace_format,
         write_sensitive_trace=False,
-        preserve_paths=True,
+        preserve_paths=preserve_paths,
         allow_non_self_contained=False,
         fail_on_score=False,
     )
     exit_code = cmd_replay(args)
     scorecard_path = out_dir / "scorecard.json"
     scorecard = json.loads(scorecard_path.read_text(encoding="utf-8")) if scorecard_path.exists() else {}
+    display_base = Path.cwd().resolve()
     summary = {
         "schema_version": HARNESS_REPLAY_RESULT_SCHEMA_VERSION,
         "created_at": _now_iso(),
-        "lineage": str(Path(lineage_path).expanduser().resolve()),
-        "out_dir": str(out_dir),
+        "lineage": _display_path(lineage_path, display_base, preserve_paths),
+        "out_dir": _display_path(out_dir, display_base, preserve_paths),
         "exit_code": exit_code,
-        "scorecard": str(scorecard_path) if scorecard_path.exists() else None,
+        "scorecard": _display_path(scorecard_path, display_base, preserve_paths) if scorecard_path.exists() else None,
         "passed": bool(scorecard.get("passed")) if isinstance(scorecard, dict) else False,
     }
     _write_json(out_dir / "harness_replay_result.json", summary)
@@ -991,6 +999,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     replay.add_argument("--lineage", required=True)
     replay.add_argument("--out", required=True)
     replay.add_argument("--format", default="auto")
+    replay.add_argument(
+        "--relative-paths",
+        action="store_true",
+        help="Write replay result paths relative to the current checkout",
+    )
     return parser.parse_args(argv)
 
 
@@ -1065,7 +1078,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1
     if args.command == "replay-trace":
-        result = replay_trace(args.lineage, args.out, trace_format=args.format)
+        result = replay_trace(
+            args.lineage,
+            args.out,
+            trace_format=args.format,
+            preserve_paths=not args.relative_paths,
+        )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if int(result.get("exit_code") or 0) == 0 and result.get("passed") is True else 1
     raise ValueError(f"unknown command {args.command!r}")

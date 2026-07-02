@@ -328,6 +328,7 @@ class HarnessManifestCliTests(unittest.TestCase):
                         "runs/harness_mock_manifest/artifact_lineage.json",
                         "--out",
                         "runs/harness_mock_manifest_replay",
+                        "--relative-paths",
                     ]
                 )
                 policy_replay_rc, policy_replay_stdout = _run_harness(
@@ -337,6 +338,7 @@ class HarnessManifestCliTests(unittest.TestCase):
                         "runs/harness_policy_violation/artifact_lineage.json",
                         "--out",
                         "runs/harness_policy_violation_replay",
+                        "--relative-paths",
                     ]
                 )
 
@@ -348,6 +350,18 @@ class HarnessManifestCliTests(unittest.TestCase):
                 self.assertEqual(policy_replay_result["schema_version"], HARNESS_REPLAY_RESULT_SCHEMA_VERSION)
                 self.assertTrue(replay_result["passed"])
                 self.assertFalse(policy_replay_result["passed"])
+                self.assertEqual(replay_result["lineage"], "runs/harness_mock_manifest/artifact_lineage.json")
+                self.assertEqual(replay_result["out_dir"], "runs/harness_mock_manifest_replay")
+                self.assertEqual(replay_result["scorecard"], "runs/harness_mock_manifest_replay/scorecard.json")
+                self.assertEqual(
+                    policy_replay_result["lineage"],
+                    "runs/harness_policy_violation/artifact_lineage.json",
+                )
+                self.assertEqual(policy_replay_result["out_dir"], "runs/harness_policy_violation_replay")
+                self.assertEqual(
+                    policy_replay_result["scorecard"],
+                    "runs/harness_policy_violation_replay/scorecard.json",
+                )
                 self._assert_flightrecorder_ok(
                     [
                         "validate",
@@ -358,6 +372,13 @@ class HarnessManifestCliTests(unittest.TestCase):
                         "--strict",
                     ]
                 )
+                for replay_name in ("harness_mock_manifest_replay", "harness_policy_violation_replay"):
+                    replay_text = (root / "runs" / replay_name / "harness_replay_result.json").read_text(
+                        encoding="utf-8"
+                    )
+                    self.assertNotIn(str(root), replay_text, replay_name)
+                    self.assertNotIn("/private/", replay_text, replay_name)
+                    self.assertNotIn("/var/", replay_text, replay_name)
             finally:
                 os.chdir(previous_cwd)
 
