@@ -9,6 +9,7 @@ from typing import Any
 
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
+from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
 from .repair import REPAIR_QUEUE_SCHEMA_VERSION
 from .training import RL_CURRICULUM_SCHEMA_VERSION
 
@@ -30,6 +31,7 @@ def build_improvement_plan(
     repair_queue_path: str | Path | None = None,
     training_export_dir: str | Path | None = None,
     runs_dir: str | Path | None = None,
+    eval_summary_path: str | Path | None = None,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Build a deterministic next-iteration plan from existing evidence artifacts."""
@@ -58,8 +60,16 @@ def build_improvement_plan(
                 f"curriculum schema_version must be {RL_CURRICULUM_SCHEMA_VERSION!r}; got {curriculum.get('schema_version')!r}"
             )
 
+    eval_summary: dict[str, Any] | None = None
+    if eval_summary_path is not None:
+        eval_summary = _read_json(Path(eval_summary_path), "eval_summary")
+        if eval_summary.get("schema_version") != EVAL_SUMMARY_SCHEMA_VERSION:
+            raise ImprovementPlanError(
+                f"eval_summary schema_version must be {EVAL_SUMMARY_SCHEMA_VERSION!r}; got {eval_summary.get('schema_version')!r}"
+            )
+
     run_digests = _load_run_digests(Path(runs_dir), preserve_paths) if runs_dir is not None else {}
-    raw_items = _build_raw_items(bundle, repair_queue, curriculum, run_digests)
+    raw_items = _build_raw_items(bundle, repair_queue, curriculum, run_digests, eval_summary)
     work_items = _finalize_work_items(raw_items)
     metrics = _metrics(work_items)
     readiness = "blocked" if bundle.get("readiness") == "blocked" else "ready"
@@ -74,6 +84,8 @@ def build_improvement_plan(
             source_artifacts["training_export_curriculum"] = _file_record(curriculum_path, preserve_paths)
     if runs_dir is not None:
         source_artifacts["runs_dir"] = _dir_record(Path(runs_dir), preserve_paths)
+    if eval_summary_path is not None:
+        source_artifacts["eval_summary"] = _file_record(Path(eval_summary_path), preserve_paths)
 
     return {
         "schema_version": IMPROVEMENT_PLAN_SCHEMA_VERSION,
@@ -124,6 +136,7 @@ def _build_raw_items(
     repair_queue: dict[str, Any] | None,
     curriculum: dict[str, Any] | None,
     run_digests: dict[str, dict[str, Any]],
+    eval_summary: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     repair_items_by_key: dict[tuple[str, str], list[dict[str, Any]]] = {}
@@ -160,6 +173,9 @@ def _build_raw_items(
     for action in decision.get("next_actions", []) if isinstance(decision.get("next_actions"), list) else []:
         if isinstance(action, dict):
             items.append(_item_from_bundle_action(action))
+
+    for item in _eval_summary_items(eval_summary):
+        items.append(_item_from_eval_summary(item))
 
     return items
 
@@ -274,6 +290,56 @@ def _item_from_bundle_action(action: dict[str, Any]) -> dict[str, Any]:
                 "evidence": evidence,
             },
         },
+        "evidence_refs": [],
+        "evidence_snippets": [],
+        "source_artifacts": {},
+        "replay": {},
+    }
+
+
+def _item_from_eval_summary(item: dict[str, Any]) -> dict[str, Any]:
+    raw_category = str(item.get("category") or "eval_harness")
+    category = raw_category if raw_category in {"repair", "curriculum"} else "bundle_action"
+    eval_item_id = str(item.get("work_item_id") or item.get("reason") or "eval_summary_item")
+    scenario_id = item.get("scenario_id") if isinstance(item.get("scenario_id"), str) and item.get("scenario_id") else None
+    rule_id = item.get("rule_id") if isinstance(item.get("rule_id"), str) and item.get("rule_id") else None
+    source_record = {
+        "work_item_id": eval_item_id,
+        "category": raw_category,
+        "source": str(item.get("source") or "eval_summary"),
+        "label": str(item.get("label") or "eval_summary"),
+        "reason": str(item.get("reason") or "eval_summary_item"),
+    }
+    if "count" in item:
+        source_record["count"] = _non_negative_int(item.get("count"))
+    sources: dict[str, Any] = {
+        "bundle_action_ids": [],
+        "repair_item_ids": [],
+        "curriculum_priorities": [],
+        "run_digest": None,
+        "eval_summary_items": [source_record],
+    }
+    if category == "bundle_action":
+        sources["bundle_action_ids"] = [eval_item_id]
+        sources["bundle_action"] = {
+            "id": eval_item_id,
+            "artifact": "eval_summary",
+            "routing_key": source_record["reason"],
+            "action_fingerprint": eval_item_id,
+            "evidence": source_record,
+        }
+    return {
+        "category": category,
+        "priority": _priority(str(item.get("priority") or "medium")),
+        "summary": str(item.get("summary") or "Review eval-summary follow-up item."),
+        "suggested_action": str(item.get("suggested_action") or "Inspect eval summary and route follow-up work."),
+        "scenario_id": scenario_id,
+        "task_family": _eval_task_family(scenario_id, source_record),
+        "rule_id": rule_id,
+        "rule_name": rule_id or source_record["reason"],
+        "score": None,
+        "task_completion_status": "regressed" if source_record["reason"] == "task_completion_regression" else None,
+        "sources": sources,
         "evidence_refs": [],
         "evidence_snippets": [],
         "source_artifacts": {},
@@ -405,6 +471,26 @@ def _curriculum_modes(curriculum: dict[str, Any] | None) -> list[dict[str, Any]]
             )
     rows.sort(key=lambda item: (-item["priority_score"], -item["count"], item["task_family"], item["rule_id"]))
     return rows
+
+
+def _eval_summary_items(eval_summary: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(eval_summary, dict):
+        return []
+    repair_curriculum = eval_summary.get("repair_curriculum")
+    if not isinstance(repair_curriculum, dict):
+        return []
+    items = repair_curriculum.get("items")
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _eval_task_family(scenario_id: str | None, source_record: dict[str, Any]) -> str:
+    if scenario_id:
+        return scenario_id
+    label = str(source_record.get("label") or "")
+    source = str(source_record.get("source") or "eval_summary")
+    return label or source or "eval_summary"
 
 
 def _load_run_digests(runs_dir: Path, preserve_paths: bool) -> dict[str, dict[str, Any]]:

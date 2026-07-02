@@ -1348,6 +1348,7 @@ def cmd_improvement_plan(args: argparse.Namespace) -> int:
         repair_queue_path=args.repair_queue,
         training_export_dir=args.training_export,
         runs_dir=args.runs,
+        eval_summary_path=args.eval_summary,
         preserve_paths=args.preserve_paths,
     )
     _write_json(Path(args.out), plan)
@@ -2788,6 +2789,7 @@ def _parser() -> argparse.ArgumentParser:
     improvement_plan.add_argument("--repair-queue", help="repair_queue.json with concrete failed-rule repair items")
     improvement_plan.add_argument("--training-export", help="export-rl directory containing curriculum.json")
     improvement_plan.add_argument("--runs", help="Runs directory containing per-run run_digest.json files")
+    improvement_plan.add_argument("--eval-summary", help="eval_summary.json with eval repair/curriculum work items")
     improvement_plan.add_argument("--out", required=True, help="Write improvement plan JSON to this path")
     improvement_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the plan output")
     improvement_plan.set_defaults(func=cmd_improvement_plan)

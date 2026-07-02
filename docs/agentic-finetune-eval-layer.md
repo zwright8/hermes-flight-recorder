@@ -132,3 +132,18 @@ The section includes:
 These items are not promotion evidence and do not unsuppress raw candidate
 movement. They exist so repair, scenario, curriculum, or adapter-readiness work
 can be queued without manually interpreting raw eval artifacts.
+
+To include eval-derived work in the longitudinal improvement loop, pass the
+summary into the existing improvement-plan command:
+
+```bash
+flightrecorder improvement-plan \
+  --evidence-bundle runs/evidence_bundle.json \
+  --eval-summary runs/eval_summary.json \
+  --out runs/improvement_plan.json
+```
+
+Eval `repair` and `curriculum` items keep their improvement-plan categories.
+Eval gate and harness blockers are normalized as `bundle_action` items so the
+ledger can track recurring operational blockers without adding a separate
+category family.

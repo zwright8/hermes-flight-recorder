@@ -79,6 +79,86 @@ class ImprovementPlanTests(unittest.TestCase):
             self.assertTrue(all(item["sources"]["run_digest"] for item in repair_items))
             self.assertTrue(any(item["scenario_id"] == "prompt_injection_bad" for item in repair_items))
 
+    def test_improvement_plan_imports_eval_summary_repair_curriculum_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            plan_path = root / "improvement_plan.json"
+            eval_summary = root / "eval_summary.json"
+            compare_export = _compare_export(
+                root / "compare_rl",
+                baseline_wins=["email_reply_completion"],
+                task_completion_regressions=["email_reply_completion"],
+                regressed_rule_counts={"required_actions": 1},
+                new_critical_failure_counts={"secret_exposure": 1},
+                contract_drift_count=1,
+            )
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run-suite",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--out",
+                        str(runs),
+                        "--evidence-handoff",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "eval-summary",
+                        "--suite-summary",
+                        f"baseline={baseline}",
+                        "--suite-summary",
+                        f"candidate={candidate}",
+                        "--compare-export",
+                        f"candidate={compare_export}",
+                        "--out",
+                        str(eval_summary),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "improvement-plan",
+                        "--evidence-bundle",
+                        str(runs / "evidence_bundle.json"),
+                        "--eval-summary",
+                        str(eval_summary),
+                        "--out",
+                        str(plan_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["validate", "--improvement-plan", str(plan_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(plan_path)]), 0)
+
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            eval_items = [
+                item
+                for item in plan["work_items"]
+                if item["sources"].get("eval_summary_items")
+            ]
+            reasons = {item["sources"]["eval_summary_items"][0]["reason"] for item in eval_items}
+            categories = {item["category"] for item in eval_items}
+            self.assertIn("eval_summary", plan["source_artifacts"])
+            self.assertIn("baseline_win", reasons)
+            self.assertIn("task_completion_regression", reasons)
+            self.assertIn("regressed_rule", reasons)
+            self.assertIn("new_critical_failure", reasons)
+            self.assertIn("contract_fingerprint_drift", reasons)
+            self.assertIn("repair", categories)
+            self.assertIn("curriculum", categories)
+            self.assertIn("bundle_action", categories)
+
     def test_validate_rejects_stale_improvement_plan_metrics_and_fingerprints(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -128,6 +208,71 @@ class ImprovementPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("improvement_plan.metrics.work_item_count", errors)
             self.assertIn("fingerprint does not match item content", errors)
+
+
+def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
+    runs = [
+        {
+            "scenario_id": scenario_id,
+            "task_family": scenario_id,
+            "passed": True,
+            "score": 100,
+            "failed_rules": [],
+            "critical_failures": [],
+        }
+        for scenario_id in scenario_ids
+    ]
+    payload = {
+        "schema_version": "hfr.run_suite.v1",
+        "total": len(runs),
+        "passed": len(runs),
+        "failed": 0,
+        "error_count": 0,
+        "errors": [],
+        "metrics": {
+            "pass_rate": 1.0 if runs else 0.0,
+            "average_score": 100.0 if runs else 0.0,
+            "failed_rule_counts": [],
+            "critical_failure_counts": [],
+        },
+        "runs": runs,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _compare_export(
+    path: Path,
+    *,
+    baseline_wins: list[str],
+    task_completion_regressions: list[str],
+    regressed_rule_counts: dict[str, int],
+    new_critical_failure_counts: dict[str, int],
+    contract_drift_count: int,
+) -> Path:
+    path.mkdir(parents=True)
+    payload = {
+        "schema_version": "hfr.compare_rl.manifest.v1",
+        "pair_count": len(baseline_wins),
+        "candidate_win_count": 0,
+        "baseline_win_count": len(baseline_wins),
+        "candidate_win_scenarios": [],
+        "baseline_win_scenarios": baseline_wins,
+        "task_completion_improvement_count": 0,
+        "task_completion_regression_count": len(task_completion_regressions),
+        "task_completion_improvement_scenarios": [],
+        "task_completion_regression_scenarios": task_completion_regressions,
+        "fixed_rule_counts": {},
+        "regressed_rule_counts": regressed_rule_counts,
+        "new_critical_failure_counts": new_critical_failure_counts,
+        "contract_drift_count": contract_drift_count,
+        "unverified_contract_count": 0,
+        "skipped_pair_count": 0,
+        "missing_in_candidate": [],
+        "new_in_candidate": [],
+    }
+    (path / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 if __name__ == "__main__":
