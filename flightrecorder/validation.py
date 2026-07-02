@@ -8938,6 +8938,41 @@ def _validate_promotion_release_record_validation(value: Any, expected_passed: b
             )
     if expected_passed and _is_non_negative_int(value.get("error_count")) and value["error_count"] != 0:
         target.errors.append("promotion_release_record.artifact_validation.error_count must be 0 when the release record passed.")
+    targets = value.get("targets")
+    if not isinstance(targets, list):
+        target.errors.append("promotion_release_record.artifact_validation.targets must be a list.")
+        targets = []
+    if _is_non_negative_int(value.get("target_count")) and value["target_count"] != len(targets):
+        target.errors.append(
+            f"promotion_release_record.artifact_validation.target_count expected {len(targets)}, got {value.get('target_count')!r}."
+        )
+    target_types: set[str] = set()
+    for index, item in enumerate(targets):
+        label = f"promotion_release_record.artifact_validation.targets[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(item.get("type"), str) or not item.get("type"):
+            target.errors.append(f"{label}.type must be a non-empty string.")
+        else:
+            target_types.add(item["type"])
+        if not isinstance(item.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean.")
+        for field_name in ("error_count", "warning_count"):
+            if not _is_non_negative_int(item.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+        if expected_passed and item.get("type") in PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS:
+            if item.get("passed") is not True:
+                target.errors.append(f"{label}.passed must be true for publishable release records.")
+            if _is_non_negative_int(item.get("error_count")) and item["error_count"] != 0:
+                target.errors.append(f"{label}.error_count must be 0 for publishable release records.")
+    if expected_passed:
+        missing_types = sorted(set(PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS) - target_types)
+        if missing_types:
+            target.errors.append(
+                "promotion_release_record.artifact_validation.targets missing required type(s): "
+                f"{', '.join(missing_types)}."
+            )
 
 
 def _validate_promotion_release_record_bindings(value: Any, artifacts: dict[str, Any], target: ValidationTarget) -> None:

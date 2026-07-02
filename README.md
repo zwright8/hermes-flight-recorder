@@ -923,7 +923,8 @@ evidence, a different alias receipt, or a policy file that does not match the
 policy embedded in the promotion decision block publication.
 Publishable release records must also carry validation evidence for the
 promotion decision, promotion cards, and alias-apply receipt that were checked
-immediately before binding.
+immediately before binding, including target-type summaries for those exact
+artifact classes.
 `promotion-archive` can include one or more release records with
 `--promotion-release-record` so the portable promotion history carries the
 final publication evidence alongside ledgers and gate receipts.

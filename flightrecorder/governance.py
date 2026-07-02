@@ -1790,13 +1790,32 @@ def _metrics_object(payload: dict[str, Any] | None) -> dict[str, Any]:
 
 def _validation_summary(value: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(value, dict):
-        return {"passed": None, "target_count": 0, "error_count": 0, "warning_count": 0}
+        return {"passed": None, "target_count": 0, "error_count": 0, "warning_count": 0, "targets": []}
     return {
         "passed": value.get("passed") if isinstance(value.get("passed"), bool) else None,
         "target_count": _int_value(value.get("target_count")),
         "error_count": _int_value(value.get("error_count")),
         "warning_count": _int_value(value.get("warning_count")),
+        "targets": _validation_target_summaries(value.get("targets")),
     }
+
+
+def _validation_target_summaries(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    targets: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        targets.append(
+            {
+                "type": item.get("type") if isinstance(item.get("type"), str) else "",
+                "passed": item.get("passed") if isinstance(item.get("passed"), bool) else None,
+                "error_count": _int_value(item.get("error_count")),
+                "warning_count": _int_value(item.get("warning_count")),
+            }
+        )
+    return targets
 
 
 def _registry_aliases(registry: dict[str, Any]) -> dict[str, str]:
