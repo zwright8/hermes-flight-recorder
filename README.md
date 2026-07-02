@@ -877,7 +877,10 @@ alias targets, expose aliases as an object, and have a missing or list-valued
 alias no longer matches the decision's previous target. Successful applies
 update `candidate`, `champion`, and `rollback`, append an alias-history entry,
 and emit a receipt that `validate --promotion-alias-apply` rechecks against the
-live registry.
+live registry. Validation of a passing `promotion_decision.json` also requires
+the full pass-authorizing check set, so stale or hand-edited decisions cannot
+omit accepted-terms, compare-metrics, rollback, card, policy, or
+zero-tolerance-rule checks before alias movement.
 `promotion-release-record` is the final review artifact for a governed release:
 it binds the exact promotion decision, generated cards, alias-apply receipt,
 rollback metadata, eval compare gate, and release notes. Validation rehashes

@@ -52,6 +52,7 @@ from .governance import (
     PROMOTION_CARDS_REQUIRED_INPUTS,
     PROMOTION_CARDS_SCHEMA_VERSION,
     PROMOTION_DECISION_REQUIRED_ARTIFACTS,
+    PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS,
     PROMOTION_DECISION_SCHEMA_VERSION,
     PROMOTION_POLICY_DEFAULT_LIMITS,
     PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES,
@@ -8308,6 +8309,8 @@ def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTar
     expected_passed = failed_checks == 0
     if isinstance(decision.get("passed"), bool) and decision["passed"] != expected_passed:
         target.errors.append("promotion_decision.passed must match failed_check_count.")
+    if expected_passed:
+        _validate_promotion_decision_required_pass_checks(checks, target)
     expected_readiness = "ready" if expected_passed else "blocked"
     expected_recommendation = "apply_alias_update" if expected_passed else "block_promotion"
     if decision.get("readiness") != expected_readiness:
@@ -8374,6 +8377,20 @@ def _validate_promotion_decision_model(value: Any, target: ValidationTarget, lab
         target.errors.append(f"{label}.id must be a string.")
     if not isinstance(value.get("class"), str) or not value.get("class"):
         target.errors.append(f"{label}.class must be a non-empty string.")
+
+
+def _validate_promotion_decision_required_pass_checks(checks: list[Any], target: ValidationTarget) -> None:
+    by_id = {check.get("id"): check for check in checks if isinstance(check, dict) and isinstance(check.get("id"), str)}
+    missing = [check_id for check_id in PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS if check_id not in by_id]
+    if missing:
+        target.errors.append(f"promotion_decision.checks missing required passing check(s): {missing!r}.")
+    failed_required = [
+        check_id
+        for check_id in PROMOTION_DECISION_REQUIRED_PASS_CHECK_IDS
+        if isinstance(by_id.get(check_id), dict) and by_id[check_id].get("passed") is not True
+    ]
+    if failed_required:
+        target.errors.append(f"promotion_decision.checks required pass check(s) are not passed: {failed_required!r}.")
 
 
 def _promotion_model_id(value: Any) -> str:

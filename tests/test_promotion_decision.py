@@ -475,6 +475,28 @@ class PromotionDecisionTests(unittest.TestCase):
 
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 1)
 
+    def test_validate_promotion_decision_rejects_missing_required_pass_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            decision["checks"] = [check for check in decision["checks"] if check["id"] != "license_terms_accepted"]
+            decision["check_count"] = len(decision["checks"])
+            decision["metrics"]["check_count"] = len(decision["checks"])
+            decision["decision"]["key_metrics"]["check_count"] = len(decision["checks"])
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-decision", str(decision_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("missing required passing check", errors)
+            self.assertIn("license_terms_accepted", errors)
+
 
 def write_governance_artifacts(
     root: Path,
