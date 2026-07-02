@@ -3,19 +3,19 @@
   "blocked_packets": [
     {
       "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-      "branch_sha_before_conflict_record": "a9c16201b2f6395cdfb4799a3e14f5f84d7824a7",
+      "branch_sha_before_conflict_record": "1ca1473a9922e2454a57a786c2d48e2a0874baf4",
       "conflicted_files": [
         "experiments/autonomy/journal/2026-07-02.md",
-        "experiments/autonomy/supervisor_state.json"
+        "experiments/autonomy/supervisor_state.json",
+        "tests/test_schema_registry.py"
       ],
       "id": "serving_main_delivery_rebase_conflict",
       "layer": "serving_demo",
-      "merge_base": "7976f618d357ee95010902295b044b45918a831e",
-      "origin_main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
+      "origin_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
       "priority": "high",
-      "recorded_at": "2026-07-02T15:16:10Z",
+      "recorded_at": "2026-07-02T15:20:46Z",
       "status": "blocked",
-      "summary": "Main delivery of verified Goal 6 branch remains blocked by add/add conflicts in shared autonomy state and journal after supervisor contracts landed on main."
+      "summary": "Main delivery of verified Goal 6 branch is blocked after repeated rebase conflicts in shared autonomy files and schema-registry test updates on origin/main."
     }
   ],
   "completed_packets": [
@@ -87,18 +87,19 @@
       "main_delivery": {
         "attempted_at": "2026-07-02T15:05:39Z",
         "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-        "branch_sha_before_conflict_record": "a9c16201b2f6395cdfb4799a3e14f5f84d7824a7",
-        "conflict_kind": "add/add during git rebase origin/main; read-only merge-tree confirms both sides added different autonomy files",
+        "branch_sha_before_conflict_record": "1ca1473a9922e2454a57a786c2d48e2a0874baf4",
+        "conflict_kind": "repeated non-trivial rebase conflicts during git rebase origin/main",
         "conflicted_files": [
           "experiments/autonomy/journal/2026-07-02.md",
-          "experiments/autonomy/supervisor_state.json"
+          "experiments/autonomy/supervisor_state.json",
+          "tests/test_schema_registry.py"
         ],
         "latest_observed_branch_sha": "1263df4843ef030af12aeccdb3e67ab8c608f7f8",
         "latest_observed_remote_main_at": "2026-07-02T15:17:41Z",
         "latest_observed_remote_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
         "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
         "lock_status": "not_acquired_after_retries",
-        "lock_status_at_record": "exists_not_acquired",
+        "lock_status_at_record": "absent_after_rebase_abort",
         "main_sha": null,
         "merge_base": "7976f618d357ee95010902295b044b45918a831e",
         "notes": [
@@ -109,18 +110,18 @@
         ],
         "observed_remote_main_at": "2026-07-02T15:07:12Z",
         "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
-        "origin_main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
+        "origin_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
         "origin_main_summary": "Integrate verified supervisor contracts onto current main",
         "pr_merge_state_status": "DIRTY",
         "pr_state": "OPEN",
         "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
         "rebase_head": "071128c1c84fb37101a5762f20b98d14498dd7b3",
-        "recorded_at": "2026-07-02T15:16:10Z",
+        "recorded_at": "2026-07-02T15:20:46Z",
         "remote_branch_deleted": false,
         "remote_branch_verified": true,
         "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
-        "resolution": "rebase aborted; main not pushed; branch and PR left open for supervisor integration",
-        "status": "blocked_rebase_conflict_reconfirmed",
+        "resolution": "rebase aborted; main not pushed; branch and PR left open; persistent goal should be marked blocked for supervisor resolution",
+        "status": "blocked_rebase_conflict_repeated_goal_threshold",
         "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
       },
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
@@ -162,7 +163,11 @@
         "git rebase --abort",
         "git merge-tree $(git merge-base HEAD origin/main) origin/main HEAD # read-only conflict evidence captured",
         "final git ls-remote --heads origin main codex/hermes-goal-6-serving-demo-20260702-1027 # main=53357ff5c838c894ec1eca8515f6601dbfee4e8c branch=1263df4843ef030af12aeccdb3e67ab8c608f7f8",
-        "final gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json mergeStateStatus # DIRTY"
+        "final gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json mergeStateStatus # DIRTY",
+        "git fetch origin # origin/main=53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+        "git rebase origin/main # blocked: conflicts in experiments/autonomy/journal/2026-07-02.md, experiments/autonomy/supervisor_state.json, tests/test_schema_registry.py",
+        "git rebase --abort",
+        "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches"
       ]
     }
   ],
@@ -176,11 +181,11 @@
   },
   "github_persistence": {
     "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-    "main_delivery_status": "blocked_rebase_conflict_reconfirmed",
+    "main_delivery_status": "blocked_rebase_conflict_repeated_goal_threshold",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
     "remote_branch_verified": true,
     "remote_ref_verified_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c",
-    "verified_at": "2026-07-02T15:16:10Z",
+    "verified_at": "2026-07-02T15:20:46Z",
     "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
   },
   "guardrails": {
@@ -226,7 +231,11 @@
     "git rebase --abort",
     "git merge-tree $(git merge-base HEAD origin/main) origin/main HEAD # read-only conflict evidence captured",
     "final git ls-remote --heads origin main codex/hermes-goal-6-serving-demo-20260702-1027 # main=53357ff5c838c894ec1eca8515f6601dbfee4e8c branch=1263df4843ef030af12aeccdb3e67ab8c608f7f8",
-    "final gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json mergeStateStatus # DIRTY"
+    "final gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json mergeStateStatus # DIRTY",
+    "git fetch origin # origin/main=53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+    "git rebase origin/main # blocked: conflicts in experiments/autonomy/journal/2026-07-02.md, experiments/autonomy/supervisor_state.json, tests/test_schema_registry.py",
+    "git rebase --abort",
+    "pgrep -fl 'manage_openai_serving.py|mock_openai_server.py|check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|vllm|sglang' # no matches"
   ],
   "layer_status": {
     "serving_demo": {
@@ -238,11 +247,12 @@
   },
   "main_delivery": {
     "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
-    "branch_sha_before_conflict_record": "a9c16201b2f6395cdfb4799a3e14f5f84d7824a7",
-    "conflict_kind": "add/add during git rebase origin/main; read-only merge-tree confirms both sides added different autonomy files",
+    "branch_sha_before_conflict_record": "1ca1473a9922e2454a57a786c2d48e2a0874baf4",
+    "conflict_kind": "repeated non-trivial rebase conflicts during git rebase origin/main",
     "conflicted_files": [
       "experiments/autonomy/journal/2026-07-02.md",
-      "experiments/autonomy/supervisor_state.json"
+      "experiments/autonomy/supervisor_state.json",
+      "tests/test_schema_registry.py"
     ],
     "latest_observed_branch_sha": "1263df4843ef030af12aeccdb3e67ab8c608f7f8",
     "latest_observed_remote_main_at": "2026-07-02T15:17:41Z",
@@ -250,7 +260,7 @@
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "not_acquired_after_retries",
     "lock_status_at_final_check": "exists_not_acquired",
-    "lock_status_at_record": "exists_not_acquired",
+    "lock_status_at_record": "absent_after_rebase_abort",
     "main_sha": null,
     "merge_base": "7976f618d357ee95010902295b044b45918a831e",
     "notes": [
@@ -260,16 +270,16 @@
     ],
     "observed_remote_main_at": "2026-07-02T15:07:12Z",
     "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
-    "origin_main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
+    "origin_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
     "origin_main_summary": "Integrate verified supervisor contracts onto current main",
     "pr_merge_state_status": "DIRTY",
     "pr_state": "OPEN",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
     "rebase_head": "071128c1c84fb37101a5762f20b98d14498dd7b3",
-    "recorded_at": "2026-07-02T15:16:10Z",
+    "recorded_at": "2026-07-02T15:20:46Z",
     "remote_branch_deleted": false,
-    "resolution": "rebase aborted; main not pushed; branch and PR left open for supervisor integration",
-    "status": "blocked_rebase_conflict_reconfirmed",
+    "resolution": "rebase aborted; main not pushed; branch and PR left open; persistent goal should be marked blocked for supervisor resolution",
+    "status": "blocked_rebase_conflict_repeated_goal_threshold",
     "verified_branch_sha": "69c36782bb3e7d42577a5df6b3aa3535e586111c"
   },
   "next_packets": [
@@ -290,5 +300,5 @@
     "serving_demo": "managed_mock_lifecycle_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:17:41Z"
+  "updated_at": "2026-07-02T15:20:46Z"
 }
