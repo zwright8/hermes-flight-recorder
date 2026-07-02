@@ -563,7 +563,7 @@
     "layer": "harness",
     "priority": "critical",
     "status": "verified_pending_main_delivery",
-    "summary": "PR #3 auditable harness contracts are merged into the supervisor integration branch and verified; main delivery is next.",
+    "summary": "PR #3 latest head is merged into the supervisor integration branch and verified; main delivery is pending lock acquisition.",
     "title": "Land auditable harness contracts"
   },
   "git": {
@@ -624,9 +624,161 @@
   },
   "harness_pr3": {
     "branch": "codex/hermes-goal-2-harness-20260702-1027",
+    "branch_blocker_history": [
+      {
+        "blocked_at": "2026-07-02T14:59:19Z",
+        "branch": "codex/hermes-goal-2-harness-20260702-1027",
+        "conflicts": [
+          "MANIFEST.in",
+          "docs/agentic-finetune-training-layer.md",
+          "flightrecorder/schemas/manifest.json",
+          "tests/test_schema_registry.py"
+        ],
+        "correct_goal2_wip_stash": "stash@{2}: wip-harness-manifest-cli-before-main-sync",
+        "id": "main_sync_wrong_stash_conflict",
+        "integration_lock": "not_acquired",
+        "layer": "harness",
+        "local_rebased_head": "97b7a3b84272fe48ce8f69aa3f11379117aeb5f9",
+        "main_push": "not_attempted",
+        "origin_main": "7976f618d357ee95010902295b044b45918a831e",
+        "pr_status": "open_not_closed",
+        "remote_branch_head": "7f5b57a7c8e349bbb15c7196d9f2d1633a74316c",
+        "resolution_summary": "Cleared the accidental Goal 1 stash application, removed only the untracked files from that stash, restored only Goal 2 metadata from the stash patch, applied the correct Goal 2 manifest CLI WIP, and rebased the branch cleanly onto origin/main 48f7660058d8692962f80a075c1e25411cf4f254.",
+        "resolved_at": "2026-07-02T15:04:34Z",
+        "status": "resolved",
+        "summary": "Rebased the Goal 2 branch cleanly onto origin/main, but a generic git stash pop applied the top stash from Goal 1 Evidence instead of the Goal 2 manifest-CLI WIP. The result is non-trivial conflicts in manifest/schema/test/docs files outside the harness packet, plus untracked training-runtime files. Correct Goal 2 WIP remains in stash@{2}.",
+        "untracked_from_wrong_stash": [
+          "flightrecorder/agentic_training_runtime.py",
+          "flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json",
+          "scripts/preflight_agentic_training_runtime.py",
+          "tests/test_agentic_training_runtime.py"
+        ],
+        "verification": [
+          {
+            "command": "git fetch origin && git rebase origin/main",
+            "status": "pass"
+          },
+          {
+            "command": "git stash pop",
+            "status": "blocked",
+            "summary": "Applied stash@{0} from codex/hermes-goal-1-evidence-20260702-1027 and kept the stash due conflicts."
+          }
+        ]
+      },
+      {
+        "blocked_at": "2026-07-02T15:09:16Z",
+        "branch": "codex/hermes-goal-2-harness-20260702-1027",
+        "branch_head": "989ca7bc4eab0dc7a99c07b51026300d450642fc",
+        "id": "main_integration_lock_held",
+        "integration_lock": "/tmp/hermes-flight-recorder-main-push.lock",
+        "layer": "harness",
+        "lock_status": "held_by_existing_process_or_stale_directory",
+        "main_push": "not_attempted",
+        "origin_main_at_block": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+        "pr_status": "open_not_closed",
+        "remote_branch_head": "989ca7bc4eab0dc7a99c07b51026300d450642fc",
+        "status": "blocked",
+        "summary": "Verified Goal 2 branch was pushed, but the required main integration lock already existed and remained held through a bounded wait. Main integration was not attempted. Before retrying, fetch origin, rebase onto current origin/main, rerun verification, then acquire the lock.",
+        "verification": [
+          {
+            "command": "git push --force-with-lease -u origin codex/hermes-goal-2-harness-20260702-1027 && git ls-remote --heads origin codex/hermes-goal-2-harness-20260702-1027",
+            "status": "pass"
+          },
+          {
+            "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
+            "status": "blocked",
+            "summary": "Lock directory already existed."
+          },
+          {
+            "command": "bounded 120-second lock acquisition retry",
+            "status": "blocked",
+            "summary": "Lock remained held; no push to origin/main attempted."
+          },
+          {
+            "command": "bounded 120-second lock acquisition retry at 2026-07-02T15:14:03Z",
+            "status": "blocked",
+            "summary": "Lock remained held on the next goal continuation; no push to origin/main attempted."
+          },
+          {
+            "command": "gh pr view 3 --json statusCheckRollup",
+            "status": "pass",
+            "summary": "PR #3 CI completed successfully for Python 3.11, 3.12, and 3.13 while waiting on the lock."
+          }
+        ]
+      },
+      {
+        "blocked_at": "2026-07-02T15:18:05Z",
+        "branch": "codex/hermes-goal-2-harness-20260702-1027",
+        "branch_head": "b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce",
+        "conflicts": [
+          "experiments/autonomy/journal/2026-07-02.md",
+          "experiments/autonomy/supervisor_state.json",
+          "flightrecorder/schemas/harness_run_manifest.v1.schema.json",
+          "flightrecorder/schemas/harness_run_result.v1.schema.json",
+          "flightrecorder/validation.py",
+          "scripts/hermes_harness.py",
+          "tests/test_deployment_hardening.py"
+        ],
+        "id": "main_integration_conflicts_origin_main_53357ff",
+        "integration_lock": "acquired_then_released",
+        "layer": "harness",
+        "main_push": "not_attempted",
+        "origin_main_at_block": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+        "pr_status": "open_ci_green",
+        "remote_branch_head": "b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce",
+        "status": "blocked",
+        "summary": "Acquired the required integration lock and attempted to rebase the verified Goal 2 branch onto current origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c. The first harness commit conflicted in shared autonomy state, harness schemas, validation, harness script, and deployment-hardening tests. Per protocol, the rebase was aborted, the lock was released, and no origin/main push was attempted.",
+        "verification": [
+          {
+            "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
+            "status": "pass"
+          },
+          {
+            "command": "git fetch origin && git rebase origin/main",
+            "status": "blocked",
+            "summary": "Non-trivial conflicts in shared harness/state surfaces; rebase aborted."
+          },
+          {
+            "command": "gh pr view 3 --json statusCheckRollup",
+            "status": "pass",
+            "summary": "PR #3 CI is green for Python 3.11, 3.12, and 3.13 at branch b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce."
+          }
+        ]
+      },
+      {
+        "blocked_at": "2026-07-02T15:23:14Z",
+        "branch": "codex/hermes-goal-2-harness-20260702-1027",
+        "branch_head": "9441c04fa03655a4abc8be8a55e3baae0c9fb52b",
+        "id": "main_integration_lock_held_after_conflict_record",
+        "integration_lock": "/tmp/hermes-flight-recorder-main-push.lock",
+        "known_rebase_blocker": "main_integration_conflicts_origin_main_53357ff",
+        "layer": "harness",
+        "lock_status": "held_by_existing_process_or_stale_directory",
+        "main_push": "not_attempted",
+        "origin_main_at_block": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+        "pr_status": "open_ci_green",
+        "remote_branch_head": "9441c04fa03655a4abc8be8a55e3baae0c9fb52b",
+        "status": "blocked",
+        "summary": "Goal 2 branch remains pushed and PR #3 CI is green, but the integration lock was held through another bounded retry. Main delivery is also known to require supervisor resolution for the rebase conflicts recorded in main_integration_conflicts_origin_main_53357ff.",
+        "verification": [
+          {
+            "command": "bounded 120-second lock acquisition retry at 2026-07-02T15:23:14Z",
+            "status": "blocked",
+            "summary": "Lock remained held; no push to origin/main attempted."
+          },
+          {
+            "command": "gh pr view 3 --json statusCheckRollup",
+            "status": "pass",
+            "summary": "PR #3 CI is green for Python 3.11, 3.12, and 3.13 at branch 9441c04fa03655a4abc8be8a55e3baae0c9fb52b."
+          }
+        ]
+      }
+    ],
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
+    "latest_head_note": "PR #3 advanced while the main-push lock was unavailable; latest head was merged before any main push attempt.",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
-    "remote_branch_sha": "b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce",
+    "previous_verified_remote_branch_sha": "b07a4cf9c1b6a2e0d5ea3574cc4674152f45bfce",
+    "remote_branch_sha": "dd08db12f0049079de61454364474fa60847c03e",
     "status": "verified_pending_main_delivery",
     "verification": [
       {
@@ -648,8 +800,14 @@
         "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
         "status": "pass",
         "summary": "314 tests passed under Python 3.11.14."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "status": "pass",
+        "summary": "314 tests passed after merging the latest PR #3 head dd08db12f0049079de61454364474fa60847c03e."
       }
-    ]
+    ],
+    "verified_latest_head_at": "2026-07-02T15:26:37Z"
   },
   "latest_artifacts": [
     {
@@ -807,6 +965,11 @@
       "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
       "status": "pass",
       "summary": "314 tests passed under Python 3.11.14."
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "status": "pass",
+      "summary": "314 tests passed after merging the latest PR #3 head dd08db12f0049079de61454364474fa60847c03e."
     }
   ],
   "layer_status": {
@@ -833,7 +996,7 @@
     "harness": {
       "next_packet": null,
       "status": "verified_pending_main_delivery",
-      "summary": "PR #3 auditable mock/live harness contracts merged cleanly with current main and passed focused plus full Python 3.11 verification."
+      "summary": "PR #3 latest head dd08db12f0049079de61454364474fa60847c03e is merged and passed the full Python 3.11 suite on the supervisor integration branch."
     },
     "model": {
       "next_packet": "model_artifact_contracts",
@@ -872,5 +1035,5 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:21:01Z"
+  "updated_at": "2026-07-02T15:26:37Z"
 }
