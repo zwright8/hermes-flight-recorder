@@ -1,0 +1,144 @@
+{
+  "active_layer": "training",
+  "branch": "codex/hermes-goal-5-training-20260702-1027",
+  "completed_packets": [
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/agentic_training_plan.py"
+        },
+        {
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/plan_agentic_training.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_training_plan.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_training_plan.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:33:59Z",
+      "id": "training_registry_backed_agentic_plans",
+      "layer": "training",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added a dependency-free dry-run planner for SFT, action SFT, DPO, SFT-then-DPO, reward-model, process-reward, GRPO, and RL training paths from registered model and dataset manifests. The planner blocks unknown licenses, unredacted traces, missing compatibility, missing mode views, and future RL modes without explicit enablement.",
+      "title": "Plan agentic training paths from registered inputs",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_training_plan tests.test_schema_registry",
+          "status": "pass",
+          "summary": "21 focused tests passed, including agentic training plan behavior and schema catalog coverage."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py",
+          "status": "pass",
+          "summary": "Planner module, script, and tests compile successfully."
+        },
+        {
+          "command": "python3 -m unittest tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "status": "pass",
+          "summary": "Schema catalog test passed with agentic_training_plan registered."
+        },
+        {
+          "command": "python3 scripts/plan_agentic_training.py --mode sft_then_dpo ... --out /tmp/hfr-agentic-training-plan/plan.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan/plan.json",
+          "status": "pass",
+          "summary": "Direct CLI smoke wrote a ready SFT-then-DPO plan from registered demo manifests and validated it against hfr.agentic_training_plan.v1."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force",
+          "status": "pass",
+          "summary": "Schema export wrote the agentic training plan schema and catalog manifest."
+        },
+        {
+          "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && python3 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && git diff --check",
+          "status": "pass",
+          "summary": "State/schema JSON parse and whitespace checks passed."
+        }
+      ]
+    }
+  ],
+  "current_packet": {
+    "id": "training_schema_checked_plan_artifacts",
+    "layer": "training",
+    "priority": "medium",
+    "status": "ready",
+    "summary": "Generate durable sample plan artifacts from registered local manifests and connect them to trainer preflight/archive checks without launching trainers.",
+    "title": "Publish schema-checked training plan artifacts"
+  },
+  "git_persistence": {
+    "branch": "codex/hermes-goal-5-training-20260702-1027",
+    "implementation_commit_sha": "pending",
+    "pr_url": "pending",
+    "remote": "origin",
+    "remote_branch_verified": false
+  },
+  "guardrails": {
+    "disallow_expensive_training": true,
+    "disallow_model_promotion_without_governance": true,
+    "require_journal_checkpoint": true,
+    "require_redaction_before_training": true,
+    "require_registered_datasets": true,
+    "require_registered_models": true,
+    "require_verification_before_completion": true
+  },
+  "latest_verification": [
+    {
+      "command": "python3 -m unittest tests.test_agentic_training_plan tests.test_schema_registry",
+      "status": "pass"
+    },
+    {
+      "command": "python3 -m py_compile flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py",
+      "status": "pass"
+    },
+    {
+      "command": "python3 scripts/plan_agentic_training.py --mode sft_then_dpo ... --out /tmp/hfr-agentic-training-plan/plan.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan/plan.json",
+      "status": "pass"
+    },
+    {
+      "command": "python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force",
+      "status": "pass"
+    },
+    {
+      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && python3 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && git diff --check",
+      "status": "pass"
+    }
+  ],
+  "migration_notes": [
+    "Dedicated worktree started clean at origin/main on codex/hermes-goal-5-training-20260702-1027.",
+    "Requested shared docs and experiments/autonomy files were absent in this worktree at migration time.",
+    "No implementation edits were made in the shared checkout after the migration update."
+  ],
+  "next_packets": [
+    {
+      "id": "training_schema_checked_plan_artifacts",
+      "layer": "training",
+      "priority": "medium",
+      "status": "ready",
+      "summary": "Generate durable sample plan artifacts from registered local manifests and connect them to trainer preflight/archive checks without launching trainers.",
+      "title": "Publish schema-checked training plan artifacts"
+    }
+  ],
+  "promotion_readiness": {
+    "training": "in_progress"
+  },
+  "risks": [
+    "The planner emits dry-run contracts only; it does not prove that a real trainer stack is installed.",
+    "The dedicated worktree lacks the broader autonomous-goal docs from the shared checkout, so this state file bootstraps Goal 5 tracking locally."
+  ],
+  "schema_version": "hfr.autonomy.supervisor_state.v1",
+  "updated_at": "2026-07-02T14:36:05Z"
+}

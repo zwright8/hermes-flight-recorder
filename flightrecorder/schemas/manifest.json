@@ -336,6 +336,14 @@
       "filename": "trainer_wrapper_dry_run.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/trainer_wrapper_dry_run.v1.schema.json",
       "name": "trainer_wrapper_dry_run"
+    },
+    {
+      "artifact": "agentic_training_plan",
+      "artifact_schema_version": "hfr.agentic_training_plan.v1",
+      "description": "Registry-backed dry-run plan for agentic fine-tuning modes.",
+      "filename": "agentic_training_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_training_plan.v1.schema.json",
+      "name": "agentic_training_plan"
     }
   ]
 }

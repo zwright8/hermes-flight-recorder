@@ -12,6 +12,7 @@ include scripts/live_openclaw_smoke.py
 include scripts/live_coven_smoke.py
 include scripts/external_verification_smoke.py
 include scripts/live_verifier_smoke.py
+include scripts/plan_agentic_training.py
 recursive-include flightrecorder/schemas *.json
 recursive-include scenarios *.json
 recursive-include fixtures *.jsonl *.json

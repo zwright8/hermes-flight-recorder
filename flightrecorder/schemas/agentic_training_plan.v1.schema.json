@@ -1,0 +1,318 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Registry-backed dry-run plan for agentic fine-tuning modes.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "execution": {
+      "$ref": "#/$defs/execution"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "handoff_contract": {
+      "$ref": "#/$defs/handoffContract"
+    },
+    "input_manifests": {
+      "$ref": "#/$defs/inputManifests"
+    },
+    "mode": {
+      "enum": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "sft_then_dpo",
+        "reward_model",
+        "process_rewards",
+        "grpo",
+        "rl"
+      ]
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "plan_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "ready_for_external_trainer_plan",
+        "block_external_training"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.agentic_training_plan.v1"
+    },
+    "selected_views": {
+      "items": {
+        "$ref": "#/$defs/view"
+      },
+      "type": "array"
+    },
+    "trainer_plan": {
+      "$ref": "#/$defs/trainerPlan"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "plan_path",
+    "mode",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "input_manifests",
+    "selected_views",
+    "trainer_plan",
+    "execution",
+    "handoff_contract",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Training Plan",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "execution": {
+      "additionalProperties": true,
+      "properties": {
+        "dry_run_only": {
+          "const": true
+        },
+        "external_runner_command": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "training_started": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "training_started",
+        "model_downloads_started",
+        "external_runner_command"
+      ],
+      "type": "object"
+    },
+    "handoffContract": {
+      "additionalProperties": true,
+      "properties": {
+        "allowed_modes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "disallow_unredacted_traces": {
+          "const": true
+        },
+        "flight_recorder_executed_training": {
+          "const": false
+        },
+        "requires_known_license_status": {
+          "const": true
+        },
+        "requires_redacted_dataset": {
+          "const": true
+        },
+        "requires_registered_dataset": {
+          "const": true
+        },
+        "requires_registered_model": {
+          "const": true
+        },
+        "runner_must_require_recommendation": {
+          "const": "ready_for_external_trainer_plan"
+        },
+        "runner_owns_execution": {
+          "const": true
+        }
+      },
+      "required": [
+        "flight_recorder_executed_training",
+        "runner_owns_execution",
+        "runner_must_require_recommendation",
+        "requires_registered_model",
+        "requires_registered_dataset",
+        "requires_known_license_status",
+        "requires_redacted_dataset",
+        "disallow_unredacted_traces",
+        "allowed_modes"
+      ],
+      "type": "object"
+    },
+    "inputManifests": {
+      "additionalProperties": true,
+      "properties": {
+        "dataset": {
+          "$ref": "#/$defs/manifestRef"
+        },
+        "model": {
+          "$ref": "#/$defs/manifestRef"
+        }
+      },
+      "required": [
+        "model",
+        "dataset"
+      ],
+      "type": "object"
+    },
+    "manifestRef": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "license_allows_training": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "id",
+        "license_allows_training"
+      ],
+      "type": "object"
+    },
+    "trainerPlan": {
+      "additionalProperties": true,
+      "properties": {
+        "backend": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "extension_points": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "mode_required_view_groups": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "stage_sequence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "backend",
+        "stage_sequence",
+        "mode_required_view_groups",
+        "extension_points"
+      ],
+      "type": "object"
+    },
+    "view": {
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "row_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "row_count"
+      ],
+      "type": "object"
+    }
+  }
+}
