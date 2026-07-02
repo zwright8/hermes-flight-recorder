@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 def run_cli(args):
@@ -36,9 +37,11 @@ class EvalSummaryTests(unittest.TestCase):
                 ]
             )
             validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+            schema_result = check_schema_file(out)
 
             self.assertEqual(code, 0)
             self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             summary = _read_json(out)
             comparison = summary["comparisons"][0]
             self.assertTrue(summary["passed"])
@@ -70,9 +73,11 @@ class EvalSummaryTests(unittest.TestCase):
                 ]
             )
             validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+            schema_result = check_schema_file(out)
 
             self.assertEqual(code, 1)
             self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             summary = _read_json(out)
             comparison = summary["comparisons"][0]
             self.assertFalse(summary["passed"])

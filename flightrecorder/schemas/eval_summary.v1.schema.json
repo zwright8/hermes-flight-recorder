@@ -1,0 +1,193 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/eval_summary.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Governance-facing held-out evaluation summary across suite, comparison, gate, and external-adapter artifacts.",
+  "properties": {
+    "arm_count": { "minimum": 0, "type": "integer" },
+    "arms": {
+      "items": { "$ref": "#/$defs/arm" },
+      "type": "array"
+    },
+    "compare_gates": {
+      "items": { "$ref": "#/$defs/gate" },
+      "type": "array"
+    },
+    "comparison_count": { "minimum": 0, "type": "integer" },
+    "comparisons": {
+      "items": { "$ref": "#/$defs/comparison" },
+      "type": "array"
+    },
+    "conclusion": { "$ref": "#/$defs/conclusion" },
+    "external_adapter_plan_count": { "minimum": 0, "type": "integer" },
+    "external_adapter_plans": {
+      "items": { "$ref": "#/$defs/external_adapter_plan" },
+      "type": "array"
+    },
+    "gate_count": { "minimum": 0, "type": "integer" },
+    "generated_at": { "minLength": 1, "type": "string" },
+    "governance_ready": { "type": "boolean" },
+    "heldout_scenarios": { "$ref": "#/$defs/heldout_scenarios" },
+    "passed": { "type": "boolean" },
+    "repair_curriculum": { "$ref": "#/$defs/repair_curriculum" },
+    "risks": {
+      "items": { "$ref": "#/$defs/risk" },
+      "type": "array"
+    },
+    "schema_version": { "const": "hfr.eval_summary.v1" }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "passed",
+    "governance_ready",
+    "arm_count",
+    "comparison_count",
+    "gate_count",
+    "external_adapter_plan_count",
+    "heldout_scenarios",
+    "arms",
+    "comparisons",
+    "compare_gates",
+    "external_adapter_plans",
+    "repair_curriculum",
+    "risks",
+    "conclusion"
+  ],
+  "title": "Hermes Flight Recorder Eval Summary",
+  "type": "object",
+  "$defs": {
+    "arm": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "error_count": { "minimum": 0, "type": "integer" },
+        "failed": { "minimum": 0, "type": "integer" },
+        "label": { "minLength": 1, "type": "string" },
+        "operational_metrics": { "type": "object" },
+        "pass_rate": { "type": ["number", "null"] },
+        "passed": { "minimum": 0, "type": "integer" },
+        "path": { "minLength": 1, "type": "string" },
+        "scenario_count": { "minimum": 0, "type": "integer" },
+        "scenario_ids": { "items": { "type": "string" }, "type": "array" },
+        "schema_version": { "type": ["string", "null"] },
+        "total": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["label", "path", "scenario_count", "scenario_ids", "total", "passed", "failed", "error_count", "blocking_reasons"],
+      "type": "object"
+    },
+    "comparison": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "claims_allowed": { "type": "boolean" },
+        "governance_claims": { "type": "object" },
+        "label": { "minLength": 1, "type": "string" },
+        "manifest": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" },
+        "raw_movement": { "type": "object" },
+        "schema_version": { "type": ["string", "null"] }
+      },
+      "required": ["label", "path", "manifest", "claims_allowed", "passed", "blocking_reasons", "raw_movement", "governance_claims"],
+      "type": "object"
+    },
+    "conclusion": {
+      "additionalProperties": true,
+      "properties": {
+        "recommendation": { "minLength": 1, "type": "string" },
+        "risk_count": { "minimum": 0, "type": "integer" },
+        "status": { "enum": ["ready", "blocked"], "type": "string" }
+      },
+      "required": ["status", "recommendation"],
+      "type": "object"
+    },
+    "external_adapter_plan": {
+      "additionalProperties": true,
+      "properties": {
+        "adapter_count": { "minimum": 0, "type": "integer" },
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "label": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "ready": { "type": "boolean" },
+        "ready_adapter_count": { "minimum": 0, "type": "integer" },
+        "schema_version": { "type": ["string", "null"] }
+      },
+      "required": ["label", "path", "ready", "adapter_count", "ready_adapter_count", "blocking_reasons"],
+      "type": "object"
+    },
+    "gate": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "check_count": { "minimum": 0, "type": "integer" },
+        "failed_check_count": { "minimum": 0, "type": "integer" },
+        "failed_checks": { "items": { "type": "object" }, "type": "array" },
+        "label": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "type": ["string", "null"] }
+      },
+      "required": ["label", "path", "passed", "check_count", "failed_check_count", "failed_checks", "blocking_reasons"],
+      "type": "object"
+    },
+    "heldout_scenarios": {
+      "additionalProperties": true,
+      "properties": {
+        "arms": { "items": { "type": "object" }, "type": "array" },
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "cross_arm_claims_allowed": { "type": "boolean" },
+        "identical": { "type": "boolean" },
+        "mismatches": { "items": { "type": "object" }, "type": "array" },
+        "scenario_count": { "minimum": 0, "type": "integer" },
+        "scenario_ids": { "items": { "type": "string" }, "type": "array" },
+        "status": {
+          "enum": ["missing_suite_summaries", "single_arm", "identical", "mismatched", "empty"],
+          "type": "string"
+        }
+      },
+      "required": ["status", "identical", "cross_arm_claims_allowed", "scenario_count", "scenario_ids", "arms", "mismatches", "blocking_reasons"],
+      "type": "object"
+    },
+    "repair_curriculum": {
+      "additionalProperties": true,
+      "properties": {
+        "category_counts": { "items": { "type": "object" }, "type": "array" },
+        "critical_work_item_count": { "minimum": 0, "type": "integer" },
+        "items": { "items": { "$ref": "#/$defs/work_item" }, "type": "array" },
+        "notes": { "items": { "type": "string" }, "type": "array" },
+        "priority_counts": { "items": { "type": "object" }, "type": "array" },
+        "work_item_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["work_item_count", "critical_work_item_count", "priority_counts", "category_counts", "items", "notes"],
+      "type": "object"
+    },
+    "risk": {
+      "additionalProperties": true,
+      "properties": {
+        "label": { "type": "string" },
+        "reason": { "minLength": 1, "type": "string" },
+        "source": { "minLength": 1, "type": "string" }
+      },
+      "required": ["source", "reason"],
+      "type": "object"
+    },
+    "work_item": {
+      "additionalProperties": true,
+      "properties": {
+        "category": { "enum": ["repair", "curriculum", "eval_gate", "eval_harness"], "type": "string" },
+        "count": { "minimum": 0, "type": "integer" },
+        "label": { "minLength": 1, "type": "string" },
+        "priority": { "enum": ["critical", "high", "medium", "low"], "type": "string" },
+        "reason": { "minLength": 1, "type": "string" },
+        "scenario_id": { "type": "string" },
+        "source": { "minLength": 1, "type": "string" },
+        "suggested_action": { "minLength": 1, "type": "string" },
+        "summary": { "minLength": 1, "type": "string" },
+        "work_item_id": { "pattern": "^eval-[0-9a-f]{16}$", "type": "string" }
+      },
+      "required": ["category", "priority", "source", "label", "reason", "summary", "suggested_action", "work_item_id"],
+      "type": "object"
+    }
+  }
+}

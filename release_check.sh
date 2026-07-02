@@ -455,6 +455,22 @@ test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
   --out runs/compare_gate.json >/dev/null
 test -f runs/compare_gate.json
 test -f examples/compare_gate_policy.demo.json
+eval_summary_status=0
+"$PYTHON" -m flightrecorder eval-summary \
+  --suite-summary baseline=runs/suite_summary.json \
+  --suite-summary candidate=runs/suite_summary.json \
+  --compare-export candidate=runs/compare_rl_export \
+  --compare-gate candidate=runs/compare_gate.json \
+  --out runs/eval_summary.json >/dev/null || eval_summary_status=$?
+if [[ "$eval_summary_status" -gt 1 ]]; then
+  echo "eval-summary failed unexpectedly with exit code $eval_summary_status" >&2
+  exit "$eval_summary_status"
+fi
+test -f runs/eval_summary.json
+"$PYTHON" -m flightrecorder validate \
+  --eval-summary runs/eval_summary.json \
+  --strict >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/eval_summary.json >/dev/null
 "$PYTHON" -m flightrecorder export-compare-rl \
   --baseline runs/compare_rl_candidate \
   --candidate runs/compare_rl_baseline \

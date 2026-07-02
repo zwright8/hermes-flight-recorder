@@ -84,6 +84,7 @@ Validate summaries before handoff:
 
 ```bash
 flightrecorder validate --eval-summary runs/eval_summary.json --strict
+flightrecorder schemas --check runs/eval_summary.json
 flightrecorder validate --heldout-manifest runs/heldout_scenarios.json --strict
 flightrecorder validate --external-eval-plan runs/external_eval_plan.json --strict
 ```

@@ -70,6 +70,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("compare_rl_manifest", names)
         self.assertIn("compare_rl_pair", names)
         self.assertIn("compare_rl_dpo", names)
+        self.assertIn("eval_summary", names)
         self.assertIn("review_manifest", names)
         self.assertIn("reviewed_manifest", names)
         self.assertIn("trainer_preflight", names)
