@@ -746,6 +746,18 @@ flightrecorder promotion-alias-apply \
   --out runs/promotion_alias_apply.json
 
 flightrecorder validate --promotion-alias-apply runs/promotion_alias_apply.json --strict
+
+flightrecorder promotion-release-record \
+  --release-id release-2026-07-02 \
+  --promotion-decision runs/promotion_decision.json \
+  --promotion-cards runs/promotion_cards \
+  --promotion-alias-apply runs/promotion_alias_apply.json \
+  --rollback-metadata runs/rollback.json \
+  --compare-gate runs/compare_gate.json \
+  --release-notes runs/RELEASE_NOTES.md \
+  --out runs/promotion_release_record.json
+
+flightrecorder validate --promotion-release-record runs/promotion_release_record.json --strict
 ```
 
 `promotion-decision` is side-effect free. It emits an alias-update receipt only
@@ -762,6 +774,11 @@ alias no longer matches the decision's previous target. Successful applies
 update `candidate`, `champion`, and `rollback`, append an alias-history entry,
 and emit a receipt that `validate --promotion-alias-apply` rechecks against the
 live registry.
+`promotion-release-record` is the final review artifact for a governed release:
+it binds the exact promotion decision, generated cards, alias-apply receipt,
+rollback metadata, eval compare gate, and release notes. Validation rehashes
+each referenced artifact, so changed release notes, stale cards, mismatched eval
+evidence, or a different alias receipt block publication.
 `promotion-cards` is also side-effect free: it writes `MODEL_CARD.md`,
 `DATASET_CARD.md`, and `promotion_cards.json`, and validation rejects stale card
 hashes after generation.

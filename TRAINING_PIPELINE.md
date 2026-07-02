@@ -364,6 +364,18 @@ flightrecorder promotion-alias-apply \
   --out runs/promotion_alias_apply.json
 
 flightrecorder validate --promotion-alias-apply runs/promotion_alias_apply.json --strict
+
+flightrecorder promotion-release-record \
+  --release-id release-2026-07-02 \
+  --promotion-decision runs/promotion_decision.json \
+  --promotion-cards runs/promotion_cards \
+  --promotion-alias-apply runs/promotion_alias_apply.json \
+  --rollback-metadata runs/rollback.json \
+  --compare-gate runs/compare_gate.json \
+  --release-notes runs/RELEASE_NOTES.md \
+  --out runs/promotion_release_record.json
+
+flightrecorder validate --promotion-release-record runs/promotion_release_record.json --strict
 ```
 
 The decision blocks promotion on missing evidence, unknown license status,
@@ -378,6 +390,11 @@ decision, requires a `hfr.model_registry.v1` registry with registered
 alias still matches the decision's previous champion, then updates aliases and
 appends an alias-history entry. Blocked receipts leave registry aliases
 unchanged.
+`promotion-release-record` binds the final publishable evidence set: promotion
+decision, generated cards, alias receipt, rollback metadata, eval compare gate,
+and release notes. Validation rehashes every referenced artifact so stale
+release notes, mismatched eval evidence, card drift, or a different alias
+receipt blocks publication.
 `promotion-cards` generates the model and dataset cards plus
 `promotion_cards.json`; validation rehashes generated cards and inputs so stale
 card evidence is caught before the promotion decision consumes it.

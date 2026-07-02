@@ -868,14 +868,83 @@
           "summary": "Remote branch exists at f205afba87065981c4d31fcaa5fb28d0901edab7."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "branch": "codex/hermes-goal-8-governance-release-record-20260702-1528",
+      "completed_at": "2026-07-02T15:35:00Z",
+      "id": "governance_release_record",
+      "implementation_commit_sha": "321a9b639dbb79c85b832e7fba72926e0e55936d",
+      "layer": "governance",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added promotion-release-record to bind a passing promotion decision, generated cards, alias receipt, rollback metadata, eval compare gate, and release notes into a validated release artifact that rehashes each input.",
+      "title": "Bind governance release records",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "Touched governance modules compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "55 focused governance, ledger, and validation tests passed."
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "pass",
+          "summary": "323 tests passed under Python 3.11."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "completed_at": "2026-07-02T15:35:00Z",
+          "status": "blocked",
+          "summary": "System Python 3.9 cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
+        }
+      ]
     }
   ],
   "current_packet": {
     "id": "land_goal2_harness_pr3",
     "layer": "harness",
     "priority": "critical",
-    "status": "blocked_recurring_main_push_lock",
-    "summary": "Harness PR #3 remains integrated and previously verified on the supervisor branch, but main delivery is blocked by the recurring active main-push lock and origin/main has advanced again.",
+    "status": "verified_pending_main_push",
+    "summary": "Harness PR #3 is merged with release-record main and verified under the main-push lock; push to main is next.",
     "title": "Land auditable harness contracts"
   },
   "git": {
@@ -965,6 +1034,13 @@
         "summary": "310 tests passed under Python 3.11.14 after merging current origin/main."
       }
     ]
+  },
+  "governance_release_record_main_delivery": {
+    "main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
+    "merge_sha": "77be2a34e490a9c1967c8c0935028789cd4da050",
+    "source_branch": "codex/hermes-goal-8-governance-release-record-20260702-1528",
+    "status": "landed_and_retired_on_main",
+    "summary": "Goal 8 release-record governance packet landed on main while Harness PR #3 waited for the main-push lock."
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -1165,14 +1241,14 @@
     "latest_head_note": "PR #3 advanced while the main-push lock was unavailable; latest head was merged before any main push attempt.",
     "latest_origin_main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
     "lock_rechecked_at": "2026-07-02T15:49:10Z",
-    "lock_status": "unavailable_file_exists_after_consecutive_goal_retry",
+    "lock_status": "acquired",
     "main_push_status": "not_attempted_lock_unavailable",
     "pr_status": "open_ci_green",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
     "previous_verified_remote_branch_sha": "dd08db12f0049079de61454364474fa60847c03e",
     "remote_branch_sha": "b702a84792450f5342ad0df3b93515c89a47767a",
-    "required_retry": "Acquire /tmp/hermes-flight-recorder-main-push.lock, fetch origin, verify PR #3 has not advanced, merge current origin/main bc15b6bd27e0a8a6649a5c66e19943f20949da7e or later, rerun verification, push HEAD to origin main, verify remote main SHA, close/merge PR #3, delete source and integration remote branches, and release the lock.",
-    "status": "blocked_recurring_main_push_lock",
+    "required_retry": "Under the acquired lock, rerun verification, push HEAD to origin main, verify remote main SHA, close/merge PR #3, delete source and integration remote branches, and release the lock.",
+    "status": "verified_pending_main_push",
     "verification": [
       {
         "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/cli.py flightrecorder/validation.py flightrecorder/report.py scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py tests/test_deployment_hardening.py tests/test_harness_manifest_cli.py tests/test_harness_replay_matrix.py tests/test_harness_tool_policy.py tests/test_schema_registry.py",
@@ -1218,10 +1294,21 @@
         "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
         "status": "pass",
         "summary": "332 tests passed after merging Model main with Harness PR #3."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_replay_matrix tests.test_harness_tool_policy tests.test_deployment_hardening tests.test_promotion_decision tests.test_promotion_ledger",
+        "status": "pass",
+        "summary": "94 focused Model/Harness/Governance tests passed under the main-push lock."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "status": "pass",
+        "summary": "334 tests passed under the main-push lock after merging origin/main bc15b6bd27e0a8a6649a5c66e19943f20949da7e."
       }
     ],
     "verified_after_model_main_at": "2026-07-02T15:39:27Z",
-    "verified_latest_head_at": "2026-07-02T15:26:37Z"
+    "verified_latest_head_at": "2026-07-02T15:26:37Z",
+    "verified_under_lock_at": "2026-07-02T15:52:39Z"
   },
   "latest_artifacts": [
     {
@@ -1357,23 +1444,48 @@
     {
       "kind": "test",
       "path": "tests/test_harness_manifest_cli.py"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/governance.py"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/cli.py"
+    },
+    {
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/validation.py"
+    },
+    {
+      "kind": "test",
+      "layer": "governance",
+      "path": "tests/test_promotion_decision.py"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "README.md"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "TRAINING_PIPELINE.md"
     }
   ],
   "latest_verification": [
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_replay_matrix tests.test_harness_tool_policy tests.test_deployment_hardening",
+      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_replay_matrix tests.test_harness_tool_policy tests.test_deployment_hardening tests.test_promotion_decision tests.test_promotion_ledger",
       "status": "pass",
-      "summary": "69 focused Model/Harness/validation/deployment tests passed after merging Model main."
-    },
-    {
-      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --out /tmp/model_layer_validation_check.json --strict",
-      "status": "pass",
-      "summary": "Model registry semantic validation passed after merging Model main."
+      "summary": "94 focused Model/Harness/Governance tests passed under the main-push lock."
     },
     {
       "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
       "status": "pass",
-      "summary": "332 tests passed after merging Model main with Harness PR #3."
+      "summary": "334 tests passed under the main-push lock after merging origin/main bc15b6bd27e0a8a6649a5c66e19943f20949da7e."
     }
   ],
   "layer_status": {
@@ -1393,14 +1505,14 @@
       "summary": "Evidence bundles now require gate decision contracts when gates are included and can require at least one gate summary."
     },
     "governance": {
-      "next_packet": "governance_release_record",
+      "next_packet": "governance_policy_artifact",
       "status": "in_progress",
-      "summary": "Promotion decisions, model/dataset cards, and guarded registry alias application are implemented; release-record binding remains."
+      "summary": "Promotion decisions, model/dataset cards, guarded registry alias application, and release-record binding are implemented; explicit promotion policy artifacts remain."
     },
     "harness": {
       "next_packet": null,
-      "status": "blocked_recurring_main_push_lock",
-      "summary": "Integration branch codex/hermes-goal-0-supervisor-20260702-1115 is pushed at a9e39d0dee9f83c7254bf34e5790f73e8bc65019 and contains PR #3 head b702a84792450f5342ad0df3b93515c89a47767a, but /tmp/hermes-flight-recorder-main-push.lock remains unavailable and origin/main advanced to bc15b6bd27e0a8a6649a5c66e19943f20949da7e."
+      "status": "verified_pending_main_push",
+      "summary": "Harness PR #3 is merged with release-record main bc15b6bd27e0a8a6649a5c66e19943f20949da7e and passed focused plus full Python 3.11 verification under the lock."
     },
     "model": {
       "next_packet": "model_real_metadata_scout_packet",
@@ -1430,8 +1542,8 @@
       "id": "land_goal2_harness_pr3",
       "layer": "harness",
       "priority": "critical",
-      "status": "merged_with_model_main_pending_reverification",
-      "summary": "Harness PR #3 is merged with current Model main; rerun verification before retrying main delivery.",
+      "status": "merged_with_release_record_main_pending_reverification",
+      "summary": "Harness PR #3 is merged with current release-record main; rerun verification before pushing main.",
       "title": "Land auditable harness contracts"
     }
   ],
@@ -1440,11 +1552,11 @@
     "eval": "not_started",
     "evidence": "in_progress",
     "governance": "in_progress",
-    "harness": "blocked_recurring_main_push_lock",
+    "harness": "verified_pending_main_push",
     "model": "in_progress",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:49:10Z"
+  "updated_at": "2026-07-02T15:52:39Z"
 }

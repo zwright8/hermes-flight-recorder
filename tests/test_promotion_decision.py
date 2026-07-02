@@ -150,6 +150,79 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertIn("registry_alias_history_list", failed_check_ids(receipt))
             self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
 
+    def test_promotion_release_record_binds_decision_cards_alias_rollback_eval_and_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            decision_path = root / "promotion_decision.json"
+            registry_path = write_model_registry(root)
+            alias_receipt_path = root / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(root)
+            release_record_path = root / "promotion_release_record.json"
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+
+            code = run_cli(
+                promotion_release_record_args(
+                    artifacts,
+                    cards_dir,
+                    decision_path,
+                    alias_receipt_path,
+                    release_notes_path,
+                    release_record_path,
+                )
+            )
+
+            self.assertEqual(code, 0)
+            record = json.loads(release_record_path.read_text(encoding="utf-8"))
+            self.assertEqual(record["schema_version"], "hfr.promotion_release_record.v1")
+            self.assertTrue(record["passed"])
+            self.assertEqual(record["recommendation"], "publish_release")
+            self.assertEqual(record["release"]["candidate_id"], "candidate-v2")
+            self.assertEqual(record["release"]["rollback_id"], "champion-v1")
+            self.assertEqual(record["release"]["dataset_id"], "dataset-v1")
+            self.assertEqual(record["artifact_validation"]["passed"], True)
+            self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 0)
+
+    def test_validate_promotion_release_record_rejects_stale_release_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            decision_path = root / "promotion_decision.json"
+            registry_path = write_model_registry(root)
+            alias_receipt_path = root / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(root)
+            release_record_path = root / "promotion_release_record.json"
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+            self.assertEqual(
+                run_cli(
+                    promotion_release_record_args(
+                        artifacts,
+                        cards_dir,
+                        decision_path,
+                        alias_receipt_path,
+                        release_notes_path,
+                        release_record_path,
+                    )
+                ),
+                0,
+            )
+
+            release_notes_path.write_text("# Release Notes\n\nChanged after release record.\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 1)
+
     def test_promotion_decision_blocks_missing_dataset_card_and_rollback(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -318,6 +391,15 @@ def write_model_registry(root: Path, *, champion_alias: str = "champion-v1", ali
     return registry_path
 
 
+def write_release_notes(root: Path) -> Path:
+    release_notes = root / "RELEASE_NOTES.md"
+    release_notes.write_text(
+        "# Release Notes\n\n- Promotes candidate-v2 after passing governance gates.\n- Rollback target: champion-v1.\n",
+        encoding="utf-8",
+    )
+    return release_notes
+
+
 def promotion_alias_apply_args(registry_path: Path, decision_path: Path, receipt_path: Path) -> list[str]:
     return [
         "promotion-alias-apply",
@@ -327,6 +409,36 @@ def promotion_alias_apply_args(registry_path: Path, decision_path: Path, receipt
         str(decision_path),
         "--out",
         str(receipt_path),
+        "--preserve-paths",
+    ]
+
+
+def promotion_release_record_args(
+    artifacts: dict[str, Path | None],
+    cards_dir: Path,
+    decision_path: Path,
+    alias_receipt_path: Path,
+    release_notes_path: Path,
+    release_record_path: Path,
+) -> list[str]:
+    return [
+        "promotion-release-record",
+        "--release-id",
+        "release-2026-07-02",
+        "--promotion-decision",
+        str(decision_path),
+        "--promotion-cards",
+        str(cards_dir),
+        "--promotion-alias-apply",
+        str(alias_receipt_path),
+        "--rollback-metadata",
+        str(artifacts["rollback_metadata"]),
+        "--compare-gate",
+        str(artifacts["compare_gate"]),
+        "--release-notes",
+        str(release_notes_path),
+        "--out",
+        str(release_record_path),
         "--preserve-paths",
     ]
 
