@@ -69,6 +69,16 @@
           "command": "bounded 120-second lock acquisition retry",
           "status": "blocked",
           "summary": "Lock remained held; no push to origin/main attempted."
+        },
+        {
+          "command": "bounded 120-second lock acquisition retry at 2026-07-02T15:14:03Z",
+          "status": "blocked",
+          "summary": "Lock remained held on the next goal continuation; no push to origin/main attempted."
+        },
+        {
+          "command": "gh pr view 3 --json statusCheckRollup",
+          "status": "pass",
+          "summary": "PR #3 CI completed successfully for Python 3.11, 3.12, and 3.13 while waiting on the lock."
         }
       ]
     }
@@ -271,7 +281,7 @@
   "current_packet": {
     "id": "main_delivery_for_verified_harness_branch",
     "status": "blocked",
-    "summary": "Verified Goal 2 branch is pushed at 989ca7bc4eab0dc7a99c07b51026300d450642fc, but main integration is waiting on /tmp/hermes-flight-recorder-main-push.lock. Re-fetch/rebase/re-verify before retrying because origin/main advanced to b671b9671fff7e891fa0ee58a69f64e818694b11."
+    "summary": "Verified Goal 2 branch is pushed at e6b785c18df2e207246d9cb50564643186c839b7 with PR #3 CI green, but main integration is waiting on /tmp/hermes-flight-recorder-main-push.lock. Re-fetch/rebase/re-verify before retrying; origin/main is b671b9671fff7e891fa0ee58a69f64e818694b11."
   },
   "latest_commit_sha": "938c053b1e5ab97058fc28b443cfd6ec0828ccbb",
   "latest_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
@@ -293,5 +303,5 @@
     "harness": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:09:16Z"
+  "updated_at": "2026-07-02T15:14:03Z"
 }
