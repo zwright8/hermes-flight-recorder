@@ -900,6 +900,9 @@ rollback metadata, eval compare gate, and release notes. Validation rehashes
 each referenced artifact, so changed release notes, stale cards, mismatched eval
 evidence, a different alias receipt, or a policy file that does not match the
 policy embedded in the promotion decision block publication.
+Publishable release records must also carry validation evidence for the
+promotion decision, promotion cards, and alias-apply receipt that were checked
+immediately before binding.
 `promotion-cards` is also side-effect free: it writes `MODEL_CARD.md`,
 `DATASET_CARD.md`, and `promotion_cards.json`, and validation rejects stale card
 hashes after generation.

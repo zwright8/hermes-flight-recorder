@@ -283,6 +283,47 @@ class PromotionDecisionTests(unittest.TestCase):
 
             self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 1)
 
+    def test_validate_promotion_release_record_requires_artifact_validation_targets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            decision_path = root / "promotion_decision.json"
+            registry_path = write_model_registry(root)
+            alias_receipt_path = root / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(root)
+            release_record_path = root / "promotion_release_record.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+            self.assertEqual(
+                run_cli(
+                    promotion_release_record_args(
+                        artifacts,
+                        cards_dir,
+                        decision_path,
+                        alias_receipt_path,
+                        release_notes_path,
+                        release_record_path,
+                    )
+                ),
+                0,
+            )
+            record = json.loads(release_record_path.read_text(encoding="utf-8"))
+            record["artifact_validation"]["target_count"] = 0
+            release_record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("artifact_validation.target_count", errors)
+
     def test_promotion_release_record_blocks_policy_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

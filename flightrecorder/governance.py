@@ -50,6 +50,11 @@ PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS = (
     "compare_gate",
     "release_notes",
 )
+PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS = (
+    "promotion_decision",
+    "promotion_cards",
+    "promotion_alias_apply",
+)
 PROMOTION_POLICY_REQUIRED_FIELDS = (
     "required_artifacts",
     "release_required_artifacts",

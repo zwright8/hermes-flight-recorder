@@ -59,6 +59,7 @@ from .governance import (
     PROMOTION_POLICY_SCHEMA_VERSION,
     PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION,
     PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
+    PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS,
     PROMOTION_RELEASE_RECORD_SCHEMA_VERSION,
 )
 from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
@@ -8085,6 +8086,15 @@ def _validate_promotion_release_record_validation(value: Any, expected_passed: b
     for field_name in ("target_count", "error_count", "warning_count"):
         if not _is_non_negative_int(value.get(field_name)):
             target.errors.append(f"promotion_release_record.artifact_validation.{field_name} must be a non-negative integer.")
+    if expected_passed and _is_non_negative_int(value.get("target_count")):
+        minimum = len(PROMOTION_RELEASE_RECORD_VALIDATED_ARTIFACTS)
+        if value["target_count"] < minimum:
+            target.errors.append(
+                "promotion_release_record.artifact_validation.target_count "
+                f"must be at least {minimum} for validated release artifacts."
+            )
+    if expected_passed and _is_non_negative_int(value.get("error_count")) and value["error_count"] != 0:
+        target.errors.append("promotion_release_record.artifact_validation.error_count must be 0 when the release record passed.")
 
 
 def _validate_promotion_release_record_bindings(value: Any, artifacts: dict[str, Any], target: ValidationTarget) -> None:
