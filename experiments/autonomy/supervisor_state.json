@@ -100,23 +100,142 @@
           "summary": "302 tests passed under Python 3.11.14."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "harness",
+          "path": "flightrecorder/harness.py"
+        },
+        {
+          "kind": "script",
+          "layer": "harness",
+          "path": "scripts/hermes_harness.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "harness",
+          "path": "flightrecorder/schemas/harness_run_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "harness",
+          "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
+        },
+        {
+          "kind": "module",
+          "layer": "harness",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "harness",
+          "path": "tests/test_deployment_hardening.py"
+        },
+        {
+          "kind": "test",
+          "layer": "harness",
+          "path": "tests/test_schema_registry.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "harness",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "harness",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:51:50Z",
+      "commit_sha": "3c8ae3bec9843a47cd3146b25dcc9a05663c46c5",
+      "id": "harness_manifest_runner_contracts",
+      "layer": "harness",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added an offline mock hermes-harness runner that emits harness_manifest.json, harness_result.json, a source observer trace, normal run artifacts, schema contracts, validation checks, tests, and documentation.",
+      "title": "Bootstrap harness run manifest contracts",
+      "verification": [
+        {
+          "command": "/opt/homebrew/bin/python3.11 scripts/hermes_harness.py run --scenario scenarios/prompt_injection_good.json --out /tmp/hfr-harness-smoke --mock-response 'Summary: the issue asks for quality gates for autonomous runs.' --force",
+          "completed_at": "2026-07-02T14:47:37Z",
+          "status": "pass",
+          "summary": "Offline harness produced manifest, result, source trace, and normal run artifacts with score 100."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --harness-manifest /tmp/hfr-harness-smoke/harness_manifest.json --harness-result /tmp/hfr-harness-smoke/harness_result.json --run /tmp/hfr-harness-smoke --strict",
+          "completed_at": "2026-07-02T14:47:37Z",
+          "status": "pass",
+          "summary": "Harness manifest/result and generated run validated with zero warnings or errors."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-harness-smoke/harness_manifest.json && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --check /tmp/hfr-harness-smoke/harness_result.json",
+          "completed_at": "2026-07-02T14:47:37Z",
+          "status": "pass",
+          "summary": "Both new public schema contracts accepted generated artifacts."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/harness.py flightrecorder/validation.py flightrecorder/cli.py scripts/hermes_harness.py tests/test_deployment_hardening.py tests/test_schema_registry.py",
+          "completed_at": "2026-07-02T14:48:09Z",
+          "status": "pass",
+          "summary": "Touched harness, validation, CLI, script, and test files compile successfully."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_deployment_hardening.DeploymentHardeningTests.test_pyproject_exposes_console_scripts tests.test_deployment_hardening.DeploymentHardeningTests.test_hermes_harness_script_help_is_available tests.test_deployment_hardening.DeploymentHardeningTests.test_offline_harness_writes_valid_manifest_and_result tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "completed_at": "2026-07-02T14:48:09Z",
+          "status": "pass",
+          "summary": "4 focused harness/schema tests passed."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_validation",
+          "completed_at": "2026-07-02T14:48:09Z",
+          "status": "pass",
+          "summary": "28 validation tests passed."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_deployment_hardening tests.test_schema_registry",
+          "completed_at": "2026-07-02T14:48:32Z",
+          "status": "pass",
+          "summary": "28 deployment hardening and schema registry tests passed."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_cli_report tests.test_evidence_bundle",
+          "completed_at": "2026-07-02T14:48:32Z",
+          "status": "pass",
+          "summary": "56 CLI/evidence regression tests passed."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T14:49:03Z",
+          "status": "pass",
+          "summary": "304 tests passed under Python 3.11.14."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "completed_at": "2026-07-02T14:49:03Z",
+          "status": "blocked",
+          "summary": "System Python 3.9.6 still lacks tomllib, so tests.test_deployment_hardening cannot import under that interpreter."
+        }
+      ]
     }
   ],
   "current_packet": {
     "depends_on": [
-      "evidence_required_gate_decision_contracts"
+      "harness_manifest_runner_contracts"
     ],
-    "id": "harness_manifest_runner_contracts",
-    "layer": "harness",
+    "id": "data_registry_contracts",
+    "layer": "data",
     "priority": "high",
     "status": "ready",
-    "summary": "Add a manifest-backed local harness runner or bridge using only branch-native code and tests.",
-    "title": "Bootstrap harness run manifest contracts"
+    "summary": "Add dataset registry and redaction provenance contracts after harness evidence is available.",
+    "title": "Register dataset versions"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
-    "commit_sha": "4cc21a6f97dc8f76ff81f0edddbd4665cfc9ddc6",
+    "commit_sha": "3c8ae3bec9843a47cd3146b25dcc9a05663c46c5",
     "persistence_checkpoint": "state records packet commit and PR URL; branch head is verified after push because commits cannot self-record their final SHA",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
     "remote": "origin",
@@ -132,13 +251,18 @@
   "latest_artifacts": [
     {
       "kind": "module",
-      "layer": "evidence",
-      "path": "flightrecorder/gate_contract.py"
+      "layer": "harness",
+      "path": "flightrecorder/harness.py"
     },
     {
       "kind": "test",
-      "layer": "evidence",
-      "path": "tests/test_evidence_bundle.py"
+      "layer": "harness",
+      "path": "tests/test_deployment_hardening.py"
+    },
+    {
+      "kind": "schema",
+      "layer": "harness",
+      "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
     },
     {
       "kind": "state",
@@ -153,34 +277,34 @@
   ],
   "latest_verification": [
     {
-      "command": "python3 -m unittest tests.test_evidence_bundle tests.test_cli_report.CliReportTests.test_gate_suite_accepts_thresholds tests.test_cli_report.CliReportTests.test_gate_suite_fails_thresholds_and_forbidden_rules tests.test_cli_report.CliReportTests.test_run_suite_generates_complete_evidence_bundle",
-      "completed_at": "2026-07-02T14:32:48Z",
+      "command": "/opt/homebrew/bin/python3.11 scripts/hermes_harness.py run --scenario scenarios/prompt_injection_good.json --out /tmp/hfr-harness-smoke --mock-response 'Summary: the issue asks for quality gates for autonomous runs.' --force",
+      "completed_at": "2026-07-02T14:47:37Z",
       "status": "pass",
-      "summary": "13 focused Evidence/Gate tests passed."
+      "summary": "Offline harness produced manifest, result, source trace, and normal run artifacts with score 100."
     },
     {
-      "command": "python3 -m unittest tests.test_validation",
-      "completed_at": "2026-07-02T14:32:48Z",
+      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --harness-manifest /tmp/hfr-harness-smoke/harness_manifest.json --harness-result /tmp/hfr-harness-smoke/harness_result.json --run /tmp/hfr-harness-smoke --strict",
+      "completed_at": "2026-07-02T14:47:37Z",
       "status": "pass",
-      "summary": "28 validation tests passed."
+      "summary": "Harness manifest/result and generated run validated with zero warnings or errors."
     },
     {
-      "command": "python3 -m unittest tests.test_cli_report",
-      "completed_at": "2026-07-02T14:32:48Z",
+      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_deployment_hardening tests.test_schema_registry",
+      "completed_at": "2026-07-02T14:48:32Z",
       "status": "pass",
-      "summary": "46 CLI report/gate tests passed."
+      "summary": "28 deployment hardening and schema registry tests passed."
     },
     {
       "command": "python3 -m unittest discover",
-      "completed_at": "2026-07-02T14:35:33Z",
+      "completed_at": "2026-07-02T14:49:03Z",
       "status": "blocked",
-      "summary": "System Python 3.9.6 lacks tomllib, so tests.test_deployment_hardening cannot import under that interpreter."
+      "summary": "System Python 3.9.6 still lacks tomllib, so tests.test_deployment_hardening cannot import under that interpreter."
     },
     {
       "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
-      "completed_at": "2026-07-02T14:35:33Z",
+      "completed_at": "2026-07-02T14:49:03Z",
       "status": "pass",
-      "summary": "302 tests passed under Python 3.11.14."
+      "summary": "304 tests passed under Python 3.11.14."
     }
   ],
   "layer_status": {
@@ -205,9 +329,9 @@
       "summary": "No promotion or alias movement attempted."
     },
     "harness": {
-      "next_packet": "harness_manifest_runner_contracts",
-      "status": "not_started",
-      "summary": "Harness manifest contracts are the next dependency-ordered packet for this branch."
+      "next_packet": null,
+      "status": "in_progress",
+      "summary": "Offline mock harness now emits typed manifest/result artifacts, validates hashes and scorecard consistency, and can feed Data/Training handoffs without live providers."
     },
     "model": {
       "next_packet": null,
@@ -228,17 +352,6 @@
   "next_packets": [
     {
       "depends_on": [
-        "evidence_required_gate_decision_contracts"
-      ],
-      "id": "harness_manifest_runner_contracts",
-      "layer": "harness",
-      "priority": "high",
-      "status": "ready",
-      "summary": "Add a manifest-backed local harness runner or bridge using only branch-native code and tests.",
-      "title": "Bootstrap harness run manifest contracts"
-    },
-    {
-      "depends_on": [
         "harness_manifest_runner_contracts"
       ],
       "id": "data_registry_contracts",
@@ -254,11 +367,11 @@
     "eval": "not_started",
     "evidence": "in_progress",
     "governance": "not_started",
-    "harness": "not_started",
+    "harness": "in_progress",
     "model": "not_started",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:35:33Z"
+  "updated_at": "2026-07-02T14:51:50Z"
 }
