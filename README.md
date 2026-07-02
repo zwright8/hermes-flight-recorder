@@ -753,6 +753,7 @@ python3.11 scripts/hermes_harness.py run-suite \
   --scenarios scenarios \
   --out runs/harness_suite \
   --mock-response "Summary: autonomous evidence quality gates." \
+  --relative-paths \
   --force
 ```
 
@@ -762,7 +763,8 @@ Record a no-network model probe before choosing a mock or live smoke runner:
 python3.11 scripts/hermes_harness.py probe-model \
   --provider mock \
   --model hfr-mock \
-  --out runs/harness_probe
+  --out runs/harness_probe \
+  --relative-paths
 ```
 
 Publish an already-recorded Codex-style trajectory through the same harness
@@ -775,7 +777,8 @@ python3.11 scripts/hermes_harness.py publish-trace \
   --format trajectory_jsonl \
   --runner codex_style_trace \
   --provider codex \
-  --out runs/harness_codex_style
+  --out runs/harness_codex_style \
+  --relative-paths
 ```
 
 Replay from a generated lineage:

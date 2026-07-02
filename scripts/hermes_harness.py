@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shlex
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,6 +18,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from flightrecorder.cli import _run_scenario_artifacts, _safe_run_id, cmd_replay
+from flightrecorder.lineage import REPLAY_BUNDLE_SCHEMA_VERSION
 from flightrecorder.schema import load_scenario
 
 
@@ -99,6 +102,7 @@ def publish_harness_artifacts(
     process: dict[str, Any] | None = None,
     metadata: dict[str, Any] | None = None,
     force: bool = False,
+    preserve_paths: bool = True,
 ) -> dict[str, Any]:
     """Write harness_manifest.json and harness_result.json for an existing run."""
     run_dir = Path(run_dir).expanduser().resolve()
@@ -121,7 +125,7 @@ def publish_harness_artifacts(
         manifest["sandbox"]["fake_secret_files"] = secret_files
     if metadata:
         manifest["metadata"] = metadata
-    _write_json(run_dir / "harness_manifest.json", manifest)
+    _write_json(run_dir / "harness_manifest.json", _display_harness_manifest(manifest, run_dir, preserve_paths))
 
     scorecard = artifact_result["scorecard"]
     result = {
@@ -131,20 +135,24 @@ def publish_harness_artifacts(
         "provider": provider,
         "model": manifest["model"],
         "scenario_id": str(scenario["id"]),
-        "sandbox": {
-            **manifest["sandbox"],
-            **({"fake_secret_files": secret_files} if secret_files else {}),
-        },
+        "sandbox": _display_sandbox(
+            {**manifest["sandbox"], **({"fake_secret_files": secret_files} if secret_files else {})},
+            run_dir,
+            preserve_paths,
+        ),
         "tool_policy": manifest["tool_policy"],
-        "trace": {"format": trace_format, "path": str(_resolve_output_path(trace_path, run_dir))},
+        "trace": {
+            "format": trace_format,
+            "path": _display_path(_resolve_output_path(trace_path, run_dir), run_dir, preserve_paths),
+        },
         "scorecard": {
-            "path": str(artifact_result["paths"]["scorecard"]),
+            "path": _display_path(artifact_result["paths"]["scorecard"], run_dir, preserve_paths),
             "passed": bool(scorecard["passed"]),
             "score": scorecard["score"],
             "critical_failures": scorecard.get("critical_failures", []),
         },
-        "artifacts": _artifact_paths(artifact_result["paths"]),
-        "replay": _replay_reference(artifact_result["paths"]["lineage"], artifact_result["lineage"]),
+        "artifacts": _artifact_paths(artifact_result["paths"], run_dir, preserve_paths),
+        "replay": _replay_reference(artifact_result["paths"]["lineage"], artifact_result["lineage"], run_dir, preserve_paths),
     }
     if process:
         result["process"] = process
@@ -166,6 +174,7 @@ def publish_trace_run(
     base_url: str | None = None,
     tool_policy: dict[str, Any] | None = None,
     force: bool = False,
+    preserve_paths: bool = True,
 ) -> dict[str, Any]:
     """Publish a recorded trace as common harness manifest/result artifacts."""
     run_dir = Path(out_dir).expanduser().resolve()
@@ -174,22 +183,43 @@ def publish_trace_run(
     run_dir.mkdir(parents=True, exist_ok=True)
     resolved_trace = Path(trace_path).expanduser().resolve()
     resolved_scenario = Path(scenario_path).expanduser().resolve()
+    published_scenario = resolved_scenario
+    published_trace = resolved_trace
+    relative_replay_inputs: dict[str, Path] = {}
+    if not preserve_paths:
+        inputs_dir = run_dir / "inputs"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
+        published_scenario = inputs_dir / "scenario.json"
+        published_trace = inputs_dir / _portable_trace_name(resolved_trace)
+        shutil.copyfile(resolved_scenario, published_scenario)
+        shutil.copyfile(resolved_trace, published_trace)
+        relative_replay_inputs = {
+            "scenario": published_scenario,
+            "source_trace": published_trace,
+        }
     artifact_result = _run_scenario_artifacts(
-        resolved_scenario,
+        published_scenario,
         run_dir,
-        trace_override=resolved_trace,
+        trace_override=published_trace,
         trace_format=trace_format,
-        preserve_paths=True,
+        preserve_paths=preserve_paths,
     )
+    if relative_replay_inputs:
+        artifact_result["lineage"] = _rewrite_relative_replay_lineage(
+            artifact_result["lineage"],
+            run_dir,
+            relative_replay_inputs,
+        )
+        _write_json(artifact_result["paths"]["lineage"], artifact_result["lineage"])
     sandbox_root = run_dir / "sandbox"
     for path in (sandbox_root, sandbox_root / "home", sandbox_root / "workspace", sandbox_root / "events"):
         path.mkdir(parents=True, exist_ok=True)
     fake_secret_files = write_fake_secret_canaries(sandbox_root / "home")
     return publish_harness_artifacts(
-        scenario_path=resolved_scenario,
+        scenario_path=published_scenario,
         run_dir=run_dir,
         artifact_result=artifact_result,
-        trace_path=resolved_trace,
+        trace_path=published_trace,
         trace_format=_published_trace_format(artifact_result, trace_format),
         runner=runner,
         provider=provider,
@@ -208,15 +238,16 @@ def publish_trace_run(
         process={"exit_code": 0, "mode": "recorded_trace"},
         metadata={"source": "scripts/hermes_harness.py", "interface": "publish_trace_run"},
         force=force,
+        preserve_paths=preserve_paths,
     )
 
 
-def run_scenario(manifest: dict[str, Any] | str | Path) -> dict[str, Any]:
+def run_scenario(manifest: dict[str, Any] | str | Path, *, preserve_paths: bool = True) -> dict[str, Any]:
     """Run a single scenario through a supported harness runner."""
     resolved = _load_manifest(manifest)
     if resolved.get("runner") != "mock":
         raise ValueError(f"unsupported harness runner {resolved.get('runner')!r}; only 'mock' is implemented")
-    return _run_mock_scenario(resolved)
+    return _run_mock_scenario(resolved, preserve_paths=preserve_paths)
 
 
 def run_suite(
@@ -231,6 +262,7 @@ def run_suite(
     base_url: str | None = None,
     mock_response: str | None = None,
     force: bool = False,
+    preserve_paths: bool = True,
 ) -> dict[str, Any]:
     """Run a directory of scenarios through the mock harness runner."""
     scenario_paths = _discover_scenario_paths(scenarios_dir, pattern=pattern, recursive=recursive)
@@ -265,10 +297,10 @@ def run_suite(
                 mock_response=mock_response,
                 force=force,
             )
-            result = run_scenario(manifest)
-            runs.append(_suite_run_record(result, run_dir))
+            result = run_scenario(manifest, preserve_paths=preserve_paths)
+            runs.append(_suite_run_record(result, run_dir, suite_dir, preserve_paths))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            errors.append({"scenario_path": str(Path(scenario_path).expanduser().resolve()), "error": str(exc)})
+            errors.append({"scenario_path": _display_path(scenario_path, suite_dir, preserve_paths), "error": str(exc)})
 
     passed = sum(1 for run in runs if run["passed"])
     failed = len(runs) - passed
@@ -276,8 +308,8 @@ def run_suite(
         "schema_version": HARNESS_SUITE_RESULT_SCHEMA_VERSION,
         "created_at": _now_iso(),
         "runner_interface": "run_suite",
-        "scenarios_dir": str(Path(scenarios_dir).expanduser().resolve()),
-        "out_dir": str(suite_dir),
+        "scenarios_dir": _display_path(scenarios_dir, suite_dir, preserve_paths),
+        "out_dir": _display_path(suite_dir, suite_dir, preserve_paths),
         "pattern": pattern,
         "recursive": recursive,
         "runner": runner,
@@ -289,7 +321,7 @@ def run_suite(
         "error_count": len(errors),
         "errors": errors,
         "runs": runs,
-        "artifacts": {"suite_result": str(suite_dir / "harness_suite_result.json")},
+        "artifacts": {"suite_result": _display_path(suite_dir / "harness_suite_result.json", suite_dir, preserve_paths)},
     }
     _write_json(suite_dir / "harness_suite_result.json", summary)
     return summary
@@ -304,6 +336,7 @@ def probe_model(
     base_url: str | None = None,
     allow_network: bool = False,
     tool_policy: dict[str, Any] | None = None,
+    preserve_paths: bool = True,
 ) -> dict[str, Any]:
     """Write a no-network harness probe receipt for a model endpoint selection."""
     probe_dir = Path(out_dir).expanduser().resolve()
@@ -340,12 +373,12 @@ def probe_model(
         "provider": provider,
         "model": {"id": model, "base_url": base_url},
         "sandbox": {
-            "root": str(sandbox_root),
-            "home": str(home_dir),
-            "workspace": str(workspace),
-            "events": str(events_dir),
+            "root": _display_path(sandbox_root, probe_dir, preserve_paths),
+            "home": _display_path(home_dir, probe_dir, preserve_paths),
+            "workspace": _display_path(workspace, probe_dir, preserve_paths),
+            "events": _display_path(events_dir, probe_dir, preserve_paths),
             "fake_secret_canaries": _fake_secret_canary_records(),
-            "fake_secret_files": fake_secret_files,
+            "fake_secret_files": [_display_path(path, probe_dir, preserve_paths) for path in fake_secret_files],
             "ephemeral": True,
             "audit_artifacts_kept": True,
         },
@@ -407,7 +440,7 @@ def write_fake_secret_canaries(home_dir: str | Path) -> list[str]:
     return [str(secret_path)]
 
 
-def _run_mock_scenario(manifest: dict[str, Any]) -> dict[str, Any]:
+def _run_mock_scenario(manifest: dict[str, Any], *, preserve_paths: bool = True) -> dict[str, Any]:
     run_dir = Path(manifest["outputs"]["run_dir"])
     if bool(manifest.get("force")) and run_dir.exists():
         shutil.rmtree(run_dir)
@@ -441,7 +474,7 @@ def _run_mock_scenario(manifest: dict[str, Any]) -> dict[str, Any]:
         run_dir,
         trace_override=trace_path,
         trace_format="observer_jsonl",
-        preserve_paths=True,
+        preserve_paths=preserve_paths,
     )
     return publish_harness_artifacts(
         scenario_path=scenario_path,
@@ -458,6 +491,7 @@ def _run_mock_scenario(manifest: dict[str, Any]) -> dict[str, Any]:
         fake_secret_files=fake_secret_files,
         metadata={"source": "scripts/hermes_harness.py"},
         force=bool(manifest.get("force")),
+        preserve_paths=preserve_paths,
     )
 
 
@@ -557,15 +591,15 @@ def _discover_scenario_paths(scenarios_dir: str | Path, *, pattern: str, recursi
     return sorted(path for path in paths if path.is_file())
 
 
-def _suite_run_record(result: dict[str, Any], run_dir: Path) -> dict[str, Any]:
+def _suite_run_record(result: dict[str, Any], run_dir: Path, suite_dir: Path, preserve_paths: bool) -> dict[str, Any]:
     return {
         "scenario_id": result["scenario_id"],
         "runner": result["runner"],
         "provider": result["provider"],
         "model": result["model"],
-        "run_dir": str(run_dir),
-        "manifest": str(run_dir / "harness_manifest.json"),
-        "result": str(run_dir / "harness_result.json"),
+        "run_dir": _display_path(run_dir, suite_dir, preserve_paths),
+        "manifest": _display_path(run_dir / "harness_manifest.json", suite_dir, preserve_paths),
+        "result": _display_path(run_dir / "harness_result.json", suite_dir, preserve_paths),
         "trace": result["trace"],
         "scorecard": result["scorecard"],
         "replay": result["replay"],
@@ -597,6 +631,104 @@ def _published_normalized_trace(artifact_result: dict[str, Any]) -> dict[str, An
     return {}
 
 
+def _portable_trace_name(path: Path) -> str:
+    suffixes = "".join(path.suffixes)
+    stem = path.name[: -len(suffixes)] if suffixes else path.name
+    safe_stem = _safe_run_id(stem)
+    return f"{safe_stem}{suffixes}" if suffixes else safe_stem
+
+
+def _rewrite_relative_replay_lineage(
+    lineage: dict[str, Any],
+    run_dir: Path,
+    replay_inputs: dict[str, Path],
+) -> dict[str, Any]:
+    rendered = json.loads(json.dumps(lineage))
+    relative_inputs = {
+        name: {
+            "path": _display_path(path, run_dir, preserve_paths=False),
+            "exists": path.exists(),
+            "sha256": _sha256_file(path),
+            "size_bytes": path.stat().st_size,
+        }
+        for name, path in replay_inputs.items()
+    }
+
+    inputs = rendered.get("inputs")
+    if isinstance(inputs, list):
+        for record in inputs:
+            if not isinstance(record, dict):
+                continue
+            name = record.get("name")
+            relative = relative_inputs.get(name) if isinstance(name, str) else None
+            if relative is None:
+                continue
+            record.update(relative)
+
+    replay = rendered.get("replay")
+    if not isinstance(replay, dict):
+        replay = {}
+        rendered["replay"] = replay
+    argv = replay.get("argv")
+    if isinstance(argv, list) and all(isinstance(item, str) for item in argv):
+        argv = list(argv)
+    else:
+        argv = [
+            "python",
+            "-m",
+            "flightrecorder",
+            "run",
+            "--scenario",
+            "",
+            "--trace",
+            "",
+            "--out",
+            "replay",
+        ]
+    _replace_replay_flag(argv, "--scenario", relative_inputs["scenario"]["path"])
+    _replace_replay_flag(argv, "--trace", relative_inputs["source_trace"]["path"])
+    _replace_replay_flag(argv, "--out", "replay")
+    replay["argv"] = argv
+    replay["command"] = shlex.join(argv)
+    replay["self_contained"] = True
+
+    fingerprints = replay.get("input_fingerprints")
+    if not isinstance(fingerprints, dict):
+        fingerprints = {}
+        replay["input_fingerprints"] = fingerprints
+    for name, relative in relative_inputs.items():
+        record = fingerprints.get(name)
+        if not isinstance(record, dict):
+            record = {}
+            fingerprints[name] = record
+        for field_name in ("path", "exists", "sha256"):
+            record[field_name] = relative[field_name]
+
+    summary = rendered.get("summary")
+    if isinstance(summary, dict):
+        summary["self_contained_replay"] = True
+    rendered["portable_replay_bundle"] = {
+        "schema_version": REPLAY_BUNDLE_SCHEMA_VERSION,
+        "input_count": len(relative_inputs),
+        "notes": [
+            "Replay input paths are relative to the directory containing artifact_lineage.json.",
+            "The harness copied recorded-trace inputs before scoring so public receipts can be replayed without source paths.",
+        ],
+    }
+    return rendered
+
+
+def _replace_replay_flag(argv: list[str], flag: str, value: str) -> None:
+    if flag not in argv:
+        argv.extend([flag, value])
+        return
+    index = argv.index(flag)
+    if index + 1 >= len(argv):
+        argv.append(value)
+        return
+    argv[index + 1] = value
+
+
 def _effective_tool_policy(scenario: dict[str, Any], tool_policy: dict[str, Any] | None) -> dict[str, Any]:
     scenario_policy = scenario.get("policy") or {}
     runtime_policy = {**DEFAULT_TOOL_POLICY, **(tool_policy or {})}
@@ -624,18 +756,78 @@ def _fake_secret_canary_records() -> list[dict[str, str]]:
     return [{"name": name, "sha256": _sha256(value)} for name, value in sorted(DEFAULT_FAKE_SECRET_CANARIES.items())]
 
 
-def _artifact_paths(paths: dict[str, Any]) -> dict[str, str | None]:
-    return {key: str(value) if value is not None else None for key, value in paths.items()}
+def _artifact_paths(paths: dict[str, Any], base_dir: Path, preserve_paths: bool) -> dict[str, str | None]:
+    return {key: _display_path(value, base_dir, preserve_paths) if value is not None else None for key, value in paths.items()}
 
 
-def _replay_reference(lineage_path: Path, lineage: dict[str, Any]) -> dict[str, Any]:
+def _replay_reference(lineage_path: Path, lineage: dict[str, Any], base_dir: Path, preserve_paths: bool) -> dict[str, Any]:
     replay = lineage.get("replay") if isinstance(lineage.get("replay"), dict) else {}
+    argv = replay.get("argv", [])
+    display_argv = _display_argv(argv, base_dir, preserve_paths) if isinstance(argv, list) else []
     return {
-        "lineage": str(lineage_path),
-        "argv": replay.get("argv", []),
-        "command": replay.get("command", ""),
+        "lineage": _display_path(lineage_path, base_dir, preserve_paths),
+        "argv": display_argv,
+        "command": shlex.join(display_argv) if display_argv else "",
         "self_contained": replay.get("self_contained") is True,
     }
+
+
+def _display_harness_manifest(manifest: dict[str, Any], base_dir: Path, preserve_paths: bool) -> dict[str, Any]:
+    rendered = json.loads(json.dumps(manifest))
+    scenario = rendered.get("scenario") if isinstance(rendered.get("scenario"), dict) else {}
+    if isinstance(scenario.get("path"), str):
+        scenario["path"] = _display_path(scenario["path"], base_dir, preserve_paths)
+
+    outputs = rendered.get("outputs") if isinstance(rendered.get("outputs"), dict) else {}
+    for field_name in ("run_dir", "manifest", "result"):
+        if isinstance(outputs.get(field_name), str):
+            outputs[field_name] = _display_path(outputs[field_name], base_dir, preserve_paths)
+
+    sandbox = rendered.get("sandbox") if isinstance(rendered.get("sandbox"), dict) else {}
+    rendered["sandbox"] = _display_sandbox(sandbox, base_dir, preserve_paths)
+    return rendered
+
+
+def _display_sandbox(sandbox: dict[str, Any], base_dir: Path, preserve_paths: bool) -> dict[str, Any]:
+    rendered = dict(sandbox)
+    for field_name in ("root", "home", "workspace", "events"):
+        if isinstance(rendered.get(field_name), str):
+            rendered[field_name] = _display_path(rendered[field_name], base_dir, preserve_paths)
+    if isinstance(rendered.get("fake_secret_files"), list):
+        rendered["fake_secret_files"] = [
+            _display_path(path, base_dir, preserve_paths) if isinstance(path, str) else path
+            for path in rendered["fake_secret_files"]
+        ]
+    return rendered
+
+
+def _display_argv(argv: list[Any], base_dir: Path, preserve_paths: bool) -> list[str]:
+    rendered: list[str] = []
+    for item in argv:
+        value = str(item)
+        rendered.append(_display_path(value, base_dir, preserve_paths) if _looks_like_path(value) else value)
+    return rendered
+
+
+def _display_path(path: str | Path, base_dir: Path, preserve_paths: bool) -> str:
+    resolved = Path(path).expanduser().resolve()
+    if preserve_paths:
+        return str(resolved)
+    for root in (base_dir.expanduser().resolve(), Path.cwd().resolve()):
+        try:
+            relative = os.path.relpath(resolved, root)
+        except ValueError:
+            continue
+        if relative == "." or not relative.startswith(".."):
+            return Path(relative).as_posix()
+    return f"<redacted:{resolved.name}>"
+
+
+def _looks_like_path(value: str) -> bool:
+    if value.startswith(("http://", "https://")):
+        return False
+    candidate = Path(value).expanduser()
+    return candidate.is_absolute() or "/" in value or "\\" in value or value.startswith(".")
 
 
 def _merge_sandbox(defaults: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -715,6 +907,14 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _probe_check(check_id: str, passed: bool, details: dict[str, Any]) -> dict[str, Any]:
     return {"id": check_id, "passed": bool(passed), "details": details}
 
@@ -740,6 +940,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         run.add_argument("--base-url")
         run.add_argument("--mock-response")
         run.add_argument("--force", action="store_true")
+        run.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the run or repo root")
     suite = subparsers.add_parser("run-suite", help="Run a scenario directory through the mock harness runner")
     suite.add_argument("--scenarios", required=True)
     suite.add_argument("--out", required=True)
@@ -752,6 +953,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     suite.add_argument("--mock-response")
     suite.add_argument("--force", action="store_true")
     suite.add_argument("--fail-on-failed", action="store_true")
+    suite.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the suite or repo root")
     probe = subparsers.add_parser("probe-model", help="Write a no-network harness model probe receipt")
     probe.add_argument("--out", required=True)
     probe.add_argument("--runner", default="mock")
@@ -759,6 +961,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     probe.add_argument("--model", default="hfr-mock")
     probe.add_argument("--base-url")
     probe.add_argument("--allow-network", action="store_true")
+    probe.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the probe output root")
     publish = subparsers.add_parser("publish-trace", help="Publish a recorded trace as harness artifacts")
     publish.add_argument("--scenario", required=True)
     publish.add_argument("--trace", required=True)
@@ -769,6 +972,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     publish.add_argument("--model")
     publish.add_argument("--base-url")
     publish.add_argument("--force", action="store_true")
+    publish.add_argument("--relative-paths", action="store_true", help="Write artifact paths relative to the run or repo root")
     replay = subparsers.add_parser("replay-trace", help="Replay a run from artifact lineage")
     replay.add_argument("--lineage", required=True)
     replay.add_argument("--out", required=True)
@@ -796,7 +1000,7 @@ def main(argv: list[str] | None = None) -> int:
                 mock_response=args.mock_response,
                 force=args.force,
             )
-        result = run_scenario(manifest)
+        result = run_scenario(manifest, preserve_paths=not args.relative_paths)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1
     if args.command == "run-suite":
@@ -811,6 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
             base_url=args.base_url,
             mock_response=args.mock_response,
             force=bool(args.force),
+            preserve_paths=not args.relative_paths,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         if result["error_count"]:
@@ -826,6 +1031,7 @@ def main(argv: list[str] | None = None) -> int:
             runner=args.runner,
             base_url=args.base_url,
             allow_network=bool(args.allow_network),
+            preserve_paths=not args.relative_paths,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["passed"] else 1
@@ -840,6 +1046,7 @@ def main(argv: list[str] | None = None) -> int:
             model=args.model,
             base_url=args.base_url,
             force=bool(args.force),
+            preserve_paths=not args.relative_paths,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1

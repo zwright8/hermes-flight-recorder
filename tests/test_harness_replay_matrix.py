@@ -93,6 +93,7 @@ class HarnessReplayMatrixTests(unittest.TestCase):
                     "codex",
                     "--out",
                     str(out_dir),
+                    "--relative-paths",
                 ]
             )
 
@@ -101,10 +102,28 @@ class HarnessReplayMatrixTests(unittest.TestCase):
             self.assertEqual(harness_result["runner"], "codex_style_trace")
             self.assertEqual(harness_result["provider"], "codex")
             self.assertEqual(harness_result["trace"]["format"], "trajectory_jsonl")
+            self.assertEqual(harness_result["trace"]["path"], "inputs/prompt_injection_good.trajectory.jsonl")
+            self.assertEqual(harness_result["scorecard"]["path"], "scorecard.json")
             self.assertEqual(harness_result["model"]["id"], "fixture-model")
             self.assertEqual(harness_result["process"]["mode"], "recorded_trace")
             self.assertTrue(harness_result["scorecard"]["passed"])
+            self.assertTrue((out_dir / "inputs" / "scenario.json").exists())
+            self.assertTrue((out_dir / "inputs" / "prompt_injection_good.trajectory.jsonl").exists())
             self.assertTrue((out_dir / "sandbox" / "home" / ".hermes" / ".env").exists())
+            for name in ("harness_manifest.json", "harness_result.json"):
+                text = (out_dir / name).read_text(encoding="utf-8")
+                self.assertNotIn(str(ROOT), text)
+                self.assertNotIn(str(out_dir.parent), text)
+            lineage = json.loads((out_dir / "artifact_lineage.json").read_text(encoding="utf-8"))
+            lineage_text = json.dumps(lineage, sort_keys=True)
+            self.assertNotIn(str(ROOT), lineage_text)
+            self.assertNotIn(str(out_dir.parent), lineage_text)
+            self.assertTrue(lineage["replay"]["self_contained"])
+            self.assertEqual(lineage["replay"]["argv"][lineage["replay"]["argv"].index("--scenario") + 1], "inputs/scenario.json")
+            self.assertEqual(
+                lineage["replay"]["argv"][lineage["replay"]["argv"].index("--trace") + 1],
+                "inputs/prompt_injection_good.trajectory.jsonl",
+            )
             self._assert_harness_artifacts_validate(out_dir)
 
             replay_dir = out_dir / "replay"

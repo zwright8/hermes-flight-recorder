@@ -124,6 +124,57 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertEqual(probe_rc, 0, probe_stdout)
             self.assertTrue(_json_from_stdout(probe_stdout)["passed"])
 
+    def test_relative_path_mode_scrubs_suite_and_probe_receipts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios = root / "scenarios"
+            scenarios.mkdir()
+            (scenarios / "harness_suite_one.json").write_text(
+                json.dumps(_scenario(scenario_id="harness_suite_one", final_text="suite complete"), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            suite = run_suite(
+                scenarios_dir=scenarios,
+                out_dir=root / "suite",
+                mock_response="suite complete with auditable evidence",
+                preserve_paths=False,
+            )
+            probe = probe_model(out_dir=root / "probe", model="hfr-mock", preserve_paths=False)
+
+            self.assertEqual(suite["out_dir"], ".")
+            self.assertEqual(suite["runs"][0]["manifest"], "harness_suite_one/harness_manifest.json")
+            self.assertEqual(probe["sandbox"]["root"], "sandbox")
+            self.assertEqual(probe["sandbox"]["fake_secret_files"], ["/".join(["sandbox", "home", ".hermes", ".env"])])
+
+            files = [
+                root / "suite" / "harness_suite_result.json",
+                root / "suite" / "harness_suite_one" / "harness_manifest.json",
+                root / "suite" / "harness_suite_one" / "harness_result.json",
+                root / "probe" / "harness_model_probe.json",
+            ]
+            for path in files:
+                text = path.read_text(encoding="utf-8")
+                self.assertNotIn(str(root), text, path.name)
+                self.assertNotIn("/private/", text, path.name)
+                self.assertNotIn("/var/", text, path.name)
+
+            rc, stdout = _run_harness(
+                [
+                    "run-suite",
+                    "--scenarios",
+                    str(scenarios),
+                    "--out",
+                    str(root / "suite_cli"),
+                    "--mock-response",
+                    "suite complete with auditable evidence",
+                    "--relative-paths",
+                ]
+            )
+            self.assertEqual(rc, 0, stdout)
+            cli_text = (root / "suite_cli" / "harness_suite_result.json").read_text(encoding="utf-8")
+            self.assertNotIn(str(root), cli_text)
+
     def test_run_scenario_accepts_manifest_file_with_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
