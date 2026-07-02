@@ -155,26 +155,27 @@ def _inputs(
 
 def _manifest_record(path: str | Path | None, preserve_paths: bool) -> dict[str, Any]:
     if path is None:
-        return {"path": None, "exists": False, "sha256": None}
+        return {"path": None, "exists": False, "sha256": None, "schema_version": None, "ready": None, "scenario_count": None}
     manifest_path = Path(path)
     exists = manifest_path.exists() and manifest_path.is_file()
     return {
         "path": _display_path(manifest_path, preserve_paths),
         "exists": exists,
         "sha256": _sha256(manifest_path) if exists else None,
+        **(_manifest_metadata(manifest_path) if exists else {"schema_version": None, "ready": None, "scenario_count": None}),
     }
 
 
 def _adapter_plan(adapter_id: str, inputs: dict[str, Any], allow_installed: bool) -> dict[str, Any]:
     spec = ADAPTERS[adapter_id]
     dependency = _dependency_status(spec)
-    missing_inputs = [name for name in spec["required_inputs"] if not _input_present(inputs, name)]
+    input_blockers = [reason for name in spec["required_inputs"] for reason in _input_blockers(inputs, name)]
     blocking_reasons: list[str] = []
     if not dependency["available"]:
         blocking_reasons.append("dependencies_missing")
     if not allow_installed:
         blocking_reasons.append("adapter_disabled_until_allow_installed")
-    blocking_reasons.extend(f"missing_{name}" for name in missing_inputs)
+    blocking_reasons.extend(input_blockers)
     ready = not blocking_reasons
     return {
         "id": adapter_id,
@@ -205,10 +206,41 @@ def _dependency_status(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _manifest_metadata(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"schema_version": None, "ready": False, "scenario_count": None}
+    if not isinstance(payload, dict):
+        return {"schema_version": None, "ready": False, "scenario_count": None}
+    ready = payload.get("ready") if isinstance(payload.get("ready"), bool) else None
+    scenario_count = payload.get("scenario_count") if isinstance(payload.get("scenario_count"), int) else None
+    return {
+        "schema_version": payload.get("schema_version") if isinstance(payload.get("schema_version"), str) else None,
+        "ready": ready,
+        "scenario_count": scenario_count,
+    }
+
+
+def _input_blockers(inputs: dict[str, Any], name: str) -> list[str]:
+    if _input_present(inputs, name):
+        return []
+    if name == "scenario_manifest":
+        manifest = inputs.get("scenario_manifest")
+        if isinstance(manifest, dict) and manifest.get("exists") is True and manifest.get("sha256") and manifest.get("ready") is False:
+            return ["scenario_manifest_not_ready"]
+    return [f"missing_{name}"]
+
+
 def _input_present(inputs: dict[str, Any], name: str) -> bool:
     if name == "scenario_manifest":
         manifest = inputs.get("scenario_manifest")
-        return isinstance(manifest, dict) and manifest.get("exists") is True and isinstance(manifest.get("sha256"), str)
+        return (
+            isinstance(manifest, dict)
+            and manifest.get("exists") is True
+            and isinstance(manifest.get("sha256"), str)
+            and manifest.get("ready") is not False
+        )
     value = inputs.get(name)
     if isinstance(value, list):
         return bool(value)

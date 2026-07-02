@@ -30,6 +30,23 @@ The summary reports:
 - compare-gate failures,
 - external adapter readiness blockers when adapter plans are included.
 
+## Held-Out Manifests
+
+Use suite summaries to build the canonical scenario manifest that downstream
+evals must share:
+
+```bash
+flightrecorder heldout-manifest \
+  --suite-summary baseline=runs_baseline/suite_summary.json \
+  --suite-summary candidate=runs_candidate/suite_summary.json \
+  --out runs/heldout_scenarios.json
+```
+
+A single suite source can seed external adapter planning. Cross-arm claims are
+allowed only when two or more suite summaries prove the exact same scenario IDs.
+Mismatched manifests validate as honest blocked artifacts, return nonzero from
+the CLI, and block external adapter readiness when used as `--scenario-manifest`.
+
 ## External Adapter Plans
 
 External harness adapters are represented by a readiness artifact before any
@@ -63,6 +80,7 @@ Validate summaries before handoff:
 
 ```bash
 flightrecorder validate --eval-summary runs/eval_summary.json --strict
+flightrecorder validate --heldout-manifest runs/heldout_scenarios.json --strict
 flightrecorder validate --external-eval-plan runs/external_eval_plan.json --strict
 ```
 
@@ -76,6 +94,7 @@ Governance claims are suppressed when any of these hold:
 - contract fingerprint drift,
 - unverified contract fingerprints,
 - zero comparison pairs.
+- held-out manifests with mismatched or empty scenario sets.
 - external adapter plans that are not ready.
 
 The artifact may still show raw movement, but `governance_claims` stays empty and

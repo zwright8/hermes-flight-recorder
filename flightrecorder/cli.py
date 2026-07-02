@@ -54,6 +54,7 @@ from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .eval_summary import EvalSummaryError, build_eval_summary
 from .external_eval import ExternalEvalPlanError, adapter_choices, build_external_eval_plan, write_external_eval_plan
+from .heldout_manifest import HeldoutManifestError, build_heldout_manifest, write_heldout_manifest
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
@@ -167,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         EvidenceBundleError,
         EvalSummaryError,
         ExternalEvalPlanError,
+        HeldoutManifestError,
         ReviewCalibrationError,
         TraceObservabilityError,
         ActionLedgerError,
@@ -814,6 +816,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         live_smoke_summary_paths=args.live_smoke_summary,
         eval_summary_paths=args.eval_summary,
         external_eval_plan_paths=args.external_eval_plan,
+        heldout_manifest_paths=args.heldout_manifest,
         strict=args.strict,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -864,6 +867,19 @@ def cmd_external_eval_plan(args: argparse.Namespace) -> int:
     else:
         print(json.dumps(plan, indent=2, sort_keys=True, ensure_ascii=False))
     return 0 if plan["ready"] else 1
+
+
+def cmd_heldout_manifest(args: argparse.Namespace) -> int:
+    manifest = build_heldout_manifest(
+        suite_summary_specs=args.suite_summary,
+        preserve_paths=args.preserve_paths,
+    )
+    if args.out:
+        write_heldout_manifest(manifest, args.out)
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if manifest["ready"] else 1
 
 
 def cmd_schemas(args: argparse.Namespace) -> int:
@@ -1950,9 +1966,27 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one hfr.external_eval_adapters.v1 JSON file; may be repeated",
     )
+    validate.add_argument(
+        "--heldout-manifest",
+        action="append",
+        default=[],
+        help="Validate one hfr.heldout_scenario_manifest.v1 JSON file; may be repeated",
+    )
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
+
+    heldout_manifest = subparsers.add_parser("heldout-manifest", help="Build a held-out scenario manifest from suite summaries")
+    heldout_manifest.add_argument(
+        "--suite-summary",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="run-suite suite_summary.json to include; may be repeated",
+    )
+    heldout_manifest.add_argument("--out", help="Write held-out manifest JSON to this path")
+    heldout_manifest.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in manifest output")
+    heldout_manifest.set_defaults(func=cmd_heldout_manifest)
 
     external_eval_plan = subparsers.add_parser(
         "external-eval-plan",

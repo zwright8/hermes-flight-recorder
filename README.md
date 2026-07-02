@@ -524,6 +524,11 @@ flightrecorder eval-summary \
   --compare-gate candidate=runs/compare_gate.json \
   --out runs/eval_summary.json
 
+flightrecorder heldout-manifest \
+  --suite-summary baseline=runs_baseline/suite_summary.json \
+  --suite-summary candidate=runs_candidate/suite_summary.json \
+  --out runs/heldout_scenarios.json
+
 flightrecorder external-eval-plan \
   --scenario-manifest runs/heldout_scenarios.json \
   --model-endpoint http://127.0.0.1:8000/v1 \
@@ -546,6 +551,12 @@ comparison movement visible but suppresses candidate-win and improvement claims
 unless all arms provide the identical held-out scenario list and the compare
 export has no scenario-set mismatch, contract drift, or unverified fingerprints.
 Validate it with `flightrecorder validate --eval-summary runs/eval_summary.json`.
+
+`flightrecorder heldout-manifest` writes the canonical held-out scenario manifest
+used by summaries and external adapters. A single suite source can seed external
+adapter planning, but cross-arm claims are allowed only when two or more suite
+summaries prove the exact same scenario IDs. Validate it with
+`flightrecorder validate --heldout-manifest runs/heldout_scenarios.json`.
 
 `flightrecorder external-eval-plan` creates a fail-closed readiness plan for
 optional BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench adapters. The

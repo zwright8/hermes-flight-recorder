@@ -1,53 +1,58 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:52:05Z",
+  "updated_at": "2026-07-02T14:59:16Z",
   "active_goal": "Goal 7 Eval Layer",
   "status": "in_progress",
   "worktree": "/Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-7-eval",
   "branch": "codex/hermes-goal-7-eval-20260702-1027",
   "remote": "origin https://github.com/zwright8/hermes-flight-recorder.git",
   "last_packet": {
-    "id": "external_eval_adapter_readiness_plan",
-    "summary": "Added a fail-closed external eval adapter readiness plan for BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench, with CLI and validation support for governance summaries.",
+    "id": "heldout_manifest_artifact",
+    "summary": "Added a canonical held-out scenario manifest artifact and validation so external adapter plans can consume a first-class scenario-set contract and mismatched manifests block readiness.",
     "changed_files": [
       "README.md",
       "docs/agentic-finetune-eval-layer.md",
       "flightrecorder/cli.py",
       "flightrecorder/external_eval.py",
+      "flightrecorder/heldout_manifest.py",
       "flightrecorder/validation.py",
-      "tests/test_external_eval_plan.py",
+      "tests/test_heldout_manifest.py",
       "experiments/autonomy/supervisor_state.json",
       "experiments/autonomy/journal/2026-07-02.md"
     ],
     "verification": [
       {
-        "command": "python3 -m py_compile flightrecorder/external_eval.py flightrecorder/eval_summary.py flightrecorder/cli.py flightrecorder/validation.py tests/test_external_eval_plan.py tests/test_eval_summary.py",
+        "command": "python3 -m py_compile flightrecorder/heldout_manifest.py flightrecorder/external_eval.py flightrecorder/cli.py flightrecorder/validation.py tests/test_heldout_manifest.py tests/test_external_eval_plan.py",
         "result": "passed"
       },
       {
-        "command": "python3 -m unittest tests.test_external_eval_plan tests.test_eval_summary",
-        "result": "passed; 8 tests"
+        "command": "python3 -m unittest tests.test_heldout_manifest tests.test_external_eval_plan tests.test_eval_summary",
+        "result": "passed; 13 tests"
       },
       {
-        "command": "python3 -m unittest tests.test_external_eval_plan tests.test_eval_summary tests.test_compare_rl_export tests.test_compare_gate tests.test_validation",
-        "result": "passed; 50 tests"
+        "command": "python3 -m unittest tests.test_heldout_manifest tests.test_external_eval_plan tests.test_eval_summary tests.test_compare_rl_export tests.test_compare_gate tests.test_validation",
+        "result": "passed; 55 tests"
       },
       {
         "command": "/opt/homebrew/bin/python3 -m unittest",
-        "result": "passed; 308 tests"
+        "result": "passed; 313 tests"
       }
     ],
     "risks": [
-      "This packet adds fail-closed readiness contracts and validation, not actual BFCL/Inspect AI/lm-evaluation-harness/SWE-bench runner execution.",
-      "External dependencies are optional and may be absent locally; plans remain blocked until dependencies, held-out manifests, model endpoints, and adapter-specific inputs are supplied.",
+      "This packet provides the canonical held-out manifest and downstream blocking, not live external harness execution.",
+      "Single-source manifests can seed external adapter planning but do not allow cross-arm claims until another arm proves the identical scenario list.",
       "The system /usr/bin/python3 is Python 3.9 and previously could not run the full suite because tests/test_deployment_hardening.py imports tomllib; /opt/homebrew/bin/python3 passed the full suite."
     ],
     "persistence": {
-      "commit_sha": "76fe7e3a0d2d85949bd557e644b185c6635e632c",
-      "pushed_branch": "codex/hermes-goal-7-eval-20260702-1027",
-      "remote_branch_verified": true,
+      "branch_commit_sha": "pending",
+      "main_commit_sha": "pending",
+      "pushed_branch": "pending",
+      "remote_branch_verified": false,
+      "remote_main_verified": false,
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
-      "pr_blocker": null
+      "pr_status": "pending branch commit and main integration",
+      "remote_branch_deleted": false,
+      "integration_lock": "/tmp/hermes-flight-recorder-main-push.lock"
     }
   }
 }

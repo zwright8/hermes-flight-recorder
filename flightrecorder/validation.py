@@ -21,6 +21,7 @@ from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
 from .external_eval import ADAPTERS, EXTERNAL_EVAL_PLAN_SCHEMA_VERSION
+from .heldout_manifest import HELDOUT_MANIFEST_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
@@ -140,6 +141,7 @@ def validate_artifacts(
     live_smoke_summary_paths: list[str | Path] | None = None,
     eval_summary_paths: list[str | Path] | None = None,
     external_eval_plan_paths: list[str | Path] | None = None,
+    heldout_manifest_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -216,6 +218,8 @@ def validate_artifacts(
         targets.append(validate_eval_summary(eval_summary_path))
     for external_eval_plan_path in external_eval_plan_paths or []:
         targets.append(validate_external_eval_plan(external_eval_plan_path))
+    for heldout_manifest_path in heldout_manifest_paths or []:
+        targets.append(validate_heldout_manifest(heldout_manifest_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -586,6 +590,16 @@ def validate_external_eval_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "external_eval_plan.json")
     if plan is not None:
         _validate_external_eval_plan(plan, target)
+    return target
+
+
+def validate_heldout_manifest(path: str | Path) -> ValidationTarget:
+    """Validate one held-out scenario manifest."""
+    manifest_path = Path(path)
+    target = ValidationTarget("heldout_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "heldout_manifest.json")
+    if manifest is not None:
+        _validate_heldout_manifest(manifest, target)
     return target
 
 
@@ -4611,6 +4625,12 @@ def _validate_external_eval_inputs(inputs: dict[str, Any], target: ValidationTar
             target.errors.append("external_eval_plan.inputs.scenario_manifest.exists must be a boolean.")
         if manifest.get("sha256") is not None and not _is_sha256(manifest.get("sha256")):
             target.errors.append("external_eval_plan.inputs.scenario_manifest.sha256 must be a SHA-256 hex string or null.")
+        if manifest.get("schema_version") is not None and not isinstance(manifest.get("schema_version"), str):
+            target.errors.append("external_eval_plan.inputs.scenario_manifest.schema_version must be a string or null.")
+        if manifest.get("ready") is not None and not isinstance(manifest.get("ready"), bool):
+            target.errors.append("external_eval_plan.inputs.scenario_manifest.ready must be a boolean or null.")
+        if manifest.get("scenario_count") is not None and not _is_non_negative_int(manifest.get("scenario_count")):
+            target.errors.append("external_eval_plan.inputs.scenario_manifest.scenario_count must be a non-negative integer or null.")
     for field_name in (
         "model_endpoint",
         "model",
@@ -4678,28 +4698,157 @@ def _validate_external_eval_adapter_plan(
     if spec is not None:
         if adapter.get("required_inputs") != spec["required_inputs"]:
             target.errors.append(f"external_eval_plan.adapters[{index}].required_inputs must match adapter contract.")
-        expected_missing = [name for name in spec["required_inputs"] if not _external_eval_input_present(inputs, name)]
-        missing_reasons = {f"missing_{name}" for name in expected_missing}
+        expected_input_blockers = {
+            reason
+            for name in spec["required_inputs"]
+            for reason in _external_eval_input_blockers(inputs, name)
+        }
         adapter_blockers = set(adapter.get("blocking_reasons") if isinstance(adapter.get("blocking_reasons"), list) else [])
         if not available and "dependencies_missing" not in adapter_blockers:
             target.errors.append(f"external_eval_plan.adapters[{index}].blocking_reasons must include dependencies_missing.")
-        if not missing_reasons.issubset(adapter_blockers):
+        if not expected_input_blockers.issubset(adapter_blockers):
             target.errors.append(f"external_eval_plan.adapters[{index}].blocking_reasons must include all missing required inputs.")
-        expected_ready = available and not expected_missing and not adapter_blockers
+        expected_ready = available and not expected_input_blockers and not adapter_blockers
         if adapter.get("ready") is True and not expected_ready:
             target.errors.append(f"external_eval_plan.adapters[{index}].ready cannot be true while blockers remain.")
         if adapter.get("ready") is False and not adapter_blockers:
             target.errors.append(f"external_eval_plan.adapters[{index}].blocking_reasons must explain why ready is false.")
 
 
+def _external_eval_input_blockers(inputs: dict[str, Any], name: str) -> list[str]:
+    if _external_eval_input_present(inputs, name):
+        return []
+    if name == "scenario_manifest":
+        manifest = inputs.get("scenario_manifest")
+        if isinstance(manifest, dict) and manifest.get("exists") is True and manifest.get("sha256") and manifest.get("ready") is False:
+            return ["scenario_manifest_not_ready"]
+    return [f"missing_{name}"]
+
+
 def _external_eval_input_present(inputs: dict[str, Any], name: str) -> bool:
     if name == "scenario_manifest":
         manifest = inputs.get("scenario_manifest")
-        return isinstance(manifest, dict) and manifest.get("exists") is True and _is_sha256(manifest.get("sha256"))
+        return (
+            isinstance(manifest, dict)
+            and manifest.get("exists") is True
+            and _is_sha256(manifest.get("sha256"))
+            and manifest.get("ready") is not False
+        )
     value = inputs.get(name)
     if isinstance(value, list):
         return bool(value)
     return isinstance(value, str) and bool(value)
+
+
+def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(manifest, "schema_version", HELDOUT_MANIFEST_SCHEMA_VERSION, target)
+    if manifest.get("status") not in {"single_source", "identical", "mismatched", "empty", "blocked"}:
+        target.errors.append("heldout_manifest.status has an unsupported value.")
+    for field_name in ("ready", "identical", "cross_arm_claims_allowed"):
+        if not isinstance(manifest.get(field_name), bool):
+            target.errors.append(f"heldout_manifest.{field_name} must be a boolean.")
+    if not _is_non_negative_int(manifest.get("source_count")):
+        target.errors.append("heldout_manifest.source_count must be a non-negative integer.")
+    if not _is_non_negative_int(manifest.get("scenario_count")):
+        target.errors.append("heldout_manifest.scenario_count must be a non-negative integer.")
+    if not _is_string_list(manifest.get("scenario_ids")):
+        target.errors.append("heldout_manifest.scenario_ids must be a list of strings.")
+    if not _is_string_list(manifest.get("blocking_reasons")):
+        target.errors.append("heldout_manifest.blocking_reasons must be a list of strings.")
+    blocking_reasons = manifest.get("blocking_reasons") if isinstance(manifest.get("blocking_reasons"), list) else []
+
+    sources = manifest.get("sources")
+    if not isinstance(sources, list):
+        target.errors.append("heldout_manifest.sources must be a list.")
+        sources = []
+    mismatches = manifest.get("mismatches")
+    if not isinstance(mismatches, list):
+        target.errors.append("heldout_manifest.mismatches must be a list.")
+        mismatches = []
+
+    if manifest.get("source_count") != len(sources):
+        target.errors.append(f"heldout_manifest.source_count expected {len(sources)}, got {manifest.get('source_count')!r}.")
+    if manifest.get("scenario_count") != len(manifest.get("scenario_ids") or []):
+        target.errors.append("heldout_manifest.scenario_count must match scenario_ids length.")
+    if len(set(manifest.get("scenario_ids") or [])) != len(manifest.get("scenario_ids") or []):
+        target.errors.append("heldout_manifest.scenario_ids must not contain duplicates.")
+
+    for index, source in enumerate(sources):
+        _validate_heldout_manifest_source(source, index, target)
+    for index, mismatch in enumerate(mismatches):
+        _validate_heldout_manifest_mismatch(mismatch, index, target)
+
+    expected_ready = bool(manifest.get("scenario_ids")) and not blocking_reasons and manifest.get("status") in {"single_source", "identical"}
+    if isinstance(manifest.get("ready"), bool) and manifest.get("ready") != expected_ready:
+        target.errors.append(f"heldout_manifest.ready expected {expected_ready}, got {manifest.get('ready')!r}.")
+    if manifest.get("ready") is False and not blocking_reasons:
+        target.errors.append("heldout_manifest.blocking_reasons must explain why ready is false.")
+    if manifest.get("ready") is True and blocking_reasons:
+        target.errors.append("heldout_manifest.blocking_reasons must be empty when ready is true.")
+    if manifest.get("status") == "identical" and manifest.get("identical") is not True:
+        target.errors.append("heldout_manifest.identical must be true when status is identical.")
+    if manifest.get("cross_arm_claims_allowed") is True and manifest.get("status") != "identical":
+        target.errors.append("heldout_manifest.cross_arm_claims_allowed requires status identical.")
+    if manifest.get("status") == "mismatched" and "heldout_scenario_set_mismatch" not in blocking_reasons:
+        target.errors.append("heldout_manifest.blocking_reasons must include heldout_scenario_set_mismatch when mismatched.")
+
+    handoff = manifest.get("governance_handoff")
+    if not isinstance(handoff, dict):
+        target.errors.append("heldout_manifest.governance_handoff must be an object.")
+    else:
+        if handoff.get("external_adapter_manifest_allowed") != manifest.get("ready"):
+            target.errors.append("heldout_manifest.governance_handoff.external_adapter_manifest_allowed must match ready.")
+        if handoff.get("cross_arm_claims_allowed") != manifest.get("cross_arm_claims_allowed"):
+            target.errors.append("heldout_manifest.governance_handoff.cross_arm_claims_allowed must match manifest.")
+        if not isinstance(handoff.get("recommendation"), str) or not handoff.get("recommendation"):
+            target.errors.append("heldout_manifest.governance_handoff.recommendation must be a non-empty string.")
+
+    target.details.update(
+        {
+            "ready": manifest.get("ready"),
+            "status": manifest.get("status"),
+            "source_count": len(sources),
+            "scenario_count": len(manifest.get("scenario_ids") or []),
+        }
+    )
+
+
+def _validate_heldout_manifest_source(source: Any, index: int, target: ValidationTarget) -> None:
+    if not isinstance(source, dict):
+        target.errors.append(f"heldout_manifest.sources[{index}] must be an object.")
+        return
+    for field_name in ("label", "path"):
+        if not isinstance(source.get(field_name), str) or not source.get(field_name):
+            target.errors.append(f"heldout_manifest.sources[{index}].{field_name} must be a non-empty string.")
+    if not _is_non_negative_int(source.get("scenario_count")):
+        target.errors.append(f"heldout_manifest.sources[{index}].scenario_count must be a non-negative integer.")
+    if not _is_string_list(source.get("scenario_ids")):
+        target.errors.append(f"heldout_manifest.sources[{index}].scenario_ids must be a list of strings.")
+    elif source.get("scenario_count") != len(source.get("scenario_ids")):
+        target.errors.append(f"heldout_manifest.sources[{index}].scenario_count must match scenario_ids length.")
+    if not _is_string_list(source.get("duplicate_scenario_ids")):
+        target.errors.append(f"heldout_manifest.sources[{index}].duplicate_scenario_ids must be a list of strings.")
+    if not _is_string_list(source.get("blocking_reasons")):
+        target.errors.append(f"heldout_manifest.sources[{index}].blocking_reasons must be a list of strings.")
+    fingerprints = source.get("scenario_fingerprints")
+    if not isinstance(fingerprints, dict):
+        target.errors.append(f"heldout_manifest.sources[{index}].scenario_fingerprints must be an object.")
+    else:
+        for scenario_id, sha in fingerprints.items():
+            if not isinstance(scenario_id, str) or not _is_sha256(sha):
+                target.errors.append(f"heldout_manifest.sources[{index}].scenario_fingerprints must map strings to SHA-256 values.")
+                break
+
+
+def _validate_heldout_manifest_mismatch(mismatch: Any, index: int, target: ValidationTarget) -> None:
+    if not isinstance(mismatch, dict):
+        target.errors.append(f"heldout_manifest.mismatches[{index}] must be an object.")
+        return
+    if not isinstance(mismatch.get("label"), str) or not mismatch.get("label"):
+        target.errors.append(f"heldout_manifest.mismatches[{index}].label must be a non-empty string.")
+    for field_name in ("missing_from_source", "extra_in_source"):
+        if not _is_string_list(mismatch.get(field_name)):
+            target.errors.append(f"heldout_manifest.mismatches[{index}].{field_name} must be a list of strings.")
 
 
 def _validate_suite_metrics(metrics: dict[str, Any], target: ValidationTarget, runs: list[dict[str, Any]]) -> None:
