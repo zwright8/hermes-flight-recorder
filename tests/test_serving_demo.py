@@ -65,12 +65,30 @@ class ServingDemoTests(unittest.TestCase):
             self.assertEqual(profile["artifacts"]["serving_profile"], "serving_profile.json")
             self.assertEqual(profile["model_identity"]["served_model_id"], "hfr-mock-model+adapter")
             self.assertTrue(profile["model_identity"]["adapter"]["local"])
+            self.assertEqual(profile["model_identity"]["adapter"]["path"], "adapter")
+            self.assertEqual(profile["model_identity"]["adapter"]["path_kind"], "local_directory")
+            self.assertFalse(Path(profile["model_identity"]["adapter"]["path"]).is_absolute())
+            self.assertFalse(any(Path(item["path"]).is_absolute() for item in profile["model_identity"]["adapter"]["files"]))
+            self.assertNotIn(str(root), json.dumps(profile))
             self.assertEqual(profile["capabilities"]["streaming"], "supported")
             self.assertEqual(profile["capabilities"]["tool_calls"], "supported")
             self.assertEqual(profile["capabilities"]["structured_outputs"], "supported")
             self.assertGreaterEqual(compatibility["checks"]["streaming"]["event_count"], 1)
             self.assertTrue(compatibility["checks"]["streaming"]["done_seen"])
             self.assertEqual(compatibility["checks"]["tool_calls"]["tool_call_count"], 1)
+
+    def test_adapter_identity_scrubs_nonexistent_private_paths(self):
+        check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_adapter_scrub")
+        with tempfile.TemporaryDirectory() as tmp:
+            private_adapter = Path(tmp) / "missing" / "adapter-secret"
+
+            identity = check_openai_serving._adapter_identity(str(private_adapter))
+
+            self.assertEqual(identity["id"], "adapter-secret")
+            self.assertEqual(identity["path"], "")
+            self.assertEqual(identity["path_kind"], "external_id")
+            self.assertFalse(identity["local"])
+            self.assertNotIn(str(tmp), json.dumps(identity))
 
     def test_demo_report_links_claims_to_replay_artifacts(self):
         build_serving_demo_report = _load_script(DEMO_SCRIPT, "build_serving_demo_report")

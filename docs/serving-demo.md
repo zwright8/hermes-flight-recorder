@@ -28,6 +28,11 @@ The command writes:
 For a real endpoint, pass `--base-url http://127.0.0.1:<port>/v1` instead of
 `--mock-response`.
 
+When `--adapter` points at a local adapter directory, the serving profile keeps
+the adapter directory name and hashes for recognized adapter files. Absolute
+local filesystem paths are omitted so preflight artifacts can be committed or
+shared without exposing machine-specific locations.
+
 ## Managed Lifecycle
 
 Use the lifecycle wrapper when the serving process should be owned by the

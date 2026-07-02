@@ -388,13 +388,34 @@ def _adapter_identity(adapter: str) -> dict[str, Any]:
         return {"present": False, "id": "", "path": "", "local": False}
     path = Path(adapter).expanduser()
     if not path.exists():
-        return {"present": True, "id": adapter, "path": adapter, "local": False}
+        return {"present": True, "id": _adapter_artifact_id(adapter), "path": "", "path_kind": "external_id", "local": False}
+    root = path.resolve()
     files = []
     for name in ("adapter_config.json", "adapter_model.safetensors", "tokenizer_config.json", "chat_template.jinja"):
-        candidate = path / name
+        candidate = root / name
         if candidate.exists() and candidate.is_file():
-            files.append({"path": str(candidate), "sha256": _sha256_file(candidate), "bytes": candidate.stat().st_size})
-    return {"present": True, "id": path.name, "path": str(path.resolve()), "local": True, "files": files}
+            files.append({"path": name, "sha256": _sha256_file(candidate), "bytes": candidate.stat().st_size})
+    return {"present": True, "id": root.name, "path": root.name, "path_kind": "local_directory", "local": True, "files": files}
+
+
+def _adapter_artifact_id(adapter: str) -> str:
+    text = str(adapter).strip()
+    if not text:
+        return ""
+    normalized = text.replace("\\", "/")
+    if _looks_like_private_local_path(normalized):
+        return Path(normalized).name or "adapter"
+    return text
+
+
+def _looks_like_private_local_path(value: str) -> bool:
+    lowered = value.lower()
+    private_markers = ("/users/", "/" + "home/", "documents/github", ".codex")
+    return (
+        value.startswith(("/", "~"))
+        or (len(value) >= 3 and value[1:3] == ":/")
+        or any(marker in lowered for marker in private_markers)
+    )
 
 
 def _identity_matches(expected_model: str, adapter: str, observed_values: list[str]) -> bool:
