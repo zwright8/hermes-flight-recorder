@@ -7,6 +7,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .agentic_training_result import (
+    AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
+    REGISTER_FAILURE_RECOMMENDATION,
+    REGISTER_RESULT_RECOMMENDATION,
+)
 from .gate_contract import summarize_gate_contract
 from .schema_registry import SchemaRegistryError, check_schema_file
 
@@ -21,7 +26,7 @@ _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.reviewed_gate.v1",
     "hfr.review_calibration.v1",
 }
-_TRAINER_HANDOFF_STAGES: tuple[dict[str, str], ...] = (
+_TRAINER_HANDOFF_STAGES: tuple[dict[str, Any], ...] = (
     {
         "id": "trainer_preflight",
         "schema_version": "hfr.trainer_preflight.v1",
@@ -53,6 +58,11 @@ _TRAINER_HANDOFF_STAGES: tuple[dict[str, str], ...] = (
         "schema_version": "hfr.example_trainer_wrapper_dry_run.v1",
         "recommendation": "dry_run_ready",
     },
+    {
+        "id": "agentic_training_result",
+        "schema_version": AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
+        "recommendations": (REGISTER_RESULT_RECOMMENDATION, REGISTER_FAILURE_RECOMMENDATION),
+    },
 )
 
 
@@ -82,6 +92,7 @@ def build_evidence_bundle(
     trainer_archive_check_path: str | Path | None = None,
     trainer_consumer_plan_path: str | Path | None = None,
     trainer_wrapper_dry_run_path: str | Path | None = None,
+    agentic_training_result_path: str | Path | None = None,
     harness_manifest_paths: list[str | Path] | None = None,
     harness_result_paths: list[str | Path] | None = None,
     require_harness: bool = False,
@@ -309,6 +320,7 @@ def build_evidence_bundle(
         trainer_archive_check_path=trainer_archive_check_path,
         trainer_consumer_plan_path=trainer_consumer_plan_path,
         trainer_wrapper_dry_run_path=trainer_wrapper_dry_run_path,
+        agentic_training_result_path=agentic_training_result_path,
     )
     _summarize_harness_handoff(
         artifacts,
@@ -824,7 +836,7 @@ def _next_actions(
                 "complete_trainer_handoff_chain",
                 "medium",
                 "trainer_handoff",
-                "Include the full trainer preflight, launch-check, archive, archive-check, consumer-plan, and wrapper receipt chain before treating the bundle as trainer-ready.",
+                "Include the full trainer preflight, launch-check, archive, archive-check, consumer-plan, wrapper receipt, and training-result chain before treating the bundle as trainer-ready.",
                 {
                     "missing_stage_ids": missing_trainer_stages,
                     "stage_count": _non_negative_int(trainer.get("stage_count")),
@@ -1438,6 +1450,7 @@ def _summarize_trainer_handoff(
     trainer_archive_check_path: str | Path | None,
     trainer_consumer_plan_path: str | Path | None,
     trainer_wrapper_dry_run_path: str | Path | None,
+    agentic_training_result_path: str | Path | None,
 ) -> None:
     paths = {
         "trainer_preflight": trainer_preflight_path,
@@ -1446,6 +1459,7 @@ def _summarize_trainer_handoff(
         "trainer_archive_check": trainer_archive_check_path,
         "trainer_consumer_plan": trainer_consumer_plan_path,
         "trainer_wrapper_dry_run": trainer_wrapper_dry_run_path,
+        "agentic_training_result": agentic_training_result_path,
     }
     stages: list[dict[str, Any]] = []
     for spec in _TRAINER_HANDOFF_STAGES:
@@ -1503,19 +1517,24 @@ def _trainer_stage_metrics(
     stage_id: str,
     artifact: dict[str, Any],
     record: dict[str, Any],
-    spec: dict[str, str],
+    spec: dict[str, Any],
 ) -> dict[str, Any]:
     schema_version = str(artifact.get("schema_version") or "")
     readiness = str(artifact.get("readiness") or "")
     recommendation = str(artifact.get("recommendation") or "")
-    expected_schema = spec["schema_version"]
-    expected_recommendation = spec["recommendation"]
+    expected_schema = str(spec["schema_version"])
+    expected_recommendations = _trainer_expected_recommendations(spec)
+    expected_recommendation = (
+        expected_recommendations[0]
+        if len(expected_recommendations) == 1
+        else " or ".join(expected_recommendations)
+    )
     schema_supported = schema_version == expected_schema
     handoff_ready = (
         schema_supported
         and artifact.get("passed") is True
         and readiness == "ready"
-        and recommendation == expected_recommendation
+        and recommendation in expected_recommendations
     )
     metrics = artifact.get("metrics") if isinstance(artifact.get("metrics"), dict) else {}
     stage: dict[str, Any] = {
@@ -1532,6 +1551,8 @@ def _trainer_stage_metrics(
         "check_count": _non_negative_int(artifact.get("check_count")),
         "failed_check_count": _non_negative_int(artifact.get("failed_check_count")),
     }
+    if len(expected_recommendations) > 1:
+        stage["expected_recommendations"] = list(expected_recommendations)
     for field_name in (
         "gate_count",
         "passed_gate_count",
@@ -1544,6 +1565,14 @@ def _trainer_stage_metrics(
         "missing_trainer_input_count",
         "command_arg_count",
         "artifact_count",
+        "regular_artifact_count",
+        "output_artifact_count",
+        "config_count",
+        "metrics_file_count",
+        "adapter_count",
+        "checkpoint_count",
+        "log_count",
+        "failure_report_count",
         "missing_count",
         "path_rewrite_count",
     ):
@@ -1552,7 +1581,34 @@ def _trainer_stage_metrics(
             value = metrics.get(field_name)
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
             stage[field_name] = value
+    if stage_id == "agentic_training_result":
+        _add_agentic_training_result_stage_fields(stage, artifact)
     return stage
+
+
+def _trainer_expected_recommendations(spec: dict[str, Any]) -> tuple[str, ...]:
+    values = spec.get("recommendations")
+    if isinstance(values, (list, tuple)):
+        recommendations = tuple(str(value) for value in values if isinstance(value, str) and value)
+        if recommendations:
+            return recommendations
+    return (str(spec["recommendation"]),)
+
+
+def _add_agentic_training_result_stage_fields(stage: dict[str, Any], artifact: dict[str, Any]) -> None:
+    training_result = artifact.get("training_result") if isinstance(artifact.get("training_result"), dict) else {}
+    failure = artifact.get("failure") if isinstance(artifact.get("failure"), dict) else {}
+    registry_update = artifact.get("registry_update") if isinstance(artifact.get("registry_update"), dict) else {}
+    for field_name, value in (
+        ("status", training_result.get("status")),
+        ("runner_id", training_result.get("runner_id")),
+        ("run_id", training_result.get("run_id")),
+        ("failure_class", failure.get("class")),
+    ):
+        if isinstance(value, str) and value:
+            stage[field_name] = value
+    if isinstance(registry_update.get("ready_to_apply"), bool):
+        stage["registry_update_ready"] = registry_update["ready_to_apply"]
 
 
 def _summarize_boolean_artifact(

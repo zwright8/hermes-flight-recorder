@@ -12084,6 +12084,7 @@ def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTa
         "trainer_archive_check",
         "trainer_consumer_plan",
         "trainer_wrapper_dry_run",
+        "agentic_training_result",
     )
     for field_name in ("stage_count", "handoff_ready_count", "blocked_stage_count", "schema_supported_count"):
         if not _is_non_negative_int(value.get(field_name)):
@@ -12137,11 +12138,26 @@ def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTa
             "missing_trainer_input_count",
             "command_arg_count",
             "artifact_count",
+            "regular_artifact_count",
+            "output_artifact_count",
+            "config_count",
+            "metrics_file_count",
+            "adapter_count",
+            "checkpoint_count",
+            "log_count",
+            "failure_report_count",
             "missing_count",
             "path_rewrite_count",
         ):
             if field_name in stage and not _is_non_negative_int(stage.get(field_name)):
                 target.errors.append(f"{stage_label}.{field_name} must be a non-negative integer when present.")
+        for field_name in ("status", "runner_id", "run_id", "failure_class"):
+            if field_name in stage and (not isinstance(stage.get(field_name), str) or not stage.get(field_name)):
+                target.errors.append(f"{stage_label}.{field_name} must be a non-empty string when present.")
+        if "expected_recommendations" in stage and not _is_string_list(stage.get("expected_recommendations")):
+            target.errors.append(f"{stage_label}.expected_recommendations must be a list of strings when present.")
+        if "registry_update_ready" in stage and not isinstance(stage.get("registry_update_ready"), bool):
+            target.errors.append(f"{stage_label}.registry_update_ready must be a boolean when present.")
         if stage.get("handoff_ready") is True:
             handoff_ready_count += 1
         elif stage.get("handoff_ready") is False:

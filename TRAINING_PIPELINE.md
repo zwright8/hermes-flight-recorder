@@ -141,8 +141,8 @@ shared `decision` contract; weak legacy gates without `readiness`,
 `recommendation`, `failed_checks`, and `next_actions` block the handoff.
 When trainer handoff artifacts are available, include them in a second
 trainer-facing bundle so the final preflight, launch-check, archive,
-archive-check, consumer-plan, and wrapper dry-run chain is visible in one
-validated manifest:
+archive-check, consumer-plan, wrapper dry-run, and agentic training result
+chain is visible in one validated manifest:
 
 ```bash
 flightrecorder evidence-bundle \
@@ -159,13 +159,17 @@ flightrecorder evidence-bundle \
   --trainer-archive-check runs/trainer_archive_check.json \
   --trainer-consumer-plan runs/trainer_consumer_plan.json \
   --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
+  --agentic-training-result runs/agentic_training_result.json \
   --out runs/evidence_bundle_trainer.json
 ```
 
 The resulting `metrics.trainer_handoff` section records included stages,
 readiness counts, missing stage ids, and whether all included trainer artifacts
-match their expected recommendation. It blocks only included stages that are no
-longer ready, while partial chains remain visible as advisory next actions.
+match their expected recommendation. The result receipt may recommend either
+`register_training_result` for completed runs or `register_training_failure`
+for classified non-completed runs. The bundle blocks only included stages that
+are no longer ready, while partial chains remain visible as advisory next
+actions.
 When included gates can validate trainer-facing exports, such as training,
 compare, reviewed, and review-calibration gates, the bundle blocks handoff if
 those gates skipped validation.

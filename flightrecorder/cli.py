@@ -1358,6 +1358,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         trainer_archive_check_path=args.trainer_archive_check,
         trainer_consumer_plan_path=args.trainer_consumer_plan,
         trainer_wrapper_dry_run_path=args.trainer_wrapper_dry_run,
+        agentic_training_result_path=args.agentic_training_result,
         harness_manifest_paths=args.harness_manifest,
         harness_result_paths=args.harness_result,
         gate_paths=args.gate,
@@ -2803,6 +2804,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--trainer-archive-check", help="trainer_archive_check.json included in the handoff")
     evidence_bundle.add_argument("--trainer-consumer-plan", help="trainer_consumer_plan.json included in the handoff")
     evidence_bundle.add_argument("--trainer-wrapper-dry-run", help="trainer_wrapper_dry_run.json included in the handoff")
+    evidence_bundle.add_argument("--agentic-training-result", help="agentic_training_result.json included in the handoff")
     evidence_bundle.add_argument("--harness-manifest", action="append", default=[], help="harness_manifest.json included in the handoff; may be repeated")
     evidence_bundle.add_argument("--harness-result", action="append", default=[], help="harness_result.json included in the handoff; may be repeated")
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")

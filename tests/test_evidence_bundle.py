@@ -479,6 +479,8 @@ class EvidenceBundleTests(unittest.TestCase):
                     str(artifacts["trainer_consumer_plan"]),
                     "--trainer-wrapper-dry-run",
                     str(artifacts["trainer_wrapper_dry_run"]),
+                    "--agentic-training-result",
+                    str(artifacts["agentic_training_result"]),
                     "--out",
                     str(bundle_path),
                 ]
@@ -490,10 +492,10 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["recommendation"], "promote_handoff")
             self.assertIn("trainer_handoff", bundle["decision"]["key_metrics"])
             trainer = bundle["metrics"]["trainer_handoff"]
-            self.assertEqual(trainer["stage_count"], 6)
-            self.assertEqual(trainer["handoff_ready_count"], 6)
+            self.assertEqual(trainer["stage_count"], 7)
+            self.assertEqual(trainer["handoff_ready_count"], 7)
             self.assertEqual(trainer["blocked_stage_count"], 0)
-            self.assertEqual(trainer["schema_supported_count"], 6)
+            self.assertEqual(trainer["schema_supported_count"], 7)
             self.assertTrue(trainer["complete_chain"])
             self.assertTrue(trainer["all_included_ready"])
             self.assertEqual(trainer["missing_stage_ids"], [])
@@ -504,9 +506,17 @@ class EvidenceBundleTests(unittest.TestCase):
                 "trainer_archive_check",
                 "trainer_consumer_plan",
                 "trainer_wrapper_dry_run",
+                "agentic_training_result",
             ])
+            result_stage = next(stage for stage in trainer["stages"] if stage["id"] == "agentic_training_result")
+            self.assertEqual(result_stage["status"], "completed")
+            self.assertEqual(result_stage["failure_class"], "none")
+            self.assertEqual(result_stage["expected_recommendations"], ["register_training_result", "register_training_failure"])
+            self.assertTrue(result_stage["registry_update_ready"])
+            self.assertEqual(result_stage["output_artifact_count"], 1)
             self.assertEqual(bundle["artifacts"]["trainer_archive"]["kind"], "directory")
             self.assertEqual(bundle["artifacts"]["trainer_archive_manifest"]["kind"], "file")
+            self.assertEqual(bundle["artifacts"]["agentic_training_result"]["schema_version"], "hfr.agentic_training_result.v1")
             self.assertEqual(bundle["decision"]["key_metrics"]["trainer_handoff"]["complete_chain"], True)
             self.assertEqual(bundle["decision"]["key_metrics"]["trainer_handoff"]["all_included_ready"], True)
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
@@ -561,6 +571,7 @@ class EvidenceBundleTests(unittest.TestCase):
                     "trainer_archive_check",
                     "trainer_consumer_plan",
                     "trainer_wrapper_dry_run",
+                    "agentic_training_result",
                 ],
             )
             failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
@@ -568,6 +579,76 @@ class EvidenceBundleTests(unittest.TestCase):
             action_ids = {action["id"] for action in bundle["decision"]["next_actions"]}
             self.assertIn("fix_trainer_handoff", action_ids)
             self.assertIn("complete_trainer_handoff_chain", action_ids)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_evidence_bundle_accepts_classified_agentic_training_failure_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result_path = root / "agentic_training_result.json"
+            result_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.agentic_training_result.v1",
+                        "passed": True,
+                        "readiness": "ready",
+                        "recommendation": "register_training_failure",
+                        "check_count": 13,
+                        "failed_check_count": 0,
+                        "training_result": {
+                            "status": "failed",
+                            "runner_id": "external-trainer",
+                            "run_id": "example-failed-run",
+                        },
+                        "failure": {
+                            "class": "out_of_memory",
+                            "message": "Synthetic failure fixture.",
+                        },
+                        "metrics": {
+                            "artifact_count": 2,
+                            "regular_artifact_count": 2,
+                            "output_artifact_count": 0,
+                            "config_count": 0,
+                            "metrics_file_count": 1,
+                            "adapter_count": 0,
+                            "checkpoint_count": 0,
+                            "log_count": 1,
+                            "failure_report_count": 1,
+                        },
+                        "registry_update": {
+                            "ready_to_apply": True,
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--agentic-training-result",
+                    str(result_path),
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            trainer = bundle["metrics"]["trainer_handoff"]
+            self.assertEqual(trainer["stage_count"], 1)
+            self.assertEqual(trainer["handoff_ready_count"], 1)
+            self.assertEqual(trainer["blocked_stage_count"], 0)
+            self.assertFalse(trainer["complete_chain"])
+            result_stage = trainer["stages"][0]
+            self.assertEqual(result_stage["id"], "agentic_training_result")
+            self.assertTrue(result_stage["handoff_ready"])
+            self.assertEqual(result_stage["recommendation"], "register_training_failure")
+            self.assertEqual(result_stage["status"], "failed")
+            self.assertEqual(result_stage["failure_class"], "out_of_memory")
+            self.assertEqual(result_stage["failure_report_count"], 1)
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
     def test_evidence_bundle_blocks_missing_run_digest(self):
@@ -910,6 +991,7 @@ def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:
         "trainer_archive_check": root / "trainer_archive_check.json",
         "trainer_consumer_plan": root / "trainer_consumer_plan.json",
         "trainer_wrapper_dry_run": root / "trainer_wrapper_dry_run.json",
+        "agentic_training_result": root / "agentic_training_result.json",
     }
     artifacts["trainer_archive"].mkdir()
     payloads = {
@@ -988,6 +1070,37 @@ def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:
                 "external_code_ready_count": 1,
                 "trainer_input_count": 4,
                 "trainer_input_ready_count": 4,
+            },
+        },
+        artifacts["agentic_training_result"]: {
+            "schema_version": "hfr.agentic_training_result.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "register_training_result",
+            "check_count": 13,
+            "failed_check_count": 0,
+            "training_result": {
+                "status": "completed",
+                "runner_id": "external-trainer",
+                "run_id": "example-completed-run",
+            },
+            "failure": {
+                "class": "none",
+                "message": "",
+            },
+            "metrics": {
+                "artifact_count": 3,
+                "regular_artifact_count": 3,
+                "output_artifact_count": 1,
+                "config_count": 1,
+                "metrics_file_count": 1,
+                "adapter_count": 1,
+                "checkpoint_count": 0,
+                "log_count": 0,
+                "failure_report_count": 0,
+            },
+            "registry_update": {
+                "ready_to_apply": True,
             },
         },
     }
