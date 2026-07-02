@@ -16,6 +16,7 @@ from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 PROMOTION_DECISION_SCHEMA_VERSION = "hfr.promotion_decision.v1"
 PROMOTION_CARDS_SCHEMA_VERSION = "hfr.promotion_cards.v1"
 PROMOTION_ALIAS_APPLY_SCHEMA_VERSION = "hfr.promotion_alias_apply.v1"
+PROMOTION_RELEASE_RECORD_SCHEMA_VERSION = "hfr.promotion_release_record.v1"
 MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
 
 MODEL_CLASSES = {"base", "trace-only", "frontier", "champion", "candidate"}
@@ -38,6 +39,14 @@ PROMOTION_DECISION_REQUIRED_ARTIFACTS = (
     "redaction_check",
     "safety_gate",
     "serving_report",
+)
+PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS = (
+    "promotion_decision",
+    "promotion_cards",
+    "promotion_alias_apply",
+    "rollback_metadata",
+    "compare_gate",
+    "release_notes",
 )
 _JSON_ARTIFACT_ROLES = {
     "evidence_bundle": EVIDENCE_BUNDLE_SCHEMA_VERSION,
@@ -478,6 +487,229 @@ def apply_promotion_aliases(
     return receipt
 
 
+def build_promotion_release_record(
+    *,
+    release_id: str,
+    promotion_decision_path: str | Path,
+    promotion_cards_path: str | Path,
+    promotion_alias_apply_path: str | Path,
+    rollback_metadata_path: str | Path,
+    compare_gate_path: str | Path,
+    release_notes_path: str | Path,
+    out_path: str | Path,
+    artifact_validation: dict[str, Any] | None = None,
+    preserve_paths: bool = False,
+    metadata: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Bind promotion governance artifacts into a reviewable release record."""
+    record_path = Path(out_path)
+    paths = {
+        "promotion_decision": Path(promotion_decision_path),
+        "promotion_cards": Path(promotion_cards_path),
+        "promotion_alias_apply": Path(promotion_alias_apply_path),
+        "rollback_metadata": Path(rollback_metadata_path),
+        "compare_gate": Path(compare_gate_path),
+        "release_notes": Path(release_notes_path),
+    }
+    artifacts = {role: _artifact_record(role, path, preserve_paths) for role, path in paths.items()}
+    decision = _read_json_artifact(paths["promotion_decision"])
+    cards_manifest_path = _promotion_cards_manifest_path(paths["promotion_cards"])
+    cards = _read_json_artifact(cards_manifest_path) if cards_manifest_path is not None else None
+    alias_receipt = _read_json_artifact(paths["promotion_alias_apply"])
+    rollback = _read_json_artifact(paths["rollback_metadata"])
+    compare_gate = _read_json_artifact(paths["compare_gate"])
+    notes_text = _read_text_artifact(paths["release_notes"])
+
+    decision_obj = decision if isinstance(decision, dict) else {}
+    cards_obj = cards if isinstance(cards, dict) else {}
+    alias_obj = alias_receipt if isinstance(alias_receipt, dict) else {}
+    rollback_obj = rollback if isinstance(rollback, dict) else {}
+    compare_obj = compare_gate if isinstance(compare_gate, dict) else {}
+    decision_models = decision_obj.get("models") if isinstance(decision_obj.get("models"), dict) else {}
+    candidate_id = _model_id(decision_models.get("candidate"))
+    champion_id = _model_id(decision_models.get("champion"))
+    rollback_id = _model_id(decision_models.get("rollback"))
+    dataset = cards_obj.get("dataset") if isinstance(cards_obj.get("dataset"), dict) else {}
+    dataset_id = dataset.get("id") if isinstance(dataset.get("id"), str) else ""
+
+    checks: list[dict[str, Any]] = []
+    _add_check(
+        checks,
+        "release_id_present",
+        bool(release_id),
+        actual=bool(release_id),
+        expected={"present": True},
+        summary="release id is present",
+    )
+    for role in PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS:
+        record = artifacts[role]
+        _add_check(
+            checks,
+            f"{role}_present",
+            record["exists"] is True,
+            actual={"exists": record["exists"], "kind": record["kind"], "path": record["path"]},
+            expected={"exists": True},
+            scope={"artifact_role": role},
+            summary=f"{role} artifact is present and fingerprinted",
+        )
+    _add_check(
+        checks,
+        "promotion_decision_schema",
+        decision_obj.get("schema_version") == PROMOTION_DECISION_SCHEMA_VERSION,
+        actual=decision_obj.get("schema_version"),
+        expected={"schema_version": PROMOTION_DECISION_SCHEMA_VERSION},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision uses the expected schema",
+    )
+    _add_check(
+        checks,
+        "promotion_cards_schema",
+        cards_obj.get("schema_version") == PROMOTION_CARDS_SCHEMA_VERSION,
+        actual=cards_obj.get("schema_version"),
+        expected={"schema_version": PROMOTION_CARDS_SCHEMA_VERSION},
+        scope={"artifact_role": "promotion_cards"},
+        summary="promotion cards manifest uses the expected schema",
+    )
+    _add_check(
+        checks,
+        "promotion_alias_apply_schema",
+        alias_obj.get("schema_version") == PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
+        actual=alias_obj.get("schema_version"),
+        expected={"schema_version": PROMOTION_ALIAS_APPLY_SCHEMA_VERSION},
+        scope={"artifact_role": "promotion_alias_apply"},
+        summary="promotion alias receipt uses the expected schema",
+    )
+    _add_schema_check(checks, "compare_gate", compare_gate)
+    for role, payload in (
+        ("promotion_decision", decision),
+        ("promotion_cards", cards),
+        ("promotion_alias_apply", alias_receipt),
+        ("compare_gate", compare_gate),
+    ):
+        _add_passed_json_check(checks, role, payload)
+
+    validation_passed = artifact_validation.get("passed") if isinstance(artifact_validation, dict) else None
+    _add_check(
+        checks,
+        "input_artifacts_validated",
+        validation_passed is True,
+        actual=validation_passed,
+        expected={"passed": True},
+        summary="release-record input artifacts passed validation immediately before binding",
+    )
+    alias_decision = alias_obj.get("promotion_decision") if isinstance(alias_obj.get("promotion_decision"), dict) else {}
+    _add_check(
+        checks,
+        "alias_receipt_matches_decision",
+        alias_decision.get("sha256") == artifacts["promotion_decision"].get("sha256"),
+        actual=alias_decision.get("sha256"),
+        expected={"promotion_decision_sha256": artifacts["promotion_decision"].get("sha256")},
+        scope={"artifact_role": "promotion_alias_apply"},
+        summary="alias receipt references the exact promotion decision",
+    )
+    _add_check(
+        checks,
+        "alias_receipt_targets_match_decision",
+        alias_decision.get("candidate_id") == candidate_id and alias_decision.get("rollback_id") == rollback_id,
+        actual={"candidate_id": alias_decision.get("candidate_id"), "rollback_id": alias_decision.get("rollback_id")},
+        expected={"candidate_id": candidate_id, "rollback_id": rollback_id},
+        scope={"artifact_role": "promotion_alias_apply"},
+        summary="alias receipt candidate and rollback targets match the decision",
+    )
+    cards_artifacts = cards_obj.get("artifacts") if isinstance(cards_obj.get("artifacts"), dict) else {}
+    decision_artifacts = decision_obj.get("artifacts") if isinstance(decision_obj.get("artifacts"), dict) else {}
+    _add_check(
+        checks,
+        "cards_match_decision",
+        _artifact_sha(cards_artifacts.get("model_card")) == _artifact_sha(decision_artifacts.get("model_card"))
+        and _artifact_sha(cards_artifacts.get("dataset_card")) == _artifact_sha(decision_artifacts.get("dataset_card")),
+        actual={
+            "cards_model_card": _artifact_sha(cards_artifacts.get("model_card")),
+            "decision_model_card": _artifact_sha(decision_artifacts.get("model_card")),
+            "cards_dataset_card": _artifact_sha(cards_artifacts.get("dataset_card")),
+            "decision_dataset_card": _artifact_sha(decision_artifacts.get("dataset_card")),
+        },
+        expected={"cards": "match_decision_card_hashes"},
+        scope={"artifact_role": "promotion_cards"},
+        summary="promotion cards are the same cards consumed by the promotion decision",
+    )
+    _add_check(
+        checks,
+        "compare_gate_matches_decision",
+        artifacts["compare_gate"].get("sha256") == _artifact_sha(decision_artifacts.get("compare_gate")),
+        actual=artifacts["compare_gate"].get("sha256"),
+        expected={"decision_compare_gate_sha256": _artifact_sha(decision_artifacts.get("compare_gate"))},
+        scope={"artifact_role": "compare_gate"},
+        summary="release eval compare gate matches the promotion decision compare gate",
+    )
+    _add_rollback_metadata_check(checks, rollback, rollback_id)
+    unsupported_markers = [marker for marker in _UNSUPPORTED_CARD_MARKERS if marker in notes_text.lower()]
+    _add_check(
+        checks,
+        "release_notes_present",
+        bool(notes_text.strip()),
+        actual={"size_bytes": artifacts["release_notes"].get("size_bytes", 0), "nonempty": bool(notes_text.strip())},
+        expected={"nonempty": True},
+        scope={"artifact_role": "release_notes"},
+        summary="release notes are present and non-empty",
+    )
+    _add_check(
+        checks,
+        "release_notes_claims_supported",
+        not unsupported_markers,
+        actual={"unsupported_markers": unsupported_markers},
+        expected={"unsupported_markers": []},
+        scope={"artifact_role": "release_notes"},
+        summary="release notes contain no TODO/TBD/unsupported-claim markers",
+    )
+
+    failed_checks = sum(1 for check in checks if not check["passed"])
+    passed = failed_checks == 0
+    record: dict[str, Any] = {
+        "schema_version": PROMOTION_RELEASE_RECORD_SCHEMA_VERSION,
+        "release_record_path": _display_path(record_path, preserve_paths),
+        "passed": passed,
+        "readiness": "ready" if passed else "blocked",
+        "recommendation": "publish_release" if passed else "hold_release",
+        "release": {
+            "id": release_id,
+            "candidate_id": candidate_id,
+            "champion_previous_target": champion_id,
+            "rollback_id": rollback_id,
+            "dataset_id": dataset_id,
+        },
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+        "checks": checks,
+        "artifacts": artifacts,
+        "artifact_validation": _validation_summary(artifact_validation),
+        "bindings": {
+            "promotion_decision_sha256": artifacts["promotion_decision"].get("sha256"),
+            "promotion_cards_sha256": artifacts["promotion_cards"].get("sha256"),
+            "promotion_alias_apply_sha256": artifacts["promotion_alias_apply"].get("sha256"),
+            "rollback_metadata_sha256": artifacts["rollback_metadata"].get("sha256"),
+            "compare_gate_sha256": artifacts["compare_gate"].get("sha256"),
+            "release_notes_sha256": artifacts["release_notes"].get("sha256"),
+            "model_card_sha256": _artifact_sha(cards_artifacts.get("model_card")),
+            "dataset_card_sha256": _artifact_sha(cards_artifacts.get("dataset_card")),
+        },
+        "metrics": {
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "required_artifact_count": len(PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS),
+            "release_notes_size_bytes": _int_value(artifacts["release_notes"].get("size_bytes")),
+        },
+        "notes": [
+            "Release records are review artifacts; they do not move aliases or publish external artifacts.",
+            "A release record binds the exact promotion decision, generated cards, alias-apply receipt, rollback metadata, eval compare gate, and release notes.",
+        ],
+    }
+    if metadata:
+        record["metadata"] = dict(sorted(metadata.items()))
+    _write_json(record_path, record)
+    return record
+
+
 def build_promotion_cards(
     *,
     out_dir: str | Path,
@@ -760,6 +992,29 @@ def _read_json_artifact(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError):
         return None
     return value if isinstance(value, dict) else None
+
+
+def _read_text_artifact(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _promotion_cards_manifest_path(path: Path) -> Path | None:
+    if path.is_dir():
+        return path / "promotion_cards.json"
+    if path.exists() and path.is_file():
+        return path
+    return None
+
+
+def _artifact_sha(value: Any) -> str:
+    if isinstance(value, dict) and isinstance(value.get("sha256"), str):
+        return value["sha256"]
+    return ""
 
 
 def _add_schema_check(checks: list[dict[str, Any]], role: str, payload: dict[str, Any] | None) -> None:
