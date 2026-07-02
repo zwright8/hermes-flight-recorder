@@ -39,17 +39,20 @@ assert_help_contains "--evidence-handoff" "$PYTHON" -m flightrecorder run-suite 
 rm -rf schema_contracts_check
 "$PYTHON" -m flightrecorder schemas --write-dir schema_contracts_check >/dev/null
 test -f schema_contracts_check/manifest.json
-test -f schema_contracts_check/trace.v1.schema.json
-test -f schema_contracts_check/improvement_ledger_gate.v1.schema.json
-test -f schema_contracts_check/rl_episode.v1.schema.json
-test -f schema_contracts_check/rl_reward_model.v1.schema.json
-test -f schema_contracts_check/live_verifier_smoke_summary.v1.schema.json
-test -f schema_contracts_check/trainer_archive.v1.schema.json
-test -f schema_contracts_check/trainer_archive_check.v1.schema.json
-test -f schema_contracts_check/trainer_consumer_plan.v1.schema.json
-test -f schema_contracts_check/trainer_wrapper_dry_run.v1.schema.json
-test -f schema_contracts_check/harness_run_manifest.v1.schema.json
-test -f schema_contracts_check/harness_run_result.v1.schema.json
+"$PYTHON" - <<'PY'
+import json
+from pathlib import Path
+
+bundle = Path("schema_contracts_check")
+catalog = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+missing = [
+    record["filename"]
+    for record in catalog.get("schemas", [])
+    if not (bundle / record["filename"]).is_file()
+]
+if missing:
+    raise SystemExit("missing exported schema file(s): " + ", ".join(sorted(missing)))
+PY
 "$PYTHON" scripts/live_verifier_smoke.py \
   --out runs/live_verifier_smoke_release_check \
   --provider slack >/dev/null
