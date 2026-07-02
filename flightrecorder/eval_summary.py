@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,6 +87,7 @@ def _suite_arm(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
         blocking_reasons.append("suite_summary_validation_failed")
     if duplicate_count > 0:
         blocking_reasons.append("duplicate_scenario_ids")
+    operational_metrics = _operational_metrics(summary, runs)
     return {
         "label": spec.label,
         "path": _display_path(spec.path, preserve_paths),
@@ -100,6 +102,7 @@ def _suite_arm(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
         "average_score": metrics.get("average_score"),
         "failed_rule_counts": _count_rows(metrics.get("failed_rule_counts")),
         "critical_failure_counts": _count_rows(metrics.get("critical_failure_counts")),
+        "operational_metrics": operational_metrics,
         "validation": _validation_summary(validation),
         "blocking_reasons": blocking_reasons,
     }
@@ -404,6 +407,216 @@ def _count_mapping(value: Any) -> dict[str, int]:
         if isinstance(key, str) and isinstance(count, int) and not isinstance(count, bool):
             counts[key] = count
     return counts
+
+
+def _operational_metrics(summary: dict[str, Any], runs: list[Any]) -> dict[str, Any]:
+    metrics = summary.get("metrics") if isinstance(summary.get("metrics"), dict) else {}
+    run_rows = [run for run in runs if isinstance(run, dict)]
+    return {
+        "cost": _cost_metrics(metrics, run_rows),
+        "latency": _latency_metrics(metrics, run_rows),
+        "tokens": _token_metrics(metrics, run_rows),
+        "task_completion": _task_completion_metrics(metrics, run_rows),
+    }
+
+
+def _cost_metrics(metrics: dict[str, Any], runs: list[dict[str, Any]]) -> dict[str, Any]:
+    costs = [_cost_usd(run) for run in runs]
+    known = [value for value in costs if value is not None]
+    if known:
+        total = sum(known)
+        source = "run_rows"
+    else:
+        total = _first_number(metrics, "total_cost_usd", "cost_usd")
+        source = "suite_metrics" if total is not None else "missing"
+    return {
+        "total_usd": _round_number(total),
+        "known_run_count": len(known),
+        "missing_run_count": max(0, len(runs) - len(known)),
+        "source": source,
+    }
+
+
+def _latency_metrics(metrics: dict[str, Any], runs: list[dict[str, Any]]) -> dict[str, Any]:
+    latencies = [_latency_ms(run) for run in runs]
+    known = [value for value in latencies if value is not None]
+    if known:
+        source = "run_rows"
+        average = sum(known) / len(known)
+        p50 = _percentile(known, 0.50)
+        p95 = _percentile(known, 0.95)
+        maximum = max(known)
+    else:
+        source = "suite_metrics" if _first_number(metrics, "average_latency_ms", "latency_ms") is not None else "missing"
+        average = _first_number(metrics, "average_latency_ms", "latency_ms")
+        p50 = _first_number(metrics, "p50_latency_ms", "latency_p50_ms")
+        p95 = _first_number(metrics, "p95_latency_ms", "latency_p95_ms")
+        maximum = _first_number(metrics, "max_latency_ms", "latency_max_ms")
+    return {
+        "average_ms": _round_number(average),
+        "p50_ms": _round_number(p50),
+        "p95_ms": _round_number(p95),
+        "max_ms": _round_number(maximum),
+        "known_run_count": len(known),
+        "missing_run_count": max(0, len(runs) - len(known)),
+        "source": source,
+    }
+
+
+def _token_metrics(metrics: dict[str, Any], runs: list[dict[str, Any]]) -> dict[str, Any]:
+    usages = [_token_usage(run) for run in runs]
+    known = [usage for usage in usages if any(value is not None for value in usage.values())]
+    source = "run_rows" if known else "suite_metrics" if _metrics_has_token_usage(metrics) else "missing"
+    prompt_tokens = _sum_ints(usage["prompt_tokens"] for usage in known) if known else _first_int(metrics, "prompt_tokens", "input_tokens")
+    completion_tokens = (
+        _sum_ints(usage["completion_tokens"] for usage in known)
+        if known
+        else _first_int(metrics, "completion_tokens", "output_tokens")
+    )
+    total_tokens = _sum_ints(usage["total_tokens"] for usage in known) if known else _first_int(metrics, "total_tokens")
+    if total_tokens is None and prompt_tokens is not None and completion_tokens is not None:
+        total_tokens = prompt_tokens + completion_tokens
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "known_run_count": len(known),
+        "missing_run_count": max(0, len(runs) - len(known)),
+        "source": source,
+    }
+
+
+def _task_completion_metrics(metrics: dict[str, Any], runs: list[dict[str, Any]]) -> dict[str, Any]:
+    task_rows = [_task_completion_record(run) for run in runs]
+    known = [row for row in task_rows if row is not None]
+    if known:
+        statuses = [str(row.get("status") or "not_applicable") for row in known]
+        passed_values = [row.get("passed") for row in known if isinstance(row.get("passed"), bool)]
+        passed_count = sum(1 for value in passed_values if value is True)
+        failed_count = sum(1 for value in passed_values if value is False)
+        return {
+            "configured_count": len(known),
+            "complete_count": statuses.count("complete"),
+            "incomplete_count": statuses.count("incomplete"),
+            "not_applicable_count": statuses.count("not_applicable"),
+            "unknown_count": max(0, len(runs) - len(known)),
+            "passed_count": passed_count,
+            "failed_count": failed_count,
+            "pass_rate": _round_number(passed_count / len(passed_values)) if passed_values else None,
+            "source": "run_rows",
+        }
+    metric_task = metrics.get("task_completion") if isinstance(metrics.get("task_completion"), dict) else {}
+    return {
+        "configured_count": _first_int(metric_task, "configured_count") or 0,
+        "complete_count": _first_int(metric_task, "complete_count") or 0,
+        "incomplete_count": _first_int(metric_task, "incomplete_count") or 0,
+        "not_applicable_count": _first_int(metric_task, "not_applicable_count") or 0,
+        "unknown_count": len(runs),
+        "passed_count": _first_int(metric_task, "passed_count") or 0,
+        "failed_count": _first_int(metric_task, "failed_count") or 0,
+        "pass_rate": _first_number(metric_task, "pass_rate"),
+        "source": "suite_metrics" if metric_task else "missing",
+    }
+
+
+def _cost_usd(run: dict[str, Any]) -> float | None:
+    value = _first_number(run, "cost_usd", "total_cost_usd")
+    if value is not None:
+        return value
+    for field_name in ("cost", "usage"):
+        nested = run.get(field_name)
+        if isinstance(nested, dict):
+            value = _first_number(nested, "usd", "cost_usd", "total_cost_usd")
+            if value is not None:
+                return value
+    return None
+
+
+def _latency_ms(run: dict[str, Any]) -> float | None:
+    return _first_number(run, "latency_ms", "duration_ms", "elapsed_ms", "runtime_ms")
+
+
+def _token_usage(run: dict[str, Any]) -> dict[str, int | None]:
+    usage = run.get("usage") if isinstance(run.get("usage"), dict) else {}
+    token_usage = run.get("token_usage") if isinstance(run.get("token_usage"), dict) else {}
+    sources = (run, usage, token_usage)
+    return {
+        "prompt_tokens": _first_int_from_sources(sources, "prompt_tokens", "input_tokens"),
+        "completion_tokens": _first_int_from_sources(sources, "completion_tokens", "output_tokens"),
+        "total_tokens": _first_int_from_sources(sources, "total_tokens"),
+    }
+
+
+def _task_completion_record(run: dict[str, Any]) -> dict[str, Any] | None:
+    task = run.get("task_completion")
+    if isinstance(task, dict):
+        record = _task_completion_from_values(task.get("status"), task.get("passed"))
+        if record is not None:
+            return record
+    record = _task_completion_from_values(run.get("task_completion_status"), run.get("task_completion_passed"))
+    if record is not None:
+        return record
+    outcome = run.get("outcome") if isinstance(run.get("outcome"), dict) else {}
+    return _task_completion_from_values(outcome.get("task_completion_status"), outcome.get("task_completion_passed"))
+
+
+def _task_completion_from_values(status: Any, passed: Any) -> dict[str, Any] | None:
+    if isinstance(status, str) or isinstance(passed, bool):
+        return {
+            "status": status if status in {"complete", "incomplete", "not_applicable"} else "not_applicable",
+            "passed": passed if isinstance(passed, bool) else None,
+        }
+    return None
+
+
+def _first_number(mapping: dict[str, Any], *field_names: str) -> float | None:
+    for field_name in field_names:
+        value = mapping.get(field_name)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0:
+            return float(value)
+    return None
+
+
+def _first_int(mapping: dict[str, Any], *field_names: str) -> int | None:
+    for field_name in field_names:
+        value = mapping.get(field_name)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return value
+    return None
+
+
+def _first_int_from_sources(sources: tuple[dict[str, Any], ...], *field_names: str) -> int | None:
+    for source in sources:
+        value = _first_int(source, *field_names)
+        if value is not None:
+            return value
+    return None
+
+
+def _metrics_has_token_usage(metrics: dict[str, Any]) -> bool:
+    return any(_first_int(metrics, field_name) is not None for field_name in ("prompt_tokens", "input_tokens", "completion_tokens", "output_tokens", "total_tokens"))
+
+
+def _sum_ints(values: Any) -> int | None:
+    known = [value for value in values if isinstance(value, int) and not isinstance(value, bool) and value >= 0]
+    return sum(known) if known else None
+
+
+def _round_number(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), 6)
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if percentile == 0.50 and len(ordered) % 2 == 0:
+        middle = len(ordered) // 2
+        return (ordered[middle - 1] + ordered[middle]) / 2
+    index = max(0, min(len(ordered) - 1, math.ceil(percentile * len(ordered)) - 1))
+    return ordered[index]
 
 
 def _string_list(value: Any) -> list[str]:

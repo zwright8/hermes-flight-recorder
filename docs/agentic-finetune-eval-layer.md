@@ -27,6 +27,8 @@ The summary reports:
 - raw compare-export movement,
 - governance claims with candidate improvements suppressed when claims are not
   allowed,
+- per-arm operational metrics for cost, latency, token usage, and
+  task-completion status when suite summaries provide them,
 - compare-gate failures,
 - external adapter readiness blockers when adapter plans are included.
 
@@ -99,3 +101,12 @@ Governance claims are suppressed when any of these hold:
 
 The artifact may still show raw movement, but `governance_claims` stays empty and
 `passed` is false until the blockers are resolved.
+
+## Operational Metrics
+
+Each eval-summary arm includes an `operational_metrics` object with `cost`,
+`latency`, `tokens`, and `task_completion` sections. These fields are
+best-effort summaries of values already present in suite summary run rows or
+suite-level metrics. Missing values remain explicit through `source: "missing"`
+and `missing_run_count`; they do not become evidence of low cost, low latency,
+or task completion.
