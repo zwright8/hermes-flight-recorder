@@ -1,57 +1,53 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:41:56Z",
+  "updated_at": "2026-07-02T14:50:23Z",
   "active_goal": "Goal 7 Eval Layer",
   "status": "in_progress",
   "worktree": "/Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-7-eval",
   "branch": "codex/hermes-goal-7-eval-20260702-1027",
   "remote": "origin https://github.com/zwright8/hermes-flight-recorder.git",
   "last_packet": {
-    "id": "governance_eval_summary_artifact",
-    "summary": "Added a governance-ready eval-summary artifact and validator that suppresses candidate-win and improvement claims unless held-out scenario lists are identical and compare contracts are clean.",
+    "id": "external_eval_adapter_readiness_plan",
+    "summary": "Added a fail-closed external eval adapter readiness plan for BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench, with CLI and validation support for governance summaries.",
     "changed_files": [
       "README.md",
       "docs/agentic-finetune-eval-layer.md",
       "flightrecorder/cli.py",
-      "flightrecorder/eval_summary.py",
+      "flightrecorder/external_eval.py",
       "flightrecorder/validation.py",
-      "tests/test_eval_summary.py",
+      "tests/test_external_eval_plan.py",
       "experiments/autonomy/supervisor_state.json",
       "experiments/autonomy/journal/2026-07-02.md"
     ],
     "verification": [
       {
-        "command": "python3 -m py_compile flightrecorder/eval_summary.py flightrecorder/cli.py flightrecorder/validation.py tests/test_eval_summary.py",
+        "command": "python3 -m py_compile flightrecorder/external_eval.py flightrecorder/eval_summary.py flightrecorder/cli.py flightrecorder/validation.py tests/test_external_eval_plan.py tests/test_eval_summary.py",
         "result": "passed"
       },
       {
-        "command": "python3 -m unittest tests.test_eval_summary",
-        "result": "passed; 4 tests"
+        "command": "python3 -m unittest tests.test_external_eval_plan tests.test_eval_summary",
+        "result": "passed; 8 tests"
       },
       {
-        "command": "python3 -m unittest tests.test_eval_summary tests.test_compare_rl_export tests.test_compare_gate tests.test_validation",
-        "result": "passed; 46 tests"
-      },
-      {
-        "command": "python3 -m unittest",
-        "result": "environment failed: /usr/bin/python3 lacks tomllib"
+        "command": "python3 -m unittest tests.test_external_eval_plan tests.test_eval_summary tests.test_compare_rl_export tests.test_compare_gate tests.test_validation",
+        "result": "passed; 50 tests"
       },
       {
         "command": "/opt/homebrew/bin/python3 -m unittest",
-        "result": "passed; 304 tests"
+        "result": "passed; 308 tests"
       }
     ],
     "risks": [
-      "The dedicated worktree did not contain the delegated docs/agentic-finetune-* source docs or experiments tree; this packet created local Goal 7 docs and autonomy state instead of editing the shared checkout.",
-      "The new eval summary can include external adapter readiness plans, but BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench adapters remain a future packet.",
-      "The system /usr/bin/python3 is Python 3.9 and cannot run the full suite because tests/test_deployment_hardening.py imports tomllib; /opt/homebrew/bin/python3 passed the full suite."
+      "This packet adds fail-closed readiness contracts and validation, not actual BFCL/Inspect AI/lm-evaluation-harness/SWE-bench runner execution.",
+      "External dependencies are optional and may be absent locally; plans remain blocked until dependencies, held-out manifests, model endpoints, and adapter-specific inputs are supplied.",
+      "The system /usr/bin/python3 is Python 3.9 and previously could not run the full suite because tests/test_deployment_hardening.py imports tomllib; /opt/homebrew/bin/python3 passed the full suite."
     ],
     "persistence": {
-      "commit_sha": "b8663f73a24f0a607d6dc98261e748b6f590e5f1",
-      "pushed_branch": "codex/hermes-goal-7-eval-20260702-1027",
-      "remote_branch_verified": true,
+      "commit_sha": "pending",
+      "pushed_branch": "pending",
+      "remote_branch_verified": false,
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
-      "pr_blocker": null
+      "pr_blocker": "pending commit and push"
     }
   }
 }

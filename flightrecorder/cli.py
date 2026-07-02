@@ -53,6 +53,7 @@ from .improvement_gate import (
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .eval_summary import EvalSummaryError, build_eval_summary
+from .external_eval import ExternalEvalPlanError, adapter_choices, build_external_eval_plan, write_external_eval_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
@@ -165,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         EvidenceCoverageError,
         EvidenceBundleError,
         EvalSummaryError,
+        ExternalEvalPlanError,
         ReviewCalibrationError,
         TraceObservabilityError,
         ActionLedgerError,
@@ -811,6 +813,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         run_digest_paths=args.run_digest,
         live_smoke_summary_paths=args.live_smoke_summary,
         eval_summary_paths=args.eval_summary,
+        external_eval_plan_paths=args.external_eval_plan,
         strict=args.strict,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -839,6 +842,28 @@ def cmd_eval_summary(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0 if summary["passed"] else 1
+
+
+def cmd_external_eval_plan(args: argparse.Namespace) -> int:
+    plan = build_external_eval_plan(
+        adapters=args.adapter,
+        scenario_manifest=args.scenario_manifest,
+        model_endpoint=args.model_endpoint,
+        model=args.model,
+        tool_schema_set=args.tool_schema_set,
+        inspect_task_set=args.inspect_task_set,
+        lm_eval_task_list=args.lm_eval_task,
+        swe_bench_task_set=args.swe_bench_task_set,
+        sandbox_policy=args.sandbox_policy,
+        allow_installed=args.allow_installed,
+        preserve_paths=args.preserve_paths,
+    )
+    if args.out:
+        write_external_eval_plan(plan, args.out)
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(plan, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if plan["ready"] else 1
 
 
 def cmd_schemas(args: argparse.Namespace) -> int:
@@ -1919,9 +1944,43 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--run-digest", action="append", default=[], help="Validate one hfr.run_digest.v1 JSON file; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--eval-summary", action="append", default=[], help="Validate one hfr.eval_summary.v1 JSON file; may be repeated")
+    validate.add_argument(
+        "--external-eval-plan",
+        action="append",
+        default=[],
+        help="Validate one hfr.external_eval_adapters.v1 JSON file; may be repeated",
+    )
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
+
+    external_eval_plan = subparsers.add_parser(
+        "external-eval-plan",
+        help="Plan fail-closed external BFCL/Inspect/lm-eval/SWE-bench adapter readiness",
+    )
+    external_eval_plan.add_argument(
+        "--adapter",
+        action="append",
+        default=[],
+        choices=adapter_choices(),
+        help="External eval adapter to include; defaults to all supported adapters",
+    )
+    external_eval_plan.add_argument("--scenario-manifest", help="Held-out scenario manifest file shared by all external adapters")
+    external_eval_plan.add_argument("--model-endpoint", help="Model endpoint or serving target used by external adapters")
+    external_eval_plan.add_argument("--model", help="Model identifier included in adapter metadata")
+    external_eval_plan.add_argument("--tool-schema-set", help="BFCL tool/function schema set identifier or file")
+    external_eval_plan.add_argument("--inspect-task-set", help="Inspect AI task set identifier or file")
+    external_eval_plan.add_argument("--lm-eval-task", action="append", default=[], help="lm-evaluation-harness task name; may be repeated")
+    external_eval_plan.add_argument("--swe-bench-task-set", help="SWE-bench held-out task set identifier or file")
+    external_eval_plan.add_argument("--sandbox-policy", help="Sandbox policy identifier or file for stateful external tasks")
+    external_eval_plan.add_argument(
+        "--allow-installed",
+        action="store_true",
+        help="Allow installed optional adapter dependencies to become ready when required inputs are present",
+    )
+    external_eval_plan.add_argument("--out", help="Write external eval adapter plan JSON to this path")
+    external_eval_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
+    external_eval_plan.set_defaults(func=cmd_external_eval_plan)
 
     eval_summary = subparsers.add_parser("eval-summary", help="Build a governance-ready held-out eval summary")
     eval_summary.add_argument(

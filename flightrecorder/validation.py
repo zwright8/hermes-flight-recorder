@@ -20,6 +20,7 @@ from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
+from .external_eval import ADAPTERS, EXTERNAL_EVAL_PLAN_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
@@ -138,6 +139,7 @@ def validate_artifacts(
     run_digest_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     eval_summary_paths: list[str | Path] | None = None,
+    external_eval_plan_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -212,6 +214,8 @@ def validate_artifacts(
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     for eval_summary_path in eval_summary_paths or []:
         targets.append(validate_eval_summary(eval_summary_path))
+    for external_eval_plan_path in external_eval_plan_paths or []:
+        targets.append(validate_external_eval_plan(external_eval_plan_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -572,6 +576,16 @@ def validate_eval_summary(path: str | Path) -> ValidationTarget:
     summary = _read_object(summary_path, target, "eval_summary.json")
     if summary is not None:
         _validate_eval_summary(summary, target)
+    return target
+
+
+def validate_external_eval_plan(path: str | Path) -> ValidationTarget:
+    """Validate one external eval adapter readiness plan."""
+    plan_path = Path(path)
+    target = ValidationTarget("external_eval_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "external_eval_plan.json")
+    if plan is not None:
+        _validate_external_eval_plan(plan, target)
     return target
 
 
@@ -4516,6 +4530,176 @@ def _validate_eval_summary_external_adapter(adapter: Any, index: int, target: Va
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must be a list of strings.")
     if adapter.get("ready") is False and not adapter.get("blocking_reasons"):
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must explain why the plan is not ready.")
+
+
+def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(plan, "schema_version", EXTERNAL_EVAL_PLAN_SCHEMA_VERSION, target)
+    if not isinstance(plan.get("ready"), bool):
+        target.errors.append("external_eval_plan.ready must be a boolean.")
+    if not isinstance(plan.get("allow_installed"), bool):
+        target.errors.append("external_eval_plan.allow_installed must be a boolean.")
+
+    adapters = plan.get("adapters")
+    if not isinstance(adapters, list):
+        target.errors.append("external_eval_plan.adapters must be a list.")
+        adapters = []
+    blocking_reasons = plan.get("blocking_reasons")
+    if not _is_string_list(blocking_reasons):
+        target.errors.append("external_eval_plan.blocking_reasons must be a list of strings.")
+        blocking_reasons = []
+    selected = plan.get("selected_adapters")
+    if not _is_string_list(selected):
+        target.errors.append("external_eval_plan.selected_adapters must be a list of strings.")
+        selected = []
+
+    if plan.get("adapter_count") != len(adapters):
+        target.errors.append(f"external_eval_plan.adapter_count expected {len(adapters)}, got {plan.get('adapter_count')!r}.")
+    ready_count = sum(1 for adapter in adapters if isinstance(adapter, dict) and adapter.get("ready") is True)
+    if plan.get("ready_adapter_count") != ready_count:
+        target.errors.append(
+            f"external_eval_plan.ready_adapter_count expected {ready_count}, got {plan.get('ready_adapter_count')!r}."
+        )
+    if sorted(selected) != sorted(adapter.get("id") for adapter in adapters if isinstance(adapter, dict)):
+        target.errors.append("external_eval_plan.selected_adapters must match adapter ids.")
+
+    inputs = plan.get("inputs")
+    if not isinstance(inputs, dict):
+        target.errors.append("external_eval_plan.inputs must be an object.")
+        inputs = {}
+    _validate_external_eval_inputs(inputs, target)
+
+    for index, adapter in enumerate(adapters):
+        _validate_external_eval_adapter_plan(adapter, index, target, inputs)
+
+    expected_ready = bool(adapters) and all(isinstance(adapter, dict) and adapter.get("ready") is True for adapter in adapters)
+    if isinstance(plan.get("ready"), bool) and plan.get("ready") != expected_ready:
+        target.errors.append(f"external_eval_plan.ready expected {expected_ready}, got {plan.get('ready')!r}.")
+    if plan.get("ready") is True and blocking_reasons:
+        target.errors.append("external_eval_plan.blocking_reasons must be empty when ready is true.")
+    if plan.get("ready") is False and not blocking_reasons:
+        target.errors.append("external_eval_plan.blocking_reasons must explain why ready is false.")
+
+    handoff = plan.get("governance_handoff")
+    if not isinstance(handoff, dict):
+        target.errors.append("external_eval_plan.governance_handoff must be an object.")
+    else:
+        if handoff.get("requires_identical_heldout_scenarios") is not True:
+            target.errors.append("external_eval_plan.governance_handoff.requires_identical_heldout_scenarios must be true.")
+        if handoff.get("external_eval_claims_allowed") != plan.get("ready"):
+            target.errors.append("external_eval_plan.governance_handoff.external_eval_claims_allowed must match ready.")
+        if not isinstance(handoff.get("recommendation"), str) or not handoff.get("recommendation"):
+            target.errors.append("external_eval_plan.governance_handoff.recommendation must be a non-empty string.")
+
+    target.details.update(
+        {
+            "ready": plan.get("ready"),
+            "adapter_count": len(adapters),
+            "ready_adapter_count": ready_count,
+            "selected_adapters": selected,
+        }
+    )
+
+
+def _validate_external_eval_inputs(inputs: dict[str, Any], target: ValidationTarget) -> None:
+    manifest = inputs.get("scenario_manifest")
+    if not isinstance(manifest, dict):
+        target.errors.append("external_eval_plan.inputs.scenario_manifest must be an object.")
+    else:
+        if manifest.get("path") is not None and not isinstance(manifest.get("path"), str):
+            target.errors.append("external_eval_plan.inputs.scenario_manifest.path must be a string or null.")
+        if not isinstance(manifest.get("exists"), bool):
+            target.errors.append("external_eval_plan.inputs.scenario_manifest.exists must be a boolean.")
+        if manifest.get("sha256") is not None and not _is_sha256(manifest.get("sha256")):
+            target.errors.append("external_eval_plan.inputs.scenario_manifest.sha256 must be a SHA-256 hex string or null.")
+    for field_name in (
+        "model_endpoint",
+        "model",
+        "tool_schema_set",
+        "inspect_task_set",
+        "swe_bench_task_set",
+        "sandbox_policy",
+    ):
+        if inputs.get(field_name) is not None and not isinstance(inputs.get(field_name), str):
+            target.errors.append(f"external_eval_plan.inputs.{field_name} must be a string or null.")
+    if not _is_string_list(inputs.get("lm_eval_task_list")):
+        target.errors.append("external_eval_plan.inputs.lm_eval_task_list must be a list of strings.")
+
+
+def _validate_external_eval_adapter_plan(
+    adapter: Any,
+    index: int,
+    target: ValidationTarget,
+    inputs: dict[str, Any],
+) -> None:
+    if not isinstance(adapter, dict):
+        target.errors.append(f"external_eval_plan.adapters[{index}] must be an object.")
+        return
+    adapter_id = adapter.get("id")
+    if adapter_id not in ADAPTERS:
+        target.errors.append(f"external_eval_plan.adapters[{index}].id must be one of {sorted(ADAPTERS)!r}.")
+        spec = None
+    else:
+        spec = ADAPTERS[adapter_id]
+    for field_name in ("name", "full_name", "domain"):
+        if not isinstance(adapter.get(field_name), str) or not adapter.get(field_name):
+            target.errors.append(f"external_eval_plan.adapters[{index}].{field_name} must be a non-empty string.")
+    for field_name in ("suite_tags", "required_inputs", "provided_inputs", "blocking_reasons"):
+        if not _is_string_list(adapter.get(field_name)):
+            target.errors.append(f"external_eval_plan.adapters[{index}].{field_name} must be a list of strings.")
+    if not isinstance(adapter.get("ready"), bool):
+        target.errors.append(f"external_eval_plan.adapters[{index}].ready must be a boolean.")
+    dependency = adapter.get("dependency_status")
+    available = False
+    if not isinstance(dependency, dict):
+        target.errors.append(f"external_eval_plan.adapters[{index}].dependency_status must be an object.")
+    else:
+        if not isinstance(dependency.get("available"), bool):
+            target.errors.append(f"external_eval_plan.adapters[{index}].dependency_status.available must be a boolean.")
+        available = dependency.get("available") is True
+        for field_name in ("imports", "commands"):
+            values = dependency.get(field_name)
+            if not isinstance(values, dict) or not all(isinstance(key, str) and isinstance(value, bool) for key, value in values.items()):
+                target.errors.append(f"external_eval_plan.adapters[{index}].dependency_status.{field_name} must be an object of booleans.")
+
+    contract = adapter.get("execution_contract")
+    if not isinstance(contract, dict):
+        target.errors.append(f"external_eval_plan.adapters[{index}].execution_contract must be an object.")
+    else:
+        if contract.get("requires_identical_heldout_scenarios") is not True:
+            target.errors.append(
+                f"external_eval_plan.adapters[{index}].execution_contract.requires_identical_heldout_scenarios must be true."
+            )
+        manifest_sha = inputs.get("scenario_manifest", {}).get("sha256") if isinstance(inputs.get("scenario_manifest"), dict) else None
+        if contract.get("scenario_manifest_sha256") != manifest_sha:
+            target.errors.append(f"external_eval_plan.adapters[{index}].execution_contract.scenario_manifest_sha256 must match inputs.")
+        if not isinstance(contract.get("boundary"), str) or not contract.get("boundary"):
+            target.errors.append(f"external_eval_plan.adapters[{index}].execution_contract.boundary must be a non-empty string.")
+
+    if spec is not None:
+        if adapter.get("required_inputs") != spec["required_inputs"]:
+            target.errors.append(f"external_eval_plan.adapters[{index}].required_inputs must match adapter contract.")
+        expected_missing = [name for name in spec["required_inputs"] if not _external_eval_input_present(inputs, name)]
+        missing_reasons = {f"missing_{name}" for name in expected_missing}
+        adapter_blockers = set(adapter.get("blocking_reasons") if isinstance(adapter.get("blocking_reasons"), list) else [])
+        if not available and "dependencies_missing" not in adapter_blockers:
+            target.errors.append(f"external_eval_plan.adapters[{index}].blocking_reasons must include dependencies_missing.")
+        if not missing_reasons.issubset(adapter_blockers):
+            target.errors.append(f"external_eval_plan.adapters[{index}].blocking_reasons must include all missing required inputs.")
+        expected_ready = available and not expected_missing and not adapter_blockers
+        if adapter.get("ready") is True and not expected_ready:
+            target.errors.append(f"external_eval_plan.adapters[{index}].ready cannot be true while blockers remain.")
+        if adapter.get("ready") is False and not adapter_blockers:
+            target.errors.append(f"external_eval_plan.adapters[{index}].blocking_reasons must explain why ready is false.")
+
+
+def _external_eval_input_present(inputs: dict[str, Any], name: str) -> bool:
+    if name == "scenario_manifest":
+        manifest = inputs.get("scenario_manifest")
+        return isinstance(manifest, dict) and manifest.get("exists") is True and _is_sha256(manifest.get("sha256"))
+    value = inputs.get(name)
+    if isinstance(value, list):
+        return bool(value)
+    return isinstance(value, str) and bool(value)
 
 
 def _validate_suite_metrics(metrics: dict[str, Any], target: ValidationTarget, runs: list[dict[str, Any]]) -> None:

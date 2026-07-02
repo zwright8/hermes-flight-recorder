@@ -523,6 +523,11 @@ flightrecorder eval-summary \
   --compare-export candidate=runs/compare_rl_export \
   --compare-gate candidate=runs/compare_gate.json \
   --out runs/eval_summary.json
+
+flightrecorder external-eval-plan \
+  --scenario-manifest runs/heldout_scenarios.json \
+  --model-endpoint http://127.0.0.1:8000/v1 \
+  --out runs/external_eval_plan.json
 ```
 
 Comparison manifests include:
@@ -541,6 +546,13 @@ comparison movement visible but suppresses candidate-win and improvement claims
 unless all arms provide the identical held-out scenario list and the compare
 export has no scenario-set mismatch, contract drift, or unverified fingerprints.
 Validate it with `flightrecorder validate --eval-summary runs/eval_summary.json`.
+
+`flightrecorder external-eval-plan` creates a fail-closed readiness plan for
+optional BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench adapters. The
+plan records optional dependency availability, required inputs, the held-out
+scenario manifest hash, and adapter blockers; it does not claim external eval
+success. Validate it with
+`flightrecorder validate --external-eval-plan runs/external_eval_plan.json`.
 
 ## Training Handoff
 
