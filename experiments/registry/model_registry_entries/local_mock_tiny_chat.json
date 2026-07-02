@@ -73,6 +73,20 @@
   "license_status": "approved",
   "links": {
     "adapters": [],
+    "compatibility_reports": [
+      {
+        "id": "local_mock_tiny_chat_compatibility_report",
+        "kind": "model_compatibility_report",
+        "metadata": {
+          "readiness": "metadata_recorded",
+          "recommendation": "ready_for_registry_dry_run"
+        },
+        "path": "experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json",
+        "recorded_at": "2026-07-02T20:25:54Z",
+        "sha256": "683e4fc681225dea2fae8a918fe529e7656bebac63cc0c33e875d350fc63380f",
+        "status": "metadata_report"
+      }
+    ],
     "datasets": [
       {
         "id": "local_mock_dataset_v1",
@@ -93,10 +107,13 @@
       {
         "id": "local_mock_tiny_chat_sft_dry_run",
         "kind": "training_plan",
-        "metadata": {},
+        "metadata": {
+          "mode": "sft",
+          "trainer": "local-dry-run"
+        },
         "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
-        "recorded_at": "2026-07-02T14:52:35Z",
-        "sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8",
+        "recorded_at": "2026-07-02T20:26:23Z",
+        "sha256": "a2eef6f6e26fde23d04a8906f061d2feb29a4974404581a0587b9710fcf50ee9",
         "status": "dry_run_plan"
       }
     ]
@@ -106,5 +123,5 @@
   "schema_version": "hfr.model_registry_entry.v1",
   "status": "registered",
   "training_eligible": true,
-  "updated_at": "2026-07-02T14:52:35Z"
+  "updated_at": "2026-07-02T20:26:23Z"
 }

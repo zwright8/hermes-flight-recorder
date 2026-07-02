@@ -17,6 +17,16 @@
       "summary": "compatibility report matches the selected model and passed no-download checks"
     },
     {
+      "id": "compatibility_report_registry_linked",
+      "passed": true,
+      "summary": "registry links.compatibility_reports contains the compatibility report hash"
+    },
+    {
+      "id": "dataset_registry_linked",
+      "passed": true,
+      "summary": "registry links.datasets contains 'local_mock_dataset_v1' with the dataset manifest hash"
+    },
+    {
       "id": "no_weight_download",
       "passed": true,
       "summary": "plan generation did not download model weights or tokenizers"
@@ -43,6 +53,8 @@
     "probe_count": 8,
     "readiness": "metadata_recorded",
     "recommendation": "ready_for_registry_dry_run",
+    "registry_link_id": "qwen3_4b_instruct_2507_compatibility_report",
+    "registry_link_status": "metadata_report",
     "sha256": "d0420af1dc9d5cbd8d7bb584b7f0774bc101d187ca78a1fc16e30da8b46c49b1",
     "unsupported_count": 1,
     "verified_count": 0
@@ -55,11 +67,13 @@
     },
     "dry_run_only": true
   },
-  "created_at": "2026-07-02T15:37:23Z",
+  "created_at": "2026-07-02T20:26:18Z",
   "dataset": {
     "dataset_id": "local_mock_dataset_v1",
     "manifest_path": "experiments/registry/datasets/local_mock_dataset_manifest.json",
-    "manifest_sha256": "a13e8bd2c3cd18b7dc164824a9f7fd6feedda4a7002822efbe39c06c1605c281"
+    "manifest_sha256": "a13e8bd2c3cd18b7dc164824a9f7fd6feedda4a7002822efbe39c06c1605c281",
+    "registry_link_id": "local_mock_dataset_v1",
+    "registry_link_status": "dry_run_stub"
   },
   "dry_run": true,
   "execution": {

@@ -20,6 +20,7 @@ TRAINING_PLAN_SCHEMA_VERSION = "hfr.training_plan.v1"
 ALIAS_NAMES = ("candidate", "champion", "rollback")
 MODEL_REGISTRY_LINK_COLLECTIONS = (
     "datasets",
+    "compatibility_reports",
     "training_runs",
     "adapters",
     "evals",
@@ -519,9 +520,23 @@ def build_dry_run_training_plan(
         raise ModelRegistryError("trainer must be a non-empty string")
     if not mode:
         raise ModelRegistryError("mode must be a non-empty string")
+    dataset_sha256 = _sha256(dataset_path)
+    dataset_link = _require_linked_artifact(
+        entry,
+        "datasets",
+        artifact_id=dataset_id,
+        kind="dataset_manifest",
+        sha256=dataset_sha256,
+        label="dataset_manifest",
+    )
     checks = [
         {"id": "license_training_approved", "passed": True, "summary": "candidate license review is approved for training"},
         {"id": "dataset_manifest_exists", "passed": True, "summary": "dataset manifest exists and was fingerprinted"},
+        {
+            "id": "dataset_registry_linked",
+            "passed": True,
+            "summary": f"registry links.datasets contains {dataset_id!r} with the dataset manifest hash",
+        },
         {"id": "no_weight_download", "passed": True, "summary": "plan generation did not download model weights or tokenizers"},
         {"id": "no_gpu_execution", "passed": True, "summary": "plan generation did not launch GPU work"},
     ]
@@ -547,7 +562,9 @@ def build_dry_run_training_plan(
         "dataset": {
             "dataset_id": dataset_id,
             "manifest_path": _display_path(dataset_path, preserve_paths),
-            "manifest_sha256": _sha256(dataset_path),
+            "manifest_sha256": dataset_sha256,
+            "registry_link_id": dataset_link["id"],
+            "registry_link_status": dataset_link["status"],
         },
         "trainer": {"name": trainer, "mode": mode, "hyperparameters": dict(hyperparameters or {})},
         "output": {"output_dir": _display_path(Path(output_dir), preserve_paths)},
@@ -567,18 +584,39 @@ def build_dry_run_training_plan(
         ],
     }
     if compatibility_report is not None:
-        plan["compatibility_report"] = _training_compatibility_report_record(
+        compatibility_report_record = _training_compatibility_report_record(
             compatibility_report,
             candidate=candidate,
             report_path=compatibility_report_path,
             preserve_paths=preserve_paths,
         )
+        report_sha256 = compatibility_report_record.get("sha256")
+        if not report_sha256:
+            raise ModelRegistryError("compatibility_report_path is required so dry-run plans can verify the registry link hash")
+        compatibility_link = _require_linked_artifact(
+            entry,
+            "compatibility_reports",
+            kind="model_compatibility_report",
+            sha256=report_sha256,
+            label="compatibility_report",
+        )
+        plan["compatibility_report"] = compatibility_report_record
+        plan["compatibility_report"]["registry_link_id"] = compatibility_link["id"]
+        plan["compatibility_report"]["registry_link_status"] = compatibility_link["status"]
         plan["checks"].insert(
             2,
             {
                 "id": "compatibility_report_passed",
                 "passed": True,
                 "summary": "compatibility report matches the selected model and passed no-download checks",
+            },
+        )
+        plan["checks"].insert(
+            3,
+            {
+                "id": "compatibility_report_registry_linked",
+                "passed": True,
+                "summary": "registry links.compatibility_reports contains the compatibility report hash",
             },
         )
     errors = training_plan_errors(plan)
@@ -1152,6 +1190,33 @@ def _upsert_link_record(records: list[dict[str, Any]], record: dict[str, Any]) -
             records[index] = record
             return
     records.append(record)
+
+
+def _require_linked_artifact(
+    entry: dict[str, Any],
+    collection: str,
+    *,
+    artifact_id: str | None = None,
+    kind: str,
+    sha256: str | None,
+    label: str,
+) -> dict[str, Any]:
+    if collection not in MODEL_REGISTRY_LINK_COLLECTIONS:
+        raise ModelRegistryError(f"collection must be one of {', '.join(MODEL_REGISTRY_LINK_COLLECTIONS)}")
+    if sha256 is not None and not _is_sha256(sha256):
+        raise ModelRegistryError(f"{label} sha256 must be a 64-character hex digest")
+    records = _model_registry_links_with_defaults(entry.get("links")).get(collection, [])
+    for record in records:
+        if artifact_id is not None and record.get("id") != artifact_id:
+            continue
+        if record.get("kind") != kind:
+            continue
+        if sha256 is not None and str(record.get("sha256") or "").lower() != sha256:
+            continue
+        return copy.deepcopy(record)
+    expected = f"{collection}.{artifact_id or kind}"
+    hash_hint = f" and sha256 {sha256}" if sha256 else ""
+    raise ModelRegistryError(f"model registry entry {entry.get('entry_id')!r} is missing linked {label} artifact {expected!r}{hash_hint}")
 
 
 def _license_errors(license_review: dict[str, Any], errors: list[str], prefix: str) -> None:

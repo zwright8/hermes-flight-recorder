@@ -123,6 +123,24 @@ class ModelRegistryTests(unittest.TestCase):
 
             registry = new_model_registry(registry_path=root / "model_registry.json")
             registry = register_model_candidate(registry, candidate)
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                status="dry_run_stub",
+                path=dataset_manifest,
+            )
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="compatibility_reports",
+                artifact_id="local_mock_tiny_chat_compatibility_report",
+                kind="model_compatibility_report",
+                status="metadata_report",
+                path=report_path,
+            )
             registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
             entry = select_model_for_training(registry, "candidate")
             self.assertTrue(entry["training_eligible"])
@@ -144,11 +162,86 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(training_plan_errors(plan), [])
             self.assertTrue(plan["dry_run"])
             self.assertTrue(plan["no_weight_download"])
+            self.assertEqual(plan["dataset"]["registry_link_id"], "local_mock_dataset_v1")
+            self.assertEqual(plan["compatibility_report"]["registry_link_id"], "local_mock_tiny_chat_compatibility_report")
             self.assertFalse(plan["gpu_execution"])
             self.assertFalse(plan["execution"]["flight_recorder_imported_heavy_ml"])
             self.assertTrue(check_schema_contract(candidate)["passed"])
             self.assertTrue(check_schema_contract(report)["passed"])
             self.assertTrue(check_schema_contract(plan)["passed"])
+
+    def test_dry_run_plan_requires_registry_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            report_path = root / "compatibility_report.json"
+            write_json(dataset_manifest, {"schema_version": "hfr.test_dataset_manifest.v1", "dataset_id": "local_mock_dataset_v1"})
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            with self.assertRaisesRegex(ModelRegistryError, "missing linked dataset_manifest artifact"):
+                build_dry_run_training_plan(
+                    registry,
+                    model_ref="candidate",
+                    dataset_id="local_mock_dataset_v1",
+                    dataset_manifest=dataset_manifest,
+                    trainer="local-dry-run",
+                    mode="sft",
+                    output_dir=root / "outputs",
+                    out_path=root / "training_plan.json",
+                    compatibility_report=report,
+                    compatibility_report_path=report_path,
+                )
+
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                status="dry_run_stub",
+                path=dataset_manifest,
+            )
+            with self.assertRaisesRegex(ModelRegistryError, "missing linked compatibility_report artifact"):
+                build_dry_run_training_plan(
+                    registry,
+                    model_ref="candidate",
+                    dataset_id="local_mock_dataset_v1",
+                    dataset_manifest=dataset_manifest,
+                    trainer="local-dry-run",
+                    mode="sft",
+                    output_dir=root / "outputs",
+                    out_path=root / "training_plan.json",
+                    compatibility_report=report,
+                    compatibility_report_path=report_path,
+                )
+
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="compatibility_reports",
+                artifact_id="local_mock_tiny_chat_compatibility_report",
+                kind="model_compatibility_report",
+                status="metadata_report",
+                path=report_path,
+            )
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=root / "training_plan.json",
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            self.assertEqual(training_plan_errors(plan), [])
+            self.assertEqual(plan["compatibility_report"]["registry_link_id"], "local_mock_tiny_chat_compatibility_report")
 
     def test_registry_links_artifacts_with_hashes_and_upserts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -419,6 +512,58 @@ class ModelRegistryTests(unittest.TestCase):
                 run_cli(
                     [
                         "model-registry",
+                        "link",
+                        "--registry",
+                        str(registry_path),
+                        "--entry",
+                        candidate["candidate_id"],
+                        "--collection",
+                        "datasets",
+                        "--artifact-id",
+                        "local_mock_dataset_v1",
+                        "--kind",
+                        "dataset_manifest",
+                        "--status",
+                        "dry_run_stub",
+                        "--path",
+                        str(dataset_manifest),
+                        "--entry-out",
+                        str(entry_path),
+                        "--metadata",
+                        "role=training_input",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-registry",
+                        "link",
+                        "--registry",
+                        str(registry_path),
+                        "--entry",
+                        candidate["candidate_id"],
+                        "--collection",
+                        "compatibility_reports",
+                        "--artifact-id",
+                        "local_mock_tiny_chat_compatibility_report",
+                        "--kind",
+                        "model_compatibility_report",
+                        "--status",
+                        "metadata_report",
+                        "--path",
+                        str(report_path),
+                        "--entry-out",
+                        str(entry_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-registry",
                         "serving-probe-receipt",
                         "--registry",
                         str(registry_path),
@@ -486,33 +631,6 @@ class ModelRegistryTests(unittest.TestCase):
                         "--entry",
                         candidate["candidate_id"],
                         "--collection",
-                        "datasets",
-                        "--artifact-id",
-                        "local_mock_dataset_v1",
-                        "--kind",
-                        "dataset_manifest",
-                        "--status",
-                        "dry_run_stub",
-                        "--path",
-                        str(dataset_manifest),
-                        "--entry-out",
-                        str(entry_path),
-                        "--metadata",
-                        "role=training_input",
-                    ]
-                ),
-                0,
-            )
-            self.assertEqual(
-                run_cli(
-                    [
-                        "model-registry",
-                        "link",
-                        "--registry",
-                        str(registry_path),
-                        "--entry",
-                        candidate["candidate_id"],
-                        "--collection",
                         "training_runs",
                         "--artifact-id",
                         "local_mock_tiny_chat_sft_dry_run",
@@ -557,6 +675,7 @@ class ModelRegistryTests(unittest.TestCase):
             registry = json.loads(registry_path.read_text(encoding="utf-8"))
             link_counts = registry["entries"][candidate["candidate_id"]]["links"]
             self.assertEqual(len(link_counts["datasets"]), 1)
+            self.assertEqual(len(link_counts["compatibility_reports"]), 1)
             self.assertEqual(len(link_counts["serving_probes"]), 1)
             self.assertEqual(len(link_counts["training_runs"]), 1)
 
@@ -568,6 +687,15 @@ class ModelRegistryTests(unittest.TestCase):
             registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
             dataset_manifest = root / "dataset_manifest.json"
             write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                status="dry_run_stub",
+                path=dataset_manifest,
+            )
             real_import = __import__
             heavy_modules = {"accelerate", "datasets", "peft", "torch", "transformers", "trl"}
 
@@ -624,6 +752,7 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertTrue(entry["training_eligible"])
         self.assertIn("qwen3_4b_instruct_2507", registry["entries"])
         self.assertEqual(len(entry["links"]["datasets"]), 1)
+        self.assertEqual(len(entry["links"]["compatibility_reports"]), 1)
         self.assertEqual(len(entry["links"]["serving_probes"]), 1)
         self.assertEqual(len(entry["links"]["training_runs"]), 1)
         self.assertTrue(plan["dry_run"])
@@ -632,6 +761,8 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertFalse(plan["execution"]["flight_recorder_downloaded_weights"])
         self.assertFalse(plan["execution"]["flight_recorder_downloaded_tokenizer"])
         self.assertEqual(plan["model"]["candidate_id"], "qwen3_4b_instruct_2507")
+        self.assertEqual(plan["dataset"]["registry_link_id"], "local_mock_dataset_v1")
+        self.assertEqual(plan["compatibility_report"]["registry_link_id"], "qwen3_4b_instruct_2507_compatibility_report")
         self.assertEqual(model_serving_probe_receipt_errors(receipt), [])
         self.assertEqual(receipt["candidate_id"], "qwen3_4b_instruct_2507")
         self.assertEqual(receipt["readiness"], "metadata_recorded")

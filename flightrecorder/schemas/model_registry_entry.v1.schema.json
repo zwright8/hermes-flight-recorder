@@ -12,13 +12,22 @@
       "additionalProperties": true,
       "properties": {
         "adapters": {"items": {"type": "object"}, "type": "array"},
+        "compatibility_reports": {"items": {"type": "object"}, "type": "array"},
         "datasets": {"items": {"type": "object"}, "type": "array"},
         "evals": {"items": {"type": "object"}, "type": "array"},
         "promotion_decisions": {"items": {"type": "object"}, "type": "array"},
         "serving_probes": {"items": {"type": "object"}, "type": "array"},
         "training_runs": {"items": {"type": "object"}, "type": "array"}
       },
-      "required": ["datasets", "training_runs", "adapters", "evals", "serving_probes", "promotion_decisions"],
+      "required": [
+        "datasets",
+        "compatibility_reports",
+        "training_runs",
+        "adapters",
+        "evals",
+        "serving_probes",
+        "promotion_decisions"
+      ],
       "type": "object"
     },
     "notes": {"items": {"type": "string"}, "type": "array"},
