@@ -17,12 +17,13 @@
       "integration_branch_sha": "182effcd0177a51d2f069f682b7bb8df4386abdb",
       "layer": "harness",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-      "origin_main_sha": "63116fb63a0402f9ba362a92591058261354934c",
+      "lock_rechecked_at": "2026-07-02T15:32:53Z",
+      "origin_main_sha": "26ef4aa775e7b0cf9e819f6d4a556ae7351457c2",
       "priority": "critical",
       "source_branch": "codex/hermes-goal-2-harness-20260702-1027",
       "source_branch_sha": "b702a84792450f5342ad0df3b93515c89a47767a",
       "status": "blocked",
-      "summary": "Harness PR #3 latest head is integrated and verified on the supervisor branch, but main delivery cannot proceed because the main-push lock remains unavailable.",
+      "summary": "Harness PR #3 latest head is integrated and verified on the supervisor branch, but main delivery cannot proceed because the main-push lock remains unavailable; origin/main has advanced to 26ef4aa775e7b0cf9e819f6d4a556ae7351457c2.",
       "verification": [
         {
           "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
@@ -956,15 +957,15 @@
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
     "integration_branch_sha": "182effcd0177a51d2f069f682b7bb8df4386abdb",
     "latest_head_note": "PR #3 advanced while the main-push lock was unavailable; latest head was merged before any main push attempt.",
-    "latest_origin_main_sha": "63116fb63a0402f9ba362a92591058261354934c",
-    "lock_rechecked_at": "2026-07-02T15:31:38Z",
+    "latest_origin_main_sha": "26ef4aa775e7b0cf9e819f6d4a556ae7351457c2",
+    "lock_rechecked_at": "2026-07-02T15:32:53Z",
     "lock_status": "unavailable_file_exists",
     "main_push_status": "not_attempted_lock_unavailable",
     "pr_status": "open_ci_green",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
     "previous_verified_remote_branch_sha": "dd08db12f0049079de61454364474fa60847c03e",
     "remote_branch_sha": "b702a84792450f5342ad0df3b93515c89a47767a",
-    "required_retry": "Acquire /tmp/hermes-flight-recorder-main-push.lock, fetch origin, verify source PR head has not advanced, merge current origin/main if needed, rerun verification, push HEAD to origin main, verify remote main SHA, close/merge PR #3, delete source and integration remote branches, and release the lock.",
+    "required_retry": "Acquire /tmp/hermes-flight-recorder-main-push.lock, fetch origin, verify source PR head has not advanced, merge current origin/main 26ef4aa775e7b0cf9e819f6d4a556ae7351457c2 or later, rerun verification, push HEAD to origin main, verify remote main SHA, close/merge PR #3, delete source and integration remote branches, and release the lock.",
     "status": "blocked_lock_unavailable",
     "verification": [
       {
@@ -1231,5 +1232,5 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:31:38Z"
+  "updated_at": "2026-07-02T15:32:53Z"
 }
