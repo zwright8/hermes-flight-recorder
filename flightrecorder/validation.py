@@ -5920,6 +5920,13 @@ def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -
     if expected_same is False and any(isinstance(claim, dict) and claim.get("id") != "scenario_sets_differ" for claim in claims):
         target.errors.append("serving_demo_run.claims must not include behavior claims when scenario sets differ.")
 
+    comparisons = demo.get("comparisons", [])
+    if not isinstance(comparisons, list):
+        target.errors.append("serving_demo_run.comparisons must be a list when present.")
+        comparisons = []
+    for index, comparison in enumerate(comparisons):
+        _validate_serving_demo_comparison(comparison, index, target, set(arm_names), candidate_arm)
+
     scenarios = demo.get("scenarios")
     if not isinstance(scenarios, list):
         target.errors.append("serving_demo_run.scenarios must be a list.")
@@ -5939,6 +5946,7 @@ def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -
         {
             "candidate_arm": candidate_arm,
             "arm_count": len(arms),
+            "comparison_count": len(comparisons),
             "claim_count": len(claims),
             "scenario_count": len(scenarios),
             "same_scenario_ids": demo.get("same_scenario_ids"),
@@ -6001,6 +6009,58 @@ def _validate_serving_demo_metrics(metrics: dict[str, Any], index: int, target: 
         expected_total = metrics.get("passed") + metrics.get("failed")
         if metrics.get("total") is not None and metrics.get("total") != expected_total:
             target.errors.append(f"{label}.total expected {expected_total}, got {metrics.get('total')!r}.")
+
+
+def _validate_serving_demo_comparison(
+    comparison: Any,
+    index: int,
+    target: ValidationTarget,
+    arm_names: set[str],
+    candidate_arm: Any,
+) -> None:
+    label = f"serving_demo_run.comparisons[{index}]"
+    if not isinstance(comparison, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if comparison.get("candidate_arm") != candidate_arm:
+        target.errors.append(f"{label}.candidate_arm must match serving_demo_run.candidate_arm.")
+    reference_arm = comparison.get("reference_arm")
+    if reference_arm not in arm_names:
+        target.errors.append(f"{label}.reference_arm must match a demo arm.")
+    if reference_arm == candidate_arm:
+        target.errors.append(f"{label}.reference_arm must not equal candidate_arm.")
+    if not isinstance(comparison.get("same_scenario_ids"), bool):
+        target.errors.append(f"{label}.same_scenario_ids must be a boolean.")
+    deltas = comparison.get("metric_deltas")
+    if not isinstance(deltas, dict):
+        target.errors.append(f"{label}.metric_deltas must be an object.")
+        deltas = {}
+    for field_name in ("pass_rate", "average_score", "passed", "failed", "critical_failure_total"):
+        if field_name in deltas and not _is_optional_number(deltas.get(field_name)):
+            target.errors.append(f"{label}.metric_deltas.{field_name} must be a number or null.")
+    outcomes = comparison.get("scenario_outcomes")
+    if not isinstance(outcomes, list):
+        target.errors.append(f"{label}.scenario_outcomes must be a list.")
+        return
+    for outcome_index, outcome in enumerate(outcomes):
+        _validate_serving_demo_comparison_outcome(outcome, outcome_index, target, label)
+
+
+def _validate_serving_demo_comparison_outcome(outcome: Any, index: int, target: ValidationTarget, parent_label: str) -> None:
+    label = f"{parent_label}.scenario_outcomes[{index}]"
+    if not isinstance(outcome, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(outcome.get("scenario_id"), str) or not outcome.get("scenario_id"):
+        target.errors.append(f"{label}.scenario_id must be a non-empty string.")
+    for field_name in ("candidate_passed", "reference_passed"):
+        if outcome.get(field_name) is not None and not isinstance(outcome.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean or null.")
+    for field_name in ("candidate_score", "reference_score", "score_delta"):
+        if not _is_optional_number(outcome.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a number or null.")
+    if outcome.get("outcome") not in {"candidate_repaired", "candidate_regressed", "both_passed", "both_failed", "missing_candidate", "missing_reference"}:
+        target.errors.append(f"{label}.outcome has an unsupported value.")
 
 
 def _validate_serving_demo_claim(claim: Any, index: int, target: ValidationTarget, arm_names: set[str]) -> None:
@@ -14032,6 +14092,10 @@ def _is_number_between(value: Any, minimum: float, maximum: float) -> bool:
 
 def _is_optional_non_negative_number(value: Any) -> bool:
     return value is None or _is_number_between(value, 0, float("inf"))
+
+
+def _is_optional_number(value: Any) -> bool:
+    return value is None or (isinstance(value, (int, float)) and not isinstance(value, bool))
 
 
 def _is_optional_rate(value: Any) -> bool:

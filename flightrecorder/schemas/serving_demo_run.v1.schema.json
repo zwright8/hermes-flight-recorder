@@ -20,6 +20,12 @@
       },
       "type": "array"
     },
+    "comparisons": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
     "generated_at": {
       "minLength": 1,
       "type": "string"

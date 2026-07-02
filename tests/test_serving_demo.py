@@ -120,11 +120,18 @@ class ServingDemoTests(unittest.TestCase):
             self.assertEqual(schema_result["schema"]["name"], "serving_demo_run")
             report = report_md.read_text(encoding="utf-8")
             claim_ids = {claim["id"] for claim in demo["claims"]}
+            comparison = demo["comparisons"][0]
             self.assertTrue(demo["same_scenario_ids"])
+            self.assertEqual(comparison["reference_arm"], "baseline")
+            self.assertEqual(comparison["metric_deltas"]["pass_rate"], 1)
+            self.assertEqual(comparison["metric_deltas"]["failed"], -1)
+            self.assertEqual(comparison["scenario_outcomes"][0]["outcome"], "candidate_repaired")
             self.assertIn("flightrecorder_repairs_demo_scenario", claim_ids)
             self.assertFalse(Path(demo["arms"][0]["source"]).is_absolute())
             self.assertEqual(demo["arms"][0]["serving_profile"], "baseline/serving_profile.json")
             self.assertFalse(Path(demo["scenarios"][0]["arms"]["baseline"]["trace_path"]).is_absolute())
+            self.assertIn("## Base Vs Candidate Comparisons", report)
+            self.assertIn("candidate_repaired", report)
             self.assertIn("[serving_profile](baseline/serving_profile.json)", report)
             self.assertIn("scorecard", report)
             self.assertIn("run_digest", report)

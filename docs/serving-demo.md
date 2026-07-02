@@ -107,7 +107,9 @@ python3 scripts/build_serving_demo_report.py \
 The report links each behavior claim to evaluation summaries, suite summaries,
 traces, scorecards, run digests, and HTML reports. Local artifact links are
 written relative to the Markdown report directory so committed demo bundles can
-be replayed from a fresh checkout.
+be replayed from a fresh checkout. The JSON and Markdown outputs also include
+base-vs-candidate comparison rows with metric deltas and per-scenario outcomes
+such as `candidate_repaired` or `candidate_regressed`.
 
 ## Eval Preflight Handoff
 

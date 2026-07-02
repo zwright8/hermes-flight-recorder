@@ -45,6 +45,7 @@ def build_demo(arms: list[dict[str, Any]], *, candidate_name: str) -> dict[str, 
     scenarios = _scenario_rows(arms)
     candidate = next(arm for arm in arms if arm["name"] == candidate_name)
     references = [arm for arm in arms if arm["name"] != candidate_name]
+    comparisons = _comparisons(candidate, references, scenarios, same_scenarios=same_scenarios)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _utc_now(),
@@ -52,6 +53,7 @@ def build_demo(arms: list[dict[str, Any]], *, candidate_name: str) -> dict[str, 
         "same_scenario_ids": same_scenarios,
         "scenario_sets": scenario_sets,
         "arms": [{"name": arm["name"], "source": arm["source"], "model": arm["model"], "base_url": arm["base_url"], "serving_profile": arm.get("serving_profile"), "metrics": arm["metrics"]} for arm in arms],
+        "comparisons": comparisons,
         "claims": _claims(candidate, references, scenarios, same_scenarios=same_scenarios),
         "scenarios": scenarios,
     }
@@ -72,6 +74,28 @@ def render_report(demo: dict[str, Any]) -> str:
     for arm in demo["arms"]:
         metrics = arm["metrics"]
         lines.append(f"| {arm['name']} | `{arm.get('model') or ''}` | {_md_link('serving_profile', arm.get('serving_profile'))} | {metrics.get('pass_rate')} | {metrics.get('average_score')} | {metrics.get('passed')} | {metrics.get('failed')} | {metrics.get('critical_failure_total')} |")
+    lines.extend(["", "## Base Vs Candidate Comparisons", ""])
+    comparisons = demo.get("comparisons") if isinstance(demo.get("comparisons"), list) else []
+    if not comparisons:
+        lines.append("- No base-vs-candidate comparisons were generated.")
+    else:
+        lines.extend(
+            [
+                "| Candidate | Reference | Pass Rate Delta | Average Score Delta | Passed Delta | Failed Delta | Critical Failure Delta |",
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for comparison in comparisons:
+            deltas = comparison.get("metric_deltas") if isinstance(comparison.get("metric_deltas"), dict) else {}
+            lines.append(
+                f"| {comparison.get('candidate_arm')} | {comparison.get('reference_arm')} | {deltas.get('pass_rate')} | {deltas.get('average_score')} | {deltas.get('passed')} | {deltas.get('failed')} | {deltas.get('critical_failure_total')} |"
+            )
+        lines.extend(["", "| Scenario | Reference | Candidate Passed | Reference Passed | Candidate Score | Reference Score | Outcome |", "| --- | --- | ---: | ---: | ---: | ---: | --- |"])
+        for comparison in comparisons:
+            for outcome in comparison.get("scenario_outcomes", []):
+                lines.append(
+                    f"| {outcome.get('scenario_id')} | {comparison.get('reference_arm')} | {outcome.get('candidate_passed')} | {outcome.get('reference_passed')} | {outcome.get('candidate_score')} | {outcome.get('reference_score')} | {outcome.get('outcome')} |"
+                )
     lines.extend(["", "## Evidence-Backed Claims", ""])
     if not demo["claims"]:
         lines.append("- No cross-arm behavior claims were generated.")
@@ -161,6 +185,61 @@ def _claims(candidate: dict[str, Any], references: list[dict[str, Any]], scenari
         if candidate_run.get("passed") and failed_refs:
             claims.append({"id": f"{candidate['name']}_repairs_{scenario['scenario_id']}", "summary": f"{candidate['name']} passed {scenario['scenario_id']} where at least one reference arm failed.", "evidence": [_run_evidence(candidate["name"], candidate_run)] + [_run_evidence(ref["name"], scenario["arms"][ref["name"]]) for ref in failed_refs]})
     return claims
+
+
+def _comparisons(candidate: dict[str, Any], references: list[dict[str, Any]], scenarios: list[dict[str, Any]], *, same_scenarios: bool) -> list[dict[str, Any]]:
+    rows = []
+    for reference in references:
+        rows.append(
+            {
+                "candidate_arm": candidate["name"],
+                "reference_arm": reference["name"],
+                "same_scenario_ids": same_scenarios,
+                "metric_deltas": {
+                    "pass_rate": _number_delta(candidate["metrics"].get("pass_rate"), reference["metrics"].get("pass_rate")),
+                    "average_score": _number_delta(candidate["metrics"].get("average_score"), reference["metrics"].get("average_score")),
+                    "passed": _number_delta(candidate["metrics"].get("passed"), reference["metrics"].get("passed")),
+                    "failed": _number_delta(candidate["metrics"].get("failed"), reference["metrics"].get("failed")),
+                    "critical_failure_total": _number_delta(candidate["metrics"].get("critical_failure_total"), reference["metrics"].get("critical_failure_total")),
+                },
+                "scenario_outcomes": [_comparison_outcome(candidate["name"], reference["name"], scenario) for scenario in scenarios],
+            }
+        )
+    return rows
+
+
+def _comparison_outcome(candidate_name: str, reference_name: str, scenario: dict[str, Any]) -> dict[str, Any]:
+    candidate_run = scenario["arms"].get(candidate_name)
+    reference_run = scenario["arms"].get(reference_name)
+    if candidate_run is None or reference_run is None:
+        outcome = "missing_candidate" if candidate_run is None else "missing_reference"
+    elif candidate_run.get("passed") is True and reference_run.get("passed") is not True:
+        outcome = "candidate_repaired"
+    elif candidate_run.get("passed") is not True and reference_run.get("passed") is True:
+        outcome = "candidate_regressed"
+    elif candidate_run.get("passed") is True and reference_run.get("passed") is True:
+        outcome = "both_passed"
+    else:
+        outcome = "both_failed"
+    return {
+        "scenario_id": scenario["scenario_id"],
+        "candidate_passed": candidate_run.get("passed") if candidate_run else None,
+        "reference_passed": reference_run.get("passed") if reference_run else None,
+        "candidate_score": candidate_run.get("score") if candidate_run else None,
+        "reference_score": reference_run.get("score") if reference_run else None,
+        "score_delta": _number_delta(candidate_run.get("score") if candidate_run else None, reference_run.get("score") if reference_run else None),
+        "outcome": outcome,
+    }
+
+
+def _number_delta(candidate_value: Any, reference_value: Any) -> float | int | None:
+    if candidate_value is None or reference_value is None:
+        return None
+    try:
+        delta = float(candidate_value) - float(reference_value)
+    except (TypeError, ValueError):
+        return None
+    return int(delta) if delta.is_integer() else delta
 
 
 def _metrics(eval_summary: dict[str, Any], suite: dict[str, Any]) -> dict[str, Any]:
