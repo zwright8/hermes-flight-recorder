@@ -1,5 +1,5 @@
 {
-  "active_layer": "evidence",
+  "active_layer": "governance",
   "blocked_packets": [
     {
       "blocked_at": "2026-07-02T14:32:48Z",
@@ -114,7 +114,7 @@
       "id": "evidence_pr5_main_delivery_lock_unavailable",
       "layer": "evidence",
       "priority": "critical",
-      "status": "blocked",
+      "status": "resolved",
       "blocked_at": "2026-07-02T16:19:11Z",
       "branch": "codex/hermes-goal-0-supervisor-20260702-1158",
       "branch_sha": "e4844b98c9d75c29a37604ccfc9df7c7c91eeb36",
@@ -122,7 +122,7 @@
       "source_branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
       "origin_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-      "summary": "Evidence PR #5 is verified and pushed on the supervisor branch, but main delivery is blocked because the required main-push lock remained unavailable through a bounded retry. No push to origin/main was attempted.",
+      "summary": "Resolved by acquiring the main-push lock, refreshing Evidence PR #5 over current origin/main, rerunning focused and release verification, pushing to origin/main, and deleting the related remote branches.",
       "verification": [
         {
           "command": "git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1158 main codex/hermes-goal-1-evidence-20260702-1027",
@@ -133,8 +133,20 @@
           "command": "bounded 120-second mkdir /tmp/hermes-flight-recorder-main-push.lock retry",
           "status": "blocked",
           "summary": "Lock remained held; no locked verification or main push attempted."
+        },
+        {
+          "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
+          "status": "pass",
+          "summary": "Lock acquired before locked verification and main push."
+        },
+        {
+          "command": "git ls-remote --heads origin main codex/hermes-goal-1-evidence-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1158",
+          "status": "pass",
+          "summary": "After remote branch deletion, only main remained at 62ec2084f60af5a576548ca8d999afd6c4f5d886."
         }
-      ]
+      ],
+      "resolved_at": "2026-07-02T16:26:16Z",
+      "resolved_by_main_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886"
     }
   ],
   "completed_packets": [
@@ -1353,15 +1365,78 @@
           "summary": "System Python 3.9 ran 321 tests but cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
         }
       ]
+    },
+    {
+      "id": "evidence_pr5_main_delivery",
+      "layer": "evidence",
+      "priority": "critical",
+      "status": "landed_on_main",
+      "title": "Land harness lineage evidence handoff promotion",
+      "summary": "Landed the verified Evidence PR #5 handoff stack on origin/main after merging current governance promotion-policy mainline; observed PR #5 as merged and deleted both related remote branches.",
+      "branch": "codex/hermes-goal-1-evidence-20260702-1027",
+      "source_branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
+      "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1158",
+      "integration_branch_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+      "main_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
+      "remote_branch_status": "deleted",
+      "completed_at": "2026-07-02T16:26:16Z",
+      "verification": [
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle tests.test_cli_report tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_tool_policy tests.test_harness_replay_matrix tests.test_deployment_hardening tests.test_model_registry tests.test_promotion_decision tests.test_promotion_ledger",
+          "status": "pass",
+          "summary": "155 focused Evidence/Harness/Model/Governance tests passed under the main-push lock after merging origin/main c4f10cf."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+          "status": "pass",
+          "summary": "Promotion-policy demo validated with zero errors and zero warnings under strict mode."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json",
+          "status": "pass",
+          "summary": "Supervisor state JSON parsed after locked merge resolution."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m json.tool examples/promotion_policy.demo.json",
+          "status": "pass",
+          "summary": "Promotion-policy demo JSON parsed after latest-main merge."
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass",
+          "summary": "No whitespace errors before committing the locked merge refresh."
+        },
+        {
+          "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+          "status": "pass",
+          "summary": "Release check passed, including Python 3.11 unit discovery with 339 tests and installed-CLI/demo gate checks."
+        },
+        {
+          "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+          "status": "pass",
+          "summary": "origin/main verified at 62ec2084f60af5a576548ca8d999afd6c4f5d886 after the locked push."
+        },
+        {
+          "command": "gh pr view 5 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+          "status": "pass",
+          "summary": "PR #5 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/5."
+        },
+        {
+          "command": "git push origin --delete codex/hermes-goal-1-evidence-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1158 && git ls-remote --heads origin main codex/hermes-goal-1-evidence-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1158",
+          "status": "pass",
+          "summary": "Only refs/heads/main remained; codex/hermes-goal-1-evidence-20260702-1027 and codex/hermes-goal-0-supervisor-20260702-1158 were absent."
+        }
+      ]
     }
   ],
   "current_packet": {
-    "id": "land_goal1_evidence_pr5",
-    "layer": "evidence",
-    "priority": "critical",
-    "status": "locked_latest_main_merged_pending_verification",
-    "summary": "Evidence PR #5 supervisor branch now includes current origin/main c4f10cf under the acquired lock; rerun verification before pushing to origin/main.",
-    "title": "Land harness lineage evidence handoff promotion"
+    "id": "governance_policy_schema_registry",
+    "layer": "governance",
+    "priority": "medium",
+    "status": "ready",
+    "summary": "Evidence PR #5 is landed on main and branch-retired; next unblocked packet is schema-catalog exposure for hfr.promotion_policy.v1.",
+    "title": "Register promotion policy schema"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -2028,10 +2103,10 @@
       "summary": "Not yet updated in this dedicated worktree."
     },
     "evidence": {
-      "next_packet": "verify_and_push_goal1_evidence_pr5_under_lock",
-      "status": "locked_latest_main_merged_pending_verification",
-      "summary": "Current origin/main c4f10cf with the governance promotion-policy packet is merged under the main-push lock; rerun relevant verification before pushing main.",
-      "latest_packet": "evidence_real_harness_publisher_contract"
+      "next_packet": null,
+      "status": "completed_landed_on_main",
+      "summary": "Evidence PR #5 landed on origin/main at 62ec2084f60af5a576548ca8d999afd6c4f5d886; PR #5 is merged and the source plus supervisor remote branches are deleted.",
+      "latest_packet": "evidence_pr5_main_delivery"
     },
     "governance": {
       "next_packet": "governance_policy_schema_registry",
@@ -2068,22 +2143,14 @@
   },
   "next_packets": [
     {
-      "id": "verify_and_push_goal1_evidence_pr5_under_lock",
-      "layer": "evidence",
-      "priority": "critical",
-      "status": "locked_latest_main_merged_pending_verification",
-      "summary": "Rerun focused Evidence/Harness/Model/Governance verification under the acquired lock, push HEAD to origin/main, verify main, and retire PR #5 branches.",
-      "title": "Verify and push Evidence PR #5 under lock"
-    },
-    {
       "depends_on": [
         "governance_policy_artifact"
       ],
       "id": "governance_policy_schema_registry",
       "layer": "governance",
       "priority": "medium",
-      "status": "queued_after_evidence",
-      "summary": "Expose hfr.promotion_policy.v1 through the public schema catalog and add schema checks for policy artifacts.",
+      "status": "ready",
+      "summary": "Promotion policy artifact is landed and Evidence PR #5 is closed; expose hfr.promotion_policy.v1 through the public schema catalog and add schema checks for policy artifacts.",
       "title": "Register promotion policy schema"
     },
     {
@@ -2139,135 +2206,144 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:22:00Z",
+  "updated_at": "2026-07-02T16:26:16Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
-    "branch_sha": "e4844b98c9d75c29a37604ccfc9df7c7c91eeb36",
+    "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1158",
-    "integration_base_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
-    "merged_at": "2026-07-02T16:03:36Z",
-    "pr_status": "OPEN",
+    "integration_branch_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+    "main_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+    "remote_main_verified_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+    "pr_status": "MERGED",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
-    "source_branch_status": "remote_present",
-    "status": "locked_latest_main_merged_pending_verification",
-    "summary": "Evidence PR #5 supervisor integration now includes origin/main dc814806 with the Qwen metadata scout packet; rerun verification before pushing the updated branch.",
+    "source_branch_status": "remote_deleted",
+    "integration_branch_status": "remote_deleted",
+    "status": "landed_on_main",
+    "summary": "Evidence PR #5 landed on origin/main with harness-lineage evidence handoff checks preserved over the governance promotion-policy mainline; PR observed merged and related remote branches deleted.",
+    "verified_at": "2026-07-02T16:26:16Z",
     "verification": [
       {
-        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle tests.test_cli_report tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_tool_policy tests.test_harness_replay_matrix tests.test_deployment_hardening tests.test_model_registry",
+        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle tests.test_cli_report tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_tool_policy tests.test_harness_replay_matrix tests.test_deployment_hardening tests.test_model_registry tests.test_promotion_decision tests.test_promotion_ledger",
         "status": "pass",
-        "summary": "128 focused Evidence/Harness/Model/schema/validation/deployment tests passed after merging origin/main dc814806."
+        "summary": "155 focused Evidence/Harness/Model/Governance tests passed under the main-push lock after merging origin/main c4f10cf."
       },
       {
-        "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
         "status": "pass",
-        "summary": "Release check passed after merging origin/main dc814806; it includes Python 3.11 discovery with 337 tests and installed-CLI checks."
+        "summary": "Promotion-policy demo validated with zero errors and zero warnings under strict mode."
       },
       {
-        "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+        "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json",
         "status": "pass",
-        "summary": "Supervisor state JSON validates after Qwen-main merge resolution."
+        "summary": "Supervisor state JSON parsed after locked merge resolution."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m json.tool examples/promotion_policy.demo.json",
+        "status": "pass",
+        "summary": "Promotion-policy demo JSON parsed after latest-main merge."
       },
       {
         "command": "git diff --check",
         "status": "pass",
-        "summary": "No whitespace errors after the latest-main verification checkpoint."
+        "summary": "No whitespace errors before committing the locked merge refresh."
+      },
+      {
+        "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+        "status": "pass",
+        "summary": "Release check passed, including Python 3.11 unit discovery with 339 tests and installed-CLI/demo gate checks."
+      },
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
+        "status": "pass",
+        "summary": "origin/main verified at 62ec2084f60af5a576548ca8d999afd6c4f5d886 after the locked push."
+      },
+      {
+        "command": "gh pr view 5 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #5 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/5."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-1-evidence-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1158 && git ls-remote --heads origin main codex/hermes-goal-1-evidence-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1158",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; codex/hermes-goal-1-evidence-20260702-1027 and codex/hermes-goal-0-supervisor-20260702-1158 were absent."
       }
     ],
-    "verified_at": "2026-07-02T16:10:52Z",
     "conflict_resolution": [
-      "Preserved main Harness schemas and removed duplicate schema catalog entries introduced by the older Evidence branch.",
+      "Preserved landed Harness schemas and removed duplicate schema catalog entries introduced by the older Evidence branch.",
       "Combined gate decision contract validation with PR #5 required harness-manifest/result evidence-bundle checks.",
-      "Updated run-suite harness handoff publisher to emit structured tool-policy metadata and schema-shaped fake-secret canaries.",
-      "Resolved harness-result validation so relative lineage paths are checked from the result artifact directory.",
-      "Merged main autonomy history with PR #5 branch packet and blocker metadata."
-    ],
-    "remaining_delivery_steps": [
-      "commit verified supervisor merge",
-      "push supervisor branch",
-      "verify remote branch",
-      "acquire main-push lock",
-      "fetch and integrate current origin/main",
-      "rerun relevant verification under lock",
-      "push and verify origin/main",
-      "close PR #5 or observe merged",
-      "delete remote source/supervisor branches",
-      "release lock"
-    ],
-    "latest_origin_main_sha": "c4f10cf56f887cb83e1aec946397851a6f05a980",
-    "rebased_over_latest_main_at": "2026-07-02T16:14:00Z",
-    "verified_after_latest_main_at": "2026-07-02T16:15:36Z",
-    "remote_branch_status": "pushed_and_verified",
-    "lock_status": "acquired",
-    "last_blocked_at": "2026-07-02T16:19:11Z",
-    "main_push_status": "not_attempted_pending_locked_verification",
-    "lock_acquired_at": "2026-07-02T16:22:00Z",
-    "merged_current_main_under_lock_at": "2026-07-02T16:22:00Z"
+      "Kept run-suite evidence handoff publisher structured tool-policy metadata and schema-shaped fake-secret canaries.",
+      "Preserved landed promotion-policy governance artifacts from origin/main c4f10cf."
+    ]
   },
   "github_delivery": {
-    "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
-    "branch": "codex/hermes-goal-8-governance-policy-20260702-1549",
-    "branch_head_before_locked_merge_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
-    "branch_remote_status": "deleted",
-    "branch_remote_verified_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
-    "implementation_commit_sha": "3a1f4cc58693fa2393c58b2a98eebe20b0cb8b23",
+    "id": "evidence_pr5_main_delivery",
+    "branch": "codex/hermes-goal-1-evidence-20260702-1027",
+    "source_branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
+    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1158",
+    "integration_branch_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+    "base_main_sha": "c4f10cf56f887cb83e1aec946397851a6f05a980",
+    "main_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+    "remote_main_verified_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886",
+    "main_integration_status": "pushed_and_verified",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
+    "pr_status": "MERGED",
+    "source_branch_remote_status": "deleted",
+    "integration_branch_remote_status": "deleted",
+    "remote_branch_verified_deleted": true,
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "pushed_and_verified",
-    "pr_status": "MERGED",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/13",
-    "remote_ref": "refs/heads/codex/hermes-goal-8-governance-policy-20260702-1549",
-    "verified_at": "2026-07-02T16:16:33Z",
+    "completed_at": "2026-07-02T16:26:16Z",
     "verification": [
       {
-        "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle tests.test_cli_report tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_tool_policy tests.test_harness_replay_matrix tests.test_deployment_hardening tests.test_model_registry tests.test_promotion_decision tests.test_promotion_ledger",
         "status": "pass",
-        "summary": "Touched governance policy modules compile after merging current origin/main."
+        "summary": "155 focused Evidence/Harness/Model/Governance tests passed under the main-push lock after merging origin/main c4f10cf."
       },
       {
-        "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
         "status": "pass",
-        "summary": "57 focused governance, ledger, and validation tests passed after merging current origin/main."
+        "summary": "Promotion-policy demo validated with zero errors and zero warnings under strict mode."
       },
       {
-        "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+        "command": "/opt/homebrew/bin/python3.11 -m json.tool experiments/autonomy/supervisor_state.json",
         "status": "pass",
-        "summary": "Standalone promotion policy validation passed with zero warnings or errors."
+        "summary": "Supervisor state JSON parsed after locked merge resolution."
       },
       {
-        "command": "python3 -m flightrecorder validate --help | rg -- --promotion-policy",
+        "command": "/opt/homebrew/bin/python3.11 -m json.tool examples/promotion_policy.demo.json",
         "status": "pass",
-        "summary": "validate --promotion-policy is advertised."
+        "summary": "Promotion-policy demo JSON parsed after latest-main merge."
       },
       {
-        "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+        "command": "git diff --check",
         "status": "pass",
-        "summary": "Supervisor state JSON parses after semantic merge."
+        "summary": "No whitespace errors before committing the locked merge refresh."
       },
       {
-        "command": "python3 -m json.tool examples/promotion_policy.demo.json && git diff --check",
+        "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
         "status": "pass",
-        "summary": "Policy demo JSON parses and the integrated diff has no whitespace errors."
+        "summary": "Release check passed, including Python 3.11 unit discovery with 339 tests and installed-CLI/demo gate checks."
       },
       {
-        "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main",
         "status": "pass",
-        "summary": "337 tests passed under Python 3.11 after merging current origin/main."
+        "summary": "origin/main verified at 62ec2084f60af5a576548ca8d999afd6c4f5d886 after the locked push."
       },
       {
-        "command": "python3 -m unittest discover",
-        "status": "blocked",
-        "summary": "System Python 3.9 ran 325 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
+        "command": "gh pr view 5 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #5 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/5."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-1-evidence-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1158 && git ls-remote --heads origin main codex/hermes-goal-1-evidence-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1158",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; codex/hermes-goal-1-evidence-20260702-1027 and codex/hermes-goal-0-supervisor-20260702-1158 were absent."
       }
     ],
-    "branch_remote_deleted_at": "2026-07-02T16:18:24Z",
-    "integrated_main_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
-    "main_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
-    "main_sha_status": "verified_before_post_delivery_checkpoint",
-    "merge_commit_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
-    "post_delivery_checkpoint_main_sha_status": "verify after pushing this checkpoint because a commit cannot self-record its final SHA",
-    "remote_branch_verified_deleted": true,
-    "remote_main_verified_at": "2026-07-02T16:18:24Z",
-    "remote_main_verified_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1"
+    "risks": [
+      "Post-delivery checkpoint still needs to be committed and pushed to origin/main before releasing the main-push lock.",
+      "System python3 remains Python 3.9.6 and is not the verification interpreter for deployment hardening; Python 3.11 release_check passed."
+    ]
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
@@ -2276,7 +2352,8 @@
     "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry.",
     "Adapter, eval, and promotion link slots are present but await real downstream artifacts.",
     "Release records are structural governance artifacts; real release publication still requires production promotion decision, cards, alias receipt, rollback metadata, compare gate, and release notes evidence.",
-    "Policy artifacts intentionally cannot relax default blockers; future policy fields must preserve that safety floor."
+    "Policy artifacts intentionally cannot relax default blockers; future policy fields must preserve that safety floor.",
+    "Post-delivery checkpoint commit cannot self-record its final main SHA; verify remote main again after pushing the checkpoint, then release /tmp/hermes-flight-recorder-main-push.lock."
   ],
   "safety_guardrails": {
     "gpu_work_launched": false,
