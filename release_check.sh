@@ -1239,6 +1239,27 @@ test -f runs/trainer_consumer_plan.json
   --strict >/dev/null
 test -f runs/trainer_wrapper_dry_run.json
 "$PYTHON" -m flightrecorder schemas --check runs/trainer_wrapper_dry_run.json >/dev/null
+mkdir -p runs/agentic_training_result_artifacts
+printf "tiny adapter bytes\n" > runs/agentic_training_result_artifacts/adapter.safetensors
+printf '{"loss":0.0}\n' > runs/agentic_training_result_artifacts/metrics.json
+"$PYTHON" scripts/preflight_agentic_training_runtime.py \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --require-module json \
+  --skip-default-modules \
+  --created-at "2026-07-02T00:00:00+00:00" \
+  --out runs/agentic_training_runtime_preflight.json >/dev/null
+test -f runs/agentic_training_runtime_preflight.json
+"$PYTHON" -m flightrecorder schemas --check runs/agentic_training_runtime_preflight.json >/dev/null
+"$PYTHON" scripts/archive_agentic_training_result.py \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --status completed \
+  --adapter runs/agentic_training_result_artifacts/adapter.safetensors \
+  --metrics runs/agentic_training_result_artifacts/metrics.json \
+  --created-at "2026-07-02T00:00:00+00:00" \
+  --out runs/agentic_training_result.json >/dev/null
+test -f runs/agentic_training_result.json
+"$PYTHON" -m flightrecorder schemas --check runs/agentic_training_result.json >/dev/null
 "$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
@@ -1259,6 +1280,7 @@ test -f runs/trainer_wrapper_dry_run.json
   --trainer-archive-check runs/trainer_archive_check.json \
   --trainer-consumer-plan runs/trainer_consumer_plan.json \
   --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
+  --agentic-training-result runs/agentic_training_result.json \
   --out runs/evidence_bundle_trainer.json >/dev/null
 test -f runs/evidence_bundle_trainer.json
 "$PYTHON" -m flightrecorder validate \
@@ -1306,10 +1328,17 @@ assert trainer_bundle["passed"] is True
 assert trainer_bundle["readiness"] == "ready"
 assert trainer_bundle["metrics"]["trainer_handoff"]["complete_chain"] is True
 assert trainer_bundle["metrics"]["trainer_handoff"]["all_included_ready"] is True
-assert trainer_bundle["metrics"]["trainer_handoff"]["stage_count"] == 6
-assert trainer_bundle["metrics"]["trainer_handoff"]["handoff_ready_count"] == 6
+assert trainer_bundle["metrics"]["trainer_handoff"]["stage_count"] == 7
+assert trainer_bundle["metrics"]["trainer_handoff"]["handoff_ready_count"] == 7
 assert trainer_bundle["metrics"]["trainer_handoff"]["blocked_stage_count"] == 0
+assert trainer_bundle["metrics"]["trainer_handoff"]["schema_supported_count"] == 7
 assert trainer_bundle["decision"]["key_metrics"]["trainer_handoff"]["complete_chain"] is True
+result_stage = next(stage for stage in trainer_bundle["metrics"]["trainer_handoff"]["stages"] if stage["id"] == "agentic_training_result")
+assert result_stage["recommendation"] == "register_training_result"
+assert result_stage["status"] == "completed"
+assert result_stage["adapter_count"] == 1
+assert result_stage["metrics_file_count"] == 1
+assert trainer_bundle["artifacts"]["agentic_training_result"]["schema_version"] == "hfr.agentic_training_result.v1"
 assert bundle["decision"]["gate_count"] == 4
 assert bundle["decision"]["passed_gate_count"] == 4
 assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
