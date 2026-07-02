@@ -417,6 +417,57 @@ class PromotionLedgerTests(unittest.TestCase):
             gate_path.unlink()
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
+    def test_promotion_archive_includes_release_record_publication_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            release_record_path = root / "promotion_release_record.json"
+            archive_dir = root / "promotion_archive"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            release_record_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.promotion_release_record.v1",
+                        "release": {"release_id": "release-2026-07-02"},
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--promotion-release-record",
+                    str(release_record_path),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            release_artifacts = [artifact for artifact in archive["artifacts"] if artifact["role"] == "promotion_release_record"]
+            self.assertEqual(len(release_artifacts), 1)
+            self.assertEqual(archive["metrics"]["promotion_release_record_count"], 1)
+            self.assertIn(
+                {"from": "promotion_release_record_000", "to": "promotion_ledger", "type": "release_record"},
+                archive["relationships"],
+            )
+            self.assertTrue((archive_dir / release_artifacts[0]["path"]).is_file())
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+            ledger_path.unlink()
+            release_record_path.unlink()
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
     def test_promotion_archive_requires_self_contained_sources_when_requested(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

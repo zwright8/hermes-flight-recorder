@@ -1562,6 +1562,7 @@ def cmd_promotion_archive(args: argparse.Namespace) -> int:
         promotion_ledger_path=args.promotion_ledger,
         promotion_ledger_gate_path=args.promotion_ledger_gate,
         decision_gate_paths=args.decision_gate,
+        promotion_release_record_paths=args.promotion_release_record,
         require_self_contained=args.require_self_contained,
         force=args.force,
         preserve_paths=args.preserve_paths,
@@ -3088,6 +3089,12 @@ def _parser() -> argparse.ArgumentParser:
     promotion_archive.add_argument("--promotion-ledger", required=True, help="Path to promotion_ledger.json")
     promotion_archive.add_argument("--promotion-ledger-gate", help="Optional path to promotion_ledger_gate.json")
     promotion_archive.add_argument("--decision-gate", action="append", default=[], help="Decision gate JSON to include; may be repeated")
+    promotion_archive.add_argument(
+        "--promotion-release-record",
+        action="append",
+        default=[],
+        help="Promotion release record JSON to include as final publication evidence; may be repeated",
+    )
     promotion_archive.add_argument("--out", required=True, help="Output directory for the portable promotion archive")
     promotion_archive.add_argument(
         "--require-self-contained",

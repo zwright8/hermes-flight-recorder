@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
+from .governance import PROMOTION_RELEASE_RECORD_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 
@@ -25,6 +26,7 @@ def build_promotion_archive(
     promotion_ledger_path: str | Path,
     promotion_ledger_gate_path: str | Path | None = None,
     decision_gate_paths: list[str | Path] | None = None,
+    promotion_release_record_paths: list[str | Path] | None = None,
     require_self_contained: bool = False,
     force: bool = False,
     preserve_paths: bool = False,
@@ -121,6 +123,28 @@ def build_promotion_archive(
         artifacts.append(source_record)
         relationships.append({"from": record["name"], "to": source_record["name"], "type": "source_artifact"})
 
+    seen_release_record_hashes: set[str] = set()
+    copied_release_record_count = 0
+    for release_record_path in promotion_release_record_paths or []:
+        source_path = Path(release_record_path)
+        _read_json_artifact(source_path, PROMOTION_RELEASE_RECORD_SCHEMA_VERSION, "promotion release record")
+        digest = _sha256(source_path)
+        if digest in seen_release_record_hashes:
+            continue
+        seen_release_record_hashes.add(digest)
+        archive_name = f"promotion_release_record_{copied_release_record_count:03d}.json"
+        release_record = _copy_artifact(
+            f"promotion_release_record_{copied_release_record_count:03d}",
+            "promotion_release_record",
+            source_path,
+            artifacts_dir / archive_name,
+            target,
+            preserve_paths,
+        )
+        copied_release_record_count += 1
+        artifacts.append(release_record)
+        relationships.append({"from": release_record["name"], "to": ledger_record["name"], "type": "release_record"})
+
     self_contained = not missing
     for artifact_index, artifact in enumerate(artifacts):
         artifact["index"] = artifact_index
@@ -138,6 +162,7 @@ def build_promotion_archive(
         "notes": [
             "Promotion archives copy promotion-history evidence into a portable directory; they do not rerun gates, train models, or mutate CI.",
             "Archive validation checks copied artifact hashes, so original local source paths are not required after the archive is built.",
+            "Optional promotion release records can be copied as final publication evidence without making the archive mutate registry aliases.",
         ],
     }
     _write_json(target / "promotion_archive.json", archive)
@@ -225,6 +250,7 @@ def _metrics(artifacts: list[dict[str, Any]], missing: list[dict[str, Any]]) -> 
     return {
         "artifact_count": len(artifacts),
         "decision_gate_count": sum(1 for record in artifacts if record.get("role") == "decision_gate"),
+        "promotion_release_record_count": sum(1 for record in artifacts if record.get("role") == "promotion_release_record"),
         "source_artifact_count": sum(1 for record in artifacts if record.get("role") == "source_artifact"),
         "missing_count": len(missing),
         "role_counts": role_counts,

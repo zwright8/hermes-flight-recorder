@@ -870,6 +870,15 @@ flightrecorder promotion-release-record \
 
 flightrecorder validate --promotion-release-record runs/promotion_release_record.json --strict
 flightrecorder schemas --check runs/promotion_release_record.json
+
+flightrecorder promotion-archive \
+  --promotion-ledger runs/promotion_ledger.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --promotion-release-record runs/promotion_release_record.json \
+  --out runs/promotion_archive \
+  --require-self-contained
+
+flightrecorder validate --promotion-archive runs/promotion_archive --strict
 ```
 
 `promotion-decision` is side-effect free. It emits an alias-update receipt only
@@ -910,6 +919,9 @@ policy embedded in the promotion decision block publication.
 Publishable release records must also carry validation evidence for the
 promotion decision, promotion cards, and alias-apply receipt that were checked
 immediately before binding.
+`promotion-archive` can include one or more release records with
+`--promotion-release-record` so the portable promotion history carries the
+final publication evidence alongside ledgers and gate receipts.
 `promotion-cards` is also side-effect free: it writes `MODEL_CARD.md`,
 `DATASET_CARD.md`, and `promotion_cards.json`, and validation rejects stale card
 hashes after generation.

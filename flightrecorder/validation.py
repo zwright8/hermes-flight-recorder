@@ -9354,7 +9354,7 @@ def _validate_promotion_archive_artifact(
     for field_name in ("name", "role", "path", "original_path", "schema_version"):
         if not isinstance(artifact.get(field_name), str) or not artifact.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
-    if artifact.get("role") not in {"promotion_ledger", "promotion_ledger_gate", "decision_gate", "source_artifact"}:
+    if artifact.get("role") not in {"promotion_ledger", "promotion_ledger_gate", "decision_gate", "source_artifact", "promotion_release_record"}:
         target.errors.append(f"{label}.role is invalid.")
     if artifact.get("exists") is not True:
         target.errors.append(f"{label}.exists must be true.")
@@ -9418,6 +9418,10 @@ def _validate_promotion_archive_metrics(
         "missing_count": len(missing),
         "unique_sha256_count": len({artifact.get("sha256") for artifact in valid_artifacts if isinstance(artifact.get("sha256"), str)}),
     }
+    if "promotion_release_record_count" in metrics:
+        expected["promotion_release_record_count"] = sum(
+            1 for artifact in valid_artifacts if artifact.get("role") == "promotion_release_record"
+        )
     for field_name, expected_value in expected.items():
         if metrics.get(field_name) != expected_value:
             target.errors.append(f"promotion_archive.metrics.{field_name} expected {expected_value}, got {metrics.get(field_name)!r}.")
