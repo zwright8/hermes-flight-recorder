@@ -82,6 +82,14 @@
       "name": "run_suite"
     },
     {
+      "artifact": "evidence_coverage",
+      "artifact_schema_version": "hfr.evidence_coverage.v1",
+      "description": "Suite-level evidence attribution coverage emitted as evidence_coverage.json.",
+      "filename": "evidence_coverage.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/evidence_coverage.v1.schema.json",
+      "name": "evidence_coverage"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",

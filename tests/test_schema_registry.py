@@ -34,6 +34,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("state_validator_assertions", names)
         self.assertIn("supervisor_state", names)
         self.assertIn("run_suite", names)
+        self.assertIn("evidence_coverage", names)
         self.assertIn("run_digest", names)
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
@@ -356,6 +357,93 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "run_suite")
+
+    def test_evidence_coverage_schema_accepts_minimal_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.evidence_coverage.v1",
+                "runs_dir": "runs",
+                "passed": True,
+                "check_count": 0,
+                "failed_check_count": 0,
+                "checks": [],
+                "metrics": {
+                    "run_count": 1,
+                    "rule_count": 1,
+                    "failed_rule_count": 1,
+                    "critical_failed_rule_count": 1,
+                    "evidence_ref_count": 1,
+                    "failed_rule_evidence_ref_count": 1,
+                    "critical_failed_rule_evidence_ref_count": 1,
+                    "failed_rules_with_evidence": 1,
+                    "failed_rules_without_evidence": 0,
+                    "critical_failed_rules_with_evidence": 1,
+                    "critical_failed_rules_without_evidence": 0,
+                    "task_evidence_ref_count": 1,
+                    "failed_rule_evidence_rate": 1.0,
+                    "critical_failed_rule_evidence_rate": 1.0,
+                    "event_evidence_ref_count": 1,
+                    "final_answer_evidence_ref_count": 0,
+                    "episode_evidence_ref_count": 0,
+                    "evidence_target_counts": [{"id": "event", "count": 1}],
+                    "failed_rule_evidence_target_counts": [{"id": "event", "count": 1}],
+                    "rule_coverage": [
+                        {
+                            "rule_id": "required_actions",
+                            "rule_name": "Required Actions",
+                            "rule_count": 1,
+                            "passed": 0,
+                            "failed": 1,
+                            "critical_failed": 1,
+                            "evidence_ref_count": 1,
+                            "negative_evidence_ref_count": 1,
+                            "failed_with_evidence": 1,
+                            "failed_without_evidence": 0,
+                            "evidence_target_counts": [{"id": "event", "count": 1}],
+                        }
+                    ],
+                },
+                "warnings": [],
+                "runs": [
+                    {
+                        "scenario_id": "email_reply_completion_bad",
+                        "scenario_title": "Email Reply Completion",
+                        "run_dir": "runs/email_reply_completion_bad",
+                        "score": 0,
+                        "passed": False,
+                        "event_count": 5,
+                        "rule_count": 1,
+                        "failed_rule_count": 1,
+                        "critical_failed_rule_count": 1,
+                        "evidence_ref_count": 1,
+                        "failed_rule_evidence_ref_count": 1,
+                        "critical_failed_rule_evidence_ref_count": 1,
+                        "failed_rules_with_evidence": 1,
+                        "failed_rules_without_evidence": [],
+                        "critical_failed_rules_with_evidence": 1,
+                        "critical_failed_rules_without_evidence": [],
+                        "task_evidence_ref_count": 1,
+                        "evidence_target_counts": [{"id": "event", "count": 1}],
+                        "failed_rule_evidence_target_counts": [{"id": "event", "count": 1}],
+                        "rules": [
+                            {
+                                "rule_id": "required_actions",
+                                "rule_name": "Required Actions",
+                                "passed": False,
+                                "failed": True,
+                                "critical": True,
+                                "evidence_ref_count": 1,
+                                "negative_evidence_ref_count": 1,
+                                "evidence_target_counts": [{"id": "event", "count": 1}],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "evidence_coverage")
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(

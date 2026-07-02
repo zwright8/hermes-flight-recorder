@@ -1,0 +1,243 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/evidence_coverage.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Suite-level evidence attribution coverage emitted as evidence_coverage.json.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "passed": { "type": "boolean" },
+    "runs": {
+      "items": { "$ref": "#/$defs/run" },
+      "type": "array"
+    },
+    "runs_dir": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.evidence_coverage.v1" },
+    "warnings": {
+      "items": { "type": "string" },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "runs_dir",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics",
+    "warnings",
+    "runs"
+  ],
+  "title": "Hermes Flight Recorder Evidence Coverage",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": { "type": ["integer", "number", "object", "string", "boolean", "null"] },
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "passed", "summary"],
+      "type": "object"
+    },
+    "count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failed_rule_count": { "minimum": 0, "type": "integer" },
+        "critical_failed_rule_evidence_rate": { "minimum": 0, "type": "number" },
+        "critical_failed_rule_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "critical_failed_rules_with_evidence": { "minimum": 0, "type": "integer" },
+        "critical_failed_rules_without_evidence": { "minimum": 0, "type": "integer" },
+        "episode_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "event_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "evidence_target_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed_rule_count": { "minimum": 0, "type": "integer" },
+        "failed_rule_evidence_rate": { "minimum": 0, "type": "number" },
+        "failed_rule_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "failed_rule_evidence_target_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed_rules_with_evidence": { "minimum": 0, "type": "integer" },
+        "failed_rules_without_evidence": { "minimum": 0, "type": "integer" },
+        "final_answer_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "rule_count": { "minimum": 0, "type": "integer" },
+        "rule_coverage": {
+          "items": { "$ref": "#/$defs/rule_coverage" },
+          "type": "array"
+        },
+        "run_count": { "minimum": 0, "type": "integer" },
+        "task_evidence_ref_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "run_count",
+        "rule_count",
+        "failed_rule_count",
+        "critical_failed_rule_count",
+        "evidence_ref_count",
+        "failed_rule_evidence_ref_count",
+        "critical_failed_rule_evidence_ref_count",
+        "failed_rules_with_evidence",
+        "failed_rules_without_evidence",
+        "critical_failed_rules_with_evidence",
+        "critical_failed_rules_without_evidence",
+        "task_evidence_ref_count",
+        "failed_rule_evidence_rate",
+        "critical_failed_rule_evidence_rate",
+        "event_evidence_ref_count",
+        "final_answer_evidence_ref_count",
+        "episode_evidence_ref_count",
+        "evidence_target_counts",
+        "failed_rule_evidence_target_counts",
+        "rule_coverage"
+      ],
+      "type": "object"
+    },
+    "rule": {
+      "additionalProperties": true,
+      "properties": {
+        "critical": { "type": "boolean" },
+        "evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "evidence_target_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed": { "type": "boolean" },
+        "negative_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" },
+        "rule_id": { "minLength": 1, "type": "string" },
+        "rule_name": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "rule_id",
+        "rule_name",
+        "passed",
+        "failed",
+        "critical",
+        "evidence_ref_count",
+        "negative_evidence_ref_count",
+        "evidence_target_counts"
+      ],
+      "type": "object"
+    },
+    "rule_coverage": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failed": { "minimum": 0, "type": "integer" },
+        "evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "evidence_target_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed": { "minimum": 0, "type": "integer" },
+        "failed_with_evidence": { "minimum": 0, "type": "integer" },
+        "failed_without_evidence": { "minimum": 0, "type": "integer" },
+        "negative_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "passed": { "minimum": 0, "type": "integer" },
+        "rule_count": { "minimum": 0, "type": "integer" },
+        "rule_id": { "minLength": 1, "type": "string" },
+        "rule_name": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "rule_id",
+        "rule_name",
+        "rule_count",
+        "passed",
+        "failed",
+        "critical_failed",
+        "evidence_ref_count",
+        "negative_evidence_ref_count",
+        "failed_with_evidence",
+        "failed_without_evidence",
+        "evidence_target_counts"
+      ],
+      "type": "object"
+    },
+    "run": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_failed_rule_count": { "minimum": 0, "type": "integer" },
+        "critical_failed_rule_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "critical_failed_rules_with_evidence": { "minimum": 0, "type": "integer" },
+        "critical_failed_rules_without_evidence": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "event_count": { "type": ["integer", "null"] },
+        "evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "evidence_target_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed_rule_count": { "minimum": 0, "type": "integer" },
+        "failed_rule_evidence_ref_count": { "minimum": 0, "type": "integer" },
+        "failed_rule_evidence_target_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed_rules_with_evidence": { "minimum": 0, "type": "integer" },
+        "failed_rules_without_evidence": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "passed": { "type": "boolean" },
+        "rule_count": { "minimum": 0, "type": "integer" },
+        "rules": {
+          "items": { "$ref": "#/$defs/rule" },
+          "type": "array"
+        },
+        "run_dir": { "minLength": 1, "type": "string" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "scenario_title": { "minLength": 1, "type": "string" },
+        "score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "task_evidence_ref_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "scenario_id",
+        "scenario_title",
+        "run_dir",
+        "score",
+        "passed",
+        "event_count",
+        "rule_count",
+        "failed_rule_count",
+        "critical_failed_rule_count",
+        "evidence_ref_count",
+        "failed_rule_evidence_ref_count",
+        "critical_failed_rule_evidence_ref_count",
+        "failed_rules_with_evidence",
+        "failed_rules_without_evidence",
+        "critical_failed_rules_with_evidence",
+        "critical_failed_rules_without_evidence",
+        "task_evidence_ref_count",
+        "evidence_target_counts",
+        "failed_rule_evidence_target_counts",
+        "rules"
+      ],
+      "type": "object"
+    }
+  }
+}
