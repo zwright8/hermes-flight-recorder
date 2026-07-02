@@ -227,6 +227,7 @@ test -f runs/prompt_injection_compare.html
 test -f runs/suite_compare.json
 test -f runs/suite_compare.html
 test -f runs/suite_trend.json
+"$PYTHON" -m flightrecorder schemas --check runs/suite_trend.json >/dev/null
 test -f runs/suite_trend.html
 test -f runs/scenario_quality.json
 "$PYTHON" -m flightrecorder schemas --check runs/scenario_quality.json >/dev/null

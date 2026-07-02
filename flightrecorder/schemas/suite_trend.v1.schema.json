@@ -1,0 +1,121 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/suite_trend.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Longitudinal run-suite trend emitted as suite_trend.json by trend-suite.",
+  "properties": {
+    "critical_failure_trends": {
+      "items": { "$ref": "#/$defs/count_trend" },
+      "type": "array"
+    },
+    "failed_rule_trends": {
+      "items": { "$ref": "#/$defs/count_trend" },
+      "type": "array"
+    },
+    "point_count": { "minimum": 0, "type": "integer" },
+    "points": {
+      "items": { "$ref": "#/$defs/trend_point" },
+      "type": "array"
+    },
+    "schema_version": { "const": "hfr.suite_trend.v1" },
+    "summary": { "minLength": 1, "type": "string" }
+  },
+  "required": [
+    "schema_version",
+    "point_count",
+    "points",
+    "failed_rule_trends",
+    "critical_failure_trends",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder Suite Trend",
+  "type": "object",
+  "$defs": {
+    "count_map": {
+      "additionalProperties": { "minimum": 0, "type": "integer" },
+      "type": "object"
+    },
+    "count_point": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "index": { "minimum": 0, "type": "integer" },
+        "label": { "minLength": 1, "type": "string" }
+      },
+      "required": ["index", "label", "count"],
+      "type": "object"
+    },
+    "count_trend": {
+      "additionalProperties": true,
+      "properties": {
+        "counts": {
+          "items": { "$ref": "#/$defs/count_point" },
+          "type": "array"
+        },
+        "delta": { "type": "integer" },
+        "first_count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" },
+        "last_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["id", "first_count", "last_count", "delta", "counts"],
+      "type": "object"
+    },
+    "metadata": {
+      "additionalProperties": { "type": "string" },
+      "type": "object"
+    },
+    "trend_point": {
+      "additionalProperties": true,
+      "properties": {
+        "average_score": { "maximum": 100, "minimum": 0, "type": "number" },
+        "critical_failure_count": { "minimum": 0, "type": "integer" },
+        "critical_failure_counts": { "$ref": "#/$defs/count_map" },
+        "delta_from_previous": {
+          "additionalProperties": true,
+          "properties": {
+            "average_score_delta": { "type": "number" },
+            "critical_failure_count_delta": { "type": "integer" },
+            "failed_rule_count_delta": { "type": "integer" },
+            "pass_rate_delta": { "type": "number" }
+          },
+          "required": [
+            "pass_rate_delta",
+            "average_score_delta",
+            "failed_rule_count_delta",
+            "critical_failure_count_delta"
+          ],
+          "type": ["object", "null"]
+        },
+        "error_count": { "minimum": 0, "type": "integer" },
+        "failed": { "minimum": 0, "type": "integer" },
+        "failed_rule_count": { "minimum": 0, "type": "integer" },
+        "failed_rule_counts": { "$ref": "#/$defs/count_map" },
+        "index": { "minimum": 0, "type": "integer" },
+        "label": { "minLength": 1, "type": "string" },
+        "metadata": { "$ref": "#/$defs/metadata" },
+        "pass_rate": { "maximum": 1, "minimum": 0, "type": "number" },
+        "passed": { "minimum": 0, "type": "integer" },
+        "path": { "minLength": 1, "type": "string" },
+        "total": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "index",
+        "label",
+        "path",
+        "metadata",
+        "total",
+        "passed",
+        "failed",
+        "error_count",
+        "pass_rate",
+        "average_score",
+        "failed_rule_counts",
+        "critical_failure_counts",
+        "failed_rule_count",
+        "critical_failure_count",
+        "delta_from_previous"
+      ],
+      "type": "object"
+    }
+  }
+}

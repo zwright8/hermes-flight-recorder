@@ -98,6 +98,14 @@
       "name": "run_suite"
     },
     {
+      "artifact": "suite_trend",
+      "artifact_schema_version": "hfr.suite_trend.v1",
+      "description": "Longitudinal run-suite trend emitted as suite_trend.json by trend-suite.",
+      "filename": "suite_trend.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/suite_trend.v1.schema.json",
+      "name": "suite_trend"
+    },
+    {
       "artifact": "evidence_coverage",
       "artifact_schema_version": "hfr.evidence_coverage.v1",
       "description": "Suite-level evidence attribution coverage emitted as evidence_coverage.json.",

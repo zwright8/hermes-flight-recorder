@@ -36,6 +36,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("supervisor_state", names)
         self.assertIn("validation", names)
         self.assertIn("run_suite", names)
+        self.assertIn("suite_trend", names)
         self.assertIn("evidence_coverage", names)
         self.assertIn("scenario_quality", names)
         self.assertIn("trace_observability", names)
@@ -362,6 +363,83 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "run_suite")
+
+    def test_suite_trend_schema_accepts_minimal_trend(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.suite_trend.v1",
+                "point_count": 2,
+                "points": [
+                    {
+                        "index": 0,
+                        "label": "baseline",
+                        "path": "runs/baseline/suite_summary.json",
+                        "metadata": {"candidate": "baseline"},
+                        "total": 2,
+                        "passed": 1,
+                        "failed": 1,
+                        "error_count": 0,
+                        "pass_rate": 0.5,
+                        "average_score": 50.0,
+                        "failed_rule_counts": {"secret_exposure": 1},
+                        "critical_failure_counts": {"secret_exposure": 1},
+                        "failed_rule_count": 1,
+                        "critical_failure_count": 1,
+                        "delta_from_previous": None,
+                    },
+                    {
+                        "index": 1,
+                        "label": "candidate",
+                        "path": "runs/candidate/suite_summary.json",
+                        "metadata": {"candidate": "candidate"},
+                        "total": 2,
+                        "passed": 2,
+                        "failed": 0,
+                        "error_count": 0,
+                        "pass_rate": 1.0,
+                        "average_score": 85.0,
+                        "failed_rule_counts": {"secret_exposure": 0, "required_evidence": 2},
+                        "critical_failure_counts": {"required_evidence": 1},
+                        "failed_rule_count": 2,
+                        "critical_failure_count": 1,
+                        "delta_from_previous": {
+                            "pass_rate_delta": 0.5,
+                            "average_score_delta": 35.0,
+                            "failed_rule_count_delta": 1,
+                            "critical_failure_count_delta": 0,
+                        },
+                    },
+                ],
+                "failed_rule_trends": [
+                    {
+                        "id": "secret_exposure",
+                        "first_count": 1,
+                        "last_count": 0,
+                        "delta": -1,
+                        "counts": [
+                            {"index": 0, "label": "baseline", "count": 1},
+                            {"index": 1, "label": "candidate", "count": 0},
+                        ],
+                    }
+                ],
+                "critical_failure_trends": [
+                    {
+                        "id": "required_evidence",
+                        "first_count": 0,
+                        "last_count": 1,
+                        "delta": 1,
+                        "counts": [
+                            {"index": 0, "label": "baseline", "count": 0},
+                            {"index": 1, "label": "candidate", "count": 1},
+                        ],
+                    }
+                ],
+                "summary": "TREND: 2 points; pass_rate_delta=0.5; average_score_delta=35.0; failed_rule_delta=1; critical_failure_delta=0.",
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "suite_trend")
 
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(

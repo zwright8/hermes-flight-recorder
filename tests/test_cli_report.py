@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 from flightrecorder.report import render_report
+from flightrecorder.schema_registry import check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1327,6 +1328,8 @@ class CliReportTests(unittest.TestCase):
             )
 
             self.assertEqual(code, 0)
+            schema_result = check_schema_file(out, "suite_trend")
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             trend = json.loads(out.read_text(encoding="utf-8"))
             report = html.read_text(encoding="utf-8")
             self.assertEqual(trend["schema_version"], "hfr.suite_trend.v1")
