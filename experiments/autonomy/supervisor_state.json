@@ -556,6 +556,85 @@
           "summary": "Post-packet branch rebase onto origin/main 48f7660058d8692962f80a075c1e25411cf4f254 completed cleanly."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "branch": "codex/hermes-goal-8-governance-20260702-1027",
+      "branch_sha": "edf46ed7cdfda1f329b96d478fe7c96264e103d8",
+      "completed_at": "2026-07-02T15:25:00Z",
+      "id": "governance_promotion_decision_cards_alias_apply",
+      "implementation_shas": [
+        "99440298b3e18ca2186708c5f1a44a974624ce49",
+        "60e8bf5a82fbcb64860bdad27f9a9a8bbd77c0c1",
+        "6f8a045411752f8c930eb266fc6577fda0828fd1"
+      ],
+      "layer": "governance",
+      "main_integration": {
+        "base_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+        "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+        "lock_status": "acquired",
+        "merge_sha": "db1e2e8302c2df7d1c25242b433b79f626237aa7",
+        "pr_status": "MERGED",
+        "push_main_status": "pushed_and_verified",
+        "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/9",
+        "remote_branch_status": "deleted",
+        "remote_main_verified_sha": "db1e2e8302c2df7d1c25242b433b79f626237aa7"
+      },
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added side-effect-free promotion decisions, model/dataset card generation, and guarded promotion-alias-apply so candidate/champion/rollback aliases move only after a validated passing decision, fresh registered targets, matching live champion alias, and alias-history audit evidence.",
+      "title": "Guard promotion decisions, cards, and registry alias movement",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Touched governance modules compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Focused governance, ledger, and validation tests passed before main integration."
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Full suite passed under Python 3.11 before main integration."
+        }
+      ]
     }
   ],
   "current_packet": {
@@ -563,7 +642,7 @@
     "layer": "harness",
     "priority": "critical",
     "status": "verified_pending_main_delivery",
-    "summary": "PR #3 latest head is merged into the supervisor integration branch and verified; main delivery is pending lock acquisition.",
+    "summary": "PR #3 latest head plus current Governance main are merged and verified; main delivery is pending lock acquisition.",
     "title": "Land auditable harness contracts"
   },
   "git": {
@@ -614,6 +693,45 @@
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
     "remote": "origin",
     "remote_branch_verified_at": "2026-07-02T15:09:17Z"
+  },
+  "governance_main_delivery": {
+    "attempted_at": "2026-07-02T15:09:17Z",
+    "branch_delete_status": "remote_deleted",
+    "branch_deleted_at": "2026-07-02T15:15:04Z",
+    "completed_at": "2026-07-02T15:15:04Z",
+    "integrated_main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
+    "integration_verified_at": "2026-07-02T15:13:16Z",
+    "latest_origin_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+    "lock_release_status": "pending_after_checkpoint_push",
+    "lock_status": "acquired",
+    "merge_base_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+    "merge_conflict_resolution": "Combined supervisor/evidence/harness journal and state with the Data layer checkpoint from origin/main; no code conflicts remained after auto-merge.",
+    "post_checkpoint_main_sha": "63116fb63a0402f9ba362a92591058261354934c",
+    "post_delivery_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; verify the post-checkpoint remote main SHA externally because a commit cannot self-record its own SHA.",
+    "pr_status": "MERGED",
+    "push_main_status": "pushed_and_verified",
+    "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
+    "remote_branch_status": "deleted",
+    "remote_branch_verified_sha": "be9f46c590e709a83afe29c072077b7d888ef356",
+    "remote_main_verified_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
+    "verification": [
+      {
+        "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+        "status": "pass",
+        "summary": "Supervisor state JSON validates after semantic merge."
+      },
+      {
+        "command": "git diff --check",
+        "status": "pass",
+        "summary": "Integrated diff has no whitespace errors."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "status": "pass",
+        "summary": "310 tests passed under Python 3.11.14 after merging current origin/main."
+      }
+    ]
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -774,6 +892,8 @@
         ]
       }
     ],
+    "current_main_merged_at": "2026-07-02T15:29:15Z",
+    "current_main_merged_sha": "63116fb63a0402f9ba362a92591058261354934c",
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
     "latest_head_note": "PR #3 advanced while the main-push lock was unavailable; latest head was merged before any main push attempt.",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
@@ -805,6 +925,11 @@
         "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
         "status": "pass",
         "summary": "314 tests passed after merging the latest PR #3 head dd08db12f0049079de61454364474fa60847c03e."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "status": "pass",
+        "summary": "325 tests passed after merging current origin/main 63116fb63a0402f9ba362a92591058261354934c with Harness PR #3."
       }
     ],
     "verified_latest_head_at": "2026-07-02T15:26:37Z"
@@ -970,6 +1095,11 @@
       "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
       "status": "pass",
       "summary": "314 tests passed after merging the latest PR #3 head dd08db12f0049079de61454364474fa60847c03e."
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "status": "pass",
+      "summary": "325 tests passed after merging current origin/main 63116fb63a0402f9ba362a92591058261354934c with Harness PR #3."
     }
   ],
   "layer_status": {
@@ -989,14 +1119,14 @@
       "summary": "Evidence bundles now require gate decision contracts when gates are included and can require at least one gate summary."
     },
     "governance": {
-      "next_packet": null,
-      "status": "not_started",
-      "summary": "No promotion or alias movement attempted."
+      "next_packet": "governance_release_record",
+      "status": "in_progress",
+      "summary": "Promotion decisions, model/dataset cards, and guarded registry alias application are implemented; release-record binding remains."
     },
     "harness": {
       "next_packet": null,
       "status": "verified_pending_main_delivery",
-      "summary": "PR #3 latest head dd08db12f0049079de61454364474fa60847c03e is merged and passed the full Python 3.11 suite on the supervisor integration branch."
+      "summary": "PR #3 latest head and current governance main passed the full Python 3.11 suite on the supervisor integration branch."
     },
     "model": {
       "next_packet": "model_artifact_contracts",
@@ -1028,12 +1158,12 @@
     "data": "completed",
     "eval": "not_started",
     "evidence": "in_progress",
-    "governance": "not_started",
+    "governance": "in_progress",
     "harness": "verified_pending_main_delivery",
     "model": "ready",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:26:37Z"
+  "updated_at": "2026-07-02T15:29:15Z"
 }
