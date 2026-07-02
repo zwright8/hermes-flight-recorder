@@ -154,7 +154,7 @@
   },
   "git_persistence": {
     "branch": "codex/hermes-goal-5-training-20260702-1027",
-    "implementation_commit_sha": "59ddc118f17c87e2f5da352a39d408ddc4564490",
+    "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
     "remote": "origin",
     "remote_branch_verified": true
@@ -213,5 +213,5 @@
     "The dedicated worktree lacks the broader autonomous-goal docs from the shared checkout, so this state file bootstraps Goal 5 tracking locally."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:46:51Z"
+  "updated_at": "2026-07-02T14:49:08Z"
 }
