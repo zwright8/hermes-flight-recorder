@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import build_gate_decision
+
 COMPARE_GATE_SCHEMA_VERSION = "hfr.compare_gate.v1"
 COMPARE_GATE_POLICY_SCHEMA_VERSION = "hfr.compare_gate.policy.v1"
 
@@ -259,6 +261,18 @@ def evaluate_compare_gate(
         _evaluate_task_family_gate(checks, gate, task_family_rows)
 
     passed = all(check["passed"] for check in checks)
+    gate_metrics = {
+        "pair_count": pair_count,
+        "dpo_count": dpo_count,
+        "candidate_win_count": candidate_win_count,
+        "baseline_win_count": baseline_win_count,
+        "skipped_pair_count": skipped_pair_count,
+        "contract_drift_count": contract_drift_count,
+        "unverified_contract_count": unverified_contract_count,
+        **movement,
+        "task_families": [task_family_rows[family] for family in sorted(task_family_rows)],
+        "validation": _validation_metrics(validation_summary),
+    }
     return {
         "schema_version": COMPARE_GATE_SCHEMA_VERSION,
         "compare_export": str(compare_export_path),
@@ -266,18 +280,8 @@ def evaluate_compare_gate(
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "checks": checks,
-        "metrics": {
-            "pair_count": pair_count,
-            "dpo_count": dpo_count,
-            "candidate_win_count": candidate_win_count,
-            "baseline_win_count": baseline_win_count,
-            "skipped_pair_count": skipped_pair_count,
-            "contract_drift_count": contract_drift_count,
-            "unverified_contract_count": unverified_contract_count,
-            **movement,
-            "task_families": [task_family_rows[family] for family in sorted(task_family_rows)],
-            "validation": _validation_metrics(validation_summary),
-        },
+        "metrics": gate_metrics,
+        "decision": build_gate_decision(passed=passed, checks=checks, metrics=gate_metrics),
     }
 
 

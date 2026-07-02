@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import build_gate_decision
 from .review import REVIEW_CONFIDENCE_LEVELS, REVIEW_LABELS, TRAINING_NEGATIVE_LABELS
 
 REVIEWED_GATE_SCHEMA_VERSION = "hfr.reviewed_gate.v1"
@@ -172,6 +173,23 @@ def evaluate_reviewed_gate(
         _add_presence_check(checks, "require_task_family", family in task_families, {"task_family": family})
 
     passed = all(check["passed"] for check in checks)
+    gate_metrics = {
+        "reviewed_label_count": reviewed_label_count,
+        "accepted_count": accepted_count,
+        "rejected_count": rejected_count,
+        "sft_count": _int_value(manifest.get("sft_count")),
+        "reward_model_count": _int_value(manifest.get("reward_model_count")),
+        "preference_count": _int_value(manifest.get("preference_count")),
+        "dpo_count": _int_value(manifest.get("dpo_count")),
+        "label_counts": label_counts,
+        "confidence_counts": confidence_counts,
+        "high_confidence_label_count": high_confidence_count,
+        "medium_or_high_confidence_label_count": medium_or_high_confidence_count,
+        "low_confidence_label_count": low_confidence_count,
+        "unknown_confidence_label_count": unknown_confidence_count,
+        "task_families": sorted(task_families),
+        "validation": _validation_metrics(validation_summary),
+    }
     return {
         "schema_version": REVIEWED_GATE_SCHEMA_VERSION,
         "reviewed_export": str(reviewed_export_path),
@@ -179,23 +197,8 @@ def evaluate_reviewed_gate(
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "checks": checks,
-        "metrics": {
-            "reviewed_label_count": reviewed_label_count,
-            "accepted_count": accepted_count,
-            "rejected_count": rejected_count,
-            "sft_count": _int_value(manifest.get("sft_count")),
-            "reward_model_count": _int_value(manifest.get("reward_model_count")),
-            "preference_count": _int_value(manifest.get("preference_count")),
-            "dpo_count": _int_value(manifest.get("dpo_count")),
-            "label_counts": label_counts,
-            "confidence_counts": confidence_counts,
-            "high_confidence_label_count": high_confidence_count,
-            "medium_or_high_confidence_label_count": medium_or_high_confidence_count,
-            "low_confidence_label_count": low_confidence_count,
-            "unknown_confidence_label_count": unknown_confidence_count,
-            "task_families": sorted(task_families),
-            "validation": _validation_metrics(validation_summary),
-        },
+        "metrics": gate_metrics,
+        "decision": build_gate_decision(passed=passed, checks=checks, metrics=gate_metrics),
     }
 
 

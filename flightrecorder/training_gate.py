@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import build_gate_decision
+
 TRAINING_GATE_SCHEMA_VERSION = "hfr.training_gate.v1"
 TRAINING_GATE_POLICY_SCHEMA_VERSION = "hfr.training_gate.policy.v1"
 
@@ -312,6 +314,19 @@ def evaluate_training_gate(
         _evaluate_task_family_gate(checks, gate, family_rows)
 
     passed = all(check["passed"] for check in checks)
+    gate_metrics = {
+        "episode_count": dataset_metrics.get("episode_count"),
+        "pass_rate": dataset_metrics.get("pass_rate"),
+        "average_score": dataset_metrics.get("average_score"),
+        "quality_flag_count": len(quality_flags),
+        "source_fingerprint_coverage": source_fingerprint_coverage,
+        "trainer_view_source_fingerprint_coverage": trainer_view_source_fingerprint_coverage,
+        "task_completion": task_completion,
+        "trace_signal": trace_signal,
+        "dataset_splits": dataset_splits,
+        "artifact_counts": artifact_counts,
+        "validation": _validation_metrics(validation_summary),
+    }
     return {
         "schema_version": TRAINING_GATE_SCHEMA_VERSION,
         "training_export": str(training_export_path),
@@ -319,19 +334,8 @@ def evaluate_training_gate(
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "checks": checks,
-        "metrics": {
-            "episode_count": dataset_metrics.get("episode_count"),
-            "pass_rate": dataset_metrics.get("pass_rate"),
-            "average_score": dataset_metrics.get("average_score"),
-            "quality_flag_count": len(quality_flags),
-            "source_fingerprint_coverage": source_fingerprint_coverage,
-            "trainer_view_source_fingerprint_coverage": trainer_view_source_fingerprint_coverage,
-            "task_completion": task_completion,
-            "trace_signal": trace_signal,
-            "dataset_splits": dataset_splits,
-            "artifact_counts": artifact_counts,
-            "validation": _validation_metrics(validation_summary),
-        },
+        "metrics": gate_metrics,
+        "decision": build_gate_decision(passed=passed, checks=checks, metrics=gate_metrics),
     }
 
 

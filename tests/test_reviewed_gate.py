@@ -74,6 +74,9 @@ class ReviewedGateTests(unittest.TestCase):
             self.assertEqual(result["schema_version"], "hfr.reviewed_gate.v1")
             self.assertTrue(result["passed"])
             self.assertEqual(result["failed_check_count"], 0)
+            self.assertEqual(result["decision"]["readiness"], "ready")
+            self.assertEqual(result["decision"]["recommendation"], "promote_iteration")
+            self.assertGreaterEqual(result["decision"]["key_metrics"]["accepted_count"], 2)
             self.assertEqual(result["policy"]["schema_version"], "hfr.reviewed_gate.policy.v1")
             self.assertGreaterEqual(result["metrics"]["accepted_count"], 2)
             self.assertGreaterEqual(result["metrics"]["rejected_count"], 2)
@@ -101,6 +104,8 @@ class ReviewedGateTests(unittest.TestCase):
 
             self.assertEqual(code, 1)
             result = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertEqual(result["decision"]["readiness"], "blocked")
+            self.assertEqual(result["decision"]["blocking_check_count"], 2)
             failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
             self.assertIn("min_reviewed_labels", failed_checks)
             self.assertIn("forbid_label", failed_checks)

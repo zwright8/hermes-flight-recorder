@@ -40,6 +40,9 @@ class TrainingGateTests(unittest.TestCase):
             self.assertEqual(result["schema_version"], "hfr.training_gate.v1")
             self.assertTrue(result["passed"])
             self.assertEqual(result["failed_check_count"], 0)
+            self.assertEqual(result["decision"]["readiness"], "ready")
+            self.assertEqual(result["decision"]["recommendation"], "promote_iteration")
+            self.assertEqual(result["decision"]["key_metrics"]["episode_count"], 7)
             self.assertEqual(result["metrics"]["validation"]["passed"], True)
             self.assertEqual(result["metrics"]["validation"]["error_count"], 0)
             self.assertEqual(result["policy"]["schema_version"], "hfr.training_gate.policy.v1")
@@ -104,6 +107,8 @@ class TrainingGateTests(unittest.TestCase):
 
             self.assertEqual(code, 1)
             result = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertEqual(result["decision"]["readiness"], "blocked")
+            self.assertEqual(result["decision"]["blocking_check_count"], 2)
             failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
             self.assertIn("min_pass_rate", failed_checks)
             self.assertIn("forbid_quality_flag", failed_checks)

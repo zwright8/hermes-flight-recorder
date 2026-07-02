@@ -50,6 +50,9 @@ class CompareGateTests(unittest.TestCase):
             gate = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertEqual(gate["schema_version"], "hfr.compare_gate.v1")
             self.assertTrue(gate["passed"])
+            self.assertEqual(gate["decision"]["readiness"], "ready")
+            self.assertEqual(gate["decision"]["recommendation"], "promote_iteration")
+            self.assertEqual(gate["decision"]["key_metrics"]["candidate_win_count"], 1)
             self.assertEqual(gate["metrics"]["validation"]["passed"], True)
             self.assertEqual(gate["metrics"]["validation"]["error_count"], 0)
             self.assertEqual(gate["metrics"]["candidate_win_count"], 1)
@@ -104,6 +107,8 @@ class CompareGateTests(unittest.TestCase):
             self.assertEqual(code, 1)
             gate = json.loads(gate_path.read_text(encoding="utf-8"))
             self.assertFalse(gate["passed"])
+            self.assertEqual(gate["decision"]["readiness"], "blocked")
+            self.assertEqual(gate["decision"]["blocking_check_count"], 2)
             failed_ids = [check["id"] for check in gate["checks"] if not check["passed"]]
             self.assertIn("min_candidate_wins", failed_ids)
             self.assertIn("require_rule_fix", failed_ids)
