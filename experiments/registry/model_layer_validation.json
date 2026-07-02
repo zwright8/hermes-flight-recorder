@@ -3,7 +3,7 @@
   "passed": true,
   "schema_version": "hfr.validation.v1",
   "strict": true,
-  "target_count": 10,
+  "target_count": 11,
   "targets": [
     {
       "details": {
@@ -78,6 +78,27 @@
     },
     {
       "details": {
+        "candidate_id": "qwen3_4b_instruct_2507",
+        "entry_id": "qwen3_4b_instruct_2507",
+        "metadata_only_count": 6,
+        "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+        "not_run_count": 1,
+        "probe_count": 7,
+        "probe_mode": "metadata_only",
+        "profile_id": "qwen3_4b_instruct_2507_metadata",
+        "provider": "metadata_only",
+        "readiness": "metadata_recorded",
+        "serving_engine": "not_launched",
+        "verified_count": 0
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json",
+      "type": "model_serving_probe_receipt",
+      "warnings": []
+    },
+    {
+      "details": {
         "candidate_id": "local_mock_tiny_chat",
         "entry_id": "local_mock_tiny_chat",
         "license_status": "approved",
@@ -86,6 +107,7 @@
           "datasets": 1,
           "evals": 0,
           "promotion_decisions": 0,
+          "serving_probes": 0,
           "training_runs": 1
         },
         "training_eligible": true
@@ -106,6 +128,7 @@
           "datasets": 1,
           "evals": 0,
           "promotion_decisions": 0,
+          "serving_probes": 1,
           "training_runs": 1
         },
         "training_eligible": true
@@ -129,6 +152,7 @@
           "datasets": 2,
           "evals": 0,
           "promotion_decisions": 0,
+          "serving_probes": 1,
           "training_runs": 2
         },
         "training_eligible_count": 2

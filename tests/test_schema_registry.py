@@ -70,6 +70,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("model_candidate", names)
         self.assertIn("model_scout_manifest", names)
         self.assertIn("model_compatibility_report", names)
+        self.assertIn("model_serving_probe_receipt", names)
         self.assertIn("model_registry_entry", names)
         self.assertIn("model_registry", names)
         self.assertIn("promotion_policy", names)

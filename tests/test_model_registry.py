@@ -18,8 +18,10 @@ from flightrecorder.model_registry import (
     ModelRegistryError,
     build_dry_run_training_plan,
     build_model_compatibility_report,
+    build_model_serving_probe_receipt,
     link_model_registry_artifact,
     model_candidate_errors,
+    model_serving_probe_receipt_errors,
     move_model_alias,
     new_model_registry,
     register_model_candidate,
@@ -204,6 +206,64 @@ class ModelRegistryTests(unittest.TestCase):
                     kind="x",
                 )
 
+    def test_serving_probe_receipt_avoids_launches_and_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            report_path = root / "compatibility_report.json"
+            receipt_path = root / "serving_probe_receipt.json"
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            real_import = __import__
+            heavy_modules = {"accelerate", "datasets", "peft", "torch", "transformers", "trl"}
+
+            def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+                if name.split(".", 1)[0] in heavy_modules:
+                    raise AssertionError(f"heavy ML import attempted: {name}")
+                return real_import(name, globals, locals, fromlist, level)
+
+            with patch("builtins.__import__", side_effect=guarded_import), patch.object(
+                socket,
+                "create_connection",
+                side_effect=AssertionError("network connection attempted"),
+            ), patch.object(subprocess, "Popen", side_effect=AssertionError("process launch attempted")):
+                receipt = build_model_serving_probe_receipt(
+                    registry,
+                    model_ref="candidate",
+                    out_path=receipt_path,
+                    profile_id="local_mock_tiny_chat_metadata",
+                    provider="metadata_only",
+                    serving_engine="not_launched",
+                    base_url="metadata://not-launched",
+                    compatibility_report=report,
+                    compatibility_report_path=report_path,
+                )
+
+            self.assertEqual(model_serving_probe_receipt_errors(receipt), [])
+            self.assertTrue(check_schema_contract(receipt)["passed"])
+            self.assertEqual(receipt["readiness"], "metadata_recorded")
+            self.assertEqual(receipt["recommendation"], "ready_for_external_serving_probe")
+            self.assertFalse(receipt["download_policy"]["downloaded_weights"])
+            self.assertFalse(receipt["download_policy"]["launched_server"])
+            self.assertFalse(receipt["execution"]["flight_recorder_opened_network_connection"])
+            self.assertEqual(receipt["summary"]["probe_count"], 7)
+            write_json(receipt_path, receipt)
+
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="serving_probes",
+                artifact_id="local_mock_tiny_chat_metadata_serving_probe",
+                kind="model_serving_probe_receipt",
+                status="metadata_receipt",
+                path=receipt_path,
+            )
+            links = registry["entries"][candidate["candidate_id"]]["links"]
+            self.assertEqual(len(links["serving_probes"]), 1)
+            self.assertEqual(len(links["serving_probes"][0]["sha256"]), 64)
+
     def test_unknown_license_blocks_training_selection_and_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -306,6 +366,7 @@ class ModelRegistryTests(unittest.TestCase):
             entry_path = root / "registry_entry.json"
             dataset_manifest = root / "dataset_manifest.json"
             plan_path = root / "training_plan.json"
+            receipt_path = root / "serving_probe_receipt.json"
             validation_path = root / "validation.json"
             candidate = approved_candidate()
             write_json(candidate_path, candidate)
@@ -354,6 +415,36 @@ class ModelRegistryTests(unittest.TestCase):
             list_code, list_output = run_cli_output(["model-registry", "list", "--registry", str(registry_path), "--json"])
             self.assertEqual(list_code, 0)
             self.assertEqual(json.loads(list_output)[0]["aliases"], ["candidate"])
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-registry",
+                        "serving-probe-receipt",
+                        "--registry",
+                        str(registry_path),
+                        "--model-ref",
+                        "candidate",
+                        "--out",
+                        str(receipt_path),
+                        "--profile-id",
+                        "local_mock_tiny_chat_metadata",
+                        "--provider",
+                        "metadata_only",
+                        "--serving-engine",
+                        "not_launched",
+                        "--base-url",
+                        "metadata://not-launched",
+                        "--compatibility-report",
+                        str(report_path),
+                        "--link",
+                        "--artifact-id",
+                        "local_mock_tiny_chat_metadata_serving_probe",
+                        "--entry-out",
+                        str(entry_path),
+                    ]
+                ),
+                0,
+            )
             self.assertEqual(
                 run_cli(
                     [
@@ -445,6 +536,8 @@ class ModelRegistryTests(unittest.TestCase):
                         str(candidate_path),
                         "--model-compatibility-report",
                         str(report_path),
+                        "--model-serving-probe-receipt",
+                        str(receipt_path),
                         "--model-registry-entry",
                         str(entry_path),
                         "--model-registry",
@@ -460,10 +553,11 @@ class ModelRegistryTests(unittest.TestCase):
             )
             validation = json.loads(validation_path.read_text(encoding="utf-8"))
             self.assertTrue(validation["passed"], validation["targets"])
-            self.assertEqual(validation["target_count"], 5)
+            self.assertEqual(validation["target_count"], 6)
             registry = json.loads(registry_path.read_text(encoding="utf-8"))
             link_counts = registry["entries"][candidate["candidate_id"]]["links"]
             self.assertEqual(len(link_counts["datasets"]), 1)
+            self.assertEqual(len(link_counts["serving_probes"]), 1)
             self.assertEqual(len(link_counts["training_runs"]), 1)
 
     def test_dry_run_plan_avoids_heavy_imports_network_and_process_launches(self):
@@ -509,12 +603,14 @@ class ModelRegistryTests(unittest.TestCase):
         registry_path = root / "experiments/registry/model_registry.json"
         entry_path = root / "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
         plan_path = root / "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json"
+        receipt_path = root / "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json"
 
         candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
         report = json.loads(report_path.read_text(encoding="utf-8"))
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
         entry = json.loads(entry_path.read_text(encoding="utf-8"))
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
 
         self.assertEqual(model_candidate_errors(candidate, require_training_eligible=True), [])
         self.assertEqual(candidate["license"]["license_id"], "apache-2.0")
@@ -528,6 +624,7 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertTrue(entry["training_eligible"])
         self.assertIn("qwen3_4b_instruct_2507", registry["entries"])
         self.assertEqual(len(entry["links"]["datasets"]), 1)
+        self.assertEqual(len(entry["links"]["serving_probes"]), 1)
         self.assertEqual(len(entry["links"]["training_runs"]), 1)
         self.assertTrue(plan["dry_run"])
         self.assertTrue(plan["no_weight_download"])
@@ -535,6 +632,11 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertFalse(plan["execution"]["flight_recorder_downloaded_weights"])
         self.assertFalse(plan["execution"]["flight_recorder_downloaded_tokenizer"])
         self.assertEqual(plan["model"]["candidate_id"], "qwen3_4b_instruct_2507")
+        self.assertEqual(model_serving_probe_receipt_errors(receipt), [])
+        self.assertEqual(receipt["candidate_id"], "qwen3_4b_instruct_2507")
+        self.assertEqual(receipt["readiness"], "metadata_recorded")
+        self.assertFalse(receipt["download_policy"]["launched_server"])
+        self.assertFalse(receipt["execution"]["flight_recorder_launched_server"])
 
 
 def scout_manifest(

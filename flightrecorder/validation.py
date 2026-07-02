@@ -30,6 +30,7 @@ from .model_registry import (
     MODEL_REGISTRY_ENTRY_SCHEMA_VERSION,
     MODEL_REGISTRY_SCHEMA_VERSION,
     MODEL_SCOUT_MANIFEST_SCHEMA_VERSION,
+    MODEL_SERVING_PROBE_RECEIPT_SCHEMA_VERSION,
     TRAINING_PLAN_SCHEMA_VERSION,
     is_training_license_approved,
     model_candidate_errors,
@@ -37,6 +38,7 @@ from .model_registry import (
     model_registry_entry_errors,
     model_registry_errors,
     model_scout_manifest_errors,
+    model_serving_probe_receipt_errors,
     training_plan_errors,
 )
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
@@ -169,6 +171,7 @@ def validate_artifacts(
     model_scout_manifest_paths: list[str | Path] | None = None,
     model_candidate_paths: list[str | Path] | None = None,
     model_compatibility_report_paths: list[str | Path] | None = None,
+    model_serving_probe_receipt_paths: list[str | Path] | None = None,
     model_registry_entry_paths: list[str | Path] | None = None,
     model_registry_paths: list[str | Path] | None = None,
     training_plan_paths: list[str | Path] | None = None,
@@ -252,6 +255,8 @@ def validate_artifacts(
         targets.append(validate_model_candidate(model_candidate_path))
     for model_compatibility_report_path in model_compatibility_report_paths or []:
         targets.append(validate_model_compatibility_report(model_compatibility_report_path))
+    for model_serving_probe_receipt_path in model_serving_probe_receipt_paths or []:
+        targets.append(validate_model_serving_probe_receipt(model_serving_probe_receipt_path))
     for model_registry_entry_path in model_registry_entry_paths or []:
         targets.append(validate_model_registry_entry(model_registry_entry_path))
     for model_registry_path in model_registry_paths or []:
@@ -971,6 +976,16 @@ def validate_model_compatibility_report(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_model_serving_probe_receipt(path: str | Path) -> ValidationTarget:
+    """Validate a no-download model serving-probe receipt artifact."""
+    receipt_path = Path(path)
+    target = ValidationTarget("model_serving_probe_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "model_serving_probe_receipt.json")
+    if receipt is not None:
+        _validate_model_serving_probe_receipt(receipt, target)
+    return target
+
+
 def validate_model_registry_entry(path: str | Path) -> ValidationTarget:
     """Validate a single model-registry entry artifact."""
     entry_path = Path(path)
@@ -1369,6 +1384,35 @@ def _validate_model_compatibility_report(report: dict[str, Any], target: Validat
             "probe_count": summary.get("probe_count"),
             "verified_count": summary.get("verified_count"),
             "metadata_only_count": summary.get("metadata_only_count"),
+        }
+    )
+
+
+def _validate_model_serving_probe_receipt(receipt: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(
+        receipt,
+        "schema_version",
+        MODEL_SERVING_PROBE_RECEIPT_SCHEMA_VERSION,
+        target,
+        prefix="model_serving_probe_receipt.",
+    )
+    target.errors.extend(model_serving_probe_receipt_errors(receipt))
+    summary = receipt.get("summary") if isinstance(receipt.get("summary"), dict) else {}
+    profile = receipt.get("serving_profile") if isinstance(receipt.get("serving_profile"), dict) else {}
+    target.details.update(
+        {
+            "entry_id": receipt.get("entry_id"),
+            "candidate_id": receipt.get("candidate_id"),
+            "model_id": receipt.get("model_id"),
+            "probe_mode": receipt.get("probe_mode"),
+            "readiness": receipt.get("readiness"),
+            "profile_id": profile.get("profile_id"),
+            "provider": profile.get("provider"),
+            "serving_engine": profile.get("serving_engine"),
+            "probe_count": summary.get("probe_count"),
+            "verified_count": summary.get("verified_count"),
+            "metadata_only_count": summary.get("metadata_only_count"),
+            "not_run_count": summary.get("not_run_count"),
         }
     )
 

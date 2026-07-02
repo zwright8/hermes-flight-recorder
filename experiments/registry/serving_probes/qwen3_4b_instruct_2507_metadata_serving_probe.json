@@ -1,0 +1,163 @@
+{
+  "candidate_id": "qwen3_4b_instruct_2507",
+  "compatibility_report": {
+    "candidate_id": "qwen3_4b_instruct_2507",
+    "download_policy": {
+      "downloaded_tokenizer": false,
+      "downloaded_weights": false,
+      "gpu_execution": false,
+      "imported_heavy_ml": false
+    },
+    "metadata_only_count": 7,
+    "missing_count": 0,
+    "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+    "passed": true,
+    "path": "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json",
+    "probe_count": 8,
+    "readiness": "metadata_recorded",
+    "recommendation": "ready_for_registry_dry_run",
+    "sha256": "d0420af1dc9d5cbd8d7bb584b7f0774bc101d187ca78a1fc16e30da8b46c49b1",
+    "unsupported_count": 1,
+    "verified_count": 0
+  },
+  "download_policy": {
+    "downloaded_tokenizer": false,
+    "downloaded_weights": false,
+    "gpu_execution": false,
+    "imported_heavy_ml": false,
+    "launched_server": false,
+    "network_connection_attempted": false
+  },
+  "entry_id": "qwen3_4b_instruct_2507",
+  "execution": {
+    "external_endpoint_required_for_verification": true,
+    "flight_recorder_downloaded_tokenizer": false,
+    "flight_recorder_downloaded_weights": false,
+    "flight_recorder_imported_heavy_ml": false,
+    "flight_recorder_launched_gpu_job": false,
+    "flight_recorder_launched_server": false,
+    "flight_recorder_opened_network_connection": false
+  },
+  "generated_at": "2026-07-02T16:22:00Z",
+  "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+  "model_ref": "qwen3_4b_instruct_2507",
+  "notes": [
+    "This receipt records serving-probe metadata without downloading weights or tokenizers.",
+    "Flight Recorder did not launch a serving process, open a network connection, or run GPU work.",
+    "A future serving worker must attach verified endpoint evidence before treating serving behavior as verified."
+  ],
+  "passed": true,
+  "probe_mode": "metadata_only",
+  "probes": [
+    {
+      "id": "health",
+      "metadata": {
+        "requires_external_endpoint": true
+      },
+      "notes": "Flight Recorder did not launch a server or open a health-check connection.",
+      "source": "serving_profile",
+      "status": "not_run",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "model_metadata",
+      "metadata": {
+        "model_id": "Qwen/Qwen3-4B-Instruct-2507"
+      },
+      "notes": "Registry candidate metadata is available for an external serving probe.",
+      "source": "model_registry_entry.candidate",
+      "status": "metadata_only",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "chat",
+      "metadata": {
+        "notes": "tokenizer_config.json contains a chat_template; metadata only, no tokenizer vocabulary or tokenizer model files were downloaded.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/tokenizer_config.json",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "tokenizer_config.json contains a chat_template; metadata only, no tokenizer vocabulary or tokenizer model files were downloaded.",
+      "source": "model_candidate.compatibility.chat_template",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "tool_calls",
+      "metadata": {
+        "notes": "Model card Agentic Use section says Qwen3 excels in tool calling and recommends Qwen-Agent; tokenizer_config.json includes tool-call chat template metadata. No runtime tool-call probe was executed.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      },
+      "notes": "Model card Agentic Use section says Qwen3 excels in tool calling and recommends Qwen-Agent; tokenizer_config.json includes tool-call chat template metadata. No runtime tool-call probe was executed.",
+      "source": "model_candidate.compatibility.tool_calls",
+      "status": "metadata_only",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "structured_outputs",
+      "metadata": {
+        "notes": "Structured-output behavior is not explicitly verified by metadata. Treat as unsupported until a serving/tool parser receipt proves it.",
+        "source": "metadata_review",
+        "status": "metadata_only",
+        "supported": false,
+        "verified": false
+      },
+      "notes": "Structured-output behavior is not explicitly verified by metadata. Treat as unsupported until a serving/tool parser receipt proves it.",
+      "source": "model_candidate.compatibility.structured_outputs",
+      "status": "metadata_only",
+      "supported": false,
+      "verified": false
+    },
+    {
+      "id": "context",
+      "metadata": {
+        "context_length": 262144
+      },
+      "notes": "Recorded context length is 262144 tokens; endpoint context handling is not verified.",
+      "source": "model_candidate.compatibility.context_length",
+      "status": "metadata_only",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "memory",
+      "metadata": {
+        "notes": "4.0B bfloat16 model metadata; README warns to reduce context length, for example to 32768, if out-of-memory occurs. No runtime memory probe was executed.",
+        "source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/README.md",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "4.0B bfloat16 model metadata; README warns to reduce context length, for example to 32768, if out-of-memory occurs. No runtime memory probe was executed.",
+      "source": "model_candidate.compatibility.memory",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    }
+  ],
+  "readiness": "metadata_recorded",
+  "receipt_path": "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json",
+  "recommendation": "ready_for_external_serving_probe",
+  "schema_version": "hfr.model_serving_probe_receipt.v1",
+  "serving_profile": {
+    "base_url": "metadata://not-launched/qwen3_4b_instruct_2507",
+    "launched_by_flight_recorder": false,
+    "profile_id": "qwen3_4b_instruct_2507_metadata",
+    "provider": "metadata_only",
+    "serving_engine": "not_launched"
+  },
+  "summary": {
+    "blocked_count": 0,
+    "context_length": 262144,
+    "metadata_only_count": 6,
+    "not_run_count": 1,
+    "probe_count": 7,
+    "verified_count": 0
+  }
+}

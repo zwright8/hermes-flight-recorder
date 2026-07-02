@@ -15,9 +15,10 @@
         "datasets": {"items": {"type": "object"}, "type": "array"},
         "evals": {"items": {"type": "object"}, "type": "array"},
         "promotion_decisions": {"items": {"type": "object"}, "type": "array"},
+        "serving_probes": {"items": {"type": "object"}, "type": "array"},
         "training_runs": {"items": {"type": "object"}, "type": "array"}
       },
-      "required": ["datasets", "training_runs", "adapters", "evals", "promotion_decisions"],
+      "required": ["datasets", "training_runs", "adapters", "evals", "serving_probes", "promotion_decisions"],
       "type": "object"
     },
     "notes": {"items": {"type": "string"}, "type": "array"},

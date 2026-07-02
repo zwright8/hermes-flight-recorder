@@ -394,6 +394,14 @@
       "name": "model_compatibility_report"
     },
     {
+      "artifact": "model_serving_probe_receipt",
+      "artifact_schema_version": "hfr.model_serving_probe_receipt.v1",
+      "description": "No-download serving-probe receipt for model registry entries, endpoint profiles, and compatibility-report links.",
+      "filename": "model_serving_probe_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_serving_probe_receipt.v1.schema.json",
+      "name": "model_serving_probe_receipt"
+    },
+    {
       "artifact": "model_registry_entry",
       "artifact_schema_version": "hfr.model_registry_entry.v1",
       "description": "One model registry entry linking a candidate snapshot to lifecycle metadata.",

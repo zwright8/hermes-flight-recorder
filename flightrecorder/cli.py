@@ -72,6 +72,7 @@ from .model_registry import (
     ModelRegistryError,
     build_dry_run_training_plan,
     build_model_compatibility_report,
+    build_model_serving_probe_receipt,
     link_model_registry_artifact,
     list_model_registry_entries,
     load_model_registry,
@@ -856,6 +857,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         model_scout_manifest_paths=args.model_scout_manifest,
         model_candidate_paths=args.model_candidate,
         model_compatibility_report_paths=args.model_compatibility_report,
+        model_serving_probe_receipt_paths=args.model_serving_probe_receipt,
         model_registry_entry_paths=args.model_registry_entry,
         model_registry_paths=args.model_registry,
         training_plan_paths=args.training_plan,
@@ -1007,6 +1009,50 @@ def cmd_model_registry_link(args: argparse.Namespace) -> int:
         _write_json(Path(args.entry_out), registry["entries"][args.entry])
     print(f"linked {args.collection}:{args.artifact_id} to {args.entry} in {registry_path}")
     return 0
+
+
+def cmd_model_registry_serving_probe_receipt(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    compatibility_report = _read_json(Path(args.compatibility_report)) if args.compatibility_report else None
+    receipt = build_model_serving_probe_receipt(
+        registry,
+        model_ref=args.model_ref,
+        out_path=args.out,
+        profile_id=args.profile_id,
+        provider=args.provider,
+        serving_engine=args.serving_engine,
+        base_url=args.base_url,
+        probe_mode=args.probe_mode,
+        compatibility_report=compatibility_report,
+        compatibility_report_path=args.compatibility_report,
+        preserve_paths=args.preserve_paths,
+    )
+    receipt_path = Path(args.out)
+    _write_json(receipt_path, receipt)
+    if args.link:
+        artifact_id = args.artifact_id or receipt_path.stem
+        registry = link_model_registry_artifact(
+            registry,
+            entry_id=receipt["entry_id"],
+            collection="serving_probes",
+            artifact_id=artifact_id,
+            kind="model_serving_probe_receipt",
+            status=args.link_status,
+            path=receipt_path,
+            metadata={
+                "probe_mode": receipt["probe_mode"],
+                "readiness": receipt["readiness"],
+                "provider": receipt["serving_profile"]["provider"],
+                "serving_engine": receipt["serving_profile"]["serving_engine"],
+            },
+            preserve_paths=args.preserve_paths,
+        )
+        _write_json(registry_path, registry)
+        if args.entry_out:
+            _write_json(Path(args.entry_out), registry["entries"][receipt["entry_id"]])
+    print(f"wrote {args.out}")
+    return 0 if receipt["passed"] else 1
 
 
 def cmd_training_plan_dry_run(args: argparse.Namespace) -> int:
@@ -2234,6 +2280,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one model compatibility report JSON; may be repeated",
     )
     validate.add_argument(
+        "--model-serving-probe-receipt",
+        action="append",
+        default=[],
+        help="Validate one model serving-probe receipt JSON; may be repeated",
+    )
+    validate.add_argument(
         "--model-registry-entry",
         action="append",
         default=[],
@@ -2311,7 +2363,7 @@ def _parser() -> argparse.ArgumentParser:
     model_registry_alias.add_argument("--rollback-target", help="Required when moving champion")
     model_registry_alias.add_argument("--reason", default="", help="Reason recorded in alias history")
     model_registry_alias.set_defaults(func=cmd_model_registry_alias)
-    model_registry_link = model_registry_subparsers.add_parser("link", help="Link dataset, training, adapter, eval, or promotion artifacts")
+    model_registry_link = model_registry_subparsers.add_parser("link", help="Link dataset, training, adapter, eval, serving, or promotion artifacts")
     model_registry_link.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
     model_registry_link.add_argument("--entry", required=True, help="Model registry entry id to update")
     model_registry_link.add_argument("--collection", choices=list(MODEL_REGISTRY_LINK_COLLECTIONS), required=True, help="Link collection to update")
@@ -2324,6 +2376,30 @@ def _parser() -> argparse.ArgumentParser:
     model_registry_link.add_argument("--metadata", action="append", default=[], type=_metadata_arg, help="Attach link metadata KEY=VALUE; may be repeated")
     model_registry_link.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in link records")
     model_registry_link.set_defaults(func=cmd_model_registry_link)
+    model_registry_serving_probe = model_registry_subparsers.add_parser(
+        "serving-probe-receipt",
+        help="Write a no-download model serving-probe receipt and optionally link it to the registry",
+    )
+    model_registry_serving_probe.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    model_registry_serving_probe.add_argument("--model-ref", required=True, help="Registry entry id or alias to resolve")
+    model_registry_serving_probe.add_argument("--out", required=True, help="Write model serving-probe receipt JSON to this path")
+    model_registry_serving_probe.add_argument("--profile-id", required=True, help="Stable serving profile id")
+    model_registry_serving_probe.add_argument("--provider", required=True, help="Serving provider label, such as metadata_only or local")
+    model_registry_serving_probe.add_argument("--serving-engine", required=True, help="Serving engine label, such as vllm-compatible")
+    model_registry_serving_probe.add_argument("--base-url", required=True, help="Endpoint URL or metadata-only placeholder")
+    model_registry_serving_probe.add_argument(
+        "--probe-mode",
+        choices=["metadata_only", "external_receipt"],
+        default="metadata_only",
+        help="Receipt mode; metadata_only records no endpoint execution",
+    )
+    model_registry_serving_probe.add_argument("--compatibility-report", help="Optional model compatibility report JSON to bind by hash")
+    model_registry_serving_probe.add_argument("--link", action="store_true", help="Link the written receipt under registry links.serving_probes")
+    model_registry_serving_probe.add_argument("--artifact-id", help="Stable linked artifact id; defaults to output filename stem")
+    model_registry_serving_probe.add_argument("--link-status", default="metadata_receipt", help="Registry link lifecycle status")
+    model_registry_serving_probe.add_argument("--entry-out", help="Optionally write the updated registry entry JSON when --link is used")
+    model_registry_serving_probe.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated receipt and link records")
+    model_registry_serving_probe.set_defaults(func=cmd_model_registry_serving_probe_receipt)
 
     training_plan = subparsers.add_parser("training-plan", help="Generate dry-run training plans")
     training_plan_subparsers = training_plan.add_subparsers(dest="training_plan_command", required=True)
