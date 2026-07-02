@@ -521,6 +521,29 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["schemas", "--check", str(consumer_plan)]), 0)
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
 
+            forged_plan = Path(tmp) / "trainer_consumer_plan_forged_validation.json"
+            forged_summary = Path(tmp) / "trainer_consumer_plan_forged_validation_summary.json"
+            forged = json.loads(json.dumps(plan))
+            forged["validation"]["passed"] = True
+            forged["validation"]["error_count"] = 1
+            forged["validation"]["errors"] = ["forged validation failure"]
+            forged["metrics"]["archive_check_error_count"] = 1
+            forged_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(forged_plan),
+                    "--strict",
+                    "--out",
+                    str(forged_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan.validation.passed", errors)
+
             wrapper_receipt = Path(tmp) / "trainer_wrapper_dry_run.json"
             wrapper = subprocess.run(
                 [

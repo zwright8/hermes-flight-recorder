@@ -536,6 +536,10 @@ needing the original producer's local paths.
 `trainer-consumer-plan` then records the exact approved command argv, archive
 root, external code file hashes, trainer input hashes, and launcher invariants
 that the external wrapper should require. It is still a plan, not a runner.
+Validation summaries embedded in the archive check, consumer plan, and wrapper
+dry-run receipts must include targets and internally consistent pass/error/
+warning counts, so a ready handoff cannot hide failed validation behind a
+forged `passed` flag.
 The reference wrapper in `examples/trainer-wrapper/` demonstrates how an
 external launcher can validate that plan and emit a dry-run receipt before a
 real trainer takes over. That receipt can also be checked with

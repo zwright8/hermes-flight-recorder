@@ -11044,16 +11044,13 @@ def _validate_trainer_archive_check(check: dict[str, Any], target: ValidationTar
 
 
 def _validate_trainer_archive_check_validation(value: dict[str, Any], target: ValidationTarget) -> None:
-    for field_name in ("available", "passed", "strict"):
-        if not isinstance(value.get(field_name), bool):
-            target.errors.append(f"trainer_archive_check.validation.{field_name} must be a boolean.")
-    for field_name in ("target_count", "error_count", "warning_count"):
-        if not _is_non_negative_int(value.get(field_name)):
-            target.errors.append(f"trainer_archive_check.validation.{field_name} must be a non-negative integer.")
-    if not _is_string_list(value.get("errors")):
-        target.errors.append("trainer_archive_check.validation.errors must be a list of strings.")
-    if not _is_string_list(value.get("warnings")):
-        target.errors.append("trainer_archive_check.validation.warnings must be a list of strings.")
+    _validate_trainer_compact_validation_record(
+        value,
+        target,
+        "trainer_archive_check.validation",
+        has_available=True,
+        has_messages=True,
+    )
 
 
 def _validate_trainer_archive_check_archive(value: Any, target: ValidationTarget) -> None:
@@ -11343,16 +11340,13 @@ def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarg
 
 
 def _validate_trainer_consumer_plan_validation(value: dict[str, Any], target: ValidationTarget) -> None:
-    for field_name in ("available", "passed", "strict"):
-        if not isinstance(value.get(field_name), bool):
-            target.errors.append(f"trainer_consumer_plan.validation.{field_name} must be a boolean.")
-    for field_name in ("target_count", "error_count", "warning_count"):
-        if not _is_non_negative_int(value.get(field_name)):
-            target.errors.append(f"trainer_consumer_plan.validation.{field_name} must be a non-negative integer.")
-    if not _is_string_list(value.get("errors")):
-        target.errors.append("trainer_consumer_plan.validation.errors must be a list of strings.")
-    if not _is_string_list(value.get("warnings")):
-        target.errors.append("trainer_consumer_plan.validation.warnings must be a list of strings.")
+    _validate_trainer_compact_validation_record(
+        value,
+        target,
+        "trainer_consumer_plan.validation",
+        has_available=True,
+        has_messages=True,
+    )
 
 
 def _validate_trainer_consumer_plan_source(value: Any, target: ValidationTarget) -> None:
@@ -11608,12 +11602,54 @@ def _validate_trainer_wrapper_dry_run(receipt: dict[str, Any], target: Validatio
 
 
 def _validate_trainer_wrapper_validation(value: dict[str, Any], target: ValidationTarget) -> None:
-    for field_name in ("passed", "strict"):
+    _validate_trainer_compact_validation_record(
+        value,
+        target,
+        "trainer_wrapper_dry_run.validation",
+        has_available=False,
+        has_messages=False,
+    )
+
+
+def _validate_trainer_compact_validation_record(
+    value: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    *,
+    has_available: bool,
+    has_messages: bool,
+) -> None:
+    bool_fields = ("available", "passed", "strict") if has_available else ("passed", "strict")
+    for field_name in bool_fields:
         if not isinstance(value.get(field_name), bool):
-            target.errors.append(f"trainer_wrapper_dry_run.validation.{field_name} must be a boolean.")
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
     for field_name in ("target_count", "error_count", "warning_count"):
         if not _is_non_negative_int(value.get(field_name)):
-            target.errors.append(f"trainer_wrapper_dry_run.validation.{field_name} must be a non-negative integer.")
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    if has_messages:
+        if not _is_string_list(value.get("errors")):
+            target.errors.append(f"{label}.errors must be a list of strings.")
+        if not _is_string_list(value.get("warnings")):
+            target.errors.append(f"{label}.warnings must be a list of strings.")
+
+    if has_available and value.get("available") is False and value.get("passed") is True:
+        target.errors.append(f"{label}.passed cannot be true when validation is unavailable.")
+    if not all(_is_non_negative_int(value.get(field_name)) for field_name in ("target_count", "error_count", "warning_count")):
+        return
+    if not isinstance(value.get("passed"), bool) or not isinstance(value.get("strict"), bool):
+        return
+    expected_passed = (
+        value["target_count"] > 0
+        and value["error_count"] == 0
+        and (value["warning_count"] == 0 or value.get("strict") is not True)
+    )
+    if value["passed"] != expected_passed:
+        target.errors.append(f"{label}.passed expected {expected_passed}, got {value.get('passed')!r}.")
+    if has_messages:
+        if value["error_count"] > 0 and isinstance(value.get("errors"), list) and not value["errors"]:
+            target.errors.append(f"{label}.errors must explain nonzero error_count.")
+        if value["warning_count"] > 0 and isinstance(value.get("warnings"), list) and not value["warnings"]:
+            target.errors.append(f"{label}.warnings must explain nonzero warning_count.")
 
 
 def _validate_trainer_wrapper_would_run(value: dict[str, Any], target: ValidationTarget) -> int:
