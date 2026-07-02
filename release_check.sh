@@ -1164,7 +1164,9 @@ fi
   --require-passed \
   --out runs/promotion_decision.json >/dev/null
 test -f runs/promotion_decision.json
+"$PYTHON" -m flightrecorder schemas --check runs/promotion_decision.json >/dev/null
 cp runs/promotion_decision.json runs/promotion_decision_previous.json
+"$PYTHON" -m flightrecorder schemas --check runs/promotion_decision_previous.json >/dev/null
 "$PYTHON" -m flightrecorder promotion-ledger \
   --decision-gate runs/promotion_decision_previous.json \
   --decision-gate runs/promotion_decision.json \

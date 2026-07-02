@@ -104,6 +104,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("promotion_alias_apply", names)
         self.assertIn("promotion_cards", names)
         self.assertIn("promotion_decision", names)
+        self.assertIn("decision_gate", names)
         self.assertIn("promotion_ledger", names)
         self.assertIn("promotion_ledger_gate", names)
         self.assertIn("promotion_policy", names)
@@ -671,6 +672,51 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "training_gate")
+
+    def test_decision_gate_schema_accepts_minimal_gate(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.decision_gate.v1",
+                "artifact": "runs/action_ledger_gate.json",
+                "source_artifact": {
+                    "path": "runs/action_ledger_gate.json",
+                    "kind": "file",
+                    "exists": True,
+                    "sha256": "0" * 64,
+                    "size_bytes": 1234,
+                },
+                "passed": True,
+                "readiness": "ready",
+                "recommendation": "allow_promotion",
+                "expected_recommendation": "promote_iteration",
+                "expected_readiness": "ready",
+                "require_passed": True,
+                "check_count": 1,
+                "failed_check_count": 0,
+                "checks": [
+                    {
+                        "id": "recommendation_matches",
+                        "passed": True,
+                        "actual": {"recommendation": "promote_iteration"},
+                        "expected": {"recommendation": "promote_iteration"},
+                        "summary": "recommendation_matches: actual='promote_iteration', expected='promote_iteration'",
+                    }
+                ],
+                "source_decision": {
+                    "schema_version": "hfr.action_ledger_gate.v1",
+                    "passed": True,
+                    "recommendation": "promote_iteration",
+                    "readiness": "ready",
+                    "summary": "Action ledger gate is ready.",
+                    "blocking_check_count": 0,
+                    "key_metrics": {"open_action_count": 1},
+                },
+                "notes": ["Decision gate fixture."],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "decision_gate")
 
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(

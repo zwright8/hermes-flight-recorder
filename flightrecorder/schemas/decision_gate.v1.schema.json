@@ -1,0 +1,94 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/decision_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free gate over a source artifact decision recommendation.",
+  "properties": {
+    "artifact": { "minLength": 1, "type": "string" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "expected_readiness": { "type": ["string", "null"] },
+    "expected_recommendation": { "minLength": 1, "type": "string" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["blocked", "ready"], "type": "string" },
+    "recommendation": { "enum": ["allow_promotion", "block_promotion"], "type": "string" },
+    "require_passed": { "type": "boolean" },
+    "schema_version": { "const": "hfr.decision_gate.v1" },
+    "source_artifact": { "$ref": "#/$defs/source_artifact" },
+    "source_decision": { "$ref": "#/$defs/source_decision" }
+  },
+  "required": [
+    "schema_version",
+    "artifact",
+    "source_artifact",
+    "passed",
+    "readiness",
+    "recommendation",
+    "expected_recommendation",
+    "expected_readiness",
+    "require_passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "source_decision",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Decision Gate",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": { "type": "object" },
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "source_artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "kind": { "const": "file" },
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["path", "kind", "exists", "sha256", "size_bytes"],
+      "type": "object"
+    },
+    "source_decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": { "minimum": 0, "type": ["integer", "null"] },
+        "key_metrics": { "type": "object" },
+        "passed": { "type": ["boolean", "null"] },
+        "readiness": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "schema_version": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": [
+        "schema_version",
+        "passed",
+        "recommendation",
+        "readiness",
+        "summary",
+        "blocking_check_count",
+        "key_metrics"
+      ],
+      "type": "object"
+    }
+  }
+}

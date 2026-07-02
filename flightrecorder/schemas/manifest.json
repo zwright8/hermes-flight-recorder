@@ -674,6 +674,14 @@
       "name": "promotion_decision"
     },
     {
+      "artifact": "decision_gate",
+      "artifact_schema_version": "hfr.decision_gate.v1",
+      "description": "Side-effect-free gate over a source artifact decision recommendation.",
+      "filename": "decision_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/decision_gate.v1.schema.json",
+      "name": "decision_gate"
+    },
+    {
       "artifact": "promotion_ledger",
       "artifact_schema_version": "hfr.promotion_ledger.v1",
       "description": "Longitudinal ledger over promotion decision gates.",
