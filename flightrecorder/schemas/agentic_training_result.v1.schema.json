@@ -1,0 +1,484 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free result receipt for externally executed agentic training runs.",
+  "properties": {
+    "artifact_path": {
+      "type": "string"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/artifactRef"
+      },
+      "type": "array"
+    },
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/executionBoundary"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "failure": {
+      "$ref": "#/$defs/failure"
+    },
+    "handoff_contract": {
+      "$ref": "#/$defs/handoffContract"
+    },
+    "lineage": {
+      "$ref": "#/$defs/lineage"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "register_training_result",
+        "register_training_failure",
+        "block_training_result_registration"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.agentic_training_result.v1"
+    },
+    "training_result": {
+      "$ref": "#/$defs/trainingResult"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "artifact_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "training_result",
+    "lineage",
+    "failure",
+    "artifacts",
+    "metrics",
+    "execution_boundary",
+    "handoff_contract",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Training Result",
+  "type": "object",
+  "$defs": {
+    "artifactRef": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "regular_file",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": true,
+      "properties": {
+        "archive_only": {
+          "const": true
+        },
+        "flight_recorder_launched_training": {
+          "const": false
+        },
+        "model_downloads_started_by_flight_recorder": {
+          "const": false
+        },
+        "runner_owns_execution": {
+          "const": true
+        },
+        "trainer_modules_imported_by_flight_recorder": {
+          "const": false
+        },
+        "training_started_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "archive_only",
+        "runner_owns_execution",
+        "flight_recorder_launched_training",
+        "training_started_by_flight_recorder",
+        "model_downloads_started_by_flight_recorder",
+        "trainer_modules_imported_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "failure": {
+      "additionalProperties": true,
+      "properties": {
+        "class": {
+          "enum": [
+            "none",
+            "runtime_preflight_blocked",
+            "dependency_missing",
+            "view_validation_failed",
+            "trainer_crash",
+            "out_of_memory",
+            "timeout",
+            "interrupted",
+            "license_or_redaction_block",
+            "artifact_missing",
+            "unknown"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "recoverable": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "message",
+        "recoverable",
+        "source"
+      ],
+      "type": "object"
+    },
+    "handoffContract": {
+      "additionalProperties": true,
+      "properties": {
+        "flight_recorder_launched_training": {
+          "const": false
+        },
+        "model_downloads_started_by_flight_recorder": {
+          "const": false
+        },
+        "requires_agentic_training_plan": {
+          "const": true
+        },
+        "requires_classified_failure_for_non_completed": {
+          "const": true
+        },
+        "requires_output_artifact_for_completed": {
+          "const": true
+        },
+        "requires_redacted_dataset": {
+          "const": true
+        },
+        "requires_registered_dataset": {
+          "const": true
+        },
+        "requires_registered_model": {
+          "const": true
+        },
+        "requires_runtime_preflight": {
+          "const": true
+        },
+        "requires_runtime_ready_for_completed": {
+          "const": true
+        },
+        "runner_owns_execution": {
+          "const": true
+        }
+      },
+      "required": [
+        "runner_owns_execution",
+        "requires_agentic_training_plan",
+        "requires_runtime_preflight",
+        "requires_runtime_ready_for_completed",
+        "requires_classified_failure_for_non_completed",
+        "requires_output_artifact_for_completed",
+        "requires_registered_model",
+        "requires_registered_dataset",
+        "requires_redacted_dataset",
+        "flight_recorder_launched_training",
+        "model_downloads_started_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "lineage": {
+      "additionalProperties": true,
+      "properties": {
+        "dataset": {
+          "$ref": "#/$defs/manifestRef"
+        },
+        "model": {
+          "$ref": "#/$defs/manifestRef"
+        },
+        "plan": {
+          "$ref": "#/$defs/lineageRef"
+        },
+        "runtime_preflight": {
+          "$ref": "#/$defs/lineageRef"
+        }
+      },
+      "required": [
+        "plan",
+        "runtime_preflight",
+        "model",
+        "dataset"
+      ],
+      "type": "object"
+    },
+    "lineageRef": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "schema_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "regular_file",
+        "schema_name",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "manifestRef": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "license_allows_training": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "sha256",
+        "license_allows_training"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "adapter_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "artifact_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "checkpoint_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "config_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failure_report_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "log_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "metrics_file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_artifact_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "regular_artifact_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifact_count",
+        "regular_artifact_count",
+        "output_artifact_count",
+        "config_count",
+        "metrics_file_count",
+        "adapter_count",
+        "checkpoint_count",
+        "log_count",
+        "failure_report_count"
+      ],
+      "type": "object"
+    },
+    "trainingResult": {
+      "additionalProperties": true,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "external_runner_reported_status": {
+          "enum": [
+            "completed",
+            "failed",
+            "blocked",
+            "aborted"
+          ]
+        },
+        "flight_recorder_executed_training": {
+          "const": false
+        },
+        "mode": {
+          "type": "string"
+        },
+        "model_downloads_started_by_flight_recorder": {
+          "const": false
+        },
+        "output_dir": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "runner_id": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed",
+            "blocked",
+            "aborted"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "runner_id",
+        "run_id",
+        "mode",
+        "backend",
+        "output_dir",
+        "external_runner_reported_status",
+        "flight_recorder_executed_training",
+        "model_downloads_started_by_flight_recorder"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -537,6 +537,14 @@ records `training_started: false`, `model_downloads_started: false`, and
 `recommendation: ready_for_tiny_smoke_launch` as the next handoff condition;
 blocked runtime-preflight artifacts are still schema-checkable failure
 evidence.
+When an external runner finishes or fails, archive that outcome with
+`scripts/archive_agentic_training_result.py`. It emits
+`hfr.agentic_training_result.v1`, verifies the plan and runtime-preflight
+lineage, requires a ready runtime preflight plus an adapter or checkpoint for
+`--status completed`, and requires a classified failure for `failed`, `blocked`,
+or `aborted` outcomes. The result receipt fingerprints supplied configs,
+metrics, adapters, checkpoints, logs, and failure reports without launching a
+trainer or importing trainer stacks.
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle
 runs/evidence_bundle_trainer.json --strict` before handing the package to an

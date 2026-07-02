@@ -14,6 +14,7 @@ include scripts/external_verification_smoke.py
 include scripts/live_verifier_smoke.py
 include scripts/plan_agentic_training.py
 include scripts/preflight_agentic_training_runtime.py
+include scripts/archive_agentic_training_result.py
 recursive-include flightrecorder/schemas *.json
 recursive-include scenarios *.json
 recursive-include fixtures *.jsonl *.json

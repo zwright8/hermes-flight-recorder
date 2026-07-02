@@ -113,6 +113,30 @@ The command exits `0` for `ready_for_tiny_smoke_launch` and `1` for
 `block_tiny_smoke_launch`; blocked artifacts are still schema-checkable so they
 can be archived as failure evidence.
 
+## Result Receipts
+
+After an external runner finishes, fails, or blocks before tiny smoke launch,
+use `scripts/archive_agentic_training_result.py` to emit
+`hfr.agentic_training_result.v1`:
+
+```bash
+python3 scripts/archive_agentic_training_result.py \
+  --plan runs/agentic_training_plan.json \
+  --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --status completed \
+  --adapter runs/adapters/candidate/adapter.safetensors \
+  --metrics runs/adapters/candidate/metrics.json \
+  --out runs/agentic_training_result.json
+```
+
+Completed receipts require a ready runtime preflight plus at least one adapter
+or checkpoint artifact. Failed, blocked, and aborted receipts require a
+classified failure such as `dependency_missing`, `view_validation_failed`,
+`trainer_crash`, `out_of_memory`, `timeout`, or `interrupted`. The receipt only
+fingerprints supplied files and records lineage back to the plan and runtime
+preflight; Flight Recorder still does not launch trainers, import trainer
+stacks, download models, or mutate weights.
+
 ## Durable Example
 
 The repository includes a tiny synthetic fixture under
@@ -158,7 +182,9 @@ python3 -m unittest tests.test_schema_registry.SchemaRegistryTests.test_catalog_
 python3 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py
 python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force
 python3 -m flightrecorder schemas --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-runtime-preflight-schema --force
+python3 -m flightrecorder schemas --name agentic_training_result --write-dir /tmp/hfr-agentic-training-result-schema --force
 python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --out /tmp/hfr-agentic-runtime-preflight/ready.json
+python3 -m unittest tests.test_agentic_training_result
 python3 -m unittest tests.test_trainer_preflight.TrainerPreflightTests.test_trainer_preflight_archives_agentic_training_plan
 ```
 

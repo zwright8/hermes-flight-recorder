@@ -72,6 +72,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("trainer_archive", names)
         self.assertIn("agentic_training_plan", names)
         self.assertIn("agentic_training_runtime_preflight", names)
+        self.assertIn("agentic_training_result", names)
         self.assertIn("model_candidate", names)
         self.assertIn("model_scout_manifest", names)
         self.assertIn("model_compatibility_report", names)

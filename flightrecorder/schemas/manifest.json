@@ -410,6 +410,14 @@
       "name": "agentic_training_runtime_preflight"
     },
     {
+      "artifact": "agentic_training_result",
+      "artifact_schema_version": "hfr.agentic_training_result.v1",
+      "description": "Side-effect-free result receipt for externally executed agentic training runs.",
+      "filename": "agentic_training_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_training_result.v1.schema.json",
+      "name": "agentic_training_result"
+    },
+    {
       "artifact": "model_candidate",
       "artifact_schema_version": "hfr.model_candidate.v1",
       "description": "Base-model scouting candidate with source, license review, terms, and compatibility metadata.",
