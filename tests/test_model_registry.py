@@ -17,9 +17,11 @@ from flightrecorder.model_registry import (
     MODEL_SCOUT_MANIFEST_SCHEMA_VERSION,
     ModelRegistryError,
     build_dry_run_training_plan,
+    build_model_adapter_manifest,
     build_model_compatibility_report,
     build_model_serving_probe_receipt,
     link_model_registry_artifact,
+    model_adapter_manifest_errors,
     model_candidate_errors,
     model_serving_probe_receipt_errors,
     move_model_alias,
@@ -264,6 +266,103 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(len(links["serving_probes"]), 1)
             self.assertEqual(len(links["serving_probes"][0]["sha256"]), 64)
 
+    def test_adapter_manifest_links_planned_adapter_without_materialization(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            plan_path = root / "training_plan.json"
+            adapter_path = root / "adapter_manifest.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+            )
+            write_json(plan_path, plan)
+            real_import = __import__
+            heavy_modules = {"accelerate", "datasets", "peft", "torch", "transformers", "trl"}
+
+            def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+                if name.split(".", 1)[0] in heavy_modules:
+                    raise AssertionError(f"heavy ML import attempted: {name}")
+                return real_import(name, globals, locals, fromlist, level)
+
+            with patch("builtins.__import__", side_effect=guarded_import), patch.object(
+                socket,
+                "create_connection",
+                side_effect=AssertionError("network connection attempted"),
+            ), patch.object(subprocess, "Popen", side_effect=AssertionError("process launch attempted")):
+                manifest = build_model_adapter_manifest(
+                    registry,
+                    model_ref="candidate",
+                    adapter_id="local_mock_tiny_chat_sft_adapter",
+                    training_plan=plan,
+                    training_plan_path=plan_path,
+                    out_path=adapter_path,
+                )
+
+            self.assertEqual(model_adapter_manifest_errors(manifest), [])
+            self.assertTrue(check_schema_contract(manifest)["passed"])
+            self.assertFalse(manifest["execution"]["flight_recorder_materialized_adapter"])
+            write_json(adapter_path, manifest)
+
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="adapters",
+                artifact_id=manifest["adapter_id"],
+                kind=manifest["registry_link"]["kind"],
+                status=manifest["registry_link"]["status"],
+                path=adapter_path,
+                metadata={"training_plan_sha256": manifest["training_plan"]["sha256"]},
+            )
+            links = registry["entries"][candidate["candidate_id"]]["links"]
+            self.assertEqual(len(links["adapters"]), 1)
+            self.assertEqual(links["adapters"][0]["kind"], "model_adapter_manifest")
+            self.assertEqual(len(links["adapters"][0]["sha256"]), 64)
+
+    def test_adapter_manifest_requires_matching_training_plan_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = approved_candidate("first-model")
+            second = approved_candidate("second-model")
+            dataset_manifest = root / "dataset_manifest.json"
+            plan_path = root / "training_plan.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = new_model_registry(registry_path=root / "model_registry.json")
+            registry = register_model_candidate(registry, first)
+            registry = register_model_candidate(registry, second)
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref=first["candidate_id"],
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+            )
+            write_json(plan_path, plan)
+
+            with self.assertRaises(ModelRegistryError) as raised:
+                build_model_adapter_manifest(
+                    registry,
+                    model_ref=second["candidate_id"],
+                    adapter_id="mismatched_adapter",
+                    training_plan=plan,
+                    training_plan_path=plan_path,
+                    out_path=root / "adapter_manifest.json",
+                )
+            self.assertIn("training_plan.model.entry_id must match", str(raised.exception))
+
     def test_unknown_license_blocks_training_selection_and_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -367,6 +466,7 @@ class ModelRegistryTests(unittest.TestCase):
             dataset_manifest = root / "dataset_manifest.json"
             plan_path = root / "training_plan.json"
             receipt_path = root / "serving_probe_receipt.json"
+            adapter_path = root / "adapter_manifest.json"
             validation_path = root / "validation.json"
             candidate = approved_candidate()
             write_json(candidate_path, candidate)
@@ -480,6 +580,28 @@ class ModelRegistryTests(unittest.TestCase):
                 run_cli(
                     [
                         "model-registry",
+                        "adapter-manifest",
+                        "--registry",
+                        str(registry_path),
+                        "--model-ref",
+                        "candidate",
+                        "--adapter-id",
+                        "local_mock_tiny_chat_sft_adapter",
+                        "--training-plan",
+                        str(plan_path),
+                        "--out",
+                        str(adapter_path),
+                        "--link",
+                        "--entry-out",
+                        str(entry_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-registry",
                         "link",
                         "--registry",
                         str(registry_path),
@@ -538,6 +660,8 @@ class ModelRegistryTests(unittest.TestCase):
                         str(report_path),
                         "--model-serving-probe-receipt",
                         str(receipt_path),
+                        "--model-adapter-manifest",
+                        str(adapter_path),
                         "--model-registry-entry",
                         str(entry_path),
                         "--model-registry",
@@ -553,9 +677,10 @@ class ModelRegistryTests(unittest.TestCase):
             )
             validation = json.loads(validation_path.read_text(encoding="utf-8"))
             self.assertTrue(validation["passed"], validation["targets"])
-            self.assertEqual(validation["target_count"], 6)
+            self.assertEqual(validation["target_count"], 7)
             registry = json.loads(registry_path.read_text(encoding="utf-8"))
             link_counts = registry["entries"][candidate["candidate_id"]]["links"]
+            self.assertEqual(len(link_counts["adapters"]), 1)
             self.assertEqual(len(link_counts["datasets"]), 1)
             self.assertEqual(len(link_counts["serving_probes"]), 1)
             self.assertEqual(len(link_counts["training_runs"]), 1)

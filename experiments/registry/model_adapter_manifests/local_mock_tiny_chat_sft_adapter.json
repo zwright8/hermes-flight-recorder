@@ -1,0 +1,84 @@
+{
+  "adapter_id": "local_mock_tiny_chat_sft_adapter",
+  "adapter_kind": "lora",
+  "base_model": {
+    "candidate_id": "local_mock_tiny_chat",
+    "entry_id": "local_mock_tiny_chat",
+    "license_status": "approved",
+    "model_id": "local/mock-tiny-chat",
+    "model_ref": "local_mock_tiny_chat",
+    "training_eligible": true
+  },
+  "blocked_reasons": [],
+  "checks": [
+    {
+      "id": "base_model_training_eligible",
+      "passed": true,
+      "summary": "base model registry entry is eligible for training selection"
+    },
+    {
+      "id": "training_plan_matches_model",
+      "passed": true,
+      "summary": "dry-run training plan matches the selected base model"
+    },
+    {
+      "id": "training_plan_dry_run_only",
+      "passed": true,
+      "summary": "training plan records no weight downloads, heavy ML imports, or GPU execution"
+    },
+    {
+      "id": "adapter_not_materialized",
+      "passed": true,
+      "summary": "Flight Recorder recorded adapter intent but did not create adapter weights"
+    }
+  ],
+  "download_policy": {
+    "downloaded_tokenizer": false,
+    "downloaded_weights": false,
+    "gpu_execution": false,
+    "imported_heavy_ml": false,
+    "launched_training_job": false
+  },
+  "execution": {
+    "flight_recorder_downloaded_tokenizer": false,
+    "flight_recorder_downloaded_weights": false,
+    "flight_recorder_imported_heavy_ml": false,
+    "flight_recorder_launched_gpu_job": false,
+    "flight_recorder_launched_training_job": false,
+    "flight_recorder_materialized_adapter": false,
+    "runner_must_revalidate_adapter": true
+  },
+  "generated_at": "2026-07-02T20:36:55Z",
+  "manifest_path": "experiments/registry/model_adapter_manifests/local_mock_tiny_chat_sft_adapter.json",
+  "notes": [
+    "This adapter manifest records planned adapter identity only; it does not contain weights.",
+    "Training and serving workers must revalidate model, dataset, adapter path, and runtime checks before execution."
+  ],
+  "output": {
+    "materialized_adapter": false,
+    "planned_output_dir": "experiments/registry/training_outputs/local_mock_tiny_chat"
+  },
+  "passed": true,
+  "readiness": "planned",
+  "recommendation": "ready_for_training_worker",
+  "registry_link": {
+    "artifact_id": "local_mock_tiny_chat_sft_adapter",
+    "collection": "adapters",
+    "kind": "model_adapter_manifest",
+    "status": "planned_adapter"
+  },
+  "schema_version": "hfr.model_adapter_manifest.v1",
+  "status": "planned",
+  "training_plan": {
+    "candidate_id": "local_mock_tiny_chat",
+    "dataset_id": "local_mock_dataset_v1",
+    "dry_run": true,
+    "gpu_execution": false,
+    "mode": "sft",
+    "model_id": "local/mock-tiny-chat",
+    "no_weight_download": true,
+    "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+    "sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8",
+    "trainer": "local-dry-run"
+  }
+}

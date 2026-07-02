@@ -13,6 +13,7 @@ MODEL_CANDIDATE_SCHEMA_VERSION = "hfr.model_candidate.v1"
 MODEL_SCOUT_MANIFEST_SCHEMA_VERSION = "hfr.model_scout_manifest.v1"
 MODEL_COMPATIBILITY_REPORT_SCHEMA_VERSION = "hfr.model_compatibility_report.v1"
 MODEL_SERVING_PROBE_RECEIPT_SCHEMA_VERSION = "hfr.model_serving_probe_receipt.v1"
+MODEL_ADAPTER_MANIFEST_SCHEMA_VERSION = "hfr.model_adapter_manifest.v1"
 MODEL_REGISTRY_ENTRY_SCHEMA_VERSION = "hfr.model_registry_entry.v1"
 MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
 TRAINING_PLAN_SCHEMA_VERSION = "hfr.training_plan.v1"
@@ -46,6 +47,7 @@ SERVING_PROBE_RECEIPT_PROBE_IDS = (
     "memory",
 )
 SERVING_PROBE_RECEIPT_MODES = {"metadata_only", "external_receipt"}
+MODEL_ADAPTER_MANIFEST_STATUSES = {"planned"}
 TRAINING_APPROVED_LICENSE_STATUSES = {"approved"}
 TRAINING_APPROVED_REVIEW_STATUSES = {"approved"}
 
@@ -704,6 +706,102 @@ def build_model_serving_probe_receipt(
     return receipt
 
 
+def build_model_adapter_manifest(
+    registry: dict[str, Any],
+    *,
+    model_ref: str,
+    adapter_id: str,
+    training_plan: dict[str, Any],
+    training_plan_path: str | Path,
+    out_path: str | Path,
+    adapter_kind: str = "lora",
+    status: str = "planned",
+    output_dir: str | Path | None = None,
+    preserve_paths: bool = False,
+) -> dict[str, Any]:
+    if not isinstance(adapter_id, str) or not adapter_id:
+        raise ModelRegistryError("adapter_id must be a non-empty string")
+    if not isinstance(adapter_kind, str) or not adapter_kind:
+        raise ModelRegistryError("adapter_kind must be a non-empty string")
+    if status not in MODEL_ADAPTER_MANIFEST_STATUSES:
+        raise ModelRegistryError(f"adapter manifest status must be one of {', '.join(sorted(MODEL_ADAPTER_MANIFEST_STATUSES))}")
+    entry = select_model_for_training(registry, model_ref)
+    candidate = entry["candidate"]
+    plan_record = _adapter_training_plan_record(
+        training_plan,
+        entry=entry,
+        training_plan_path=training_plan_path,
+        preserve_paths=preserve_paths,
+    )
+    planned_output_dir = output_dir
+    if planned_output_dir is None:
+        output = training_plan.get("output") if isinstance(training_plan.get("output"), dict) else {}
+        planned_output_dir = output.get("output_dir")
+    if not isinstance(planned_output_dir, (str, Path)) or not str(planned_output_dir):
+        raise ModelRegistryError("adapter output_dir must be provided or present in training_plan.output.output_dir")
+    manifest = {
+        "schema_version": MODEL_ADAPTER_MANIFEST_SCHEMA_VERSION,
+        "manifest_path": _display_path(Path(out_path), preserve_paths),
+        "generated_at": _now_iso(),
+        "adapter_id": adapter_id,
+        "adapter_kind": adapter_kind,
+        "status": status,
+        "passed": True,
+        "readiness": "planned",
+        "recommendation": "ready_for_training_worker",
+        "base_model": {
+            "model_ref": model_ref,
+            "entry_id": entry["entry_id"],
+            "candidate_id": entry["candidate_id"],
+            "model_id": candidate["model_id"],
+            "license_status": entry["license_status"],
+            "training_eligible": entry["training_eligible"],
+        },
+        "training_plan": plan_record,
+        "output": {
+            "planned_output_dir": _display_path(Path(planned_output_dir), preserve_paths),
+            "materialized_adapter": False,
+        },
+        "download_policy": {
+            "downloaded_weights": False,
+            "downloaded_tokenizer": False,
+            "imported_heavy_ml": False,
+            "launched_training_job": False,
+            "gpu_execution": False,
+        },
+        "execution": {
+            "flight_recorder_downloaded_weights": False,
+            "flight_recorder_downloaded_tokenizer": False,
+            "flight_recorder_imported_heavy_ml": False,
+            "flight_recorder_launched_training_job": False,
+            "flight_recorder_launched_gpu_job": False,
+            "flight_recorder_materialized_adapter": False,
+            "runner_must_revalidate_adapter": True,
+        },
+        "registry_link": {
+            "collection": "adapters",
+            "artifact_id": adapter_id,
+            "kind": "model_adapter_manifest",
+            "status": "planned_adapter",
+        },
+        "checks": [
+            {"id": "base_model_training_eligible", "passed": True, "summary": "base model registry entry is eligible for training selection"},
+            {"id": "training_plan_matches_model", "passed": True, "summary": "dry-run training plan matches the selected base model"},
+            {"id": "training_plan_dry_run_only", "passed": True, "summary": "training plan records no weight downloads, heavy ML imports, or GPU execution"},
+            {"id": "adapter_not_materialized", "passed": True, "summary": "Flight Recorder recorded adapter intent but did not create adapter weights"},
+        ],
+        "blocked_reasons": [],
+        "notes": [
+            "This adapter manifest records planned adapter identity only; it does not contain weights.",
+            "Training and serving workers must revalidate model, dataset, adapter path, and runtime checks before execution.",
+        ],
+    }
+    errors = model_adapter_manifest_errors(manifest)
+    if errors:
+        raise ModelRegistryError("; ".join(errors))
+    return manifest
+
+
 def model_serving_probe_receipt_errors(receipt: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(receipt, dict):
@@ -808,6 +906,92 @@ def model_serving_probe_receipt_errors(receipt: Any) -> list[str]:
         errors.append("model_serving_probe_receipt.compatibility_report must be an object when present.")
     elif isinstance(report, dict):
         _serving_probe_compatibility_report_errors(report, receipt, errors)
+    return errors
+
+
+def model_adapter_manifest_errors(manifest: Any) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["model_adapter_manifest must be a JSON object"]
+    _require_equal(manifest, "schema_version", MODEL_ADAPTER_MANIFEST_SCHEMA_VERSION, errors, "model_adapter_manifest.")
+    for field_name in ("manifest_path", "generated_at", "adapter_id", "adapter_kind", "status", "readiness", "recommendation"):
+        _require_non_empty_string(manifest, field_name, errors, "model_adapter_manifest.")
+    if manifest.get("status") not in MODEL_ADAPTER_MANIFEST_STATUSES:
+        errors.append("model_adapter_manifest.status must be planned.")
+    if manifest.get("readiness") != "planned":
+        errors.append("model_adapter_manifest.readiness must be planned.")
+    if manifest.get("recommendation") != "ready_for_training_worker":
+        errors.append("model_adapter_manifest.recommendation must be ready_for_training_worker.")
+    if manifest.get("passed") is not True:
+        errors.append("model_adapter_manifest.passed must be true.")
+    _adapter_base_model_errors(manifest.get("base_model"), errors)
+    _adapter_training_plan_errors(manifest.get("training_plan"), errors)
+    output = manifest.get("output")
+    if not isinstance(output, dict):
+        errors.append("model_adapter_manifest.output must be an object.")
+    else:
+        _require_non_empty_string(output, "planned_output_dir", errors, "model_adapter_manifest.output.")
+        if output.get("materialized_adapter") is not False:
+            errors.append("model_adapter_manifest.output.materialized_adapter must be false.")
+    policy = manifest.get("download_policy")
+    if not isinstance(policy, dict):
+        errors.append("model_adapter_manifest.download_policy must be an object.")
+    else:
+        for field_name in (
+            "downloaded_weights",
+            "downloaded_tokenizer",
+            "imported_heavy_ml",
+            "launched_training_job",
+            "gpu_execution",
+        ):
+            if policy.get(field_name) is not False:
+                errors.append(f"model_adapter_manifest.download_policy.{field_name} must be false.")
+    execution = manifest.get("execution")
+    if not isinstance(execution, dict):
+        errors.append("model_adapter_manifest.execution must be an object.")
+    else:
+        for field_name in (
+            "flight_recorder_downloaded_weights",
+            "flight_recorder_downloaded_tokenizer",
+            "flight_recorder_imported_heavy_ml",
+            "flight_recorder_launched_training_job",
+            "flight_recorder_launched_gpu_job",
+            "flight_recorder_materialized_adapter",
+        ):
+            if execution.get(field_name) is not False:
+                errors.append(f"model_adapter_manifest.execution.{field_name} must be false.")
+        if execution.get("runner_must_revalidate_adapter") is not True:
+            errors.append("model_adapter_manifest.execution.runner_must_revalidate_adapter must be true.")
+    link = manifest.get("registry_link")
+    if not isinstance(link, dict):
+        errors.append("model_adapter_manifest.registry_link must be an object.")
+    else:
+        expected = {
+            "collection": "adapters",
+            "artifact_id": manifest.get("adapter_id"),
+            "kind": "model_adapter_manifest",
+            "status": "planned_adapter",
+        }
+        for field_name, value in expected.items():
+            if link.get(field_name) != value:
+                errors.append(f"model_adapter_manifest.registry_link.{field_name} must be {value!r}.")
+    checks = manifest.get("checks")
+    if not isinstance(checks, list) or not checks:
+        errors.append("model_adapter_manifest.checks must be a non-empty list.")
+        checks = []
+    for index, check in enumerate(checks):
+        prefix = f"model_adapter_manifest.checks[{index}]."
+        if not isinstance(check, dict):
+            errors.append(f"model_adapter_manifest.checks[{index}] must be an object.")
+            continue
+        _require_non_empty_string(check, "id", errors, prefix)
+        _require_non_empty_string(check, "summary", errors, prefix)
+        if check.get("passed") is not True:
+            errors.append(f"{prefix}passed must be true.")
+    if not _is_string_list(manifest.get("blocked_reasons", [])):
+        errors.append("model_adapter_manifest.blocked_reasons must be a list of strings when present.")
+    if not _is_string_list(manifest.get("notes", [])):
+        errors.append("model_adapter_manifest.notes must be a list of strings when present.")
     return errors
 
 
@@ -1019,6 +1203,66 @@ def _training_compatibility_report_record(
     if errors:
         raise ModelRegistryError("; ".join(errors))
     return record
+
+
+def _adapter_training_plan_record(
+    plan: dict[str, Any],
+    *,
+    entry: dict[str, Any],
+    training_plan_path: str | Path,
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    errors = training_plan_errors(plan)
+    model = plan.get("model") if isinstance(plan, dict) and isinstance(plan.get("model"), dict) else {}
+    if model.get("entry_id") != entry.get("entry_id"):
+        errors.append("training_plan.model.entry_id must match selected model registry entry.")
+    if model.get("candidate_id") != entry.get("candidate_id"):
+        errors.append("training_plan.model.candidate_id must match selected model registry entry.")
+    candidate = entry.get("candidate") if isinstance(entry.get("candidate"), dict) else {}
+    if model.get("model_id") != candidate.get("model_id"):
+        errors.append("training_plan.model.model_id must match selected model registry entry.")
+    source_path = Path(training_plan_path)
+    if not source_path.exists() or not source_path.is_file() or source_path.is_symlink():
+        errors.append(f"training_plan_path must be an existing regular file: {source_path}")
+    trainer = plan.get("trainer") if isinstance(plan, dict) and isinstance(plan.get("trainer"), dict) else {}
+    dataset = plan.get("dataset") if isinstance(plan, dict) and isinstance(plan.get("dataset"), dict) else {}
+    if errors:
+        raise ModelRegistryError("; ".join(errors))
+    return {
+        "path": _display_path(source_path, preserve_paths),
+        "sha256": _sha256(source_path),
+        "candidate_id": model["candidate_id"],
+        "model_id": model["model_id"],
+        "dataset_id": dataset["dataset_id"],
+        "trainer": trainer["name"],
+        "mode": trainer["mode"],
+        "dry_run": True,
+        "no_weight_download": True,
+        "gpu_execution": False,
+    }
+
+
+def _adapter_base_model_errors(base_model: Any, errors: list[str]) -> None:
+    if not isinstance(base_model, dict):
+        errors.append("model_adapter_manifest.base_model must be an object.")
+        return
+    for field_name in ("model_ref", "entry_id", "candidate_id", "model_id", "license_status"):
+        _require_non_empty_string(base_model, field_name, errors, "model_adapter_manifest.base_model.")
+    if base_model.get("training_eligible") is not True:
+        errors.append("model_adapter_manifest.base_model.training_eligible must be true.")
+
+
+def _adapter_training_plan_errors(plan: Any, errors: list[str]) -> None:
+    if not isinstance(plan, dict):
+        errors.append("model_adapter_manifest.training_plan must be an object.")
+        return
+    for field_name in ("path", "sha256", "candidate_id", "model_id", "dataset_id", "trainer", "mode"):
+        _require_non_empty_string(plan, field_name, errors, "model_adapter_manifest.training_plan.")
+    if "sha256" in plan and not _is_sha256(plan.get("sha256")):
+        errors.append("model_adapter_manifest.training_plan.sha256 must be a 64-character hex digest.")
+    for field_name, expected in (("dry_run", True), ("no_weight_download", True), ("gpu_execution", False)):
+        if plan.get(field_name) is not expected:
+            errors.append(f"model_adapter_manifest.training_plan.{field_name} must be {expected!r}.")
 
 
 def _training_plan_compatibility_report_errors(report: dict[str, Any], model: dict[str, Any], errors: list[str]) -> None:

@@ -72,8 +72,10 @@ from .heldout_manifest import HeldoutManifestError, build_heldout_manifest, writ
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .model_registry import (
     ALIAS_NAMES,
+    MODEL_ADAPTER_MANIFEST_STATUSES,
     MODEL_REGISTRY_LINK_COLLECTIONS,
     ModelRegistryError,
+    build_model_adapter_manifest,
     build_dry_run_training_plan,
     build_model_compatibility_report,
     build_model_serving_probe_receipt,
@@ -868,6 +870,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         model_candidate_paths=args.model_candidate,
         model_compatibility_report_paths=args.model_compatibility_report,
         model_serving_probe_receipt_paths=args.model_serving_probe_receipt,
+        model_adapter_manifest_paths=args.model_adapter_manifest,
         model_registry_entry_paths=args.model_registry_entry,
         model_registry_paths=args.model_registry,
         training_plan_paths=args.training_plan,
@@ -1067,6 +1070,48 @@ def cmd_model_registry_serving_probe_receipt(args: argparse.Namespace) -> int:
             _write_json(Path(args.entry_out), registry["entries"][receipt["entry_id"]])
     print(f"wrote {args.out}")
     return 0 if receipt["passed"] else 1
+
+
+def cmd_model_registry_adapter_manifest(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    training_plan = _read_json(Path(args.training_plan))
+    manifest = build_model_adapter_manifest(
+        registry,
+        model_ref=args.model_ref,
+        adapter_id=args.adapter_id,
+        training_plan=training_plan,
+        training_plan_path=args.training_plan,
+        out_path=args.out,
+        adapter_kind=args.kind,
+        status=args.status,
+        output_dir=args.output_dir,
+        preserve_paths=args.preserve_paths,
+    )
+    manifest_path = Path(args.out)
+    _write_json(manifest_path, manifest)
+    if args.link:
+        registry = link_model_registry_artifact(
+            registry,
+            entry_id=manifest["base_model"]["entry_id"],
+            collection="adapters",
+            artifact_id=manifest["registry_link"]["artifact_id"],
+            kind=manifest["registry_link"]["kind"],
+            status=args.link_status,
+            path=manifest_path,
+            metadata={
+                "adapter_kind": manifest["adapter_kind"],
+                "readiness": manifest["readiness"],
+                "training_plan": manifest["training_plan"]["path"],
+                "training_plan_sha256": manifest["training_plan"]["sha256"],
+            },
+            preserve_paths=args.preserve_paths,
+        )
+        _write_json(registry_path, registry)
+        if args.entry_out:
+            _write_json(Path(args.entry_out), registry["entries"][manifest["base_model"]["entry_id"]])
+    print(f"wrote {args.out}")
+    return 0 if manifest["passed"] else 1
 
 
 def cmd_training_plan_dry_run(args: argparse.Namespace) -> int:
@@ -2372,6 +2417,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one model serving-probe receipt JSON; may be repeated",
     )
     validate.add_argument(
+        "--model-adapter-manifest",
+        action="append",
+        default=[],
+        help="Validate one model adapter manifest JSON; may be repeated",
+    )
+    validate.add_argument(
         "--model-registry-entry",
         action="append",
         default=[],
@@ -2500,6 +2551,23 @@ def _parser() -> argparse.ArgumentParser:
     model_registry_serving_probe.add_argument("--entry-out", help="Optionally write the updated registry entry JSON when --link is used")
     model_registry_serving_probe.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated receipt and link records")
     model_registry_serving_probe.set_defaults(func=cmd_model_registry_serving_probe_receipt)
+    model_registry_adapter = model_registry_subparsers.add_parser(
+        "adapter-manifest",
+        help="Write a no-download planned-adapter manifest and optionally link it to the registry",
+    )
+    model_registry_adapter.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    model_registry_adapter.add_argument("--model-ref", required=True, help="Registry entry id or alias to resolve")
+    model_registry_adapter.add_argument("--adapter-id", required=True, help="Stable planned adapter id")
+    model_registry_adapter.add_argument("--kind", default="lora", help="Adapter kind, such as lora or qlora")
+    model_registry_adapter.add_argument("--status", choices=sorted(MODEL_ADAPTER_MANIFEST_STATUSES), default="planned", help="Adapter manifest lifecycle status")
+    model_registry_adapter.add_argument("--training-plan", required=True, help="Dry-run training plan JSON to fingerprint")
+    model_registry_adapter.add_argument("--output-dir", help="Planned adapter output directory; defaults to training_plan.output.output_dir")
+    model_registry_adapter.add_argument("--out", required=True, help="Write model adapter manifest JSON to this path")
+    model_registry_adapter.add_argument("--link", action="store_true", help="Link the written manifest under registry links.adapters")
+    model_registry_adapter.add_argument("--link-status", default="planned_adapter", help="Registry link lifecycle status")
+    model_registry_adapter.add_argument("--entry-out", help="Optionally write the updated registry entry JSON when --link is used")
+    model_registry_adapter.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated manifest and link records")
+    model_registry_adapter.set_defaults(func=cmd_model_registry_adapter_manifest)
 
     training_plan = subparsers.add_parser("training-plan", help="Generate dry-run training plans")
     training_plan_subparsers = training_plan.add_subparsers(dest="training_plan_command", required=True)

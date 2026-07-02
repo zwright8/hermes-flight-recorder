@@ -72,7 +72,22 @@
   "entry_id": "local_mock_tiny_chat",
   "license_status": "approved",
   "links": {
-    "adapters": [],
+    "adapters": [
+      {
+        "id": "local_mock_tiny_chat_sft_adapter",
+        "kind": "model_adapter_manifest",
+        "metadata": {
+          "adapter_kind": "lora",
+          "readiness": "planned",
+          "training_plan": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+          "training_plan_sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8"
+        },
+        "path": "experiments/registry/model_adapter_manifests/local_mock_tiny_chat_sft_adapter.json",
+        "recorded_at": "2026-07-02T20:36:55Z",
+        "sha256": "62b3cddfae998fee606f5b167725f5fae7052e55e51b460785e5995cf0de0e54",
+        "status": "planned_adapter"
+      }
+    ],
     "datasets": [
       {
         "id": "local_mock_dataset_v1",
@@ -106,5 +121,5 @@
   "schema_version": "hfr.model_registry_entry.v1",
   "status": "registered",
   "training_eligible": true,
-  "updated_at": "2026-07-02T14:52:35Z"
+  "updated_at": "2026-07-02T20:36:55Z"
 }

@@ -28,6 +28,7 @@ from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_k
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .model_registry import (
+    MODEL_ADAPTER_MANIFEST_SCHEMA_VERSION,
     MODEL_CANDIDATE_SCHEMA_VERSION,
     MODEL_COMPATIBILITY_REPORT_SCHEMA_VERSION,
     MODEL_REGISTRY_ENTRY_SCHEMA_VERSION,
@@ -36,6 +37,7 @@ from .model_registry import (
     MODEL_SERVING_PROBE_RECEIPT_SCHEMA_VERSION,
     TRAINING_PLAN_SCHEMA_VERSION,
     is_training_license_approved,
+    model_adapter_manifest_errors,
     model_candidate_errors,
     model_compatibility_report_errors,
     model_registry_entry_errors,
@@ -177,6 +179,7 @@ def validate_artifacts(
     model_candidate_paths: list[str | Path] | None = None,
     model_compatibility_report_paths: list[str | Path] | None = None,
     model_serving_probe_receipt_paths: list[str | Path] | None = None,
+    model_adapter_manifest_paths: list[str | Path] | None = None,
     model_registry_entry_paths: list[str | Path] | None = None,
     model_registry_paths: list[str | Path] | None = None,
     training_plan_paths: list[str | Path] | None = None,
@@ -267,6 +270,8 @@ def validate_artifacts(
         targets.append(validate_model_compatibility_report(model_compatibility_report_path))
     for model_serving_probe_receipt_path in model_serving_probe_receipt_paths or []:
         targets.append(validate_model_serving_probe_receipt(model_serving_probe_receipt_path))
+    for model_adapter_manifest_path in model_adapter_manifest_paths or []:
+        targets.append(validate_model_adapter_manifest(model_adapter_manifest_path))
     for model_registry_entry_path in model_registry_entry_paths or []:
         targets.append(validate_model_registry_entry(model_registry_entry_path))
     for model_registry_path in model_registry_paths or []:
@@ -1042,6 +1047,16 @@ def validate_model_serving_probe_receipt(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_model_adapter_manifest(path: str | Path) -> ValidationTarget:
+    """Validate a no-download planned adapter manifest artifact."""
+    manifest_path = Path(path)
+    target = ValidationTarget("model_adapter_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "model_adapter_manifest.json")
+    if manifest is not None:
+        _validate_model_adapter_manifest(manifest, target)
+    return target
+
+
 def validate_model_registry_entry(path: str | Path) -> ValidationTarget:
     """Validate a single model-registry entry artifact."""
     entry_path = Path(path)
@@ -1469,6 +1484,31 @@ def _validate_model_serving_probe_receipt(receipt: dict[str, Any], target: Valid
             "verified_count": summary.get("verified_count"),
             "metadata_only_count": summary.get("metadata_only_count"),
             "not_run_count": summary.get("not_run_count"),
+        }
+    )
+
+
+def _validate_model_adapter_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(
+        manifest,
+        "schema_version",
+        MODEL_ADAPTER_MANIFEST_SCHEMA_VERSION,
+        target,
+        prefix="model_adapter_manifest.",
+    )
+    target.errors.extend(model_adapter_manifest_errors(manifest))
+    base_model = manifest.get("base_model") if isinstance(manifest.get("base_model"), dict) else {}
+    training_plan = manifest.get("training_plan") if isinstance(manifest.get("training_plan"), dict) else {}
+    target.details.update(
+        {
+            "adapter_id": manifest.get("adapter_id"),
+            "adapter_kind": manifest.get("adapter_kind"),
+            "readiness": manifest.get("readiness"),
+            "entry_id": base_model.get("entry_id"),
+            "candidate_id": base_model.get("candidate_id"),
+            "model_id": base_model.get("model_id"),
+            "training_plan_path": training_plan.get("path"),
+            "training_plan_sha256": training_plan.get("sha256"),
         }
     )
 

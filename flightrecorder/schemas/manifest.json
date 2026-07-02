@@ -490,6 +490,14 @@
       "name": "model_serving_probe_receipt"
     },
     {
+      "artifact": "model_adapter_manifest",
+      "artifact_schema_version": "hfr.model_adapter_manifest.v1",
+      "description": "No-download planned adapter manifest linking a base-model registry entry to a dry-run training plan.",
+      "filename": "model_adapter_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_adapter_manifest.v1.schema.json",
+      "name": "model_adapter_manifest"
+    },
+    {
       "artifact": "model_registry_entry",
       "artifact_schema_version": "hfr.model_registry_entry.v1",
       "description": "One model registry entry linking a candidate snapshot to lifecycle metadata.",

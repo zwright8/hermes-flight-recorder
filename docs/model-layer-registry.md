@@ -15,6 +15,10 @@ or launch GPU work.
 - `experiments/registry/serving_probes/*.json`: no-download serving-probe
   receipts that bind registry entries to endpoint/profile metadata without
   launching a server, opening a network connection, or running GPU work.
+- `experiments/registry/model_adapter_manifests/*.json`: planned adapter
+  manifests that bind a base-model registry entry to a dry-run training plan
+  without materializing adapter weights, importing heavy ML packages, or running
+  GPU work.
 - `experiments/registry/model_registry.json`: local registry with `candidate`,
   `champion`, and `rollback` aliases.
 - `experiments/registry/training_plans/*.json`: dry-run plans that bind a
@@ -46,6 +50,15 @@ flightrecorder training-plan dry-run \
   --output-dir experiments/registry/training_outputs/local_mock_tiny_chat \
   --out experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json \
   --compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json
+flightrecorder model-registry adapter-manifest \
+  --registry experiments/registry/model_registry.json \
+  --model-ref candidate \
+  --adapter-id local_mock_tiny_chat_sft_adapter \
+  --kind lora \
+  --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json \
+  --out experiments/registry/model_adapter_manifests/local_mock_tiny_chat_sft_adapter.json \
+  --link \
+  --entry-out experiments/registry/model_registry_entries/local_mock_tiny_chat.json
 flightrecorder model-registry serving-probe-receipt \
   --registry experiments/registry/model_registry.json \
   --model-ref candidate \
@@ -82,6 +95,7 @@ flightrecorder validate \
   --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json \
   --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json \
   --model-serving-probe-receipt experiments/registry/serving_probes/local_mock_tiny_chat_metadata_serving_probe.json \
+  --model-adapter-manifest experiments/registry/model_adapter_manifests/local_mock_tiny_chat_sft_adapter.json \
   --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json \
   --model-registry experiments/registry/model_registry.json \
   --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json \
@@ -99,6 +113,7 @@ review: `README.md`, `config.json`, `tokenizer_config.json`, and `LICENSE`.
 The corresponding artifacts are:
 
 - `experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json`
+- `experiments/registry/model_adapter_manifests/qwen3_4b_instruct_2507_sft_adapter.json`
 - `experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json`
 - `experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json`
 - `experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json`

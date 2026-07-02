@@ -3,7 +3,7 @@
   "passed": true,
   "schema_version": "hfr.validation.v1",
   "strict": true,
-  "target_count": 11,
+  "target_count": 13,
   "targets": [
     {
       "details": {
@@ -99,11 +99,45 @@
     },
     {
       "details": {
+        "adapter_id": "local_mock_tiny_chat_sft_adapter",
+        "adapter_kind": "lora",
+        "candidate_id": "local_mock_tiny_chat",
+        "entry_id": "local_mock_tiny_chat",
+        "model_id": "local/mock-tiny-chat",
+        "readiness": "planned",
+        "training_plan_path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+        "training_plan_sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8"
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/model_adapter_manifests/local_mock_tiny_chat_sft_adapter.json",
+      "type": "model_adapter_manifest",
+      "warnings": []
+    },
+    {
+      "details": {
+        "adapter_id": "qwen3_4b_instruct_2507_sft_adapter",
+        "adapter_kind": "lora",
+        "candidate_id": "qwen3_4b_instruct_2507",
+        "entry_id": "qwen3_4b_instruct_2507",
+        "model_id": "Qwen/Qwen3-4B-Instruct-2507",
+        "readiness": "planned",
+        "training_plan_path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
+        "training_plan_sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a"
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/model_adapter_manifests/qwen3_4b_instruct_2507_sft_adapter.json",
+      "type": "model_adapter_manifest",
+      "warnings": []
+    },
+    {
+      "details": {
         "candidate_id": "local_mock_tiny_chat",
         "entry_id": "local_mock_tiny_chat",
         "license_status": "approved",
         "link_counts": {
-          "adapters": 0,
+          "adapters": 1,
           "datasets": 1,
           "evals": 0,
           "promotion_decisions": 0,
@@ -124,7 +158,7 @@
         "entry_id": "qwen3_4b_instruct_2507",
         "license_status": "approved",
         "link_counts": {
-          "adapters": 0,
+          "adapters": 1,
           "datasets": 1,
           "evals": 0,
           "promotion_decisions": 0,
@@ -148,7 +182,7 @@
         },
         "entry_count": 2,
         "link_counts": {
-          "adapters": 0,
+          "adapters": 2,
           "datasets": 2,
           "evals": 0,
           "promotion_decisions": 0,
