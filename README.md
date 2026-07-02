@@ -139,6 +139,20 @@ flightrecorder validate \
   --strict
 ```
 
+Audit evidence before handoff:
+
+```bash
+flightrecorder audit \
+  --runs runs \
+  --fail-on-privacy \
+  --fail-on-failed
+```
+
+`audit --fail-on-privacy` blocks generated artifacts that contain public-repo
+privacy findings such as local workspace paths or personal contact strings. Add
+`--forbid-text` with `--fail-on-leak` for project-specific canaries or secrets
+that must never appear in evidence.
+
 Run a deterministic offline harness packet without launching Hermes or a model
 provider:
 

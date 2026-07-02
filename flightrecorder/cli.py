@@ -722,6 +722,8 @@ def cmd_audit(args: argparse.Namespace) -> int:
         print(rendered, end="")
     if args.fail_on_leak and summary["leaks"]:
         return 1
+    if args.fail_on_privacy and summary["privacy_findings"]:
+        return 1
     if args.fail_on_failed and summary["failed"] > 0:
         return 1
     return 0
@@ -2231,6 +2233,7 @@ def _parser() -> argparse.ArgumentParser:
     audit.add_argument("--out")
     audit.add_argument("--forbid-text", action="append", default=[], help="Literal text that must not appear in generated artifacts")
     audit.add_argument("--fail-on-leak", action="store_true", help="Exit nonzero if forbidden text is found")
+    audit.add_argument("--fail-on-privacy", action="store_true", help="Exit nonzero if generated artifacts contain public-repo privacy findings")
     audit.add_argument("--fail-on-failed", action="store_true", help="Exit nonzero if any scorecard failed")
     audit.set_defaults(func=cmd_audit)
 
@@ -4990,6 +4993,43 @@ def _read_scorecard_ref(path: Path) -> tuple[dict[str, Any], str]:
     return _read_json(score_path), _display_path(score_path)
 
 
+PUBLIC_REPO_PRIVACY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("posix_home_path", re.compile("/" + "Users/|" + "/" + r"home/[^\s\"'<>]+")),
+    ("windows_home_path", re.compile(r"[A-Za-z]:[\\/]" + "Users" + r"[\\/]")),
+    ("local_workspace_path", re.compile("Documents/" + "GitHub")),
+    ("private_codex_worktree", re.compile(r"\." + "codex-" + "goal-" + "worktrees")),
+    ("private_codex_automation", re.compile(r"\." + "codex/" + "automations")),
+    ("email_address", re.compile(r"\b[A-Za-z0-9._%+-]+" + "@" + r"[A-Za-z0-9.-]+[.][A-Za-z]{2,}\b")),
+)
+
+
+def _audit_privacy_findings(path: Path, text: str) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+    for name, pattern in PUBLIC_REPO_PRIVACY_PATTERNS:
+        for match in pattern.finditer(text):
+            if name == "email_address" and _is_example_email_address(match.group(0)):
+                continue
+            line = text.count("\n", 0, match.start()) + 1
+            key = (name, line)
+            if key in seen:
+                continue
+            seen.add(key)
+            findings.append(
+                {
+                    "path": _display_path(path),
+                    "line": line,
+                    "pattern": name,
+                }
+            )
+    return findings
+
+
+def _is_example_email_address(value: str) -> bool:
+    domain = value.partition("@")[2].lower()
+    return domain.startswith("example.") or domain.endswith(".example")
+
+
 def _audit_runs(runs_dir: Path, forbidden_text: list[str]) -> dict[str, Any]:
     if not runs_dir.exists():
         raise FileNotFoundError(f"Runs directory not found: {runs_dir}")
@@ -4998,6 +5038,7 @@ def _audit_runs(runs_dir: Path, forbidden_text: list[str]) -> dict[str, Any]:
 
     scorecards: list[dict[str, Any]] = []
     leaks: list[dict[str, str]] = []
+    privacy_findings: list[dict[str, Any]] = []
     for score_path in sorted(runs_dir.glob("*/scorecard.json")):
         scorecard = _read_json(score_path)
         scorecards.append(
@@ -5011,23 +5052,25 @@ def _audit_runs(runs_dir: Path, forbidden_text: list[str]) -> dict[str, Any]:
         )
 
     needles = [needle for needle in forbidden_text if needle]
-    if needles and runs_dir.exists():
-        for path in sorted(runs_dir.rglob("*")):
-            if not path.is_file():
-                continue
-            text = path.read_text(encoding="utf-8", errors="ignore")
+    for path in sorted(runs_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        privacy_findings.extend(_audit_privacy_findings(path, text))
+        if needles:
             for needle in needles:
                 if needle in text:
-                    leaks.append({"path": str(path), "text": needle})
+                    leaks.append({"path": _display_path(path), "text": needle})
 
     passed = sum(1 for item in scorecards if item["passed"])
     failed = len(scorecards) - passed
     return {
-        "runs_dir": str(runs_dir),
+        "runs_dir": _display_path(runs_dir),
         "total": len(scorecards),
         "passed": passed,
         "failed": failed,
         "leaks": leaks,
+        "privacy_findings": privacy_findings,
         "scorecards": scorecards,
     }
 
