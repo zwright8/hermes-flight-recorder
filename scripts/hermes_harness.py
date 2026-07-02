@@ -411,7 +411,42 @@ def _resolve_output_path(path: str | Path, base_dir: Path) -> Path:
 def _load_manifest(manifest: dict[str, Any] | str | Path) -> dict[str, Any]:
     if isinstance(manifest, dict):
         return dict(manifest)
-    return json.loads(Path(manifest).read_text(encoding="utf-8"))
+    manifest_path = Path(manifest).expanduser().resolve()
+    loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return _resolve_manifest_paths(loaded, manifest_path.parent)
+
+
+def _resolve_manifest_paths(manifest: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+    resolved = dict(manifest)
+    scenario = dict(resolved.get("scenario") or {})
+    if isinstance(scenario.get("path"), str):
+        scenario["path"] = str(_resolve_manifest_path(scenario["path"], base_dir))
+    resolved["scenario"] = scenario
+
+    outputs = dict(resolved.get("outputs") or {})
+    for field_name in ("run_dir", "manifest", "result"):
+        if isinstance(outputs.get(field_name), str):
+            outputs[field_name] = str(_resolve_manifest_path(outputs[field_name], base_dir))
+    resolved["outputs"] = outputs
+
+    sandbox = dict(resolved.get("sandbox") or {})
+    for field_name in ("root", "home", "workspace", "events"):
+        if isinstance(sandbox.get(field_name), str):
+            sandbox[field_name] = str(_resolve_manifest_path(sandbox[field_name], base_dir))
+    if isinstance(sandbox.get("fake_secret_files"), list):
+        sandbox["fake_secret_files"] = [
+            str(_resolve_manifest_path(path, base_dir)) if isinstance(path, str) else path
+            for path in sandbox["fake_secret_files"]
+        ]
+    resolved["sandbox"] = sandbox
+    return resolved
+
+
+def _resolve_manifest_path(path: str, base_dir: Path) -> Path:
+    candidate = Path(path).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (base_dir / candidate).resolve()
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -436,8 +471,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run or replay Flight Recorder harness artifacts")
     subparsers = parser.add_subparsers(dest="command", required=True)
     run = subparsers.add_parser("run-scenario", help="Run one scenario through a harness runner")
-    run.add_argument("--scenario", required=True)
-    run.add_argument("--out", required=True)
+    run.add_argument("--manifest", help="Existing harness manifest JSON to execute")
+    run.add_argument("--scenario", help="Scenario JSON/YAML path; required unless --manifest is used")
+    run.add_argument("--out", help="Run output directory; required unless --manifest is used")
     run.add_argument("--runner", default="mock")
     run.add_argument("--provider", default="mock")
     run.add_argument("--model", default="hfr-mock")
@@ -454,16 +490,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if args.command == "run-scenario":
-        manifest = build_harness_manifest(
-            scenario_path=args.scenario,
-            out_dir=args.out,
-            provider=args.provider,
-            model=args.model,
-            runner=args.runner,
-            base_url=args.base_url,
-            mock_response=args.mock_response,
-            force=args.force,
-        )
+        if args.manifest:
+            manifest = _load_manifest(args.manifest)
+            if args.force:
+                manifest["force"] = True
+        else:
+            if not args.scenario or not args.out:
+                raise SystemExit("--scenario and --out are required unless --manifest is provided")
+            manifest = build_harness_manifest(
+                scenario_path=args.scenario,
+                out_dir=args.out,
+                provider=args.provider,
+                model=args.model,
+                runner=args.runner,
+                base_url=args.base_url,
+                mock_response=args.mock_response,
+                force=args.force,
+            )
         result = run_scenario(manifest)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1

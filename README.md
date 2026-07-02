@@ -643,6 +643,14 @@ flightrecorder validate \
   --strict
 ```
 
+Or execute a checked-in manifest with relative paths resolved from the manifest
+file:
+
+```bash
+python3.11 scripts/hermes_harness.py run-scenario \
+  --manifest harness/mock_manifest.json
+```
+
 Replay from a generated lineage:
 
 ```bash
