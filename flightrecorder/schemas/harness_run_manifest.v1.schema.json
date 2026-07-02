@@ -1,0 +1,216 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_run_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Offline harness run intent manifest linking a scenario contract to a deterministic source trace and output directory.",
+  "properties": {
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "harness": {
+      "$ref": "#/$defs/harness"
+    },
+    "manifest_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "mock_response": {
+      "$ref": "#/$defs/mockResponse"
+    },
+    "output_dir": {
+      "$ref": "#/$defs/outputDir"
+    },
+    "scenario": {
+      "$ref": "#/$defs/scenario"
+    },
+    "schema_version": {
+      "const": "hfr.harness_run_manifest.v1"
+    },
+    "source_trace": {
+      "$ref": "#/$defs/artifact"
+    },
+    "tool_policy": {
+      "$ref": "#/$defs/toolPolicy"
+    }
+  },
+  "required": [
+    "schema_version",
+    "manifest_path",
+    "created_at",
+    "harness",
+    "scenario",
+    "source_trace",
+    "output_dir",
+    "tool_policy",
+    "mock_response"
+  ],
+  "title": "Hermes Flight Recorder Harness Run Manifest",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "exists"
+      ],
+      "type": "object"
+    },
+    "harness": {
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "const": "offline_mock"
+        },
+        "model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "const": "hermes_harness"
+        },
+        "network": {
+          "const": "disabled"
+        },
+        "provider": {
+          "const": "mock"
+        }
+      },
+      "required": [
+        "name",
+        "mode",
+        "provider",
+        "model",
+        "network"
+      ],
+      "type": "object"
+    },
+    "mockResponse": {
+      "additionalProperties": true,
+      "properties": {
+        "length_chars": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "length_chars"
+      ],
+      "type": "object"
+    },
+    "outputDir": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "expected_artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "const": "directory"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "exists",
+        "expected_artifacts"
+      ],
+      "type": "object"
+    },
+    "scenario": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "prompt_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "path",
+        "sha256",
+        "prompt_sha256"
+      ],
+      "type": "object"
+    },
+    "toolPolicy": {
+      "additionalProperties": true,
+      "properties": {
+        "allowed_tools": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "network": {
+          "const": "disabled"
+        },
+        "write_scope": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "network",
+        "allowed_tools",
+        "write_scope"
+      ],
+      "type": "object"
+    }
+  }
+}

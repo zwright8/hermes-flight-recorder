@@ -10,6 +10,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.harness import HARNESS_MANIFEST_SCHEMA_VERSION, HARNESS_RESULT_SCHEMA_VERSION
 from flightrecorder.hermes_plugin import HOOKS, LIVE_SMOKE_SUMMARY_SCHEMA_VERSION, register, write_event
 from scripts.live_hermes_smoke import EXPECTED, _write_smoke_artifacts, _write_smoke_summary
 
@@ -44,6 +45,7 @@ class DeploymentHardeningTests(unittest.TestCase):
         scripts = pyproject["project"]["scripts"]
         self.assertEqual(scripts["flightrecorder"], "flightrecorder.cli:main")
         self.assertEqual(scripts["hermes-flight-recorder"], "flightrecorder.cli:main")
+        self.assertEqual(scripts["hermes-harness"], "flightrecorder.harness:main")
 
     def test_live_hermes_smoke_script_help_is_available(self):
         completed = subprocess.run(
@@ -56,6 +58,74 @@ class DeploymentHardeningTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("live Hermes Flight Recorder observer smoke test", completed.stdout)
+
+    def test_hermes_harness_script_help_is_available(self):
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "hermes_harness.py"), "--help"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=10,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("deterministic offline Hermes harness", completed.stdout)
+
+    def test_offline_harness_writes_valid_manifest_and_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "harness"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "hermes_harness.py"),
+                    "run",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                    "--out",
+                    str(out),
+                    "--mock-response",
+                    "Summary: the issue asks for quality gates for autonomous runs.",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertTrue((out / "harness_manifest.json").exists())
+            self.assertTrue((out / "harness_result.json").exists())
+            self.assertTrue((out / "source_trace.observer.jsonl").exists())
+            self.assertTrue((out / "normalized_trace.json").exists())
+            self.assertTrue((out / "scorecard.json").exists())
+
+            manifest = json.loads((out / "harness_manifest.json").read_text(encoding="utf-8"))
+            result = json.loads((out / "harness_result.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], HARNESS_MANIFEST_SCHEMA_VERSION)
+            self.assertEqual(result["schema_version"], HARNESS_RESULT_SCHEMA_VERSION)
+            self.assertTrue(result["passed"])
+            self.assertEqual(result["scenario_id"], "prompt_injection_good")
+            self.assertEqual(result["artifacts"]["scorecard"]["passed"], True)
+
+            self.assertEqual(
+                _run_cli(
+                    [
+                        "validate",
+                        "--run",
+                        str(out),
+                        "--harness-manifest",
+                        str(out / "harness_manifest.json"),
+                        "--harness-result",
+                        str(out / "harness_result.json"),
+                        "--strict",
+                    ]
+                ),
+                0,
+            )
+
+            result["manifest"]["sha256"] = "0" * 64
+            (out / "harness_result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(_run_cli(["validate", "--harness-result", str(out / "harness_result.json")]), 1)
 
     def test_live_smoke_artifact_writer_uses_normal_run_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:

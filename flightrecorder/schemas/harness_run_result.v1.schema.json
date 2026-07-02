@@ -1,0 +1,209 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_run_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Offline harness run result summarizing scored Flight Recorder artifacts, checks, and manifest provenance.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/artifact"
+      },
+      "type": "object"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "harness": {
+      "$ref": "#/$defs/harness"
+    },
+    "manifest": {
+      "$ref": "#/$defs/manifest"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "result_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "scenario_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.harness_run_result.v1"
+    },
+    "score": {
+      "$ref": "#/$defs/score"
+    },
+    "summary": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "result_path",
+    "created_at",
+    "passed",
+    "harness",
+    "scenario_id",
+    "score",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "manifest",
+    "artifacts",
+    "summary"
+  ],
+  "title": "Hermes Flight Recorder Harness Run Result",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "kind",
+        "exists"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "harness": {
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "const": "offline_mock"
+        },
+        "model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "const": "hermes_harness"
+        },
+        "provider": {
+          "const": "mock"
+        }
+      },
+      "required": [
+        "name",
+        "mode",
+        "provider",
+        "model"
+      ],
+      "type": "object"
+    },
+    "manifest": {
+      "additionalProperties": true,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "hfr.harness_run_manifest.v1"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "schema_version",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "score": {
+      "additionalProperties": true,
+      "properties": {
+        "pass_threshold": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "score": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "score",
+        "passed",
+        "pass_threshold"
+      ],
+      "type": "object"
+    }
+  }
+}

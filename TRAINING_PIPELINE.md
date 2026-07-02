@@ -21,6 +21,7 @@ flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
+flightrecorder schemas --check runs/harness_prompt_injection_good/harness_result.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
 
@@ -36,6 +37,22 @@ Generate normal Flight Recorder runs first:
 
 ```bash
 ./demo.sh
+```
+
+For local harness integration without launching Hermes or a provider, write and
+validate an offline mock harness packet before exporting the run:
+
+```bash
+python3.11 scripts/hermes_harness.py run \
+  --scenario scenarios/prompt_injection_good.json \
+  --mock-response "Summary: the issue asks for quality gates for autonomous runs." \
+  --out runs/harness_prompt_injection_good
+
+flightrecorder validate \
+  --run runs/harness_prompt_injection_good \
+  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
+  --strict
 ```
 
 For your own scenario directory, the suite runner can generate runs, validation,

@@ -19,6 +19,7 @@ from .compare_gate import compare_movement_summary
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
+from .harness import HARNESS_MANIFEST_SCHEMA_VERSION, HARNESS_RESULT_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
@@ -136,6 +137,8 @@ def validate_artifacts(
     state_diff_paths: list[str | Path] | None = None,
     run_digest_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
+    harness_manifest_paths: list[str | Path] | None = None,
+    harness_result_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -208,6 +211,10 @@ def validate_artifacts(
         targets.append(validate_run_digest(run_digest_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
+    for harness_manifest_path in harness_manifest_paths or []:
+        targets.append(validate_harness_manifest(harness_manifest_path))
+    for harness_result_path in harness_result_paths or []:
+        targets.append(validate_harness_result(harness_result_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -745,6 +752,26 @@ def validate_live_smoke_summary(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_harness_manifest(path: str | Path) -> ValidationTarget:
+    """Validate an offline harness run manifest."""
+    manifest_path = Path(path)
+    target = ValidationTarget("harness_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "harness_manifest.json")
+    if manifest is not None:
+        _validate_harness_manifest(manifest, target, manifest_path)
+    return target
+
+
+def validate_harness_result(path: str | Path) -> ValidationTarget:
+    """Validate an offline harness run result."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_result", str(result_path))
+    result = _read_object(result_path, target, "harness_result.json")
+    if result is not None:
+        _validate_harness_result(result, target, result_path)
+    return target
+
+
 def validate_repair_queue(path: str | Path) -> ValidationTarget:
     """Validate a repair-queue artifact."""
     queue_path = Path(path)
@@ -825,6 +852,343 @@ def validate_scenario_quality(path: str | Path) -> ValidationTarget:
     if quality is not None:
         _validate_scenario_quality(quality, target)
     return target
+
+
+def _validate_harness_manifest(manifest: dict[str, Any], target: ValidationTarget, manifest_path: Path) -> None:
+    _require_equal(manifest, "schema_version", HARNESS_MANIFEST_SCHEMA_VERSION, target, prefix="harness_manifest.")
+    if not isinstance(manifest.get("manifest_path"), str) or not manifest.get("manifest_path"):
+        target.errors.append("harness_manifest.manifest_path must be a non-empty string.")
+    if not isinstance(manifest.get("created_at"), str) or not manifest.get("created_at"):
+        target.errors.append("harness_manifest.created_at must be a non-empty string.")
+
+    harness = manifest.get("harness")
+    _validate_harness_identity(harness, target, "harness_manifest.harness", require_network=True)
+
+    scenario = manifest.get("scenario")
+    scenario_id = None
+    if not isinstance(scenario, dict):
+        target.errors.append("harness_manifest.scenario must be an object.")
+        scenario = {}
+    else:
+        scenario_id = scenario.get("id") if isinstance(scenario.get("id"), str) else None
+        for field_name in ("id", "title", "path"):
+            if not isinstance(scenario.get(field_name), str) or not scenario.get(field_name):
+                target.errors.append(f"harness_manifest.scenario.{field_name} must be a non-empty string.")
+        for field_name in ("sha256", "prompt_sha256"):
+            if not _is_sha256(scenario.get(field_name)):
+                target.errors.append(f"harness_manifest.scenario.{field_name} must be a SHA-256 hex string.")
+        scenario_path = _resolve_harness_path(str(scenario.get("path") or ""), manifest_path.parent)
+        if scenario_path is not None and scenario_path.exists() and scenario_path.is_file() and _is_sha256(scenario.get("sha256")):
+            if _sha256(scenario_path) != scenario.get("sha256"):
+                target.errors.append("harness_manifest.scenario.sha256 does not match current scenario file contents.")
+
+    source_trace = manifest.get("source_trace")
+    _validate_harness_artifact_record(
+        source_trace,
+        target,
+        "harness_manifest.source_trace",
+        manifest_path.parent,
+        required=True,
+        expected_kind="file",
+    )
+
+    output_dir = manifest.get("output_dir")
+    if not isinstance(output_dir, dict):
+        target.errors.append("harness_manifest.output_dir must be an object.")
+    else:
+        if output_dir.get("kind") != "directory":
+            target.errors.append("harness_manifest.output_dir.kind must be directory.")
+        if not isinstance(output_dir.get("path"), str) or not output_dir.get("path"):
+            target.errors.append("harness_manifest.output_dir.path must be a non-empty string.")
+        if not isinstance(output_dir.get("exists"), bool):
+            target.errors.append("harness_manifest.output_dir.exists must be a boolean.")
+        expected = output_dir.get("expected_artifacts")
+        if not _is_string_list(expected):
+            target.errors.append("harness_manifest.output_dir.expected_artifacts must be a list of strings.")
+
+    tool_policy = manifest.get("tool_policy")
+    if not isinstance(tool_policy, dict):
+        target.errors.append("harness_manifest.tool_policy must be an object.")
+    else:
+        if tool_policy.get("network") != "disabled":
+            target.errors.append("harness_manifest.tool_policy.network must be disabled.")
+        allowed_tools = tool_policy.get("allowed_tools")
+        if not _is_string_list(allowed_tools):
+            target.errors.append("harness_manifest.tool_policy.allowed_tools must be a list of strings.")
+        if not isinstance(tool_policy.get("write_scope"), str) or not tool_policy.get("write_scope"):
+            target.errors.append("harness_manifest.tool_policy.write_scope must be a non-empty string.")
+
+    mock_response = manifest.get("mock_response")
+    if not isinstance(mock_response, dict):
+        target.errors.append("harness_manifest.mock_response must be an object.")
+    else:
+        if not _is_sha256(mock_response.get("sha256")):
+            target.errors.append("harness_manifest.mock_response.sha256 must be a SHA-256 hex string.")
+        if not _is_non_negative_int(mock_response.get("length_chars")) or mock_response.get("length_chars") == 0:
+            target.errors.append("harness_manifest.mock_response.length_chars must be a positive integer.")
+
+    if scenario_id:
+        target.details["scenario_id"] = scenario_id
+    if isinstance(harness, dict):
+        target.details.update({"provider": harness.get("provider"), "model": harness.get("model")})
+
+
+def _validate_harness_result(result: dict[str, Any], target: ValidationTarget, result_path: Path) -> None:
+    _require_equal(result, "schema_version", HARNESS_RESULT_SCHEMA_VERSION, target, prefix="harness_result.")
+    if not isinstance(result.get("result_path"), str) or not result.get("result_path"):
+        target.errors.append("harness_result.result_path must be a non-empty string.")
+    if not isinstance(result.get("created_at"), str) or not result.get("created_at"):
+        target.errors.append("harness_result.created_at must be a non-empty string.")
+    if not isinstance(result.get("passed"), bool):
+        target.errors.append("harness_result.passed must be a boolean.")
+    if not isinstance(result.get("scenario_id"), str) or not result.get("scenario_id"):
+        target.errors.append("harness_result.scenario_id must be a non-empty string.")
+
+    harness = result.get("harness")
+    _validate_harness_identity(harness, target, "harness_result.harness", require_network=False)
+
+    score = result.get("score")
+    if not isinstance(score, dict):
+        target.errors.append("harness_result.score must be an object.")
+        score = {}
+    else:
+        if not _is_int_between(score.get("score"), 0, 100):
+            target.errors.append("harness_result.score.score must be an integer from 0 to 100.")
+        if not isinstance(score.get("passed"), bool):
+            target.errors.append("harness_result.score.passed must be a boolean.")
+        if not _is_int_between(score.get("pass_threshold"), 0, 100):
+            target.errors.append("harness_result.score.pass_threshold must be an integer from 0 to 100.")
+
+    checks = result.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("harness_result.checks must be a list.")
+        checks = []
+    failed_checks = _validate_harness_checks(checks, target)
+    if result.get("check_count") != len(checks):
+        target.errors.append(f"harness_result.check_count expected {len(checks)}, got {result.get('check_count')!r}.")
+    if result.get("failed_check_count") != failed_checks:
+        target.errors.append(f"harness_result.failed_check_count expected {failed_checks}, got {result.get('failed_check_count')!r}.")
+    expected_passed = failed_checks == 0
+    if isinstance(result.get("passed"), bool) and result.get("passed") != expected_passed:
+        target.errors.append("harness_result.passed must match failed_check_count.")
+    if score.get("passed") is False and result.get("passed") is True:
+        target.errors.append("harness_result.passed cannot be true when harness_result.score.passed is false.")
+    if not isinstance(result.get("summary"), str) or not result.get("summary"):
+        target.errors.append("harness_result.summary must be a non-empty string.")
+
+    manifest_ref = result.get("manifest")
+    manifest_payload = None
+    if not isinstance(manifest_ref, dict):
+        target.errors.append("harness_result.manifest must be an object.")
+    else:
+        if manifest_ref.get("schema_version") != HARNESS_MANIFEST_SCHEMA_VERSION:
+            target.errors.append("harness_result.manifest.schema_version must be hfr.harness_run_manifest.v1.")
+        manifest_path = _validate_harness_artifact_pointer(
+            manifest_ref,
+            target,
+            "harness_result.manifest",
+            result_path.parent,
+            expected_kind="file",
+        )
+        if manifest_path is not None and manifest_path.exists() and manifest_path.is_file():
+            try:
+                manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                target.errors.append("harness_result.manifest.path must point to valid JSON.")
+            if isinstance(manifest_payload, dict):
+                _validate_harness_manifest(manifest_payload, target, manifest_path)
+
+    artifacts = result.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("harness_result.artifacts must be an object.")
+        artifacts = {}
+    required_artifacts = {
+        "harness_manifest",
+        "source_trace",
+        "normalized_trace",
+        "scorecard",
+        "task_completion",
+        "run_digest",
+        "report",
+        "lineage",
+    }
+    for name in sorted(required_artifacts - set(artifacts)):
+        target.errors.append(f"harness_result.artifacts.{name} is required.")
+    resolved_artifacts: dict[str, Path] = {}
+    for name, record in artifacts.items():
+        label = f"harness_result.artifacts.{name}"
+        path = _validate_harness_artifact_record(
+            record,
+            target,
+            label,
+            result_path.parent,
+            required=name in required_artifacts,
+            expected_kind="file",
+        )
+        if path is not None:
+            resolved_artifacts[str(name)] = path
+
+    scorecard_path = resolved_artifacts.get("scorecard")
+    if scorecard_path is not None and scorecard_path.exists() and scorecard_path.is_file():
+        try:
+            scorecard = json.loads(scorecard_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            target.errors.append("harness_result.artifacts.scorecard.path must point to valid JSON.")
+            scorecard = None
+        if isinstance(scorecard, dict):
+            if scorecard.get("scenario_id") != result.get("scenario_id"):
+                target.errors.append("harness_result.scenario_id must match scorecard.scenario_id.")
+            if scorecard.get("score") != score.get("score"):
+                target.errors.append("harness_result.score.score must match scorecard.score.")
+            if scorecard.get("passed") != score.get("passed"):
+                target.errors.append("harness_result.score.passed must match scorecard.passed.")
+            if scorecard.get("pass_threshold") != score.get("pass_threshold"):
+                target.errors.append("harness_result.score.pass_threshold must match scorecard.pass_threshold.")
+
+    if isinstance(manifest_payload, dict):
+        manifest_scenario = manifest_payload.get("scenario") if isinstance(manifest_payload.get("scenario"), dict) else {}
+        manifest_harness = manifest_payload.get("harness") if isinstance(manifest_payload.get("harness"), dict) else {}
+        if manifest_scenario.get("id") != result.get("scenario_id"):
+            target.errors.append("harness_result.scenario_id must match harness_manifest.scenario.id.")
+        for field_name in ("name", "mode", "provider", "model"):
+            if isinstance(harness, dict) and manifest_harness.get(field_name) != harness.get(field_name):
+                target.errors.append(f"harness_result.harness.{field_name} must match harness_manifest.harness.{field_name}.")
+
+    target.details.update(
+        {
+            "scenario_id": result.get("scenario_id"),
+            "passed": result.get("passed"),
+            "score": score.get("score"),
+            "artifact_count": len(artifacts),
+            "failed_check_count": failed_checks,
+        }
+    )
+
+
+def _validate_harness_identity(value: Any, target: ValidationTarget, label: str, *, require_network: bool) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    expected = {"name": "hermes_harness", "mode": "offline_mock", "provider": "mock"}
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
+    if not isinstance(value.get("model"), str) or not value.get("model"):
+        target.errors.append(f"{label}.model must be a non-empty string.")
+    if require_network and value.get("network") != "disabled":
+        target.errors.append(f"{label}.network must be disabled.")
+
+
+def _validate_harness_checks(checks: list[Any], target: ValidationTarget) -> int:
+    failed = 0
+    seen_ids: set[str] = set()
+    for index, check in enumerate(checks):
+        label = f"harness_result.checks[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{label} must be an object.")
+            failed += 1
+            continue
+        check_id = check.get("id")
+        if not isinstance(check_id, str) or not check_id:
+            target.errors.append(f"{label}.id must be a non-empty string.")
+        elif check_id in seen_ids:
+            target.errors.append(f"{label}.id is duplicated.")
+        else:
+            seen_ids.add(check_id)
+        if not isinstance(check.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean.")
+            failed += 1
+        elif check["passed"] is False:
+            failed += 1
+        if not isinstance(check.get("summary"), str) or not check.get("summary"):
+            target.errors.append(f"{label}.summary must be a non-empty string.")
+    return failed
+
+
+def _validate_harness_artifact_pointer(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    base_dir: Path,
+    *,
+    expected_kind: str,
+) -> Path | None:
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        return None
+    if record.get("schema_version") is not None and not isinstance(record.get("schema_version"), str):
+        target.errors.append(f"{label}.schema_version must be a string when present.")
+    if not _is_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+    path = _resolve_harness_path(record["path"], base_dir)
+    if path is None:
+        target.warnings.append(f"{label}.path is redacted; cannot recompute artifact hash.")
+        return None
+    if expected_kind == "file" and not path.is_file():
+        target.errors.append(f"{label}.path does not resolve to a file.")
+        return path
+    if _is_sha256(record.get("sha256")) and _sha256(path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match current file contents.")
+    return path
+
+
+def _validate_harness_artifact_record(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    base_dir: Path,
+    *,
+    required: bool,
+    expected_kind: str,
+) -> Path | None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        return None
+    if record.get("kind") != expected_kind:
+        target.errors.append(f"{label}.kind must be {expected_kind}.")
+    if not isinstance(record.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    elif required and record.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if "schema_version" in record and record.get("schema_version") is not None and not isinstance(record.get("schema_version"), str):
+        target.errors.append(f"{label}.schema_version must be a string or null.")
+    if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean or null.")
+
+    path = _resolve_harness_path(record["path"], base_dir)
+    if path is None:
+        if record.get("exists") is True:
+            target.warnings.append(f"{label}.path is redacted; cannot recompute artifact hash.")
+        return None
+    if record.get("exists") is True:
+        if expected_kind == "file" and not path.is_file():
+            target.errors.append(f"{label}.path does not resolve to a file.")
+            return path
+        if not _is_non_negative_int(record.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        elif path.stat().st_size != record.get("size_bytes"):
+            target.errors.append(f"{label}.size_bytes does not match current file size.")
+        if not _is_sha256(record.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing files.")
+        elif _sha256(path) != record.get("sha256"):
+            target.errors.append(f"{label}.sha256 does not match current file contents.")
+    return path
+
+
+def _resolve_harness_path(path_label: str, base_dir: Path) -> Path | None:
+    if not path_label or (path_label.startswith("<redacted:") and path_label.endswith(">")):
+        return None
+    path = Path(path_label)
+    if path.is_absolute():
+        return path
+    candidates = [(base_dir / path).resolve(), path.resolve()]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
 
 
 def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarget) -> None:

@@ -31,6 +31,7 @@ yaml = ["PyYAML>=6,<7"]
 [project.scripts]
 flightrecorder = "flightrecorder.cli:main"
 hermes-flight-recorder = "flightrecorder.cli:main"
+hermes-harness = "flightrecorder.harness:main"
 
 [tool.setuptools.packages.find]
 include = ["flightrecorder*"]

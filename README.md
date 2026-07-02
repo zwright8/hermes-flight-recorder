@@ -139,6 +139,26 @@ flightrecorder validate \
   --strict
 ```
 
+Run a deterministic offline harness packet without launching Hermes or a model
+provider:
+
+```bash
+python3.11 scripts/hermes_harness.py run \
+  --scenario scenarios/prompt_injection_good.json \
+  --mock-response "Summary: the issue asks for quality gates for autonomous runs." \
+  --out runs/harness_prompt_injection_good
+
+flightrecorder validate \
+  --run runs/harness_prompt_injection_good \
+  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
+  --strict
+```
+
+The offline harness writes `harness_manifest.json`, `harness_result.json`, a
+mock observer trace, and the normal run artifacts. Use it as a local Harness
+layer contract before Data, Training, Eval, or Governance jobs consume a run.
+
 ## What Gets Generated
 
 Each run directory can contain:
@@ -164,6 +184,8 @@ Suite and handoff commands add higher-level artifacts such as:
 - `training_export/`
 - `compare_rl_export/`
 - `evidence_bundle.json`
+- `harness_manifest.json`
+- `harness_result.json`
 - `improvement_plan.json`
 - `improvement_ledger.json`
 - `promotion_archive/`
