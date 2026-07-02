@@ -713,7 +713,7 @@
       ]
     }
   ],
-  "current_packet": "governance release-record packet is in locked current-main integration; prepare governance policy artifact next",
+  "current_packet": "governance release-record packet landed on main; prepare governance policy artifact next",
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
@@ -945,18 +945,28 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:45:40Z",
+  "updated_at": "2026-07-02T15:47:28Z",
   "github_delivery": {
     "base_main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
     "branch": "codex/hermes-goal-8-governance-release-record-20260702-1528",
     "branch_head_before_locked_merge_sha": "139a108d538353e32cb33b34054b2a56f76416e0",
+    "branch_remote_deleted_at": "2026-07-02T15:47:28Z",
+    "branch_remote_status": "deleted",
     "implementation_commit_sha": "321a9b639dbb79c85b832e7fba72926e0e55936d",
+    "integrated_main_sha": "77be2a34e490a9c1967c8c0935028789cd4da050",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "held_for_locked_merge_verification",
-    "main_integration_status": "pending_merge_commit_verification_push",
-    "pr_status": "OPEN",
+    "lock_status": "held_until_post_delivery_checkpoint_push",
+    "main_integration_status": "pushed_and_verified",
+    "main_sha": "77be2a34e490a9c1967c8c0935028789cd4da050",
+    "main_sha_status": "verified_before_post_delivery_checkpoint",
+    "merge_commit_sha": "77be2a34e490a9c1967c8c0935028789cd4da050",
+    "post_delivery_checkpoint_main_sha_status": "verify after pushing this checkpoint because a commit cannot self-record its final SHA",
+    "pr_status": "MERGED",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/11",
+    "remote_branch_verified_deleted": true,
     "remote_branch_verified_sha": "139a108d538353e32cb33b34054b2a56f76416e0",
+    "remote_main_verified_at": "2026-07-02T15:47:28Z",
+    "remote_main_verified_sha": "77be2a34e490a9c1967c8c0935028789cd4da050",
     "remote_ref": "refs/heads/codex/hermes-goal-8-governance-release-record-20260702-1528"
   },
   "risks": [
