@@ -872,6 +872,7 @@ assert "## Dataset Splits" in dataset_card
 assert "## Quality Flags" in dataset_card
 PY
 test -f runs/validation.json
+"$PYTHON" -m flightrecorder schemas --check runs/validation.json >/dev/null
 "$PYTHON" -m flightrecorder validate \
   --runs runs \
   --training-export runs/training_export \
@@ -1181,6 +1182,7 @@ test -f runs/promotion_archive/promotion_archive.json
   --strict \
   --out runs/gate_validation.json >/dev/null
 test -f runs/gate_validation.json
+"$PYTHON" -m flightrecorder schemas --check runs/gate_validation.json >/dev/null
 "$PYTHON" -m flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --gate runs/compare_gate.json \

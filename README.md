@@ -1076,6 +1076,7 @@ flightrecorder schemas
 flightrecorder schemas --name trace --out trace.v1.schema.json
 flightrecorder schemas --write-dir artifact_schemas
 flightrecorder schemas --check runs/suite_summary.json
+flightrecorder schemas --check runs/validation.json
 flightrecorder schemas --check runs/scenario_quality.json
 flightrecorder schemas --check runs/evidence_coverage.json
 flightrecorder schemas --check runs/trace_observability.json

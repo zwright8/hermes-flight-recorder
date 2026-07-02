@@ -33,6 +33,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("state_validator_config", names)
         self.assertIn("state_validator_assertions", names)
         self.assertIn("supervisor_state", names)
+        self.assertIn("validation", names)
         self.assertIn("run_suite", names)
         self.assertIn("evidence_coverage", names)
         self.assertIn("scenario_quality", names)
@@ -595,6 +596,36 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "trace_observability")
+
+    def test_validation_schema_accepts_minimal_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.validation.v1",
+                "passed": True,
+                "strict": True,
+                "target_count": 1,
+                "error_count": 0,
+                "warning_count": 0,
+                "targets": [
+                    {
+                        "type": "run",
+                        "path": "runs/prompt_injection_good",
+                        "passed": True,
+                        "errors": [],
+                        "warnings": [],
+                        "details": {
+                            "scenario_id": "prompt_injection_good",
+                            "score": 100,
+                            "passed": True,
+                            "event_count": 4,
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "validation")
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(

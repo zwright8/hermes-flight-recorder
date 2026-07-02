@@ -1,0 +1,53 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/validation.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Artifact validation summary emitted by flightrecorder validate.",
+  "properties": {
+    "error_count": { "minimum": 0, "type": "integer" },
+    "passed": { "type": "boolean" },
+    "schema_version": { "const": "hfr.validation.v1" },
+    "strict": { "type": "boolean" },
+    "target_count": { "minimum": 0, "type": "integer" },
+    "targets": {
+      "items": { "$ref": "#/$defs/target" },
+      "type": "array"
+    },
+    "warning_count": { "minimum": 0, "type": "integer" }
+  },
+  "required": [
+    "schema_version",
+    "passed",
+    "strict",
+    "target_count",
+    "error_count",
+    "warning_count",
+    "targets"
+  ],
+  "title": "Hermes Flight Recorder Validation Summary",
+  "type": "object",
+  "$defs": {
+    "target": {
+      "additionalProperties": true,
+      "properties": {
+        "details": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "errors": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "passed": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" },
+        "type": { "minLength": 1, "type": "string" },
+        "warnings": {
+          "items": { "type": "string" },
+          "type": "array"
+        }
+      },
+      "required": ["type", "path", "passed", "errors", "warnings", "details"],
+      "type": "object"
+    }
+  }
+}

@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,9 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(summary["schema_version"], "hfr.validation.v1")
             self.assertEqual(summary["error_count"], 0)
             self.assertEqual(summary["target_count"], 3)
+            schema = check_schema_file(summary_path)
+            self.assertTrue(schema["passed"], schema["errors"])
+            self.assertEqual(schema["schema"]["name"], "validation")
 
     def test_validate_rejects_inconsistent_scorecard(self):
         with tempfile.TemporaryDirectory() as tmp:
