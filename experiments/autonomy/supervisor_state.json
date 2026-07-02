@@ -2216,7 +2216,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:33:26Z",
+  "updated_at": "2026-07-02T16:37:53Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2366,7 +2366,8 @@
     "Policy artifacts intentionally cannot relax default blockers; future policy fields must preserve that safety floor.",
     "Post-delivery checkpoint commit cannot self-record its final main SHA; verify remote main again after pushing the checkpoint, then release /tmp/hermes-flight-recorder-main-push.lock.",
     "The schema is intentionally permissive for additionalProperties to preserve forward-compatible policy extension; governance code remains the safety floor for unknown fields.",
-    "System python3 is Python 3.9.6 and cannot run the full discovery suite because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11."
+    "System python3 is Python 3.9.6 and cannot run the full discovery suite because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11.",
+    "Duplicate supervisor branch codex/hermes-goal-0-supervisor-20260702-1228 was deleted instead of merged because PR #14 had already landed a stronger promotion-policy schema packet on main."
   ],
   "safety_guardrails": {
     "gpu_work_launched": false,
@@ -2496,5 +2497,47 @@
     "remote_branch_verified_deleted": true,
     "remote_main_verified_at": "2026-07-02T16:18:24Z",
     "remote_main_verified_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1"
-  }
+  },
+  "branch_retirements": [
+    {
+      "id": "duplicate_supervisor_governance_policy_schema_branch_retired",
+      "branch": "codex/hermes-goal-0-supervisor-20260702-1228",
+      "branch_sha": "a1fd6c68d3082a78af8dc24e3abf74bbed5631ed",
+      "status": "remote_deleted_superseded_by_main",
+      "deleted_at": "2026-07-02T16:35:42Z",
+      "remote_branch_verified_deleted": true,
+      "superseded_by_branch": "codex/hermes-goal-8-governance-policy-schema-20260702-1620",
+      "superseded_by_main_sha": "fd9856e2854d5bdcf593e4ad56307485bc921057",
+      "superseded_by_merge_sha": "136c1c2f7d85d9458ad9f3ce0ef1d916f0d23be0",
+      "reason": "A richer Goal 8 promotion-policy schema packet landed on main before this duplicate supervisor branch acquired the integration lock.",
+      "verification": [
+        {
+          "command": "git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1228 codex/hermes-goal-8-governance-policy-schema-20260702-1620",
+          "status": "pass",
+          "summary": "Only refs/heads/main returned at fd9856e2854d5bdcf593e4ad56307485bc921057; the duplicate supervisor branch and landed source branch were absent."
+        },
+        {
+          "command": "git show origin/main:experiments/autonomy/supervisor_state.json",
+          "status": "pass",
+          "summary": "Current main records governance_policy_schema_registry as landed and queues governance_rollback_target_receipts next."
+        }
+      ]
+    },
+    {
+      "id": "duplicate_branch_retirement_checkpoint_branch_closed",
+      "branch": "codex/hermes-goal-0-supervisor-20260702-1236",
+      "branch_sha": "99a4bc58f7696c15f15d9f8bdf2223a08b258919",
+      "status": "remote_deleted_after_main_checkpoint",
+      "deleted_at": "2026-07-02T16:37:53Z",
+      "remote_branch_verified_deleted": true,
+      "main_sha": "99a4bc58f7696c15f15d9f8bdf2223a08b258919",
+      "verification": [
+        {
+          "command": "git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1236",
+          "status": "pass",
+          "summary": "Only refs/heads/main returned at 99a4bc58f7696c15f15d9f8bdf2223a08b258919; the checkpoint branch was absent."
+        }
+      ]
+    }
+  ]
 }
