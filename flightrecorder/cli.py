@@ -53,7 +53,7 @@ from .improvement_gate import (
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
-from .governance import PromotionDecisionError, build_promotion_decision
+from .governance import PromotionDecisionError, build_promotion_cards, build_promotion_decision
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -790,6 +790,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         action_ledger_paths=args.action_ledger,
         action_ledger_gate_paths=args.action_ledger_gate,
         decision_gate_paths=args.decision_gate,
+        promotion_cards_paths=args.promotion_cards,
         promotion_decision_paths=args.promotion_decision,
         promotion_ledger_paths=args.promotion_ledger,
         promotion_ledger_gate_paths=args.promotion_ledger_gate,
@@ -1006,6 +1007,29 @@ def cmd_action_ledger(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0
+
+
+def cmd_promotion_cards(args: argparse.Namespace) -> int:
+    cards = build_promotion_cards(
+        out_dir=args.out,
+        candidate_id=args.candidate_id,
+        dataset_id=args.dataset_id,
+        model_source=args.model_source,
+        license_status=args.license_status,
+        evidence_bundle_path=args.evidence_bundle,
+        training_export_path=args.training_export,
+        compare_gate_path=args.compare_gate,
+        redaction_check_path=args.redaction_check,
+        safety_gate_path=args.safety_gate,
+        preserve_paths=args.preserve_paths,
+        metadata=_metadata_options(args.metadata),
+    )
+    print(
+        f"{'READY' if cards['passed'] else 'BLOCKED'} promotion-cards "
+        f"checks={cards['check_count'] - cards['failed_check_count']}/{cards['check_count']} "
+        f"out={args.out}"
+    )
+    return 0 if cards["passed"] else 1
 
 
 def cmd_promotion_decision(args: argparse.Namespace) -> int:
@@ -1894,6 +1918,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
+    validate.add_argument("--promotion-cards", action="append", default=[], help="Validate one promotion-cards directory or manifest; may be repeated")
     validate.add_argument("--promotion-decision", action="append", default=[], help="Validate one promotion_decision.json; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
@@ -2142,6 +2167,35 @@ def _parser() -> argparse.ArgumentParser:
     action_ledger.add_argument("--out", help="Write action ledger JSON to this path")
     action_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
     action_ledger.set_defaults(func=cmd_action_ledger)
+
+    promotion_cards = subparsers.add_parser(
+        "promotion-cards",
+        help="Generate model and dataset cards for promotion governance",
+    )
+    promotion_cards.add_argument("--candidate-id", required=True, help="Model id proposed for promotion")
+    promotion_cards.add_argument("--dataset-id", required=True, help="Dataset id or version represented by the dataset card")
+    promotion_cards.add_argument("--model-source", required=True, help="Source model or training output summarized by the model card")
+    promotion_cards.add_argument(
+        "--license-status",
+        default="unknown",
+        help="Reviewed license status; unknown/unreviewed/missing blocks promotion-card readiness",
+    )
+    promotion_cards.add_argument("--evidence-bundle", help="evidence_bundle.json used as governance evidence")
+    promotion_cards.add_argument("--training-export", help="Training export directory used to produce the dataset card")
+    promotion_cards.add_argument("--compare-gate", help="compare_gate.json used as eval movement evidence")
+    promotion_cards.add_argument("--redaction-check", help="Redaction gate JSON")
+    promotion_cards.add_argument("--safety-gate", help="Safety gate JSON")
+    promotion_cards.add_argument("--out", required=True, help="Output directory for MODEL_CARD.md, DATASET_CARD.md, and promotion_cards.json")
+    promotion_cards.add_argument(
+        "--metadata",
+        action="append",
+        nargs=2,
+        metavar=("KEY", "VALUE"),
+        default=[],
+        help="Attach metadata to the promotion cards manifest; may be repeated",
+    )
+    promotion_cards.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in card manifests")
+    promotion_cards.set_defaults(func=cmd_promotion_cards)
 
     promotion_decision = subparsers.add_parser(
         "promotion-decision",

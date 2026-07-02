@@ -617,6 +617,20 @@ to model, dataset, rollback, license, safety, serving, training, and eval
 evidence:
 
 ```bash
+flightrecorder promotion-cards \
+  --candidate-id candidate-v2 \
+  --dataset-id dataset-v1 \
+  --model-source base-model-or-training-output \
+  --license-status known \
+  --evidence-bundle runs/evidence_bundle.json \
+  --training-export runs/training_export \
+  --compare-gate runs/compare_gate.json \
+  --redaction-check runs/redaction_check.json \
+  --safety-gate runs/safety_gate.json \
+  --out runs/promotion_cards
+
+flightrecorder validate --promotion-cards runs/promotion_cards --strict
+
 flightrecorder promotion-decision \
   --candidate-id candidate-v2 \
   --champion-id champion-v1 \
@@ -625,8 +639,8 @@ flightrecorder promotion-decision \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --compare-gate runs/compare_gate.json \
   --trainer-launch-check runs/trainer_launch_check.json \
-  --model-card runs/MODEL_CARD.md \
-  --dataset-card runs/training_export/DATASET_CARD.md \
+  --model-card runs/promotion_cards/MODEL_CARD.md \
+  --dataset-card runs/promotion_cards/DATASET_CARD.md \
   --rollback-metadata runs/rollback.json \
   --license-review runs/license_review.json \
   --redaction-check runs/redaction_check.json \
@@ -643,6 +657,9 @@ the rollback target is declared, license status is known, cards have no
 TODO/TBD/unsupported-claim markers, and eval movement shows no task-completion
 regressions, new critical failures, forbidden actions, secret exposure,
 contract drift, or unverified contracts.
+`promotion-cards` is also side-effect free: it writes `MODEL_CARD.md`,
+`DATASET_CARD.md`, and `promotion_cards.json`, and validation rejects stale card
+hashes after generation.
 
 ## Live Hermes Collection
 

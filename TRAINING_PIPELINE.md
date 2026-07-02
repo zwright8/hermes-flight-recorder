@@ -303,6 +303,20 @@ Before any external registry process moves `candidate`, `champion`, or
 `rollback` aliases, run a top-level governance decision:
 
 ```bash
+flightrecorder promotion-cards \
+  --candidate-id candidate-v2 \
+  --dataset-id dataset-v1 \
+  --model-source base-model-or-training-output \
+  --license-status known \
+  --evidence-bundle runs/evidence_bundle.json \
+  --training-export runs/training_export \
+  --compare-gate runs/compare_gate.json \
+  --redaction-check runs/redaction_check.json \
+  --safety-gate runs/safety_gate.json \
+  --out runs/promotion_cards
+
+flightrecorder validate --promotion-cards runs/promotion_cards --strict
+
 flightrecorder promotion-decision \
   --candidate-id candidate-v2 \
   --champion-id champion-v1 \
@@ -311,8 +325,8 @@ flightrecorder promotion-decision \
   --promotion-ledger-gate runs/promotion_ledger_gate.json \
   --compare-gate runs/compare_gate.json \
   --trainer-launch-check runs/trainer_launch_check.json \
-  --model-card runs/MODEL_CARD.md \
-  --dataset-card runs/training_export/DATASET_CARD.md \
+  --model-card runs/promotion_cards/MODEL_CARD.md \
+  --dataset-card runs/promotion_cards/DATASET_CARD.md \
   --rollback-metadata runs/rollback.json \
   --license-review runs/license_review.json \
   --redaction-check runs/redaction_check.json \
@@ -329,6 +343,9 @@ mismatch, task-completion regression, new critical failures, secret exposure,
 forbidden actions, and unsupported card claims. A passing decision is still
 side-effect free: it authorizes an alias-update receipt, leaving the actual
 registry write to a later guarded step.
+`promotion-cards` generates the model and dataset cards plus
+`promotion_cards.json`; validation rehashes generated cards and inputs so stale
+card evidence is caught before the promotion decision consumes it.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

@@ -13,8 +13,16 @@ from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 
 PROMOTION_DECISION_SCHEMA_VERSION = "hfr.promotion_decision.v1"
+PROMOTION_CARDS_SCHEMA_VERSION = "hfr.promotion_cards.v1"
 
 MODEL_CLASSES = {"base", "trace-only", "frontier", "champion", "candidate"}
+PROMOTION_CARDS_REQUIRED_INPUTS = (
+    "evidence_bundle",
+    "training_export",
+    "compare_gate",
+    "redaction_check",
+    "safety_gate",
+)
 PROMOTION_DECISION_REQUIRED_ARTIFACTS = (
     "evidence_bundle",
     "promotion_ledger_gate",
@@ -234,6 +242,251 @@ def build_promotion_decision(
     if metadata:
         result["metadata"] = dict(sorted(metadata.items()))
     return result
+
+
+def build_promotion_cards(
+    *,
+    out_dir: str | Path,
+    candidate_id: str,
+    dataset_id: str,
+    model_source: str = "",
+    license_status: str = "",
+    evidence_bundle_path: str | Path | None = None,
+    training_export_path: str | Path | None = None,
+    compare_gate_path: str | Path | None = None,
+    redaction_check_path: str | Path | None = None,
+    safety_gate_path: str | Path | None = None,
+    preserve_paths: bool = False,
+    metadata: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Generate promotion model and dataset cards plus a validating manifest."""
+    target = Path(out_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    model_card_path = target / "MODEL_CARD.md"
+    dataset_card_path = target / "DATASET_CARD.md"
+    manifest_path = target / "promotion_cards.json"
+
+    paths = {
+        "evidence_bundle": evidence_bundle_path,
+        "training_export": training_export_path,
+        "compare_gate": compare_gate_path,
+        "redaction_check": redaction_check_path,
+        "safety_gate": safety_gate_path,
+    }
+    input_artifacts = {
+        role: _artifact_record(role, Path(raw_path) if raw_path else None, preserve_paths)
+        for role, raw_path in paths.items()
+    }
+    json_artifacts = {
+        role: _read_json_artifact(Path(raw_path)) if raw_path else None
+        for role, raw_path in paths.items()
+        if role != "training_export"
+    }
+
+    checks: list[dict[str, Any]] = []
+    _add_check(
+        checks,
+        "candidate_id_present",
+        bool(candidate_id),
+        actual=bool(candidate_id),
+        expected={"present": True},
+        summary="candidate model id is present",
+    )
+    _add_check(
+        checks,
+        "dataset_id_present",
+        bool(dataset_id),
+        actual=bool(dataset_id),
+        expected={"present": True},
+        summary="dataset id is present",
+    )
+    _add_check(
+        checks,
+        "model_source_present",
+        bool(model_source),
+        actual=bool(model_source),
+        expected={"present": True},
+        summary="model source is present",
+    )
+    _add_check(
+        checks,
+        "license_status_known",
+        _known_status(license_status),
+        actual=license_status or "missing",
+        expected={"license_status": "known"},
+        scope={"field": "license_status"},
+        summary="license status is known before card generation",
+    )
+    for role in PROMOTION_CARDS_REQUIRED_INPUTS:
+        record = input_artifacts[role]
+        _add_check(
+            checks,
+            f"{role}_present",
+            record["exists"] is True,
+            actual={"exists": record["exists"], "path": record["path"]},
+            expected={"exists": True},
+            scope={"artifact_role": role},
+            summary=f"{role} input artifact is present and fingerprinted",
+        )
+
+    _add_schema_check(checks, "evidence_bundle", json_artifacts.get("evidence_bundle"))
+    _add_schema_check(checks, "compare_gate", json_artifacts.get("compare_gate"))
+    for role in ("evidence_bundle", "compare_gate", "redaction_check", "safety_gate"):
+        _add_passed_json_check(checks, role, json_artifacts.get(role))
+
+    compare_metrics = _metrics_object(json_artifacts.get("compare_gate"))
+    _add_max_count_check(checks, "task_completion_regressions_absent", compare_metrics.get("task_completion_regression_count"), 0)
+    _add_count_map_absence_check(
+        checks,
+        "new_critical_failures_absent",
+        compare_metrics.get("new_critical_failure_counts"),
+        "new critical failures",
+    )
+
+    failed_checks = sum(1 for check in checks if not check["passed"])
+    passed = failed_checks == 0
+    model_card = _render_model_card(
+        candidate_id=candidate_id,
+        model_source=model_source,
+        license_status=license_status,
+        passed=passed,
+        input_artifacts=input_artifacts,
+        compare_metrics=compare_metrics,
+    )
+    dataset_card = _render_dataset_card(
+        dataset_id=dataset_id,
+        candidate_id=candidate_id,
+        passed=passed,
+        input_artifacts=input_artifacts,
+        compare_metrics=compare_metrics,
+    )
+    model_card_path.write_text(model_card, encoding="utf-8")
+    dataset_card_path.write_text(dataset_card, encoding="utf-8")
+
+    card_artifacts = {
+        "model_card": _artifact_record("model_card", model_card_path, preserve_paths),
+        "dataset_card": _artifact_record("dataset_card", dataset_card_path, preserve_paths),
+    }
+    metrics = {
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+        "required_input_count": len(PROMOTION_CARDS_REQUIRED_INPUTS),
+        "task_completion_regression_count": _int_value(compare_metrics.get("task_completion_regression_count")),
+        "new_critical_failure_count": sum(_count_map(compare_metrics.get("new_critical_failure_counts")).values()),
+    }
+    manifest: dict[str, Any] = {
+        "schema_version": PROMOTION_CARDS_SCHEMA_VERSION,
+        "manifest_path": _display_path(manifest_path, preserve_paths),
+        "cards_dir": _display_path(target, preserve_paths),
+        "passed": passed,
+        "readiness": "ready" if passed else "blocked",
+        "recommendation": "use_cards_for_promotion_decision" if passed else "regenerate_or_block_promotion",
+        "candidate": {
+            "id": candidate_id,
+            "model_source": model_source,
+            "license_status": license_status,
+        },
+        "dataset": {"id": dataset_id},
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+        "checks": checks,
+        "artifacts": {**card_artifacts, **input_artifacts},
+        "metrics": metrics,
+        "notes": [
+            "Promotion cards are generated review artifacts; they do not train models or move registry aliases.",
+            "Cards are blocked when required inputs are missing, stale, unsafe, unredacted, or license status is unknown.",
+        ],
+    }
+    if metadata:
+        manifest["metadata"] = dict(sorted(metadata.items()))
+    _write_json(manifest_path, manifest)
+    return manifest
+
+
+def _render_model_card(
+    *,
+    candidate_id: str,
+    model_source: str,
+    license_status: str,
+    passed: bool,
+    input_artifacts: dict[str, dict[str, Any]],
+    compare_metrics: dict[str, Any],
+) -> str:
+    readiness = "ready" if passed else "blocked"
+    lines = [
+        "# Model Card",
+        "",
+        f"- Candidate model: `{candidate_id}`",
+        f"- Source: `{model_source}`",
+        f"- License status: `{license_status}`",
+        f"- Promotion-card readiness: `{readiness}`",
+        "",
+        "## Required Evidence",
+        "",
+    ]
+    for role in PROMOTION_CARDS_REQUIRED_INPUTS:
+        record = input_artifacts[role]
+        state = "present" if record.get("exists") is True else "missing"
+        lines.append(f"- {role}: {state}; path `{record.get('path', '')}`")
+    lines.extend(
+        [
+            "",
+            "## Evaluation Movement",
+            "",
+            f"- Task-completion regressions: `{_int_value(compare_metrics.get('task_completion_regression_count'))}`",
+            f"- New critical failures: `{sum(_count_map(compare_metrics.get('new_critical_failure_counts')).values())}`",
+            "",
+            "## Limitations",
+            "",
+            "- Promotion requires a separate validated promotion-decision artifact before aliases move.",
+            "- This card summarizes local governance evidence and should be regenerated when any referenced artifact changes.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _render_dataset_card(
+    *,
+    dataset_id: str,
+    candidate_id: str,
+    passed: bool,
+    input_artifacts: dict[str, dict[str, Any]],
+    compare_metrics: dict[str, Any],
+) -> str:
+    readiness = "ready" if passed else "blocked"
+    training_record = input_artifacts["training_export"]
+    lines = [
+        "# Dataset Card",
+        "",
+        f"- Dataset: `{dataset_id}`",
+        f"- Candidate model: `{candidate_id}`",
+        f"- Training export: `{training_record.get('path', '')}`",
+        f"- Promotion-card readiness: `{readiness}`",
+        "",
+        "## Governance Inputs",
+        "",
+    ]
+    for role in ("evidence_bundle", "redaction_check", "safety_gate", "compare_gate"):
+        record = input_artifacts[role]
+        state = "present" if record.get("exists") is True else "missing"
+        lines.append(f"- {role}: {state}; path `{record.get('path', '')}`")
+    lines.extend(
+        [
+            "",
+            "## Quality Signals",
+            "",
+            f"- Task-completion regressions: `{_int_value(compare_metrics.get('task_completion_regression_count'))}`",
+            f"- New critical failures: `{sum(_count_map(compare_metrics.get('new_critical_failure_counts')).values())}`",
+            "",
+            "## Use",
+            "",
+            "- Use this dataset card only with the matching promotion_cards.json manifest.",
+            "- Regenerate the card if redaction, safety, evidence, training, or eval artifacts change.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _artifact_record(role: str, path: Path | None, preserve_paths: bool) -> dict[str, Any]:
@@ -465,6 +718,10 @@ def _license_status(payload: dict[str, Any] | None) -> str:
     return status.lower() if isinstance(status, str) else ""
 
 
+def _known_status(value: str) -> bool:
+    return value.lower() not in {"", "unknown", "unreviewed", "missing"}
+
+
 def _count_map(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
@@ -520,3 +777,8 @@ def _is_windows_absolute(value: str) -> bool:
 
 def _basename(value: str) -> str:
     return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
+
+
+def _write_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")

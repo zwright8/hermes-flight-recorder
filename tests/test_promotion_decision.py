@@ -16,6 +16,54 @@ def run_cli(args):
 
 
 class PromotionDecisionTests(unittest.TestCase):
+    def test_promotion_cards_generate_valid_model_and_dataset_cards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+
+            code = run_cli(promotion_cards_args(artifacts, training_export, cards_dir))
+
+            self.assertEqual(code, 0)
+            manifest = json.loads((cards_dir / "promotion_cards.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], "hfr.promotion_cards.v1")
+            self.assertTrue(manifest["passed"])
+            self.assertTrue((cards_dir / "MODEL_CARD.md").is_file())
+            self.assertTrue((cards_dir / "DATASET_CARD.md").is_file())
+            cards_text = (cards_dir / "MODEL_CARD.md").read_text(encoding="utf-8").lower()
+            cards_text += (cards_dir / "DATASET_CARD.md").read_text(encoding="utf-8").lower()
+            self.assertNotIn("todo", cards_text)
+            self.assertNotIn("unsupported claim", cards_text)
+            self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 0)
+
+    def test_promotion_cards_block_unknown_license(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+
+            code = run_cli(promotion_cards_args(artifacts, training_export, cards_dir, license_status="unknown"))
+
+            self.assertEqual(code, 1)
+            manifest = json.loads((cards_dir / "promotion_cards.json").read_text(encoding="utf-8"))
+            self.assertFalse(manifest["passed"])
+            self.assertIn("license_status_known", failed_check_ids(manifest))
+            self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 0)
+
+    def test_validate_promotion_cards_rejects_stale_generated_card(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+
+            (cards_dir / "MODEL_CARD.md").write_text("# Model Card\n\nchanged after manifest\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 1)
+
     def test_promotion_decision_authorizes_alias_receipt_after_all_gates_pass(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -168,6 +216,46 @@ def write_governance_artifacts(root: Path, *, license_status: str = "known", com
         "safety_gate": safety_gate,
         "serving_report": serving_report,
     }
+
+
+def write_training_export(root: Path) -> Path:
+    training_export = root / "training_export"
+    training_export.mkdir()
+    (training_export / "DATASET_CARD.md").write_text("# Dataset Card\n\nGenerated upstream.\n", encoding="utf-8")
+    return training_export
+
+
+def promotion_cards_args(
+    artifacts: dict[str, Path | None],
+    training_export: Path,
+    out_dir: Path,
+    *,
+    license_status: str = "known",
+) -> list[str]:
+    return [
+        "promotion-cards",
+        "--candidate-id",
+        "candidate-v2",
+        "--dataset-id",
+        "dataset-v1",
+        "--model-source",
+        "base-model",
+        "--license-status",
+        license_status,
+        "--evidence-bundle",
+        str(artifacts["evidence_bundle"]),
+        "--training-export",
+        str(training_export),
+        "--compare-gate",
+        str(artifacts["compare_gate"]),
+        "--redaction-check",
+        str(artifacts["redaction_check"]),
+        "--safety-gate",
+        str(artifacts["safety_gate"]),
+        "--out",
+        str(out_dir),
+        "--preserve-paths",
+    ]
 
 
 def promotion_decision_args(artifacts: dict[str, Path | None], out_path: Path) -> list[str]:

@@ -1,8 +1,8 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:46:35Z",
+  "updated_at": "2026-07-02T14:51:50Z",
   "active_layer": "governance",
-  "current_packet": "governance promotion-decision artifact",
+  "current_packet": "governance promotion-cards artifact",
   "completed_packets": [
     {
       "id": "governance_promotion_decision_artifact",
@@ -13,17 +13,20 @@
       "branch": "codex/hermes-goal-8-governance-20260702-1027",
       "commit_sha": "eb2b97cfe046b909b04e3ae114a96f5355ea13a5",
       "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9"
+    },
+    {
+      "id": "governance_promotion_cards_artifact",
+      "layer": "governance",
+      "status": "complete",
+      "title": "Promotion model and dataset card generation",
+      "summary": "Added a side-effect-free promotion-cards command that writes MODEL_CARD.md, DATASET_CARD.md, and promotion_cards.json while blocking readiness on missing inputs, unknown license, failed redaction/safety/evidence/eval gates, stale hashes, task-completion regression, or new critical failures.",
+      "branch": "codex/hermes-goal-8-governance-20260702-1027",
+      "commit_sha": "pending",
+      "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9"
     }
   ],
   "blocked_packets": [],
   "next_packets": [
-    {
-      "id": "governance_cards_generation",
-      "layer": "governance",
-      "status": "ready",
-      "title": "Promotion card generation",
-      "summary": "Add model-card and dataset-card templates or generators that satisfy promotion-decision required-card checks."
-    },
     {
       "id": "governance_alias_apply_guard",
       "layer": "governance",
@@ -42,27 +45,27 @@
   "latest_artifacts": [
     {
       "path": "flightrecorder/governance.py",
-      "sha256": "06c52ac2ed50f2454e648ee99ab032e27a1820dd69917dda01a0744ecc65805d"
+      "sha256": "13d59c8f23e885e79748850f3cf40296054ec96abcb254d02315e9df5f9d5d83"
     },
     {
       "path": "flightrecorder/cli.py",
-      "sha256": "e015d029c08d24275c15dd789ff4800c9f2917e0c66a06869a200cf71299d2bb"
+      "sha256": "ee742bb581dbbcdd4970bd98c632a87e8d62967c2e235ed842eb7ce25d365644"
     },
     {
       "path": "flightrecorder/validation.py",
-      "sha256": "03447caddb9213bd2ada3bf7ce44239fdeebfb2ac495465445b5b3db0cc58653"
+      "sha256": "5ed99d9a5d4fa41e8251468fb342a0e564db56a42f0b6b09b847269234ca2e9b"
     },
     {
       "path": "tests/test_promotion_decision.py",
-      "sha256": "7594cc6836dd1d9c3215946bcfe965198072909ff4f6b5f853f9d71a3351d928"
+      "sha256": "e597a34947f51ec0c7b41268a54ab79356346be0d80c03c4b51b7430a90014cf"
     },
     {
       "path": "README.md",
-      "sha256": "44660e8783f21b198592111c5cb7ed5db4ea25a66d79ebc587fd3c1618a4359e"
+      "sha256": "d73fa78193f6c90c71a4a844b4e479be30aca386ad5560575f0f3e9d98ec4f20"
     },
     {
       "path": "TRAINING_PIPELINE.md",
-      "sha256": "e0b8f5d6ba9cf7bb83595cd3f27096eac8ed517cb75df9cb0db210cc5125a563"
+      "sha256": "fc33198ee8fa38457fa8b1ac8e9744e11ae976452ca40a39f09e6792d7391231"
     }
   ],
   "latest_verification": [
@@ -73,17 +76,17 @@
     {
       "command": "python3 -m unittest tests.test_promotion_decision",
       "status": "passed",
-      "summary": "5 tests passed"
+      "summary": "8 tests passed"
     },
     {
       "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
       "status": "passed",
-      "summary": "45 tests passed"
+      "summary": "48 tests passed"
     },
     {
-      "command": "python3 -m flightrecorder --help && python3 -m flightrecorder validate --help",
+      "command": "python3 -m flightrecorder promotion-cards --help && python3 -m flightrecorder validate --help",
       "status": "passed",
-      "summary": "promotion-decision and validate --promotion-decision are advertised"
+      "summary": "promotion-cards and validate --promotion-cards are advertised"
     },
     {
       "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
@@ -103,7 +106,7 @@
     {
       "command": "python3.11 -m unittest discover",
       "status": "passed",
-      "summary": "305 tests passed"
+      "summary": "308 tests passed"
     }
   ],
   "promotion_readiness": {
@@ -117,7 +120,7 @@
     "governance": "in_progress"
   },
   "layer_status": {
-    "governance": "Top-level promotion decision artifact is implemented and verified; card generation, release records, and guarded registry alias application remain."
+    "governance": "Promotion-decision and promotion-cards artifacts are implemented and verified; release records and guarded registry alias application remain."
   },
   "safety_guardrails": [
     "Never push directly to main.",

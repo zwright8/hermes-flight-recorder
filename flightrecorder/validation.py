@@ -25,7 +25,12 @@ from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_k
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
-from .governance import PROMOTION_DECISION_REQUIRED_ARTIFACTS, PROMOTION_DECISION_SCHEMA_VERSION
+from .governance import (
+    PROMOTION_CARDS_REQUIRED_INPUTS,
+    PROMOTION_CARDS_SCHEMA_VERSION,
+    PROMOTION_DECISION_REQUIRED_ARTIFACTS,
+    PROMOTION_DECISION_SCHEMA_VERSION,
+)
 from .promotion_archive import PROMOTION_ARCHIVE_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
@@ -124,6 +129,7 @@ def validate_artifacts(
     action_ledger_paths: list[str | Path] | None = None,
     action_ledger_gate_paths: list[str | Path] | None = None,
     decision_gate_paths: list[str | Path] | None = None,
+    promotion_cards_paths: list[str | Path] | None = None,
     promotion_decision_paths: list[str | Path] | None = None,
     promotion_ledger_paths: list[str | Path] | None = None,
     promotion_ledger_gate_paths: list[str | Path] | None = None,
@@ -177,6 +183,8 @@ def validate_artifacts(
         targets.append(validate_action_ledger_gate(action_ledger_gate_path))
     for decision_gate_path in decision_gate_paths or []:
         targets.append(validate_decision_gate(decision_gate_path))
+    for promotion_cards_path in promotion_cards_paths or []:
+        targets.append(validate_promotion_cards(promotion_cards_path))
     for promotion_decision_path in promotion_decision_paths or []:
         targets.append(validate_promotion_decision(promotion_decision_path))
     for promotion_ledger_path in promotion_ledger_paths or []:
@@ -736,6 +744,17 @@ def validate_promotion_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "promotion_ledger.json")
     if ledger is not None:
         _validate_promotion_ledger(ledger, target, ledger_path)
+    return target
+
+
+def validate_promotion_cards(path: str | Path) -> ValidationTarget:
+    """Validate a promotion-cards directory or manifest."""
+    cards_path = Path(path)
+    manifest_path = cards_path / "promotion_cards.json" if cards_path.is_dir() else cards_path
+    target = ValidationTarget("promotion_cards", str(path))
+    cards = _read_object(manifest_path, target, "promotion_cards.json")
+    if cards is not None:
+        _validate_promotion_cards(cards, target, manifest_path)
     return target
 
 
@@ -6421,6 +6440,103 @@ def _validate_decision_gate_source_decision_matches_artifact(
             target.errors.append(f"decision_gate.source_decision.{field_name} must match current source artifact.")
 
 
+def _validate_promotion_cards(cards: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(cards, "schema_version", PROMOTION_CARDS_SCHEMA_VERSION, target)
+    for field_name in ("manifest_path", "cards_dir"):
+        if not isinstance(cards.get(field_name), str) or not cards.get(field_name):
+            target.errors.append(f"promotion_cards.{field_name} must be a non-empty string.")
+    if not isinstance(cards.get("passed"), bool):
+        target.errors.append("promotion_cards.passed must be a boolean.")
+    checks = cards.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("promotion_cards.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "promotion_cards.checks")
+    if cards.get("check_count") != len(checks):
+        target.errors.append(f"promotion_cards.check_count expected {len(checks)}, got {cards.get('check_count')!r}.")
+    if cards.get("failed_check_count") != failed_checks:
+        target.errors.append(f"promotion_cards.failed_check_count expected {failed_checks}, got {cards.get('failed_check_count')!r}.")
+    expected_passed = failed_checks == 0
+    if isinstance(cards.get("passed"), bool) and cards["passed"] != expected_passed:
+        target.errors.append("promotion_cards.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = "use_cards_for_promotion_decision" if expected_passed else "regenerate_or_block_promotion"
+    if cards.get("readiness") != expected_readiness:
+        target.errors.append(f"promotion_cards.readiness expected {expected_readiness!r}, got {cards.get('readiness')!r}.")
+    if cards.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"promotion_cards.recommendation expected {expected_recommendation!r}, got {cards.get('recommendation')!r}."
+        )
+
+    candidate = cards.get("candidate")
+    if not isinstance(candidate, dict):
+        target.errors.append("promotion_cards.candidate must be an object.")
+        candidate = {}
+    for field_name in ("id", "model_source", "license_status"):
+        if not isinstance(candidate.get(field_name), str):
+            target.errors.append(f"promotion_cards.candidate.{field_name} must be a string.")
+    dataset = cards.get("dataset")
+    if not isinstance(dataset, dict):
+        target.errors.append("promotion_cards.dataset must be an object.")
+        dataset = {}
+    if not isinstance(dataset.get("id"), str):
+        target.errors.append("promotion_cards.dataset.id must be a string.")
+
+    artifacts = cards.get("artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("promotion_cards.artifacts must be an object.")
+        artifacts = {}
+    for role in ("model_card", "dataset_card", *PROMOTION_CARDS_REQUIRED_INPUTS):
+        _validate_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_cards.artifacts")
+    _validate_promotion_card_text(artifacts.get("model_card"), target, source_path, "promotion_cards.artifacts.model_card")
+    _validate_promotion_card_text(artifacts.get("dataset_card"), target, source_path, "promotion_cards.artifacts.dataset_card")
+    _validate_promotion_cards_metrics(cards.get("metrics"), checks, target)
+    if not _is_string_list(cards.get("notes")):
+        target.errors.append("promotion_cards.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": cards.get("passed"),
+            "recommendation": cards.get("recommendation"),
+            "failed_check_count": failed_checks,
+            "candidate_id": candidate.get("id"),
+            "dataset_id": dataset.get("id"),
+        }
+    )
+
+
+def _validate_promotion_card_text(value: Any, target: ValidationTarget, source_path: Path, label: str) -> None:
+    if not isinstance(value, dict) or value.get("exists") is not True:
+        return
+    card_path = _resolve_promotion_decision_artifact_path(value.get("path"), source_path, "file")
+    if card_path is None or not card_path.exists() or not card_path.is_file():
+        return
+    try:
+        text = card_path.read_text(encoding="utf-8").lower()
+    except OSError:
+        return
+    markers = [marker for marker in ("unsupported claim", "todo", "tbd") if marker in text]
+    if markers:
+        target.errors.append(f"{label} contains unsupported claim marker(s): {', '.join(markers)}.")
+
+
+def _validate_promotion_cards_metrics(value: Any, checks: list[Any], target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("promotion_cards.metrics must be an object.")
+        return
+    expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
+    expected = {
+        "check_count": len(checks),
+        "failed_check_count": expected_failed,
+        "required_input_count": len(PROMOTION_CARDS_REQUIRED_INPUTS),
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"promotion_cards.metrics.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}.")
+    for field_name in ("task_completion_regression_count", "new_critical_failure_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"promotion_cards.metrics.{field_name} must be a non-negative integer.")
+
+
 def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(decision, "schema_version", PROMOTION_DECISION_SCHEMA_VERSION, target)
     if not isinstance(decision.get("decision_path"), str):
@@ -6558,7 +6674,17 @@ def _validate_promotion_decision_block(
 
 
 def _validate_promotion_decision_artifact(value: Any, role: str, target: ValidationTarget, source_path: Path) -> None:
-    label = f"promotion_decision.artifacts.{role}"
+    _validate_fingerprinted_artifact(value, role, target, source_path, "promotion_decision.artifacts")
+
+
+def _validate_fingerprinted_artifact(
+    value: Any,
+    role: str,
+    target: ValidationTarget,
+    source_path: Path,
+    prefix: str,
+) -> None:
+    label = f"{prefix}.{role}"
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
