@@ -745,7 +745,21 @@ file:
 
 ```bash
 python3.11 scripts/hermes_harness.py run-scenario \
-  --manifest harness/mock_manifest.json
+  --manifest harness/mock_manifest.json \
+  --relative-paths \
+  --force
+```
+
+The companion policy example is expected to return nonzero because the mock
+trace intentionally uses a denied terminal command and blocked URL. Keep the
+generated artifacts anyway: they are useful public fixtures for validating
+blocked-action canaries, scorecard failures, and replay.
+
+```bash
+python3.11 scripts/hermes_harness.py run-scenario \
+  --manifest harness/policy_violation_manifest.json \
+  --relative-paths \
+  --force
 ```
 
 Run a directory through the mock harness interface:

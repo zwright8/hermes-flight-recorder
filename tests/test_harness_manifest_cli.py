@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -9,6 +11,7 @@ from flightrecorder.cli import main as flightrecorder_main
 from flightrecorder.schema_registry import check_schema_file
 from scripts.hermes_harness import (
     DEFAULT_FAKE_SECRET_CANARIES,
+    HARNESS_REPLAY_RESULT_SCHEMA_VERSION,
     HARNESS_MODEL_PROBE_SCHEMA_VERSION,
     HARNESS_SUITE_RESULT_SCHEMA_VERSION,
     build_harness_manifest,
@@ -243,6 +246,120 @@ class HarnessManifestCliTests(unittest.TestCase):
             self._assert_flightrecorder_ok(
                 ["validate", "--harness-replay-result", str(replay_dir / "harness_replay_result.json"), "--strict"]
             )
+
+    def test_checked_in_public_harness_examples_run_validate_and_replay(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(repo_root / "harness", root / "harness")
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                mock_manifest_path = root / "harness" / "mock_manifest.json"
+                policy_manifest_path = root / "harness" / "policy_violation_manifest.json"
+                self.assertTrue(check_schema_file(mock_manifest_path, "harness_run_manifest")["passed"])
+                self.assertTrue(
+                    check_schema_file(policy_manifest_path, "harness_run_manifest")["passed"]
+                )
+
+                mock_rc, mock_stdout = _run_harness(
+                    [
+                        "run-scenario",
+                        "--manifest",
+                        "harness/mock_manifest.json",
+                        "--relative-paths",
+                        "--force",
+                    ]
+                )
+                policy_rc, policy_stdout = _run_harness(
+                    [
+                        "run-scenario",
+                        "--manifest",
+                        "harness/policy_violation_manifest.json",
+                        "--relative-paths",
+                        "--force",
+                    ]
+                )
+
+                self.assertEqual(mock_rc, 0, mock_stdout)
+                self.assertEqual(policy_rc, 1, policy_stdout)
+                mock_result = _json_from_stdout(mock_stdout)
+                policy_result = _json_from_stdout(policy_stdout)
+                self.assertTrue(mock_result["scorecard"]["passed"])
+                self.assertEqual(set(policy_result["scorecard"]["critical_failures"]), {"forbidden_actions", "budget"})
+                self.assertTrue(mock_result["replay"]["self_contained"])
+                self.assertTrue(policy_result["replay"]["self_contained"])
+
+                canaries = {
+                    (item["type"], item["pattern"])
+                    for item in policy_result["tool_policy"]["blocked_action_canaries"]
+                }
+                self.assertIn(("tool_name", "terminal"), canaries)
+                self.assertIn(("command", "cat .*secrets\\.env"), canaries)
+                self.assertIn(("url", "https://evil\\.example"), canaries)
+
+                for run_name in ("harness_mock_manifest", "harness_policy_violation"):
+                    run_dir = root / "runs" / run_name
+                    self.assertTrue(check_schema_file(run_dir / "harness_manifest.json", "harness_run_manifest")["passed"])
+                    self.assertTrue(check_schema_file(run_dir / "harness_result.json", "harness_run_result")["passed"])
+                    self._assert_flightrecorder_ok(
+                        [
+                            "validate",
+                            "--harness-manifest",
+                            str(run_dir / "harness_manifest.json"),
+                            "--harness-result",
+                            str(run_dir / "harness_result.json"),
+                            "--strict",
+                        ]
+                    )
+                    for filename in ("harness_manifest.json", "harness_result.json", "artifact_lineage.json"):
+                        text = (run_dir / filename).read_text(encoding="utf-8")
+                        self.assertNotIn(str(root), text, filename)
+                        self.assertNotIn("/private/", text, filename)
+                        self.assertNotIn("/var/", text, filename)
+                    for canary_value in DEFAULT_FAKE_SECRET_CANARIES.values():
+                        result_text = (run_dir / "harness_result.json").read_text(encoding="utf-8")
+                        self.assertNotIn(canary_value, result_text)
+
+                replay_rc, replay_stdout = _run_harness(
+                    [
+                        "replay-trace",
+                        "--lineage",
+                        "runs/harness_mock_manifest/artifact_lineage.json",
+                        "--out",
+                        "runs/harness_mock_manifest_replay",
+                    ]
+                )
+                policy_replay_rc, policy_replay_stdout = _run_harness(
+                    [
+                        "replay-trace",
+                        "--lineage",
+                        "runs/harness_policy_violation/artifact_lineage.json",
+                        "--out",
+                        "runs/harness_policy_violation_replay",
+                    ]
+                )
+
+                self.assertEqual(replay_rc, 0, replay_stdout)
+                self.assertEqual(policy_replay_rc, 1, policy_replay_stdout)
+                replay_result = _json_from_stdout(replay_stdout)
+                policy_replay_result = _json_from_stdout(policy_replay_stdout)
+                self.assertEqual(replay_result["schema_version"], HARNESS_REPLAY_RESULT_SCHEMA_VERSION)
+                self.assertEqual(policy_replay_result["schema_version"], HARNESS_REPLAY_RESULT_SCHEMA_VERSION)
+                self.assertTrue(replay_result["passed"])
+                self.assertFalse(policy_replay_result["passed"])
+                self._assert_flightrecorder_ok(
+                    [
+                        "validate",
+                        "--harness-replay-result",
+                        str(root / "runs" / "harness_mock_manifest_replay" / "harness_replay_result.json"),
+                        "--harness-replay-result",
+                        str(root / "runs" / "harness_policy_violation_replay" / "harness_replay_result.json"),
+                        "--strict",
+                    ]
+                )
+            finally:
+                os.chdir(previous_cwd)
 
     def _assert_flightrecorder_ok(self, args: list[str]) -> None:
         rc, stdout, stderr = _run_flightrecorder(args)
