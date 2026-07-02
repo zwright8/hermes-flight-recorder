@@ -314,7 +314,7 @@ def _view_checks(plan: dict[str, Any], plan_path: Path) -> list[dict[str, Any]]:
             {
                 "name": name,
                 "path": raw_path,
-                "resolved_path": str(resolved_path),
+                "resolved_path": _display_path(resolved_path),
                 "exists": resolved_path.exists(),
                 "regular_file": regular_file,
                 "schema_name": schema_name,
@@ -346,6 +346,15 @@ def _resolve_view_path(raw_path: str, plan: dict[str, Any], plan_path: Path) -> 
         if candidate not in deduped:
             deduped.append(candidate)
     return next((candidate for candidate in deduped if candidate.exists()), deduped[0] if deduped else path)
+
+
+def _display_path(path: Path) -> str:
+    if not path.is_absolute():
+        return str(path)
+    try:
+        return str(path.relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return path.name
 
 
 def _manifest_path(plan: dict[str, Any], key: str, plan_path: Path) -> Path | None:

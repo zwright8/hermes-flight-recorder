@@ -31,6 +31,7 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             self.assertEqual(preflight["backend"], "axolotl")
             self.assertEqual({view["name"] for view in preflight["view_checks"]}, {"sft", "dpo"})
             self.assertTrue(all(view["passed"] for view in preflight["view_checks"]))
+            self.assertTrue(all(not Path(view["resolved_path"]).is_absolute() for view in preflight["view_checks"]))
             self.assertFalse(preflight["execution_boundary"]["flight_recorder_launched_training"])
             self.assertFalse(preflight["execution_boundary"]["trainer_modules_imported"])
             schema = check_schema_contract(preflight)
@@ -104,6 +105,16 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             self.assertTrue(preflight["passed"], preflight["blocked_reasons"])
             schema = check_schema_file(out)
             self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_committed_example_runtime_preflight_is_schema_checkable(self):
+        preflight_path = ROOT / "examples" / "agentic_training" / "runtime_preflight" / "ready.json"
+        preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(preflight["passed"], preflight["blocked_reasons"])
+        self.assertEqual(preflight["recommendation"], "ready_for_tiny_smoke_launch")
+        self.assertTrue(all(not Path(view["resolved_path"]).is_absolute() for view in preflight["view_checks"]))
+        schema = check_schema_file(preflight_path)
+        self.assertTrue(schema["passed"], schema["errors"])
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

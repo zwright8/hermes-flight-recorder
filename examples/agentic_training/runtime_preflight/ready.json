@@ -1,0 +1,195 @@
+{
+  "artifact_path": "examples/agentic_training/runtime_preflight/ready.json",
+  "backend": "axolotl",
+  "blocked_reasons": [],
+  "check_count": 7,
+  "checks": [
+    {
+      "actual": {
+        "errors": []
+      },
+      "expected": {
+        "errors": []
+      },
+      "id": "plan_json_readable",
+      "passed": true,
+      "summary": "plan_json_readable: passed=True"
+    },
+    {
+      "actual": {
+        "error_count": 0,
+        "errors": []
+      },
+      "expected": {
+        "error_count": 0,
+        "schema_name": "agentic_training_plan"
+      },
+      "id": "plan_schema_passed",
+      "passed": true,
+      "summary": "plan_schema_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true,
+        "recommendation": "ready_for_external_trainer_plan"
+      },
+      "expected": {
+        "passed": true,
+        "recommendation": "ready_for_external_trainer_plan"
+      },
+      "id": "plan_recommendation_ready",
+      "passed": true,
+      "summary": "plan_recommendation_ready: passed=True"
+    },
+    {
+      "actual": {
+        "failed_views": [],
+        "view_count": 2
+      },
+      "expected": {
+        "all_selected_views_pass": true
+      },
+      "id": "selected_views_schema_passed",
+      "passed": true,
+      "summary": "selected_views_schema_passed: passed=True"
+    },
+    {
+      "actual": {
+        "backend": "axolotl",
+        "missing_modules": []
+      },
+      "expected": {
+        "all_required_modules_available": true
+      },
+      "id": "runtime_dependencies_available",
+      "passed": true,
+      "summary": "runtime_dependencies_available: passed=True"
+    },
+    {
+      "actual": {
+        "training_started": false
+      },
+      "expected": {
+        "training_started": false
+      },
+      "id": "flight_recorder_did_not_launch_training",
+      "passed": true,
+      "summary": "flight_recorder_did_not_launch_training: passed=True"
+    },
+    {
+      "actual": {
+        "model_downloads_started": false
+      },
+      "expected": {
+        "model_downloads_started": false
+      },
+      "id": "model_downloads_not_started",
+      "passed": true,
+      "summary": "model_downloads_not_started: passed=True"
+    }
+  ],
+  "created_at": "2026-07-02T00:00:00+00:00",
+  "dependency_checks": [
+    {
+      "available": true,
+      "module": "json",
+      "passed": true,
+      "required": true,
+      "sources": [
+        "override"
+      ],
+      "summary": "json: available=True"
+    }
+  ],
+  "execution_boundary": {
+    "dependency_resolution_method": "importlib.util.find_spec",
+    "dry_run_preflight_only": true,
+    "flight_recorder_launched_training": false,
+    "model_downloads_started": false,
+    "trainer_modules_imported": false,
+    "training_started": false
+  },
+  "failed_check_count": 0,
+  "handoff_contract": {
+    "disallow_unredacted_traces": true,
+    "flight_recorder_launched_training": false,
+    "model_downloads_started": false,
+    "requires_known_license_status": true,
+    "requires_redacted_dataset": true,
+    "requires_registered_dataset": true,
+    "requires_registered_inputs": true,
+    "requires_registered_model": true,
+    "runner_must_require_recommendation": "ready_for_tiny_smoke_launch",
+    "runner_owns_execution": true
+  },
+  "notes": [
+    "This artifact checks local readiness for a bounded tiny smoke launch only.",
+    "Flight Recorder did not import trainer packages, download models, mutate weights, or launch training.",
+    "External runners must revalidate manifests, redaction, license status, file hashes, and dependency versions immediately before execution."
+  ],
+  "passed": true,
+  "plan_check": {
+    "error_count": 0,
+    "errors": [],
+    "exists": true,
+    "observed_passed": true,
+    "observed_recommendation": "ready_for_external_trainer_plan",
+    "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+    "regular_file": true,
+    "required_recommendation": "ready_for_external_trainer_plan",
+    "schema_name": "agentic_training_plan",
+    "schema_passed": true
+  },
+  "plan_mode": "sft_then_dpo",
+  "plan_path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+  "plan_sha256": "038d1bf482debea820b410ce600b7750a21e39634b2ee0e01d4c043c8cbbf34b",
+  "readiness": "ready",
+  "recommendation": "ready_for_tiny_smoke_launch",
+  "schema_version": "hfr.agentic_training_runtime_preflight.v1",
+  "view_checks": [
+    {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "expected_row_count": 2,
+      "name": "sft",
+      "observed_row_count": 2,
+      "passed": true,
+      "path": "examples/agentic_training/data/sft.jsonl",
+      "regular_file": true,
+      "resolved_path": "examples/agentic_training/data/sft.jsonl",
+      "row_count_matches_manifest": true,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_sft"
+        }
+      ],
+      "schema_name": "hfr.rl.sft.v1",
+      "schema_version_declared": "hfr.rl.sft.v1",
+      "sha256": "a18ca653473ae0b0bbc635178937a351c3846149a5fcd74a1624dc8e83dd7997"
+    },
+    {
+      "error_count": 0,
+      "errors": [],
+      "exists": true,
+      "expected_row_count": 2,
+      "name": "dpo",
+      "observed_row_count": 2,
+      "passed": true,
+      "path": "examples/agentic_training/data/dpo.jsonl",
+      "regular_file": true,
+      "resolved_path": "examples/agentic_training/data/dpo.jsonl",
+      "row_count_matches_manifest": true,
+      "row_schema_counts": [
+        {
+          "count": 2,
+          "name": "rl_dpo"
+        }
+      ],
+      "schema_name": "hfr.rl.dpo.v1",
+      "schema_version_declared": "hfr.rl.dpo.v1",
+      "sha256": "a2ea1bade186c022ea178ca51b7d01cac8e864467d0128715423d6c5bd34ae49"
+    }
+  ]
+}

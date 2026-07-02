@@ -276,6 +276,18 @@ class AgenticTrainingResultTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("agentic_training_result passed receipts require all artifact refs to be regular files", errors)
 
+    def test_committed_example_result_receipt_validates(self):
+        result_path = ROOT / "examples" / "agentic_training" / "results" / "completed_result.json"
+
+        code = run_cli(["validate", "--agentic-training-result", str(result_path), "--strict"])
+
+        self.assertEqual(code, 0)
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        self.assertEqual(result["recommendation"], "register_training_result")
+        self.assertEqual(result["registry_update"]["links"][0]["collection"], "training_runs")
+        schema = check_schema_file(result_path)
+        self.assertTrue(schema["passed"], schema["errors"])
+
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_training_result", names)
