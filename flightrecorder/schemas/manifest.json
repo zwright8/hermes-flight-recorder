@@ -98,6 +98,22 @@
       "name": "harness_replay_result"
     },
     {
+      "artifact": "harness_probe_result",
+      "artifact_schema_version": "hfr.harness_probe_result.v1",
+      "description": "No-network receipt emitted before a harness suite verifies runner/provider readiness.",
+      "filename": "harness_probe_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_probe_result.v1.schema.json",
+      "name": "harness_probe_result"
+    },
+    {
+      "artifact": "harness_suite_result",
+      "artifact_schema_version": "hfr.harness_suite_result.v1",
+      "description": "Receipt emitted after running multiple scenarios through the harness layer.",
+      "filename": "harness_suite_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_suite_result.v1.schema.json",
+      "name": "harness_suite_result"
+    },
+    {
       "artifact": "live_smoke_summary",
       "artifact_schema_version": "hfr.live_smoke.summary.v2",
       "description": "Live Hermes runtime smoke summary emitted by scripts/live_hermes_smoke.py.",

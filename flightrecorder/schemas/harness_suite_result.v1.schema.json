@@ -1,0 +1,78 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_suite_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Receipt emitted after running multiple scenarios through the harness layer.",
+  "properties": {
+    "checks": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "id": { "minLength": 1, "type": "string" },
+          "passed": { "type": "boolean" },
+          "summary": { "minLength": 1, "type": "string" }
+        },
+        "required": ["id", "passed", "summary"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "created_at": { "type": "string" },
+    "failed_count": { "minimum": 0, "type": "integer" },
+    "model": {
+      "additionalProperties": true,
+      "properties": {
+        "base_url": { "type": ["string", "null"] },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "out_dir": { "minLength": 1, "type": "string" },
+    "passed": { "type": "boolean" },
+    "passed_count": { "minimum": 0, "type": "integer" },
+    "probe_result": { "minLength": 1, "type": "string" },
+    "provider": { "minLength": 1, "type": "string" },
+    "result_path": { "minLength": 1, "type": "string" },
+    "results": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "lineage": { "type": "string" },
+          "manifest": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "result": { "type": "string" },
+          "run_dir": { "type": "string" },
+          "scenario_id": { "minLength": 1, "type": "string" },
+          "score": { "type": "number" },
+          "scorecard": { "type": "string" }
+        },
+        "required": ["scenario_id", "passed"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "run_count": { "minimum": 0, "type": "integer" },
+    "runner": { "minLength": 1, "type": "string" },
+    "scenario_count": { "minimum": 0, "type": "integer" },
+    "schema_version": { "const": "hfr.harness_suite_result.v1" }
+  },
+  "required": [
+    "schema_version",
+    "runner",
+    "provider",
+    "model",
+    "out_dir",
+    "result_path",
+    "probe_result",
+    "passed",
+    "scenario_count",
+    "run_count",
+    "passed_count",
+    "failed_count",
+    "checks",
+    "results"
+  ],
+  "title": "Hermes Flight Recorder Harness Suite Result",
+  "type": "object"
+}

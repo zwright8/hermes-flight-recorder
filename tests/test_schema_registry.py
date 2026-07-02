@@ -36,6 +36,8 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
         self.assertIn("harness_replay_result", names)
+        self.assertIn("harness_probe_result", names)
+        self.assertIn("harness_suite_result", names)
         self.assertIn("live_smoke_summary", names)
         self.assertIn("live_verifier_smoke_summary", names)
         self.assertIn("openclaw_event", names)
@@ -321,6 +323,60 @@ class SchemaRegistryTests(unittest.TestCase):
         )
         self.assertTrue(result_result["passed"], result_result["errors"])
         self.assertEqual(result_result["schema"]["name"], "harness_run_result")
+
+        probe_result = check_schema_contract(
+            {
+                "schema_version": "hfr.harness_probe_result.v1",
+                "runner": "mock",
+                "provider": "mock",
+                "model": {"id": "hfr-mock"},
+                "passed": True,
+                "checks": [{"id": "probe_passed", "passed": True, "summary": "Probe passed."}],
+                "probe": {"mode": "offline_mock", "network": "disabled", "endpoint_checked": False},
+                "sandbox": {
+                    "root": "sandbox",
+                    "home": "sandbox/home",
+                    "workspace": "sandbox/workspace",
+                    "events": "sandbox/events",
+                    "fake_secret_canaries": [{"name": "HFR_FAKE_SECRET_CANARY", "sha256": "0" * 64}],
+                },
+                "tool_policy": {},
+            }
+        )
+        self.assertTrue(probe_result["passed"], probe_result["errors"])
+        self.assertEqual(probe_result["schema"]["name"], "harness_probe_result")
+
+        suite_result = check_schema_contract(
+            {
+                "schema_version": "hfr.harness_suite_result.v1",
+                "runner": "mock",
+                "provider": "mock",
+                "model": {"id": "hfr-mock"},
+                "out_dir": ".",
+                "result_path": "harness_suite_result.json",
+                "probe_result": "probe/harness_probe_result.json",
+                "passed": True,
+                "scenario_count": 1,
+                "run_count": 1,
+                "passed_count": 1,
+                "failed_count": 0,
+                "checks": [{"id": "all_scenarios_passed", "passed": True, "summary": "Suite passed."}],
+                "results": [
+                    {
+                        "scenario_id": "prompt_injection_good",
+                        "run_dir": "runs/prompt_injection_good",
+                        "manifest": "runs/prompt_injection_good/harness_manifest.json",
+                        "result": "runs/prompt_injection_good/harness_result.json",
+                        "scorecard": "runs/prompt_injection_good/scorecard.json",
+                        "lineage": "runs/prompt_injection_good/artifact_lineage.json",
+                        "passed": True,
+                        "score": 100,
+                    }
+                ],
+            }
+        )
+        self.assertTrue(suite_result["passed"], suite_result["errors"])
+        self.assertEqual(suite_result["schema"]["name"], "harness_suite_result")
 
     def test_live_smoke_summary_schema_accepts_current_summary(self):
         result = check_schema_contract(

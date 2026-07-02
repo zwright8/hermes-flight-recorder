@@ -884,6 +884,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
         harness_manifest_paths=args.harness_manifest,
         harness_result_paths=args.harness_result,
         harness_replay_result_paths=args.harness_replay_result,
+        harness_probe_result_paths=args.harness_probe_result,
+        harness_suite_result_paths=args.harness_suite_result,
         live_smoke_summary_paths=args.live_smoke_summary,
         eval_summary_paths=args.eval_summary,
         external_eval_plan_paths=args.external_eval_plan,
@@ -2392,6 +2394,8 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--harness-manifest", action="append", default=[], help="Validate one harness_manifest.json; may be repeated")
     validate.add_argument("--harness-result", action="append", default=[], help="Validate one harness_result.json; may be repeated")
     validate.add_argument("--harness-replay-result", action="append", default=[], help="Validate one harness_replay_result.json; may be repeated")
+    validate.add_argument("--harness-probe-result", action="append", default=[], help="Validate one harness_probe_result.json; may be repeated")
+    validate.add_argument("--harness-suite-result", action="append", default=[], help="Validate one harness_suite_result.json; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
     validate.add_argument("--eval-summary", action="append", default=[], help="Validate one hfr.eval_summary.v1 JSON file; may be repeated")
     validate.add_argument(
