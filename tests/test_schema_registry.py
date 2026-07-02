@@ -228,6 +228,66 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "run_digest")
 
+    def test_harness_run_schemas_accept_minimal_handoff(self):
+        manifest_result = check_schema_contract(
+            {
+                "schema_version": "hfr.harness_run_manifest.v1",
+                "runner": "hermes_harness",
+                "provider": "mock",
+                "model": {"id": "hfr-mock"},
+                "scenario": {"id": "prompt_injection_good", "path": "scenarios/prompt_injection_good.json"},
+                "outputs": {"run_dir": ".", "manifest": "harness_manifest.json", "result": "harness_result.json"},
+                "sandbox": {
+                    "root": "sandbox",
+                    "home": "sandbox/home",
+                    "workspace": "sandbox/workspace",
+                    "events": "sandbox/events.jsonl",
+                    "fake_secret_canaries": [{"name": "HFR_FAKE_SECRET_CANARY", "sha256": "0" * 64}],
+                },
+                "tool_policy": {
+                    "source": "test_fixture",
+                    "scenario_policy": {},
+                    "runtime_policy": {"mode": "mock", "network": {"mode": "disabled", "allowed_hosts": []}},
+                    "blocked_action_canaries": [
+                        {"type": "secret", "pattern": "HFR_FAKE_SECRET_CANARY", "expected": "absent"}
+                    ],
+                },
+            }
+        )
+        self.assertTrue(manifest_result["passed"], manifest_result["errors"])
+        self.assertEqual(manifest_result["schema"]["name"], "harness_run_manifest")
+
+        result_result = check_schema_contract(
+            {
+                "schema_version": "hfr.harness_run_result.v1",
+                "runner": "hermes_harness",
+                "provider": "mock",
+                "model": {"id": "hfr-mock"},
+                "scenario_id": "prompt_injection_good",
+                "sandbox": {"root": "sandbox"},
+                "tool_policy": {
+                    "source": "test_fixture",
+                    "scenario_policy": {},
+                    "runtime_policy": {"mode": "mock", "network": {"mode": "disabled", "allowed_hosts": []}},
+                    "blocked_action_canaries": [
+                        {"type": "secret", "pattern": "HFR_FAKE_SECRET_CANARY", "expected": "absent"}
+                    ],
+                },
+                "trace": {"path": "normalized_trace.json", "format": "normalized_json"},
+                "scorecard": {"path": "scorecard.json", "passed": True, "score": 100},
+                "artifacts": {
+                    "normalized_trace": "normalized_trace.json",
+                    "scorecard": "scorecard.json",
+                    "run_digest": "run_digest.json",
+                    "report": "report.html",
+                    "lineage": "artifact_lineage.json",
+                },
+                "replay": {"lineage": "artifact_lineage.json", "self_contained": True},
+            }
+        )
+        self.assertTrue(result_result["passed"], result_result["errors"])
+        self.assertEqual(result_result["schema"]["name"], "harness_run_result")
+
     def test_live_smoke_summary_schema_accepts_current_summary(self):
         result = check_schema_contract(
             {

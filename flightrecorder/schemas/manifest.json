@@ -146,22 +146,6 @@
       "name": "live_coven_smoke_summary"
     },
     {
-      "artifact": "harness_run_manifest",
-      "artifact_schema_version": "hfr.harness_run_manifest.v1",
-      "description": "Offline harness run intent manifest emitted by hermes-harness.",
-      "filename": "harness_run_manifest.v1.schema.json",
-      "id": "https://schemas.hermes-flight-recorder.dev/harness_run_manifest.v1.schema.json",
-      "name": "harness_run_manifest"
-    },
-    {
-      "artifact": "harness_run_result",
-      "artifact_schema_version": "hfr.harness_run_result.v1",
-      "description": "Offline harness run result emitted by hermes-harness.",
-      "filename": "harness_run_result.v1.schema.json",
-      "id": "https://schemas.hermes-flight-recorder.dev/harness_run_result.v1.schema.json",
-      "name": "harness_run_result"
-    },
-    {
       "artifact": "evidence_bundle",
       "artifact_schema_version": "hfr.evidence_bundle.v1",
       "description": "Evidence handoff manifest emitted by evidence-bundle.",

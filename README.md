@@ -183,6 +183,8 @@ Suite and handoff commands add higher-level artifacts such as:
 - `repair_queue.json`
 - `training_export/`
 - `compare_rl_export/`
+- `harness_handoff/harness_manifest.json`
+- `harness_handoff/harness_result.json`
 - `evidence_bundle.json`
 - `harness_manifest.json`
 - `harness_result.json`
@@ -627,7 +629,10 @@ flightrecorder evidence-bundle \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --training-export runs/training_export \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
   --gate runs/suite_gate.json \
+  --require-harness \
   --require-gate \
   --out runs/evidence_bundle.json
 ```
@@ -638,6 +643,10 @@ Gate outputs include a shared machine-readable `decision` contract with
 contract, even when top-level `passed` is true. Add `--require-gate` at Eval,
 training, or Governance boundaries so bundles cannot pass without at least one
 gate summary.
+For Eval or Governance handoffs, include matched `--harness-manifest` and
+`--harness-result` inputs plus `--require-harness --require-gate`. The bundle
+blocks unless harness lineage is schema-valid, internally consistent, and backed
+by a passing scorecard.
 
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI
 promotion-gate example.

@@ -13,7 +13,7 @@ from .action_gate import ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, ACTION_LEDGER
 from .action_ledger import ACTION_LEDGER_SCHEMA_VERSION
 from .adapters import TRACE_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
-from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
+from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
 from .compare_gate import compare_movement_summary
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
@@ -1074,7 +1074,7 @@ def validate_run_digest(path: str | Path) -> ValidationTarget:
 
 
 def validate_harness_run_manifest(path: str | Path) -> ValidationTarget:
-    """Validate a harness_manifest.json artifact."""
+    """Validate a harness run manifest handoff artifact."""
     manifest_path = Path(path)
     target = ValidationTarget("harness_run_manifest", str(manifest_path))
     manifest = _read_object(manifest_path, target, "harness_manifest.json")
@@ -1084,14 +1084,13 @@ def validate_harness_run_manifest(path: str | Path) -> ValidationTarget:
 
 
 def validate_harness_run_result(path: str | Path) -> ValidationTarget:
-    """Validate a harness_result.json artifact."""
+    """Validate a harness run result handoff artifact."""
     result_path = Path(path)
     target = ValidationTarget("harness_run_result", str(result_path))
     result = _read_object(result_path, target, "harness_result.json")
     if result is not None:
-        _validate_harness_run_result(result, target)
+        _validate_harness_run_result(result, target, source_dir=result_path.parent)
     return target
-
 
 def validate_harness_replay_result(path: str | Path) -> ValidationTarget:
     """Validate a harness_replay_result.json artifact."""
@@ -1155,7 +1154,7 @@ def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationT
     _validate_harness_tool_policy(manifest.get("tool_policy"), target, "harness_manifest.tool_policy")
 
 
-def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarget, source_dir: Path | None = None) -> None:
     if result.get("schema_version") != HARNESS_RUN_RESULT_SCHEMA_VERSION:
         target.errors.append(
             f"harness_result.schema_version must be {HARNESS_RUN_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
@@ -1167,18 +1166,18 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
         if not isinstance(result.get(field_name), dict):
             target.errors.append(f"harness_result.{field_name} must be an object.")
     trace = result.get("trace") if isinstance(result.get("trace"), dict) else {}
-    _validate_existing_path_field(trace, "path", target, "harness_result.trace.path")
+    _validate_existing_path_field(trace, "path", target, "harness_result.trace.path", base_dir=source_dir)
     scorecard = result.get("scorecard") if isinstance(result.get("scorecard"), dict) else {}
-    _validate_existing_path_field(scorecard, "path", target, "harness_result.scorecard.path")
+    _validate_existing_path_field(scorecard, "path", target, "harness_result.scorecard.path", base_dir=source_dir)
     if not isinstance(scorecard.get("passed"), bool):
         target.errors.append("harness_result.scorecard.passed must be a boolean.")
     if not isinstance(scorecard.get("score"), (int, float)) or isinstance(scorecard.get("score"), bool):
         target.errors.append("harness_result.scorecard.score must be numeric.")
     artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
     for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
-        _validate_existing_path_field(artifacts, field_name, target, f"harness_result.artifacts.{field_name}")
+        _validate_existing_path_field(artifacts, field_name, target, f"harness_result.artifacts.{field_name}", base_dir=source_dir)
     replay = result.get("replay") if isinstance(result.get("replay"), dict) else {}
-    _validate_existing_path_field(replay, "lineage", target, "harness_result.replay.lineage")
+    _validate_existing_path_field(replay, "lineage", target, "harness_result.replay.lineage", base_dir=source_dir)
     if not isinstance(replay.get("self_contained"), bool):
         target.errors.append("harness_result.replay.self_contained must be a boolean.")
     _validate_harness_tool_policy(result.get("tool_policy"), target, "harness_result.tool_policy")
@@ -1297,6 +1296,8 @@ def _validate_harness_tool_policy(value: Any, target: ValidationTarget, label: s
         for field_name in ("type", "pattern", "expected"):
             if not isinstance(canary.get(field_name), str) or not canary.get(field_name):
                 target.errors.append(f"{label}.blocked_action_canaries[{index}].{field_name} must be a non-empty string.")
+
+
 def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTarget) -> None:
     if result.get("schema_version") != HARNESS_REPLAY_RESULT_SCHEMA_VERSION:
         target.errors.append(
@@ -1316,12 +1317,21 @@ def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTa
         target.errors.append("harness_replay_result.passed must be a boolean.")
 
 
-def _validate_existing_path_field(value: dict[str, Any], field_name: str, target: ValidationTarget, label: str) -> None:
+def _validate_existing_path_field(
+    value: dict[str, Any],
+    field_name: str,
+    target: ValidationTarget,
+    label: str,
+    base_dir: Path | None = None,
+) -> None:
     path_value = value.get(field_name)
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label} must be a non-empty string.")
         return
-    if not Path(path_value).exists():
+    check_path = Path(path_value)
+    if base_dir is not None and not check_path.is_absolute():
+        check_path = base_dir / check_path
+    if not check_path.exists():
         target.errors.append(f"{label} does not exist: {path_value}.")
 
 
@@ -10864,6 +10874,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "review_calibration",
         "live_smoke_summary",
         "trainer_handoff",
+        "harness_handoff",
     )
     for section in expected_sections:
         if section in metrics and not isinstance(metrics[section], dict):
@@ -10877,6 +10888,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     trainer_handoff = metrics.get("trainer_handoff")
     if isinstance(trainer_handoff, dict):
         _validate_bundle_trainer_handoff(trainer_handoff, target)
+    harness_handoff = metrics.get("harness_handoff")
+    if isinstance(harness_handoff, dict):
+        _validate_bundle_harness_handoff(harness_handoff, target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -10946,6 +10960,70 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
     for field_name in ("missing_digest_scenarios", "invalid_digest_scenarios"):
         if not _is_string_list(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a list of strings.")
+
+
+def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "evidence_bundle.metrics.harness_handoff"
+    for field_name in (
+        "manifest_count",
+        "result_count",
+        "pair_count",
+        "passed_pair_count",
+        "failed_pair_count",
+        "schema_valid_pair_count",
+        "consistent_pair_count",
+        "missing_pair_count",
+    ):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("runners", "providers", "models", "trace_formats"):
+        _validate_count_rows(value.get(field_name), target, f"{label}.{field_name}")
+    runs = value.get("runs")
+    if not isinstance(runs, list):
+        target.errors.append(f"{label}.runs must be a list.")
+        runs = []
+    if _is_non_negative_int(value.get("pair_count")) and int(value["pair_count"]) != len(runs):
+        target.errors.append(f"{label}.pair_count expected {len(runs)}, got {value.get('pair_count')!r}.")
+
+    passed_count = 0
+    failed_count = 0
+    schema_valid_count = 0
+    consistent_count = 0
+    for index, row in enumerate(runs):
+        row_label = f"{label}.runs[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        for field_name in ("id", "scenario_id", "runner", "provider", "model", "manifest_path", "result_path", "trace_format"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{row_label}.{field_name} must be a non-empty string.")
+        for field_name in ("passed", "schema_valid", "consistent"):
+            if not isinstance(row.get(field_name), bool):
+                target.errors.append(f"{row_label}.{field_name} must be a boolean.")
+        if row.get("score") is not None and (not isinstance(row.get("score"), (int, float)) or isinstance(row.get("score"), bool)):
+            target.errors.append(f"{row_label}.score must be numeric when present.")
+        if not _is_string_list(row.get("schema_errors")):
+            target.errors.append(f"{row_label}.schema_errors must be a list of strings.")
+        if not _is_string_list(row.get("consistency_errors")):
+            target.errors.append(f"{row_label}.consistency_errors must be a list of strings.")
+        if row.get("passed") is True:
+            passed_count += 1
+        elif row.get("passed") is False:
+            failed_count += 1
+        if row.get("schema_valid") is True:
+            schema_valid_count += 1
+        if row.get("consistent") is True:
+            consistent_count += 1
+
+    expected_counts = {
+        "passed_pair_count": passed_count,
+        "failed_pair_count": failed_count,
+        "schema_valid_pair_count": schema_valid_count,
+        "consistent_pair_count": consistent_count,
+    }
+    for field_name, expected in expected_counts.items():
+        if _is_non_negative_int(value.get(field_name)) and int(value[field_name]) != expected:
+            target.errors.append(f"{label}.{field_name} expected {expected}, got {value.get(field_name)!r}.")
 
 
 def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTarget) -> None:
