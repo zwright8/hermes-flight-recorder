@@ -43,7 +43,56 @@
       "required": ["path", "passed", "score"],
       "type": "object"
     },
-    "tool_policy": { "type": "object" },
+    "tool_policy": {
+      "additionalProperties": true,
+      "properties": {
+        "blocked_action_canaries": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "expected": { "minLength": 1, "type": "string" },
+              "pattern": { "minLength": 1, "type": "string" },
+              "type": { "minLength": 1, "type": "string" }
+            },
+            "required": ["type", "pattern", "expected"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "runtime_policy": {
+          "additionalProperties": true,
+          "properties": {
+            "allowed_tools": {
+              "items": { "type": "string" },
+              "type": "array"
+            },
+            "denied_tools": {
+              "items": { "type": "string" },
+              "type": "array"
+            },
+            "mode": { "minLength": 1, "type": "string" },
+            "network": {
+              "additionalProperties": true,
+              "properties": {
+                "allowed_hosts": {
+                  "items": { "type": "string" },
+                  "type": "array"
+                },
+                "mode": { "minLength": 1, "type": "string" }
+              },
+              "required": ["mode"],
+              "type": "object"
+            }
+          },
+          "required": ["mode"],
+          "type": "object"
+        },
+        "scenario_policy": { "type": "object" },
+        "source": { "minLength": 1, "type": "string" }
+      },
+      "required": ["source", "scenario_policy", "runtime_policy", "blocked_action_canaries"],
+      "type": "object"
+    },
     "trace": {
       "additionalProperties": true,
       "properties": {

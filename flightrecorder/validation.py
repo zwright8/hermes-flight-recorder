@@ -982,6 +982,7 @@ def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationT
     canaries = sandbox.get("fake_secret_canaries")
     if not isinstance(canaries, list) or not canaries:
         target.errors.append("harness_manifest.sandbox.fake_secret_canaries must be a non-empty list.")
+    _validate_harness_tool_policy(manifest.get("tool_policy"), target, "harness_manifest.tool_policy")
 
 
 def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarget) -> None:
@@ -1010,6 +1011,45 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
     _validate_existing_path_field(replay, "lineage", target, "harness_result.replay.lineage")
     if not isinstance(replay.get("self_contained"), bool):
         target.errors.append("harness_result.replay.self_contained must be a boolean.")
+    _validate_harness_tool_policy(result.get("tool_policy"), target, "harness_result.tool_policy")
+
+
+def _validate_harness_tool_policy(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        return
+    if not isinstance(value.get("source"), str) or not value.get("source"):
+        target.errors.append(f"{label}.source must be a non-empty string.")
+    if not isinstance(value.get("scenario_policy"), dict):
+        target.errors.append(f"{label}.scenario_policy must be an object.")
+    runtime_policy = value.get("runtime_policy")
+    if not isinstance(runtime_policy, dict):
+        target.errors.append(f"{label}.runtime_policy must be an object.")
+    else:
+        if not isinstance(runtime_policy.get("mode"), str) or not runtime_policy.get("mode"):
+            target.errors.append(f"{label}.runtime_policy.mode must be a non-empty string.")
+        for field_name in ("allowed_tools", "denied_tools"):
+            if field_name in runtime_policy and not _is_string_list(runtime_policy.get(field_name)):
+                target.errors.append(f"{label}.runtime_policy.{field_name} must be a list of strings.")
+        network = runtime_policy.get("network")
+        if network is not None:
+            if not isinstance(network, dict):
+                target.errors.append(f"{label}.runtime_policy.network must be an object.")
+            else:
+                if not isinstance(network.get("mode"), str) or not network.get("mode"):
+                    target.errors.append(f"{label}.runtime_policy.network.mode must be a non-empty string.")
+                if "allowed_hosts" in network and not _is_string_list(network.get("allowed_hosts")):
+                    target.errors.append(f"{label}.runtime_policy.network.allowed_hosts must be a list of strings.")
+    canaries = value.get("blocked_action_canaries")
+    if not isinstance(canaries, list):
+        target.errors.append(f"{label}.blocked_action_canaries must be a list.")
+        return
+    for index, canary in enumerate(canaries):
+        if not isinstance(canary, dict):
+            target.errors.append(f"{label}.blocked_action_canaries[{index}] must be an object.")
+            continue
+        for field_name in ("type", "pattern", "expected"):
+            if not isinstance(canary.get(field_name), str) or not canary.get(field_name):
+                target.errors.append(f"{label}.blocked_action_canaries[{index}].{field_name} must be a non-empty string.")
 
 
 def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTarget) -> None:

@@ -248,6 +248,7 @@ def _run_mock_scenario(manifest: dict[str, Any]) -> dict[str, Any]:
         model=str(manifest["model"]["id"]),
         base_url=manifest["model"].get("base_url"),
         sandbox={**sandbox, "fake_secret_files": fake_secret_files},
+        tool_policy=manifest["tool_policy"].get("runtime_policy") if isinstance(manifest.get("tool_policy"), dict) else None,
         fake_secret_files=fake_secret_files,
         metadata={"source": "scripts/hermes_harness.py"},
         force=bool(manifest.get("force")),

@@ -623,6 +623,11 @@ scenario run without hand-edited config. The harness writes:
   Flight Recorder artifacts, and replay lineage.
 - `harness_replay_result.json` when replaying from `artifact_lineage.json`.
 
+Tool-policy metadata includes the scenario policy, effective runtime policy,
+and blocked-action canaries derived from forbidden tools, commands, and URLs.
+Mock harness coverage verifies those canaries against scorecard failures and
+replay so policy regressions are visible without a live agent runtime.
+
 Run a local mock scenario without an external model endpoint:
 
 ```bash

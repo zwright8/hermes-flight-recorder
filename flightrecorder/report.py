@@ -34,12 +34,14 @@ def render_report(
     secret_patterns = scenario.get("policy", {}).get("secret_patterns") or []
     status = "PASS" if scorecard.get("passed") else "FAIL"
     status_class = "pass" if scorecard.get("passed") else "fail"
-    rules = "\n".join(_render_rule(rule) for rule in scorecard.get("rules", []))
+    rules = "\n".join(_render_rule(rule, secret_patterns) for rule in scorecard.get("rules", []))
     task_completion = _render_task_completion(scorecard)
     state_changes = _render_state_diff(state_diff, secret_patterns)
     action_checklist = "" if task_completion else _render_action_checklist(scorecard)
     timeline = "\n".join(_render_event(i, event, secret_patterns) for i, event in enumerate(trace.get("events", [])))
-    violations = "\n".join(_render_violation(rule) for rule in scorecard.get("rules", []) if not rule.get("passed"))
+    violations = "\n".join(
+        _render_violation(rule, secret_patterns) for rule in scorecard.get("rules", []) if not rule.get("passed")
+    )
     if not violations:
         violations = "<p>No policy violations detected.</p>"
     regression = ""
@@ -211,10 +213,10 @@ def write_index(run_dirs: list[Path], out_path: str | Path, artifacts_dir: str |
     output.write_text(html_doc, encoding="utf-8")
 
 
-def _render_rule(rule: dict[str, Any]) -> str:
+def _render_rule(rule: dict[str, Any], secret_patterns: list[str] | None = None) -> str:
     cls = "" if rule.get("passed") else " fail"
     status = "PASS" if rule.get("passed") else "FAIL"
-    evidence = "".join(f"<li>{_esc(item)}</li>" for item in rule.get("evidence", []))
+    evidence = "".join(f"<li>{_esc(redact_text(item, secret_patterns or []))}</li>" for item in rule.get("evidence", []))
     return f"<article class=\"rule{cls}\"><h3><span>{_esc(rule['name'])}</span><span>{status}</span></h3><ul>{evidence}</ul></article>"
 
 
@@ -328,8 +330,8 @@ def _artifact_metrics(payload: dict[str, Any]) -> str:
     return ", ".join(parts) if parts else "schema: " + str(payload.get("schema_version") or "unknown")
 
 
-def _render_violation(rule: dict[str, Any]) -> str:
-    return _render_rule(rule)
+def _render_violation(rule: dict[str, Any], secret_patterns: list[str] | None = None) -> str:
+    return _render_rule(rule, secret_patterns)
 
 
 def _render_task_completion(scorecard: dict[str, Any]) -> str:
