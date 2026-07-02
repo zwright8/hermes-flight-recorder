@@ -443,9 +443,11 @@ appends an alias-history entry. Blocked receipts leave registry aliases
 unchanged.
 `promotion-release-record` binds the final publishable evidence set: promotion
 decision, generated cards, alias receipt, rollback metadata, eval compare gate,
-and release notes. Validation rehashes every referenced artifact so stale
-release notes, mismatched eval evidence, card drift, a different alias receipt,
-or a release policy that differs from the decision policy blocks publication.
+and release notes. Validation rehashes every referenced artifact and matches
+compact model/dataset card bindings back to the referenced promotion-cards
+manifest, so stale release notes, mismatched eval evidence, card drift, a
+different alias receipt, or a release policy that differs from the decision
+policy blocks publication.
 Alias-apply and release-record receipts also preserve compact strict validation
 summaries; validation recomputes their pass state from target, error, and
 warning counts so a forged `passed` flag cannot hide warning-bearing or failed

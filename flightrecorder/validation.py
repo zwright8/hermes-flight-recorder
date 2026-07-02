@@ -9189,7 +9189,7 @@ def _validate_promotion_release_record(record: dict[str, Any], target: Validatio
         _validate_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_release_record.artifacts")
 
     _validate_promotion_release_record_validation(record.get("artifact_validation"), expected_passed, target)
-    _validate_promotion_release_record_bindings(record.get("bindings"), artifacts, target)
+    _validate_promotion_release_record_bindings(record.get("bindings"), artifacts, target, source_path)
     _validate_promotion_release_record_metrics(record.get("metrics"), checks, target)
     _validate_promotion_release_record_policy(record.get("policy"), target, source_path)
     if not _is_string_list(record.get("notes")):
@@ -9293,7 +9293,12 @@ def _validate_strict_compact_validation_summary(
             target.errors.append(f"{label}.targets missing required type(s): {', '.join(missing_types)}.")
 
 
-def _validate_promotion_release_record_bindings(value: Any, artifacts: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_promotion_release_record_bindings(
+    value: Any,
+    artifacts: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
     if not isinstance(value, dict):
         target.errors.append("promotion_release_record.bindings must be an object.")
         return
@@ -9316,6 +9321,49 @@ def _validate_promotion_release_record_bindings(value: Any, artifacts: dict[str,
     for field_name in ("model_card_sha256", "dataset_card_sha256"):
         if value.get(field_name) and not _is_sha256(value.get(field_name)):
             target.errors.append(f"promotion_release_record.bindings.{field_name} must be a SHA-256 hex string when present.")
+    _validate_promotion_release_record_card_bindings(value, artifacts, target, source_path)
+
+
+def _validate_promotion_release_record_card_bindings(
+    bindings: dict[str, Any],
+    artifacts: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    promotion_cards = artifacts.get("promotion_cards") if isinstance(artifacts.get("promotion_cards"), dict) else {}
+    kind = promotion_cards.get("kind")
+    cards_path = _resolve_promotion_decision_artifact_path(promotion_cards.get("path"), source_path, kind)
+    if cards_path is None or not cards_path.exists():
+        return
+    manifest_path = cards_path / "promotion_cards.json" if cards_path.is_dir() else cards_path
+    if not manifest_path.is_file():
+        return
+    try:
+        cards = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"promotion_release_record.artifacts.promotion_cards contains invalid JSON: {exc}")
+        return
+    if not isinstance(cards, dict):
+        target.errors.append("promotion_release_record.artifacts.promotion_cards must contain a JSON object.")
+        return
+    cards_artifacts = cards.get("artifacts") if isinstance(cards.get("artifacts"), dict) else {}
+    expected_card_fields = {
+        "model_card_sha256": "model_card",
+        "dataset_card_sha256": "dataset_card",
+    }
+    for field_name, card_role in expected_card_fields.items():
+        actual = bindings.get(field_name)
+        card_artifact = cards_artifacts.get(card_role) if isinstance(cards_artifacts.get(card_role), dict) else {}
+        expected = card_artifact.get("sha256")
+        if expected is None and not actual:
+            continue
+        if not _is_sha256(expected):
+            target.errors.append(f"promotion_cards.artifacts.{card_role}.sha256 must be a SHA-256 hex string.")
+            continue
+        if actual != expected:
+            target.errors.append(
+                f"promotion_release_record.bindings.{field_name} must match promotion_cards.artifacts.{card_role}.sha256."
+            )
 
 
 def _validate_promotion_release_record_metrics(value: Any, checks: list[Any], target: ValidationTarget) -> None:
