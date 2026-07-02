@@ -44,6 +44,8 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
         self.assertIn("serving_profile", names)
+        self.assertIn("serving_compatibility_report", names)
+        self.assertIn("serving_endpoint_check", names)
         self.assertIn("serving_lifecycle", names)
         self.assertIn("serving_demo_run", names)
         self.assertIn("evidence_bundle", names)

@@ -1,0 +1,93 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_endpoint_check.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "OpenAI-compatible serving endpoint preflight summary for automation gates.",
+  "properties": {
+    "arm": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "object"
+    },
+    "base_url": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "checks": {
+      "items": {
+        "properties": {
+          "details": {
+            "type": "object"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "passed",
+          "details"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "failed_checks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "profile_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.serving_endpoint_check.v1"
+    },
+    "served_model_id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "passed",
+    "readiness",
+    "profile_id",
+    "arm",
+    "model",
+    "served_model_id",
+    "base_url",
+    "checks",
+    "failed_checks",
+    "artifacts"
+  ],
+  "title": "Hermes Flight Recorder Serving Endpoint Check",
+  "type": "object"
+}

@@ -110,6 +110,8 @@ Validate generated artifacts with the bundled schema registry:
 
 ```bash
 python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json
+python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/compatibility_report.json
+python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_check.json
 python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json
 python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json
 ```

@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "capability_check": {
+      "additionalProperties": true,
+      "properties": {
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "response_ok": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "not_verified"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "response_ok"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_compatibility_report.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "OpenAI-compatible serving capability report for streaming, tool-call, and structured-output smoke checks.",
+  "properties": {
+    "checks": {
+      "properties": {
+        "openai_core": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        },
+        "streaming": {
+          "$ref": "#/$defs/capability_check"
+        },
+        "structured_outputs": {
+          "$ref": "#/$defs/capability_check"
+        },
+        "tool_calls": {
+          "$ref": "#/$defs/capability_check"
+        }
+      },
+      "required": [
+        "openai_core",
+        "streaming",
+        "tool_calls",
+        "structured_outputs"
+      ],
+      "type": "object"
+    },
+    "engine": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "model": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "profile_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.serving_compatibility_report.v1"
+    },
+    "served_model_id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "profile_id",
+    "model",
+    "served_model_id",
+    "engine",
+    "checks"
+  ],
+  "title": "Hermes Flight Recorder Serving Compatibility Report",
+  "type": "object"
+}

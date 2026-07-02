@@ -146,6 +146,22 @@
       "name": "serving_profile"
     },
     {
+      "artifact": "serving_compatibility_report",
+      "artifact_schema_version": "hfr.serving_compatibility_report.v1",
+      "description": "OpenAI-compatible serving capability report for streaming, tool-call, and structured-output smoke checks.",
+      "filename": "serving_compatibility_report.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_compatibility_report.v1.schema.json",
+      "name": "serving_compatibility_report"
+    },
+    {
+      "artifact": "serving_endpoint_check",
+      "artifact_schema_version": "hfr.serving_endpoint_check.v1",
+      "description": "OpenAI-compatible serving endpoint preflight summary for automation gates.",
+      "filename": "serving_endpoint_check.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_endpoint_check.v1.schema.json",
+      "name": "serving_endpoint_check"
+    },
+    {
       "artifact": "serving_lifecycle",
       "artifact_schema_version": "hfr.serving_lifecycle.v1",
       "description": "Managed OpenAI-compatible serving process lifecycle check.",
