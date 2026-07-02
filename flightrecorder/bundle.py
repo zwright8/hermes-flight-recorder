@@ -307,7 +307,7 @@ def build_evidence_bundle(
 
     if live_smoke_summary_path is not None:
         live_smoke_summary = _read_json_artifact(Path(live_smoke_summary_path), artifacts, "live_smoke_summary", preserve_paths)
-        _summarize_live_smoke_summary(live_smoke_summary, metrics, checks)
+        _summarize_live_smoke_summary(live_smoke_summary, metrics, checks, preserve_paths=preserve_paths)
 
     _summarize_trainer_handoff(
         artifacts,
@@ -1084,7 +1084,13 @@ def _summarize_run_digest_coverage(
     )
 
 
-def _summarize_live_smoke_summary(summary: dict[str, Any], metrics: dict[str, Any], checks: list[dict[str, Any]]) -> None:
+def _summarize_live_smoke_summary(
+    summary: dict[str, Any],
+    metrics: dict[str, Any],
+    checks: list[dict[str, Any]],
+    *,
+    preserve_paths: bool,
+) -> None:
     hooks = summary.get("hooks") if isinstance(summary.get("hooks"), list) else []
     missing_hooks = summary.get("missing_hooks") if isinstance(summary.get("missing_hooks"), list) else []
     consistent = _live_smoke_summary_consistent(summary, missing_hooks)
@@ -1096,7 +1102,7 @@ def _summarize_live_smoke_summary(summary: dict[str, Any], metrics: dict[str, An
         "missing_hook_count": len([item for item in missing_hooks if isinstance(item, str)]),
         "missing_hooks": [item for item in missing_hooks if isinstance(item, str)],
         "chat_completion_request_count": summary.get("chat_completion_request_count"),
-        **_live_smoke_environment_metrics(summary.get("environment")),
+        **_live_smoke_environment_metrics(summary.get("environment"), preserve_paths=preserve_paths),
     }
     _add_presence_check(checks, "live_smoke_summary_passed", summary.get("passed") is True, {"artifact": "live_smoke_summary"})
     _add_presence_check(checks, "live_smoke_summary_consistent", consistent, {"artifact": "live_smoke_summary"})
@@ -1116,7 +1122,7 @@ def _live_smoke_summary_consistent(summary: dict[str, Any], missing_hooks: list[
     )
 
 
-def _live_smoke_environment_metrics(environment: Any) -> dict[str, Any]:
+def _live_smoke_environment_metrics(environment: Any, *, preserve_paths: bool) -> dict[str, Any]:
     if not isinstance(environment, dict):
         return {}
     fields = (
@@ -1130,7 +1136,17 @@ def _live_smoke_environment_metrics(environment: Any) -> dict[str, Any]:
         "flight_recorder_git_commit",
         "flight_recorder_git_dirty",
     )
-    return {field: environment.get(field) for field in fields if field in environment}
+    metrics: dict[str, Any] = {}
+    path_fields = {"hermes_root", "flight_recorder_root"}
+    for field in fields:
+        if field not in environment:
+            continue
+        value = environment.get(field)
+        if field in path_fields and isinstance(value, str) and value:
+            metrics[field] = _display_path(Path(value), preserve_paths)
+        else:
+            metrics[field] = value
+    return metrics
 
 
 def _summarize_harness_handoff(

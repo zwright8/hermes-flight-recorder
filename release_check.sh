@@ -1477,7 +1477,8 @@ assert bundle["metrics"]["compare_export"]["regressed_rule_counts"] == {}
 assert bundle["metrics"]["compare_export"]["new_critical_failure_counts"] == {}
 assert bundle["metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["unverified"] == 0
 assert bundle["metrics"]["live_smoke_summary"]["chat_completion_request_count"] == 1
-assert bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"] == str(Path.cwd())
+assert bundle["metrics"]["live_smoke_summary"]["hermes_root"] == "<redacted:hermes-agent>"
+assert bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"] == "."
 assert bundle["metrics"]["trace_observability"]["final_answer_rate"] == 1.0
 assert bundle["metrics"]["review_export"]["item_count"] >= 6
 assert bundle["metrics"]["reviewed_export"]["reviewed_label_count"] == bundle["metrics"]["review_export"]["item_count"]

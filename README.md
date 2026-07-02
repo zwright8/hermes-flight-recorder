@@ -701,6 +701,8 @@ provenance block tying the selected passing scenario back to the suite summary
 and pass/fail counts; evidence-bundle validation checks the corresponding
 `artifact_valid_pair_count`, `run_suite_pair_count`, and
 `run_suite_lineage_valid_pair_count` metrics.
+Live-smoke environment roots included in evidence bundles are redacted by
+default; use `--preserve-paths` only for private local debugging.
 
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI
 promotion-gate example.

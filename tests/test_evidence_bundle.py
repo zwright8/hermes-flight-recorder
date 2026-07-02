@@ -131,6 +131,7 @@ class EvidenceBundleTests(unittest.TestCase):
                 0,
             )
             live_smoke_path = runs / "live_smoke_summary.json"
+            hermes_root = "/" + "Users/example/hermes-agent"
             live_smoke_path.write_text(
                 json.dumps(
                     {
@@ -151,7 +152,7 @@ class EvidenceBundleTests(unittest.TestCase):
                             "python_version": "3.11.0",
                             "python_implementation": "CPython",
                             "platform": "Linux-test",
-                            "hermes_root": "/tmp/hermes-agent",
+                            "hermes_root": hermes_root,
                             "hermes_git_commit": "abcdef123456",
                             "hermes_git_dirty": False,
                             "flight_recorder_root": str(ROOT),
@@ -168,39 +169,38 @@ class EvidenceBundleTests(unittest.TestCase):
             )
             harness_artifacts = _write_harness_handoff_artifacts(root)
 
-            code = run_cli(
-                [
-                    "evidence-bundle",
-                    "--runs",
-                    str(runs),
-                    "--suite-summary",
-                    str(runs / "suite_summary.json"),
-                    "--scenario-quality",
-                    str(runs / "scenario_quality.json"),
-                    "--evidence-coverage",
-                    str(runs / "evidence_coverage.json"),
-                    "--trace-observability",
-                    str(runs / "trace_observability.json"),
-                    "--repair-queue",
-                    str(runs / "repair_queue.json"),
-                    "--validation",
-                    str(runs / "validation.json"),
-                    "--training-export",
-                    str(runs / "training_export"),
-                    "--live-smoke-summary",
-                    str(live_smoke_path),
-                    "--harness-manifest",
-                    str(harness_artifacts["manifest"]),
-                    "--harness-result",
-                    str(harness_artifacts["result"]),
-                    "--gate",
-                    str(runs / "suite_gate.json"),
-                    "--require-harness",
-                    "--require-gate",
-                    "--out",
-                    str(bundle_path),
-                ]
-            )
+            bundle_args = [
+                "evidence-bundle",
+                "--runs",
+                str(runs),
+                "--suite-summary",
+                str(runs / "suite_summary.json"),
+                "--scenario-quality",
+                str(runs / "scenario_quality.json"),
+                "--evidence-coverage",
+                str(runs / "evidence_coverage.json"),
+                "--trace-observability",
+                str(runs / "trace_observability.json"),
+                "--repair-queue",
+                str(runs / "repair_queue.json"),
+                "--validation",
+                str(runs / "validation.json"),
+                "--training-export",
+                str(runs / "training_export"),
+                "--live-smoke-summary",
+                str(live_smoke_path),
+                "--harness-manifest",
+                str(harness_artifacts["manifest"]),
+                "--harness-result",
+                str(harness_artifacts["result"]),
+                "--gate",
+                str(runs / "suite_gate.json"),
+                "--require-harness",
+                "--require-gate",
+                "--out",
+                str(bundle_path),
+            ]
+            code = run_cli(bundle_args)
 
             self.assertEqual(code, 0)
             bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
@@ -293,7 +293,9 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["training_export"]["curriculum_failure_mode_count"], 14)
             self.assertEqual(bundle["metrics"]["training_export"]["trainer_view_source_fingerprint_coverage"]["unverified"], 0)
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hook_count"], 3)
-            self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hermes_root"], "/tmp/hermes-agent")
+            self.assertEqual(bundle["metrics"]["live_smoke_summary"]["hermes_root"], "<redacted:hermes-agent>")
+            self.assertEqual(bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"], ".")
+            self.assertNotIn("Users/example", json.dumps(bundle))
             self.assertEqual(bundle["metrics"]["live_smoke_summary"]["flight_recorder_git_dirty"], True)
             self.assertEqual(bundle["metrics"]["harness_handoff"]["pair_count"], 1)
             self.assertEqual(bundle["metrics"]["harness_handoff"]["schema_valid_pair_count"], 1)
@@ -328,6 +330,14 @@ class EvidenceBundleTests(unittest.TestCase):
                 0,
             )
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+            preserved_bundle_path = root / "evidence_bundle_preserve_paths.json"
+            self.assertEqual(
+                run_cli([*bundle_args[:-2], "--preserve-paths", "--out", str(preserved_bundle_path)]),
+                0,
+            )
+            preserved_bundle = json.loads(preserved_bundle_path.read_text(encoding="utf-8"))
+            self.assertEqual(preserved_bundle["metrics"]["live_smoke_summary"]["hermes_root"], hermes_root)
+            self.assertEqual(preserved_bundle["metrics"]["live_smoke_summary"]["flight_recorder_root"], str(ROOT))
             bundle["metrics"]["training_export"]["top_curriculum_priorities"][0]["priority_band"] = "urgent"
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path)]), 1)
