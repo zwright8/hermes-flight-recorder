@@ -70,6 +70,8 @@
       "main_delivery": {
         "attempted_at": "2026-07-02T15:05:39Z",
         "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+        "latest_observed_remote_main_at": "2026-07-02T15:09:25Z",
+        "latest_observed_remote_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
         "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
         "lock_status": "not_acquired_after_retries",
         "main_sha": null,
@@ -117,7 +119,8 @@
         "gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json url,number,state,headRefOid,headRefName,baseRefName",
         "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
         "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired",
-        "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90"
+        "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90",
+        "final git ls-remote --heads origin main # b671b9671fff7e891fa0ee58a69f64e818694b11"
       ]
     }
   ],
@@ -171,7 +174,8 @@
     "gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json url,number,state,headRefOid,headRefName,baseRefName",
     "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
     "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired",
-    "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90"
+    "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90",
+    "final git ls-remote --heads origin main # b671b9671fff7e891fa0ee58a69f64e818694b11"
   ],
   "layer_status": {
     "serving_demo": {
@@ -183,11 +187,14 @@
   },
   "main_delivery": {
     "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+    "latest_observed_remote_main_at": "2026-07-02T15:09:25Z",
+    "latest_observed_remote_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "not_acquired_after_retries",
     "main_sha": null,
     "notes": [
-      "git ls-remote --heads origin main after lock blocker returned ebd562fc39251d32778f6d2265e257dbf5a60b90; future integration must fetch/rebase again."
+      "git ls-remote --heads origin main after lock blocker returned ebd562fc39251d32778f6d2265e257dbf5a60b90; future integration must fetch/rebase again.",
+      "Final handoff check saw origin/main at b671b9671fff7e891fa0ee58a69f64e818694b11 while the lock still existed; do not assume the rebased branch is current without fetching again."
     ],
     "observed_remote_main_at": "2026-07-02T15:07:12Z",
     "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
@@ -216,5 +223,5 @@
     "serving_demo": "managed_mock_lifecycle_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:07:12Z"
+  "updated_at": "2026-07-02T15:09:25Z"
 }
