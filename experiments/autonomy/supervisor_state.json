@@ -79,6 +79,8 @@
           "git push --force-with-lease updated the rebased goal branch",
           "main push was not attempted because the integration lock was already present and remained held through retry windows"
         ],
+        "observed_remote_main_at": "2026-07-02T15:07:12Z",
+        "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
         "pr_state": "OPEN",
         "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
         "remote_branch_deleted": false,
@@ -114,7 +116,8 @@
         "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
         "gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json url,number,state,headRefOid,headRefName,baseRefName",
         "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
-        "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired"
+        "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired",
+        "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90"
       ]
     }
   ],
@@ -167,7 +170,8 @@
     "git ls-remote --heads origin codex/hermes-goal-6-serving-demo-20260702-1027",
     "gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json url,number,state,headRefOid,headRefName,baseRefName",
     "mkdir /tmp/hermes-flight-recorder-main-push.lock # failed: File exists",
-    "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired"
+    "lock retry windows through 2026-07-02T11:04:37-0400 # not_acquired",
+    "git ls-remote --heads origin main # ebd562fc39251d32778f6d2265e257dbf5a60b90"
   ],
   "layer_status": {
     "serving_demo": {
@@ -182,6 +186,11 @@
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "not_acquired_after_retries",
     "main_sha": null,
+    "notes": [
+      "git ls-remote --heads origin main after lock blocker returned ebd562fc39251d32778f6d2265e257dbf5a60b90; future integration must fetch/rebase again."
+    ],
+    "observed_remote_main_at": "2026-07-02T15:07:12Z",
+    "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
     "pr_state": "OPEN",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
     "recorded_at": "2026-07-02T15:05:39Z",
@@ -207,5 +216,5 @@
     "serving_demo": "managed_mock_lifecycle_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:05:39Z"
+  "updated_at": "2026-07-02T15:07:12Z"
 }
