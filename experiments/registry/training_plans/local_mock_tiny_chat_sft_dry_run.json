@@ -1,0 +1,218 @@
+{
+  "blocked_reasons": [],
+  "checks": [
+    {
+      "id": "license_training_approved",
+      "passed": true,
+      "summary": "candidate license review is approved for training"
+    },
+    {
+      "id": "dataset_manifest_exists",
+      "passed": true,
+      "summary": "dataset manifest exists and was fingerprinted"
+    },
+    {
+      "id": "compatibility_report_passed",
+      "passed": true,
+      "summary": "compatibility report matches the selected model and passed no-download checks"
+    },
+    {
+      "id": "no_weight_download",
+      "passed": true,
+      "summary": "plan generation did not download model weights or tokenizers"
+    },
+    {
+      "id": "no_gpu_execution",
+      "passed": true,
+      "summary": "plan generation did not launch GPU work"
+    }
+  ],
+  "compatibility_report": {
+    "candidate_id": "local_mock_tiny_chat",
+    "download_policy": {
+      "downloaded_tokenizer": false,
+      "downloaded_weights": false,
+      "gpu_execution": false,
+      "imported_heavy_ml": false
+    },
+    "metadata_only_count": 7,
+    "missing_count": 0,
+    "model_id": "local/mock-tiny-chat",
+    "passed": true,
+    "path": "experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json",
+    "probe_count": 8,
+    "readiness": "metadata_recorded",
+    "recommendation": "ready_for_registry_dry_run",
+    "sha256": "683e4fc681225dea2fae8a918fe529e7656bebac63cc0c33e875d350fc63380f",
+    "unsupported_count": 0,
+    "verified_count": 0
+  },
+  "compute": {
+    "accelerator_required": false,
+    "assumptions": {},
+    "dry_run_only": true
+  },
+  "created_at": "2026-07-02T14:52:34Z",
+  "dataset": {
+    "dataset_id": "local_mock_dataset_v1",
+    "manifest_path": "experiments/registry/datasets/local_mock_dataset_manifest.json",
+    "manifest_sha256": "a13e8bd2c3cd18b7dc164824a9f7fd6feedda4a7002822efbe39c06c1605c281"
+  },
+  "dry_run": true,
+  "execution": {
+    "flight_recorder_downloaded_tokenizer": false,
+    "flight_recorder_downloaded_weights": false,
+    "flight_recorder_imported_heavy_ml": false,
+    "flight_recorder_launched_gpu_job": false,
+    "runner_must_revalidate_plan": true
+  },
+  "gpu_execution": false,
+  "model": {
+    "candidate": {
+      "candidate_id": "local_mock_tiny_chat",
+      "compatibility": {
+        "chat_template": {
+          "notes": "Metadata-only chat template placeholder for registry and dry-run plan tests.",
+          "status": "metadata_only",
+          "verified": false
+        },
+        "context_length": 2048,
+        "memory": {
+          "notes": "Tiny local fixture; no runtime memory probe has been executed.",
+          "status": "metadata_only",
+          "verified": false
+        },
+        "quantization": {
+          "notes": "4-bit LoRA-compatible path expected; not verified by this metadata scout.",
+          "status": "metadata_only",
+          "verified": false
+        },
+        "serving": {
+          "notes": "Expected to use an OpenAI-compatible local mock endpoint for future smoke checks.",
+          "status": "metadata_only",
+          "verified": false
+        },
+        "structured_outputs": {
+          "notes": "Structured-output support is recorded from fixture metadata only.",
+          "status": "metadata_only",
+          "supported": true,
+          "verified": false
+        },
+        "tokenizer": {
+          "notes": "Tokenizer metadata is recorded only; no tokenizer files were downloaded.",
+          "status": "metadata_only",
+          "verified": false
+        },
+        "tool_calls": {
+          "notes": "Tool-call support is recorded from fixture metadata only.",
+          "status": "metadata_only",
+          "supported": true,
+          "verified": false
+        }
+      },
+      "license": {
+        "accepted_terms": true,
+        "license_id": "mit",
+        "notes": [
+          "Synthetic local fixture metadata for model-layer registry coverage.",
+          "Do not treat this as a real upstream model license review."
+        ],
+        "review_status": "approved",
+        "reviewed_at": "2026-07-02T00:00:00Z",
+        "reviewer": "codex-goal-4-model",
+        "source_url": "https://opensource.org/license/mit/",
+        "status": "approved",
+        "terms_url": "https://opensource.org/license/mit/",
+        "training_allowed": true
+      },
+      "model_id": "local/mock-tiny-chat",
+      "notes": [
+        "Metadata-only candidate used to verify registry, alias, compatibility, and dry-run plan contracts without weight downloads."
+      ],
+      "schema_version": "hfr.model_candidate.v1",
+      "source": {
+        "revision": "metadata-only",
+        "type": "local_fixture",
+        "url": "file://experiments/registry/model_candidates/local_mock_tiny_chat.json",
+        "weight_download_allowed": false
+      }
+    },
+    "candidate_id": "local_mock_tiny_chat",
+    "compatibility": {
+      "chat_template": {
+        "notes": "Metadata-only chat template placeholder for registry and dry-run plan tests.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "context_length": 2048,
+      "memory": {
+        "notes": "Tiny local fixture; no runtime memory probe has been executed.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "quantization": {
+        "notes": "4-bit LoRA-compatible path expected; not verified by this metadata scout.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "serving": {
+        "notes": "Expected to use an OpenAI-compatible local mock endpoint for future smoke checks.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "structured_outputs": {
+        "notes": "Structured-output support is recorded from fixture metadata only.",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      },
+      "tokenizer": {
+        "notes": "Tokenizer metadata is recorded only; no tokenizer files were downloaded.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "tool_calls": {
+        "notes": "Tool-call support is recorded from fixture metadata only.",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      }
+    },
+    "entry_id": "local_mock_tiny_chat",
+    "license": {
+      "accepted_terms": true,
+      "license_id": "mit",
+      "notes": [
+        "Synthetic local fixture metadata for model-layer registry coverage.",
+        "Do not treat this as a real upstream model license review."
+      ],
+      "review_status": "approved",
+      "reviewed_at": "2026-07-02T00:00:00Z",
+      "reviewer": "codex-goal-4-model",
+      "source_url": "https://opensource.org/license/mit/",
+      "status": "approved",
+      "terms_url": "https://opensource.org/license/mit/",
+      "training_allowed": true
+    },
+    "model_id": "local/mock-tiny-chat",
+    "model_ref": "candidate"
+  },
+  "no_weight_download": true,
+  "notes": [
+    "This is a dry-run plan. It records metadata for a future trainer but does not import heavy ML packages.",
+    "Training runners must revalidate license, compatibility, dataset gates, and output paths before execution."
+  ],
+  "output": {
+    "output_dir": "experiments/registry/training_outputs/local_mock_tiny_chat"
+  },
+  "passed": true,
+  "plan_path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+  "readiness": "ready",
+  "recommendation": "ready_for_dry_run_review",
+  "schema_version": "hfr.training_plan.v1",
+  "trainer": {
+    "hyperparameters": {},
+    "mode": "sft",
+    "name": "local-dry-run"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_candidate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Base-model scouting candidate with source, license review, terms, and compatibility metadata.",
+  "properties": {
+    "candidate_id": {"minLength": 1, "type": "string"},
+    "compatibility": {"type": "object"},
+    "license": {"type": "object"},
+    "model_id": {"minLength": 1, "type": "string"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "schema_version": {"const": "hfr.model_candidate.v1"},
+    "source": {"type": "object"}
+  },
+  "required": ["schema_version", "candidate_id", "model_id", "source", "license", "compatibility"],
+  "title": "Hermes Flight Recorder Model Candidate",
+  "type": "object"
+}

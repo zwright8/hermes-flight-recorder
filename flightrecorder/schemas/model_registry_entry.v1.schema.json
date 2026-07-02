@@ -1,0 +1,43 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_registry_entry.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "One model registry entry linking a candidate snapshot to lifecycle metadata.",
+  "properties": {
+    "candidate": {"type": "object"},
+    "candidate_id": {"minLength": 1, "type": "string"},
+    "entry_id": {"minLength": 1, "type": "string"},
+    "license_status": {"type": "string"},
+    "links": {
+      "additionalProperties": true,
+      "properties": {
+        "adapters": {"items": {"type": "object"}, "type": "array"},
+        "datasets": {"items": {"type": "object"}, "type": "array"},
+        "evals": {"items": {"type": "object"}, "type": "array"},
+        "promotion_decisions": {"items": {"type": "object"}, "type": "array"},
+        "training_runs": {"items": {"type": "object"}, "type": "array"}
+      },
+      "required": ["datasets", "training_runs", "adapters", "evals", "promotion_decisions"],
+      "type": "object"
+    },
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "registered_at": {"minLength": 1, "type": "string"},
+    "schema_version": {"const": "hfr.model_registry_entry.v1"},
+    "status": {"minLength": 1, "type": "string"},
+    "training_eligible": {"type": "boolean"},
+    "updated_at": {"minLength": 1, "type": "string"}
+  },
+  "required": [
+    "schema_version",
+    "entry_id",
+    "candidate_id",
+    "registered_at",
+    "updated_at",
+    "status",
+    "training_eligible",
+    "links",
+    "candidate"
+  ],
+  "title": "Hermes Flight Recorder Model Registry Entry",
+  "type": "object"
+}

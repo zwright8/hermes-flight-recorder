@@ -67,6 +67,12 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("trainer_preflight", names)
         self.assertIn("trainer_launch_check", names)
         self.assertIn("trainer_archive", names)
+        self.assertIn("model_candidate", names)
+        self.assertIn("model_scout_manifest", names)
+        self.assertIn("model_compatibility_report", names)
+        self.assertIn("model_registry_entry", names)
+        self.assertIn("model_registry", names)
+        self.assertIn("training_plan", names)
         for record in records:
             schema = load_schema(record["name"])
             self.assertEqual(schema["$id"], record["id"])

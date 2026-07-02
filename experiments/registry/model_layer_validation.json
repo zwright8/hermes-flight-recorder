@@ -1,0 +1,112 @@
+{
+  "error_count": 0,
+  "passed": true,
+  "schema_version": "hfr.validation.v1",
+  "strict": true,
+  "target_count": 6,
+  "targets": [
+    {
+      "details": {
+        "blocked_training_selection_count": 0,
+        "candidate_count": 1,
+        "compatibility_report_count": 1,
+        "training_eligible_count": 1
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/model_scout_manifest.json",
+      "type": "model_scout_manifest",
+      "warnings": []
+    },
+    {
+      "details": {
+        "candidate_id": "local_mock_tiny_chat",
+        "context_length": 2048,
+        "license_review_status": "approved",
+        "license_status": "approved",
+        "model_id": "local/mock-tiny-chat"
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/model_candidates/local_mock_tiny_chat.json",
+      "type": "model_candidate",
+      "warnings": []
+    },
+    {
+      "details": {
+        "candidate_id": "local_mock_tiny_chat",
+        "metadata_only_count": 7,
+        "model_id": "local/mock-tiny-chat",
+        "probe_count": 8,
+        "readiness": "metadata_recorded",
+        "verified_count": 0
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json",
+      "type": "model_compatibility_report",
+      "warnings": []
+    },
+    {
+      "details": {
+        "candidate_id": "local_mock_tiny_chat",
+        "entry_id": "local_mock_tiny_chat",
+        "license_status": "approved",
+        "link_counts": {
+          "adapters": 0,
+          "datasets": 1,
+          "evals": 0,
+          "promotion_decisions": 0,
+          "training_runs": 1
+        },
+        "training_eligible": true
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/model_registry_entries/local_mock_tiny_chat.json",
+      "type": "model_registry_entry",
+      "warnings": []
+    },
+    {
+      "details": {
+        "aliases": {
+          "candidate": "local_mock_tiny_chat",
+          "champion": null,
+          "rollback": null
+        },
+        "entry_count": 1,
+        "link_counts": {
+          "adapters": 0,
+          "datasets": 1,
+          "evals": 0,
+          "promotion_decisions": 0,
+          "training_runs": 1
+        },
+        "training_eligible_count": 1
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/model_registry.json",
+      "type": "model_registry",
+      "warnings": []
+    },
+    {
+      "details": {
+        "candidate_id": "local_mock_tiny_chat",
+        "compatibility_report_path": "experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json",
+        "compatibility_report_sha256": "683e4fc681225dea2fae8a918fe529e7656bebac63cc0c33e875d350fc63380f",
+        "dataset_id": "local_mock_dataset_v1",
+        "dry_run": true,
+        "gpu_execution": false,
+        "model_ref": "candidate",
+        "no_weight_download": true
+      },
+      "errors": [],
+      "passed": true,
+      "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+      "type": "training_plan",
+      "warnings": []
+    }
+  ],
+  "warning_count": 0
+}

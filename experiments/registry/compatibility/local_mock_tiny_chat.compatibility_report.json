@@ -1,0 +1,134 @@
+{
+  "candidate_id": "local_mock_tiny_chat",
+  "download_policy": {
+    "downloaded_tokenizer": false,
+    "downloaded_weights": false,
+    "gpu_execution": false,
+    "imported_heavy_ml": false
+  },
+  "generated_at": "2026-07-02T14:43:54Z",
+  "model_id": "local/mock-tiny-chat",
+  "notes": [
+    "This compatibility report records metadata without downloading model weights or tokenizers.",
+    "Future serving checks should replace metadata_only probes with verified tokenizer and serving evidence."
+  ],
+  "passed": true,
+  "probes": [
+    {
+      "id": "context",
+      "metadata": {
+        "context_length": 2048
+      },
+      "notes": "Recorded context length is 2048 tokens.",
+      "source": "model_candidate.compatibility.context_length",
+      "status": "recorded",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "tokenizer",
+      "metadata": {
+        "notes": "Tokenizer metadata is recorded only; no tokenizer files were downloaded.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "Tokenizer metadata is recorded only; no tokenizer files were downloaded.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "chat_template",
+      "metadata": {
+        "notes": "Metadata-only chat template placeholder for registry and dry-run plan tests.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "Metadata-only chat template placeholder for registry and dry-run plan tests.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "serving",
+      "metadata": {
+        "notes": "Expected to use an OpenAI-compatible local mock endpoint for future smoke checks.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "Expected to use an OpenAI-compatible local mock endpoint for future smoke checks.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "tool_calls",
+      "metadata": {
+        "notes": "Tool-call support is recorded from fixture metadata only.",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      },
+      "notes": "Tool-call support is recorded from fixture metadata only.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "structured_outputs",
+      "metadata": {
+        "notes": "Structured-output support is recorded from fixture metadata only.",
+        "status": "metadata_only",
+        "supported": true,
+        "verified": false
+      },
+      "notes": "Structured-output support is recorded from fixture metadata only.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": true,
+      "verified": false
+    },
+    {
+      "id": "quantization",
+      "metadata": {
+        "notes": "4-bit LoRA-compatible path expected; not verified by this metadata scout.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "4-bit LoRA-compatible path expected; not verified by this metadata scout.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    },
+    {
+      "id": "memory",
+      "metadata": {
+        "notes": "Tiny local fixture; no runtime memory probe has been executed.",
+        "status": "metadata_only",
+        "verified": false
+      },
+      "notes": "Tiny local fixture; no runtime memory probe has been executed.",
+      "source": "model_candidate.compatibility",
+      "status": "metadata_only",
+      "supported": null,
+      "verified": false
+    }
+  ],
+  "readiness": "metadata_recorded",
+  "recommendation": "ready_for_registry_dry_run",
+  "report_path": "experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json",
+  "schema_version": "hfr.model_compatibility_report.v1",
+  "summary": {
+    "context_length": 2048,
+    "metadata_only_count": 7,
+    "missing_count": 0,
+    "probe_count": 8,
+    "unsupported_count": 0,
+    "verified_count": 0
+  }
+}

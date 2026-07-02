@@ -24,6 +24,21 @@ from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMP
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
+from .model_registry import (
+    MODEL_CANDIDATE_SCHEMA_VERSION,
+    MODEL_COMPATIBILITY_REPORT_SCHEMA_VERSION,
+    MODEL_REGISTRY_ENTRY_SCHEMA_VERSION,
+    MODEL_REGISTRY_SCHEMA_VERSION,
+    MODEL_SCOUT_MANIFEST_SCHEMA_VERSION,
+    TRAINING_PLAN_SCHEMA_VERSION,
+    is_training_license_approved,
+    model_candidate_errors,
+    model_compatibility_report_errors,
+    model_registry_entry_errors,
+    model_registry_errors,
+    model_scout_manifest_errors,
+    training_plan_errors,
+)
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
 from .governance import (
     MODEL_REGISTRY_SCHEMA_VERSION,
@@ -146,6 +161,12 @@ def validate_artifacts(
     trainer_archive_check_paths: list[str | Path] | None = None,
     trainer_consumer_plan_paths: list[str | Path] | None = None,
     trainer_wrapper_dry_run_paths: list[str | Path] | None = None,
+    model_scout_manifest_paths: list[str | Path] | None = None,
+    model_candidate_paths: list[str | Path] | None = None,
+    model_compatibility_report_paths: list[str | Path] | None = None,
+    model_registry_entry_paths: list[str | Path] | None = None,
+    model_registry_paths: list[str | Path] | None = None,
+    training_plan_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -216,6 +237,18 @@ def validate_artifacts(
         targets.append(validate_trainer_consumer_plan(trainer_consumer_plan_path))
     for trainer_wrapper_dry_run_path in trainer_wrapper_dry_run_paths or []:
         targets.append(validate_trainer_wrapper_dry_run(trainer_wrapper_dry_run_path))
+    for model_scout_manifest_path in model_scout_manifest_paths or []:
+        targets.append(validate_model_scout_manifest(model_scout_manifest_path))
+    for model_candidate_path in model_candidate_paths or []:
+        targets.append(validate_model_candidate(model_candidate_path))
+    for model_compatibility_report_path in model_compatibility_report_paths or []:
+        targets.append(validate_model_compatibility_report(model_compatibility_report_path))
+    for model_registry_entry_path in model_registry_entry_paths or []:
+        targets.append(validate_model_registry_entry(model_registry_entry_path))
+    for model_registry_path in model_registry_paths or []:
+        targets.append(validate_model_registry(model_registry_path))
+    for training_plan_path in training_plan_paths or []:
+        targets.append(validate_training_plan(training_plan_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -879,6 +912,66 @@ def validate_trainer_wrapper_dry_run(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_model_scout_manifest(path: str | Path) -> ValidationTarget:
+    """Validate a model-scout manifest and any referenced candidate artifacts."""
+    manifest_path = Path(path)
+    target = ValidationTarget("model_scout_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "model_scout_manifest.json")
+    if manifest is not None:
+        _validate_model_scout_manifest(manifest, target, manifest_path)
+    return target
+
+
+def validate_model_candidate(path: str | Path) -> ValidationTarget:
+    """Validate a model-candidate artifact."""
+    candidate_path = Path(path)
+    target = ValidationTarget("model_candidate", str(candidate_path))
+    candidate = _read_object(candidate_path, target, "model_candidate.json")
+    if candidate is not None:
+        _validate_model_candidate(candidate, target)
+    return target
+
+
+def validate_model_compatibility_report(path: str | Path) -> ValidationTarget:
+    """Validate a model-compatibility report artifact."""
+    report_path = Path(path)
+    target = ValidationTarget("model_compatibility_report", str(report_path))
+    report = _read_object(report_path, target, "model_compatibility_report.json")
+    if report is not None:
+        _validate_model_compatibility_report(report, target)
+    return target
+
+
+def validate_model_registry_entry(path: str | Path) -> ValidationTarget:
+    """Validate a single model-registry entry artifact."""
+    entry_path = Path(path)
+    target = ValidationTarget("model_registry_entry", str(entry_path))
+    entry = _read_object(entry_path, target, "model_registry_entry.json")
+    if entry is not None:
+        _validate_model_registry_entry(entry, target)
+    return target
+
+
+def validate_model_registry(path: str | Path) -> ValidationTarget:
+    """Validate a model registry artifact."""
+    registry_path = Path(path)
+    target = ValidationTarget("model_registry", str(registry_path))
+    registry = _read_object(registry_path, target, "model_registry.json")
+    if registry is not None:
+        _validate_model_registry(registry, target)
+    return target
+
+
+def validate_training_plan(path: str | Path) -> ValidationTarget:
+    """Validate a dry-run training-plan artifact."""
+    plan_path = Path(path)
+    target = ValidationTarget("training_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "training_plan.json")
+    if plan is not None:
+        _validate_training_plan(plan, target)
+    return target
+
+
 def validate_live_smoke_summary(path: str | Path) -> ValidationTarget:
     """Validate a live Hermes observer-smoke summary artifact."""
     summary_path = Path(path)
@@ -1062,6 +1155,83 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
     _validate_harness_tool_policy(result.get("tool_policy"), target, "harness_result.tool_policy")
 
 
+def _validate_model_scout_manifest(manifest: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(manifest, "schema_version", MODEL_SCOUT_MANIFEST_SCHEMA_VERSION, target, prefix="model_scout_manifest.")
+    target.errors.extend(model_scout_manifest_errors(manifest))
+    selection_policy = manifest.get("selection_policy") if isinstance(manifest.get("selection_policy"), dict) else {}
+    require_compatibility_metadata = selection_policy.get("require_compatibility_metadata") is True
+    candidates = manifest.get("candidates") if isinstance(manifest.get("candidates"), list) else []
+    candidate_count = 0
+    training_eligible_count = 0
+    compatibility_report_count = 0
+    blocked_training_selection_count = 0
+
+    for index, ref in enumerate(candidates):
+        if not isinstance(ref, dict):
+            continue
+        candidate_count += 1
+        label = f"model_scout_manifest.candidates[{index}]"
+        candidate_path = _model_scout_reference_path(ref.get("manifest_path"), source_path)
+        candidate = _read_object(candidate_path, target, f"{label}.manifest_path") if candidate_path is not None else None
+        if candidate is None:
+            continue
+
+        target.errors.extend(error.replace("model_candidate.", f"{label}.candidate.") for error in model_candidate_errors(candidate))
+        if ref.get("candidate_id") != candidate.get("candidate_id"):
+            target.errors.append(f"{label}.candidate_id must match referenced candidate.candidate_id.")
+        license_review = candidate.get("license") if isinstance(candidate.get("license"), dict) else {}
+        if isinstance(ref.get("license_status"), str) and ref.get("license_status") != license_review.get("status"):
+            target.errors.append(f"{label}.license_status must match referenced candidate license.status.")
+        if isinstance(ref.get("review_status"), str) and ref.get("review_status") != license_review.get("review_status"):
+            target.errors.append(f"{label}.review_status must match referenced candidate license.review_status.")
+
+        training_eligible = is_training_license_approved(candidate)
+        if training_eligible:
+            training_eligible_count += 1
+        elif ref.get("training_selection_eligible") is True:
+            blocked_training_selection_count += 1
+            target.errors.append(
+                f"{label}.training_selection_eligible cannot be true unless the referenced candidate license is approved for training."
+            )
+        if ref.get("training_selection_eligible") is False and training_eligible:
+            target.warnings.append(
+                f"{label}.training_selection_eligible is false although the referenced candidate is license-approved."
+            )
+        if require_compatibility_metadata and not isinstance(candidate.get("compatibility"), dict):
+            target.errors.append(
+                f"{label}.candidate.compatibility must be present when selection policy requires compatibility metadata."
+            )
+
+        report_path_value = ref.get("compatibility_report_path")
+        if isinstance(report_path_value, str) and report_path_value:
+            compatibility_report_count += 1
+            report_path = _model_scout_reference_path(report_path_value, source_path)
+            report = _read_object(report_path, target, f"{label}.compatibility_report_path") if report_path is not None else None
+            if report is None:
+                continue
+            target.errors.extend(
+                error.replace("model_compatibility_report.", f"{label}.compatibility_report.")
+                for error in model_compatibility_report_errors(report)
+            )
+            if report.get("candidate_id") != candidate.get("candidate_id"):
+                target.errors.append(f"{label}.compatibility_report.candidate_id must match referenced candidate.")
+            if report.get("model_id") != candidate.get("model_id"):
+                target.errors.append(f"{label}.compatibility_report.model_id must match referenced candidate.")
+            if ref.get("training_selection_eligible") is True and report.get("passed") is not True:
+                target.errors.append(
+                    f"{label}.compatibility_report.passed must be true for training-selectable scout entries."
+                )
+
+    target.details.update(
+        {
+            "candidate_count": candidate_count,
+            "compatibility_report_count": compatibility_report_count,
+            "training_eligible_count": training_eligible_count,
+            "blocked_training_selection_count": blocked_training_selection_count,
+        }
+    )
+
+
 def _validate_harness_tool_policy(value: Any, target: ValidationTarget, label: str) -> None:
     if not isinstance(value, dict):
         return
@@ -1098,8 +1268,6 @@ def _validate_harness_tool_policy(value: Any, target: ValidationTarget, label: s
         for field_name in ("type", "pattern", "expected"):
             if not isinstance(canary.get(field_name), str) or not canary.get(field_name):
                 target.errors.append(f"{label}.blocked_action_canaries[{index}].{field_name} must be a non-empty string.")
-
-
 def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTarget) -> None:
     if result.get("schema_version") != HARNESS_REPLAY_RESULT_SCHEMA_VERSION:
         target.errors.append(
@@ -1126,6 +1294,116 @@ def _validate_existing_path_field(value: dict[str, Any], field_name: str, target
         return
     if not Path(path_value).exists():
         target.errors.append(f"{label} does not exist: {path_value}.")
+
+
+def _validate_model_candidate(candidate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(candidate, "schema_version", MODEL_CANDIDATE_SCHEMA_VERSION, target, prefix="model_candidate.")
+    target.errors.extend(model_candidate_errors(candidate))
+    license_review = candidate.get("license") if isinstance(candidate.get("license"), dict) else {}
+    compatibility = candidate.get("compatibility") if isinstance(candidate.get("compatibility"), dict) else {}
+    target.details.update(
+        {
+            "candidate_id": candidate.get("candidate_id"),
+            "model_id": candidate.get("model_id"),
+            "license_status": license_review.get("status"),
+            "license_review_status": license_review.get("review_status"),
+            "context_length": compatibility.get("context_length"),
+        }
+    )
+
+
+def _validate_model_compatibility_report(report: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(
+        report,
+        "schema_version",
+        MODEL_COMPATIBILITY_REPORT_SCHEMA_VERSION,
+        target,
+        prefix="model_compatibility_report.",
+    )
+    target.errors.extend(model_compatibility_report_errors(report))
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    target.details.update(
+        {
+            "candidate_id": report.get("candidate_id"),
+            "model_id": report.get("model_id"),
+            "readiness": report.get("readiness"),
+            "probe_count": summary.get("probe_count"),
+            "verified_count": summary.get("verified_count"),
+            "metadata_only_count": summary.get("metadata_only_count"),
+        }
+    )
+
+
+def _validate_model_registry_entry(entry: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(entry, "schema_version", MODEL_REGISTRY_ENTRY_SCHEMA_VERSION, target, prefix="model_registry_entry.")
+    target.errors.extend(model_registry_entry_errors(entry))
+    links = entry.get("links") if isinstance(entry.get("links"), dict) else {}
+    target.details.update(
+        {
+            "entry_id": entry.get("entry_id"),
+            "candidate_id": entry.get("candidate_id"),
+            "training_eligible": entry.get("training_eligible"),
+            "license_status": entry.get("license_status"),
+            "link_counts": {
+                key: len(value)
+                for key, value in links.items()
+                if isinstance(key, str) and isinstance(value, list)
+            },
+        }
+    )
+
+
+def _validate_model_registry(registry: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(registry, "schema_version", MODEL_REGISTRY_SCHEMA_VERSION, target, prefix="model_registry.")
+    target.errors.extend(model_registry_errors(registry))
+    entries = registry.get("entries") if isinstance(registry.get("entries"), dict) else {}
+    aliases = registry.get("aliases") if isinstance(registry.get("aliases"), dict) else {}
+    link_counts: dict[str, int] = {}
+    for entry in entries.values():
+        links = entry.get("links") if isinstance(entry, dict) and isinstance(entry.get("links"), dict) else {}
+        for collection, records in links.items():
+            if isinstance(collection, str) and isinstance(records, list):
+                link_counts[collection] = link_counts.get(collection, 0) + len(records)
+    target.details.update(
+        {
+            "entry_count": len(entries),
+            "training_eligible_count": sum(
+                1 for entry in entries.values() if isinstance(entry, dict) and entry.get("training_eligible") is True
+            ),
+            "aliases": aliases,
+            "link_counts": link_counts,
+        }
+    )
+
+
+def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(plan, "schema_version", TRAINING_PLAN_SCHEMA_VERSION, target, prefix="training_plan.")
+    target.errors.extend(training_plan_errors(plan))
+    model = plan.get("model") if isinstance(plan.get("model"), dict) else {}
+    dataset = plan.get("dataset") if isinstance(plan.get("dataset"), dict) else {}
+    compatibility_report = plan.get("compatibility_report") if isinstance(plan.get("compatibility_report"), dict) else {}
+    target.details.update(
+        {
+            "model_ref": model.get("model_ref"),
+            "candidate_id": model.get("candidate_id"),
+            "dataset_id": dataset.get("dataset_id"),
+            "compatibility_report_path": compatibility_report.get("path"),
+            "compatibility_report_sha256": compatibility_report.get("sha256"),
+            "dry_run": plan.get("dry_run"),
+            "gpu_execution": plan.get("gpu_execution"),
+            "no_weight_download": plan.get("no_weight_download"),
+        }
+    )
+
+
+def _model_scout_reference_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.is_absolute() or path.exists():
+        return path
+    local_path = source_path.parent / path
+    return local_path if local_path.exists() else path
 
 
 def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
