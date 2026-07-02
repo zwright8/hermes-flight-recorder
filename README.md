@@ -649,6 +649,13 @@ flightrecorder promotion-decision \
   --out runs/promotion_decision.json
 
 flightrecorder validate --promotion-decision runs/promotion_decision.json --strict
+
+flightrecorder promotion-alias-apply \
+  --registry registry/model_registry.json \
+  --promotion-decision runs/promotion_decision.json \
+  --out runs/promotion_alias_apply.json
+
+flightrecorder validate --promotion-alias-apply runs/promotion_alias_apply.json --strict
 ```
 
 `promotion-decision` is side-effect free. It emits an alias-update receipt only
@@ -657,6 +664,14 @@ the rollback target is declared, license status is known, cards have no
 TODO/TBD/unsupported-claim markers, and eval movement shows no task-completion
 regressions, new critical failures, forbidden actions, secret exposure,
 contract drift, or unverified contracts.
+`promotion-alias-apply` performs the guarded registry write after validating
+that receipt. The model registry must use `hfr.model_registry.v1`, register all
+alias targets, expose aliases as an object, and have a missing or list-valued
+`alias_history`; the command blocks without mutation when the live `champion`
+alias no longer matches the decision's previous target. Successful applies
+update `candidate`, `champion`, and `rollback`, append an alias-history entry,
+and emit a receipt that `validate --promotion-alias-apply` rechecks against the
+live registry.
 `promotion-cards` is also side-effect free: it writes `MODEL_CARD.md`,
 `DATASET_CARD.md`, and `promotion_cards.json`, and validation rejects stale card
 hashes after generation.

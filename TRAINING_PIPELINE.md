@@ -335,6 +335,13 @@ flightrecorder promotion-decision \
   --out runs/promotion_decision.json
 
 flightrecorder validate --promotion-decision runs/promotion_decision.json --strict
+
+flightrecorder promotion-alias-apply \
+  --registry registry/model_registry.json \
+  --promotion-decision runs/promotion_decision.json \
+  --out runs/promotion_alias_apply.json
+
+flightrecorder validate --promotion-alias-apply runs/promotion_alias_apply.json --strict
 ```
 
 The decision blocks promotion on missing evidence, unknown license status,
@@ -343,6 +350,12 @@ mismatch, task-completion regression, new critical failures, secret exposure,
 forbidden actions, and unsupported card claims. A passing decision is still
 side-effect free: it authorizes an alias-update receipt, leaving the actual
 registry write to a later guarded step.
+`promotion-alias-apply` is that guarded write: it revalidates the promotion
+decision, requires a `hfr.model_registry.v1` registry with registered
+`candidate`, `champion`, and `rollback` targets, verifies the live champion
+alias still matches the decision's previous champion, then updates aliases and
+appends an alias-history entry. Blocked receipts leave registry aliases
+unchanged.
 `promotion-cards` generates the model and dataset cards plus
 `promotion_cards.json`; validation rehashes generated cards and inputs so stale
 card evidence is caught before the promotion decision consumes it.

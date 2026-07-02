@@ -53,7 +53,7 @@ from .improvement_gate import (
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
-from .governance import PromotionDecisionError, build_promotion_cards, build_promotion_decision
+from .governance import PromotionDecisionError, apply_promotion_aliases, build_promotion_cards, build_promotion_decision
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -792,6 +792,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         decision_gate_paths=args.decision_gate,
         promotion_cards_paths=args.promotion_cards,
         promotion_decision_paths=args.promotion_decision,
+        promotion_alias_apply_paths=args.promotion_alias_apply,
         promotion_ledger_paths=args.promotion_ledger,
         promotion_ledger_gate_paths=args.promotion_ledger_gate,
         promotion_archive_paths=args.promotion_archive,
@@ -1030,6 +1031,24 @@ def cmd_promotion_cards(args: argparse.Namespace) -> int:
         f"out={args.out}"
     )
     return 0 if cards["passed"] else 1
+
+
+def cmd_promotion_alias_apply(args: argparse.Namespace) -> int:
+    validation_summary = validate_artifacts(promotion_decision_paths=[args.promotion_decision], strict=True)
+    receipt = apply_promotion_aliases(
+        registry_path=args.registry,
+        promotion_decision_path=args.promotion_decision,
+        out_path=args.out,
+        promotion_decision_validation=validation_summary,
+        preserve_paths=args.preserve_paths,
+        metadata=_metadata_options(args.metadata),
+    )
+    print(
+        f"{'APPLIED' if receipt['passed'] else 'BLOCKED'} promotion-alias-apply "
+        f"checks={receipt['check_count'] - receipt['failed_check_count']}/{receipt['check_count']} "
+        f"out={args.out}"
+    )
+    return 0 if receipt["passed"] else 1
 
 
 def cmd_promotion_decision(args: argparse.Namespace) -> int:
@@ -1920,6 +1939,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
     validate.add_argument("--promotion-cards", action="append", default=[], help="Validate one promotion-cards directory or manifest; may be repeated")
     validate.add_argument("--promotion-decision", action="append", default=[], help="Validate one promotion_decision.json; may be repeated")
+    validate.add_argument("--promotion-alias-apply", action="append", default=[], help="Validate one promotion_alias_apply.json receipt; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
     validate.add_argument("--promotion-archive", action="append", default=[], help="Validate one promotion archive directory or manifest; may be repeated")
@@ -2196,6 +2216,24 @@ def _parser() -> argparse.ArgumentParser:
     )
     promotion_cards.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in card manifests")
     promotion_cards.set_defaults(func=cmd_promotion_cards)
+
+    promotion_alias_apply = subparsers.add_parser(
+        "promotion-alias-apply",
+        help="Apply registry aliases from a validated passing promotion decision",
+    )
+    promotion_alias_apply.add_argument("--registry", required=True, help="Model registry JSON to mutate only if all checks pass")
+    promotion_alias_apply.add_argument("--promotion-decision", required=True, help="Passing promotion_decision.json authorizing aliases")
+    promotion_alias_apply.add_argument("--out", required=True, help="Write promotion alias application receipt JSON")
+    promotion_alias_apply.add_argument(
+        "--metadata",
+        action="append",
+        nargs=2,
+        metavar=("KEY", "VALUE"),
+        default=[],
+        help="Attach metadata to the alias-apply receipt; may be repeated",
+    )
+    promotion_alias_apply.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the receipt")
+    promotion_alias_apply.set_defaults(func=cmd_promotion_alias_apply)
 
     promotion_decision = subparsers.add_parser(
         "promotion-decision",

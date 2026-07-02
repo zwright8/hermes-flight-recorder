@@ -84,6 +84,72 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(aliases["rollback"]["target"], "champion-v1")
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
 
+    def test_promotion_alias_apply_moves_aliases_after_valid_decision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+
+            code = run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path))
+
+            self.assertEqual(code, 0)
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            self.assertEqual(registry["aliases"]["candidate"], "candidate-v2")
+            self.assertEqual(registry["aliases"]["champion"], "candidate-v2")
+            self.assertEqual(registry["aliases"]["rollback"], "champion-v1")
+            self.assertEqual(len(registry["alias_history"]), 1)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertTrue(receipt["passed"])
+            self.assertEqual(receipt["recommendation"], "alias_update_applied")
+            self.assertEqual(receipt["promotion_decision_validation"]["passed"], True)
+            self.assertEqual(receipt["alias_history_entry"]["promotion_decision_sha256"], receipt["promotion_decision"]["sha256"])
+            self.assertEqual(receipt["alias_history_entry"]["updated_aliases"]["champion"], "candidate-v2")
+            self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
+
+    def test_promotion_alias_apply_blocks_stale_champion_alias_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root, champion_alias="other-model")
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            before = json.loads(registry_path.read_text(encoding="utf-8"))
+
+            code = run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path))
+
+            self.assertEqual(code, 1)
+            after = json.loads(registry_path.read_text(encoding="utf-8"))
+            self.assertEqual(after, before)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertFalse(receipt["passed"])
+            self.assertIn("champion_alias_matches_previous_target", failed_check_ids(receipt))
+            self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
+
+    def test_promotion_alias_apply_blocks_malformed_alias_history_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root, alias_history="not-a-list")
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            before = json.loads(registry_path.read_text(encoding="utf-8"))
+
+            code = run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path))
+
+            self.assertEqual(code, 1)
+            after = json.loads(registry_path.read_text(encoding="utf-8"))
+            self.assertEqual(after, before)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertFalse(receipt["passed"])
+            self.assertIsNone(receipt["alias_history_entry"])
+            self.assertIn("registry_alias_history_list", failed_check_ids(receipt))
+            self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
+
     def test_promotion_decision_blocks_missing_dataset_card_and_rollback(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -223,6 +289,46 @@ def write_training_export(root: Path) -> Path:
     training_export.mkdir()
     (training_export / "DATASET_CARD.md").write_text("# Dataset Card\n\nGenerated upstream.\n", encoding="utf-8")
     return training_export
+
+
+def write_model_registry(root: Path, *, champion_alias: str = "champion-v1", alias_history=None) -> Path:
+    registry_path = root / "model_registry.json"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.model_registry.v1",
+                "models": {
+                    "candidate-v2": {"id": "candidate-v2", "role": "candidate"},
+                    "champion-v1": {"id": "champion-v1", "role": "champion"},
+                    "other-model": {"id": "other-model", "role": "historical"},
+                },
+                "aliases": {
+                    "candidate": "candidate-v2",
+                    "champion": champion_alias,
+                    "rollback": "other-model",
+                },
+                "alias_history": [] if alias_history is None else alias_history,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return registry_path
+
+
+def promotion_alias_apply_args(registry_path: Path, decision_path: Path, receipt_path: Path) -> list[str]:
+    return [
+        "promotion-alias-apply",
+        "--registry",
+        str(registry_path),
+        "--promotion-decision",
+        str(decision_path),
+        "--out",
+        str(receipt_path),
+        "--preserve-paths",
+    ]
 
 
 def promotion_cards_args(

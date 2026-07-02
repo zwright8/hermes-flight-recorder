@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -14,6 +15,8 @@ from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 
 PROMOTION_DECISION_SCHEMA_VERSION = "hfr.promotion_decision.v1"
 PROMOTION_CARDS_SCHEMA_VERSION = "hfr.promotion_cards.v1"
+PROMOTION_ALIAS_APPLY_SCHEMA_VERSION = "hfr.promotion_alias_apply.v1"
+MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
 
 MODEL_CLASSES = {"base", "trace-only", "frontier", "champion", "candidate"}
 PROMOTION_CARDS_REQUIRED_INPUTS = (
@@ -242,6 +245,237 @@ def build_promotion_decision(
     if metadata:
         result["metadata"] = dict(sorted(metadata.items()))
     return result
+
+
+def apply_promotion_aliases(
+    *,
+    registry_path: str | Path,
+    promotion_decision_path: str | Path,
+    out_path: str | Path,
+    promotion_decision_validation: dict[str, Any] | None = None,
+    preserve_paths: bool = False,
+    metadata: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Apply candidate/champion/rollback aliases only from a passing promotion decision."""
+    registry_file = Path(registry_path)
+    decision_file = Path(promotion_decision_path)
+    receipt_path = Path(out_path)
+    registry_before_record = _artifact_record("registry", registry_file, preserve_paths)
+    decision_record = _artifact_record("promotion_decision", decision_file, preserve_paths)
+    registry = _read_json_artifact(registry_file)
+    decision = _read_json_artifact(decision_file)
+    registry_obj = registry if isinstance(registry, dict) else {}
+    decision_obj = decision if isinstance(decision, dict) else {}
+    aliases_before = _registry_aliases(registry_obj)
+    alias_history_before = registry_obj.get("alias_history")
+    model_ids = _registry_model_ids(registry_obj)
+    decision_models = decision_obj.get("models") if isinstance(decision_obj.get("models"), dict) else {}
+    candidate_id = _model_id(decision_models.get("candidate"))
+    champion_id = _model_id(decision_models.get("champion"))
+    rollback_id = _model_id(decision_models.get("rollback"))
+    alias_update = decision_obj.get("alias_update") if isinstance(decision_obj.get("alias_update"), dict) else {}
+
+    checks: list[dict[str, Any]] = []
+    _add_check(
+        checks,
+        "registry_present",
+        registry_before_record["exists"] is True and registry_before_record["kind"] == "file",
+        actual={"exists": registry_before_record["exists"], "kind": registry_before_record["kind"]},
+        expected={"exists": True, "kind": "file"},
+        scope={"artifact_role": "registry"},
+        summary="model registry file is present",
+    )
+    _add_check(
+        checks,
+        "registry_schema",
+        registry_obj.get("schema_version") == MODEL_REGISTRY_SCHEMA_VERSION,
+        actual=registry_obj.get("schema_version"),
+        expected={"schema_version": MODEL_REGISTRY_SCHEMA_VERSION},
+        scope={"artifact_role": "registry"},
+        summary="model registry uses the expected schema version",
+    )
+    _add_check(
+        checks,
+        "promotion_decision_present",
+        decision_record["exists"] is True and decision_record["kind"] == "file",
+        actual={"exists": decision_record["exists"], "kind": decision_record["kind"]},
+        expected={"exists": True, "kind": "file"},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision file is present",
+    )
+    _add_check(
+        checks,
+        "promotion_decision_schema",
+        decision_obj.get("schema_version") == PROMOTION_DECISION_SCHEMA_VERSION,
+        actual=decision_obj.get("schema_version"),
+        expected={"schema_version": PROMOTION_DECISION_SCHEMA_VERSION},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision uses the expected schema version",
+    )
+    _add_check(
+        checks,
+        "promotion_decision_passed",
+        decision_obj.get("passed") is True,
+        actual=decision_obj.get("passed"),
+        expected={"passed": True},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision passed before aliases can move",
+    )
+    _add_check(
+        checks,
+        "promotion_decision_authorizes_alias_update",
+        decision_obj.get("recommendation") == "apply_alias_update" and alias_update.get("authorized") is True,
+        actual={"recommendation": decision_obj.get("recommendation"), "authorized": alias_update.get("authorized")},
+        expected={"recommendation": "apply_alias_update", "authorized": True},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision explicitly authorizes alias movement",
+    )
+    validation_passed = promotion_decision_validation.get("passed") if isinstance(promotion_decision_validation, dict) else None
+    _add_check(
+        checks,
+        "promotion_decision_validated",
+        validation_passed is True,
+        actual=validation_passed,
+        expected={"passed": True},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision validation passed immediately before alias movement",
+    )
+    _add_check(
+        checks,
+        "champion_previous_target_registered",
+        bool(champion_id) and champion_id in model_ids,
+        actual={"target": champion_id, "registered": champion_id in model_ids},
+        expected={"registered": True},
+        scope={"alias": "champion"},
+        summary="current champion previous target is registered",
+    )
+    _add_check(
+        checks,
+        "promotion_decision_alias_targets_match_models",
+        _alias_update_targets(alias_update)
+        == {"candidate": candidate_id, "champion": candidate_id, "rollback": rollback_id},
+        actual=_alias_update_targets(alias_update),
+        expected={"candidate": candidate_id, "champion": candidate_id, "rollback": rollback_id},
+        scope={"artifact_role": "promotion_decision"},
+        summary="promotion decision alias receipt matches named candidate and rollback models",
+    )
+    for alias_name, target in (("candidate", candidate_id), ("champion", candidate_id), ("rollback", rollback_id)):
+        _add_check(
+            checks,
+            f"{alias_name}_target_registered",
+            bool(target) and target in model_ids,
+            actual={"target": target, "registered": target in model_ids},
+            expected={"registered": True},
+            scope={"alias": alias_name},
+            summary=f"{alias_name} alias target is registered",
+        )
+    _add_check(
+        checks,
+        "champion_alias_matches_previous_target",
+        bool(champion_id) and aliases_before.get("champion") == champion_id,
+        actual={"champion_alias": aliases_before.get("champion"), "expected_previous": champion_id},
+        expected={"champion_alias": champion_id},
+        scope={"alias": "champion"},
+        summary="current champion alias matches the promotion decision previous target",
+    )
+    _add_check(
+        checks,
+        "registry_aliases_object",
+        isinstance(registry_obj.get("aliases"), dict),
+        actual=type(registry_obj.get("aliases")).__name__,
+        expected={"type": "object"},
+        scope={"artifact_role": "registry"},
+        summary="model registry aliases are stored as an object",
+    )
+    _add_check(
+        checks,
+        "registry_alias_history_list",
+        alias_history_before is None or isinstance(alias_history_before, list),
+        actual="missing" if alias_history_before is None else type(alias_history_before).__name__,
+        expected={"type": "list_or_missing"},
+        scope={"artifact_role": "registry"},
+        summary="model registry alias history can record the alias movement",
+    )
+
+    failed_checks = sum(1 for check in checks if not check["passed"])
+    passed = failed_checks == 0
+    aliases_after = dict(aliases_before)
+    alias_history_entry: dict[str, Any] | None = None
+    registry_after_record = registry_before_record
+    alias_history_count_before = len(alias_history_before) if isinstance(alias_history_before, list) else 0
+    alias_history_count_after = alias_history_count_before
+    if passed:
+        updated = copy.deepcopy(registry_obj)
+        updated_aliases = updated.setdefault("aliases", {})
+        updated_aliases["candidate"] = candidate_id
+        updated_aliases["champion"] = candidate_id
+        updated_aliases["rollback"] = rollback_id
+        history = updated.setdefault("alias_history", [])
+        alias_history_entry = {
+            "promotion_decision_sha256": decision_record.get("sha256"),
+            "previous_aliases": aliases_before,
+            "updated_aliases": {
+                "candidate": candidate_id,
+                "champion": candidate_id,
+                "rollback": rollback_id,
+            },
+        }
+        history.append(alias_history_entry)
+        _write_json(registry_file, updated)
+        registry_after_record = _artifact_record("registry", registry_file, preserve_paths)
+        aliases_after = _registry_aliases(updated)
+        alias_history_count_after += 1
+
+    receipt: dict[str, Any] = {
+        "schema_version": PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
+        "receipt_path": _display_path(receipt_path, preserve_paths),
+        "passed": passed,
+        "readiness": "applied" if passed else "blocked",
+        "recommendation": "alias_update_applied" if passed else "hold_aliases",
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+        "checks": checks,
+        "promotion_decision": {
+            "path": decision_record.get("path", ""),
+            "sha256": decision_record.get("sha256"),
+            "candidate_id": candidate_id,
+            "champion_previous_target": champion_id,
+            "rollback_id": rollback_id,
+        },
+        "promotion_decision_validation": _validation_summary(promotion_decision_validation),
+        "registry_before": {
+            "path": registry_before_record.get("path", ""),
+            "sha256": registry_before_record.get("sha256"),
+            "aliases": aliases_before,
+        },
+        "registry_after": {
+            "path": registry_after_record.get("path", ""),
+            "sha256": registry_after_record.get("sha256"),
+            "aliases": aliases_after,
+        },
+        "alias_history_entry": alias_history_entry,
+        "artifacts": {
+            "registry": registry_after_record,
+            "promotion_decision": decision_record,
+        },
+        "metrics": {
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "registered_model_count": len(model_ids),
+            "alias_count_before": len(aliases_before),
+            "alias_count_after": len(aliases_after),
+            "alias_history_count_before": alias_history_count_before,
+            "alias_history_count_after": alias_history_count_after,
+        },
+        "notes": [
+            "Promotion alias application is the guarded side-effectful step after promotion-decision validation.",
+            "Registry aliases are written only when the decision passed, authorized alias movement, and the current champion alias still matches the decision previous target.",
+        ],
+    }
+    if metadata:
+        receipt["metadata"] = dict(sorted(metadata.items()))
+    _write_json(receipt_path, receipt)
+    return receipt
 
 
 def build_promotion_cards(
@@ -703,6 +937,58 @@ def _metrics_object(payload: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     metrics = payload.get("metrics")
     return metrics if isinstance(metrics, dict) else {}
+
+
+def _validation_summary(value: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {"passed": None, "target_count": 0, "error_count": 0, "warning_count": 0}
+    return {
+        "passed": value.get("passed") if isinstance(value.get("passed"), bool) else None,
+        "target_count": _int_value(value.get("target_count")),
+        "error_count": _int_value(value.get("error_count")),
+        "warning_count": _int_value(value.get("warning_count")),
+    }
+
+
+def _registry_aliases(registry: dict[str, Any]) -> dict[str, str]:
+    aliases = registry.get("aliases")
+    if not isinstance(aliases, dict):
+        return {}
+    return {str(alias): str(target) for alias, target in aliases.items() if isinstance(alias, str) and isinstance(target, str)}
+
+
+def _registry_model_ids(registry: dict[str, Any]) -> set[str]:
+    models = registry.get("models")
+    if isinstance(models, dict):
+        return {str(model_id) for model_id in models if isinstance(model_id, str) and model_id}
+    if isinstance(models, list):
+        ids: set[str] = set()
+        for model in models:
+            if isinstance(model, dict) and isinstance(model.get("id"), str) and model["id"]:
+                ids.add(model["id"])
+        return ids
+    return set()
+
+
+def _alias_update_targets(alias_update: dict[str, Any]) -> dict[str, str]:
+    aliases = alias_update.get("aliases")
+    if not isinstance(aliases, list):
+        return {}
+    rows: dict[str, str] = {}
+    for item in aliases:
+        if not isinstance(item, dict):
+            continue
+        alias = item.get("alias")
+        target = item.get("target")
+        if isinstance(alias, str) and isinstance(target, str):
+            rows[alias] = target
+    return rows
+
+
+def _model_id(value: Any) -> str:
+    if isinstance(value, dict) and isinstance(value.get("id"), str):
+        return value["id"]
+    return ""
 
 
 def _license_status(payload: dict[str, Any] | None) -> str:
