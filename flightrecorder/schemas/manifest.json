@@ -106,6 +106,22 @@
       "name": "live_openclaw_smoke_summary"
     },
     {
+      "artifact": "serving_profile",
+      "artifact_schema_version": "hfr.serving_profile.v1",
+      "description": "OpenAI-compatible serving endpoint readiness profile.",
+      "filename": "serving_profile.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_profile.v1.schema.json",
+      "name": "serving_profile"
+    },
+    {
+      "artifact": "serving_demo_run",
+      "artifact_schema_version": "hfr.serving_demo_run.v1",
+      "description": "Replayable serving demo report linking claims to eval evidence.",
+      "filename": "serving_demo_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/serving_demo_run.v1.schema.json",
+      "name": "serving_demo_run"
+    },
+    {
       "artifact": "coven_event",
       "artifact_schema_version": "hfr.coven.event.v1",
       "description": "Raw Coven stream-json frame or daemon/API event row accepted by the Coven adapter.",

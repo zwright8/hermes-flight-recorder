@@ -1,0 +1,99 @@
+{
+  "active_layer": "serving_demo",
+  "blocked_packets": [],
+  "completed_packets": [
+    {
+      "artifacts": [
+        "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json",
+        "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/compatibility_report.json",
+        "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_check.json",
+        "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/mock_requests.json",
+        "experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
+        "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md"
+      ],
+      "branch": "codex/hermes-goal-6-serving-demo-20260702-1027",
+      "commit_sha": "pending",
+      "completed_at": "2026-07-02T14:39:14Z",
+      "id": "serving_endpoint_preflight_and_demo_report",
+      "layer": "serving_demo",
+      "pr_url": "pending",
+      "priority": "high",
+      "risks": [
+        "Real vLLM/SGLang endpoint launch remains a follow-up packet; this packet verifies mock and artifact-contract readiness.",
+        "System python3 is 3.9.6 and cannot run tests.test_deployment_hardening because tomllib requires Python 3.11+; full discovery passed with /opt/homebrew/bin/python3.11."
+      ],
+      "status": "completed",
+      "summary": "Added dependency-free OpenAI-compatible serving preflight, portable demo replay reports, public schemas, and committed sample artifacts for base-vs-candidate inspection.",
+      "title": "Add serving endpoint preflight and demo report",
+      "verification": [
+        "python3 scripts/check_openai_serving.py --mock-response \"hfr serving smoke ok\" --require-tool-call --require-structured-output --model hfr-mock-model --out experiments/qwen3_4b_flightrecorder/serving/mock_openai_check",
+        "python3 scripts/build_serving_demo_report.py --arm baseline=experiments/qwen3_4b_flightrecorder/evaluations/baseline/evaluation_summary.json --arm flightrecorder=experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/evaluation_summary.json --out experiments/qwen3_4b_flightrecorder/serving/demo_run.json --report experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md",
+        "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json",
+        "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
+        "python3 -m py_compile scripts/check_openai_serving.py scripts/build_serving_demo_report.py tests/test_serving_demo.py",
+        "python3 -m unittest tests.test_serving_demo tests.test_schema_registry",
+        "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "pgrep -fl 'check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|mock_openai|vllm|sglang' # no matches"
+      ]
+    }
+  ],
+  "current_packet": {
+    "id": "serving_managed_lifecycle_and_endpoint_suite",
+    "layer": "serving_demo",
+    "priority": "high",
+    "status": "ready",
+    "summary": "Next packet should wrap real vLLM/SGLang startup, readiness polling, smoke checks, and teardown without leaving unmanaged servers.",
+    "title": "Add managed lifecycle helpers and real endpoint suite profiles"
+  },
+  "guardrails": {
+    "disallow_expensive_training": true,
+    "disallow_model_promotion_without_governance": true,
+    "require_journal_checkpoint": true,
+    "require_verification_before_completion": true
+  },
+  "latest_artifacts": [
+    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json",
+    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/compatibility_report.json",
+    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_check.json",
+    "experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/mock_requests.json",
+    "experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
+    "experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md"
+  ],
+  "latest_verification": [
+    "python3 scripts/check_openai_serving.py --mock-response \"hfr serving smoke ok\" --require-tool-call --require-structured-output --model hfr-mock-model --out experiments/qwen3_4b_flightrecorder/serving/mock_openai_check",
+    "python3 scripts/build_serving_demo_report.py --arm baseline=experiments/qwen3_4b_flightrecorder/evaluations/baseline/evaluation_summary.json --arm flightrecorder=experiments/qwen3_4b_flightrecorder/evaluations/flightrecorder/evaluation_summary.json --out experiments/qwen3_4b_flightrecorder/serving/demo_run.json --report experiments/qwen3_4b_flightrecorder/serving/DEMO_REPORT.md",
+    "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json",
+    "python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json",
+    "python3 -m py_compile scripts/check_openai_serving.py scripts/build_serving_demo_report.py tests/test_serving_demo.py",
+    "python3 -m unittest tests.test_serving_demo tests.test_schema_registry",
+    "/opt/homebrew/bin/python3.11 -m unittest discover",
+    "pgrep -fl 'check_openai_serving.py|build_serving_demo_report.py|serve_transformers_openai.py|mock_openai|vllm|sglang' # no matches"
+  ],
+  "layer_status": {
+    "serving_demo": {
+      "last_completed_packet": "serving_endpoint_preflight_and_demo_report",
+      "next_packet": "serving_managed_lifecycle_and_endpoint_suite",
+      "status": "in_progress",
+      "summary": "Endpoint preflight and replayable demo report packet completed; managed real-engine lifecycle remains."
+    }
+  },
+  "next_packets": [
+    {
+      "id": "serving_managed_lifecycle_and_endpoint_suite",
+      "layer": "serving_demo",
+      "priority": "high",
+      "summary": "Add process lifecycle helpers and real vLLM/SGLang profile smoke checks with teardown guarantees."
+    },
+    {
+      "id": "adapter_identity_endpoint_matrix",
+      "layer": "serving_demo",
+      "priority": "medium",
+      "summary": "Record base, adapter, provider, and endpoint identity across multiple serving profiles."
+    }
+  ],
+  "promotion_readiness": {
+    "serving_demo": "partial_mock_verified"
+  },
+  "schema_version": "hfr.autonomy.supervisor_state.v1",
+  "updated_at": "2026-07-02T14:39:14Z"
+}

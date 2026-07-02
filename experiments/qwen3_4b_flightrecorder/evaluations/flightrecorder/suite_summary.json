@@ -1,0 +1,30 @@
+{
+  "failed": 0,
+  "metadata": {
+    "arm": "flightrecorder",
+    "base_url": "mock://openai-compatible",
+    "model": "hfr-base-mock+adapter",
+    "serving_profile": "../../serving/mock_openai_check/serving_profile.json"
+  },
+  "metrics": {
+    "average_score": 96,
+    "critical_failure_counts": [],
+    "pass_rate": 1.0
+  },
+  "passed": 1,
+  "runs": [
+    {
+      "critical_failures": [],
+      "passed": true,
+      "report": "demo_scenario/report.html",
+      "run_digest": "demo_scenario/run_digest.json",
+      "scenario_id": "demo_scenario",
+      "scenario_title": "Serving demo scenario",
+      "score": 96,
+      "scorecard": "demo_scenario/scorecard.json",
+      "task_family": "serving_demo",
+      "trace_path": "demo_scenario/live_observer.jsonl"
+    }
+  ],
+  "total": 1
+}

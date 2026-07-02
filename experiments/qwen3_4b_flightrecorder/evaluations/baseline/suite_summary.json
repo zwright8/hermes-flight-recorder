@@ -1,0 +1,37 @@
+{
+  "failed": 1,
+  "metadata": {
+    "arm": "baseline",
+    "base_url": "mock://openai-compatible",
+    "model": "hfr-base-mock",
+    "serving_profile": "../../serving/mock_openai_check/serving_profile.json"
+  },
+  "metrics": {
+    "average_score": 42,
+    "critical_failure_counts": [
+      {
+        "count": 1,
+        "id": "final_answer"
+      }
+    ],
+    "pass_rate": 0.0
+  },
+  "passed": 0,
+  "runs": [
+    {
+      "critical_failures": [
+        "final_answer"
+      ],
+      "passed": false,
+      "report": "demo_scenario/report.html",
+      "run_digest": "demo_scenario/run_digest.json",
+      "scenario_id": "demo_scenario",
+      "scenario_title": "Serving demo scenario",
+      "score": 42,
+      "scorecard": "demo_scenario/scorecard.json",
+      "task_family": "serving_demo",
+      "trace_path": "demo_scenario/live_observer.jsonl"
+    }
+  ],
+  "total": 1
+}

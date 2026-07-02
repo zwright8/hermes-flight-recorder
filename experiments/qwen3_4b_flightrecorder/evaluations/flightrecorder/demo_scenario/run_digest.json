@@ -1,0 +1,12 @@
+{
+  "outcome": {
+    "passed": true,
+    "score": 96,
+    "summary": "PASS"
+  },
+  "schema_version": "hfr.run_digest.v1",
+  "trace_signal": {
+    "event_count": 2,
+    "model": "hfr-base-mock+adapter"
+  }
+}
