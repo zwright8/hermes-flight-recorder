@@ -299,6 +299,37 @@ safe relative paths before they are copied, and validation rejects symlinked
 archive artifacts. Keep shared promotion archives in the default redacted mode;
 use `--preserve-paths` only for private local debugging.
 
+Before any external registry process moves `candidate`, `champion`, or
+`rollback` aliases, run a top-level governance decision:
+
+```bash
+flightrecorder promotion-decision \
+  --candidate-id candidate-v2 \
+  --champion-id champion-v1 \
+  --rollback-id champion-v1 \
+  --evidence-bundle runs/evidence_bundle.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --compare-gate runs/compare_gate.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --model-card runs/MODEL_CARD.md \
+  --dataset-card runs/training_export/DATASET_CARD.md \
+  --rollback-metadata runs/rollback.json \
+  --license-review runs/license_review.json \
+  --redaction-check runs/redaction_check.json \
+  --safety-gate runs/safety_gate.json \
+  --serving-report runs/serving_report.json \
+  --out runs/promotion_decision.json
+
+flightrecorder validate --promotion-decision runs/promotion_decision.json --strict
+```
+
+The decision blocks promotion on missing evidence, unknown license status,
+redaction or safety failure, missing cards, missing rollback metadata, eval
+mismatch, task-completion regression, new critical failures, secret exposure,
+forbidden actions, and unsupported card claims. A passing decision is still
+side-effect free: it authorizes an alias-update receipt, leaving the actual
+registry write to a later guarded step.
+
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the
 trainer-facing export files, including `dataset_registry.json`,

@@ -612,6 +612,38 @@ flightrecorder evidence-bundle \
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI
 promotion-gate example.
 
+For final governance before registry alias movement, bind the promotion history
+to model, dataset, rollback, license, safety, serving, training, and eval
+evidence:
+
+```bash
+flightrecorder promotion-decision \
+  --candidate-id candidate-v2 \
+  --champion-id champion-v1 \
+  --rollback-id champion-v1 \
+  --evidence-bundle runs/evidence_bundle.json \
+  --promotion-ledger-gate runs/promotion_ledger_gate.json \
+  --compare-gate runs/compare_gate.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --model-card runs/MODEL_CARD.md \
+  --dataset-card runs/training_export/DATASET_CARD.md \
+  --rollback-metadata runs/rollback.json \
+  --license-review runs/license_review.json \
+  --redaction-check runs/redaction_check.json \
+  --safety-gate runs/safety_gate.json \
+  --serving-report runs/serving_report.json \
+  --out runs/promotion_decision.json
+
+flightrecorder validate --promotion-decision runs/promotion_decision.json --strict
+```
+
+`promotion-decision` is side-effect free. It emits an alias-update receipt only
+when every required artifact is present and fingerprinted, every gate passes,
+the rollback target is declared, license status is known, cards have no
+TODO/TBD/unsupported-claim markers, and eval movement shows no task-completion
+regressions, new critical failures, forbidden actions, secret exposure,
+contract drift, or unverified contracts.
+
 ## Live Hermes Collection
 
 The guaranteed demo path is fixture-based. Live Hermes integration is optional.

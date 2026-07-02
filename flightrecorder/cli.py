@@ -53,6 +53,7 @@ from .improvement_gate import (
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
+from .governance import PromotionDecisionError, build_promotion_decision
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -163,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         RunDigestError,
         EvidenceCoverageError,
         EvidenceBundleError,
+        PromotionDecisionError,
         ReviewCalibrationError,
         TraceObservabilityError,
         ActionLedgerError,
@@ -788,6 +790,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         action_ledger_paths=args.action_ledger,
         action_ledger_gate_paths=args.action_ledger_gate,
         decision_gate_paths=args.decision_gate,
+        promotion_decision_paths=args.promotion_decision,
         promotion_ledger_paths=args.promotion_ledger,
         promotion_ledger_gate_paths=args.promotion_ledger_gate,
         promotion_archive_paths=args.promotion_archive,
@@ -1003,6 +1006,38 @@ def cmd_action_ledger(args: argparse.Namespace) -> int:
     else:
         print(rendered, end="")
     return 0
+
+
+def cmd_promotion_decision(args: argparse.Namespace) -> int:
+    decision = build_promotion_decision(
+        candidate_id=args.candidate_id,
+        champion_id=args.champion_id,
+        rollback_id=args.rollback_id,
+        candidate_class=args.candidate_class,
+        champion_class=args.champion_class,
+        out_path=args.out,
+        evidence_bundle_path=args.evidence_bundle,
+        promotion_ledger_gate_path=args.promotion_ledger_gate,
+        compare_gate_path=args.compare_gate,
+        trainer_launch_check_path=args.trainer_launch_check,
+        model_card_path=args.model_card,
+        dataset_card_path=args.dataset_card,
+        rollback_metadata_path=args.rollback_metadata,
+        license_review_path=args.license_review,
+        redaction_check_path=args.redaction_check,
+        safety_gate_path=args.safety_gate,
+        serving_report_path=args.serving_report,
+        preserve_paths=args.preserve_paths,
+        metadata=_metadata_options(args.metadata),
+    )
+    rendered = json.dumps(decision, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if decision["passed"] else 1
 
 
 def cmd_promotion_ledger(args: argparse.Namespace) -> int:
@@ -1859,6 +1894,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--action-ledger", action="append", default=[], help="Validate one action_ledger.json; may be repeated")
     validate.add_argument("--action-ledger-gate", action="append", default=[], help="Validate one action_ledger_gate.json; may be repeated")
     validate.add_argument("--decision-gate", action="append", default=[], help="Validate one decision_gate.json; may be repeated")
+    validate.add_argument("--promotion-decision", action="append", default=[], help="Validate one promotion_decision.json; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
     validate.add_argument("--promotion-ledger-gate", action="append", default=[], help="Validate one promotion_ledger_gate.json; may be repeated")
     validate.add_argument("--promotion-archive", action="append", default=[], help="Validate one promotion archive directory or manifest; may be repeated")
@@ -2106,6 +2142,48 @@ def _parser() -> argparse.ArgumentParser:
     action_ledger.add_argument("--out", help="Write action ledger JSON to this path")
     action_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the ledger output")
     action_ledger.set_defaults(func=cmd_action_ledger)
+
+    promotion_decision = subparsers.add_parser(
+        "promotion-decision",
+        help="Evaluate top-level governance evidence before registry alias movement",
+    )
+    promotion_decision.add_argument("--candidate-id", required=True, help="Model id proposed for promotion")
+    promotion_decision.add_argument("--champion-id", required=True, help="Current champion model id")
+    promotion_decision.add_argument("--rollback-id", help="Model id to assign to rollback if promotion passes")
+    promotion_decision.add_argument(
+        "--candidate-class",
+        default="candidate",
+        choices=["base", "trace-only", "frontier", "champion", "candidate"],
+        help="Source class of the promoted candidate",
+    )
+    promotion_decision.add_argument(
+        "--champion-class",
+        default="champion",
+        choices=["base", "trace-only", "frontier", "champion", "candidate"],
+        help="Source class of the incumbent champion",
+    )
+    promotion_decision.add_argument("--evidence-bundle", help="evidence_bundle.json for the candidate run")
+    promotion_decision.add_argument("--promotion-ledger-gate", help="promotion_ledger_gate.json proving clean promotion history")
+    promotion_decision.add_argument("--compare-gate", help="compare_gate.json proving candidate/champion eval movement")
+    promotion_decision.add_argument("--trainer-launch-check", help="trainer_launch_check.json proving trainer handoff readiness")
+    promotion_decision.add_argument("--model-card", help="Candidate model card")
+    promotion_decision.add_argument("--dataset-card", help="Dataset card for the training/eval data")
+    promotion_decision.add_argument("--rollback-metadata", help="Rollback metadata JSON naming the rollback target")
+    promotion_decision.add_argument("--license-review", help="License review JSON with known license status")
+    promotion_decision.add_argument("--redaction-check", help="Redaction gate JSON")
+    promotion_decision.add_argument("--safety-gate", help="Safety gate JSON")
+    promotion_decision.add_argument("--serving-report", help="Serving smoke or readiness JSON")
+    promotion_decision.add_argument("--out", help="Write promotion decision JSON to this path")
+    promotion_decision.add_argument(
+        "--metadata",
+        action="append",
+        nargs=2,
+        metavar=("KEY", "VALUE"),
+        default=[],
+        help="Attach metadata to the promotion decision; may be repeated",
+    )
+    promotion_decision.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the decision output")
+    promotion_decision.set_defaults(func=cmd_promotion_decision)
 
     promotion_ledger = subparsers.add_parser(
         "promotion-ledger",
