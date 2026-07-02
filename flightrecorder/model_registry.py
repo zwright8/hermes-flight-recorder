@@ -12,12 +12,20 @@ from typing import Any
 MODEL_CANDIDATE_SCHEMA_VERSION = "hfr.model_candidate.v1"
 MODEL_SCOUT_MANIFEST_SCHEMA_VERSION = "hfr.model_scout_manifest.v1"
 MODEL_COMPATIBILITY_REPORT_SCHEMA_VERSION = "hfr.model_compatibility_report.v1"
+MODEL_SERVING_PROBE_RECEIPT_SCHEMA_VERSION = "hfr.model_serving_probe_receipt.v1"
 MODEL_REGISTRY_ENTRY_SCHEMA_VERSION = "hfr.model_registry_entry.v1"
 MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
 TRAINING_PLAN_SCHEMA_VERSION = "hfr.training_plan.v1"
 
 ALIAS_NAMES = ("candidate", "champion", "rollback")
-MODEL_REGISTRY_LINK_COLLECTIONS = ("datasets", "training_runs", "adapters", "evals", "promotion_decisions")
+MODEL_REGISTRY_LINK_COLLECTIONS = (
+    "datasets",
+    "training_runs",
+    "adapters",
+    "evals",
+    "serving_probes",
+    "promotion_decisions",
+)
 COMPATIBILITY_FIELDS = (
     "tokenizer",
     "chat_template",
@@ -28,6 +36,16 @@ COMPATIBILITY_FIELDS = (
     "memory",
 )
 COMPATIBILITY_REPORT_PROBE_IDS = ("context", *COMPATIBILITY_FIELDS)
+SERVING_PROBE_RECEIPT_PROBE_IDS = (
+    "health",
+    "model_metadata",
+    "chat",
+    "tool_calls",
+    "structured_outputs",
+    "context",
+    "memory",
+)
+SERVING_PROBE_RECEIPT_MODES = {"metadata_only", "external_receipt"}
 TRAINING_APPROVED_LICENSE_STATUSES = {"approved"}
 TRAINING_APPROVED_REVIEW_STATUSES = {"approved"}
 
@@ -400,7 +418,7 @@ def list_model_registry_entries(registry: dict[str, Any]) -> list[dict[str, Any]
     return rows
 
 
-def select_model_for_training(registry: dict[str, Any], model_ref: str) -> dict[str, Any]:
+def resolve_model_registry_entry(registry: dict[str, Any], model_ref: str) -> dict[str, Any]:
     validate_model_registry(registry)
     aliases = registry.get("aliases") if isinstance(registry.get("aliases"), dict) else {}
     target = aliases.get(model_ref, model_ref)
@@ -409,10 +427,15 @@ def select_model_for_training(registry: dict[str, Any], model_ref: str) -> dict[
     entry = registry["entries"].get(target)
     if not isinstance(entry, dict):
         raise ModelRegistryError(f"model reference {model_ref!r} does not resolve to a registered entry")
+    return copy.deepcopy(entry)
+
+
+def select_model_for_training(registry: dict[str, Any], model_ref: str) -> dict[str, Any]:
+    entry = resolve_model_registry_entry(registry, model_ref)
     validate_model_candidate(entry.get("candidate"), require_training_eligible=True)
     if entry.get("training_eligible") is not True:
         raise ModelRegistryError(f"model entry {entry.get('entry_id')!r} is not training eligible")
-    return copy.deepcopy(entry)
+    return entry
 
 
 def link_model_registry_artifact(
@@ -564,6 +587,230 @@ def build_dry_run_training_plan(
     return plan
 
 
+def build_model_serving_probe_receipt(
+    registry: dict[str, Any],
+    *,
+    model_ref: str,
+    out_path: str | Path,
+    profile_id: str,
+    provider: str,
+    serving_engine: str,
+    base_url: str,
+    probe_mode: str = "metadata_only",
+    compatibility_report: dict[str, Any] | None = None,
+    compatibility_report_path: str | Path | None = None,
+    preserve_paths: bool = False,
+) -> dict[str, Any]:
+    if probe_mode not in SERVING_PROBE_RECEIPT_MODES:
+        raise ModelRegistryError(f"probe_mode must be one of {', '.join(sorted(SERVING_PROBE_RECEIPT_MODES))}")
+    for field_name, value in (
+        ("profile_id", profile_id),
+        ("provider", provider),
+        ("serving_engine", serving_engine),
+        ("base_url", base_url),
+    ):
+        if not isinstance(value, str) or not value:
+            raise ModelRegistryError(f"{field_name} must be a non-empty string")
+    entry = resolve_model_registry_entry(registry, model_ref)
+    candidate = validate_model_candidate(entry.get("candidate"))
+    compatibility = candidate["compatibility"]
+    probes = [
+        _serving_probe(
+            "health",
+            status="not_run",
+            verified=False,
+            supported=None,
+            source="serving_profile",
+            notes="Flight Recorder did not launch a server or open a health-check connection.",
+            metadata={"requires_external_endpoint": True},
+        ),
+        _serving_probe(
+            "model_metadata",
+            status="metadata_only",
+            verified=False,
+            supported=True,
+            source="model_registry_entry.candidate",
+            notes="Registry candidate metadata is available for an external serving probe.",
+            metadata={"model_id": candidate["model_id"]},
+        ),
+        _serving_probe_from_compatibility("chat", "chat_template", compatibility["chat_template"]),
+        _serving_probe_from_compatibility("tool_calls", "tool_calls", compatibility["tool_calls"]),
+        _serving_probe_from_compatibility("structured_outputs", "structured_outputs", compatibility["structured_outputs"]),
+        _serving_context_probe(compatibility["context_length"]),
+        _serving_probe_from_compatibility("memory", "memory", compatibility["memory"]),
+    ]
+    summary = {
+        "probe_count": len(probes),
+        "verified_count": sum(1 for probe in probes if probe.get("verified") is True),
+        "metadata_only_count": sum(1 for probe in probes if probe.get("status") == "metadata_only"),
+        "not_run_count": sum(1 for probe in probes if probe.get("status") == "not_run"),
+        "blocked_count": sum(1 for probe in probes if probe.get("status") == "blocked"),
+        "context_length": compatibility["context_length"],
+    }
+    receipt = {
+        "schema_version": MODEL_SERVING_PROBE_RECEIPT_SCHEMA_VERSION,
+        "receipt_path": _display_path(Path(out_path), preserve_paths),
+        "generated_at": _now_iso(),
+        "model_ref": model_ref,
+        "entry_id": entry["entry_id"],
+        "candidate_id": entry["candidate_id"],
+        "model_id": candidate["model_id"],
+        "probe_mode": probe_mode,
+        "passed": summary["blocked_count"] == 0,
+        "readiness": "metadata_recorded" if probe_mode == "metadata_only" else "external_receipt_recorded",
+        "recommendation": "ready_for_external_serving_probe",
+        "serving_profile": {
+            "profile_id": profile_id,
+            "provider": provider,
+            "serving_engine": serving_engine,
+            "base_url": base_url,
+            "launched_by_flight_recorder": False,
+        },
+        "download_policy": {
+            "downloaded_weights": False,
+            "downloaded_tokenizer": False,
+            "imported_heavy_ml": False,
+            "launched_server": False,
+            "gpu_execution": False,
+            "network_connection_attempted": False,
+        },
+        "execution": {
+            "flight_recorder_downloaded_weights": False,
+            "flight_recorder_downloaded_tokenizer": False,
+            "flight_recorder_imported_heavy_ml": False,
+            "flight_recorder_launched_server": False,
+            "flight_recorder_launched_gpu_job": False,
+            "flight_recorder_opened_network_connection": False,
+            "external_endpoint_required_for_verification": True,
+        },
+        "probes": probes,
+        "summary": summary,
+        "notes": [
+            "This receipt records serving-probe metadata without downloading weights or tokenizers.",
+            "Flight Recorder did not launch a serving process, open a network connection, or run GPU work.",
+            "A future serving worker must attach verified endpoint evidence before treating serving behavior as verified.",
+        ],
+    }
+    if compatibility_report is not None:
+        receipt["compatibility_report"] = _serving_compatibility_report_record(
+            compatibility_report,
+            candidate=candidate,
+            report_path=compatibility_report_path,
+            preserve_paths=preserve_paths,
+        )
+    errors = model_serving_probe_receipt_errors(receipt)
+    if errors:
+        raise ModelRegistryError("; ".join(errors))
+    return receipt
+
+
+def model_serving_probe_receipt_errors(receipt: Any) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(receipt, dict):
+        return ["model_serving_probe_receipt must be a JSON object"]
+    _require_equal(receipt, "schema_version", MODEL_SERVING_PROBE_RECEIPT_SCHEMA_VERSION, errors, "model_serving_probe_receipt.")
+    for field_name in (
+        "receipt_path",
+        "generated_at",
+        "model_ref",
+        "entry_id",
+        "candidate_id",
+        "model_id",
+        "probe_mode",
+        "readiness",
+        "recommendation",
+    ):
+        _require_non_empty_string(receipt, field_name, errors, "model_serving_probe_receipt.")
+    if receipt.get("probe_mode") not in SERVING_PROBE_RECEIPT_MODES:
+        errors.append("model_serving_probe_receipt.probe_mode must be metadata_only or external_receipt.")
+    if receipt.get("readiness") not in {"metadata_recorded", "external_receipt_recorded", "verified", "blocked"}:
+        errors.append("model_serving_probe_receipt.readiness must be metadata_recorded, external_receipt_recorded, verified, or blocked.")
+    if receipt.get("recommendation") not in {"ready_for_external_serving_probe", "serving_verified", "block_serving_selection"}:
+        errors.append("model_serving_probe_receipt.recommendation must be a known serving recommendation.")
+    if not isinstance(receipt.get("passed"), bool):
+        errors.append("model_serving_probe_receipt.passed must be a boolean.")
+    profile = receipt.get("serving_profile")
+    if not isinstance(profile, dict):
+        errors.append("model_serving_probe_receipt.serving_profile must be an object.")
+    else:
+        for field_name in ("profile_id", "provider", "serving_engine", "base_url"):
+            _require_non_empty_string(profile, field_name, errors, "model_serving_probe_receipt.serving_profile.")
+        if profile.get("launched_by_flight_recorder") is not False:
+            errors.append("model_serving_probe_receipt.serving_profile.launched_by_flight_recorder must be false.")
+    policy = receipt.get("download_policy")
+    if not isinstance(policy, dict):
+        errors.append("model_serving_probe_receipt.download_policy must be an object.")
+    else:
+        for field_name in (
+            "downloaded_weights",
+            "downloaded_tokenizer",
+            "imported_heavy_ml",
+            "launched_server",
+            "gpu_execution",
+            "network_connection_attempted",
+        ):
+            if policy.get(field_name) is not False:
+                errors.append(f"model_serving_probe_receipt.download_policy.{field_name} must be false.")
+    execution = receipt.get("execution")
+    if not isinstance(execution, dict):
+        errors.append("model_serving_probe_receipt.execution must be an object.")
+    else:
+        for field_name in (
+            "flight_recorder_downloaded_weights",
+            "flight_recorder_downloaded_tokenizer",
+            "flight_recorder_imported_heavy_ml",
+            "flight_recorder_launched_server",
+            "flight_recorder_launched_gpu_job",
+            "flight_recorder_opened_network_connection",
+        ):
+            if execution.get(field_name) is not False:
+                errors.append(f"model_serving_probe_receipt.execution.{field_name} must be false.")
+        if not isinstance(execution.get("external_endpoint_required_for_verification"), bool):
+            errors.append("model_serving_probe_receipt.execution.external_endpoint_required_for_verification must be a boolean.")
+    probes = receipt.get("probes")
+    if not isinstance(probes, list):
+        errors.append("model_serving_probe_receipt.probes must be a list.")
+        probes = []
+    seen: set[str] = set()
+    for index, probe in enumerate(probes):
+        prefix = f"model_serving_probe_receipt.probes[{index}]."
+        if not isinstance(probe, dict):
+            errors.append(f"model_serving_probe_receipt.probes[{index}] must be an object.")
+            continue
+        probe_id = probe.get("id")
+        if not isinstance(probe_id, str) or not probe_id:
+            errors.append(f"{prefix}id must be a non-empty string.")
+        elif probe_id in seen:
+            errors.append(f"{prefix}id duplicates {probe_id!r}.")
+        else:
+            seen.add(probe_id)
+        for field_name in ("status", "source", "notes"):
+            _require_non_empty_string(probe, field_name, errors, prefix)
+        if not isinstance(probe.get("verified"), bool):
+            errors.append(f"{prefix}verified must be a boolean.")
+        if "supported" in probe and probe.get("supported") is not None and not isinstance(probe.get("supported"), bool):
+            errors.append(f"{prefix}supported must be a boolean or null.")
+        if not isinstance(probe.get("metadata", {}), dict):
+            errors.append(f"{prefix}metadata must be an object when present.")
+    if seen != set(SERVING_PROBE_RECEIPT_PROBE_IDS):
+        errors.append(f"model_serving_probe_receipt.probes must contain exactly {sorted(SERVING_PROBE_RECEIPT_PROBE_IDS)!r}.")
+    summary = receipt.get("summary")
+    if not isinstance(summary, dict):
+        errors.append("model_serving_probe_receipt.summary must be an object.")
+    else:
+        for field_name in ("probe_count", "verified_count", "metadata_only_count", "not_run_count", "blocked_count", "context_length"):
+            if not _is_non_negative_int(summary.get(field_name)):
+                errors.append(f"model_serving_probe_receipt.summary.{field_name} must be a non-negative integer.")
+        if isinstance(summary.get("probe_count"), int) and summary.get("probe_count") != len(probes):
+            errors.append("model_serving_probe_receipt.summary.probe_count must match probes length.")
+    report = receipt.get("compatibility_report")
+    if report is not None and not isinstance(report, dict):
+        errors.append("model_serving_probe_receipt.compatibility_report must be an object when present.")
+    elif isinstance(report, dict):
+        _serving_probe_compatibility_report_errors(report, receipt, errors)
+    return errors
+
+
 def training_plan_errors(plan: Any) -> list[str]:
     errors: list[str] = []
     if not isinstance(plan, dict):
@@ -614,6 +861,123 @@ def is_training_license_approved(candidate: dict[str, Any]) -> bool:
         and license_review.get("accepted_terms") is True
         and license_review.get("training_allowed") is True
     )
+
+
+def _serving_compatibility_report_record(
+    report: dict[str, Any],
+    *,
+    candidate: dict[str, Any],
+    report_path: str | Path | None,
+    preserve_paths: bool,
+) -> dict[str, Any]:
+    errors = model_compatibility_report_errors(report)
+    if report.get("candidate_id") != candidate.get("candidate_id"):
+        errors.append("compatibility_report.candidate_id must match selected candidate.")
+    if report.get("model_id") != candidate.get("model_id"):
+        errors.append("compatibility_report.model_id must match selected candidate.")
+    if report.get("passed") is not True:
+        errors.append("compatibility_report.passed must be true for serving-probe receipts.")
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    record = {
+        "path": str(report.get("report_path") or ""),
+        "candidate_id": report.get("candidate_id"),
+        "model_id": report.get("model_id"),
+        "passed": report.get("passed"),
+        "readiness": report.get("readiness"),
+        "recommendation": report.get("recommendation"),
+        "probe_count": summary.get("probe_count"),
+        "verified_count": summary.get("verified_count"),
+        "metadata_only_count": summary.get("metadata_only_count"),
+        "missing_count": summary.get("missing_count"),
+        "unsupported_count": summary.get("unsupported_count"),
+        "download_policy": copy.deepcopy(report.get("download_policy")),
+    }
+    if report_path is not None and str(report_path):
+        source_path = Path(report_path)
+        if not source_path.exists() or not source_path.is_file() or source_path.is_symlink():
+            errors.append(f"compatibility_report_path must be an existing regular file: {source_path}")
+        else:
+            record["path"] = _display_path(source_path, preserve_paths)
+            record["sha256"] = _sha256(source_path)
+    if errors:
+        raise ModelRegistryError("; ".join(errors))
+    return record
+
+
+def _serving_probe_compatibility_report_errors(
+    report: dict[str, Any],
+    receipt: dict[str, Any],
+    errors: list[str],
+) -> None:
+    for field_name in ("path", "candidate_id", "model_id", "readiness", "recommendation"):
+        _require_non_empty_string(report, field_name, errors, "model_serving_probe_receipt.compatibility_report.")
+    for field_name in ("probe_count", "verified_count", "metadata_only_count", "missing_count", "unsupported_count"):
+        if not _is_non_negative_int(report.get(field_name)):
+            errors.append(f"model_serving_probe_receipt.compatibility_report.{field_name} must be a non-negative integer.")
+    if report.get("passed") is not True:
+        errors.append("model_serving_probe_receipt.compatibility_report.passed must be true.")
+    if "sha256" in report and not _is_sha256(report.get("sha256")):
+        errors.append("model_serving_probe_receipt.compatibility_report.sha256 must be a 64-character hex digest.")
+    if report.get("candidate_id") != receipt.get("candidate_id"):
+        errors.append("model_serving_probe_receipt.compatibility_report.candidate_id must match receipt.candidate_id.")
+    if report.get("model_id") != receipt.get("model_id"):
+        errors.append("model_serving_probe_receipt.compatibility_report.model_id must match receipt.model_id.")
+    policy = report.get("download_policy")
+    if not isinstance(policy, dict):
+        errors.append("model_serving_probe_receipt.compatibility_report.download_policy must be an object.")
+    else:
+        for field_name in ("downloaded_weights", "downloaded_tokenizer", "imported_heavy_ml", "gpu_execution"):
+            if policy.get(field_name) is not False:
+                errors.append(f"model_serving_probe_receipt.compatibility_report.download_policy.{field_name} must be false.")
+
+
+def _serving_probe_from_compatibility(
+    probe_id: str,
+    compatibility_field: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    return _serving_probe(
+        probe_id,
+        status=str(metadata.get("status") or "metadata_only"),
+        verified=metadata.get("verified") is True,
+        supported=metadata.get("supported") if isinstance(metadata.get("supported"), bool) else None,
+        source=f"model_candidate.compatibility.{compatibility_field}",
+        notes=str(metadata.get("notes") or f"{compatibility_field} serving metadata recorded."),
+        metadata=metadata,
+    )
+
+
+def _serving_context_probe(context_length: int) -> dict[str, Any]:
+    return _serving_probe(
+        "context",
+        status="metadata_only",
+        verified=False,
+        supported=True,
+        source="model_candidate.compatibility.context_length",
+        notes=f"Recorded context length is {context_length} tokens; endpoint context handling is not verified.",
+        metadata={"context_length": context_length},
+    )
+
+
+def _serving_probe(
+    probe_id: str,
+    *,
+    status: str,
+    verified: bool,
+    supported: bool | None,
+    source: str,
+    notes: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "id": probe_id,
+        "status": status,
+        "verified": verified,
+        "supported": supported,
+        "source": source,
+        "notes": notes,
+        "metadata": copy.deepcopy(metadata),
+    }
 
 
 def _training_compatibility_report_record(

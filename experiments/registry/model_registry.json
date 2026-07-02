@@ -111,6 +111,7 @@
         ],
         "evals": [],
         "promotion_decisions": [],
+        "serving_probes": [],
         "training_runs": [
           {
             "id": "local_mock_tiny_chat_sft_dry_run",
@@ -258,6 +259,22 @@
         ],
         "evals": [],
         "promotion_decisions": [],
+        "serving_probes": [
+          {
+            "id": "qwen3_4b_instruct_2507_metadata_serving_probe",
+            "kind": "model_serving_probe_receipt",
+            "metadata": {
+              "probe_mode": "metadata_only",
+              "provider": "metadata_only",
+              "readiness": "metadata_recorded",
+              "serving_engine": "not_launched"
+            },
+            "path": "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json",
+            "recorded_at": "2026-07-02T16:22:00Z",
+            "sha256": "ae7262005216c9ade49e03b4b3ba47084cd5d6701a3925adcfe94d7570ac7b3e",
+            "status": "metadata_receipt"
+          }
+        ],
         "training_runs": [
           {
             "id": "qwen3_4b_instruct_2507_sft_dry_run",
@@ -278,11 +295,11 @@
       "schema_version": "hfr.model_registry_entry.v1",
       "status": "metadata_reviewed",
       "training_eligible": true,
-      "updated_at": "2026-07-02T15:37:36Z"
+      "updated_at": "2026-07-02T16:22:00Z"
     }
   },
   "notes": [],
   "registry_path": "experiments/registry/model_registry.json",
   "schema_version": "hfr.model_registry.v1",
-  "updated_at": "2026-07-02T15:37:36Z"
+  "updated_at": "2026-07-02T16:22:00Z"
 }

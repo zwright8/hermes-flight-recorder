@@ -1078,12 +1078,12 @@
     }
   ],
   "current_packet": {
-    "id": "prepare_next_model_layer_packet",
+    "id": "model_serving_probe_receipt_contracts",
     "layer": "model",
     "priority": "medium",
-    "status": "ready",
-    "summary": "Qwen metadata-only scout packet landed on main; next Goal 4 packet should extend serving-probe receipts or adapter registry links without downloading weights.",
-    "title": "Prepare next model-layer packet"
+    "status": "verified_pending_branch_commit_and_main_delivery",
+    "summary": "Added no-download model serving-probe receipts, validation/schema/CLI support, registry serving_probes links, and a Qwen metadata-only receipt without launching servers, opening network connections, downloading weights, or running GPU work.",
+    "title": "Add model serving-probe receipt contracts"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -1536,14 +1536,34 @@
   },
   "latest_artifacts": [
     {
-      "kind": "model_candidate",
+      "kind": "schema",
       "layer": "model",
-      "path": "experiments/registry/model_candidates/qwen3_4b_instruct_2507.json"
+      "path": "flightrecorder/schemas/model_serving_probe_receipt.v1.schema.json"
     },
     {
-      "kind": "compatibility_report",
+      "kind": "schema",
       "layer": "model",
-      "path": "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json"
+      "path": "flightrecorder/schemas/model_registry_entry.v1.schema.json"
+    },
+    {
+      "kind": "module",
+      "layer": "model",
+      "path": "flightrecorder/model_registry.py"
+    },
+    {
+      "kind": "module",
+      "layer": "model",
+      "path": "flightrecorder/validation.py"
+    },
+    {
+      "kind": "module",
+      "layer": "model",
+      "path": "flightrecorder/cli.py"
+    },
+    {
+      "kind": "serving_probe_receipt",
+      "layer": "model",
+      "path": "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json"
     },
     {
       "kind": "registry_entry",
@@ -1551,19 +1571,14 @@
       "path": "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
     },
     {
+      "kind": "registry_entry",
+      "layer": "model",
+      "path": "experiments/registry/model_registry_entries/local_mock_tiny_chat.json"
+    },
+    {
       "kind": "registry",
       "layer": "model",
       "path": "experiments/registry/model_registry.json"
-    },
-    {
-      "kind": "scout_manifest",
-      "layer": "model",
-      "path": "experiments/registry/model_scout_manifest.json"
-    },
-    {
-      "kind": "training_plan",
-      "layer": "model",
-      "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json"
     },
     {
       "kind": "validation_summary",
@@ -1579,38 +1594,48 @@
       "kind": "test",
       "layer": "model",
       "path": "tests/test_model_registry.py"
+    },
+    {
+      "kind": "test",
+      "layer": "model",
+      "path": "tests/test_schema_registry.py"
     }
   ],
   "latest_verification": [
     {
-      "command": "python3 -m flightrecorder model-candidate validate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --require-training-eligible --out /tmp/qwen3_candidate_validation.json",
+      "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
       "status": "pass",
-      "summary": "Qwen metadata candidate remained training-eligible under approved Apache-2.0 review fields after rebasing over harness main."
-    },
-    {
-      "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
-      "status": "pass",
-      "summary": "Strict semantic validation passed for local and Qwen model-layer artifacts after rebase."
-    },
-    {
-      "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, registry entry, registry, scout manifest, and training plan",
-      "status": "pass",
-      "summary": "Public schema checks passed for all new and updated Qwen artifacts."
+      "summary": "Touched model-layer modules and tests compile successfully."
     },
     {
       "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
       "status": "pass",
-      "summary": "54 model, schema registry, and validation tests passed after rebase."
+      "summary": "55 focused model, schema registry, and validation tests passed."
     },
     {
-      "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+      "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-serving-probe-receipt experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
       "status": "pass",
-      "summary": "Touched Python files compile successfully."
+      "summary": "Strict semantic validation passed for 11 model-layer targets including the new Qwen serving-probe receipt."
     },
     {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && git diff --check",
+      "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, serving-probe receipt, registry entry, registry, scout manifest, and training plan",
       "status": "pass",
-      "summary": "Supervisor state and diff whitespace checks passed after rebase."
+      "summary": "Public schema checks passed for all current Qwen model-layer artifacts, including hfr.model_serving_probe_receipt.v1."
+    },
+    {
+      "command": "rm -rf /tmp/hfr-serving-schema-bundle && python3 -m flightrecorder schemas --name model_serving_probe_receipt --name model_registry_entry --write-dir /tmp/hfr-serving-schema-bundle",
+      "status": "pass",
+      "summary": "Selected public schema bundle export wrote manifest, model registry entry, and model serving-probe receipt schemas."
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "status": "pass",
+      "summary": "336 tests passed under Python 3.11.14."
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass",
+      "summary": "Whitespace check passed."
     }
   ],
   "layer_status": {
@@ -1656,11 +1681,49 @@
     }
   },
   "model_main_delivery": {
-    "main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
-    "previous_main_sha": "26ef4aa775e7b0cf9e819f6d4a556ae7351457c2",
-    "source_branch": "codex/hermes-goal-4-model-20260702-1027",
-    "status": "landed_and_retired_on_main",
-    "summary": "Goal 4 model registry, compatibility, and dry-run planning contracts landed on main while Harness PR #3 waited for the main-push lock."
+    "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
+    "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+    "lock_status": "observed_existing_lock_not_owned_before_delivery",
+    "source_branch": "codex/hermes-goal-4-model-20260702-1614",
+    "status": "verified_pending_branch_commit_and_main_delivery",
+    "summary": "Serving-probe receipt contract packet is locally verified; branch commit, push, locked main integration, branch deletion, and post-delivery checkpoint are still pending.",
+    "verification": [
+      {
+        "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+        "status": "pass",
+        "summary": "Touched model-layer modules and tests compile successfully."
+      },
+      {
+        "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+        "status": "pass",
+        "summary": "55 focused model, schema registry, and validation tests passed."
+      },
+      {
+        "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-serving-probe-receipt experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+        "status": "pass",
+        "summary": "Strict semantic validation passed for 11 model-layer targets including the new Qwen serving-probe receipt."
+      },
+      {
+        "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, serving-probe receipt, registry entry, registry, scout manifest, and training plan",
+        "status": "pass",
+        "summary": "Public schema checks passed for all current Qwen model-layer artifacts, including hfr.model_serving_probe_receipt.v1."
+      },
+      {
+        "command": "rm -rf /tmp/hfr-serving-schema-bundle && python3 -m flightrecorder schemas --name model_serving_probe_receipt --name model_registry_entry --write-dir /tmp/hfr-serving-schema-bundle",
+        "status": "pass",
+        "summary": "Selected public schema bundle export wrote manifest, model registry entry, and model serving-probe receipt schemas."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+        "status": "pass",
+        "summary": "336 tests passed under Python 3.11.14."
+      },
+      {
+        "command": "git diff --check",
+        "status": "pass",
+        "summary": "Whitespace check passed."
+      }
+    ]
   },
   "next_packets": [
     {
@@ -1681,8 +1744,8 @@
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/12",
       "source_branch": "codex/hermes-goal-4-model-20260702-1534",
       "source_branch_sha": "9df284fcea44fd1db5b602be193a9d2f02f36929",
-      "status": "open_queued_after_evidence",
-      "summary": "Metadata-only Qwen model scout remains open after the earlier local-mock model registry packet landed.",
+      "status": "resolved_by_prior_goal4_qwen_delivery",
+      "summary": "Goal 4 Qwen metadata scout PR #12 was merged and the source branch was deleted before this serving-probe packet.",
       "title": "Land Model PR #12"
     },
     {
@@ -1717,6 +1780,14 @@
       "status": "open_queued",
       "summary": "Governance eval summary enforcement remains open.",
       "title": "Land Eval PR #6"
+    },
+    {
+      "id": "model_adapter_registry_receipts",
+      "layer": "model",
+      "priority": "medium",
+      "status": "ready_after_serving_receipt_delivery",
+      "title": "Add adapter registry receipt contracts",
+      "summary": "Next Goal 4 packet can extend adapter registry links and validation without downloading weights or launching GPU work."
     }
   ],
   "promotion_readiness": {
@@ -1730,62 +1801,53 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:07:15Z",
+  "updated_at": "2026-07-02T16:24:57Z",
   "github_delivery": {
-    "branch": "codex/hermes-goal-4-model-20260702-1534",
-    "branch_remote_deleted_at": "2026-07-02T16:06:00Z",
-    "branch_remote_status": "deleted",
-    "commit_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "integrated_main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
+    "branch": "codex/hermes-goal-4-model-20260702-1614",
+    "commit_sha": null,
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_release_status": "pending_after_post_delivery_checkpoint_push",
-    "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "pushed_and_verified",
-    "main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "observed_origin_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/12",
-    "pr_status": "MERGED",
-    "remote_branch_verified_deleted": true,
-    "remote_branch_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "remote_main_verified_at": "2026-07-02T16:06:00Z",
-    "remote_main_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "remote_ci": {
-      "checked_at": "2026-07-02T16:10:00Z",
-      "run_id": "28604441425",
-      "status": "failed_preexisting_non_model_release_check",
-      "summary": "GitHub CI passed 335 tests, then release_check.sh failed while writing schema_contracts_check because the harness_run_manifest.v1.schema.json output path was encountered twice during schema export. The same failure appears on pre-Qwen harness main runs 28603801361 and 28604266200."
-    },
-    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1534",
+    "lock_status": "observed_existing_lock_not_owned_before_delivery",
+    "main_integration_status": "pending_lock_and_delivery",
+    "main_sha": null,
+    "pr_status": "pending_branch_push",
+    "pr_url": null,
+    "remote_branch_status": "pending_push",
     "verification": [
       {
-        "command": "python3 -m flightrecorder model-candidate validate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --require-training-eligible --out /tmp/qwen3_candidate_validation.json",
+        "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
         "status": "pass",
-        "summary": "Qwen metadata candidate remained training-eligible under approved Apache-2.0 review fields."
-      },
-      {
-        "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
-        "status": "pass",
-        "summary": "Strict semantic validation passed for local and Qwen model-layer artifacts."
-      },
-      {
-        "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, registry entry, registry, scout manifest, and training plan",
-        "status": "pass",
-        "summary": "Public schema checks passed for all new and updated Qwen artifacts."
+        "summary": "Touched model-layer modules and tests compile successfully."
       },
       {
         "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
         "status": "pass",
-        "summary": "54 focused model, schema registry, and validation tests passed."
+        "summary": "55 focused model, schema registry, and validation tests passed."
+      },
+      {
+        "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-serving-probe-receipt experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+        "status": "pass",
+        "summary": "Strict semantic validation passed for 11 model-layer targets including the new Qwen serving-probe receipt."
+      },
+      {
+        "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, serving-probe receipt, registry entry, registry, scout manifest, and training plan",
+        "status": "pass",
+        "summary": "Public schema checks passed for all current Qwen model-layer artifacts, including hfr.model_serving_probe_receipt.v1."
+      },
+      {
+        "command": "rm -rf /tmp/hfr-serving-schema-bundle && python3 -m flightrecorder schemas --name model_serving_probe_receipt --name model_registry_entry --write-dir /tmp/hfr-serving-schema-bundle",
+        "status": "pass",
+        "summary": "Selected public schema bundle export wrote manifest, model registry entry, and model serving-probe receipt schemas."
       },
       {
         "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
         "status": "pass",
-        "summary": "335 tests passed under Python 3.11.14 after integrating current origin/main."
+        "summary": "336 tests passed under Python 3.11.14."
       },
       {
-        "command": "git ls-remote origin refs/heads/main && git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1534",
+        "command": "git diff --check",
         "status": "pass",
-        "summary": "Remote main resolved to 23729146346958edc9aaa56a29cebe3420626aaa and the Goal 4 remote branch was absent after deletion."
+        "summary": "Whitespace check passed."
       }
     ]
   },
@@ -1794,7 +1856,9 @@
     "Qwen compatibility is metadata-only; tokenizer, serving, tool-call, structured-output, quantization, and memory behavior still need runtime receipts.",
     "Remote CI is failing on a pre-existing non-model schema export duplication in release_check.sh after unit tests pass; Goal 4 did not modify harness schema registration.",
     "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry.",
-    "Adapter, eval, and promotion link slots are present but await real downstream artifacts."
+    "Adapter, eval, and promotion link slots are present but await real downstream artifacts.",
+    "Serving-probe receipt is metadata-only and intentionally does not verify endpoint health, chat completions, tool calls, structured outputs, runtime context, or memory behavior.",
+    "Remote CI may still fail on the pre-existing non-model schema export duplication in release_check.sh unless another lane fixes harness schema registration."
   ],
   "safety_guardrails": {
     "gpu_work_launched": false,
