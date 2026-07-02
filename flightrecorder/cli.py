@@ -10,6 +10,7 @@ import os
 import re
 import shlex
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -150,6 +151,7 @@ from .validation import EVAL_SUITE_MANIFEST_SCHEMA_VERSION, validate_artifacts
 from .verifiers import VerifierError, capture_verified_state
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+GOAL3_HANDOFF_SCHEMA_VERSION = "hfr.goal3_handoff.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 TRACE_FORMAT_CHOICES = [
     "auto",
@@ -731,6 +733,158 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
     if args.fail_on_failed and summary["failed"] > 0:
         return 1
     return 0
+
+
+def cmd_goal3_handoff(args: argparse.Namespace) -> int:
+    target = Path(args.out)
+    if target.exists() and not target.is_dir():
+        raise ArtifactError(f"goal3 handoff output is not a directory: {target}")
+    if target.exists() and any(target.iterdir()):
+        if not args.force:
+            raise ArtifactError(f"goal3 handoff output is not empty: {target}; pass --force to replace it")
+        shutil.rmtree(target)
+    target.mkdir(parents=True, exist_ok=True)
+
+    metadata = _metadata_options(args.metadata)
+    runs_dir = target / "runs"
+    training_export_dir = target / "training_export"
+    suite_summary_path = target / "suite_summary.json"
+    validation_path = target / "validation.json"
+    index_path = target / "index.html"
+    gate_path = target / "training_gate.json"
+    preflight_path = target / "trainer_preflight.json"
+    handoff_path = target / "goal3_handoff.json"
+    evidence_bundle_path = runs_dir / "evidence_bundle.json"
+
+    suite_code = cmd_run_suite(
+        argparse.Namespace(
+            scenarios=args.scenarios,
+            pattern=args.pattern,
+            recursive=args.recursive,
+            suite_manifest=args.suite_manifest,
+            out=str(runs_dir),
+            format=args.format,
+            summary_out=str(suite_summary_path),
+            index_out=str(index_path),
+            no_index=False,
+            junit=False,
+            markdown=False,
+            export_rl=True,
+            training_export_out=str(training_export_dir),
+            reward_scale=args.reward_scale,
+            min_score_gap=args.min_score_gap,
+            max_pairs_per_family=args.max_pairs_per_family,
+            validate=True,
+            validation_out=str(validation_path),
+            strict=args.strict,
+            evidence_handoff=True,
+            write_sensitive_trace=False,
+            preserve_paths=args.preserve_paths,
+            metadata=args.metadata,
+            fail_on_failed=False,
+        )
+    )
+
+    training_manifest = _read_json(training_export_dir / "manifest.json")
+    validation_summary = _read_json(validation_path)
+    evidence_bundle = _read_json(evidence_bundle_path)
+    dataset_version = str(training_manifest.get("dataset_version") or "")
+
+    gate_code = cmd_gate_export(_goal3_training_gate_args(args, training_export_dir, gate_path))
+    gate = _read_json(gate_path)
+
+    preflight_code = cmd_trainer_preflight(
+        argparse.Namespace(
+            out=str(preflight_path),
+            gate=[str(gate_path)],
+            training_export=str(training_export_dir),
+            compare_export=None,
+            reviewed_export=None,
+            evidence_bundle=str(evidence_bundle_path),
+            agentic_training_plan=None,
+            validation=[str(validation_path)],
+            require_gate=["training_gate"],
+            require_dataset_version=[dataset_version] if dataset_version else [],
+            trainer_command=args.trainer_command,
+            allow_unvalidated_gates=False,
+            preserve_paths=args.preserve_paths,
+            metadata=args.metadata,
+        )
+    )
+    preflight = _read_json(preflight_path)
+
+    artifacts = {
+        "runs": _display_path(runs_dir, args.preserve_paths),
+        "suite_summary": _display_path(suite_summary_path, args.preserve_paths),
+        "training_export": _display_path(training_export_dir, args.preserve_paths),
+        "validation": _display_path(validation_path, args.preserve_paths),
+        "evidence_bundle": _display_path(evidence_bundle_path, args.preserve_paths),
+        "training_gate": _display_path(gate_path, args.preserve_paths),
+        "trainer_preflight": _display_path(preflight_path, args.preserve_paths),
+    }
+    if args.policy:
+        artifacts["training_gate_policy"] = _display_path(Path(args.policy), args.preserve_paths)
+
+    stages = [
+        {
+            "id": "run_suite",
+            "passed": suite_code == 0,
+            "artifact": artifacts["suite_summary"],
+            "summary": "Scenario suite, optional RL export, validation, and evidence handoff generation.",
+        },
+        {
+            "id": "training_export",
+            "passed": bool(dataset_version),
+            "artifact": artifacts["training_export"],
+            "summary": "Trainer-ready RL dataset export with dataset_version selection key.",
+        },
+        {
+            "id": "validation",
+            "passed": validation_summary.get("passed") is True,
+            "artifact": artifacts["validation"],
+            "summary": "Structural validation over runs, training export, and evidence handoff artifacts.",
+        },
+        {
+            "id": "evidence_bundle",
+            "passed": evidence_bundle.get("passed") is True,
+            "artifact": artifacts["evidence_bundle"],
+            "summary": "Evidence handoff bundle over scenario quality, evidence coverage, observability, repair queue, and harness artifacts.",
+        },
+        {
+            "id": "training_gate",
+            "passed": gate.get("passed") is True and gate_code == 0,
+            "artifact": artifacts["training_gate"],
+            "summary": "Training dataset readiness gate.",
+        },
+        {
+            "id": "trainer_preflight",
+            "passed": preflight.get("passed") is True and preflight_code == 0,
+            "artifact": artifacts["trainer_preflight"],
+            "summary": "Trainer launch guard manifest that records but does not execute the trainer command.",
+        },
+    ]
+    passed = all(stage["passed"] for stage in stages)
+    handoff = {
+        "schema_version": GOAL3_HANDOFF_SCHEMA_VERSION,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "passed": passed,
+        "recommendation": "handoff_ready" if passed else "fix_handoff",
+        "output_dir": _display_path(target, args.preserve_paths),
+        "dataset_version": dataset_version,
+        "metadata": metadata,
+        "artifacts": artifacts,
+        "stages": stages,
+        "notes": [
+            "Goal 3 handoff builds export, validation, gate, evidence bundle, and trainer preflight artifacts in one reproducible sequence.",
+            "The trainer command is recorded for downstream launch checks; it is not executed by this command.",
+        ],
+    }
+    _write_json(handoff_path, handoff)
+    print(
+        f"{'READY' if passed else 'BLOCKED'} goal3-handoff "
+        f"dataset_version={dataset_version or 'missing'} out={handoff_path}"
+    )
+    return 0 if passed else 1
 
 
 def cmd_index(args: argparse.Namespace) -> int:
@@ -2312,6 +2466,34 @@ def _parser() -> argparse.ArgumentParser:
     )
     run_suite.add_argument("--fail-on-failed", action="store_true", help="Exit nonzero when any scenario score fails")
     run_suite.set_defaults(func=cmd_run_suite)
+
+    goal3_handoff = subparsers.add_parser(
+        "goal3-handoff",
+        help="Build a Goal 3 training-data handoff with export, validation, gate, evidence bundle, and preflight artifacts",
+    )
+    goal3_handoff.add_argument("--scenarios", required=True, help="Directory containing scenario JSON files")
+    goal3_handoff.add_argument("--out", required=True, help="Output directory for the reproducible Goal 3 handoff")
+    goal3_handoff.add_argument("--pattern", default="*.json", help="Scenario filename glob relative to --scenarios")
+    goal3_handoff.add_argument("--recursive", action="store_true", help="Discover scenarios recursively with --pattern")
+    goal3_handoff.add_argument("--suite-manifest", help="Eval suite manifest with an explicit scenario_ids list to run")
+    goal3_handoff.add_argument("--format", default="auto", choices=TRACE_FORMAT_CHOICES)
+    goal3_handoff.add_argument("--policy", help="Versioned training gate policy JSON file")
+    goal3_handoff.add_argument("--trainer-command", required=True, help="Trainer command to record in preflight; not executed")
+    goal3_handoff.add_argument("--reward-scale", default="score", choices=["score", "binary", "signed"])
+    goal3_handoff.add_argument("--min-score-gap", type=int, default=1)
+    goal3_handoff.add_argument("--max-pairs-per-family", type=int, default=0)
+    goal3_handoff.add_argument("--strict", action="store_true", help="Treat validation warnings as handoff blockers")
+    goal3_handoff.add_argument("--force", action="store_true", help="Replace an existing non-empty handoff directory")
+    goal3_handoff.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in generated handoff artifacts")
+    goal3_handoff.add_argument(
+        "--metadata",
+        action="append",
+        default=[],
+        type=_metadata_arg,
+        metavar="KEY=VALUE",
+        help="Attach metadata to suite, training export, and trainer preflight artifacts; may be repeated",
+    )
+    goal3_handoff.set_defaults(func=cmd_goal3_handoff)
 
     index = subparsers.add_parser("index", help="Build an index for generated run reports")
     index.add_argument("--runs", required=True)
@@ -3967,6 +4149,49 @@ def _training_gate_options(args: argparse.Namespace) -> dict[str, Any]:
         "require_trace_event_types": _merge_unique_strings(policy.get("require_trace_event_types", []), args.require_trace_event_type),
         "task_family_gates": policy.get("task_family_gates", []),
     }
+
+
+def _goal3_training_gate_args(args: argparse.Namespace, training_export_dir: Path, gate_path: Path) -> argparse.Namespace:
+    return argparse.Namespace(
+        training_export=str(training_export_dir),
+        policy=args.policy,
+        out=str(gate_path),
+        strict_validation=args.strict,
+        skip_validation=False,
+        min_episodes=None,
+        min_pass_rate=None,
+        min_average_score=None,
+        min_preferences=None,
+        min_sft=None,
+        min_dpo=None,
+        min_reward_model=None,
+        min_step_rewards=None,
+        min_task_completion_configured=None,
+        min_task_completion_complete=None,
+        max_task_completion_incomplete=None,
+        min_task_completion_check_pass_rate=None,
+        min_source_fingerprint_rate=None,
+        max_unverified_source_fingerprints=None,
+        min_trainer_view_source_fingerprint_rate=None,
+        max_unverified_trainer_view_source_fingerprints=None,
+        min_trace_average_events=None,
+        min_trace_event_type_count=None,
+        min_trace_final_answer_rate=None,
+        min_trace_tool_or_api_rate=None,
+        max_trace_empty_final_answers=None,
+        max_trace_risk_count=None,
+        require_trace_event_type=[],
+        min_split_task_families=None,
+        min_train_episodes=None,
+        min_validation_episodes=None,
+        min_test_episodes=None,
+        require_family_exclusive_splits=False,
+        max_quality_flags=None,
+        forbid_quality_flag=[],
+        forbid_quality_severity=[],
+        require_task_family=[],
+        preserve_paths=args.preserve_paths,
+    )
 
 
 def _training_gate_policy_summary(options: dict[str, Any]) -> dict[str, Any]:
