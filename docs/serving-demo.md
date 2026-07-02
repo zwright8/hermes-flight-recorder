@@ -131,3 +131,14 @@ python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/se
 python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json
 python3 -m flightrecorder schemas --check experiments/qwen3_4b_flightrecorder/serving/demo_run.json
 ```
+
+Run semantic validation before handing serving artifacts to Eval or Governance:
+
+```bash
+python3 -m flightrecorder validate \
+  --serving-profile experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json \
+  --serving-compatibility-report experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/compatibility_report.json \
+  --serving-endpoint-check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_check.json \
+  --serving-demo-run experiments/qwen3_4b_flightrecorder/serving/demo_run.json \
+  --strict
+```

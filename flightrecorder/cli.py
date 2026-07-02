@@ -921,6 +921,10 @@ def cmd_validate(args: argparse.Namespace) -> int:
         eval_summary_paths=args.eval_summary,
         external_eval_plan_paths=args.external_eval_plan,
         heldout_manifest_paths=args.heldout_manifest,
+        serving_profile_paths=args.serving_profile,
+        serving_compatibility_report_paths=args.serving_compatibility_report,
+        serving_endpoint_check_paths=args.serving_endpoint_check,
+        serving_demo_run_paths=args.serving_demo_run,
         strict=args.strict,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
@@ -2504,6 +2508,15 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one hfr.heldout_scenario_manifest.v1 JSON file; may be repeated",
     )
+    validate.add_argument("--serving-profile", action="append", default=[], help="Validate one serving_profile.json; may be repeated")
+    validate.add_argument(
+        "--serving-compatibility-report",
+        action="append",
+        default=[],
+        help="Validate one compatibility_report.json; may be repeated",
+    )
+    validate.add_argument("--serving-endpoint-check", action="append", default=[], help="Validate one serving_check.json; may be repeated")
+    validate.add_argument("--serving-demo-run", action="append", default=[], help="Validate one serving demo_run.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)

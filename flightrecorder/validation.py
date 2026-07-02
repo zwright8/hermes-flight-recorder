@@ -134,6 +134,11 @@ LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
 RUN_SUITE_HARNESS_SOURCE = "flightrecorder run-suite --evidence-handoff"
+SERVING_PROFILE_SCHEMA_VERSION = "hfr.serving_profile.v1"
+SERVING_COMPATIBILITY_REPORT_SCHEMA_VERSION = "hfr.serving_compatibility_report.v1"
+SERVING_ENDPOINT_CHECK_SCHEMA_VERSION = "hfr.serving_endpoint_check.v1"
+SERVING_DEMO_RUN_SCHEMA_VERSION = "hfr.serving_demo_run.v1"
+SERVING_CAPABILITY_STATUSES = {"supported", "not_verified"}
 _COMPANION_NOT_PROVIDED = object()
 
 
@@ -214,6 +219,10 @@ def validate_artifacts(
     eval_summary_paths: list[str | Path] | None = None,
     external_eval_plan_paths: list[str | Path] | None = None,
     heldout_manifest_paths: list[str | Path] | None = None,
+    serving_profile_paths: list[str | Path] | None = None,
+    serving_compatibility_report_paths: list[str | Path] | None = None,
+    serving_endpoint_check_paths: list[str | Path] | None = None,
+    serving_demo_run_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -330,6 +339,14 @@ def validate_artifacts(
         targets.append(validate_external_eval_plan(external_eval_plan_path))
     for heldout_manifest_path in heldout_manifest_paths or []:
         targets.append(validate_heldout_manifest(heldout_manifest_path))
+    for serving_profile_path in serving_profile_paths or []:
+        targets.append(validate_serving_profile(serving_profile_path))
+    for serving_compatibility_report_path in serving_compatibility_report_paths or []:
+        targets.append(validate_serving_compatibility_report(serving_compatibility_report_path))
+    for serving_endpoint_check_path in serving_endpoint_check_paths or []:
+        targets.append(validate_serving_endpoint_check(serving_endpoint_check_path))
+    for serving_demo_run_path in serving_demo_run_paths or []:
+        targets.append(validate_serving_demo_run(serving_demo_run_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -797,6 +814,46 @@ def validate_heldout_manifest(path: str | Path) -> ValidationTarget:
     manifest = _read_object(manifest_path, target, "heldout_manifest.json")
     if manifest is not None:
         _validate_heldout_manifest(manifest, target)
+    return target
+
+
+def validate_serving_profile(path: str | Path) -> ValidationTarget:
+    """Validate one serving_profile.json artifact."""
+    profile_path = Path(path)
+    target = ValidationTarget("serving_profile", str(profile_path))
+    profile = _read_object(profile_path, target, "serving_profile.json")
+    if profile is not None:
+        _validate_serving_profile(profile, target)
+    return target
+
+
+def validate_serving_compatibility_report(path: str | Path) -> ValidationTarget:
+    """Validate one compatibility_report.json artifact."""
+    report_path = Path(path)
+    target = ValidationTarget("serving_compatibility_report", str(report_path))
+    report = _read_object(report_path, target, "compatibility_report.json")
+    if report is not None:
+        _validate_serving_compatibility_report(report, target)
+    return target
+
+
+def validate_serving_endpoint_check(path: str | Path) -> ValidationTarget:
+    """Validate one serving_check.json artifact."""
+    check_path = Path(path)
+    target = ValidationTarget("serving_endpoint_check", str(check_path))
+    check = _read_object(check_path, target, "serving_check.json")
+    if check is not None:
+        _validate_serving_endpoint_check(check, target)
+    return target
+
+
+def validate_serving_demo_run(path: str | Path) -> ValidationTarget:
+    """Validate one serving demo run artifact."""
+    demo_path = Path(path)
+    target = ValidationTarget("serving_demo_run", str(demo_path))
+    demo = _read_object(demo_path, target, "serving_demo_run.json")
+    if demo is not None:
+        _validate_serving_demo_run(demo, target)
     return target
 
 
@@ -5641,6 +5698,386 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -
             "error_count": len(errors),
         }
     )
+
+
+def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(profile, "schema_version", SERVING_PROFILE_SCHEMA_VERSION, target, prefix="serving_profile.")
+    for field_name in ("generated_at", "profile_id", "arm"):
+        if not isinstance(profile.get(field_name), str) or not profile.get(field_name):
+            target.errors.append(f"serving_profile.{field_name} must be a non-empty string.")
+
+    endpoint = profile.get("endpoint") if isinstance(profile.get("endpoint"), dict) else {}
+    if not endpoint:
+        target.errors.append("serving_profile.endpoint must be an object.")
+    for field_name in ("base_url", "models_url", "chat_completions_url"):
+        if field_name in endpoint and (not isinstance(endpoint.get(field_name), str) or not endpoint.get(field_name)):
+            target.errors.append(f"serving_profile.endpoint.{field_name} must be a non-empty string when present.")
+
+    identity = profile.get("model_identity") if isinstance(profile.get("model_identity"), dict) else {}
+    if not identity:
+        target.errors.append("serving_profile.model_identity must be an object.")
+    for field_name in ("requested_model", "served_model_id"):
+        if field_name in identity and (not isinstance(identity.get(field_name), str) or not identity.get(field_name)):
+            target.errors.append(f"serving_profile.model_identity.{field_name} must be a non-empty string when present.")
+    observed = identity.get("observed_model_ids")
+    if observed is not None and not _is_string_list(observed):
+        target.errors.append("serving_profile.model_identity.observed_model_ids must be a list of strings when present.")
+
+    capabilities = profile.get("capabilities") if isinstance(profile.get("capabilities"), dict) else {}
+    if not capabilities:
+        target.errors.append("serving_profile.capabilities must be an object.")
+    for field_name in ("health", "models", "model_metadata", "chat_completions"):
+        if field_name in capabilities and not isinstance(capabilities.get(field_name), bool):
+            target.errors.append(f"serving_profile.capabilities.{field_name} must be a boolean when present.")
+    for field_name in ("streaming", "tool_calls", "structured_outputs"):
+        if capabilities.get(field_name) not in SERVING_CAPABILITY_STATUSES:
+            target.errors.append(f"serving_profile.capabilities.{field_name} must be supported or not_verified.")
+
+    eval_preflight = profile.get("eval_preflight") if isinstance(profile.get("eval_preflight"), dict) else {}
+    if not eval_preflight:
+        target.errors.append("serving_profile.eval_preflight must be an object.")
+    _validate_serving_readiness(
+        eval_preflight,
+        target,
+        "serving_profile.eval_preflight",
+        ready_field="ready",
+    )
+    artifacts = profile.get("artifacts")
+    if artifacts is not None and not isinstance(artifacts, dict):
+        target.errors.append("serving_profile.artifacts must be an object when present.")
+
+    target.details.update(
+        {
+            "profile_id": profile.get("profile_id"),
+            "arm": profile.get("arm"),
+            "readiness": eval_preflight.get("readiness"),
+            "served_model_id": identity.get("served_model_id"),
+        }
+    )
+
+
+def _validate_serving_compatibility_report(report: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(
+        report,
+        "schema_version",
+        SERVING_COMPATIBILITY_REPORT_SCHEMA_VERSION,
+        target,
+        prefix="serving_compatibility_report.",
+    )
+    for field_name in ("generated_at", "profile_id", "model", "served_model_id", "engine"):
+        if not isinstance(report.get(field_name), str) or not report.get(field_name):
+            target.errors.append(f"serving_compatibility_report.{field_name} must be a non-empty string.")
+
+    checks = report.get("checks") if isinstance(report.get("checks"), dict) else {}
+    if not checks:
+        target.errors.append("serving_compatibility_report.checks must be an object.")
+    openai_core = checks.get("openai_core") if isinstance(checks.get("openai_core"), dict) else {}
+    if not openai_core:
+        target.errors.append("serving_compatibility_report.checks.openai_core must be a non-empty object.")
+    for check_id, passed in openai_core.items():
+        if not isinstance(check_id, str) or not check_id:
+            target.errors.append("serving_compatibility_report.checks.openai_core keys must be non-empty strings.")
+        if not isinstance(passed, bool):
+            target.errors.append(f"serving_compatibility_report.checks.openai_core.{check_id} must be a boolean.")
+
+    for field_name in ("streaming", "tool_calls", "structured_outputs"):
+        _validate_serving_capability_check(
+            checks.get(field_name),
+            target,
+            f"serving_compatibility_report.checks.{field_name}",
+        )
+
+    target.details.update(
+        {
+            "profile_id": report.get("profile_id"),
+            "model": report.get("model"),
+            "served_model_id": report.get("served_model_id"),
+            "engine": report.get("engine"),
+            "openai_core_passed": sum(1 for passed in openai_core.values() if passed is True),
+        }
+    )
+
+
+def _validate_serving_endpoint_check(check: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(check, "schema_version", SERVING_ENDPOINT_CHECK_SCHEMA_VERSION, target, prefix="serving_endpoint_check.")
+    for field_name in ("generated_at", "profile_id", "arm", "model", "served_model_id", "base_url"):
+        if not isinstance(check.get(field_name), str) or not check.get(field_name):
+            target.errors.append(f"serving_endpoint_check.{field_name} must be a non-empty string.")
+
+    checks = check.get("checks")
+    if not isinstance(checks, list) or not checks:
+        target.errors.append("serving_endpoint_check.checks must be a non-empty list.")
+        checks = []
+    failed_from_rows: list[str] = []
+    seen_ids: set[str] = set()
+    for index, item in enumerate(checks):
+        label = f"serving_endpoint_check.checks[{index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        check_id = item.get("id")
+        if not isinstance(check_id, str) or not check_id:
+            target.errors.append(f"{label}.id must be a non-empty string.")
+        elif check_id in seen_ids:
+            target.errors.append(f"serving_endpoint_check.checks has duplicate id {check_id!r}.")
+        else:
+            seen_ids.add(check_id)
+        if not isinstance(item.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean.")
+        elif item.get("passed") is False and isinstance(check_id, str):
+            failed_from_rows.append(check_id)
+        if not isinstance(item.get("details"), dict):
+            target.errors.append(f"{label}.details must be an object.")
+
+    failed_checks = check.get("failed_checks")
+    if not _is_string_list(failed_checks):
+        target.errors.append("serving_endpoint_check.failed_checks must be a list of strings.")
+        failed_checks = []
+    if failed_checks != failed_from_rows:
+        target.errors.append(f"serving_endpoint_check.failed_checks expected {failed_from_rows!r}, got {failed_checks!r}.")
+    if not isinstance(check.get("artifacts"), dict):
+        target.errors.append("serving_endpoint_check.artifacts must be an object.")
+    _validate_serving_readiness(
+        check,
+        target,
+        "serving_endpoint_check",
+        ready_field="passed",
+        failed_checks=failed_checks,
+    )
+
+    target.details.update(
+        {
+            "profile_id": check.get("profile_id"),
+            "arm": check.get("arm"),
+            "readiness": check.get("readiness"),
+            "passed": check.get("passed"),
+            "check_count": len(checks),
+            "failed_check_count": len(failed_from_rows),
+        }
+    )
+
+
+def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(demo, "schema_version", SERVING_DEMO_RUN_SCHEMA_VERSION, target, prefix="serving_demo_run.")
+    candidate_arm = demo.get("candidate_arm")
+    if not isinstance(candidate_arm, str) or not candidate_arm:
+        target.errors.append("serving_demo_run.candidate_arm must be a non-empty string.")
+    if not isinstance(demo.get("same_scenario_ids"), bool):
+        target.errors.append("serving_demo_run.same_scenario_ids must be a boolean.")
+
+    arms = demo.get("arms")
+    if not isinstance(arms, list):
+        target.errors.append("serving_demo_run.arms must be a list.")
+        arms = []
+    if len(arms) < 2:
+        target.errors.append("serving_demo_run.arms must include at least two arms.")
+    arm_names: list[str] = []
+    for index, arm in enumerate(arms):
+        if not isinstance(arm, dict):
+            target.errors.append(f"serving_demo_run.arms[{index}] must be an object.")
+            continue
+        name = arm.get("name")
+        if not isinstance(name, str) or not name:
+            target.errors.append(f"serving_demo_run.arms[{index}].name must be a non-empty string.")
+        elif name in arm_names:
+            target.errors.append(f"serving_demo_run.arms has duplicate name {name!r}.")
+        else:
+            arm_names.append(name)
+        if not isinstance(arm.get("source"), str) or not arm.get("source"):
+            target.errors.append(f"serving_demo_run.arms[{index}].source must be a non-empty string.")
+        if arm.get("serving_profile") is not None and not isinstance(arm.get("serving_profile"), str):
+            target.errors.append(f"serving_demo_run.arms[{index}].serving_profile must be a string or null.")
+        metrics = arm.get("metrics")
+        if not isinstance(metrics, dict):
+            target.errors.append(f"serving_demo_run.arms[{index}].metrics must be an object.")
+        else:
+            _validate_serving_demo_metrics(metrics, index, target)
+    if isinstance(candidate_arm, str) and candidate_arm and candidate_arm not in arm_names:
+        target.errors.append("serving_demo_run.candidate_arm must match one arm name.")
+
+    scenario_sets = demo.get("scenario_sets")
+    if not isinstance(scenario_sets, dict):
+        target.errors.append("serving_demo_run.scenario_sets must be an object.")
+        scenario_sets = {}
+    normalized_sets: dict[str, list[str]] = {}
+    for arm_name in arm_names:
+        values = scenario_sets.get(arm_name)
+        if not _is_string_list(values):
+            target.errors.append(f"serving_demo_run.scenario_sets.{arm_name} must be a list of strings.")
+            normalized_sets[arm_name] = []
+        else:
+            normalized_sets[arm_name] = list(values)
+    expected_same = bool(normalized_sets) and len({tuple(values) for values in normalized_sets.values()}) == 1
+    if isinstance(demo.get("same_scenario_ids"), bool) and demo.get("same_scenario_ids") != expected_same:
+        target.errors.append(f"serving_demo_run.same_scenario_ids expected {expected_same}, got {demo.get('same_scenario_ids')!r}.")
+
+    claims = demo.get("claims")
+    if not isinstance(claims, list):
+        target.errors.append("serving_demo_run.claims must be a list.")
+        claims = []
+    for index, claim in enumerate(claims):
+        _validate_serving_demo_claim(claim, index, target, set(arm_names))
+    if expected_same is False and any(isinstance(claim, dict) and claim.get("id") != "scenario_sets_differ" for claim in claims):
+        target.errors.append("serving_demo_run.claims must not include behavior claims when scenario sets differ.")
+
+    scenarios = demo.get("scenarios")
+    if not isinstance(scenarios, list):
+        target.errors.append("serving_demo_run.scenarios must be a list.")
+        scenarios = []
+    seen_scenarios: set[str] = set()
+    for index, scenario in enumerate(scenarios):
+        _validate_serving_demo_scenario(
+            scenario,
+            index,
+            target,
+            set(arm_names),
+            require_all_arms=expected_same,
+            seen_scenarios=seen_scenarios,
+        )
+
+    target.details.update(
+        {
+            "candidate_arm": candidate_arm,
+            "arm_count": len(arms),
+            "claim_count": len(claims),
+            "scenario_count": len(scenarios),
+            "same_scenario_ids": demo.get("same_scenario_ids"),
+        }
+    )
+
+
+def _validate_serving_readiness(
+    value: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    *,
+    ready_field: str,
+    failed_checks: list[str] | None = None,
+) -> None:
+    if not isinstance(value.get(ready_field), bool):
+        target.errors.append(f"{label}.{ready_field} must be a boolean.")
+    if value.get("readiness") not in {"ready", "blocked"}:
+        target.errors.append(f"{label}.readiness must be ready or blocked.")
+    raw_failed = value.get("failed_checks") if failed_checks is None else failed_checks
+    if not _is_string_list(raw_failed):
+        target.errors.append(f"{label}.failed_checks must be a list of strings.")
+        raw_failed = []
+    if value.get(ready_field) is True:
+        if value.get("readiness") != "ready":
+            target.errors.append(f"{label}.{ready_field} requires readiness ready.")
+        if raw_failed:
+            target.errors.append(f"{label}.{ready_field} requires an empty failed_checks list.")
+    if value.get(ready_field) is False and value.get("readiness") == "ready":
+        target.errors.append(f"{label}.readiness cannot be ready when {ready_field} is false.")
+    if value.get("readiness") == "blocked" and not raw_failed:
+        target.errors.append(f"{label}.failed_checks must explain blocked readiness.")
+
+
+def _validate_serving_capability_check(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if value.get("status") not in SERVING_CAPABILITY_STATUSES:
+        target.errors.append(f"{label}.status must be supported or not_verified.")
+    if not isinstance(value.get("response_ok"), bool):
+        target.errors.append(f"{label}.response_ok must be a boolean.")
+    if value.get("status") == "supported" and value.get("response_ok") is not True:
+        target.errors.append(f"{label}.response_ok must be true when status is supported.")
+    if value.get("response_ok") is True and value.get("status") != "supported":
+        target.errors.append(f"{label}.status must be supported when response_ok is true.")
+    if "error" in value and value.get("error") is not None and not isinstance(value.get("error"), str):
+        target.errors.append(f"{label}.error must be a string or null when present.")
+
+
+def _validate_serving_demo_metrics(metrics: dict[str, Any], index: int, target: ValidationTarget) -> None:
+    label = f"serving_demo_run.arms[{index}].metrics"
+    for field_name in ("total", "passed", "failed", "critical_failure_total"):
+        if field_name in metrics and not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer when present.")
+    for field_name in ("pass_rate", "average_score"):
+        if field_name in metrics and metrics.get(field_name) is not None and not _is_optional_non_negative_number(metrics.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be null or a non-negative number.")
+    if _is_non_negative_int(metrics.get("passed")) and _is_non_negative_int(metrics.get("failed")):
+        expected_total = metrics.get("passed") + metrics.get("failed")
+        if metrics.get("total") is not None and metrics.get("total") != expected_total:
+            target.errors.append(f"{label}.total expected {expected_total}, got {metrics.get('total')!r}.")
+
+
+def _validate_serving_demo_claim(claim: Any, index: int, target: ValidationTarget, arm_names: set[str]) -> None:
+    label = f"serving_demo_run.claims[{index}]"
+    if not isinstance(claim, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("id", "summary"):
+        if not isinstance(claim.get(field_name), str) or not claim.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    evidence = claim.get("evidence")
+    if not isinstance(evidence, list):
+        target.errors.append(f"{label}.evidence must be a list.")
+        return
+    if claim.get("id") != "scenario_sets_differ" and not evidence:
+        target.errors.append(f"{label}.evidence must not be empty for behavior claims.")
+    for evidence_index, item in enumerate(evidence):
+        evidence_label = f"{label}.evidence[{evidence_index}]"
+        if not isinstance(item, dict):
+            target.errors.append(f"{evidence_label} must be an object.")
+            continue
+        if item.get("arm") not in arm_names:
+            target.errors.append(f"{evidence_label}.arm must match a demo arm.")
+        if not isinstance(item.get("scenario_id"), str) or not item.get("scenario_id"):
+            target.errors.append(f"{evidence_label}.scenario_id must be a non-empty string.")
+        for field_name in ("evaluation_summary", "suite_summary", "trace_path", "scorecard", "run_digest", "report"):
+            if field_name in item and item.get(field_name) is not None and not isinstance(item.get(field_name), str):
+                target.errors.append(f"{evidence_label}.{field_name} must be a string when present.")
+
+
+def _validate_serving_demo_scenario(
+    scenario: Any,
+    index: int,
+    target: ValidationTarget,
+    arm_names: set[str],
+    *,
+    require_all_arms: bool,
+    seen_scenarios: set[str],
+) -> None:
+    label = f"serving_demo_run.scenarios[{index}]"
+    if not isinstance(scenario, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    scenario_id = scenario.get("scenario_id")
+    if not isinstance(scenario_id, str) or not scenario_id:
+        target.errors.append(f"{label}.scenario_id must be a non-empty string.")
+    elif scenario_id in seen_scenarios:
+        target.errors.append(f"serving_demo_run.scenarios has duplicate scenario_id {scenario_id!r}.")
+    else:
+        seen_scenarios.add(scenario_id)
+    runs = scenario.get("arms")
+    if not isinstance(runs, dict):
+        target.errors.append(f"{label}.arms must be an object.")
+        return
+    unknown_arms = sorted(set(runs) - arm_names)
+    if unknown_arms:
+        target.errors.append(f"{label}.arms contains unknown arm(s): {', '.join(unknown_arms)}.")
+    if require_all_arms:
+        missing_arms = sorted(arm_names - set(runs))
+        if missing_arms:
+            target.errors.append(f"{label}.arms missing arm(s): {', '.join(missing_arms)}.")
+    for arm_name, run in runs.items():
+        run_label = f"{label}.arms.{arm_name}"
+        if not isinstance(run, dict):
+            target.errors.append(f"{run_label} must be an object.")
+            continue
+        if run.get("scenario_id") != scenario_id:
+            target.errors.append(f"{run_label}.scenario_id must match {scenario_id!r}.")
+        if not isinstance(run.get("passed"), bool):
+            target.errors.append(f"{run_label}.passed must be a boolean.")
+        if "score" in run and run.get("score") is not None and not _is_optional_non_negative_number(run.get("score")):
+            target.errors.append(f"{run_label}.score must be null or a non-negative number.")
+        if not _is_string_list(run.get("critical_failures")):
+            target.errors.append(f"{run_label}.critical_failures must be a list of strings.")
+        for field_name in ("trace_path", "scorecard", "run_digest", "report"):
+            if field_name in run and run.get(field_name) is not None and not isinstance(run.get(field_name), str):
+                target.errors.append(f"{run_label}.{field_name} must be a string when present.")
 
 
 def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) -> None:

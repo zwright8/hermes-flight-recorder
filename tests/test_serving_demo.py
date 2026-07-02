@@ -8,6 +8,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.schema_registry import check_schema_file
+from flightrecorder.validation import validate_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +78,17 @@ class ServingDemoTests(unittest.TestCase):
             self.assertGreaterEqual(compatibility["checks"]["streaming"]["event_count"], 1)
             self.assertTrue(compatibility["checks"]["streaming"]["done_seen"])
             self.assertEqual(compatibility["checks"]["tool_calls"]["tool_call_count"], 1)
+            validation = validate_artifacts(
+                serving_profile_paths=[out / "serving_profile.json"],
+                serving_compatibility_report_paths=[out / "compatibility_report.json"],
+                serving_endpoint_check_paths=[out / "serving_check.json"],
+                strict=True,
+            )
+            self.assertTrue(validation["passed"], validation)
+            self.assertEqual(
+                [target["type"] for target in validation["targets"]],
+                ["serving_profile", "serving_compatibility_report", "serving_endpoint_check"],
+            )
 
     def test_demo_report_links_claims_to_replay_artifacts(self):
         build_serving_demo_report = _load_script(DEMO_SCRIPT, "build_serving_demo_report")
@@ -117,6 +129,73 @@ class ServingDemoTests(unittest.TestCase):
             self.assertIn("scorecard", report)
             self.assertIn("run_digest", report)
             self.assertIn("live_observer.jsonl", report)
+            validation = validate_artifacts(serving_demo_run_paths=[demo_json], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
+    def test_validate_rejects_inconsistent_serving_endpoint_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            check_path = root / "serving_check.json"
+            check_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.serving_endpoint_check.v1",
+                        "generated_at": "2026-01-01T00:00:00Z",
+                        "passed": True,
+                        "readiness": "ready",
+                        "profile_id": "candidate-mock",
+                        "arm": "candidate",
+                        "model": "hfr-mock-model",
+                        "served_model_id": "hfr-mock-model",
+                        "base_url": "http://127.0.0.1:8000/v1",
+                        "checks": [{"id": "chat_completion", "passed": False, "details": {}}],
+                        "failed_checks": [],
+                        "artifacts": {},
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            validation = validate_artifacts(serving_endpoint_check_paths=[check_path], strict=True)
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("serving_endpoint_check.failed_checks expected ['chat_completion']", errors)
+
+    def test_validate_rejects_demo_run_with_unknown_claim_arm(self):
+        build_serving_demo_report = _load_script(DEMO_SCRIPT, "build_serving_demo_report_for_validation")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_eval = _write_eval_arm(root, "baseline", "hfr-base", passed=False, score=50)
+            candidate_eval = _write_eval_arm(root, "flightrecorder", "hfr-base+adapter", passed=True, score=100)
+            demo_json = root / "demo_run.json"
+            report_md = root / "DEMO_REPORT.md"
+            with redirect_stdout(StringIO()):
+                code = build_serving_demo_report.main(
+                    [
+                        "--arm",
+                        f"baseline={baseline_eval}",
+                        "--arm",
+                        f"flightrecorder={candidate_eval}",
+                        "--out",
+                        str(demo_json),
+                        "--report",
+                        str(report_md),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            demo = _read_json(demo_json)
+            demo["claims"][0]["evidence"][0]["arm"] = "ghost"
+            demo_json.write_text(json.dumps(demo, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(serving_demo_run_paths=[demo_json], strict=True)
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("serving_demo_run.claims[0].evidence[0].arm must match a demo arm", errors)
 
 
 def _read_json(path: Path):
