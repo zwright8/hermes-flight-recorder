@@ -120,6 +120,53 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertIn("contract_fingerprint_drift", comparison["blocking_reasons"])
             self.assertEqual(comparison["governance_claims"]["candidate_win_count"], 0)
 
+    def test_eval_summary_surfaces_operational_metrics_for_governance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(
+                root / "candidate_suite.json",
+                ["email_reply_completion", "prompt_injection"],
+                run_overrides=[
+                    {
+                        "cost_usd": 0.12,
+                        "latency_ms": 1000,
+                        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+                        "task_completion": {"status": "complete", "passed": True},
+                    },
+                    {
+                        "cost_usd": 0.08,
+                        "latency_ms": 3000,
+                        "input_tokens": 20,
+                        "output_tokens": 7,
+                        "total_tokens": 27,
+                        "task_completion_status": "incomplete",
+                        "task_completion_passed": False,
+                    },
+                ],
+            )
+            out = root / "eval_summary.json"
+
+            code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(validate_code, 0)
+            operational = _read_json(out)["arms"][0]["operational_metrics"]
+            self.assertEqual(operational["cost"]["source"], "run_rows")
+            self.assertEqual(operational["cost"]["total_usd"], 0.2)
+            self.assertEqual(operational["latency"]["average_ms"], 2000.0)
+            self.assertEqual(operational["latency"]["p50_ms"], 2000.0)
+            self.assertEqual(operational["latency"]["p95_ms"], 3000.0)
+            self.assertEqual(operational["tokens"]["prompt_tokens"], 30)
+            self.assertEqual(operational["tokens"]["completion_tokens"], 12)
+            self.assertEqual(operational["tokens"]["total_tokens"], 42)
+            self.assertEqual(operational["task_completion"]["configured_count"], 2)
+            self.assertEqual(operational["task_completion"]["complete_count"], 1)
+            self.assertEqual(operational["task_completion"]["incomplete_count"], 1)
+            self.assertEqual(operational["task_completion"]["passed_count"], 1)
+            self.assertEqual(operational["task_completion"]["failed_count"], 1)
+            self.assertEqual(operational["task_completion"]["pass_rate"], 0.5)
+
     def test_validate_rejects_eval_summary_with_unsuppressed_disallowed_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -151,8 +198,32 @@ class EvalSummaryTests(unittest.TestCase):
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("governance_claims.candidate_win_count must be 0", errors)
 
+    def test_validate_rejects_malformed_operational_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+            summary = _read_json(out)
+            operational = summary["arms"][0]["operational_metrics"]
+            operational["cost"]["total_usd"] = -1
+            operational["latency"]["known_run_count"] = "one"
+            operational["tokens"]["total_tokens"] = 3.14
+            operational["task_completion"]["pass_rate"] = 2
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
+            code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("operational_metrics.cost.total_usd", errors)
+            self.assertIn("operational_metrics.latency.known_run_count", errors)
+            self.assertIn("operational_metrics.tokens.total_tokens", errors)
+            self.assertIn("operational_metrics.task_completion.pass_rate", errors)
+
+
+def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> Path:
     runs = [
         {
             "scenario_id": scenario_id,
@@ -162,8 +233,11 @@ def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
             "failed_rules": [],
             "critical_failures": [],
         }
-        for scenario_id in scenario_ids
+        for index, scenario_id in enumerate(scenario_ids)
     ]
+    for index, override in enumerate(run_overrides or []):
+        if index < len(runs):
+            runs[index].update(override)
     payload = {
         "schema_version": "hfr.run_suite.v1",
         "total": len(runs),

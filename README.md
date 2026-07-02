@@ -574,6 +574,9 @@ Comparison manifests include:
 comparison movement visible but suppresses candidate-win and improvement claims
 unless all arms provide the identical held-out scenario list and the compare
 export has no scenario-set mismatch, contract drift, or unverified fingerprints.
+Each arm also includes an `operational_metrics` block for measured or missing
+cost, latency, token usage, and task-completion status. Missing operational
+values are explicit and do not imply success.
 Validate it with `flightrecorder validate --eval-summary runs/eval_summary.json`.
 
 `flightrecorder heldout-manifest` writes the canonical held-out scenario manifest

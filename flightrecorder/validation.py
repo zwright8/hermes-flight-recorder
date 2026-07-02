@@ -5421,6 +5421,53 @@ def _validate_eval_summary_arm(arm: Any, index: int, target: ValidationTarget) -
         target.errors.append(f"eval_summary.arms[{index}].scenario_ids must be a list of strings.")
     if not _is_string_list(arm.get("blocking_reasons")):
         target.errors.append(f"eval_summary.arms[{index}].blocking_reasons must be a list of strings.")
+    _validate_eval_summary_operational_metrics(arm.get("operational_metrics"), index, target)
+
+
+def _validate_eval_summary_operational_metrics(value: Any, index: int, target: ValidationTarget) -> None:
+    label = f"eval_summary.arms[{index}].operational_metrics"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for section_name in ("cost", "latency", "tokens", "task_completion"):
+        if not isinstance(value.get(section_name), dict):
+            target.errors.append(f"{label}.{section_name} must be an object.")
+
+    cost = value.get("cost") if isinstance(value.get("cost"), dict) else {}
+    _validate_metric_source(cost, f"{label}.cost", target)
+    _validate_metric_count_fields(cost, f"{label}.cost", target)
+    if not _is_optional_non_negative_number(cost.get("total_usd")):
+        target.errors.append(f"{label}.cost.total_usd must be null or a non-negative number.")
+
+    latency = value.get("latency") if isinstance(value.get("latency"), dict) else {}
+    _validate_metric_source(latency, f"{label}.latency", target)
+    _validate_metric_count_fields(latency, f"{label}.latency", target)
+    for field_name in ("average_ms", "p50_ms", "p95_ms", "max_ms"):
+        if not _is_optional_non_negative_number(latency.get(field_name)):
+            target.errors.append(f"{label}.latency.{field_name} must be null or a non-negative number.")
+
+    tokens = value.get("tokens") if isinstance(value.get("tokens"), dict) else {}
+    _validate_metric_source(tokens, f"{label}.tokens", target)
+    _validate_metric_count_fields(tokens, f"{label}.tokens", target)
+    for field_name in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        if not _is_optional_non_negative_int(tokens.get(field_name)):
+            target.errors.append(f"{label}.tokens.{field_name} must be null or a non-negative integer.")
+
+    task = value.get("task_completion") if isinstance(value.get("task_completion"), dict) else {}
+    _validate_metric_source(task, f"{label}.task_completion", target)
+    for field_name in (
+        "configured_count",
+        "complete_count",
+        "incomplete_count",
+        "not_applicable_count",
+        "unknown_count",
+        "passed_count",
+        "failed_count",
+    ):
+        if not _is_non_negative_int(task.get(field_name)):
+            target.errors.append(f"{label}.task_completion.{field_name} must be a non-negative integer.")
+    if not _is_optional_rate(task.get("pass_rate")):
+        target.errors.append(f"{label}.task_completion.pass_rate must be null or a number between 0 and 1.")
 
 
 def _validate_eval_summary_comparison(
@@ -12792,8 +12839,31 @@ def _is_non_negative_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
+def _is_optional_non_negative_int(value: Any) -> bool:
+    return value is None or _is_non_negative_int(value)
+
+
 def _is_number_between(value: Any, minimum: float, maximum: float) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and minimum <= float(value) <= maximum
+
+
+def _is_optional_non_negative_number(value: Any) -> bool:
+    return value is None or _is_number_between(value, 0, float("inf"))
+
+
+def _is_optional_rate(value: Any) -> bool:
+    return value is None or _is_number_between(value, 0, 1)
+
+
+def _validate_metric_source(value: dict[str, Any], label: str, target: ValidationTarget) -> None:
+    if value.get("source") not in {"run_rows", "suite_metrics", "missing"}:
+        target.errors.append(f"{label}.source must be run_rows, suite_metrics, or missing.")
+
+
+def _validate_metric_count_fields(value: dict[str, Any], label: str, target: ValidationTarget) -> None:
+    for field_name in ("known_run_count", "missing_run_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
 
 
 def _is_sha256(value: Any) -> bool:
