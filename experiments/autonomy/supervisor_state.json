@@ -242,6 +242,14 @@
       ],
       "consecutive_goal_turn_conflict_count": 2,
       "latest_attempt_at": "2026-07-02T15:18:43Z",
+      "latest_lock_contention": {
+        "attempted_at": "2026-07-02T15:26:48Z",
+        "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+        "lock_state": "held_through_retry_window",
+        "origin_main_sha_after_retry": "db1e2e8302c2df7d1c25242b433b79f626237aa7",
+        "packet_in_origin_main": false,
+        "result": "third conflict audit not attempted because lock was unavailable"
+      },
       "origin_main_sha_at_conflict": "b671b9671fff7e891fa0ee58a69f64e818694b11",
       "origin_main_sha_latest_attempt": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
       "reason": "Rebasing the verified Goal 5 branch onto current origin/main hit add/add autonomy state and journal conflicts from earlier packet commits. Per the main delivery protocol, the worker aborted rather than resolving non-trivial cross-worker integration conflicts.",
@@ -294,7 +302,8 @@
     "On 2026-07-02T15:01:51Z the branch fetched origin and rebased cleanly onto current origin/main before runtime-preflight work continued, making the shared autonomous docs available locally.",
     "Delivery protocol changed to require verified branch packets to land on origin/main under /tmp/hermes-flight-recorder-main-push.lock before temporary branches and PRs are retired.",
     "Main integration for the runtime-preflight packet was attempted under the lock and aborted after non-trivial add/add conflicts in autonomy journal/state files against origin/main b671b9671fff7e891fa0ee58a69f64e818694b11.",
-    "A second locked integration attempt at 2026-07-02T15:18:43Z hit the same add/add conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c."
+    "A second locked integration attempt at 2026-07-02T15:18:43Z hit the same add/add conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c.",
+    "A later continuation at 2026-07-02T15:26:48Z could not acquire /tmp/hermes-flight-recorder-main-push.lock; origin/main had advanced to db1e2e8302c2df7d1c25242b433b79f626237aa7 and still did not contain packet commit a37b7000b88643d8aaf6f4af436e69977bb321e7."
   ],
   "next_packets": [
     {
@@ -315,8 +324,9 @@
     "No model downloads, trainer imports, weight updates, or expensive jobs were launched in this packet.",
     "The repository docs recommend schema-checking supervisor_state.json, but no bundled hfr.autonomy.supervisor_state.v1 schema is registered in this branch; this packet verified the state with json.tool instead.",
     "Main delivery is blocked because rebasing onto current origin/main requires supervisor-level resolution of autonomy state and journal conflicts.",
-    "The same non-trivial main integration conflict has recurred for two consecutive Goal 5 continuation turns; one more recurrence without a resolution would satisfy the strict blocked audit threshold."
+    "The same non-trivial main integration conflict has recurred for two consecutive Goal 5 continuation turns; one more recurrence without a resolution would satisfy the strict blocked audit threshold.",
+    "The latest continuation could not test the third recurrence because the main-push lock was held for the full retry window."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:18:43Z"
+  "updated_at": "2026-07-02T15:26:48Z"
 }
