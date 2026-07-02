@@ -29,6 +29,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("scorecard", names)
         self.assertIn("task_completion", names)
         self.assertIn("state_diff", names)
+        self.assertIn("state_snapshot", names)
         self.assertIn("verifier_config", names)
         self.assertIn("state_validator_config", names)
         self.assertIn("state_validator_assertions", names)
@@ -649,6 +650,39 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "state_diff")
+
+    def test_state_snapshot_schema_accepts_minimal_snapshot(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.state_snapshot.v1",
+                "filesystem": {
+                    "files": {
+                        "artifact": {
+                            "path": "runs/artifact.json",
+                            "exists": True,
+                            "kind": "file",
+                            "size_bytes": 12,
+                            "sha256": "0" * 64,
+                        }
+                    },
+                    "directories": {},
+                },
+                "json_sources": {
+                    "artifact": {
+                        "path": "runs/artifact.json",
+                        "exists": True,
+                        "kind": "file",
+                        "size_bytes": 12,
+                        "sha256": "0" * 64,
+                    }
+                },
+                "json": {"artifact": {"status": "complete"}},
+                "observations": {"task": {"status": "complete"}},
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "state_snapshot")
 
     def test_run_digest_schema_accepts_minimal_digest(self):
         result = check_schema_contract(

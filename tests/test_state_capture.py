@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from flightrecorder.schema_registry import check_schema_contract
 from flightrecorder.state_capture import StateCaptureError, capture_state_snapshot
 
 
@@ -38,6 +39,9 @@ class StateCaptureTests(unittest.TestCase):
                 snapshot["observations"]["gmail"]["threads"]["email-123"]["sent_replies"][0]["status"],
                 "sent",
             )
+            schema = check_schema_contract(snapshot)
+            self.assertTrue(schema["passed"], schema["errors"])
+            self.assertEqual(schema["schema"]["name"], "state_snapshot")
 
     def test_capture_rejects_bad_source_key(self):
         with self.assertRaisesRegex(StateCaptureError, "Snapshot source key"):

@@ -1,0 +1,83 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/state_snapshot.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "External-state evidence snapshot emitted by capture-state, verify-state, and run state capture.",
+  "properties": {
+    "filesystem": { "$ref": "#/$defs/filesystem" },
+    "json": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "json_sources": {
+      "additionalProperties": { "$ref": "#/$defs/file_record" },
+      "type": "object"
+    },
+    "observations": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "schema_version": { "const": "hfr.state_snapshot.v1" }
+  },
+  "required": ["schema_version", "filesystem", "json_sources", "json", "observations"],
+  "title": "Hermes Flight Recorder State Snapshot",
+  "type": "object",
+  "$defs": {
+    "directory_entry": {
+      "additionalProperties": true,
+      "properties": {
+        "kind": { "enum": ["file", "directory", "other", "missing"], "type": "string" },
+        "name": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["name"],
+      "type": "object"
+    },
+    "directory_record": {
+      "additionalProperties": true,
+      "properties": {
+        "entries": {
+          "items": { "$ref": "#/$defs/directory_entry" },
+          "type": "array"
+        },
+        "entries_truncated": { "type": "boolean" },
+        "entry_count": { "minimum": 0, "type": "integer" },
+        "exists": { "type": "boolean" },
+        "kind": { "enum": ["missing", "not_directory", "directory"], "type": "string" },
+        "path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["path", "exists", "kind"],
+      "type": "object"
+    },
+    "file_record": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "kind": { "enum": ["missing", "file", "directory", "other"], "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" },
+        "text": { "type": "string" },
+        "text_truncated": { "type": "boolean" }
+      },
+      "required": ["path", "exists", "kind"],
+      "type": "object"
+    },
+    "filesystem": {
+      "additionalProperties": true,
+      "properties": {
+        "directories": {
+          "additionalProperties": { "$ref": "#/$defs/directory_record" },
+          "type": "object"
+        },
+        "files": {
+          "additionalProperties": { "$ref": "#/$defs/file_record" },
+          "type": "object"
+        }
+      },
+      "required": ["files", "directories"],
+      "type": "object"
+    }
+  }
+}

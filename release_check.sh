@@ -208,6 +208,7 @@ test -f runs/draft_email_reply/scorecard.json
 test -f runs/draft_email_reply/task_completion.json
 test -f runs/draft_email_reply/artifact_lineage.json
 test -f runs/captured_state.json
+"$PYTHON" -m flightrecorder schemas --check runs/captured_state.json >/dev/null
 test -f runs/email_reply_completion_good/scorecard.junit.xml
 test -f runs/email_reply_completion_good/scorecard.md
 test -f runs/email_reply_completion_good/state_snapshot.json

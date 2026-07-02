@@ -42,6 +42,14 @@
       "name": "state_diff"
     },
     {
+      "artifact": "state_snapshot",
+      "artifact_schema_version": "hfr.state_snapshot.v1",
+      "description": "External-state evidence snapshot emitted by capture-state, verify-state, and run state capture.",
+      "filename": "state_snapshot.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/state_snapshot.v1.schema.json",
+      "name": "state_snapshot"
+    },
+    {
       "artifact": "verifier_config",
       "artifact_schema_version": "hfr.verifier_config.v1",
       "description": "Read-only external verifier source config accepted by verify-state.",
