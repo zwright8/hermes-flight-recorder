@@ -266,6 +266,33 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(len(links["serving_probes"]), 1)
             self.assertEqual(len(links["serving_probes"][0]["sha256"]), 64)
 
+    def test_model_serving_probe_receipt_rejects_forged_verified_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            receipt = build_model_serving_probe_receipt(
+                registry,
+                model_ref="candidate",
+                out_path=root / "serving_probe.json",
+                profile_id="local_mock_tiny_chat_metadata",
+                provider="metadata_only",
+                serving_engine="not_launched",
+                base_url="metadata://not-launched",
+            )
+            receipt["probe_mode"] = "external_receipt"
+            receipt["readiness"] = "verified"
+            receipt["recommendation"] = "serving_verified"
+            receipt["summary"]["verified_count"] = receipt["summary"]["probe_count"]
+            receipt["summary"]["metadata_only_count"] = 0
+            receipt["summary"]["not_run_count"] = 0
+
+            errors = "\n".join(model_serving_probe_receipt_errors(receipt))
+
+            self.assertIn("model_serving_probe_receipt.summary.verified_count", errors)
+            self.assertIn("model_serving_probe_receipt.readiness verified", errors)
+
     def test_adapter_manifest_links_planned_adapter_without_materialization(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

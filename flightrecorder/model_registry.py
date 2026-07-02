@@ -892,6 +892,7 @@ def model_serving_probe_receipt_errors(receipt: Any) -> list[str]:
             errors.append(f"{prefix}metadata must be an object when present.")
     if seen != set(SERVING_PROBE_RECEIPT_PROBE_IDS):
         errors.append(f"model_serving_probe_receipt.probes must contain exactly {sorted(SERVING_PROBE_RECEIPT_PROBE_IDS)!r}.")
+    probe_counts = _serving_probe_receipt_counts(probes)
     summary = receipt.get("summary")
     if not isinstance(summary, dict):
         errors.append("model_serving_probe_receipt.summary must be an object.")
@@ -899,14 +900,68 @@ def model_serving_probe_receipt_errors(receipt: Any) -> list[str]:
         for field_name in ("probe_count", "verified_count", "metadata_only_count", "not_run_count", "blocked_count", "context_length"):
             if not _is_non_negative_int(summary.get(field_name)):
                 errors.append(f"model_serving_probe_receipt.summary.{field_name} must be a non-negative integer.")
-        if isinstance(summary.get("probe_count"), int) and summary.get("probe_count") != len(probes):
-            errors.append("model_serving_probe_receipt.summary.probe_count must match probes length.")
+        for field_name, expected_value in probe_counts.items():
+            if _is_non_negative_int(summary.get(field_name)) and summary.get(field_name) != expected_value:
+                errors.append(
+                    f"model_serving_probe_receipt.summary.{field_name} expected {expected_value}, got {summary.get(field_name)!r}."
+                )
+    _serving_probe_receipt_readiness_errors(receipt, probe_counts, errors)
     report = receipt.get("compatibility_report")
     if report is not None and not isinstance(report, dict):
         errors.append("model_serving_probe_receipt.compatibility_report must be an object when present.")
     elif isinstance(report, dict):
         _serving_probe_compatibility_report_errors(report, receipt, errors)
     return errors
+
+
+def _serving_probe_receipt_counts(probes: list[Any]) -> dict[str, int]:
+    valid_probes = [probe for probe in probes if isinstance(probe, dict)]
+    return {
+        "probe_count": len(probes),
+        "verified_count": sum(1 for probe in valid_probes if probe.get("verified") is True),
+        "metadata_only_count": sum(1 for probe in valid_probes if probe.get("status") == "metadata_only"),
+        "not_run_count": sum(1 for probe in valid_probes if probe.get("status") == "not_run"),
+        "blocked_count": sum(1 for probe in valid_probes if probe.get("status") == "blocked"),
+    }
+
+
+def _serving_probe_receipt_readiness_errors(
+    receipt: dict[str, Any],
+    probe_counts: dict[str, int],
+    errors: list[str],
+) -> None:
+    blocked_count = probe_counts["blocked_count"]
+    all_verified = (
+        probe_counts["probe_count"] > 0
+        and probe_counts["verified_count"] == probe_counts["probe_count"]
+        and probe_counts["metadata_only_count"] == 0
+        and probe_counts["not_run_count"] == 0
+        and blocked_count == 0
+    )
+    if isinstance(receipt.get("passed"), bool) and receipt.get("passed") != (blocked_count == 0):
+        errors.append("model_serving_probe_receipt.passed must match blocked probe count.")
+    if blocked_count > 0:
+        if receipt.get("readiness") != "blocked":
+            errors.append("model_serving_probe_receipt.readiness must be blocked when any probe is blocked.")
+        if receipt.get("recommendation") != "block_serving_selection":
+            errors.append("model_serving_probe_receipt.recommendation must be block_serving_selection when any probe is blocked.")
+        return
+    if receipt.get("readiness") == "blocked":
+        errors.append("model_serving_probe_receipt.readiness blocked requires at least one blocked probe.")
+    if receipt.get("readiness") == "verified" and not all_verified:
+        errors.append("model_serving_probe_receipt.readiness verified requires every probe to be verified.")
+    if receipt.get("recommendation") == "serving_verified" and receipt.get("readiness") != "verified":
+        errors.append("model_serving_probe_receipt.recommendation serving_verified requires readiness verified.")
+    if receipt.get("readiness") == "verified" and receipt.get("recommendation") != "serving_verified":
+        errors.append("model_serving_probe_receipt.readiness verified requires recommendation serving_verified.")
+    if receipt.get("probe_mode") == "metadata_only" and receipt.get("readiness") not in {"metadata_recorded", "blocked"}:
+        errors.append("model_serving_probe_receipt.probe_mode metadata_only requires metadata_recorded or blocked readiness.")
+    if receipt.get("probe_mode") == "external_receipt" and receipt.get("readiness") not in {
+        "external_receipt_recorded",
+        "verified",
+        "blocked",
+    }:
+        errors.append("model_serving_probe_receipt.probe_mode external_receipt requires external_receipt_recorded, verified, or blocked readiness.")
 
 
 def model_adapter_manifest_errors(manifest: Any) -> list[str]:

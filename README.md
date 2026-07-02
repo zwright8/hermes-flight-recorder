@@ -231,7 +231,9 @@ commit only redacted examples.
 
 The model layer is metadata-first. It records candidates, license posture,
 compatibility, aliases, adapter manifests, and serving-probe receipts without
-downloading weights or launching GPU work.
+downloading weights or launching GPU work. Serving-probe validation recomputes
+summary counts from probe rows and reserves `verified` readiness for receipts
+where every required probe is verified.
 
 ```bash
 flightrecorder model-candidate validate \

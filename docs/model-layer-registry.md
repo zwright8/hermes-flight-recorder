@@ -124,7 +124,9 @@ metadata. The serving-probe receipt is also metadata-only: it records a serving
 profile and compatibility-report hash, but it does not launch a server, open a
 health-check connection, or verify endpoint behavior. Any real trainer must
 re-check license, serving compatibility, runtime memory, dataset gates, and
-output paths before execution.
+output paths before execution. Validation recomputes serving-probe summary
+counts from the probe rows; receipts cannot claim `verified` readiness unless
+every required probe row is verified.
 
 Unknown license status can be recorded for scouting, but it is blocked from
 training selection. Moving `champion` requires an explicit, different
