@@ -236,6 +236,7 @@ test -f runs/improvement_plan.json
 test -f runs/improvement_ledger.json
 test -f runs/improvement_ledger_gate.json
 test -f runs/suite_summary.json
+"$PYTHON" -m flightrecorder schemas --check runs/suite_summary.json >/dev/null
 "$PYTHON" - <<'PY'
 import json
 from pathlib import Path

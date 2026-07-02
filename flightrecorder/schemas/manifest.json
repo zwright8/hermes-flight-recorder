@@ -74,6 +74,14 @@
       "name": "supervisor_state"
     },
     {
+      "artifact": "run_suite",
+      "artifact_schema_version": "hfr.run_suite.v1",
+      "description": "Suite-level evidence summary emitted as suite_summary.json by run-suite.",
+      "filename": "run_suite.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/run_suite.v1.schema.json",
+      "name": "run_suite"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",

@@ -1043,6 +1043,7 @@ Public artifacts ship with JSON Schema contracts.
 flightrecorder schemas
 flightrecorder schemas --name trace --out trace.v1.schema.json
 flightrecorder schemas --write-dir artifact_schemas
+flightrecorder schemas --check runs/suite_summary.json
 flightrecorder schemas --check runs/prompt_injection_good/normalized_trace.json
 flightrecorder schemas --check-jsonl runs/training_export/episodes.jsonl
 ```

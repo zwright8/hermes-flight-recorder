@@ -1,0 +1,207 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/run_suite.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Suite-level evidence summary emitted as suite_summary.json by run-suite.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": { "type": "string" },
+      "type": "object"
+    },
+    "error_count": { "minimum": 0, "type": "integer" },
+    "errors": {
+      "items": { "$ref": "#/$defs/error" },
+      "type": "array"
+    },
+    "failed": { "minimum": 0, "type": "integer" },
+    "metadata": {
+      "additionalProperties": { "type": "string" },
+      "type": "object"
+    },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "out_dir": { "minLength": 1, "type": "string" },
+    "passed": { "minimum": 0, "type": "integer" },
+    "runs": {
+      "items": { "$ref": "#/$defs/run" },
+      "type": "array"
+    },
+    "scenarios_dir": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.run_suite.v1" },
+    "total": { "minimum": 0, "type": "integer" },
+    "training_export": { "$ref": "#/$defs/training_export" },
+    "validation": { "$ref": "#/$defs/validation" }
+  },
+  "required": [
+    "schema_version",
+    "scenarios_dir",
+    "out_dir",
+    "total",
+    "passed",
+    "failed",
+    "error_count",
+    "errors",
+    "metrics",
+    "runs",
+    "artifacts"
+  ],
+  "title": "Hermes Flight Recorder Run Suite Summary",
+  "type": "object",
+  "$defs": {
+    "count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    },
+    "error": {
+      "additionalProperties": true,
+      "properties": {
+        "error": { "minLength": 1, "type": "string" },
+        "scenario_path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["scenario_path", "error"],
+      "type": "object"
+    },
+    "family_metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "average_score": { "type": "number" },
+        "critical_failure_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed": { "minimum": 0, "type": "integer" },
+        "failed_rule_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "pass_rate": { "minimum": 0, "type": "number" },
+        "passed": { "minimum": 0, "type": "integer" },
+        "task_family": { "minLength": 1, "type": "string" },
+        "total": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "task_family",
+        "total",
+        "passed",
+        "failed",
+        "pass_rate",
+        "average_score",
+        "failed_rule_counts",
+        "critical_failure_counts"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "average_score": { "type": "number" },
+        "critical_failure_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "failed": { "minimum": 0, "type": "integer" },
+        "failed_rule_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "max_score": { "type": ["integer", "null"] },
+        "min_score": { "type": ["integer", "null"] },
+        "pass_rate": { "minimum": 0, "type": "number" },
+        "passed": { "minimum": 0, "type": "integer" },
+        "task_families": {
+          "items": { "$ref": "#/$defs/family_metrics" },
+          "type": "array"
+        }
+      },
+      "required": [
+        "pass_rate",
+        "average_score",
+        "min_score",
+        "max_score",
+        "failed_rule_counts",
+        "critical_failure_counts",
+        "task_families",
+        "failed",
+        "passed"
+      ],
+      "type": "object"
+    },
+    "run": {
+      "additionalProperties": true,
+      "properties": {
+        "before_state_path": { "type": ["string", "null"] },
+        "before_state_sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "critical_failures": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "failed_rules": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "lineage": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "report": { "minLength": 1, "type": "string" },
+        "run_digest": { "minLength": 1, "type": "string" },
+        "run_dir": { "minLength": 1, "type": "string" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "scenario_path": { "minLength": 1, "type": "string" },
+        "scenario_sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "scenario_title": { "minLength": 1, "type": "string" },
+        "score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "scorecard": { "minLength": 1, "type": "string" },
+        "state_path": { "type": ["string", "null"] },
+        "state_sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "task_family": { "minLength": 1, "type": "string" },
+        "trace_path": { "minLength": 1, "type": "string" },
+        "trace_sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] }
+      },
+      "required": [
+        "scenario_id",
+        "scenario_title",
+        "task_family",
+        "scenario_path",
+        "trace_path",
+        "run_dir",
+        "report",
+        "scorecard",
+        "lineage",
+        "passed",
+        "score",
+        "failed_rules",
+        "critical_failures"
+      ],
+      "type": "object"
+    },
+    "training_export": {
+      "additionalProperties": true,
+      "properties": {
+        "dpo_count": { "minimum": 0, "type": "integer" },
+        "episode_count": { "minimum": 0, "type": "integer" },
+        "failure_mode_count": { "minimum": 0, "type": "integer" },
+        "preference_count": { "minimum": 0, "type": "integer" },
+        "quality_flag_count": { "minimum": 0, "type": "integer" },
+        "reward_count": { "minimum": 0, "type": "integer" },
+        "reward_model_count": { "minimum": 0, "type": "integer" },
+        "sft_count": { "minimum": 0, "type": "integer" },
+        "step_reward_count": { "minimum": 0, "type": "integer" }
+      },
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" },
+        "target_count": { "minimum": 0, "type": "integer" },
+        "warning_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["passed", "target_count", "error_count", "warning_count"],
+      "type": "object"
+    }
+  }
+}

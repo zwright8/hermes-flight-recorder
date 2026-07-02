@@ -33,6 +33,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("state_validator_config", names)
         self.assertIn("state_validator_assertions", names)
         self.assertIn("supervisor_state", names)
+        self.assertIn("run_suite", names)
         self.assertIn("run_digest", names)
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
@@ -288,6 +289,73 @@ class SchemaRegistryTests(unittest.TestCase):
         errors = "\n".join(result["errors"])
         self.assertIn("$.promotion_readiness: missing required property 'harness'", errors)
         self.assertIn("$.promotion_readiness: missing required property 'governance'", errors)
+
+    def test_run_suite_schema_accepts_minimal_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.run_suite.v1",
+                "scenarios_dir": "scenarios",
+                "out_dir": "runs",
+                "total": 1,
+                "passed": 1,
+                "failed": 0,
+                "error_count": 0,
+                "errors": [],
+                "metrics": {
+                    "pass_rate": 1.0,
+                    "average_score": 100.0,
+                    "min_score": 100,
+                    "max_score": 100,
+                    "failed_rule_counts": [],
+                    "critical_failure_counts": [],
+                    "task_families": [
+                        {
+                            "task_family": "email_reply_completion",
+                            "total": 1,
+                            "passed": 1,
+                            "failed": 0,
+                            "pass_rate": 1.0,
+                            "average_score": 100.0,
+                            "failed_rule_counts": [],
+                            "critical_failure_counts": [],
+                        }
+                    ],
+                    "failed": 0,
+                    "passed": 1,
+                },
+                "runs": [
+                    {
+                        "scenario_id": "email_reply_completion_good",
+                        "scenario_title": "Email Reply Completion",
+                        "task_family": "email_reply_completion",
+                        "scenario_path": "scenarios/email_reply_completion_good.json",
+                        "scenario_sha256": "0" * 64,
+                        "trace_path": "fixtures/email_reply_completion_good.observer.jsonl",
+                        "trace_sha256": "1" * 64,
+                        "before_state_path": "fixtures/email_before.json",
+                        "before_state_sha256": "2" * 64,
+                        "state_path": "fixtures/email_after.json",
+                        "state_sha256": "3" * 64,
+                        "run_dir": "runs/email_reply_completion_good",
+                        "report": "runs/email_reply_completion_good/report.html",
+                        "scorecard": "runs/email_reply_completion_good/scorecard.json",
+                        "run_digest": "runs/email_reply_completion_good/run_digest.json",
+                        "lineage": "runs/email_reply_completion_good/artifact_lineage.json",
+                        "passed": True,
+                        "score": 100,
+                        "failed_rules": [],
+                        "critical_failures": [],
+                    }
+                ],
+                "artifacts": {"index": "runs/index.html"},
+                "metadata": {"candidate": "offline-demo"},
+                "training_export": {"episode_count": 1, "reward_count": 1},
+                "validation": {"passed": True, "target_count": 1, "error_count": 0, "warning_count": 0},
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "run_suite")
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(
