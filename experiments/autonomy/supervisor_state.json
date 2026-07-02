@@ -3518,9 +3518,9 @@
     "id": "supervisor_cross_layer_completion_audit",
     "layer": "supervisor",
     "priority": "high",
-    "status": "verified_pending_main_delivery",
+    "status": "completed_landed_on_main",
     "title": "Audit cross-layer completion and remaining blockers",
-    "summary": "Evidence, Harness, Data, Model, Training, Serving/Demo, Eval, and Governance are implemented, tested, documented, connected, landed on main, and remote goal branches are retired.",
+    "summary": "Cross-layer completion audit landed on main; PR #18 is merged and the audit remote branch is deleted.",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1351",
     "base_main_sha": "3f67adf35da399a2b3a8598e6518c6814e0eeb86",
     "verification": [
@@ -3563,12 +3563,17 @@
       "System Python 3.9 is not the verification floor; Python 3.11 release_check is the supported verification path."
     ],
     "branch_sha": "7d343a9ae51f454bd34a7f41fc21101b6d1b6478",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/18"
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/18",
+    "main_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
+    "merge_commit_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
+    "completed_at": "2026-07-02T17:55:33Z",
+    "remote_branch_status": "deleted",
+    "pr_status": "MERGED"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1351",
-    "branch_sha": "7d343a9ae51f454bd34a7f41fc21101b6d1b6478",
+    "branch_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
     "commit_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "main_delivery": {
       "attempted_at": "2026-07-02T15:09:17Z",
@@ -3656,9 +3661,9 @@
       "lock_released_at": "2026-07-02T16:03:36Z",
       "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     },
-    "latest_origin_main_sha": "3f67adf35da399a2b3a8598e6518c6814e0eeb86",
+    "latest_origin_main_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "not_acquired"
+    "lock_status": "held_until_final_checkpoint_push"
   },
   "governance_main_delivery": {
     "attempted_at": "2026-07-02T15:09:17Z",
@@ -4075,44 +4080,19 @@
   ],
   "latest_verification": [
     {
-      "command": "jq layer_status/current_packet/next_packets promotion_readiness audit",
+      "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
       "status": "pass",
-      "summary": "All named layers report completed/landed infrastructure after stale queue normalization."
+      "summary": "origin/main verified at 29a573e4afe07cd458703947a842a42a9bb62fd5 after final audit push."
     },
     {
-      "command": "git ls-remote --heads origin",
+      "command": "gh pr view 18 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
       "status": "pass",
-      "summary": "Only refs/heads/main exists on origin for goal branches; remote goal packet branches are deleted."
+      "summary": "PR #18 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/18 with merge commit 29a573e4afe07cd458703947a842a42a9bb62fd5."
     },
     {
-      "command": "gh pr list --state open --json number,title,headRefName,headRefOid,url,isDraft,baseRefName",
+      "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1351 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
       "status": "pass",
-      "summary": "Only unrelated PR #1 fix-schema-anyof-validation remains open; no active Goal 0-8 packet PRs remain."
-    },
-    {
-      "command": "git worktree list",
-      "status": "pass",
-      "summary": "Retired local packet branches remain checked out in their dedicated worktrees, but their remote branches are deleted and they are not main-delivery blockers."
-    },
-    {
-      "command": "test ! -d /tmp/hermes-flight-recorder-main-push.lock",
-      "status": "pass",
-      "summary": "Main-push lock is free before final audit delivery."
-    },
-    {
-      "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
-      "status": "pass",
-      "summary": "Most recent release check passed on the promotion schema packet, including 375 Python 3.11 tests and installed-CLI/demo gates."
-    },
-    {
-      "command": "git push -u origin codex/hermes-goal-0-supervisor-20260702-1351 && git ls-remote --heads origin codex/hermes-goal-0-supervisor-20260702-1351",
-      "status": "pass",
-      "summary": "Audit branch pushed and verified at 7d343a9ae51f454bd34a7f41fc21101b6d1b6478."
-    },
-    {
-      "command": "gh pr create --base main --head codex/hermes-goal-0-supervisor-20260702-1351",
-      "status": "pass",
-      "summary": "Opened audit PR #18 at https://github.com/zwright8/hermes-flight-recorder/pull/18."
+      "summary": "Only refs/heads/main remained; the final audit remote branch was absent."
     }
   ],
   "layer_status": {
@@ -4181,7 +4161,7 @@
     "training": "completed"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T17:53:56Z",
+  "updated_at": "2026-07-02T17:55:33Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -5487,7 +5467,7 @@
     "post_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the checkpoint commit SHA is verified after push because a commit cannot self-record its final SHA."
   },
   "supervisor_cross_layer_completion_audit": {
-    "status": "verified_pending_main_delivery",
+    "status": "completed_landed_on_main",
     "verified_at": "2026-07-02T17:52:53Z",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1351",
     "base_main_sha": "3f67adf35da399a2b3a8598e6518c6814e0eeb86",
@@ -5540,7 +5520,67 @@
     "completion_claim": "All requested infrastructure layers are landed, tested, documented, and connected; no model was promoted.",
     "branch_sha": "7d343a9ae51f454bd34a7f41fc21101b6d1b6478",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/18",
-    "pr_status": "OPEN",
-    "updated_at": "2026-07-02T17:53:56Z"
+    "pr_status": "MERGED",
+    "updated_at": "2026-07-02T17:53:56Z",
+    "main_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
+    "merge_commit_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
+    "remote_branch_status": "deleted",
+    "completed_at": "2026-07-02T17:55:33Z",
+    "post_delivery_verification": [
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
+        "status": "pass",
+        "summary": "origin/main verified at 29a573e4afe07cd458703947a842a42a9bb62fd5 after final audit push."
+      },
+      {
+        "command": "gh pr view 18 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #18 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/18 with merge commit 29a573e4afe07cd458703947a842a42a9bb62fd5."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1351 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the final audit remote branch was absent."
+      }
+    ]
+  },
+  "goal0_completion": {
+    "status": "complete_after_final_checkpoint_push",
+    "completed_layers": [
+      "evidence",
+      "harness",
+      "data",
+      "model",
+      "training",
+      "serving_demo",
+      "eval",
+      "governance"
+    ],
+    "main_sha": "29a573e4afe07cd458703947a842a42a9bb62fd5",
+    "audit_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/18",
+    "remote_branch_status": "deleted",
+    "open_prs_out_of_scope": [
+      "https://github.com/zwright8/hermes-flight-recorder/pull/1"
+    ],
+    "no_model_promoted": true,
+    "no_expensive_training_launched": true,
+    "no_unmanaged_serving_process": true,
+    "verification": [
+      {
+        "command": "git push origin HEAD:main && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
+        "status": "pass",
+        "summary": "origin/main verified at 29a573e4afe07cd458703947a842a42a9bb62fd5 after final audit push."
+      },
+      {
+        "command": "gh pr view 18 --json number,state,headRefName,headRefOid,mergeCommit,url,closed,mergedAt,title",
+        "status": "pass",
+        "summary": "PR #18 resolved as MERGED at https://github.com/zwright8/hermes-flight-recorder/pull/18 with merge commit 29a573e4afe07cd458703947a842a42a9bb62fd5."
+      },
+      {
+        "command": "git push origin --delete codex/hermes-goal-0-supervisor-20260702-1351 && git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1351",
+        "status": "pass",
+        "summary": "Only refs/heads/main remained; the final audit remote branch was absent."
+      }
+    ]
   }
 }
