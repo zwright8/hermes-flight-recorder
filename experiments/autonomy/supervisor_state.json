@@ -1,6 +1,6 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:50:23Z",
+  "updated_at": "2026-07-02T14:52:05Z",
   "active_goal": "Goal 7 Eval Layer",
   "status": "in_progress",
   "worktree": "/Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-7-eval",
@@ -43,11 +43,11 @@
       "The system /usr/bin/python3 is Python 3.9 and previously could not run the full suite because tests/test_deployment_hardening.py imports tomllib; /opt/homebrew/bin/python3 passed the full suite."
     ],
     "persistence": {
-      "commit_sha": "pending",
-      "pushed_branch": "pending",
-      "remote_branch_verified": false,
+      "commit_sha": "76fe7e3a0d2d85949bd557e644b185c6635e632c",
+      "pushed_branch": "codex/hermes-goal-7-eval-20260702-1027",
+      "remote_branch_verified": true,
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/6",
-      "pr_blocker": "pending commit and push"
+      "pr_blocker": null
     }
   }
 }
