@@ -66,7 +66,7 @@ from .improvement_gate import (
 )
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
-from .eval_summary import EvalSummaryError, build_eval_summary
+from .eval_summary import EvalSummaryError, build_eval_summary, render_eval_summary_markdown
 from .external_eval import ExternalEvalPlanError, adapter_choices, build_external_eval_plan, write_external_eval_plan
 from .heldout_manifest import HeldoutManifestError, build_heldout_manifest, write_heldout_manifest
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
@@ -1191,6 +1191,10 @@ def cmd_eval_summary(args: argparse.Namespace) -> int:
         print(f"wrote {args.out}")
     else:
         print(rendered, end="")
+    if args.markdown_out:
+        Path(args.markdown_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.markdown_out).write_text(render_eval_summary_markdown(summary), encoding="utf-8")
+        print(f"wrote {args.markdown_out}")
     return 0 if summary["passed"] else 1
 
 
@@ -2726,6 +2730,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Block suite arms that do not have a ready serving_check.json preflight attached",
     )
     eval_summary.add_argument("--out", help="Write eval summary JSON to this path")
+    eval_summary.add_argument("--markdown-out", help="Write a compact Markdown eval handoff report")
     eval_summary.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in summary output")
     eval_summary.set_defaults(func=cmd_eval_summary)
 

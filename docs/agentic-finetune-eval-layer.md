@@ -19,7 +19,8 @@ flightrecorder eval-summary \
   --require-serving-preflight \
   --compare-export candidate=runs/compare_rl_export \
   --compare-gate candidate=runs/compare_gate.json \
-  --out runs/eval_summary.json
+  --out runs/eval_summary.json \
+  --markdown-out runs/eval_summary.md
 ```
 
 The summary reports:
@@ -36,6 +37,11 @@ The summary reports:
 - repair/curriculum work items for candidate regressions, failed rules,
   critical failures, gate failures, and adapter blockers,
 - external adapter readiness blockers when adapter plans are included.
+
+Use the Markdown report for human review. The JSON artifact remains the
+contract; the report mirrors raw movement and approved claims in separate
+columns so reviewers do not treat suppressed candidate wins as promotion
+evidence.
 
 ## Held-Out Manifests
 

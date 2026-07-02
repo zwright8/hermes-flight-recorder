@@ -89,6 +89,39 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertTrue(comparison["governance_claims"]["suppressed_raw_claims"])
             self.assertIn("heldout_scenario_set_mismatch", comparison["governance_claims"]["suppression_reasons"])
 
+    def test_eval_summary_writes_markdown_report_without_approving_raw_movement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion", "prompt_injection"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            out = root / "eval_summary.json"
+            markdown = root / "eval_summary.md"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                    "--markdown-out",
+                    str(markdown),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            report = markdown.read_text(encoding="utf-8")
+            self.assertIn("# Eval Summary", report)
+            self.assertIn("- Governance ready: no", report)
+            self.assertIn("| candidate | 1 | 1 | 0 | 1 | 0 | blocked |", report)
+            self.assertIn("heldout_scenario_set_mismatch", report)
+            self.assertIn("Raw movement is reported separately from approved governance claims.", report)
+
     def test_eval_summary_blocks_claims_for_contract_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

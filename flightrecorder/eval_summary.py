@@ -97,6 +97,38 @@ def build_eval_summary(
     }
 
 
+def render_eval_summary_markdown(summary: dict[str, Any]) -> str:
+    """Render a compact governance handoff without reclassifying raw movement."""
+    heldout = summary.get("heldout_scenarios") if isinstance(summary.get("heldout_scenarios"), dict) else {}
+    conclusion = summary.get("conclusion") if isinstance(summary.get("conclusion"), dict) else {}
+    risks = summary.get("risks") if isinstance(summary.get("risks"), list) else []
+    lines = [
+        "# Eval Summary",
+        "",
+        f"- Status: {_status_label(summary.get('passed') is True)}",
+        f"- Governance ready: {_yes_no(summary.get('governance_ready') is True)}",
+        f"- Held-out scenarios: {_md_text(heldout.get('status'))} ({_int_value(heldout.get('scenario_count'))})",
+        f"- Cross-arm claims allowed: {_yes_no(heldout.get('cross_arm_claims_allowed') is True)}",
+        f"- Recommendation: {_md_text(conclusion.get('recommendation'))}",
+        "",
+    ]
+    lines.extend(_markdown_arms(summary.get("arms")))
+    lines.extend(_markdown_comparisons(summary.get("comparisons")))
+    lines.extend(_markdown_gates(summary.get("compare_gates")))
+    lines.extend(_markdown_repair_curriculum(summary.get("repair_curriculum")))
+    lines.extend(_markdown_risks(risks))
+    lines.extend(
+        [
+            "## Notes",
+            "",
+            "- Raw movement is reported separately from approved governance claims.",
+            "- Candidate wins or task-completion improvements are approved only when the held-out scenario gate allows cross-arm claims.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _suite_arm(
     spec: LabeledPath,
     preserve_paths: bool,
@@ -696,6 +728,180 @@ def _risks(
     for reason in serving_preflight["blocking_reasons"]:
         risks.append({"source": "serving_preflight", "reason": reason})
     return _dedupe_risks(risks)
+
+
+def _markdown_arms(value: Any) -> list[str]:
+    arms = value if isinstance(value, list) else []
+    lines = ["## Arms", ""]
+    if not arms:
+        return [*lines, "- No suite summary arms were provided.", ""]
+    lines.extend(
+        [
+            "| Arm | Scenarios | Passed | Failed | Serving | Blockers |",
+            "| --- | ---: | ---: | ---: | --- | --- |",
+        ]
+    )
+    for arm in arms:
+        if not isinstance(arm, dict):
+            continue
+        serving = arm.get("serving_preflight") if isinstance(arm.get("serving_preflight"), dict) else {}
+        serving_state = str(serving.get("readiness") or "not_required")
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(arm.get("label")),
+                    str(_int_value(arm.get("scenario_count"))),
+                    str(_int_value(arm.get("passed"))),
+                    str(_int_value(arm.get("failed"))),
+                    _md_cell(serving_state),
+                    _md_cell(_join_reasons(arm.get("blocking_reasons"))),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _markdown_comparisons(value: Any) -> list[str]:
+    comparisons = value if isinstance(value, list) else []
+    lines = ["## Comparisons", ""]
+    if not comparisons:
+        return [*lines, "- No compare exports were provided.", ""]
+    lines.extend(
+        [
+            "| Comparison | Pairs | Raw Candidate Wins | Approved Candidate Wins | Raw Task Improvements | Approved Task Improvements | Governance Claims | Blockers |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+        ]
+    )
+    for comparison in comparisons:
+        if not isinstance(comparison, dict):
+            continue
+        raw = comparison.get("raw_movement") if isinstance(comparison.get("raw_movement"), dict) else {}
+        claims = comparison.get("governance_claims") if isinstance(comparison.get("governance_claims"), dict) else {}
+        claim_state = "allowed" if comparison.get("claims_allowed") is True else "blocked"
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(comparison.get("label")),
+                    str(_int_value(raw.get("pair_count"))),
+                    str(_int_value(raw.get("candidate_win_count"))),
+                    str(_int_value(claims.get("candidate_win_count"))),
+                    str(_int_value(raw.get("task_completion_improvement_count"))),
+                    str(_int_value(claims.get("task_completion_improvement_count"))),
+                    _md_cell(claim_state),
+                    _md_cell(_join_reasons(comparison.get("blocking_reasons"))),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _markdown_gates(value: Any) -> list[str]:
+    gates = value if isinstance(value, list) else []
+    lines = ["## Compare Gates", ""]
+    if not gates:
+        return [*lines, "- No compare gates were provided.", ""]
+    lines.extend(["| Gate | Failed Checks | Blockers |", "| --- | ---: | --- |"])
+    for gate in gates:
+        if not isinstance(gate, dict):
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(gate.get("label")),
+                    str(_int_value(gate.get("failed_check_count"))),
+                    _md_cell(_join_reasons(gate.get("blocking_reasons"))),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _markdown_repair_curriculum(value: Any) -> list[str]:
+    repair = value if isinstance(value, dict) else {}
+    lines = [
+        "## Repair And Curriculum",
+        "",
+        f"- Work items: {_int_value(repair.get('work_item_count'))}",
+        f"- Critical work items: {_int_value(repair.get('critical_work_item_count'))}",
+        "",
+    ]
+    items = repair.get("items") if isinstance(repair.get("items"), list) else []
+    if not items:
+        return [*lines, "- No repair or curriculum work items were emitted.", ""]
+    lines.extend(["| Priority | Category | Reason | Summary |", "| --- | --- | --- | --- |"])
+    for item in items[:10]:
+        if not isinstance(item, dict):
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(item.get("priority")),
+                    _md_cell(item.get("category")),
+                    _md_cell(item.get("reason")),
+                    _md_cell(item.get("summary")),
+                ]
+            )
+            + " |"
+        )
+    if len(items) > 10:
+        lines.append(f"- Additional work items omitted from this compact report: {len(items) - 10}")
+    lines.append("")
+    return lines
+
+
+def _markdown_risks(risks: list[Any]) -> list[str]:
+    lines = ["## Risks", ""]
+    if not risks:
+        return [*lines, "- No blocking risks were reported.", ""]
+    lines.extend(["| Source | Label | Reason |", "| --- | --- | --- |"])
+    for risk in risks:
+        if not isinstance(risk, dict):
+            continue
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(risk.get("source")),
+                    _md_cell(risk.get("label")),
+                    _md_cell(risk.get("reason")),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _status_label(passed: bool) -> str:
+    return "ready" if passed else "blocked"
+
+
+def _yes_no(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def _join_reasons(value: Any) -> str:
+    reasons = _string_list(value)
+    return ", ".join(reasons) if reasons else "none"
+
+
+def _md_cell(value: Any) -> str:
+    return _md_text(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _md_text(value: Any) -> str:
+    text = str(value or "")
+    return text if text else "none"
 
 
 def _risk_source(reason: str) -> str:
