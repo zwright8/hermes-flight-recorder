@@ -1,0 +1,71 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_suite_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Mock harness suite receipt linking per-scenario harness artifacts.",
+  "properties": {
+    "artifacts": { "type": "object" },
+    "created_at": { "type": "string" },
+    "error_count": { "minimum": 0, "type": "integer" },
+    "errors": {
+      "items": { "type": "object" },
+      "type": "array"
+    },
+    "failed": { "minimum": 0, "type": "integer" },
+    "model": {
+      "additionalProperties": true,
+      "properties": {
+        "base_url": { "type": ["string", "null"] },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "out_dir": { "minLength": 1, "type": "string" },
+    "passed": { "minimum": 0, "type": "integer" },
+    "pattern": { "minLength": 1, "type": "string" },
+    "provider": { "minLength": 1, "type": "string" },
+    "recursive": { "type": "boolean" },
+    "runner": { "minLength": 1, "type": "string" },
+    "runner_interface": { "const": "run_suite" },
+    "runs": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "manifest": { "minLength": 1, "type": "string" },
+          "passed": { "type": "boolean" },
+          "result": { "minLength": 1, "type": "string" },
+          "run_dir": { "minLength": 1, "type": "string" },
+          "scenario_id": { "minLength": 1, "type": "string" }
+        },
+        "required": ["scenario_id", "run_dir", "manifest", "result", "passed"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "scenario_count": { "minimum": 0, "type": "integer" },
+    "scenarios_dir": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.harness_suite_result.v1" },
+    "total": { "minimum": 0, "type": "integer" }
+  },
+  "required": [
+    "schema_version",
+    "runner_interface",
+    "scenarios_dir",
+    "out_dir",
+    "pattern",
+    "recursive",
+    "runner",
+    "provider",
+    "model",
+    "total",
+    "passed",
+    "failed",
+    "error_count",
+    "errors",
+    "runs",
+    "artifacts"
+  ],
+  "title": "Hermes Flight Recorder Harness Suite Result",
+  "type": "object"
+}

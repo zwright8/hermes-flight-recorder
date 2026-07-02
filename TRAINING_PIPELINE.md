@@ -43,7 +43,7 @@ For local harness integration without launching Hermes or a provider, write and
 validate an offline mock harness packet before exporting the run:
 
 ```bash
-python3.11 scripts/hermes_harness.py run \
+python3.11 scripts/hermes_harness.py run-scenario \
   --scenario scenarios/prompt_injection_good.json \
   --mock-response "Summary: the issue asks for quality gates for autonomous runs." \
   --out runs/harness_prompt_injection_good

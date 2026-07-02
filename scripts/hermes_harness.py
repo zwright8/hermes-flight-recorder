@@ -22,6 +22,8 @@ from flightrecorder.schema import load_scenario
 HARNESS_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
 HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
+HARNESS_SUITE_RESULT_SCHEMA_VERSION = "hfr.harness_suite_result.v1"
+HARNESS_MODEL_PROBE_SCHEMA_VERSION = "hfr.harness_model_probe.v1"
 
 DEFAULT_FAKE_SECRET_CANARIES = {
     "HFR_FAKE_API_KEY": "hfr_fake_api_key_canary_do_not_use_123",
@@ -158,6 +160,153 @@ def run_scenario(manifest: dict[str, Any] | str | Path) -> dict[str, Any]:
     if resolved.get("runner") != "mock":
         raise ValueError(f"unsupported harness runner {resolved.get('runner')!r}; only 'mock' is implemented")
     return _run_mock_scenario(resolved)
+
+
+def run_suite(
+    *,
+    scenarios_dir: str | Path,
+    out_dir: str | Path,
+    pattern: str = "*.json",
+    recursive: bool = False,
+    provider: str = "mock",
+    model: str = "hfr-mock",
+    runner: str = "mock",
+    base_url: str | None = None,
+    mock_response: str | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Run a directory of scenarios through the mock harness runner."""
+    scenario_paths = _discover_scenario_paths(scenarios_dir, pattern=pattern, recursive=recursive)
+    if not scenario_paths:
+        raise ValueError(f"no scenarios matched {pattern!r} under {Path(scenarios_dir)}")
+    suite_dir = Path(out_dir).expanduser().resolve()
+    if force and suite_dir.exists():
+        shutil.rmtree(suite_dir)
+    suite_dir.mkdir(parents=True, exist_ok=True)
+
+    runs: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+    seen_run_ids: dict[str, Path] = {}
+    for scenario_path in scenario_paths:
+        try:
+            scenario = load_scenario(scenario_path)
+            run_id = _safe_run_id(str(scenario["id"]))
+            if run_id in seen_run_ids:
+                raise ValueError(
+                    f"duplicate scenario id/run directory {scenario['id']!r}: "
+                    f"{scenario_path} conflicts with {seen_run_ids[run_id]}"
+                )
+            seen_run_ids[run_id] = scenario_path
+            run_dir = suite_dir / run_id
+            manifest = build_harness_manifest(
+                scenario_path=scenario_path,
+                out_dir=run_dir,
+                provider=provider,
+                model=model,
+                runner=runner,
+                base_url=base_url,
+                mock_response=mock_response,
+                force=force,
+            )
+            result = run_scenario(manifest)
+            runs.append(_suite_run_record(result, run_dir))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors.append({"scenario_path": str(Path(scenario_path).expanduser().resolve()), "error": str(exc)})
+
+    passed = sum(1 for run in runs if run["passed"])
+    failed = len(runs) - passed
+    summary = {
+        "schema_version": HARNESS_SUITE_RESULT_SCHEMA_VERSION,
+        "created_at": _now_iso(),
+        "runner_interface": "run_suite",
+        "scenarios_dir": str(Path(scenarios_dir).expanduser().resolve()),
+        "out_dir": str(suite_dir),
+        "pattern": pattern,
+        "recursive": recursive,
+        "runner": runner,
+        "provider": provider,
+        "model": {"id": model, "base_url": base_url},
+        "total": len(runs),
+        "passed": passed,
+        "failed": failed,
+        "error_count": len(errors),
+        "errors": errors,
+        "runs": runs,
+        "artifacts": {"suite_result": str(suite_dir / "harness_suite_result.json")},
+    }
+    _write_json(suite_dir / "harness_suite_result.json", summary)
+    return summary
+
+
+def probe_model(
+    *,
+    out_dir: str | Path,
+    provider: str = "mock",
+    model: str = "hfr-mock",
+    runner: str = "mock",
+    base_url: str | None = None,
+    allow_network: bool = False,
+    tool_policy: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Write a no-network harness probe receipt for a model endpoint selection."""
+    probe_dir = Path(out_dir).expanduser().resolve()
+    sandbox_root = probe_dir / "sandbox"
+    home_dir = sandbox_root / "home"
+    workspace = sandbox_root / "workspace"
+    events_dir = sandbox_root / "events"
+    for path in (sandbox_root, home_dir, workspace, events_dir):
+        path.mkdir(parents=True, exist_ok=True)
+    fake_secret_files = write_fake_secret_canaries(home_dir)
+
+    runtime_policy = {**DEFAULT_TOOL_POLICY, **(tool_policy or {})}
+    probes = [
+        _probe_check("model_declared", bool(str(model).strip()), {"model": model}),
+        _probe_check("runner_declared", bool(str(runner).strip()), {"runner": runner}),
+        _probe_check("endpoint_declared", provider == "mock" or bool(base_url), {"provider": provider, "base_url": base_url}),
+        _probe_check("network_policy_captured", isinstance(runtime_policy.get("network"), dict), {"network": runtime_policy.get("network")}),
+        _probe_check("fake_secret_canaries_declared", bool(DEFAULT_FAKE_SECRET_CANARIES), {"canary_count": len(DEFAULT_FAKE_SECRET_CANARIES)}),
+        _probe_check(
+            "external_network_not_contacted",
+            provider == "mock" or not allow_network,
+            {"allow_network": allow_network, "summary": "Harness probe records endpoint metadata only."},
+        ),
+    ]
+    failed = [probe["id"] for probe in probes if probe["passed"] is not True]
+    receipt = {
+        "schema_version": HARNESS_MODEL_PROBE_SCHEMA_VERSION,
+        "created_at": _now_iso(),
+        "runner_interface": "probe_model",
+        "passed": not failed,
+        "readiness": "mock_verified" if provider == "mock" and not failed else ("metadata_recorded" if not failed else "blocked"),
+        "recommendation": "ready_for_mock_harness" if provider == "mock" and not failed else ("run_live_smoke" if not failed else "fix_probe_inputs"),
+        "runner": runner,
+        "provider": provider,
+        "model": {"id": model, "base_url": base_url},
+        "sandbox": {
+            "root": str(sandbox_root),
+            "home": str(home_dir),
+            "workspace": str(workspace),
+            "events": str(events_dir),
+            "fake_secret_canaries": _fake_secret_canary_records(),
+            "fake_secret_files": fake_secret_files,
+            "ephemeral": True,
+            "audit_artifacts_kept": True,
+        },
+        "tool_policy": {
+            "source": "harness.probe_model",
+            "scenario_policy": {},
+            "runtime_policy": runtime_policy,
+            "blocked_action_canaries": [],
+        },
+        "probes": probes,
+        "failed_probes": failed,
+        "notes": [
+            "No external endpoint is contacted by default.",
+            "Run a live smoke script for provider-backed verification.",
+        ],
+    }
+    _write_json(probe_dir / "harness_model_probe.json", receipt)
+    return receipt
 
 
 def replay_trace(lineage_path: str | Path, out_dir: str | Path, *, trace_format: str = "auto") -> dict[str, Any]:
@@ -345,6 +494,28 @@ def _mock_final_answer(scenario: dict[str, Any], manifest: dict[str, Any]) -> st
     return " ".join(str(item) for item in final_contains) or f"Mock completed {scenario['id']}."
 
 
+def _discover_scenario_paths(scenarios_dir: str | Path, *, pattern: str, recursive: bool) -> list[Path]:
+    root = Path(scenarios_dir).expanduser().resolve()
+    paths = root.rglob(pattern) if recursive else root.glob(pattern)
+    return sorted(path for path in paths if path.is_file())
+
+
+def _suite_run_record(result: dict[str, Any], run_dir: Path) -> dict[str, Any]:
+    return {
+        "scenario_id": result["scenario_id"],
+        "runner": result["runner"],
+        "provider": result["provider"],
+        "model": result["model"],
+        "run_dir": str(run_dir),
+        "manifest": str(run_dir / "harness_manifest.json"),
+        "result": str(run_dir / "harness_result.json"),
+        "trace": result["trace"],
+        "scorecard": result["scorecard"],
+        "replay": result["replay"],
+        "passed": result["scorecard"]["passed"] is True,
+    }
+
+
 def _effective_tool_policy(scenario: dict[str, Any], tool_policy: dict[str, Any] | None) -> dict[str, Any]:
     scenario_policy = scenario.get("policy") or {}
     runtime_policy = {**DEFAULT_TOOL_POLICY, **(tool_policy or {})}
@@ -463,6 +634,10 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _probe_check(check_id: str, passed: bool, details: dict[str, Any]) -> dict[str, Any]:
+    return {"id": check_id, "passed": bool(passed), "details": details}
+
+
 def _now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -470,16 +645,39 @@ def _now_iso() -> str:
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run or replay Flight Recorder harness artifacts")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    run = subparsers.add_parser("run-scenario", help="Run one scenario through a harness runner")
-    run.add_argument("--manifest", help="Existing harness manifest JSON to execute")
-    run.add_argument("--scenario", help="Scenario JSON/YAML path; required unless --manifest is used")
-    run.add_argument("--out", help="Run output directory; required unless --manifest is used")
-    run.add_argument("--runner", default="mock")
-    run.add_argument("--provider", default="mock")
-    run.add_argument("--model", default="hfr-mock")
-    run.add_argument("--base-url")
-    run.add_argument("--mock-response")
-    run.add_argument("--force", action="store_true")
+    for command_name, help_text in (
+        ("run-scenario", "Run one scenario through a harness runner"),
+        ("run", "Alias for run-scenario"),
+    ):
+        run = subparsers.add_parser(command_name, help=help_text)
+        run.add_argument("--manifest", help="Existing harness manifest JSON to execute")
+        run.add_argument("--scenario", help="Scenario JSON/YAML path; required unless --manifest is used")
+        run.add_argument("--out", help="Run output directory; required unless --manifest is used")
+        run.add_argument("--runner", default="mock")
+        run.add_argument("--provider", default="mock")
+        run.add_argument("--model", default="hfr-mock")
+        run.add_argument("--base-url")
+        run.add_argument("--mock-response")
+        run.add_argument("--force", action="store_true")
+    suite = subparsers.add_parser("run-suite", help="Run a scenario directory through the mock harness runner")
+    suite.add_argument("--scenarios", required=True)
+    suite.add_argument("--out", required=True)
+    suite.add_argument("--pattern", default="*.json")
+    suite.add_argument("--recursive", action="store_true")
+    suite.add_argument("--runner", default="mock")
+    suite.add_argument("--provider", default="mock")
+    suite.add_argument("--model", default="hfr-mock")
+    suite.add_argument("--base-url")
+    suite.add_argument("--mock-response")
+    suite.add_argument("--force", action="store_true")
+    suite.add_argument("--fail-on-failed", action="store_true")
+    probe = subparsers.add_parser("probe-model", help="Write a no-network harness model probe receipt")
+    probe.add_argument("--out", required=True)
+    probe.add_argument("--runner", default="mock")
+    probe.add_argument("--provider", default="mock")
+    probe.add_argument("--model", default="hfr-mock")
+    probe.add_argument("--base-url")
+    probe.add_argument("--allow-network", action="store_true")
     replay = subparsers.add_parser("replay-trace", help="Replay a run from artifact lineage")
     replay.add_argument("--lineage", required=True)
     replay.add_argument("--out", required=True)
@@ -489,7 +687,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    if args.command == "run-scenario":
+    if args.command in {"run", "run-scenario"}:
         if args.manifest:
             manifest = _load_manifest(args.manifest)
             if args.force:
@@ -510,6 +708,36 @@ def main(argv: list[str] | None = None) -> int:
         result = run_scenario(manifest)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1
+    if args.command == "run-suite":
+        result = run_suite(
+            scenarios_dir=args.scenarios,
+            out_dir=args.out,
+            pattern=args.pattern,
+            recursive=bool(args.recursive),
+            provider=args.provider,
+            model=args.model,
+            runner=args.runner,
+            base_url=args.base_url,
+            mock_response=args.mock_response,
+            force=bool(args.force),
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        if result["error_count"]:
+            return 1
+        if args.fail_on_failed and result["failed"]:
+            return 1
+        return 0
+    if args.command == "probe-model":
+        result = probe_model(
+            out_dir=args.out,
+            provider=args.provider,
+            model=args.model,
+            runner=args.runner,
+            base_url=args.base_url,
+            allow_network=bool(args.allow_network),
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["passed"] else 1
     if args.command == "replay-trace":
         result = replay_trace(args.lineage, args.out, trace_format=args.format)
         print(json.dumps(result, indent=2, sort_keys=True))

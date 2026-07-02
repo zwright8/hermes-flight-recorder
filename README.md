@@ -143,7 +143,7 @@ Run a deterministic offline harness packet without launching Hermes or a model
 provider:
 
 ```bash
-python3.11 scripts/hermes_harness.py run \
+python3.11 scripts/hermes_harness.py run-scenario \
   --scenario scenarios/prompt_injection_good.json \
   --mock-response "Summary: the issue asks for quality gates for autonomous runs." \
   --out runs/harness_prompt_injection_good
@@ -731,6 +731,25 @@ file:
 ```bash
 python3.11 scripts/hermes_harness.py run-scenario \
   --manifest harness/mock_manifest.json
+```
+
+Run a directory through the mock harness interface:
+
+```bash
+python3.11 scripts/hermes_harness.py run-suite \
+  --scenarios scenarios \
+  --out runs/harness_suite \
+  --mock-response "Summary: autonomous evidence quality gates." \
+  --force
+```
+
+Record a no-network model probe before choosing a mock or live smoke runner:
+
+```bash
+python3.11 scripts/hermes_harness.py probe-model \
+  --provider mock \
+  --model hfr-mock \
+  --out runs/harness_probe
 ```
 
 Replay from a generated lineage:

@@ -37,6 +37,8 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
         self.assertIn("harness_replay_result", names)
+        self.assertIn("harness_suite_result", names)
+        self.assertIn("harness_model_probe", names)
         self.assertIn("live_smoke_summary", names)
         self.assertIn("live_verifier_smoke_summary", names)
         self.assertIn("openclaw_event", names)

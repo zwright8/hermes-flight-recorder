@@ -1,0 +1,65 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_model_probe.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "No-network harness model probe receipt for mock and live-smoke runner selection.",
+  "properties": {
+    "created_at": { "type": "string" },
+    "failed_probes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "model": {
+      "additionalProperties": true,
+      "properties": {
+        "base_url": { "type": ["string", "null"] },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "type": "boolean" },
+    "probes": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "details": { "type": "object" },
+          "id": { "minLength": 1, "type": "string" },
+          "passed": { "type": "boolean" }
+        },
+        "required": ["id", "passed", "details"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "provider": { "minLength": 1, "type": "string" },
+    "readiness": { "minLength": 1, "type": "string" },
+    "recommendation": { "minLength": 1, "type": "string" },
+    "runner": { "minLength": 1, "type": "string" },
+    "runner_interface": { "const": "probe_model" },
+    "sandbox": { "type": "object" },
+    "schema_version": { "const": "hfr.harness_model_probe.v1" },
+    "tool_policy": { "type": "object" }
+  },
+  "required": [
+    "schema_version",
+    "runner_interface",
+    "passed",
+    "readiness",
+    "recommendation",
+    "runner",
+    "provider",
+    "model",
+    "sandbox",
+    "tool_policy",
+    "probes",
+    "failed_probes",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Harness Model Probe",
+  "type": "object"
+}

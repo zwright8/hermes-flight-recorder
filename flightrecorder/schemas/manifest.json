@@ -106,6 +106,22 @@
       "name": "harness_replay_result"
     },
     {
+      "artifact": "harness_suite_result",
+      "artifact_schema_version": "hfr.harness_suite_result.v1",
+      "description": "Mock harness suite receipt linking per-scenario manifest and result artifacts.",
+      "filename": "harness_suite_result.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_suite_result.v1.schema.json",
+      "name": "harness_suite_result"
+    },
+    {
+      "artifact": "harness_model_probe",
+      "artifact_schema_version": "hfr.harness_model_probe.v1",
+      "description": "No-network harness model probe receipt for mock and live-smoke runner selection.",
+      "filename": "harness_model_probe.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/harness_model_probe.v1.schema.json",
+      "name": "harness_model_probe"
+    },
+    {
       "artifact": "live_smoke_summary",
       "artifact_schema_version": "hfr.live_smoke.summary.v2",
       "description": "Live Hermes runtime smoke summary emitted by scripts/live_hermes_smoke.py.",
