@@ -1056,55 +1056,11 @@ PY
 "$PYTHON" -m flightrecorder validate \
   --live-smoke-summary runs/live_smoke_summary.json \
   --strict >/dev/null
-"$PYTHON" - <<'PY'
-import json
-from pathlib import Path
-
-harness_dir = Path("runs/harness_release_check")
-harness_dir.mkdir(parents=True, exist_ok=True)
-manifest = {
-    "schema_version": "hfr.harness_run_manifest.v1",
-    "runner": "release_check",
-    "provider": "mock",
-    "model": {"id": "hfr-release-check-mock"},
-    "scenario": {"id": "prompt_injection_good", "path": "scenarios/prompt_injection_good.json"},
-    "outputs": {"run_dir": ".", "manifest": "harness_manifest.json", "result": "harness_result.json"},
-    "sandbox": {
-        "root": "sandbox",
-        "home": "sandbox/home",
-        "workspace": "sandbox/workspace",
-        "events": "sandbox/events.jsonl",
-        "fake_secret_canaries": ["HFR_FAKE_SECRET_CANARY"],
-    },
-    "tool_policy": {"network": "disabled", "filesystem": "sandboxed"},
-}
-result = {
-    "schema_version": "hfr.harness_run_result.v1",
-    "runner": "release_check",
-    "provider": "mock",
-    "model": {"id": "hfr-release-check-mock"},
-    "scenario_id": "prompt_injection_good",
-    "sandbox": manifest["sandbox"],
-    "tool_policy": manifest["tool_policy"],
-    "trace": {"path": "normalized_trace.json", "format": "normalized_json"},
-    "scorecard": {"path": "scorecard.json", "passed": True, "score": 100},
-    "artifacts": {
-        "normalized_trace": "normalized_trace.json",
-        "scorecard": "scorecard.json",
-        "run_digest": "run_digest.json",
-        "report": "report.html",
-        "lineage": "artifact_lineage.json",
-    },
-    "replay": {"lineage": "artifact_lineage.json", "self_contained": True},
-}
-(harness_dir / "harness_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-(harness_dir / "harness_result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-PY
-"$PYTHON" -m flightrecorder schemas --check runs/harness_release_check/harness_manifest.json >/dev/null
-"$PYTHON" -m flightrecorder schemas --check runs/harness_release_check/harness_result.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/harness_handoff/harness_manifest.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/harness_handoff/harness_result.json >/dev/null
 "$PYTHON" -m flightrecorder validate \
-  --harness-manifest runs/harness_release_check/harness_manifest.json \
-  --harness-result runs/harness_release_check/harness_result.json \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
   --strict >/dev/null
 "$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \
@@ -1120,8 +1076,8 @@ PY
   --reviewed-export runs/reviewed_export \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
-  --harness-manifest runs/harness_release_check/harness_manifest.json \
-  --harness-result runs/harness_release_check/harness_result.json \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
   --gate runs/suite_gate.json \
   --gate runs/compare_gate.json \
   --gate runs/training_gate.json \
@@ -1265,8 +1221,8 @@ test -f runs/evidence_bundle_trainer.json
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
   --evidence-bundle runs/evidence_bundle_trainer.json \
-  --harness-manifest runs/harness_release_check/harness_manifest.json \
-  --harness-result runs/harness_release_check/harness_result.json \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
   --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --action-ledger runs/action_ledger.json \
   --action-ledger-gate runs/action_ledger_gate.json \
@@ -1319,8 +1275,8 @@ assert bundle["decision"]["key_metrics"]["harness_handoff"]["missing_pair_count"
 assert bundle["metrics"]["harness_handoff"]["pair_count"] == 1
 assert bundle["metrics"]["harness_handoff"]["schema_valid_pair_count"] == 1
 assert bundle["metrics"]["harness_handoff"]["consistent_pair_count"] == 1
-assert bundle["metrics"]["harness_handoff"]["runs"][0]["runner"] == "release_check"
-assert bundle["metrics"]["harness_handoff"]["runs"][0]["provider"] == "mock"
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["runner"] == "flightrecorder_run_suite"
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["provider"] == "fixture"
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_count"] == 1
 assert bundle["decision"]["key_metrics"]["compare_export"]["task_completion_improvement_count"] == 1
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_scenarios"] == ["email_reply_completion"]

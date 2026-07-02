@@ -163,6 +163,8 @@ Suite and handoff commands add higher-level artifacts such as:
 - `repair_queue.json`
 - `training_export/`
 - `compare_rl_export/`
+- `harness_handoff/harness_manifest.json`
+- `harness_handoff/harness_result.json`
 - `evidence_bundle.json`
 - `improvement_plan.json`
 - `improvement_ledger.json`
@@ -601,8 +603,8 @@ flightrecorder evidence-bundle \
   --evidence-coverage runs/evidence_coverage.json \
   --trace-observability runs/trace_observability.json \
   --training-export runs/training_export \
-  --harness-manifest runs/harness_prompt_injection_good/harness_manifest.json \
-  --harness-result runs/harness_prompt_injection_good/harness_result.json \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
   --gate runs/suite_gate.json \
   --require-harness \
   --require-gate \
