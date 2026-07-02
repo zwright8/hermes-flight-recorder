@@ -384,18 +384,24 @@
     "commit_sha": "3c8ae3bec9843a47cd3146b25dcc9a05663c46c5",
     "main_delivery": {
       "attempted_at": "2026-07-02T15:09:17Z",
-      "branch_delete_status": "pending_after_main_push",
+      "branch_delete_status": "remote_deleted",
+      "branch_deleted_at": "2026-07-02T15:15:04Z",
+      "completed_at": "2026-07-02T15:15:04Z",
+      "integrated_main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
       "integration_verified_at": "2026-07-02T15:13:16Z",
       "latest_origin_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+      "lock_release_status": "pending_after_checkpoint_push",
       "lock_status": "acquired",
       "merge_base_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
       "merge_conflict_resolution": "Combined supervisor/evidence/harness journal and state with the Data layer checkpoint from origin/main; no code conflicts remained after auto-merge.",
-      "pr_status": "open_before_main_push",
-      "push_main_status": "verified_pending_main_push",
+      "post_delivery_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; verify the post-checkpoint remote main SHA externally because a commit cannot self-record its own SHA.",
+      "pr_status": "MERGED",
+      "push_main_status": "pushed_and_verified",
       "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
-      "remote_branch_status": "kept_until_main_push_verified",
+      "remote_branch_status": "deleted",
       "remote_branch_verified_sha": "be9f46c590e709a83afe29c072077b7d888ef356",
+      "remote_main_verified_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
       "verification": [
         {
           "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
@@ -414,6 +420,7 @@
         }
       ]
     },
+    "main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
     "persistence_checkpoint": "state records packet commit and PR URL; branch head is verified after push because commits cannot self-record their final SHA",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
     "remote": "origin",
@@ -601,5 +608,5 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:13:16Z"
+  "updated_at": "2026-07-02T15:15:04Z"
 }
