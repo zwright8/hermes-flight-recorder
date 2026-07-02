@@ -538,6 +538,14 @@
       "name": "review_calibration"
     },
     {
+      "artifact": "reviewed_gate",
+      "artifact_schema_version": "hfr.reviewed_gate.v1",
+      "description": "Gate result over an apply-review reviewed trainer handoff and optional reviewed-gate policy.",
+      "filename": "reviewed_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/reviewed_gate.v1.schema.json",
+      "name": "reviewed_gate"
+    },
+    {
       "artifact": "trainer_preflight",
       "artifact_schema_version": "hfr.trainer_preflight.v1",
       "description": "Trainer preflight launch guard over passed gates and trainer-facing artifacts.",

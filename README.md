@@ -516,6 +516,7 @@ flightrecorder schemas --check runs/suite_gate.json
 flightrecorder schemas --check runs/prompt_compare.json
 flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/review_calibration.json
+flightrecorder schemas --check runs/reviewed_gate.json
 flightrecorder schemas --check runs/suite_compare.json
 flightrecorder schemas --check runs/suite_trend.json
 flightrecorder schemas --check runs/repair_queue.json

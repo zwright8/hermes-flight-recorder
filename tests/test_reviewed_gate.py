@@ -82,6 +82,7 @@ class ReviewedGateTests(unittest.TestCase):
             self.assertGreaterEqual(result["metrics"]["rejected_count"], 2)
             self.assertEqual(result["metrics"]["low_confidence_label_count"], 0)
             self.assertEqual(result["metrics"]["unknown_confidence_label_count"], 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(gate)]), 0)
 
     def test_gate_reviewed_fails_thresholds_and_forbidden_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -109,6 +110,7 @@ class ReviewedGateTests(unittest.TestCase):
             failed_checks = {item["id"] for item in result["checks"] if not item["passed"]}
             self.assertIn("min_reviewed_labels", failed_checks)
             self.assertIn("forbid_label", failed_checks)
+            self.assertEqual(run_cli(["schemas", "--check", str(gate)]), 0)
 
     def test_gate_reviewed_fails_confidence_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:

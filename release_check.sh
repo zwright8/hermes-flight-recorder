@@ -992,6 +992,7 @@ test -f runs/reviewed_export/reviewed_dpo.jsonl
   --policy examples/reviewed_gate_policy.demo.json \
   --out runs/reviewed_gate.json >/dev/null
 test -f runs/reviewed_gate.json
+"$PYTHON" -m flightrecorder schemas --check runs/reviewed_gate.json >/dev/null
 test -f examples/reviewed_gate_policy.demo.json
 "$PYTHON" -m flightrecorder review-calibration \
   --reviewed-export runs/reviewed_export \

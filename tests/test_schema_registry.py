@@ -938,6 +938,70 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "review_calibration")
 
+    def test_reviewed_gate_schema_accepts_minimal_gate(self):
+        metrics = {
+            "reviewed_label_count": 2,
+            "accepted_count": 1,
+            "rejected_count": 1,
+            "sft_count": 1,
+            "reward_model_count": 1,
+            "preference_count": 1,
+            "dpo_count": 1,
+            "label_counts": {"accept": 1, "reject": 1},
+            "confidence_counts": {"high": 2},
+            "high_confidence_label_count": 2,
+            "medium_or_high_confidence_label_count": 2,
+            "low_confidence_label_count": 0,
+            "unknown_confidence_label_count": 0,
+            "task_families": ["prompt_injection"],
+            "validation": {
+                "available": True,
+                "passed": True,
+                "strict": False,
+                "target_count": 1,
+                "error_count": 0,
+                "warning_count": 0,
+            },
+        }
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.reviewed_gate.v1",
+                "reviewed_export": "runs/reviewed_export",
+                "passed": True,
+                "check_count": 1,
+                "failed_check_count": 0,
+                "checks": [
+                    {
+                        "id": "min_reviewed_labels",
+                        "passed": True,
+                        "actual": 2,
+                        "expected": {"min": 2},
+                        "summary": "min_reviewed_labels: actual=2, min=2",
+                    }
+                ],
+                "metrics": metrics,
+                "decision": {
+                    "readiness": "ready",
+                    "recommendation": "promote_iteration",
+                    "summary": "Reviewed handoff passed gate checks.",
+                    "blocking_check_count": 0,
+                    "blocking_checks": [],
+                    "failed_checks": [],
+                    "next_action_count": 0,
+                    "next_actions": [],
+                    "key_metrics": metrics,
+                },
+                "policy": {
+                    "schema_version": "hfr.reviewed_gate.policy.v1",
+                    "path": "examples/reviewed_gate_policy.demo.json",
+                    "effective": {"min_reviewed_labels": 2},
+                },
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "reviewed_gate")
+
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(
             {

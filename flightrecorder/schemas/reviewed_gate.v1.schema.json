@@ -1,0 +1,318 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/reviewed_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Gate result over an apply-review reviewed trainer handoff and optional reviewed-gate policy.",
+  "properties": {
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "decision": {
+      "$ref": "#/$defs/decision"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "reviewed_export": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.reviewed_gate.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "reviewed_export",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics",
+    "decision"
+  ],
+  "title": "Hermes Flight Recorder Reviewed Gate",
+  "type": "object",
+  "$defs": {
+    "blocking_check": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "type": "object"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "count_map": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "blocking_checks": {
+          "items": {
+            "$ref": "#/$defs/blocking_check"
+          },
+          "type": "array"
+        },
+        "failed_checks": {
+          "items": {
+            "$ref": "#/$defs/blocking_check"
+          },
+          "type": "array"
+        },
+        "key_metrics": {
+          "$ref": "#/$defs/metrics"
+        },
+        "next_action_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "next_actions": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "readiness": {
+          "enum": [
+            "blocked",
+            "ready"
+          ],
+          "type": "string"
+        },
+        "recommendation": {
+          "enum": [
+            "block_iteration",
+            "promote_iteration"
+          ],
+          "type": "string"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "failed_checks",
+        "next_action_count",
+        "next_actions",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "accepted_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "confidence_counts": {
+          "$ref": "#/$defs/count_map"
+        },
+        "dpo_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "high_confidence_label_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "label_counts": {
+          "$ref": "#/$defs/count_map"
+        },
+        "low_confidence_label_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "medium_or_high_confidence_label_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preference_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rejected_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reviewed_label_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reward_model_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sft_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task_families": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "unknown_confidence_label_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "validation": {
+          "$ref": "#/$defs/validation"
+        }
+      },
+      "required": [
+        "reviewed_label_count",
+        "accepted_count",
+        "rejected_count",
+        "sft_count",
+        "reward_model_count",
+        "preference_count",
+        "dpo_count",
+        "label_counts",
+        "confidence_counts",
+        "high_confidence_label_count",
+        "medium_or_high_confidence_label_count",
+        "low_confidence_label_count",
+        "unknown_confidence_label_count",
+        "task_families",
+        "validation"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "effective": {
+          "type": "object"
+        },
+        "path": {
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "hfr.reviewed_gate.policy.v1"
+        }
+      },
+      "required": [
+        "schema_version",
+        "path",
+        "effective"
+      ],
+      "type": "object"
+    },
+    "validation": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "strict": {
+          "type": "boolean"
+        },
+        "target_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warning_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "available",
+        "passed",
+        "strict",
+        "target_count",
+        "error_count",
+        "warning_count"
+      ],
+      "type": "object"
+    }
+  }
+}
