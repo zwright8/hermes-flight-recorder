@@ -223,6 +223,46 @@ class PromotionDecisionTests(unittest.TestCase):
 
             self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 1)
 
+    def test_promotion_release_record_blocks_policy_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            decision_path = root / "promotion_decision.json"
+            registry_path = write_model_registry(root)
+            alias_receipt_path = root / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(root)
+            release_record_path = root / "promotion_release_record.json"
+            policy_path = write_promotion_policy(root)
+            mismatched_policy_path = write_promotion_policy(
+                root,
+                filename="promotion_policy_mismatch.json",
+                policy_id="mismatch-policy",
+            )
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path, promotion_policy=policy_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+
+            code = run_cli(
+                promotion_release_record_args(
+                    artifacts,
+                    cards_dir,
+                    decision_path,
+                    alias_receipt_path,
+                    release_notes_path,
+                    release_record_path,
+                    promotion_policy=mismatched_policy_path,
+                )
+            )
+
+            self.assertEqual(code, 1)
+            record = json.loads(release_record_path.read_text(encoding="utf-8"))
+            self.assertIn("promotion_policy_matches_decision", failed_check_ids(record))
+            self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 0)
+
     def test_promotion_decision_blocks_missing_dataset_card_and_rollback(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -255,6 +295,28 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(code, 1)
             decision = json.loads(decision_path.read_text(encoding="utf-8"))
             self.assertIn("license_status_known", failed_check_ids(decision))
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_promotion_decision_blocks_incomplete_policy_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            policy_path = write_promotion_policy(
+                root,
+                required_artifacts=[
+                    role for role in promotion_decision_required_artifacts() if role != "serving_report"
+                ],
+            )
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path, promotion_policy=policy_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertEqual(decision["policy"]["source"], "file")
+            self.assertEqual(decision["policy"]["artifact"]["role"], "promotion_policy")
+            self.assertIn("promotion_policy_required_artifacts_complete", failed_check_ids(decision))
+            self.assertFalse(decision["alias_update"]["authorized"])
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
 
     def test_promotion_decision_blocks_eval_regressions_and_secret_exposure(self):
@@ -400,6 +462,77 @@ def write_release_notes(root: Path) -> Path:
     return release_notes
 
 
+def write_promotion_policy(
+    root: Path,
+    *,
+    filename: str = "promotion_policy.json",
+    policy_id: str = "strict-local-policy",
+    required_artifacts: list[str] | None = None,
+    release_required_artifacts: list[str] | None = None,
+) -> Path:
+    policy_path = root / filename
+    policy_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.promotion_policy.v1",
+                "id": policy_id,
+                "description": "Strict local promotion policy for tests.",
+                "required_artifacts": required_artifacts or promotion_decision_required_artifacts(),
+                "release_required_artifacts": release_required_artifacts or promotion_release_required_artifacts(),
+                "allowed_candidate_classes": ["base", "candidate", "champion", "frontier", "trace-only"],
+                "allowed_champion_classes": ["base", "candidate", "champion", "frontier", "trace-only"],
+                "limits": {
+                    "max_task_completion_regressions": 0,
+                    "max_baseline_wins": 0,
+                    "max_contract_drifts": 0,
+                    "max_unverified_contracts": 0,
+                    "max_new_critical_failures": 0,
+                    "max_rule_regressions": 0,
+                },
+                "forbid_new_critical_rules": ["forbidden_actions", "secret_exposure"],
+                "forbid_regressed_rules": ["forbidden_actions", "secret_exposure"],
+                "require_known_license": True,
+                "require_accepted_terms": True,
+                "require_rollback_metadata": True,
+                "require_supported_cards": True,
+                "require_artifact_validation": True,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return policy_path
+
+
+def promotion_decision_required_artifacts() -> list[str]:
+    return [
+        "evidence_bundle",
+        "promotion_ledger_gate",
+        "compare_gate",
+        "trainer_launch_check",
+        "model_card",
+        "dataset_card",
+        "rollback_metadata",
+        "license_review",
+        "redaction_check",
+        "safety_gate",
+        "serving_report",
+    ]
+
+
+def promotion_release_required_artifacts() -> list[str]:
+    return [
+        "promotion_decision",
+        "promotion_cards",
+        "promotion_alias_apply",
+        "rollback_metadata",
+        "compare_gate",
+        "release_notes",
+    ]
+
+
 def promotion_alias_apply_args(registry_path: Path, decision_path: Path, receipt_path: Path) -> list[str]:
     return [
         "promotion-alias-apply",
@@ -420,8 +553,9 @@ def promotion_release_record_args(
     alias_receipt_path: Path,
     release_notes_path: Path,
     release_record_path: Path,
+    promotion_policy: Path | None = None,
 ) -> list[str]:
-    return [
+    args = [
         "promotion-release-record",
         "--release-id",
         "release-2026-07-02",
@@ -441,6 +575,9 @@ def promotion_release_record_args(
         str(release_record_path),
         "--preserve-paths",
     ]
+    if promotion_policy is not None:
+        args.extend(["--promotion-policy", str(promotion_policy)])
+    return args
 
 
 def promotion_cards_args(
@@ -476,7 +613,12 @@ def promotion_cards_args(
     ]
 
 
-def promotion_decision_args(artifacts: dict[str, Path | None], out_path: Path) -> list[str]:
+def promotion_decision_args(
+    artifacts: dict[str, Path | None],
+    out_path: Path,
+    *,
+    promotion_policy: Path | None = None,
+) -> list[str]:
     args = [
         "promotion-decision",
         "--candidate-id",
@@ -506,6 +648,8 @@ def promotion_decision_args(artifacts: dict[str, Path | None], out_path: Path) -
         path = artifacts.get(role)
         if path is not None:
             args.extend([flag, str(path)])
+    if promotion_policy is not None:
+        args.extend(["--promotion-policy", str(promotion_policy)])
     return args
 
 

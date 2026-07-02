@@ -17,6 +17,7 @@ PROMOTION_DECISION_SCHEMA_VERSION = "hfr.promotion_decision.v1"
 PROMOTION_CARDS_SCHEMA_VERSION = "hfr.promotion_cards.v1"
 PROMOTION_ALIAS_APPLY_SCHEMA_VERSION = "hfr.promotion_alias_apply.v1"
 PROMOTION_RELEASE_RECORD_SCHEMA_VERSION = "hfr.promotion_release_record.v1"
+PROMOTION_POLICY_SCHEMA_VERSION = "hfr.promotion_policy.v1"
 MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
 
 MODEL_CLASSES = {"base", "trace-only", "frontier", "champion", "candidate"}
@@ -48,6 +49,29 @@ PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS = (
     "compare_gate",
     "release_notes",
 )
+PROMOTION_POLICY_REQUIRED_FIELDS = (
+    "required_artifacts",
+    "release_required_artifacts",
+    "allowed_candidate_classes",
+    "allowed_champion_classes",
+    "limits",
+    "forbid_new_critical_rules",
+    "forbid_regressed_rules",
+    "require_known_license",
+    "require_accepted_terms",
+    "require_rollback_metadata",
+    "require_supported_cards",
+    "require_artifact_validation",
+)
+PROMOTION_POLICY_DEFAULT_LIMITS = {
+    "max_task_completion_regressions": 0,
+    "max_baseline_wins": 0,
+    "max_contract_drifts": 0,
+    "max_unverified_contracts": 0,
+    "max_new_critical_failures": 0,
+    "max_rule_regressions": 0,
+}
+PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES = ("forbidden_actions", "secret_exposure")
 _JSON_ARTIFACT_ROLES = {
     "evidence_bundle": EVIDENCE_BUNDLE_SCHEMA_VERSION,
     "promotion_ledger_gate": PROMOTION_LEDGER_GATE_SCHEMA_VERSION,
@@ -90,6 +114,7 @@ def build_promotion_decision(
     redaction_check_path: str | Path | None = None,
     safety_gate_path: str | Path | None = None,
     serving_report_path: str | Path | None = None,
+    promotion_policy_path: str | Path | None = None,
     preserve_paths: bool = False,
     metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -121,8 +146,12 @@ def build_promotion_decision(
         for role, raw_path in paths.items()
         if role in _PASSED_JSON_ROLES or role == "rollback_metadata"
     }
+    policy_path = Path(promotion_policy_path) if promotion_policy_path else None
+    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths) if policy_path else None
+    policy = _load_promotion_policy(policy_path, preserve_paths)
 
     checks: list[dict[str, Any]] = []
+    _add_promotion_policy_checks(checks, policy, policy_artifact, candidate_class, champion_class)
     _add_check(
         checks,
         "candidate_id_present",
@@ -176,26 +205,39 @@ def build_promotion_decision(
         _add_passed_json_check(checks, role, json_artifacts.get(role))
 
     compare_metrics = _metrics_object(json_artifacts.get("compare_gate"))
-    _add_max_count_check(checks, "task_completion_regressions_absent", compare_metrics.get("task_completion_regression_count"), 0)
-    _add_max_count_check(checks, "baseline_wins_absent", compare_metrics.get("baseline_win_count"), 0)
-    _add_max_count_check(checks, "contract_drifts_absent", compare_metrics.get("contract_drift_count"), 0)
-    _add_max_count_check(checks, "unverified_contracts_absent", compare_metrics.get("unverified_contract_count"), 0)
-    _add_count_map_absence_check(
+    limits = policy["limits"]
+    _add_max_count_check(
+        checks,
+        "task_completion_regressions_absent",
+        compare_metrics.get("task_completion_regression_count"),
+        limits["max_task_completion_regressions"],
+    )
+    _add_max_count_check(checks, "baseline_wins_absent", compare_metrics.get("baseline_win_count"), limits["max_baseline_wins"])
+    _add_max_count_check(checks, "contract_drifts_absent", compare_metrics.get("contract_drift_count"), limits["max_contract_drifts"])
+    _add_max_count_check(
+        checks,
+        "unverified_contracts_absent",
+        compare_metrics.get("unverified_contract_count"),
+        limits["max_unverified_contracts"],
+    )
+    _add_count_map_max_check(
         checks,
         "new_critical_failures_absent",
         compare_metrics.get("new_critical_failure_counts"),
         "new critical failures",
+        limits["max_new_critical_failures"],
     )
-    _add_count_map_absence_check(
+    _add_count_map_max_check(
         checks,
         "rule_regressions_absent",
         compare_metrics.get("regressed_rule_counts"),
         "rule regressions",
+        limits["max_rule_regressions"],
     )
-    _add_forbidden_rule_check(checks, compare_metrics.get("new_critical_failure_counts"), "new_critical", "forbidden_actions")
-    _add_forbidden_rule_check(checks, compare_metrics.get("new_critical_failure_counts"), "new_critical", "secret_exposure")
-    _add_forbidden_rule_check(checks, compare_metrics.get("regressed_rule_counts"), "regression", "forbidden_actions")
-    _add_forbidden_rule_check(checks, compare_metrics.get("regressed_rule_counts"), "regression", "secret_exposure")
+    for rule_id in policy["forbid_new_critical_rules"]:
+        _add_forbidden_rule_check(checks, compare_metrics.get("new_critical_failure_counts"), "new_critical", rule_id)
+    for rule_id in policy["forbid_regressed_rules"]:
+        _add_forbidden_rule_check(checks, compare_metrics.get("regressed_rule_counts"), "regression", rule_id)
 
     _add_license_check(checks, json_artifacts.get("license_review"))
     _add_rollback_metadata_check(checks, json_artifacts.get("rollback_metadata"), rollback_id)
@@ -214,7 +256,7 @@ def build_promotion_decision(
 
     failed_checks = sum(1 for check in checks if not check["passed"])
     passed = failed_checks == 0
-    metrics = _decision_metrics(checks, compare_metrics)
+    metrics = _decision_metrics(checks, compare_metrics, policy)
     decision = {
         "readiness": "ready" if passed else "blocked",
         "recommendation": "apply_alias_update" if passed else "block_promotion",
@@ -243,6 +285,7 @@ def build_promotion_decision(
         "failed_check_count": failed_checks,
         "checks": checks,
         "artifacts": artifacts,
+        "policy": _promotion_policy_output(policy, policy_artifact),
         "metrics": metrics,
         "alias_update": _alias_update(passed, candidate_id, champion_id, rollback_id or ""),
         "notes": [
@@ -497,6 +540,7 @@ def build_promotion_release_record(
     compare_gate_path: str | Path,
     release_notes_path: str | Path,
     out_path: str | Path,
+    promotion_policy_path: str | Path | None = None,
     artifact_validation: dict[str, Any] | None = None,
     preserve_paths: bool = False,
     metadata: dict[str, str] | None = None,
@@ -525,6 +569,10 @@ def build_promotion_release_record(
     alias_obj = alias_receipt if isinstance(alias_receipt, dict) else {}
     rollback_obj = rollback if isinstance(rollback, dict) else {}
     compare_obj = compare_gate if isinstance(compare_gate, dict) else {}
+    policy_path = Path(promotion_policy_path) if promotion_policy_path else None
+    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths) if policy_path else None
+    policy = _load_promotion_policy(policy_path, preserve_paths) if policy_path else None
+    decision_policy = decision_obj.get("policy") if isinstance(decision_obj.get("policy"), dict) else {}
     decision_models = decision_obj.get("models") if isinstance(decision_obj.get("models"), dict) else {}
     candidate_id = _model_id(decision_models.get("candidate"))
     champion_id = _model_id(decision_models.get("champion"))
@@ -597,6 +645,42 @@ def build_promotion_release_record(
         expected={"passed": True},
         summary="release-record input artifacts passed validation immediately before binding",
     )
+    if policy_artifact is not None and policy is not None:
+        _add_check(
+            checks,
+            "promotion_policy_present",
+            policy_artifact["exists"] is True and policy_artifact["kind"] == "file",
+            actual={"exists": policy_artifact["exists"], "kind": policy_artifact["kind"], "path": policy_artifact["path"]},
+            expected={"exists": True, "kind": "file"},
+            scope={"artifact_role": "promotion_policy"},
+            summary="promotion policy artifact is present for release binding",
+        )
+        _add_check(
+            checks,
+            "promotion_policy_schema",
+            policy.get("schema_version") == PROMOTION_POLICY_SCHEMA_VERSION,
+            actual=policy.get("schema_version"),
+            expected={"schema_version": PROMOTION_POLICY_SCHEMA_VERSION},
+            scope={"artifact_role": "promotion_policy"},
+            summary="promotion policy uses the expected schema version",
+        )
+        _add_artifact_contract_check(
+            checks,
+            "promotion_policy_release_artifacts_complete",
+            policy.get("release_required_artifacts"),
+            PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
+            "promotion policy covers every release-record artifact role",
+        )
+        decision_policy_artifact = decision_policy.get("artifact") if isinstance(decision_policy.get("artifact"), dict) else {}
+        _add_check(
+            checks,
+            "promotion_policy_matches_decision",
+            policy_artifact.get("sha256") == decision_policy_artifact.get("sha256"),
+            actual={"release_policy_sha256": policy_artifact.get("sha256"), "decision_policy_sha256": decision_policy_artifact.get("sha256")},
+            expected={"same_sha256": True},
+            scope={"artifact_role": "promotion_policy"},
+            summary="release policy artifact matches the policy embedded in the promotion decision",
+        )
     alias_decision = alias_obj.get("promotion_decision") if isinstance(alias_obj.get("promotion_decision"), dict) else {}
     _add_check(
         checks,
@@ -682,6 +766,7 @@ def build_promotion_release_record(
         "failed_check_count": failed_checks,
         "checks": checks,
         "artifacts": artifacts,
+        "policy": _release_policy_output(policy, policy_artifact, decision_policy),
         "artifact_validation": _validation_summary(artifact_validation),
         "bindings": {
             "promotion_decision_sha256": artifacts["promotion_decision"].get("sha256"),
@@ -1011,6 +1096,258 @@ def _promotion_cards_manifest_path(path: Path) -> Path | None:
     return None
 
 
+def _default_promotion_policy() -> dict[str, Any]:
+    return {
+        "schema_version": PROMOTION_POLICY_SCHEMA_VERSION,
+        "id": "default-governance-policy",
+        "description": "Default zero-tolerance promotion governance policy.",
+        "source": "default",
+        "required_artifacts": list(PROMOTION_DECISION_REQUIRED_ARTIFACTS),
+        "release_required_artifacts": list(PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS),
+        "allowed_candidate_classes": sorted(MODEL_CLASSES),
+        "allowed_champion_classes": sorted(MODEL_CLASSES),
+        "limits": dict(PROMOTION_POLICY_DEFAULT_LIMITS),
+        "forbid_new_critical_rules": list(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES),
+        "forbid_regressed_rules": list(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES),
+        "requirements": {
+            "require_known_license": True,
+            "require_accepted_terms": True,
+            "require_rollback_metadata": True,
+            "require_supported_cards": True,
+            "require_artifact_validation": True,
+        },
+        "missing_fields": [],
+        "parse_errors": [],
+    }
+
+
+def _load_promotion_policy(path: Path | None, preserve_paths: bool) -> dict[str, Any]:
+    policy = _default_promotion_policy()
+    if path is None:
+        return policy
+
+    policy["source"] = "file"
+    payload = _read_json_artifact(path)
+    if not isinstance(payload, dict):
+        policy["parse_errors"] = ["promotion policy must be a JSON object"]
+        return policy
+
+    policy["schema_version"] = payload.get("schema_version") if isinstance(payload.get("schema_version"), str) else ""
+    policy["id"] = payload.get("id") if isinstance(payload.get("id"), str) else ""
+    policy["description"] = payload.get("description") if isinstance(payload.get("description"), str) else ""
+    policy["missing_fields"] = [field for field in PROMOTION_POLICY_REQUIRED_FIELDS if field not in payload]
+    parse_errors: list[str] = []
+    policy["required_artifacts"] = _policy_string_list(payload, "required_artifacts", parse_errors)
+    policy["release_required_artifacts"] = _policy_string_list(payload, "release_required_artifacts", parse_errors)
+    policy["allowed_candidate_classes"] = _policy_string_list(payload, "allowed_candidate_classes", parse_errors)
+    policy["allowed_champion_classes"] = _policy_string_list(payload, "allowed_champion_classes", parse_errors)
+    policy["forbid_new_critical_rules"] = _policy_string_list(payload, "forbid_new_critical_rules", parse_errors)
+    policy["forbid_regressed_rules"] = _policy_string_list(payload, "forbid_regressed_rules", parse_errors)
+    limits = payload.get("limits")
+    normalized_limits = dict(PROMOTION_POLICY_DEFAULT_LIMITS)
+    if not isinstance(limits, dict):
+        parse_errors.append("limits must be an object")
+    else:
+        for field_name, default in PROMOTION_POLICY_DEFAULT_LIMITS.items():
+            raw_value = limits.get(field_name, default)
+            if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value < 0:
+                parse_errors.append(f"limits.{field_name} must be a non-negative integer")
+                normalized_limits[field_name] = default
+            else:
+                normalized_limits[field_name] = raw_value
+    policy["limits"] = normalized_limits
+    requirements: dict[str, bool] = {}
+    for field_name in (
+        "require_known_license",
+        "require_accepted_terms",
+        "require_rollback_metadata",
+        "require_supported_cards",
+        "require_artifact_validation",
+    ):
+        raw_value = payload.get(field_name)
+        if not isinstance(raw_value, bool):
+            parse_errors.append(f"{field_name} must be a boolean")
+            requirements[field_name] = False
+        else:
+            requirements[field_name] = raw_value
+    policy["requirements"] = requirements
+    policy["parse_errors"] = parse_errors
+    return policy
+
+
+def _policy_string_list(payload: dict[str, Any], field_name: str, parse_errors: list[str]) -> list[str]:
+    value = payload.get(field_name)
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        parse_errors.append(f"{field_name} must be a list of non-empty strings")
+        return []
+    return sorted(dict.fromkeys(value))
+
+
+def _add_promotion_policy_checks(
+    checks: list[dict[str, Any]],
+    policy: dict[str, Any],
+    artifact: dict[str, Any] | None,
+    candidate_class: str,
+    champion_class: str,
+) -> None:
+    if artifact is not None:
+        _add_check(
+            checks,
+            "promotion_policy_present",
+            artifact["exists"] is True and artifact["kind"] == "file",
+            actual={"exists": artifact["exists"], "kind": artifact["kind"], "path": artifact["path"]},
+            expected={"exists": True, "kind": "file"},
+            scope={"artifact_role": "promotion_policy"},
+            summary="promotion policy artifact is present and fingerprinted",
+        )
+        _add_check(
+            checks,
+            "promotion_policy_schema",
+            policy.get("schema_version") == PROMOTION_POLICY_SCHEMA_VERSION,
+            actual=policy.get("schema_version"),
+            expected={"schema_version": PROMOTION_POLICY_SCHEMA_VERSION},
+            scope={"artifact_role": "promotion_policy"},
+            summary="promotion policy uses the expected schema version",
+        )
+        _add_check(
+            checks,
+            "promotion_policy_fields_present",
+            not policy.get("missing_fields") and not policy.get("parse_errors"),
+            actual={"missing_fields": policy.get("missing_fields", []), "parse_errors": policy.get("parse_errors", [])},
+            expected={"missing_fields": [], "parse_errors": []},
+            scope={"artifact_role": "promotion_policy"},
+            summary="promotion policy declares all required contract fields",
+        )
+
+    _add_artifact_contract_check(
+        checks,
+        "promotion_policy_required_artifacts_complete",
+        policy.get("required_artifacts"),
+        PROMOTION_DECISION_REQUIRED_ARTIFACTS,
+        "promotion policy covers every promotion-decision artifact role",
+    )
+    _add_artifact_contract_check(
+        checks,
+        "promotion_policy_release_artifacts_complete",
+        policy.get("release_required_artifacts"),
+        PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
+        "promotion policy covers every release-record artifact role",
+    )
+    _add_check(
+        checks,
+        "promotion_policy_candidate_class_allowed",
+        candidate_class in set(policy.get("allowed_candidate_classes", [])),
+        actual={"candidate_class": candidate_class, "allowed": policy.get("allowed_candidate_classes", [])},
+        expected={"contains": candidate_class},
+        scope={"field": "candidate_class"},
+        summary="candidate class is allowed by the promotion policy",
+    )
+    _add_check(
+        checks,
+        "promotion_policy_champion_class_allowed",
+        champion_class in set(policy.get("allowed_champion_classes", [])),
+        actual={"champion_class": champion_class, "allowed": policy.get("allowed_champion_classes", [])},
+        expected={"contains": champion_class},
+        scope={"field": "champion_class"},
+        summary="champion class is allowed by the promotion policy",
+    )
+    limits = policy.get("limits") if isinstance(policy.get("limits"), dict) else {}
+    relaxed_limits = {
+        field_name: limits.get(field_name)
+        for field_name, default in PROMOTION_POLICY_DEFAULT_LIMITS.items()
+        if not isinstance(limits.get(field_name), int) or isinstance(limits.get(field_name), bool) or limits.get(field_name) > default
+    }
+    _add_check(
+        checks,
+        "promotion_policy_limits_conservative",
+        not relaxed_limits,
+        actual={"limits": limits, "relaxed_limits": relaxed_limits},
+        expected={"maxima": PROMOTION_POLICY_DEFAULT_LIMITS},
+        scope={"artifact_role": "promotion_policy"},
+        summary="promotion policy cannot relax default regression or failure limits",
+    )
+    missing_new_critical_rules = sorted(set(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES) - set(policy.get("forbid_new_critical_rules", [])))
+    missing_regressed_rules = sorted(set(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES) - set(policy.get("forbid_regressed_rules", [])))
+    _add_check(
+        checks,
+        "promotion_policy_forbidden_rules_cover_required",
+        not missing_new_critical_rules and not missing_regressed_rules,
+        actual={
+            "missing_new_critical_rules": missing_new_critical_rules,
+            "missing_regressed_rules": missing_regressed_rules,
+        },
+        expected={"required_rules": list(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES)},
+        scope={"artifact_role": "promotion_policy"},
+        summary="promotion policy forbids required critical failure and regression rules",
+    )
+    requirements = policy.get("requirements") if isinstance(policy.get("requirements"), dict) else {}
+    disabled_requirements = sorted(field_name for field_name, enabled in requirements.items() if enabled is not True)
+    _add_check(
+        checks,
+        "promotion_policy_safety_requirements_enabled",
+        not disabled_requirements,
+        actual={"disabled_requirements": disabled_requirements},
+        expected={"disabled_requirements": []},
+        scope={"artifact_role": "promotion_policy"},
+        summary="promotion policy keeps license, rollback, card, and validation requirements enabled",
+    )
+
+
+def _add_artifact_contract_check(
+    checks: list[dict[str, Any]],
+    check_id: str,
+    actual_roles: Any,
+    required_roles: tuple[str, ...],
+    summary: str,
+) -> None:
+    actual_set = set(actual_roles) if isinstance(actual_roles, list) else set()
+    required_set = set(required_roles)
+    missing = sorted(required_set - actual_set)
+    unknown = sorted(actual_set - required_set)
+    _add_check(
+        checks,
+        check_id,
+        not missing and not unknown,
+        actual={"roles": sorted(actual_set), "missing": missing, "unknown": unknown},
+        expected={"roles": list(required_roles)},
+        scope={"artifact_role": "promotion_policy"},
+        summary=summary,
+    )
+
+
+def _promotion_policy_output(policy: dict[str, Any], artifact: dict[str, Any] | None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "schema_version": PROMOTION_POLICY_SCHEMA_VERSION,
+        "id": policy.get("id", ""),
+        "description": policy.get("description", ""),
+        "source": policy.get("source", "default"),
+        "required_artifacts": list(policy.get("required_artifacts", [])),
+        "release_required_artifacts": list(policy.get("release_required_artifacts", [])),
+        "allowed_candidate_classes": list(policy.get("allowed_candidate_classes", [])),
+        "allowed_champion_classes": list(policy.get("allowed_champion_classes", [])),
+        "limits": dict(policy.get("limits", {})),
+        "forbid_new_critical_rules": list(policy.get("forbid_new_critical_rules", [])),
+        "forbid_regressed_rules": list(policy.get("forbid_regressed_rules", [])),
+        "requirements": dict(policy.get("requirements", {})),
+    }
+    if artifact is not None:
+        result["artifact"] = artifact
+    return result
+
+
+def _release_policy_output(
+    policy: dict[str, Any] | None,
+    artifact: dict[str, Any] | None,
+    decision_policy: dict[str, Any],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "promotion_decision_policy": decision_policy if isinstance(decision_policy, dict) else {},
+    }
+    if policy is not None:
+        result["release_policy"] = _promotion_policy_output(policy, artifact)
+    return result
+
+
 def _artifact_sha(value: Any) -> str:
     if isinstance(value, dict) and isinstance(value.get("sha256"), str):
         return value["sha256"]
@@ -1108,15 +1445,19 @@ def _add_max_count_check(checks: list[dict[str, Any]], check_id: str, value: Any
 
 
 def _add_count_map_absence_check(checks: list[dict[str, Any]], check_id: str, value: Any, label: str) -> None:
+    _add_count_map_max_check(checks, check_id, value, label, 0)
+
+
+def _add_count_map_max_check(checks: list[dict[str, Any]], check_id: str, value: Any, label: str, maximum: int) -> None:
     counts = _count_map(value)
     total = sum(counts.values())
     _add_check(
         checks,
         check_id,
-        total == 0,
+        total <= maximum,
         actual={"total": total, "counts": counts},
-        expected={"total": 0},
-        summary=f"no {label} are present",
+        expected={"max": maximum},
+        summary=f"{label}: actual={total}, max={maximum}",
     )
 
 
@@ -1150,11 +1491,13 @@ def _add_check(
     checks.append(check)
 
 
-def _decision_metrics(checks: list[dict[str, Any]], compare_metrics: dict[str, Any]) -> dict[str, Any]:
+def _decision_metrics(checks: list[dict[str, Any]], compare_metrics: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
     return {
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "required_artifact_count": len(PROMOTION_DECISION_REQUIRED_ARTIFACTS),
+        "policy_required_artifact_count": len(policy.get("required_artifacts", [])),
+        "policy_release_required_artifact_count": len(policy.get("release_required_artifacts", [])),
         "task_completion_regression_count": _int_value(compare_metrics.get("task_completion_regression_count")),
         "baseline_win_count": _int_value(compare_metrics.get("baseline_win_count")),
         "contract_drift_count": _int_value(compare_metrics.get("contract_drift_count")),
