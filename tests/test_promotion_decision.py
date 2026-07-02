@@ -379,6 +379,55 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertFalse(decision["alias_update"]["authorized"])
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
 
+    def test_promotion_decision_blocks_policy_that_omits_comparison_arm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            policy_path = write_promotion_policy(
+                root,
+                required_comparison_arms=["base", "trace-only", "champion", "candidate"],
+            )
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path, promotion_policy=policy_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertIn("promotion_policy_comparison_arms_complete", failed_check_ids(decision))
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 1)
+
+    def test_promotion_decision_blocks_missing_required_comparison_arm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            write_serving_report(root, arms=["base", "trace-only", "champion", "candidate"])
+            decision_path = root / "promotion_decision.json"
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertIn("required_comparison_arms_present", failed_check_ids(decision))
+            self.assertIn("frontier", decision["comparison_arms"]["missing"])
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_promotion_decision_blocks_nonidentical_comparison_arms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            write_serving_report(root, heldout_identical=False)
+            decision_path = root / "promotion_decision.json"
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertIn("comparison_arms_identical_heldout", failed_check_ids(decision))
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
     def test_promotion_decision_blocks_eval_regressions_and_secret_exposure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -462,8 +511,7 @@ def write_governance_artifacts(root: Path, *, license_status: str = "known", com
     redaction_check.write_text(json.dumps({"passed": True}), encoding="utf-8")
     safety_gate = root / "safety_gate.json"
     safety_gate.write_text(json.dumps({"passed": True}), encoding="utf-8")
-    serving_report = root / "serving_report.json"
-    serving_report.write_text(json.dumps({"passed": True}), encoding="utf-8")
+    serving_report = write_serving_report(root)
     return {
         "evidence_bundle": evidence_bundle,
         "promotion_ledger_gate": promotion_ledger_gate,
@@ -477,6 +525,53 @@ def write_governance_artifacts(root: Path, *, license_status: str = "known", com
         "safety_gate": safety_gate,
         "serving_report": serving_report,
     }
+
+
+def write_serving_report(
+    root: Path,
+    *,
+    arms: list[str] | None = None,
+    heldout_identical: bool = True,
+) -> Path:
+    arm_labels = arms or required_comparison_arms()
+    serving_report = root / "serving_report.json"
+    serving_report.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.eval_summary.v1",
+                "passed": True,
+                "governance_ready": True,
+                "arms": [
+                    {
+                        "label": arm,
+                        "scenario_count": 2,
+                        "scenario_ids": ["heldout-1", "heldout-2"],
+                        "blocking_reasons": [],
+                    }
+                    for arm in arm_labels
+                ],
+                "heldout_scenarios": {
+                    "status": "identical" if heldout_identical else "mismatched",
+                    "identical": heldout_identical,
+                    "cross_arm_claims_allowed": heldout_identical,
+                    "arms": [
+                        {
+                            "label": arm,
+                            "scenario_count": 2,
+                            "scenario_ids": ["heldout-1", "heldout-2"] if heldout_identical else [f"{arm}-only"],
+                        }
+                        for arm in arm_labels
+                    ],
+                    "blocking_reasons": [] if heldout_identical else ["heldout_scenario_set_mismatch"],
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return serving_report
 
 
 def write_training_export(root: Path) -> Path:
@@ -529,6 +624,7 @@ def write_promotion_policy(
     policy_id: str = "strict-local-policy",
     required_artifacts: list[str] | None = None,
     release_required_artifacts: list[str] | None = None,
+    required_comparison_arms: list[str] | None = None,
 ) -> Path:
     policy_path = root / filename
     policy_path.write_text(
@@ -539,6 +635,7 @@ def write_promotion_policy(
                 "description": "Strict local promotion policy for tests.",
                 "required_artifacts": required_artifacts or promotion_decision_required_artifacts(),
                 "release_required_artifacts": release_required_artifacts or promotion_release_required_artifacts(),
+                "required_comparison_arms": required_comparison_arms or required_comparison_arms_default(),
                 "allowed_candidate_classes": ["base", "candidate", "champion", "frontier", "trace-only"],
                 "allowed_champion_classes": ["base", "candidate", "champion", "frontier", "trace-only"],
                 "limits": {
@@ -591,6 +688,14 @@ def promotion_release_required_artifacts() -> list[str]:
         "compare_gate",
         "release_notes",
     ]
+
+
+def required_comparison_arms() -> list[str]:
+    return ["base", "trace-only", "frontier", "champion", "candidate"]
+
+
+def required_comparison_arms_default() -> list[str]:
+    return required_comparison_arms()
 
 
 def promotion_alias_apply_args(registry_path: Path, decision_path: Path, receipt_path: Path) -> list[str]:

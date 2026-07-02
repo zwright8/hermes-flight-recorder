@@ -508,7 +508,7 @@
     {
       "artifact": "promotion_policy",
       "artifact_schema_version": "hfr.promotion_policy.v1",
-      "description": "Promotion governance policy declaring required evidence, model classes, safety limits, forbidden-rule blockers, and release artifact contracts.",
+      "description": "Promotion governance policy declaring required evidence, model classes, comparison arms, safety limits, forbidden-rule blockers, and release artifact contracts.",
       "filename": "promotion_policy.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/promotion_policy.v1.schema.json",
       "name": "promotion_policy"

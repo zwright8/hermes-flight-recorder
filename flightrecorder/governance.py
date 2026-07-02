@@ -56,6 +56,7 @@ PROMOTION_POLICY_REQUIRED_FIELDS = (
     "allowed_candidate_classes",
     "allowed_champion_classes",
     "limits",
+    "required_comparison_arms",
     "forbid_new_critical_rules",
     "forbid_regressed_rules",
     "require_known_license",
@@ -73,6 +74,7 @@ PROMOTION_POLICY_DEFAULT_LIMITS = {
     "max_rule_regressions": 0,
 }
 PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES = ("forbidden_actions", "secret_exposure")
+PROMOTION_POLICY_REQUIRED_COMPARISON_ARMS = ("base", "trace-only", "frontier", "champion", "candidate")
 _JSON_ARTIFACT_ROLES = {
     "evidence_bundle": EVIDENCE_BUNDLE_SCHEMA_VERSION,
     "promotion_ledger_gate": PROMOTION_LEDGER_GATE_SCHEMA_VERSION,
@@ -204,6 +206,8 @@ def build_promotion_decision(
     _add_schema_check(checks, "trainer_launch_check", json_artifacts.get("trainer_launch_check"))
     for role in _PASSED_JSON_ROLES:
         _add_passed_json_check(checks, role, json_artifacts.get(role))
+    comparison_arms = _comparison_arm_summary(json_artifacts.get("serving_report"), policy["required_comparison_arms"])
+    _add_comparison_arm_checks(checks, comparison_arms, policy["required_comparison_arms"])
 
     compare_metrics = _metrics_object(json_artifacts.get("compare_gate"))
     limits = policy["limits"]
@@ -257,7 +261,7 @@ def build_promotion_decision(
 
     failed_checks = sum(1 for check in checks if not check["passed"])
     passed = failed_checks == 0
-    metrics = _decision_metrics(checks, compare_metrics, policy)
+    metrics = _decision_metrics(checks, compare_metrics, policy, comparison_arms)
     decision = {
         "readiness": "ready" if passed else "blocked",
         "recommendation": "apply_alias_update" if passed else "block_promotion",
@@ -287,6 +291,7 @@ def build_promotion_decision(
         "checks": checks,
         "artifacts": artifacts,
         "policy": _promotion_policy_output(policy, policy_artifact),
+        "comparison_arms": comparison_arms,
         "metrics": metrics,
         "alias_update": _alias_update(passed, candidate_id, champion_id, rollback_id or ""),
         "notes": [
@@ -1245,6 +1250,7 @@ def _default_promotion_policy() -> dict[str, Any]:
         "allowed_candidate_classes": sorted(MODEL_CLASSES),
         "allowed_champion_classes": sorted(MODEL_CLASSES),
         "limits": dict(PROMOTION_POLICY_DEFAULT_LIMITS),
+        "required_comparison_arms": list(PROMOTION_POLICY_REQUIRED_COMPARISON_ARMS),
         "forbid_new_critical_rules": list(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES),
         "forbid_regressed_rules": list(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES),
         "requirements": {
@@ -1279,6 +1285,7 @@ def _load_promotion_policy(path: Path | None, preserve_paths: bool) -> dict[str,
     policy["release_required_artifacts"] = _policy_string_list(payload, "release_required_artifacts", parse_errors)
     policy["allowed_candidate_classes"] = _policy_string_list(payload, "allowed_candidate_classes", parse_errors)
     policy["allowed_champion_classes"] = _policy_string_list(payload, "allowed_champion_classes", parse_errors)
+    policy["required_comparison_arms"] = _policy_string_list(payload, "required_comparison_arms", parse_errors)
     policy["forbid_new_critical_rules"] = _policy_string_list(payload, "forbid_new_critical_rules", parse_errors)
     policy["forbid_regressed_rules"] = _policy_string_list(payload, "forbid_regressed_rules", parse_errors)
     limits = payload.get("limits")
@@ -1389,6 +1396,22 @@ def _add_promotion_policy_checks(
         scope={"field": "champion_class"},
         summary="champion class is allowed by the promotion policy",
     )
+    required_arms = set(policy.get("required_comparison_arms", []))
+    missing_default_arms = sorted(set(PROMOTION_POLICY_REQUIRED_COMPARISON_ARMS) - required_arms)
+    unknown_arms = sorted(required_arms - MODEL_CLASSES)
+    _add_check(
+        checks,
+        "promotion_policy_comparison_arms_complete",
+        not missing_default_arms and not unknown_arms,
+        actual={
+            "required_comparison_arms": sorted(required_arms),
+            "missing_default_arms": missing_default_arms,
+            "unknown_arms": unknown_arms,
+        },
+        expected={"required_comparison_arms": list(PROMOTION_POLICY_REQUIRED_COMPARISON_ARMS)},
+        scope={"artifact_role": "promotion_policy"},
+        summary="promotion policy requires base, trace-only, frontier, champion, and candidate comparison arms",
+    )
     limits = policy.get("limits") if isinstance(policy.get("limits"), dict) else {}
     relaxed_limits = {
         field_name: limits.get(field_name)
@@ -1464,6 +1487,7 @@ def _promotion_policy_output(policy: dict[str, Any], artifact: dict[str, Any] | 
         "allowed_candidate_classes": list(policy.get("allowed_candidate_classes", [])),
         "allowed_champion_classes": list(policy.get("allowed_champion_classes", [])),
         "limits": dict(policy.get("limits", {})),
+        "required_comparison_arms": list(policy.get("required_comparison_arms", [])),
         "forbid_new_critical_rules": list(policy.get("forbid_new_critical_rules", [])),
         "forbid_regressed_rules": list(policy.get("forbid_regressed_rules", [])),
         "requirements": dict(policy.get("requirements", {})),
@@ -1592,6 +1616,91 @@ def _add_card_claims_check(checks: list[dict[str, Any]], role: str, path: Path |
     )
 
 
+def _comparison_arm_summary(payload: dict[str, Any] | None, required_arms: list[str]) -> dict[str, Any]:
+    arms = sorted(_comparison_arm_labels(payload))
+    heldout_identical = _comparison_arms_heldout_identical(payload)
+    required = sorted(dict.fromkeys(required_arms))
+    return {
+        "required": required,
+        "evidenced": arms,
+        "missing": sorted(set(required) - set(arms)),
+        "extra": sorted(set(arms) - set(required)),
+        "heldout_identical": heldout_identical,
+        "source_schema_version": payload.get("schema_version") if isinstance(payload, dict) else None,
+    }
+
+
+def _comparison_arm_labels(payload: dict[str, Any] | None) -> set[str]:
+    if not isinstance(payload, dict):
+        return set()
+    labels: set[str] = set()
+    for field_name in ("arm", "candidate_arm"):
+        value = payload.get(field_name)
+        if isinstance(value, str) and value:
+            labels.add(value)
+    labels.update(_arm_labels_from_rows(payload.get("arms")))
+    heldout = payload.get("heldout_scenarios") if isinstance(payload.get("heldout_scenarios"), dict) else {}
+    labels.update(_arm_labels_from_rows(heldout.get("arms")))
+    scenario_sets = payload.get("scenario_sets")
+    if isinstance(scenario_sets, dict):
+        labels.update(str(label) for label in scenario_sets if isinstance(label, str) and label)
+    return labels
+
+
+def _arm_labels_from_rows(rows: Any) -> set[str]:
+    labels: set[str] = set()
+    if not isinstance(rows, list):
+        return labels
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for field_name in ("label", "name", "arm", "id"):
+            value = row.get(field_name)
+            if isinstance(value, str) and value:
+                labels.add(value)
+                break
+    return labels
+
+
+def _comparison_arms_heldout_identical(payload: dict[str, Any] | None) -> bool | None:
+    if not isinstance(payload, dict):
+        return None
+    heldout = payload.get("heldout_scenarios") if isinstance(payload.get("heldout_scenarios"), dict) else {}
+    if isinstance(heldout.get("cross_arm_claims_allowed"), bool):
+        return heldout["cross_arm_claims_allowed"]
+    if isinstance(heldout.get("identical"), bool):
+        return heldout["identical"]
+    if isinstance(payload.get("same_scenario_ids"), bool):
+        return payload["same_scenario_ids"]
+    return None
+
+
+def _add_comparison_arm_checks(
+    checks: list[dict[str, Any]],
+    comparison_arms: dict[str, Any],
+    required_arms: list[str],
+) -> None:
+    missing = comparison_arms.get("missing") if isinstance(comparison_arms.get("missing"), list) else []
+    _add_check(
+        checks,
+        "required_comparison_arms_present",
+        not missing,
+        actual={"evidenced": comparison_arms.get("evidenced", []), "missing": missing},
+        expected={"required": sorted(dict.fromkeys(required_arms))},
+        scope={"artifact_role": "serving_report"},
+        summary="serving/eval report proves required base, trace-only, frontier, champion, and candidate arms",
+    )
+    _add_check(
+        checks,
+        "comparison_arms_identical_heldout",
+        comparison_arms.get("heldout_identical") is True,
+        actual={"heldout_identical": comparison_arms.get("heldout_identical")},
+        expected={"heldout_identical": True},
+        scope={"artifact_role": "serving_report"},
+        summary="required comparison arms use identical held-out scenarios before promotion claims are trusted",
+    )
+
+
 def _add_max_count_check(checks: list[dict[str, Any]], check_id: str, value: Any, maximum: int) -> None:
     actual = _int_value(value)
     _add_check(
@@ -1651,13 +1760,22 @@ def _add_check(
     checks.append(check)
 
 
-def _decision_metrics(checks: list[dict[str, Any]], compare_metrics: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+def _decision_metrics(
+    checks: list[dict[str, Any]],
+    compare_metrics: dict[str, Any],
+    policy: dict[str, Any],
+    comparison_arms: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "required_artifact_count": len(PROMOTION_DECISION_REQUIRED_ARTIFACTS),
         "policy_required_artifact_count": len(policy.get("required_artifacts", [])),
         "policy_release_required_artifact_count": len(policy.get("release_required_artifacts", [])),
+        "required_comparison_arm_count": len(policy.get("required_comparison_arms", [])),
+        "evidenced_comparison_arm_count": len(comparison_arms.get("evidenced", []))
+        if isinstance(comparison_arms.get("evidenced"), list)
+        else 0,
         "task_completion_regression_count": _int_value(compare_metrics.get("task_completion_regression_count")),
         "baseline_win_count": _int_value(compare_metrics.get("baseline_win_count")),
         "contract_drift_count": _int_value(compare_metrics.get("contract_drift_count")),
