@@ -63,6 +63,7 @@ def build_agentic_training_plan(
     output_dir: str | Path | None = None,
     limit: int | None = None,
     allow_future_rl: bool = False,
+    created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a side-effect-free training plan from registered model and dataset manifests."""
     if mode not in SUPPORTED_MODES:
@@ -134,7 +135,7 @@ def build_agentic_training_plan(
     output_path = Path(out_path)
     plan = {
         "schema_version": AGENTIC_TRAINING_PLAN_SCHEMA_VERSION,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": created_at or datetime.now(timezone.utc).isoformat(),
         "plan_path": str(output_path),
         "mode": mode,
         "passed": passed,

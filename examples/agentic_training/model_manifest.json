@@ -1,0 +1,21 @@
+{
+  "base_model": "local/synthetic-agentic-base",
+  "candidate_id": "candidate",
+  "compatibility": {
+    "checks": [
+      {
+        "id": "local_metadata_only",
+        "passed": true,
+        "summary": "Synthetic example manifest; no model download required."
+      }
+    ],
+    "passed": true
+  },
+  "license": {
+    "allow_training": true,
+    "name": "Synthetic fixture license",
+    "status": "approved"
+  },
+  "model_id": "local/synthetic-agentic-candidate",
+  "schema_version": "hfr.model_candidate.example.v1"
+}

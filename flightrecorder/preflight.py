@@ -103,6 +103,7 @@ def build_trainer_preflight(
     compare_export_dir: str | Path | None = None,
     reviewed_export_dir: str | Path | None = None,
     evidence_bundle_path: str | Path | None = None,
+    agentic_training_plan_path: str | Path | None = None,
     validation_summary_paths: list[str | Path] | None = None,
     require_gates: list[str] | None = None,
     trainer_command: str | None = None,
@@ -113,10 +114,10 @@ def build_trainer_preflight(
     """Build a launch guard over trainer-facing exports and gate outputs."""
     if not gate_paths:
         raise TrainerPreflightError("At least one --gate path is required.")
-    if not any((training_export_dir, compare_export_dir, reviewed_export_dir, evidence_bundle_path)):
+    if not any((training_export_dir, compare_export_dir, reviewed_export_dir, evidence_bundle_path, agentic_training_plan_path)):
         raise TrainerPreflightError(
             "At least one trainer-facing artifact is required: --training-export, --compare-export, "
-            "--reviewed-export, or --evidence-bundle."
+            "--reviewed-export, --evidence-bundle, or --agentic-training-plan."
         )
 
     checks: list[dict[str, Any]] = []
@@ -166,6 +167,18 @@ def build_trainer_preflight(
             "evidence_bundle_passed",
             bool(isinstance(bundle, dict) and bundle.get("passed") is True),
             {"artifact": "evidence_bundle"},
+        )
+    if agentic_training_plan_path is not None:
+        plan_path = Path(agentic_training_plan_path)
+        artifacts["agentic_training_plan"] = _file_record(plan_path, preserve_paths)
+        _add_schema_contract(schema_contracts, checks, "agentic_training_plan", plan_path, "agentic_training_plan", False, preserve_paths)
+        plan = _read_json_optional(plan_path)
+        _add_bool_check(checks, "agentic_training_plan_exists", plan_path.exists() and plan_path.is_file(), {"artifact": "agentic_training_plan"})
+        _add_bool_check(
+            checks,
+            "agentic_training_plan_ready",
+            bool(isinstance(plan, dict) and plan.get("passed") is True and plan.get("recommendation") == "ready_for_external_trainer_plan"),
+            {"artifact": "agentic_training_plan"},
         )
 
     command = _trainer_command_record(trainer_command)

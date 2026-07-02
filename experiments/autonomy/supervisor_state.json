@@ -69,15 +69,88 @@
           "summary": "State/schema JSON parse and whitespace checks passed."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/preflight.py"
+        },
+        {
+          "kind": "cli",
+          "layer": "training",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/model_manifest.json"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/dataset_manifest.json"
+        },
+        {
+          "kind": "example",
+          "layer": "training",
+          "path": "examples/agentic_training/plans/sft_then_dpo_plan.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_trainer_preflight.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:46:51Z",
+      "id": "training_schema_checked_plan_artifacts",
+      "layer": "training",
+      "priority": "medium",
+      "status": "completed",
+      "summary": "Published durable synthetic registered model/dataset manifests, schema-conforming trainer-view JSONL samples, and a reproducible SFT-then-DPO agentic training plan. Added trainer-preflight --agentic-training-plan support so ready plans are hashed, schema-checked, archived, archive-checked, and exposed to trainer consumer plans without launching trainers.",
+      "title": "Publish schema-checked training plan artifacts",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_training_plan tests.test_trainer_preflight tests.test_schema_registry",
+          "status": "pass",
+          "summary": "38 tests passed, including full agentic-plan preflight/archive/consumer-plan coverage."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/preflight.py flightrecorder/cli.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py tests/test_trainer_preflight.py",
+          "status": "pass",
+          "summary": "Touched planner, preflight, CLI, script, and tests compile."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check examples/agentic_training/plans/sft_then_dpo_plan.json and --check-jsonl for each sample trainer view",
+          "status": "pass",
+          "summary": "Committed plan plus SFT, action SFT, DPO, reward-model, step-reward, and episode sample views validate against bundled schemas."
+        },
+        {
+          "command": "python3 scripts/plan_agentic_training.py ... --out examples/agentic_training/plans/sft_then_dpo_plan.json && git diff --exit-code -- examples/agentic_training/plans/sft_then_dpo_plan.json",
+          "status": "pass",
+          "summary": "Committed example plan regenerates cleanly with the fixed timestamp."
+        }
+      ]
     }
   ],
   "current_packet": {
-    "id": "training_schema_checked_plan_artifacts",
+    "id": "training_tiny_smoke_runtime_resolution",
     "layer": "training",
     "priority": "medium",
     "status": "ready",
-    "summary": "Generate durable sample plan artifacts from registered local manifests and connect them to trainer preflight/archive checks without launching trainers.",
-    "title": "Publish schema-checked training plan artifacts"
+    "summary": "Resolve or document the bounded tiny smoke trainer runtime path, then run only dependency/preflight checks until registered inputs, license status, redaction gates, and no-download/no-expensive-job constraints pass.",
+    "title": "Resolve tiny smoke training runtime dependencies"
   },
   "git_persistence": {
     "branch": "codex/hermes-goal-5-training-20260702-1027",
@@ -124,12 +197,12 @@
   ],
   "next_packets": [
     {
-      "id": "training_schema_checked_plan_artifacts",
+      "id": "training_tiny_smoke_runtime_resolution",
       "layer": "training",
       "priority": "medium",
       "status": "ready",
-      "summary": "Generate durable sample plan artifacts from registered local manifests and connect them to trainer preflight/archive checks without launching trainers.",
-      "title": "Publish schema-checked training plan artifacts"
+      "summary": "Resolve or document the bounded tiny smoke trainer runtime path, then run only dependency/preflight checks until registered inputs, license status, redaction gates, and no-download/no-expensive-job constraints pass.",
+      "title": "Resolve tiny smoke training runtime dependencies"
     }
   ],
   "promotion_readiness": {
@@ -140,5 +213,5 @@
     "The dedicated worktree lacks the broader autonomous-goal docs from the shared checkout, so this state file bootstraps Goal 5 tracking locally."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:38:18Z"
+  "updated_at": "2026-07-02T14:46:51Z"
 }

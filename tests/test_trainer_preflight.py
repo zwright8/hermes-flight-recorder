@@ -7,6 +7,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+from flightrecorder.agentic_training_plan import build_agentic_training_plan, write_agentic_training_plan
 from flightrecorder.cli import main
 
 
@@ -75,6 +76,58 @@ def write_passed_evidence_bundle(path: Path) -> None:
     path.write_text(json.dumps(bundle, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_agentic_plan_fixture(root: Path) -> Path:
+    model = root / "agentic_model.json"
+    dataset = root / "agentic_dataset.json"
+    plan_path = root / "agentic_training_plan.json"
+    model.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.model_candidate.test.v1",
+                "model_id": "local/agentic-preflight-model",
+                "candidate_id": "candidate",
+                "license": {"status": "approved", "allow_training": True},
+                "compatibility": {"passed": True},
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    dataset.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.dataset_manifest.test.v1",
+                "dataset_id": "agentic-preflight-dataset",
+                "dataset_version": "v1",
+                "license": {"status": "approved", "allow_training": True},
+                "redaction": {"status": "redacted", "passed": True, "contains_unredacted_traces": False},
+                "views": {
+                    "sft": {"path": "sft.jsonl", "row_count": 2, "schema_version": "hfr.rl.sft.v1"},
+                    "dpo": {"path": "dpo.jsonl", "row_count": 2, "schema_version": "hfr.rl.dpo.v1"},
+                },
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    plan = build_agentic_training_plan(
+        out_path=plan_path,
+        mode="sft_then_dpo",
+        model_manifest_path=model,
+        dataset_manifest_path=dataset,
+        trainer_backend="axolotl",
+        output_dir=root / "adapters",
+        limit=2,
+        created_at="2026-07-02T00:00:00+00:00",
+    )
+    write_agentic_training_plan(plan_path, plan)
+    return plan_path
+
+
 def write_improvement_ledger_gate(path: Path) -> None:
     metrics = {
         "plan_count": 2,
@@ -122,6 +175,127 @@ def write_improvement_ledger_gate(path: Path) -> None:
 
 
 class TrainerPreflightTests(unittest.TestCase):
+    def test_trainer_preflight_archives_agentic_training_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "evidence_bundle.json"
+            agentic_plan = write_agentic_plan_fixture(root)
+            preflight = root / "trainer_preflight.json"
+            write_passed_evidence_bundle(gate)
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--agentic-training-plan",
+                        str(agentic_plan),
+                        "--require-gate",
+                        "evidence_bundle",
+                        "--trainer-command",
+                        f"python train.py --agentic-plan {agentic_plan}",
+                        "--metadata",
+                        "launcher=agentic-dry-run",
+                        "--out",
+                        str(preflight),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertTrue(result["passed"])
+            self.assertIn("agentic_training_plan", result["artifacts"])
+            self.assertEqual(len(result["artifacts"]["agentic_training_plan"]["sha256"]), 64)
+            self.assertTrue(result["schema_contracts"]["agentic_training_plan"]["passed"])
+            self.assertEqual(result["schema_contracts"]["agentic_training_plan"]["schema_name"], "agentic_training_plan")
+            self.assertFalse(any(check["id"] == "agentic_training_plan_ready" and not check["passed"] for check in result["checks"]))
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+
+            launch_check = root / "trainer_launch_check.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-launch-check",
+                        "--preflight",
+                        str(preflight),
+                        "--require-gate",
+                        "evidence_bundle",
+                        "--require-metadata",
+                        "launcher=agentic-dry-run",
+                        "--out",
+                        str(launch_check),
+                        "--strict",
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+
+            archive = root / "trainer_archive"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-archive",
+                        "--preflight",
+                        str(preflight),
+                        "--launch-check",
+                        str(launch_check),
+                        "--out",
+                        str(archive),
+                        "--require-self-contained",
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            archive_manifest = json.loads((archive / "trainer_archive.json").read_text(encoding="utf-8"))
+            self.assertTrue(archive_manifest["passed"])
+            self.assertIn("agentic_training_plan", {item["artifact_name"] for item in archive_manifest["trainer_inputs"]})
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
+
+            trainer_code = root / "trainer_code"
+            trainer_code.mkdir()
+            (trainer_code / "train.py").write_text("print('agentic dry run only')\n", encoding="utf-8")
+            archive_check = root / "trainer_archive_check.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-archive-check",
+                        "--archive",
+                        str(archive),
+                        "--external-code-root",
+                        str(trainer_code),
+                        "--out",
+                        str(archive_check),
+                        "--strict",
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+
+            consumer_plan = root / "trainer_consumer_plan.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-consumer-plan",
+                        "--archive-check",
+                        str(archive_check),
+                        "--out",
+                        str(consumer_plan),
+                        "--strict",
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            plan = json.loads(consumer_plan.read_text(encoding="utf-8"))
+            self.assertTrue(plan["passed"])
+            self.assertIn("agentic_training_plan", {item["artifact_name"] for item in plan["execution"]["trainer_inputs"]})
+            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
+
     def test_trainer_preflight_accepts_passed_training_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import sys
@@ -183,3 +184,26 @@ class AgenticTrainingPlanTests(unittest.TestCase):
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_training_plan", names)
+
+    def test_committed_example_plan_matches_registered_manifests(self):
+        plan_path = ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_plan.json"
+        model_path = ROOT / "examples" / "agentic_training" / "model_manifest.json"
+        dataset_path = ROOT / "examples" / "agentic_training" / "dataset_manifest.json"
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(plan["passed"], plan["blocked_reasons"])
+        self.assertEqual(plan["created_at"], "2026-07-02T00:00:00+00:00")
+        self.assertEqual(plan["trainer_plan"]["stage_sequence"], ["sft", "dpo"])
+        self.assertEqual(plan["input_manifests"]["model"]["sha256"], sha256(model_path))
+        self.assertEqual(plan["input_manifests"]["dataset"]["sha256"], sha256(dataset_path))
+        self.assertEqual({view["name"] for view in plan["selected_views"]}, {"sft", "dpo"})
+        schema = check_schema_file(plan_path)
+        self.assertTrue(schema["passed"], schema["errors"])
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

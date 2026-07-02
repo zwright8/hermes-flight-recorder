@@ -80,6 +80,40 @@ Plans use `hfr.agentic_training_plan.v1` and record:
 External runners must revalidate the plan, manifests, license status, redaction
 status, and current file hashes immediately before launch.
 
+## Durable Example
+
+The repository includes a tiny synthetic fixture under
+`examples/agentic_training/`:
+
+- `model_manifest.json`
+- `dataset_manifest.json`
+- schema-conforming JSONL trainer views under `data/`
+- `plans/sft_then_dpo_plan.json`
+
+The committed plan can be regenerated with the command in
+`examples/agentic_training/README.md`. It uses a fixed `--created-at` timestamp
+so the sample is reproducible when the input manifests are unchanged.
+
+## Trainer Preflight Bridge
+
+Use `--agentic-training-plan` to carry a passed dry-run plan through the
+existing trainer handoff pipeline:
+
+```bash
+flightrecorder trainer-preflight \
+  --gate runs/evidence_bundle.json \
+  --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --trainer-command "python train.py --agentic-plan examples/agentic_training/plans/sft_then_dpo_plan.json" \
+  --metadata launcher=agentic-dry-run \
+  --out runs/trainer_preflight.json
+```
+
+The preflight records the plan as a hashed trainer artifact and validates it
+against `hfr.agentic_training_plan.v1`. `trainer-archive`,
+`trainer-archive-check`, and `trainer-consumer-plan` then copy the plan into
+the portable archive and expose it as a runner input. None of these commands
+execute the trainer command.
+
 ## Verification
 
 Focused verification for this packet:
@@ -89,6 +123,7 @@ python3 -m unittest tests.test_agentic_training_plan
 python3 -m unittest tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts
 python3 -m py_compile flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py
 python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force
+python3 -m unittest tests.test_trainer_preflight.TrainerPreflightTests.test_trainer_preflight_archives_agentic_training_plan
 ```
 
 The dedicated worktree did not contain

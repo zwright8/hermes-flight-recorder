@@ -29,6 +29,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", default="", help="Intended external trainer output directory")
     parser.add_argument("--limit", type=int, help="Optional row limit for tiny smoke launches")
     parser.add_argument("--allow-future-rl", action="store_true", help="Allow future GRPO/RL planning modes to pass input gates")
+    parser.add_argument("--created-at", help="Override created_at for reproducible sample artifacts")
     parser.add_argument("--out", required=True, type=Path, help="Destination plan JSON")
     return parser.parse_args(argv)
 
@@ -45,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             limit=args.limit,
             allow_future_rl=args.allow_future_rl,
+            created_at=args.created_at,
         )
     except AgenticTrainingPlanError as exc:
         print(str(exc), file=sys.stderr)
