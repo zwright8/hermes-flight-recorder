@@ -150,6 +150,7 @@ from .validation import validate_artifacts
 from .verifiers import VerifierError, capture_verified_state
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+EVAL_SUITE_MANIFEST_SCHEMA_VERSION = "hfr.eval_suite_manifest.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 TRACE_FORMAT_CHOICES = [
     "auto",
@@ -466,8 +467,36 @@ def cmd_replay_bundle(args: argparse.Namespace) -> int:
     return 0
 
 
+def _scenario_paths_from_suite_manifest(scenario_paths: list[Path], manifest_path: Path) -> list[Path]:
+    manifest = _read_json(manifest_path)
+    if manifest.get("schema_version") != EVAL_SUITE_MANIFEST_SCHEMA_VERSION:
+        raise ScenarioError(
+            f"suite manifest schema_version must be {EVAL_SUITE_MANIFEST_SCHEMA_VERSION!r}; got {manifest.get('schema_version')!r}"
+        )
+    scenario_ids = manifest.get("scenario_ids")
+    if not isinstance(scenario_ids, list) or not scenario_ids or not all(isinstance(item, str) and item for item in scenario_ids):
+        raise ScenarioError("suite manifest scenario_ids must be a non-empty list of strings")
+    duplicates = sorted({scenario_id for scenario_id in scenario_ids if scenario_ids.count(scenario_id) > 1})
+    if duplicates:
+        raise ScenarioError(f"suite manifest has duplicate scenario_ids: {', '.join(duplicates)}")
+
+    by_id: dict[str, Path] = {}
+    for scenario_path in scenario_paths:
+        scenario = load_scenario(scenario_path)
+        scenario_id = str(scenario["id"])
+        if scenario_id in by_id:
+            raise ScenarioError(f"Duplicate discovered scenario id {scenario_id!r}: {scenario_path} conflicts with {by_id[scenario_id]}")
+        by_id[scenario_id] = scenario_path
+    missing = [scenario_id for scenario_id in scenario_ids if scenario_id not in by_id]
+    if missing:
+        raise ScenarioError(f"suite manifest references missing scenario_ids: {', '.join(missing)}")
+    return [by_id[scenario_id] for scenario_id in scenario_ids]
+
+
 def cmd_run_suite(args: argparse.Namespace) -> int:
     scenario_paths = discover_scenarios(Path(args.scenarios), args.pattern, args.recursive)
+    if args.suite_manifest:
+        scenario_paths = _scenario_paths_from_suite_manifest(scenario_paths, Path(args.suite_manifest))
     out_dir = Path(args.out)
     metadata = _metadata_options(args.metadata)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -2235,6 +2264,7 @@ def _parser() -> argparse.ArgumentParser:
     run_suite.add_argument("--out", required=True, help="Output directory for per-scenario run directories and suite artifacts")
     run_suite.add_argument("--pattern", default="*.json", help="Scenario filename glob relative to --scenarios")
     run_suite.add_argument("--recursive", action="store_true", help="Discover scenarios recursively with --pattern")
+    run_suite.add_argument("--suite-manifest", help="Eval suite manifest with an explicit scenario_ids list to run")
     run_suite.add_argument("--format", default="auto", choices=TRACE_FORMAT_CHOICES)
     run_suite.add_argument("--summary-out", help="Suite summary JSON output path; defaults to <out>/suite_summary.json")
     run_suite.add_argument("--index-out", help="Report index output path; defaults to <out>/index.html")

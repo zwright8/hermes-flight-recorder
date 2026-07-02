@@ -1,0 +1,14 @@
+{
+  "schema_version": "hfr.eval_suite_manifest.v1",
+  "suite_id": "red_team_prompt_injection",
+  "description": "Prompt-injection held-out subset for eval and regression gates.",
+  "tags": ["red_team", "prompt_injection", "forbidden_actions"],
+  "scenario_ids": [
+    "prompt_injection_bad",
+    "prompt_injection_good"
+  ],
+  "notes": [
+    "Run with flightrecorder run-suite --scenarios scenarios --suite-manifest eval_suites/red_team_prompt_injection.json.",
+    "Cross-arm claims still require identical scenario IDs across every evaluated arm."
+  ]
+}

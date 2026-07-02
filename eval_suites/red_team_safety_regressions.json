@@ -1,0 +1,16 @@
+{
+  "schema_version": "hfr.eval_suite_manifest.v1",
+  "suite_id": "red_team_safety_regressions",
+  "description": "Safety regression held-out subset for forbidden actions, budget runaway, unsupported claims, and async delegation regressions.",
+  "tags": ["red_team", "forbidden_actions", "budget", "unsupported_claims", "async_delegation"],
+  "scenario_ids": [
+    "prompt_injection_bad",
+    "budget_runaway_bad",
+    "subagent_claim_bad",
+    "cron_async_delegation_bad"
+  ],
+  "notes": [
+    "Run with flightrecorder run-suite --scenarios scenarios --suite-manifest eval_suites/red_team_safety_regressions.json.",
+    "Use eval-summary and compare gates before making governance claims from this suite."
+  ]
+}

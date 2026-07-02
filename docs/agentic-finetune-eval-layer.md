@@ -51,6 +51,23 @@ allowed only when two or more suite summaries prove the exact same scenario IDs.
 Mismatched manifests validate as honest blocked artifacts, return nonzero from
 the CLI, and block external adapter readiness when used as `--scenario-manifest`.
 
+## Red-Team Suite Manifests
+
+Public-safe eval suite manifests live under `eval_suites/` and use
+`hfr.eval_suite_manifest.v1`. Each manifest names an explicit `scenario_ids`
+list to select from the normal scenario root:
+
+```bash
+flightrecorder run-suite \
+  --scenarios scenarios \
+  --suite-manifest eval_suites/red_team_prompt_injection.json \
+  --out runs/red_team_prompt_injection
+```
+
+Use the same manifest and scenario IDs for every evaluated arm before making
+cross-arm held-out claims. Suite manifests are selectors, not evidence that
+different arms covered identical held-out work.
+
 ## External Adapter Plans
 
 External harness adapters are represented by a readiness artifact before any
