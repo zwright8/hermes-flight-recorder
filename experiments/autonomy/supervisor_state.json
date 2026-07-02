@@ -1,0 +1,57 @@
+{
+  "schema_version": "hfr.autonomy.supervisor_state.v1",
+  "updated_at": "2026-07-02T14:39:44Z",
+  "active_goal": "Goal 7 Eval Layer",
+  "status": "in_progress",
+  "worktree": "/Users/zacharywright/Documents/GitHub/hermes_dev/.codex-goal-worktrees/hermes-goal-7-eval",
+  "branch": "codex/hermes-goal-7-eval-20260702-1027",
+  "remote": "origin https://github.com/zwright8/hermes-flight-recorder.git",
+  "last_packet": {
+    "id": "governance_eval_summary_artifact",
+    "summary": "Added a governance-ready eval-summary artifact and validator that suppresses candidate-win and improvement claims unless held-out scenario lists are identical and compare contracts are clean.",
+    "changed_files": [
+      "README.md",
+      "docs/agentic-finetune-eval-layer.md",
+      "flightrecorder/cli.py",
+      "flightrecorder/eval_summary.py",
+      "flightrecorder/validation.py",
+      "tests/test_eval_summary.py",
+      "experiments/autonomy/supervisor_state.json",
+      "experiments/autonomy/journal/2026-07-02.md"
+    ],
+    "verification": [
+      {
+        "command": "python3 -m py_compile flightrecorder/eval_summary.py flightrecorder/cli.py flightrecorder/validation.py tests/test_eval_summary.py",
+        "result": "passed"
+      },
+      {
+        "command": "python3 -m unittest tests.test_eval_summary",
+        "result": "passed; 4 tests"
+      },
+      {
+        "command": "python3 -m unittest tests.test_eval_summary tests.test_compare_rl_export tests.test_compare_gate tests.test_validation",
+        "result": "passed; 46 tests"
+      },
+      {
+        "command": "python3 -m unittest",
+        "result": "environment failed: /usr/bin/python3 lacks tomllib"
+      },
+      {
+        "command": "/opt/homebrew/bin/python3 -m unittest",
+        "result": "passed; 304 tests"
+      }
+    ],
+    "risks": [
+      "The dedicated worktree did not contain the delegated docs/agentic-finetune-* source docs or experiments tree; this packet created local Goal 7 docs and autonomy state instead of editing the shared checkout.",
+      "The new eval summary can include external adapter readiness plans, but BFCL, Inspect AI, lm-evaluation-harness, and SWE-bench adapters remain a future packet.",
+      "The system /usr/bin/python3 is Python 3.9 and cannot run the full suite because tests/test_deployment_hardening.py imports tomllib; /opt/homebrew/bin/python3 passed the full suite."
+    ],
+    "persistence": {
+      "commit_sha": "pending",
+      "pushed_branch": "pending",
+      "remote_branch_verified": false,
+      "pr_url": null,
+      "pr_blocker": "pending gh authentication and push"
+    }
+  }
+}

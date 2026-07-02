@@ -516,6 +516,13 @@ flightrecorder gate-compare-export \
   --compare-export runs/compare_rl_export \
   --policy examples/compare_gate_policy.demo.json \
   --out runs/compare_gate.json
+
+flightrecorder eval-summary \
+  --suite-summary baseline=runs_baseline/suite_summary.json \
+  --suite-summary candidate=runs_candidate/suite_summary.json \
+  --compare-export candidate=runs/compare_rl_export \
+  --compare-gate candidate=runs/compare_gate.json \
+  --out runs/eval_summary.json
 ```
 
 Comparison manifests include:
@@ -528,6 +535,12 @@ Comparison manifests include:
 
 `flightrecorder validate` recomputes those movement summaries from
 `improvement_pairs.jsonl`, so stale or hand-edited manifests fail validation.
+
+`flightrecorder eval-summary` writes a governance-facing artifact that keeps raw
+comparison movement visible but suppresses candidate-win and improvement claims
+unless all arms provide the identical held-out scenario list and the compare
+export has no scenario-set mismatch, contract drift, or unverified fingerprints.
+Validate it with `flightrecorder validate --eval-summary runs/eval_summary.json`.
 
 ## Training Handoff
 

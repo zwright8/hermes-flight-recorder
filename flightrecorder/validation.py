@@ -19,6 +19,7 @@ from .compare_gate import compare_movement_summary
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
+from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
@@ -136,6 +137,7 @@ def validate_artifacts(
     state_diff_paths: list[str | Path] | None = None,
     run_digest_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
+    eval_summary_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
     """Validate generated Flight Recorder run and training artifacts."""
@@ -208,6 +210,8 @@ def validate_artifacts(
         targets.append(validate_run_digest(run_digest_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
+    for eval_summary_path in eval_summary_paths or []:
+        targets.append(validate_eval_summary(eval_summary_path))
     if not targets:
         target = ValidationTarget("configuration", ".", errors=["No validation targets configured."])
         targets.append(target)
@@ -558,6 +562,16 @@ def validate_suite_summary(path: str | Path) -> ValidationTarget:
     if summary is None:
         return target
     _validate_suite_summary(summary, target)
+    return target
+
+
+def validate_eval_summary(path: str | Path) -> ValidationTarget:
+    """Validate one governance-ready eval summary artifact."""
+    summary_path = Path(path)
+    target = ValidationTarget("eval_summary", str(summary_path))
+    summary = _read_object(summary_path, target, "eval_summary.json")
+    if summary is not None:
+        _validate_eval_summary(summary, target)
     return target
 
 
@@ -4293,6 +4307,215 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -
             "error_count": len(errors),
         }
     )
+
+
+def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(summary, "schema_version", EVAL_SUMMARY_SCHEMA_VERSION, target)
+    for field_name in ("passed", "governance_ready"):
+        if not isinstance(summary.get(field_name), bool):
+            target.errors.append(f"eval_summary.{field_name} must be a boolean.")
+    if isinstance(summary.get("passed"), bool) and summary.get("governance_ready") != summary.get("passed"):
+        target.errors.append("eval_summary.governance_ready must match eval_summary.passed.")
+
+    arms = summary.get("arms")
+    if not isinstance(arms, list):
+        target.errors.append("eval_summary.arms must be a list.")
+        arms = []
+    comparisons = summary.get("comparisons")
+    if not isinstance(comparisons, list):
+        target.errors.append("eval_summary.comparisons must be a list.")
+        comparisons = []
+    gates = summary.get("compare_gates")
+    if not isinstance(gates, list):
+        target.errors.append("eval_summary.compare_gates must be a list.")
+        gates = []
+    adapters = summary.get("external_adapter_plans")
+    if not isinstance(adapters, list):
+        target.errors.append("eval_summary.external_adapter_plans must be a list.")
+        adapters = []
+    risks = summary.get("risks")
+    if not isinstance(risks, list):
+        target.errors.append("eval_summary.risks must be a list.")
+        risks = []
+
+    expected_counts = {
+        "arm_count": len(arms),
+        "comparison_count": len(comparisons),
+        "gate_count": len(gates),
+        "external_adapter_plan_count": len(adapters),
+    }
+    for field_name, expected in expected_counts.items():
+        if summary.get(field_name) != expected:
+            target.errors.append(f"eval_summary.{field_name} expected {expected}, got {summary.get(field_name)!r}.")
+
+    heldout = summary.get("heldout_scenarios")
+    if not isinstance(heldout, dict):
+        target.errors.append("eval_summary.heldout_scenarios must be an object.")
+        heldout = {}
+    _validate_eval_summary_heldout(heldout, target, bool(comparisons))
+
+    for index, arm in enumerate(arms):
+        _validate_eval_summary_arm(arm, index, target)
+    for index, comparison in enumerate(comparisons):
+        _validate_eval_summary_comparison(comparison, index, target, heldout)
+    for index, gate in enumerate(gates):
+        _validate_eval_summary_gate(gate, index, target)
+    for index, adapter in enumerate(adapters):
+        _validate_eval_summary_external_adapter(adapter, index, target)
+    for index, risk in enumerate(risks):
+        if not isinstance(risk, dict):
+            target.errors.append(f"eval_summary.risks[{index}] must be an object.")
+            continue
+        for field_name in ("source", "reason"):
+            if not isinstance(risk.get(field_name), str) or not risk.get(field_name):
+                target.errors.append(f"eval_summary.risks[{index}].{field_name} must be a non-empty string.")
+
+    has_failed_child = any(isinstance(item, dict) and item.get("passed") is False for item in [*comparisons, *gates])
+    has_blocked_adapter = any(isinstance(item, dict) and item.get("ready") is False for item in adapters)
+    has_arm_blockers = any(isinstance(item, dict) and item.get("blocking_reasons") for item in arms)
+    has_blocking_status = bool(comparisons) and heldout.get("cross_arm_claims_allowed") is not True
+    expected_passed = not risks and not has_failed_child and not has_blocked_adapter and not has_arm_blockers and not has_blocking_status
+    if isinstance(summary.get("passed"), bool) and summary.get("passed") != expected_passed:
+        target.errors.append(f"eval_summary.passed expected {expected_passed}, got {summary.get('passed')!r}.")
+
+    conclusion = summary.get("conclusion")
+    if not isinstance(conclusion, dict):
+        target.errors.append("eval_summary.conclusion must be an object.")
+    elif conclusion.get("status") not in {"ready", "blocked"}:
+        target.errors.append("eval_summary.conclusion.status must be 'ready' or 'blocked'.")
+
+    target.details.update(
+        {
+            "passed": summary.get("passed"),
+            "arm_count": len(arms),
+            "comparison_count": len(comparisons),
+            "risk_count": len(risks),
+            "heldout_status": heldout.get("status"),
+        }
+    )
+
+
+def _validate_eval_summary_heldout(heldout: dict[str, Any], target: ValidationTarget, has_comparisons: bool) -> None:
+    if heldout.get("status") not in {"missing_suite_summaries", "single_arm", "identical", "mismatched", "empty"}:
+        target.errors.append("eval_summary.heldout_scenarios.status has an unsupported value.")
+    for field_name in ("identical", "cross_arm_claims_allowed"):
+        if not isinstance(heldout.get(field_name), bool):
+            target.errors.append(f"eval_summary.heldout_scenarios.{field_name} must be a boolean.")
+    if not _is_non_negative_int(heldout.get("scenario_count")):
+        target.errors.append("eval_summary.heldout_scenarios.scenario_count must be a non-negative integer.")
+    if not _is_string_list(heldout.get("scenario_ids")):
+        target.errors.append("eval_summary.heldout_scenarios.scenario_ids must be a list of strings.")
+    if not isinstance(heldout.get("arms"), list):
+        target.errors.append("eval_summary.heldout_scenarios.arms must be a list.")
+    if not isinstance(heldout.get("mismatches"), list):
+        target.errors.append("eval_summary.heldout_scenarios.mismatches must be a list.")
+    if not _is_string_list(heldout.get("blocking_reasons")):
+        target.errors.append("eval_summary.heldout_scenarios.blocking_reasons must be a list of strings.")
+    if heldout.get("cross_arm_claims_allowed") is True and heldout.get("status") != "identical":
+        target.errors.append("eval_summary.heldout_scenarios.cross_arm_claims_allowed requires status 'identical'.")
+    if has_comparisons and heldout.get("cross_arm_claims_allowed") is not True and not heldout.get("blocking_reasons"):
+        target.errors.append("eval_summary.heldout_scenarios.blocking_reasons must explain disallowed comparisons.")
+
+
+def _validate_eval_summary_arm(arm: Any, index: int, target: ValidationTarget) -> None:
+    if not isinstance(arm, dict):
+        target.errors.append(f"eval_summary.arms[{index}] must be an object.")
+        return
+    for field_name in ("label", "path"):
+        if not isinstance(arm.get(field_name), str) or not arm.get(field_name):
+            target.errors.append(f"eval_summary.arms[{index}].{field_name} must be a non-empty string.")
+    for field_name in ("scenario_count", "total", "passed", "failed", "error_count"):
+        if not _is_non_negative_int(arm.get(field_name)):
+            target.errors.append(f"eval_summary.arms[{index}].{field_name} must be a non-negative integer.")
+    if not _is_string_list(arm.get("scenario_ids")):
+        target.errors.append(f"eval_summary.arms[{index}].scenario_ids must be a list of strings.")
+    if not _is_string_list(arm.get("blocking_reasons")):
+        target.errors.append(f"eval_summary.arms[{index}].blocking_reasons must be a list of strings.")
+
+
+def _validate_eval_summary_comparison(
+    comparison: Any,
+    index: int,
+    target: ValidationTarget,
+    heldout: dict[str, Any],
+) -> None:
+    if not isinstance(comparison, dict):
+        target.errors.append(f"eval_summary.comparisons[{index}] must be an object.")
+        return
+    for field_name in ("label", "path", "manifest"):
+        if not isinstance(comparison.get(field_name), str) or not comparison.get(field_name):
+            target.errors.append(f"eval_summary.comparisons[{index}].{field_name} must be a non-empty string.")
+    for field_name in ("claims_allowed", "passed"):
+        if not isinstance(comparison.get(field_name), bool):
+            target.errors.append(f"eval_summary.comparisons[{index}].{field_name} must be a boolean.")
+    if not _is_string_list(comparison.get("blocking_reasons")):
+        target.errors.append(f"eval_summary.comparisons[{index}].blocking_reasons must be a list of strings.")
+    raw = comparison.get("raw_movement")
+    if not isinstance(raw, dict):
+        target.errors.append(f"eval_summary.comparisons[{index}].raw_movement must be an object.")
+        raw = {}
+    for field_name in (
+        "pair_count",
+        "candidate_win_count",
+        "baseline_win_count",
+        "task_completion_improvement_count",
+        "task_completion_regression_count",
+        "contract_drift_count",
+        "unverified_contract_count",
+        "skipped_pair_count",
+    ):
+        if not _is_non_negative_int(raw.get(field_name)):
+            target.errors.append(f"eval_summary.comparisons[{index}].raw_movement.{field_name} must be a non-negative integer.")
+    claims = comparison.get("governance_claims")
+    if not isinstance(claims, dict):
+        target.errors.append(f"eval_summary.comparisons[{index}].governance_claims must be an object.")
+        claims = {}
+    if comparison.get("claims_allowed") is True and heldout.get("cross_arm_claims_allowed") is not True:
+        target.errors.append(f"eval_summary.comparisons[{index}].claims_allowed requires identical held-out scenarios.")
+    if comparison.get("claims_allowed") is False:
+        if not comparison.get("blocking_reasons"):
+            target.errors.append(f"eval_summary.comparisons[{index}].blocking_reasons must explain disallowed claims.")
+        if claims.get("candidate_win_count") != 0:
+            target.errors.append(f"eval_summary.comparisons[{index}].governance_claims.candidate_win_count must be 0 when claims are disallowed.")
+        if claims.get("task_completion_improvement_count") != 0:
+            target.errors.append(
+                f"eval_summary.comparisons[{index}].governance_claims.task_completion_improvement_count must be 0 when claims are disallowed."
+            )
+        if claims.get("candidate_win_scenarios") not in ([], None):
+            target.errors.append(
+                f"eval_summary.comparisons[{index}].governance_claims.candidate_win_scenarios must be empty when claims are disallowed."
+            )
+        if claims.get("suppressed_raw_claims") is not True:
+            target.errors.append(f"eval_summary.comparisons[{index}].governance_claims.suppressed_raw_claims must be true when claims are disallowed.")
+    if comparison.get("passed") is True and comparison.get("blocking_reasons"):
+        target.errors.append(f"eval_summary.comparisons[{index}].passed cannot be true with blocking_reasons.")
+
+
+def _validate_eval_summary_gate(gate: Any, index: int, target: ValidationTarget) -> None:
+    if not isinstance(gate, dict):
+        target.errors.append(f"eval_summary.compare_gates[{index}] must be an object.")
+        return
+    if not isinstance(gate.get("passed"), bool):
+        target.errors.append(f"eval_summary.compare_gates[{index}].passed must be a boolean.")
+    if not _is_string_list(gate.get("blocking_reasons")):
+        target.errors.append(f"eval_summary.compare_gates[{index}].blocking_reasons must be a list of strings.")
+    if gate.get("passed") is False and "compare_gate_failed" not in gate.get("blocking_reasons", []):
+        target.errors.append(f"eval_summary.compare_gates[{index}].blocking_reasons must include compare_gate_failed when failed.")
+
+
+def _validate_eval_summary_external_adapter(adapter: Any, index: int, target: ValidationTarget) -> None:
+    if not isinstance(adapter, dict):
+        target.errors.append(f"eval_summary.external_adapter_plans[{index}] must be an object.")
+        return
+    if not isinstance(adapter.get("ready"), bool):
+        target.errors.append(f"eval_summary.external_adapter_plans[{index}].ready must be a boolean.")
+    for field_name in ("adapter_count", "ready_adapter_count"):
+        if not _is_non_negative_int(adapter.get(field_name)):
+            target.errors.append(f"eval_summary.external_adapter_plans[{index}].{field_name} must be a non-negative integer.")
+    if not _is_string_list(adapter.get("blocking_reasons")):
+        target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must be a list of strings.")
+    if adapter.get("ready") is False and not adapter.get("blocking_reasons"):
+        target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must explain why the plan is not ready.")
 
 
 def _validate_suite_metrics(metrics: dict[str, Any], target: ValidationTarget, runs: list[dict[str, Any]]) -> None:

@@ -52,6 +52,7 @@ from .improvement_gate import (
 )
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
+from .eval_summary import EvalSummaryError, build_eval_summary
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
@@ -163,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         RunDigestError,
         EvidenceCoverageError,
         EvidenceBundleError,
+        EvalSummaryError,
         ReviewCalibrationError,
         TraceObservabilityError,
         ActionLedgerError,
@@ -808,7 +810,26 @@ def cmd_validate(args: argparse.Namespace) -> int:
         state_diff_paths=args.state_diff,
         run_digest_paths=args.run_digest,
         live_smoke_summary_paths=args.live_smoke_summary,
+        eval_summary_paths=args.eval_summary,
         strict=args.strict,
+    )
+    rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(rendered, encoding="utf-8")
+        print(f"wrote {args.out}")
+    else:
+        print(rendered, end="")
+    return 0 if summary["passed"] else 1
+
+
+def cmd_eval_summary(args: argparse.Namespace) -> int:
+    summary = build_eval_summary(
+        suite_summary_specs=args.suite_summary,
+        compare_export_specs=args.compare_export,
+        compare_gate_specs=args.compare_gate,
+        external_adapter_plan_specs=args.external_adapter_plan,
+        preserve_paths=args.preserve_paths,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     if args.out:
@@ -1897,9 +1918,43 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--state-diff", action="append", default=[], help="Validate one hfr.state_diff.v1 JSON file; may be repeated")
     validate.add_argument("--run-digest", action="append", default=[], help="Validate one hfr.run_digest.v1 JSON file; may be repeated")
     validate.add_argument("--live-smoke-summary", action="append", default=[], help="Validate one live_smoke_summary.json; may be repeated")
+    validate.add_argument("--eval-summary", action="append", default=[], help="Validate one hfr.eval_summary.v1 JSON file; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")
     validate.set_defaults(func=cmd_validate)
+
+    eval_summary = subparsers.add_parser("eval-summary", help="Build a governance-ready held-out eval summary")
+    eval_summary.add_argument(
+        "--suite-summary",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="run-suite suite_summary.json to include; may be repeated",
+    )
+    eval_summary.add_argument(
+        "--compare-export",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="export-compare-rl directory or manifest.json to summarize; may be repeated",
+    )
+    eval_summary.add_argument(
+        "--compare-gate",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="gate-compare-export JSON output to include; may be repeated",
+    )
+    eval_summary.add_argument(
+        "--external-adapter-plan",
+        action="append",
+        default=[],
+        metavar="LABEL=PATH",
+        help="External eval adapter readiness plan JSON to include; may be repeated",
+    )
+    eval_summary.add_argument("--out", help="Write eval summary JSON to this path")
+    eval_summary.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in summary output")
+    eval_summary.set_defaults(func=cmd_eval_summary)
 
     schemas = subparsers.add_parser("schemas", help="List or export bundled JSON Schema contracts")
     schemas.add_argument("--name", action="append", default=[], help="Schema name, filename, schema version, or $id; may be repeated with --write-dir")
