@@ -412,8 +412,12 @@
         "base_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
         "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
         "lock_status": "acquired",
+        "merge_sha": "db1e2e8302c2df7d1c25242b433b79f626237aa7",
+        "pr_status": "MERGED",
+        "push_main_status": "pushed_and_verified",
         "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/9",
-        "remote_branch_status": "pending_delete_after_main_push"
+        "remote_branch_status": "deleted",
+        "remote_main_verified_sha": "db1e2e8302c2df7d1c25242b433b79f626237aa7"
       },
       "priority": "high",
       "status": "completed",
@@ -625,6 +629,21 @@
       "command": "python3.11 -m unittest discover",
       "status": "pass",
       "summary": "321 tests passed under Python 3.11 after merging current origin/main."
+    },
+    {
+      "command": "git ls-remote origin refs/heads/main",
+      "status": "pass",
+      "summary": "Remote main verified at db1e2e8302c2df7d1c25242b433b79f626237aa7 after the locked push."
+    },
+    {
+      "command": "gh pr view 9 --json url,state,mergeCommit,headRefName,baseRefName",
+      "status": "pass",
+      "summary": "PR #9 is MERGED with merge commit db1e2e8302c2df7d1c25242b433b79f626237aa7."
+    },
+    {
+      "command": "git ls-remote --heads origin codex/hermes-goal-8-governance-20260702-1027",
+      "status": "pass",
+      "summary": "Remote Goal 8 branch deletion verified by empty output."
     }
   ],
   "layer_status": {
@@ -704,5 +723,5 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:24:35Z"
+  "updated_at": "2026-07-02T15:28:00Z"
 }
