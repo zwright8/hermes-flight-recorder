@@ -254,12 +254,12 @@
       },
       "latest_attempt_at": "2026-07-02T15:18:43Z",
       "latest_lock_contention": {
-        "attempted_at": "2026-07-02T15:26:48Z",
+        "attempted_at": "2026-07-02T15:45:31Z",
         "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
         "lock_state": "held_through_retry_window",
-        "origin_main_sha_after_retry": "db1e2e8302c2df7d1c25242b433b79f626237aa7",
+        "origin_main_sha_after_retry": "00d5430a6166ec5c805688c6b77430e4d55a207c",
         "packet_in_origin_main": false,
-        "result": "third conflict audit not attempted because lock was unavailable"
+        "result": "next conflict audit not attempted because lock was unavailable"
       },
       "locked_integration_conflict_attempt_count": 4,
       "origin_main_sha_at_conflict": "b671b9671fff7e891fa0ee58a69f64e818694b11",
@@ -317,7 +317,8 @@
     "A second locked integration attempt at 2026-07-02T15:18:43Z hit the same add/add conflicts against origin/main 53357ff5c838c894ec1eca8515f6601dbfee4e8c.",
     "A later continuation at 2026-07-02T15:26:48Z could not acquire /tmp/hermes-flight-recorder-main-push.lock; origin/main had advanced to db1e2e8302c2df7d1c25242b433b79f626237aa7 and still did not contain packet commit a37b7000b88643d8aaf6f4af436e69977bb321e7.",
     "A third locked integration attempt at 2026-07-02T15:34:54Z hit non-trivial conflicts against origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c in autonomy state/journal plus the schema manifest/catalog test.",
-    "A fourth locked integration attempt at 2026-07-02T15:37:36Z hit the same non-trivial conflict set against the same origin/main SHA."
+    "A fourth locked integration attempt at 2026-07-02T15:37:36Z hit the same non-trivial conflict set against the same origin/main SHA.",
+    "A later continuation at 2026-07-02T15:45:31Z could not acquire /tmp/hermes-flight-recorder-main-push.lock; origin/main remained 00d5430a6166ec5c805688c6b77430e4d55a207c and still did not contain packet commit a37b7000b88643d8aaf6f4af436e69977bb321e7."
   ],
   "next_packets": [
     {
@@ -341,8 +342,9 @@
     "The same non-trivial main integration conflict has recurred for two consecutive Goal 5 continuation turns; one more recurrence without a resolution would satisfy the strict blocked audit threshold.",
     "The latest successful lock acquisition showed a third locked rebase conflict, now including schema catalog files as well as autonomy state/journal.",
     "The latest successful lock acquisition showed a fourth locked rebase conflict with the same conflict set.",
-    "The same conflict has recurred for two consecutive goal turns since the lock-contention interruption; one more consecutive conflict recurrence without resolution would satisfy the strict blocked audit threshold."
+    "The same conflict has recurred for two consecutive goal turns since the lock-contention interruption; one more consecutive conflict recurrence without resolution would satisfy the strict blocked audit threshold.",
+    "The latest continuation could not test that recurrence because the main-push lock was held for the full retry window."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:37:36Z"
+  "updated_at": "2026-07-02T15:45:31Z"
 }
