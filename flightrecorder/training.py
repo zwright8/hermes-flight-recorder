@@ -46,6 +46,16 @@ UNREDACTED_SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)(?<![:\w.-])[\w.-]*(?:api[_-]?key|secret|token|password|authorization|bearer)[\w.-]*"
     r"\s*[:=]\s*[\"']?(?!\[REDACTED\]\b)[^\"'\s,;}]+"
 )
+UNREDACTED_CREDENTIAL_LITERAL_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:"
+    r"sk-(?:proj-|ant-)?[A-Za-z0-9_-]{12,}"
+    r"|gh[pousr]_[A-Za-z0-9_]{20,}"
+    r"|github_pat_[A-Za-z0-9_]{20,}"
+    r"|xox[abprseo]-[A-Za-z0-9-]{10,}"
+    r"|xwfp-[A-Za-z0-9-]{10,}"
+    r"|xapp-[A-Za-z0-9-]{10,}"
+    r")(?![A-Za-z0-9_-])"
+)
 
 
 class TrainingExportError(ValueError):
@@ -2461,13 +2471,19 @@ def _append_redaction_findings(
     row_index: int | None = None,
 ) -> None:
     for path, value in _walk_strings(payload):
-        if not UNREDACTED_SECRET_ASSIGNMENT_RE.search(value):
+        if UNREDACTED_SECRET_ASSIGNMENT_RE.search(value):
+            kind = "secret_like_assignment"
+            preview = "secret-like assignment value omitted"
+        elif UNREDACTED_CREDENTIAL_LITERAL_RE.search(value):
+            kind = "secret_like_literal"
+            preview = "secret-like literal value omitted"
+        else:
             continue
         finding: dict[str, Any] = {
             "artifact": artifact,
             "path": path,
-            "kind": "secret_like_assignment",
-            "preview": "secret-like assignment value omitted",
+            "kind": kind,
+            "preview": preview,
         }
         if row_index is not None:
             finding["row_index"] = row_index

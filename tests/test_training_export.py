@@ -7,7 +7,13 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
-from flightrecorder.training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES, TrainingExportError, export_rl_dataset
+from flightrecorder.training import (
+    DATASET_SPLIT_ARTIFACTS,
+    DATASET_SPLIT_NAMES,
+    TrainingExportError,
+    export_rl_dataset,
+    redaction_scan_artifacts,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -248,6 +254,78 @@ class TrainingExportTests(unittest.TestCase):
 
             with self.assertRaises(TrainingExportError):
                 export_rl_dataset(runs, out, metadata={"api_key": "sk-test-unredacted"})
+
+    def test_redaction_scan_detects_standalone_credential_literals(self):
+        rows = {
+            "sft": [
+                {
+                    "messages": [
+                        {
+                            "role": "assistant",
+                            "content": "fixture placeholder sk-exampleStandaloneToken000000 for scanner coverage",
+                        }
+                    ],
+                    "metadata": {
+                        "github": "ghp_exampleToken000000000000000000000000",
+                        "slack": "xoxb-example-token-000000000000",
+                        "slack_workflow": "xwfp-example-token-000000000000",
+                        "slack_app": "xapp-example-token-000000000000",
+                        "slack_rotated": "xoxe-example-token-000000000000",
+                    },
+                }
+            ]
+        }
+
+        findings = redaction_scan_artifacts(rows)
+
+        self.assertEqual(len(findings), 6)
+        self.assertEqual({finding["artifact"] for finding in findings}, {"sft"})
+        self.assertEqual({finding["kind"] for finding in findings}, {"secret_like_literal"})
+        self.assertTrue(all(finding["preview"] == "secret-like literal value omitted" for finding in findings))
+        self.assertNotIn("sk-exampleStandaloneToken000000", json.dumps(findings))
+        self.assertNotIn("ghp_exampleToken000000000000000000000000", json.dumps(findings))
+        self.assertNotIn("xoxb-example-token-000000000000", json.dumps(findings))
+        self.assertNotIn("xwfp-example-token-000000000000", json.dumps(findings))
+        self.assertNotIn("xapp-example-token-000000000000", json.dumps(findings))
+        self.assertNotIn("xoxe-example-token-000000000000", json.dumps(findings))
+
+    def test_redaction_scan_allows_hashes_dataset_ids_and_fingerprints(self):
+        sha256 = "a" * 64
+        rows = {
+            "manifest": [
+                {
+                    "dataset_version": "hfrds-0123456789abcdef",
+                    "manifest_sha256": sha256,
+                    "artifact_fingerprints": {
+                        "manifest": {
+                            "path": "manifest.json",
+                            "sha256": sha256,
+                        }
+                    },
+                    "notes": [
+                        f"source fingerprint {sha256}",
+                        "dataset hfrds-0123456789abcdef is selectable",
+                        "short examples like xapp-demo and xwfp-short are documentation labels, not credentials",
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(redaction_scan_artifacts(rows), [])
+
+    def test_export_rl_blocks_standalone_credential_like_trace_value(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            good = runs / "prompt_injection_good"
+            out = Path(tmp) / "training"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(good)])
+            trace_path = good / "normalized_trace.json"
+            trace = json.loads(trace_path.read_text(encoding="utf-8"))
+            trace["final_answer"] = "fixture placeholder sk-exampleStandaloneToken000000"
+            trace_path.write_text(json.dumps(trace, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            with self.assertRaises(TrainingExportError):
+                export_rl_dataset(runs, out)
 
     def test_export_rl_excludes_final_answer_only_positive_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
