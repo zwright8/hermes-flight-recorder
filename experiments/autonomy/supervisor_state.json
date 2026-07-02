@@ -93,26 +93,82 @@
           "status": "pass"
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "script",
+          "path": "scripts/hermes_harness.py"
+        },
+        {
+          "kind": "module",
+          "path": "flightrecorder/report.py"
+        },
+        {
+          "kind": "module",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "schema",
+          "path": "flightrecorder/schemas/harness_run_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "path": "tests/test_harness_tool_policy.py"
+        },
+        {
+          "kind": "doc",
+          "path": "README.md"
+        }
+      ],
+      "commit_sha": "72562fad07de1e445772dcbd4d196cb4c346f900",
+      "completed_at": "2026-07-02T14:54:22Z",
+      "id": "harness_tool_policy_enforcement_matrix",
+      "layer": "harness",
+      "status": "completed",
+      "summary": "Tightened harness tool-policy contracts, preserved mock runtime policy overrides in published harness results, redacted scorecard evidence in reports, and added replaying mock coverage for denied tools, commands, URLs, budgets, and fake-secret canaries.",
+      "verification": [
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile flightrecorder/report.py flightrecorder/validation.py scripts/hermes_harness.py tests/test_harness_tool_policy.py tests/test_harness_replay_matrix.py",
+          "status": "pass"
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_harness_tool_policy",
+          "status": "pass"
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_harness_tool_policy tests.test_harness_replay_matrix tests.test_deployment_hardening tests.test_schema_registry tests.test_cli_report",
+          "status": "pass"
+        },
+        {
+          "command": "git diff --cached --name-status && git diff --cached --check before commit",
+          "status": "pass"
+        }
+      ]
     }
   ],
   "current_packet": null,
-  "latest_commit_sha": "5ae421cc14446b252e26a317ba6171e5d6ca7bbc",
+  "latest_commit_sha": "72562fad07de1e445772dcbd4d196cb4c346f900",
   "latest_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
   "latest_risks": [
-    "Real Hermes, OpenClaw, and Coven runtimes were not launched in this packet; coverage uses fixture-backed live-shaped artifact writers and replay.",
+    "Real Hermes, OpenClaw, and Coven runtimes were not launched in the latest packets; coverage uses mock and fixture-backed live-shaped artifact writers with replay.",
     "The dedicated worktree did not include the broader autonomous docs/state files from the shared checkout, so this branch starts its own scoped state handoff."
   ],
   "next_packets": [
     {
-      "id": "harness_tool_policy_enforcement_matrix",
+      "id": "harness_manifest_file_cli",
       "layer": "harness",
       "status": "ready",
-      "summary": "Exercise denied tool/action metadata and fake-secret canary detection across mock and replayed harness runs."
+      "summary": "Allow harness runs to consume a checked-in manifest file directly and cover that CLI path with validation and replay."
     }
   ],
   "promotion_readiness": {
     "harness": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:47:25Z"
+  "updated_at": "2026-07-02T14:54:22Z"
 }
