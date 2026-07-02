@@ -738,6 +738,52 @@ class PromotionLedgerTests(unittest.TestCase):
 
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 1)
 
+    def test_promotion_archive_validation_rejects_bad_relationship_receipts(self):
+        tamper_cases = (("to", "missing_promotion_ledger"), ("type", "source_artifact"))
+        for field_name, forged_value in tamper_cases:
+            with self.subTest(field_name=field_name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    ledger_path = root / "promotion_ledger.json"
+                    release_record_path = root / "promotion_release_record.json"
+                    archive_dir = root / "promotion_archive"
+                    ledger_path.write_text(
+                        json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                        encoding="utf-8",
+                    )
+                    release_record_path.write_text(
+                        json.dumps(
+                            {
+                                "schema_version": "hfr.promotion_release_record.v1",
+                                "release": {"release_id": "release-2026-07-02"},
+                            },
+                            sort_keys=True,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    self.assertEqual(
+                        run_cli(
+                            [
+                                "promotion-archive",
+                                "--promotion-ledger",
+                                str(ledger_path),
+                                "--promotion-release-record",
+                                str(release_record_path),
+                                "--out",
+                                str(archive_dir),
+                                "--require-self-contained",
+                            ]
+                        ),
+                        0,
+                    )
+                    manifest_path = archive_dir / "promotion_archive.json"
+                    archive = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    archive["relationships"][0][field_name] = forged_value
+                    manifest_path.write_text(json.dumps(archive, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+                    self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 1)
+
     def test_promotion_archive_redacts_original_paths_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

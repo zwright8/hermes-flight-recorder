@@ -10316,8 +10316,21 @@ def _validate_promotion_archive(archive: dict[str, Any], target: ValidationTarge
         _validate_promotion_archive_artifact(artifact, target, f"promotion_archive.artifacts[{index}]", index, archive_root)
     for index, item in enumerate(missing):
         _validate_promotion_archive_missing(item, target, f"promotion_archive.missing[{index}]")
+    artifact_roles_by_name = _archive_artifact_roles_by_name(artifacts, target, "promotion_archive", require_unique=True)
+    allowed_relationship_edges = {
+        "gates": {("promotion_ledger_gate", "promotion_ledger")},
+        "summarizes": {("promotion_ledger", "decision_gate")},
+        "source_artifact": {("decision_gate", "source_artifact")},
+        "release_record": {("promotion_release_record", "promotion_ledger")},
+    }
     for index, relationship in enumerate(relationships):
-        _validate_promotion_archive_relationship(relationship, target, f"promotion_archive.relationships[{index}]")
+        _validate_archive_relationship(
+            relationship,
+            target,
+            f"promotion_archive.relationships[{index}]",
+            artifact_roles_by_name,
+            allowed_relationship_edges,
+        )
 
     self_contained = len(missing) == 0
     if isinstance(archive.get("self_contained"), bool) and archive["self_contained"] != self_contained:
@@ -10395,13 +10408,64 @@ def _validate_promotion_archive_missing(item: Any, target: ValidationTarget, lab
         target.errors.append(f"{label}.reason must be a non-empty string.")
 
 
-def _validate_promotion_archive_relationship(relationship: Any, target: ValidationTarget, label: str) -> None:
+def _archive_artifact_roles_by_name(
+    artifacts: list[Any],
+    target: ValidationTarget,
+    prefix: str,
+    *,
+    require_unique: bool,
+) -> dict[str, set[str]]:
+    roles_by_name: dict[str, set[str]] = {}
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            continue
+        name = artifact.get("name")
+        role = artifact.get("role")
+        if not isinstance(name, str) or not name or not isinstance(role, str) or not role:
+            continue
+        if name in roles_by_name:
+            if require_unique:
+                target.errors.append(f"{prefix}.artifacts[{index}].name must be unique.")
+            roles_by_name[name].add(role)
+        else:
+            roles_by_name[name] = {role}
+    return roles_by_name
+
+
+def _validate_archive_relationship(
+    relationship: Any,
+    target: ValidationTarget,
+    label: str,
+    artifact_roles_by_name: dict[str, set[str]],
+    allowed_edges_by_type: dict[str, set[tuple[str, str]]],
+) -> None:
     if not isinstance(relationship, dict):
         target.errors.append(f"{label} must be an object.")
         return
     for field_name in ("from", "to", "type"):
         if not isinstance(relationship.get(field_name), str) or not relationship.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    from_name = relationship.get("from")
+    to_name = relationship.get("to")
+    relationship_type = relationship.get("type")
+    from_roles = artifact_roles_by_name.get(from_name) if isinstance(from_name, str) else None
+    to_roles = artifact_roles_by_name.get(to_name) if isinstance(to_name, str) else None
+    if isinstance(from_name, str) and from_name and from_roles is None:
+        target.errors.append(f"{label}.from must reference an archived artifact name.")
+    if isinstance(to_name, str) and to_name and to_roles is None:
+        target.errors.append(f"{label}.to must reference an archived artifact name.")
+    if not isinstance(relationship_type, str) or not relationship_type:
+        return
+    allowed_edges = allowed_edges_by_type.get(relationship_type)
+    if allowed_edges is None:
+        target.errors.append(f"{label}.type is invalid.")
+        return
+    if from_roles is not None and to_roles is not None:
+        has_allowed_edge = any((from_role, to_role) in allowed_edges for from_role in from_roles for to_role in to_roles)
+        if not has_allowed_edge:
+            from_role_text = "|".join(sorted(from_roles))
+            to_role_text = "|".join(sorted(to_roles))
+            target.errors.append(f"{label}.type is invalid for {from_role_text} -> {to_role_text}.")
 
 
 def _validate_promotion_archive_metrics(
@@ -10476,8 +10540,16 @@ def _validate_trainer_archive(archive: dict[str, Any], target: ValidationTarget,
         _validate_trainer_archive_artifact(artifact, target, f"trainer_archive.artifacts[{index}]", index, archive_root)
     for index, item in enumerate(missing):
         _validate_trainer_archive_missing(item, target, f"trainer_archive.missing[{index}]")
+    artifact_roles_by_name = _archive_artifact_roles_by_name(artifacts, target, "trainer_archive", require_unique=False)
+    allowed_relationship_edges = {"validates": {("trainer_launch_check", "trainer_preflight")}}
     for index, relationship in enumerate(relationships):
-        _validate_promotion_archive_relationship(relationship, target, f"trainer_archive.relationships[{index}]")
+        _validate_archive_relationship(
+            relationship,
+            target,
+            f"trainer_archive.relationships[{index}]",
+            artifact_roles_by_name,
+            allowed_relationship_edges,
+        )
 
     valid_artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
     roles = {artifact.get("role") for artifact in valid_artifacts}

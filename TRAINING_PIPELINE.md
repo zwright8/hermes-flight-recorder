@@ -339,8 +339,9 @@ the promotion ledger, promotion-ledger gate, decision gates, and resolvable
 source gate artifacts into a hash-checked directory that remains valid after
 the original workspace paths disappear. Recorded artifact references must be
 safe relative paths before they are copied, and validation rejects symlinked
-archive artifacts. Keep shared promotion archives in the default redacted mode;
-use `--preserve-paths` only for private local debugging.
+archive artifacts plus relationships that point at unknown artifacts or invalid
+role pairs. Keep shared promotion archives in the default redacted mode; use
+`--preserve-paths` only for private local debugging.
 
 Before any external registry process moves `candidate`, `champion`, or
 `rollback` aliases, run a top-level governance decision:
