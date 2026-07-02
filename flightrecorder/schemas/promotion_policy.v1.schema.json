@@ -54,6 +54,15 @@
       ],
       "type": "object"
     },
+    "required_comparison_arms": {
+      "items": {
+        "enum": ["base", "candidate", "champion", "frontier", "trace-only"],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
     "release_required_artifacts": {
       "items": {
         "enum": [
@@ -107,6 +116,7 @@
     "allowed_candidate_classes",
     "allowed_champion_classes",
     "limits",
+    "required_comparison_arms",
     "forbid_new_critical_rules",
     "forbid_regressed_rules",
     "require_known_license",

@@ -399,10 +399,12 @@ flightrecorder schemas --check runs/promotion_release_record.json
 
 The decision blocks promotion on missing evidence, unknown license status,
 redaction or safety failure, missing cards, missing rollback metadata, failed
-rollback receipts, eval mismatch, task-completion regression, new critical
-failures, secret exposure, forbidden actions, and unsupported card claims. A
-passing decision is still side-effect free: it authorizes an alias-update
-receipt, leaving the actual registry write to a later guarded step.
+rollback receipts, eval mismatch, missing `base`/`trace-only`/`frontier`/
+`champion`/`candidate` comparison arms, non-identical held-out scenarios,
+task-completion regression, new critical failures, secret exposure, forbidden
+actions, and unsupported card claims. A passing decision is still side-effect
+free: it authorizes an alias-update receipt, leaving the actual registry write
+to a later guarded step.
 `promotion-rollback-receipt` is side-effect free: it fingerprints the model
 registry, proves the rollback target is registered, and blocks when the target
 no longer matches the current champion before promotion.
@@ -410,7 +412,10 @@ no longer matches the current champion before promotion.
 decision/release artifact contract, allowed model classes, zero-tolerance eval
 limits, required forbidden-rule blockers, license, rollback, card, and
 validation requirements. Policy files can make expectations reviewable but
-cannot relax the default promotion blockers.
+cannot relax the default promotion blockers or drop required comparison arms.
+Use `eval-summary` or `serving_demo_run` output for `--serving-report`; a
+generic pass/fail serving receipt blocks promotion unless it declares every
+required arm and identical held-out coverage.
 `promotion-alias-apply` is that guarded write: it revalidates the promotion
 decision, requires a `hfr.model_registry.v1` registry with registered
 `candidate`, `champion`, and `rollback` targets, verifies the live champion

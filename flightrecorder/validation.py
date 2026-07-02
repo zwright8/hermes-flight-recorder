@@ -52,6 +52,7 @@ from .governance import (
     PROMOTION_CARDS_SCHEMA_VERSION,
     PROMOTION_DECISION_REQUIRED_ARTIFACTS,
     PROMOTION_DECISION_SCHEMA_VERSION,
+    PROMOTION_POLICY_REQUIRED_COMPARISON_ARMS,
     PROMOTION_POLICY_SCHEMA_VERSION,
     PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION,
     PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
@@ -8328,6 +8329,7 @@ def _validate_raw_promotion_policy(policy: dict[str, Any], target: ValidationTar
     _validate_policy_role_list(policy.get("release_required_artifacts"), target, "promotion_policy.release_required_artifacts")
     _validate_policy_class_list(policy.get("allowed_candidate_classes"), target, "promotion_policy.allowed_candidate_classes")
     _validate_policy_class_list(policy.get("allowed_champion_classes"), target, "promotion_policy.allowed_champion_classes")
+    _validate_policy_comparison_arm_list(policy.get("required_comparison_arms"), target, "promotion_policy.required_comparison_arms")
     _validate_policy_limits(policy.get("limits"), target, "promotion_policy.limits")
     _validate_policy_forbidden_rules(policy.get("forbid_new_critical_rules"), target, "promotion_policy.forbid_new_critical_rules")
     _validate_policy_forbidden_rules(policy.get("forbid_regressed_rules"), target, "promotion_policy.forbid_regressed_rules")
@@ -8362,6 +8364,7 @@ def _validate_promotion_policy_section(value: Any, target: ValidationTarget, sou
     )
     _validate_policy_class_list(value.get("allowed_candidate_classes"), target, f"{label}.allowed_candidate_classes")
     _validate_policy_class_list(value.get("allowed_champion_classes"), target, f"{label}.allowed_champion_classes")
+    _validate_policy_comparison_arm_list(value.get("required_comparison_arms"), target, f"{label}.required_comparison_arms")
     _validate_policy_limits(value.get("limits"), target, f"{label}.limits")
     _validate_policy_forbidden_rules(value.get("forbid_new_critical_rules"), target, f"{label}.forbid_new_critical_rules")
     _validate_policy_forbidden_rules(value.get("forbid_regressed_rules"), target, f"{label}.forbid_regressed_rules")
@@ -8390,6 +8393,15 @@ def _validate_policy_class_list(value: Any, target: ValidationTarget, label: str
     unknown = sorted(set(value) - allowed)
     if unknown:
         target.errors.append(f"{label} contains unknown model classes: {unknown!r}.")
+
+
+def _validate_policy_comparison_arm_list(value: Any, target: ValidationTarget, label: str) -> None:
+    _validate_policy_class_list(value, target, label)
+    if not _is_string_list(value):
+        return
+    missing = sorted(set(PROMOTION_POLICY_REQUIRED_COMPARISON_ARMS) - set(value))
+    if missing:
+        target.errors.append(f"{label} must include required comparison arms: {missing!r}.")
 
 
 def _validate_policy_limits(value: Any, target: ValidationTarget, label: str) -> None:
@@ -8523,6 +8535,9 @@ def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: 
         "policy_release_required_artifact_count": (
             len(policy_obj.get("release_required_artifacts", [])) if isinstance(policy_obj.get("release_required_artifacts"), list) else 0
         ),
+        "required_comparison_arm_count": (
+            len(policy_obj.get("required_comparison_arms", [])) if isinstance(policy_obj.get("required_comparison_arms"), list) else 0
+        ),
     }
     for field_name, expected in expected_fields.items():
         if value.get(field_name) != expected:
@@ -8534,6 +8549,7 @@ def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: 
         "unverified_contract_count",
         "new_critical_failure_count",
         "rule_regression_count",
+        "evidenced_comparison_arm_count",
     ):
         if not _is_non_negative_int(value.get(field_name)):
             target.errors.append(f"promotion_decision.metrics.{field_name} must be a non-negative integer.")

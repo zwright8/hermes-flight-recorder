@@ -39,6 +39,13 @@
     "compare_gate",
     "release_notes"
   ],
+  "required_comparison_arms": [
+    "base",
+    "trace-only",
+    "frontier",
+    "champion",
+    "candidate"
+  ],
   "require_accepted_terms": true,
   "require_artifact_validation": true,
   "require_known_license": true,
