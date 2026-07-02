@@ -242,14 +242,14 @@
       ],
       "consecutive_goal_turn_conflict_count": 2,
       "latest_conflict_attempt": {
-        "attempted_at": "2026-07-02T15:37:36Z",
+        "attempted_at": "2026-07-02T15:49:29Z",
         "conflicting_files": [
           "experiments/autonomy/journal/2026-07-02.md",
           "experiments/autonomy/supervisor_state.json",
           "flightrecorder/schemas/manifest.json",
           "tests/test_schema_registry.py"
         ],
-        "origin_main_sha": "00d5430a6166ec5c805688c6b77430e4d55a207c",
+        "origin_main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
         "result": "rebase_aborted_without_main_push"
       },
       "latest_attempt_at": "2026-07-02T15:18:43Z",
@@ -261,12 +261,17 @@
         "packet_in_origin_main": false,
         "result": "next conflict audit not attempted because lock was unavailable"
       },
-      "locked_integration_conflict_attempt_count": 4,
+      "locked_integration_conflict_attempt_count": 5,
       "origin_main_sha_at_conflict": "b671b9671fff7e891fa0ee58a69f64e818694b11",
-      "origin_main_sha_latest_attempt": "00d5430a6166ec5c805688c6b77430e4d55a207c",
+      "origin_main_sha_latest_attempt": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
       "reason": "Rebasing the verified Goal 5 branch onto current origin/main hit add/add autonomy state and journal conflicts from earlier packet commits. Per the main delivery protocol, the worker aborted rather than resolving non-trivial cross-worker integration conflicts.",
       "related_pr_status": "open_pending_supervisor_resolution",
       "remote_branch_deletion_status": "deferred_until_main_integration",
+      "strict_blocked_audit": {
+        "reason": "The required main-delivery step for the verified Goal 5 packet has remained blocked across repeated goal continuations by the same supervisor-owned integration surface: autonomy state/journal conflicts and schema catalog conflicts, with intermittent lock contention. The worker cannot safely resolve those cross-worker files under the delivery protocol.",
+        "status": "satisfied",
+        "satisfied_at": "2026-07-02T15:49:29Z"
+      },
       "verified_packet_branch_sha": "a37b7000b88643d8aaf6f4af436e69977bb321e7"
     },
     "main_sha": null,
@@ -274,7 +279,7 @@
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
     "remote": "origin",
     "remote_branch_verified": true,
-    "runtime_preflight_packet_delivery_status": "blocked_on_non_trivial_main_integration_conflict_after_third_locked_attempt"
+    "runtime_preflight_packet_delivery_status": "blocked_requires_supervisor_resolution"
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -318,7 +323,8 @@
     "A later continuation at 2026-07-02T15:26:48Z could not acquire /tmp/hermes-flight-recorder-main-push.lock; origin/main had advanced to db1e2e8302c2df7d1c25242b433b79f626237aa7 and still did not contain packet commit a37b7000b88643d8aaf6f4af436e69977bb321e7.",
     "A third locked integration attempt at 2026-07-02T15:34:54Z hit non-trivial conflicts against origin/main 00d5430a6166ec5c805688c6b77430e4d55a207c in autonomy state/journal plus the schema manifest/catalog test.",
     "A fourth locked integration attempt at 2026-07-02T15:37:36Z hit the same non-trivial conflict set against the same origin/main SHA.",
-    "A later continuation at 2026-07-02T15:45:31Z could not acquire /tmp/hermes-flight-recorder-main-push.lock; origin/main remained 00d5430a6166ec5c805688c6b77430e4d55a207c and still did not contain packet commit a37b7000b88643d8aaf6f4af436e69977bb321e7."
+    "A later continuation at 2026-07-02T15:45:31Z could not acquire /tmp/hermes-flight-recorder-main-push.lock; origin/main remained 00d5430a6166ec5c805688c6b77430e4d55a207c and still did not contain packet commit a37b7000b88643d8aaf6f4af436e69977bb321e7.",
+    "A fifth locked integration attempt at 2026-07-02T15:49:29Z hit the same non-trivial conflict set against origin/main bc15b6bd27e0a8a6649a5c66e19943f20949da7e."
   ],
   "next_packets": [
     {
@@ -343,8 +349,9 @@
     "The latest successful lock acquisition showed a third locked rebase conflict, now including schema catalog files as well as autonomy state/journal.",
     "The latest successful lock acquisition showed a fourth locked rebase conflict with the same conflict set.",
     "The same conflict has recurred for two consecutive goal turns since the lock-contention interruption; one more consecutive conflict recurrence without resolution would satisfy the strict blocked audit threshold.",
-    "The latest continuation could not test that recurrence because the main-push lock was held for the full retry window."
+    "The latest continuation could not test that recurrence because the main-push lock was held for the full retry window.",
+    "The required main-delivery step is now treated as blocked pending supervisor resolution of cross-worker autonomy and schema catalog conflicts."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:45:31Z"
+  "updated_at": "2026-07-02T15:49:29Z"
 }
