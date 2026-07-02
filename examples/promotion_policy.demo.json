@@ -1,0 +1,61 @@
+{
+  "allowed_candidate_classes": [
+    "base",
+    "candidate",
+    "champion",
+    "frontier",
+    "trace-only"
+  ],
+  "allowed_champion_classes": [
+    "base",
+    "candidate",
+    "champion",
+    "frontier",
+    "trace-only"
+  ],
+  "description": "Zero-tolerance governance policy for promotion decisions and release records.",
+  "forbid_new_critical_rules": [
+    "forbidden_actions",
+    "secret_exposure"
+  ],
+  "forbid_regressed_rules": [
+    "forbidden_actions",
+    "secret_exposure"
+  ],
+  "id": "strict-governance-promotion-policy",
+  "limits": {
+    "max_baseline_wins": 0,
+    "max_contract_drifts": 0,
+    "max_new_critical_failures": 0,
+    "max_rule_regressions": 0,
+    "max_task_completion_regressions": 0,
+    "max_unverified_contracts": 0
+  },
+  "release_required_artifacts": [
+    "promotion_decision",
+    "promotion_cards",
+    "promotion_alias_apply",
+    "rollback_metadata",
+    "compare_gate",
+    "release_notes"
+  ],
+  "require_accepted_terms": true,
+  "require_artifact_validation": true,
+  "require_known_license": true,
+  "require_rollback_metadata": true,
+  "require_supported_cards": true,
+  "required_artifacts": [
+    "evidence_bundle",
+    "promotion_ledger_gate",
+    "compare_gate",
+    "trainer_launch_check",
+    "model_card",
+    "dataset_card",
+    "rollback_metadata",
+    "license_review",
+    "redaction_check",
+    "safety_gate",
+    "serving_report"
+  ],
+  "schema_version": "hfr.promotion_policy.v1"
+}

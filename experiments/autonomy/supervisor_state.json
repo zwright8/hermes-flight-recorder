@@ -1075,15 +1075,102 @@
           "summary": "No whitespace errors."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py",
+          "sha256": "63675467779a4f59d6055188ef3644e5a39424439775fd1bceb72bd5abc45e13"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py",
+          "sha256": "a8d26f7a3f08a037e53aa6da192538e8e782e1c499c62daf7d309b2922d9a9c0"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py",
+          "sha256": "211c1821e811f2e07c3ed9e9eb2bbd1f3e51a2563b25bdd184b9010f962e1490"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py",
+          "sha256": "8db338fa00541c87985a3be2c482db7101cfd030984a8715e1bc5ac9eec4fd0b"
+        },
+        {
+          "kind": "policy",
+          "layer": "governance",
+          "path": "examples/promotion_policy.demo.json",
+          "sha256": "715e8ff9e045de78b2bf02c29a7281e934b65219d19fe0e686c72a18fd2cbcfe"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md",
+          "sha256": "5bd845648346f01dd83dea0835b9dbdd8a9688f3f35c5f56e3793a1e06639afb"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md",
+          "sha256": "a4b0ce44b378ac1103c56b8507ce2cee48dd569fb68743c27a799c8dbb52f4e0"
+        }
+      ],
+      "branch": "codex/hermes-goal-8-governance-policy-20260702-1549",
+      "completed_at": "2026-07-02T16:03:15Z",
+      "id": "governance_policy_artifact",
+      "implementation_commit_sha": "3a1f4cc58693fa2393c58b2a98eebe20b0cb8b23",
+      "layer": "governance",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Externalized the promotion policy contract as hfr.promotion_policy.v1 evidence, embedded policy fingerprints in promotion decisions, required release records to match the decision policy, added standalone policy validation, and documented the policy-driven command path.",
+      "title": "Externalize promotion policy artifacts",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T16:03:15Z",
+          "status": "pass",
+          "summary": "Touched governance modules compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+          "completed_at": "2026-07-02T16:03:15Z",
+          "status": "pass",
+          "summary": "57 focused governance, ledger, and validation tests passed."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+          "completed_at": "2026-07-02T16:03:15Z",
+          "status": "pass",
+          "summary": "Standalone promotion policy validation passed with zero warnings or errors."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T16:03:15Z",
+          "status": "pass",
+          "summary": "332 tests passed under Python 3.11."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "completed_at": "2026-07-02T16:03:15Z",
+          "status": "blocked",
+          "summary": "System Python 3.9 ran 321 tests but cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
+        }
+      ]
     }
   ],
   "current_packet": {
-    "id": "prepare_next_model_layer_packet",
-    "layer": "model",
-    "priority": "medium",
-    "status": "ready",
-    "summary": "Qwen metadata-only scout packet landed on main; next Goal 4 packet should extend serving-probe receipts or adapter registry links without downloading weights.",
-    "title": "Prepare next model-layer packet"
+    "id": "governance_policy_artifact_main_integration",
+    "layer": "governance",
+    "priority": "high",
+    "status": "verified_pending_main_push",
+    "summary": "Goal 8 promotion policy packet merged over current origin/main under the main-push lock; verification passed and main push is pending.",
+    "title": "Integrate promotion policy artifacts on main"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -1536,81 +1623,88 @@
   },
   "latest_artifacts": [
     {
-      "kind": "model_candidate",
-      "layer": "model",
-      "path": "experiments/registry/model_candidates/qwen3_4b_instruct_2507.json"
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/governance.py",
+      "sha256": "63675467779a4f59d6055188ef3644e5a39424439775fd1bceb72bd5abc45e13"
     },
     {
-      "kind": "compatibility_report",
-      "layer": "model",
-      "path": "experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json"
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/cli.py",
+      "sha256": "a8d26f7a3f08a037e53aa6da192538e8e782e1c499c62daf7d309b2922d9a9c0"
     },
     {
-      "kind": "registry_entry",
-      "layer": "model",
-      "path": "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
-    },
-    {
-      "kind": "registry",
-      "layer": "model",
-      "path": "experiments/registry/model_registry.json"
-    },
-    {
-      "kind": "scout_manifest",
-      "layer": "model",
-      "path": "experiments/registry/model_scout_manifest.json"
-    },
-    {
-      "kind": "training_plan",
-      "layer": "model",
-      "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json"
-    },
-    {
-      "kind": "validation_summary",
-      "layer": "model",
-      "path": "experiments/registry/model_layer_validation.json"
-    },
-    {
-      "kind": "doc",
-      "layer": "model",
-      "path": "docs/model-layer-registry.md"
+      "kind": "module",
+      "layer": "governance",
+      "path": "flightrecorder/validation.py",
+      "sha256": "211c1821e811f2e07c3ed9e9eb2bbd1f3e51a2563b25bdd184b9010f962e1490"
     },
     {
       "kind": "test",
-      "layer": "model",
-      "path": "tests/test_model_registry.py"
+      "layer": "governance",
+      "path": "tests/test_promotion_decision.py",
+      "sha256": "8db338fa00541c87985a3be2c482db7101cfd030984a8715e1bc5ac9eec4fd0b"
+    },
+    {
+      "kind": "policy",
+      "layer": "governance",
+      "path": "examples/promotion_policy.demo.json",
+      "sha256": "715e8ff9e045de78b2bf02c29a7281e934b65219d19fe0e686c72a18fd2cbcfe"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "README.md",
+      "sha256": "5bd845648346f01dd83dea0835b9dbdd8a9688f3f35c5f56e3793a1e06639afb"
+    },
+    {
+      "kind": "doc",
+      "layer": "governance",
+      "path": "TRAINING_PIPELINE.md",
+      "sha256": "a4b0ce44b378ac1103c56b8507ce2cee48dd569fb68743c27a799c8dbb52f4e0"
     }
   ],
   "latest_verification": [
     {
-      "command": "python3 -m flightrecorder model-candidate validate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --require-training-eligible --out /tmp/qwen3_candidate_validation.json",
+      "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
       "status": "pass",
-      "summary": "Qwen metadata candidate remained training-eligible under approved Apache-2.0 review fields after rebasing over harness main."
+      "summary": "Touched governance policy modules compile after merging current origin/main."
     },
     {
-      "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+      "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
       "status": "pass",
-      "summary": "Strict semantic validation passed for local and Qwen model-layer artifacts after rebase."
+      "summary": "57 focused governance, ledger, and validation tests passed after merging current origin/main."
     },
     {
-      "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, registry entry, registry, scout manifest, and training plan",
+      "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
       "status": "pass",
-      "summary": "Public schema checks passed for all new and updated Qwen artifacts."
+      "summary": "Standalone promotion policy validation passed with zero warnings or errors."
     },
     {
-      "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+      "command": "python3 -m flightrecorder validate --help | rg -- --promotion-policy",
       "status": "pass",
-      "summary": "54 model, schema registry, and validation tests passed after rebase."
+      "summary": "validate --promotion-policy is advertised."
     },
     {
-      "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
+      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
       "status": "pass",
-      "summary": "Touched Python files compile successfully."
+      "summary": "Supervisor state JSON parses after semantic merge."
     },
     {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && git diff --check",
+      "command": "python3 -m json.tool examples/promotion_policy.demo.json && git diff --check",
       "status": "pass",
-      "summary": "Supervisor state and diff whitespace checks passed after rebase."
+      "summary": "Policy demo JSON parses and the integrated diff has no whitespace errors."
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "status": "pass",
+      "summary": "337 tests passed under Python 3.11 after merging current origin/main."
+    },
+    {
+      "command": "python3 -m unittest discover",
+      "status": "blocked",
+      "summary": "System Python 3.9 ran 325 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
     }
   ],
   "layer_status": {
@@ -1630,9 +1724,9 @@
       "summary": "Evidence bundles require gate decision contracts; PR #5 remains the next dependency-ordered landing target now that Harness PR #3 is on main."
     },
     "governance": {
-      "next_packet": "governance_policy_artifact",
+      "next_packet": "governance_policy_schema_registry",
       "status": "in_progress",
-      "summary": "Promotion decisions, model/dataset cards, guarded registry alias application, and release-record binding are implemented; explicit promotion policy artifacts remain."
+      "summary": "Promotion decisions, model/dataset cards, guarded registry alias application, release-record binding, and explicit promotion-policy evidence are implemented; schema-catalog exposure remains."
     },
     "harness": {
       "next_packet": null,
@@ -1717,6 +1811,28 @@
       "status": "open_queued",
       "summary": "Governance eval summary enforcement remains open.",
       "title": "Land Eval PR #6"
+    },
+    {
+      "depends_on": [
+        "governance_release_record"
+      ],
+      "id": "governance_policy_artifact",
+      "layer": "governance",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Externalize the promotion policy thresholds and required artifact contract consumed by promotion-decision and release-record checks.",
+      "title": "Externalize promotion policy artifacts"
+    },
+    {
+      "depends_on": [
+        "governance_policy_artifact"
+      ],
+      "id": "governance_policy_schema_registry",
+      "layer": "governance",
+      "priority": "medium",
+      "status": "ready",
+      "summary": "Expose hfr.promotion_policy.v1 through the public schema catalog and add schema checks for policy artifacts.",
+      "title": "Register promotion policy schema"
     }
   ],
   "promotion_readiness": {
@@ -1730,66 +1846,67 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:07:15Z",
+  "updated_at": "2026-07-02T16:16:33Z",
   "github_delivery": {
-    "branch": "codex/hermes-goal-4-model-20260702-1534",
-    "branch_remote_deleted_at": "2026-07-02T16:06:00Z",
-    "branch_remote_status": "deleted",
-    "commit_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "integrated_main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
+    "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
+    "branch": "codex/hermes-goal-8-governance-policy-20260702-1549",
+    "branch_head_before_locked_merge_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
+    "branch_remote_status": "pushed_and_verified_before_locked_merge",
+    "branch_remote_verified_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
+    "implementation_commit_sha": "3a1f4cc58693fa2393c58b2a98eebe20b0cb8b23",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_release_status": "pending_after_post_delivery_checkpoint_push",
-    "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "pushed_and_verified",
-    "main_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "observed_origin_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/12",
-    "pr_status": "MERGED",
-    "remote_branch_verified_deleted": true,
-    "remote_branch_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "remote_main_verified_at": "2026-07-02T16:06:00Z",
-    "remote_main_verified_sha": "23729146346958edc9aaa56a29cebe3420626aaa",
-    "remote_ci": {
-      "checked_at": "2026-07-02T16:10:00Z",
-      "run_id": "28604441425",
-      "status": "failed_preexisting_non_model_release_check",
-      "summary": "GitHub CI passed 335 tests, then release_check.sh failed while writing schema_contracts_check because the harness_run_manifest.v1.schema.json output path was encountered twice during schema export. The same failure appears on pre-Qwen harness main runs 28603801361 and 28604266200."
-    },
-    "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1534",
+    "lock_status": "held_until_main_push_and_post_delivery_checkpoint",
+    "main_integration_status": "verified_pending_main_push",
+    "pr_status": "OPEN",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/13",
+    "remote_ref": "refs/heads/codex/hermes-goal-8-governance-policy-20260702-1549",
+    "verified_at": "2026-07-02T16:16:33Z",
     "verification": [
       {
-        "command": "python3 -m flightrecorder model-candidate validate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --require-training-eligible --out /tmp/qwen3_candidate_validation.json",
+        "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
         "status": "pass",
-        "summary": "Qwen metadata candidate remained training-eligible under approved Apache-2.0 review fields."
+        "summary": "Touched governance policy modules compile after merging current origin/main."
       },
       {
-        "command": "python3 -m flightrecorder validate --model-scout-manifest experiments/registry/model_scout_manifest.json --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json --model-candidate experiments/registry/model_candidates/qwen3_4b_instruct_2507.json --model-compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json --model-compatibility-report experiments/registry/compatibility/qwen3_4b_instruct_2507.compatibility_report.json --model-registry-entry experiments/registry/model_registry_entries/local_mock_tiny_chat.json --model-registry-entry experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json --model-registry experiments/registry/model_registry.json --training-plan experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json --training-plan experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json --out experiments/registry/model_layer_validation.json --strict",
+        "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
         "status": "pass",
-        "summary": "Strict semantic validation passed for local and Qwen model-layer artifacts."
+        "summary": "57 focused governance, ledger, and validation tests passed after merging current origin/main."
       },
       {
-        "command": "python3 -m flightrecorder schemas --check on Qwen candidate, compatibility report, registry entry, registry, scout manifest, and training plan",
+        "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
         "status": "pass",
-        "summary": "Public schema checks passed for all new and updated Qwen artifacts."
+        "summary": "Standalone promotion policy validation passed with zero warnings or errors."
       },
       {
-        "command": "python3 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation",
+        "command": "python3 -m flightrecorder validate --help | rg -- --promotion-policy",
         "status": "pass",
-        "summary": "54 focused model, schema registry, and validation tests passed."
+        "summary": "validate --promotion-policy is advertised."
+      },
+      {
+        "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+        "status": "pass",
+        "summary": "Supervisor state JSON parses after semantic merge."
+      },
+      {
+        "command": "python3 -m json.tool examples/promotion_policy.demo.json && git diff --check",
+        "status": "pass",
+        "summary": "Policy demo JSON parses and the integrated diff has no whitespace errors."
       },
       {
         "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
         "status": "pass",
-        "summary": "335 tests passed under Python 3.11.14 after integrating current origin/main."
+        "summary": "337 tests passed under Python 3.11 after merging current origin/main."
       },
       {
-        "command": "git ls-remote origin refs/heads/main && git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1534",
-        "status": "pass",
-        "summary": "Remote main resolved to 23729146346958edc9aaa56a29cebe3420626aaa and the Goal 4 remote branch was absent after deletion."
+        "command": "python3 -m unittest discover",
+        "status": "blocked",
+        "summary": "System Python 3.9 ran 325 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
       }
     ]
   },
   "risks": [
+    "Release records are structural governance artifacts; real release publication still requires production promotion decision, cards, alias receipt, rollback metadata, compare gate, and release notes evidence.",
+    "Policy artifacts intentionally cannot relax default blockers; future policy fields must preserve that safety floor.",
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
     "Qwen compatibility is metadata-only; tokenizer, serving, tool-call, structured-output, quantization, and memory behavior still need runtime receipts.",
     "Remote CI is failing on a pre-existing non-model schema export duplication in release_check.sh after unit tests pass; Goal 4 did not modify harness schema registration.",
