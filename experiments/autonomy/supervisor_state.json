@@ -50,6 +50,38 @@
       ],
       "resolved_at": "2026-07-02T15:56:29Z",
       "resolved_by_main_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96"
+    },
+    {
+      "id": "model_serving_receipt_main_delivery_lock_unavailable",
+      "layer": "model",
+      "priority": "high",
+      "status": "blocked",
+      "title": "Land Goal 4 serving-probe receipt packet on main",
+      "summary": "Serving-probe receipt packet is committed, branch-pushed, and PR-open, but main delivery is blocked because the main-push lock could not be acquired.",
+      "blocked_at": "2026-07-02T16:31:45Z",
+      "source_branch": "codex/hermes-goal-4-model-20260702-1614",
+      "source_branch_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
+      "observed_origin_main_sha": "1842611af7a080c41f811839e24a053a5d12b024",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/15",
+      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+      "lock_status": "unavailable_not_owned",
+      "verification": [
+        {
+          "command": "git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1614 main",
+          "status": "pass",
+          "summary": "Remote branch resolved to afc5fb69291b72dbfef6922159a1bedb48fb69d1; origin/main resolved to 1842611af7a080c41f811839e24a053a5d12b024."
+        },
+        {
+          "command": "bounded lock retry: 12 mkdir attempts ending 2026-07-02T16:30:28Z",
+          "status": "blocked",
+          "summary": "Tried 12 mkdir lock attempts from 2026-07-02T16:28:28Z through 2026-07-02T16:30:28Z; the lock directory already existed each time, so no main integration or main push was attempted."
+        },
+        {
+          "command": "gh pr create --base main --head codex/hermes-goal-4-model-20260702-1614",
+          "status": "pass",
+          "summary": "Opened tracking PR https://github.com/zwright8/hermes-flight-recorder/pull/15 while main integration waits for the lock."
+        }
+      ]
     }
   ],
   "completed_packets": [
@@ -1081,8 +1113,8 @@
     "id": "model_serving_probe_receipt_contracts",
     "layer": "model",
     "priority": "medium",
-    "status": "verified_pending_branch_commit_and_main_delivery",
-    "summary": "Added no-download model serving-probe receipts, validation/schema/CLI support, registry serving_probes links, and a Qwen metadata-only receipt without launching servers, opening network connections, downloading weights, or running GPU work.",
+    "status": "blocked_main_lock_unavailable_after_branch_push",
+    "summary": "Serving-probe receipt packet is verified and branch-pushed, but locked main delivery is blocked because /tmp/hermes-flight-recorder-main-push.lock could not be acquired.",
     "title": "Add model serving-probe receipt contracts"
   },
   "git": {
@@ -1636,6 +1668,21 @@
       "command": "git diff --check",
       "status": "pass",
       "summary": "Whitespace check passed."
+    },
+    {
+      "command": "git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1614 main",
+      "status": "pass",
+      "summary": "Remote branch resolved to afc5fb69291b72dbfef6922159a1bedb48fb69d1; origin/main resolved to 1842611af7a080c41f811839e24a053a5d12b024."
+    },
+    {
+      "command": "bounded lock retry: 12 mkdir attempts ending 2026-07-02T16:30:28Z",
+      "status": "blocked",
+      "summary": "Tried 12 mkdir lock attempts from 2026-07-02T16:28:28Z through 2026-07-02T16:30:28Z; the lock directory already existed each time, so no main integration or main push was attempted."
+    },
+    {
+      "command": "gh pr create --base main --head codex/hermes-goal-4-model-20260702-1614",
+      "status": "pass",
+      "summary": "Opened tracking PR https://github.com/zwright8/hermes-flight-recorder/pull/15 while main integration waits for the lock."
     }
   ],
   "layer_status": {
@@ -1683,10 +1730,10 @@
   "model_main_delivery": {
     "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "observed_existing_lock_not_owned_before_delivery",
+    "lock_status": "unavailable_not_owned",
     "source_branch": "codex/hermes-goal-4-model-20260702-1614",
-    "status": "verified_pending_branch_commit_and_main_delivery",
-    "summary": "Serving-probe receipt contract packet is locally verified; branch commit, push, locked main integration, branch deletion, and post-delivery checkpoint are still pending.",
+    "status": "blocked_lock_unavailable_after_branch_push",
+    "summary": "Serving-probe receipt packet is verified, branch-pushed, and PR-open; main delivery is blocked by an existing main-push lock not owned by this worker.",
     "verification": [
       {
         "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
@@ -1722,8 +1769,34 @@
         "command": "git diff --check",
         "status": "pass",
         "summary": "Whitespace check passed."
+      },
+      {
+        "command": "git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1614 main",
+        "status": "pass",
+        "summary": "Remote branch resolved to afc5fb69291b72dbfef6922159a1bedb48fb69d1; origin/main resolved to 1842611af7a080c41f811839e24a053a5d12b024."
+      },
+      {
+        "command": "bounded lock retry: 12 mkdir attempts ending 2026-07-02T16:30:28Z",
+        "status": "blocked",
+        "summary": "Tried 12 mkdir lock attempts from 2026-07-02T16:28:28Z through 2026-07-02T16:30:28Z; the lock directory already existed each time, so no main integration or main push was attempted."
+      },
+      {
+        "command": "gh pr create --base main --head codex/hermes-goal-4-model-20260702-1614",
+        "status": "pass",
+        "summary": "Opened tracking PR https://github.com/zwright8/hermes-flight-recorder/pull/15 while main integration waits for the lock."
       }
-    ]
+    ],
+    "branch": "codex/hermes-goal-4-model-20260702-1614",
+    "commit_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
+    "source_branch_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
+    "remote_branch_verified_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
+    "observed_origin_main_sha": "1842611af7a080c41f811839e24a053a5d12b024",
+    "main_sha": null,
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/15",
+    "pr_status": "OPEN",
+    "remote_branch_status": "pushed_verified",
+    "main_integration_status": "blocked_lock_unavailable",
+    "lock_last_observed_at": "2026-07-02T16:30:28Z"
   },
   "next_packets": [
     {
@@ -1801,18 +1874,18 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:24:57Z",
+  "updated_at": "2026-07-02T16:31:45Z",
   "github_delivery": {
     "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
     "branch": "codex/hermes-goal-4-model-20260702-1614",
-    "commit_sha": null,
+    "commit_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "observed_existing_lock_not_owned_before_delivery",
-    "main_integration_status": "pending_lock_and_delivery",
+    "lock_status": "unavailable_not_owned",
+    "main_integration_status": "blocked_lock_unavailable",
     "main_sha": null,
-    "pr_status": "pending_branch_push",
-    "pr_url": null,
-    "remote_branch_status": "pending_push",
+    "pr_status": "OPEN",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/15",
+    "remote_branch_status": "pushed_verified",
     "verification": [
       {
         "command": "python3 -m py_compile flightrecorder/model_registry.py flightrecorder/validation.py flightrecorder/cli.py tests/test_model_registry.py tests/test_schema_registry.py",
@@ -1848,8 +1921,29 @@
         "command": "git diff --check",
         "status": "pass",
         "summary": "Whitespace check passed."
+      },
+      {
+        "command": "git ls-remote --heads origin codex/hermes-goal-4-model-20260702-1614 main",
+        "status": "pass",
+        "summary": "Remote branch resolved to afc5fb69291b72dbfef6922159a1bedb48fb69d1; origin/main resolved to 1842611af7a080c41f811839e24a053a5d12b024."
+      },
+      {
+        "command": "bounded lock retry: 12 mkdir attempts ending 2026-07-02T16:30:28Z",
+        "status": "blocked",
+        "summary": "Tried 12 mkdir lock attempts from 2026-07-02T16:28:28Z through 2026-07-02T16:30:28Z; the lock directory already existed each time, so no main integration or main push was attempted."
+      },
+      {
+        "command": "gh pr create --base main --head codex/hermes-goal-4-model-20260702-1614",
+        "status": "pass",
+        "summary": "Opened tracking PR https://github.com/zwright8/hermes-flight-recorder/pull/15 while main integration waits for the lock."
       }
-    ]
+    ],
+    "source_branch": "codex/hermes-goal-4-model-20260702-1614",
+    "source_branch_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
+    "remote_branch_verified_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
+    "observed_origin_main_sha": "1842611af7a080c41f811839e24a053a5d12b024",
+    "lock_last_observed_at": "2026-07-02T16:30:28Z",
+    "summary": "Serving-probe receipt packet is verified, branch-pushed, and PR-open; main delivery is blocked by an existing main-push lock not owned by this worker."
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
