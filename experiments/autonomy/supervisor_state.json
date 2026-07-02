@@ -1548,7 +1548,7 @@
       "title": "Add model serving-probe receipt contracts",
       "summary": "Added metadata-only model serving-probe receipt contracts, CLI generation/linking, semantic validation, schema catalog wiring, Qwen sample receipt, registry links, docs, and tests; merged and verified over current main under the lock.",
       "branch": "codex/hermes-goal-4-model-20260702-1614",
-      "source_branch_sha": "b921b54978b50df416a7bf04186a41091960b38a",
+      "source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
       "implementation_commit_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
       "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/15",
       "artifacts": [
@@ -1661,7 +1661,9 @@
         }
       ],
       "merged_under_lock_at": "2026-07-02T16:42:00Z",
-      "verified_at": "2026-07-02T16:43:20Z"
+      "verified_at": "2026-07-02T16:43:20Z",
+      "latest_source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+      "latest_source_branch_note": "State-only blocker refresh folded into locked merge before main push."
     }
   ],
   "current_packet": {
@@ -1672,7 +1674,7 @@
     "title": "Add model serving-probe receipt contracts",
     "summary": "PR #15 serving-probe receipt packet is merged into current main under the main-push lock and verified; main push, PR observation, branch deletion, checkpoint, and lock release remain.",
     "branch": "codex/hermes-goal-4-model-20260702-1614",
-    "branch_sha": "b921b54978b50df416a7bf04186a41091960b38a",
+    "branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
     "packet_commit_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
     "base_main_sha": "b904f0476f706afa00bf11463db3af760c46dc31",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/15",
@@ -1885,7 +1887,11 @@
         "status": "pass",
         "summary": "Release check passed, including Python 3.11 discovery with 341 tests and installed-CLI/demo gates."
       }
-    ]
+    ],
+    "branch_head_before_locked_merge_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+    "source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+    "latest_source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+    "latest_source_branch_note": "Folded state-only PR #15 blocker refresh commit into the locked supervisor merge before main push."
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -2554,8 +2560,9 @@
       "summary": "PR #15 serving-probe receipts are merged and verified under the lock; main push and branch cleanup are pending.",
       "title": "Add model serving-probe receipts",
       "branch": "codex/hermes-goal-4-model-20260702-1614",
-      "source_branch_sha": "b921b54978b50df416a7bf04186a41091960b38a",
-      "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/15"
+      "source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+      "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/15",
+      "latest_source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd"
     },
     {
       "id": "land_goal5_training_pr4",
@@ -2613,7 +2620,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:43:20Z",
+  "updated_at": "2026-07-02T16:45:00Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2686,7 +2693,7 @@
     "id": "model_serving_receipts_main_delivery",
     "branch": "codex/hermes-goal-4-model-20260702-1614",
     "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1614",
-    "branch_head_before_locked_merge_sha": "b921b54978b50df416a7bf04186a41091960b38a",
+    "branch_head_before_locked_merge_sha": "17412934e733f594737e0781ee5f936e872c18bd",
     "implementation_commit_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
     "base_main_sha": "b904f0476f706afa00bf11463db3af760c46dc31",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
@@ -2740,7 +2747,10 @@
     "risks": [
       "Serving-probe receipt is metadata-only and does not prove live endpoint behavior.",
       "Fresh release_check is required after merging over current governance schema main."
-    ]
+    ],
+    "source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+    "latest_source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+    "latest_source_branch_note": "Folded state-only PR #15 blocker refresh commit into the locked supervisor merge before main push."
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
@@ -3006,7 +3016,7 @@
     "id": "model_serving_receipts_main_delivery",
     "branch": "codex/hermes-goal-4-model-20260702-1614",
     "remote_ref": "refs/heads/codex/hermes-goal-4-model-20260702-1614",
-    "branch_head_before_locked_merge_sha": "b921b54978b50df416a7bf04186a41091960b38a",
+    "branch_head_before_locked_merge_sha": "17412934e733f594737e0781ee5f936e872c18bd",
     "implementation_commit_sha": "afc5fb69291b72dbfef6922159a1bedb48fb69d1",
     "base_main_sha": "b904f0476f706afa00bf11463db3af760c46dc31",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
@@ -3060,6 +3070,9 @@
     "risks": [
       "Serving-probe receipt is metadata-only and does not prove live endpoint behavior.",
       "Fresh release_check is required after merging over current governance schema main."
-    ]
+    ],
+    "source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+    "latest_source_branch_sha": "17412934e733f594737e0781ee5f936e872c18bd",
+    "latest_source_branch_note": "Folded state-only PR #15 blocker refresh commit into the locked supervisor merge before main push."
   }
 }
