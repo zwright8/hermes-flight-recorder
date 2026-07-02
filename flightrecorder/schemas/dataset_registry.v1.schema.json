@@ -1,0 +1,82 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/dataset_registry.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Selectable dataset registry entry for trainer handoffs.",
+  "properties": {
+    "artifact_fingerprints": {
+      "type": "object"
+    },
+    "artifact_type": {
+      "enum": [
+        "training_export",
+        "reviewed_export"
+      ]
+    },
+    "dataset_version": {
+      "pattern": "^hfrds-[0-9a-f]+$",
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "label_provenance": {
+      "type": "object"
+    },
+    "manifest_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "outputs": {
+      "type": "object"
+    },
+    "redaction_status": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "hfr.rl.dataset_registry.v1"
+    },
+    "selection": {
+      "properties": {
+        "key": {
+          "pattern": "^hfrds-[0-9a-f]+$",
+          "type": "string"
+        },
+        "root_views": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trainer_preflight_arg": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "trainer_preflight_arg",
+        "root_views"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "dataset_version",
+    "generated_at",
+    "artifact_type",
+    "manifest_path",
+    "manifest_sha256",
+    "selection",
+    "redaction_status",
+    "label_provenance",
+    "artifact_fingerprints",
+    "outputs"
+  ],
+  "title": "Hermes Flight Recorder Dataset Registry",
+  "type": "object"
+}

@@ -39,6 +39,37 @@
       },
       "type": "array"
     },
+    "label_provenance": {
+      "properties": {
+        "schema_version": {
+          "const": "hfr.rl.label_provenance.v1"
+        }
+      },
+      "required": [
+        "schema_version"
+      ],
+      "type": "object"
+    },
+    "redaction_status": {
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "hfr.rl.redaction_status.v1"
+        },
+        "unredacted_secret_like_finding_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "passed",
+        "unredacted_secret_like_finding_count"
+      ],
+      "type": "object"
+    },
     "recommended_checks": {
       "items": {
         "type": "string"
@@ -89,6 +120,8 @@
     "task_completion",
     "trace_signal",
     "dataset_splits",
+    "redaction_status",
+    "label_provenance",
     "task_families",
     "quality_flags",
     "recommended_checks"

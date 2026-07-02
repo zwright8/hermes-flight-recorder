@@ -16,6 +16,7 @@ TRAINER_LAUNCH_CHECK_SCHEMA_VERSION = "hfr.trainer_launch_check.v1"
 
 _TRAINING_EXPORT_BASE_FILES = (
     "manifest.json",
+    "dataset_registry.json",
     "dataset_metrics.json",
     "dataset_splits.json",
     "DATASET_CARD.md",
@@ -46,6 +47,7 @@ _TRAINING_ROW_SCHEMA_NAMES = {
 }
 _TRAINING_SCHEMA_CONTRACTS = (
     ("manifest.json", "training_manifest", False),
+    ("dataset_registry.json", "dataset_registry", False),
     ("dataset_metrics.json", "rl_dataset_metrics", False),
     ("curriculum.json", "rl_curriculum", False),
     ("dataset_splits.json", "dataset_splits", False),
@@ -75,13 +77,17 @@ _COMPARE_SCHEMA_CONTRACTS = (
 )
 _REVIEWED_EXPORT_FILES = (
     "manifest.json",
+    "dataset_registry.json",
     "reviewed_labels.jsonl",
     "reviewed_sft.jsonl",
     "reviewed_reward_model.jsonl",
     "reviewed_preferences.jsonl",
     "reviewed_dpo.jsonl",
 )
-_REVIEWED_SCHEMA_CONTRACTS = (("manifest.json", "reviewed_manifest", False),)
+_REVIEWED_SCHEMA_CONTRACTS = (
+    ("manifest.json", "reviewed_manifest", False),
+    ("dataset_registry.json", "dataset_registry", False),
+)
 _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.training_gate.v1",
     "hfr.compare_gate.v1",
@@ -105,6 +111,7 @@ def build_trainer_preflight(
     evidence_bundle_path: str | Path | None = None,
     validation_summary_paths: list[str | Path] | None = None,
     require_gates: list[str] | None = None,
+    required_dataset_versions: list[str] | None = None,
     trainer_command: str | None = None,
     allow_unvalidated_gates: bool = False,
     preserve_paths: bool = False,
@@ -120,6 +127,7 @@ def build_trainer_preflight(
         )
 
     checks: list[dict[str, Any]] = []
+    required_dataset_versions = list(dict.fromkeys(required_dataset_versions or []))
     validation_summaries, validation_targets = _validation_summary_records(validation_summary_paths or [], preserve_paths)
     gates = [_gate_record(Path(path), preserve_paths, validation_targets) for path in gate_paths]
     seen_gate_ids = {gate["id"] for gate in gates}
@@ -143,10 +151,19 @@ def build_trainer_preflight(
 
     artifacts: dict[str, Any] = {}
     schema_contracts: dict[str, Any] = {}
+    dataset_selection: list[dict[str, Any]] = []
     if training_export_dir is not None:
         training_root = Path(training_export_dir)
         _add_export_artifacts(artifacts, checks, "training_export", training_root, _TRAINING_EXPORT_FILES, preserve_paths)
         _add_schema_contracts(schema_contracts, checks, "training_export", training_root, _TRAINING_SCHEMA_CONTRACTS, preserve_paths)
+        _add_dataset_selection(
+            dataset_selection,
+            checks,
+            "training_export",
+            training_root,
+            preserve_paths,
+            required_dataset_versions,
+        )
     if compare_export_dir is not None:
         compare_root = Path(compare_export_dir)
         _add_export_artifacts(artifacts, checks, "compare_export", compare_root, _COMPARE_EXPORT_FILES, preserve_paths)
@@ -155,6 +172,14 @@ def build_trainer_preflight(
         reviewed_root = Path(reviewed_export_dir)
         _add_export_artifacts(artifacts, checks, "reviewed_export", reviewed_root, _REVIEWED_EXPORT_FILES, preserve_paths)
         _add_schema_contracts(schema_contracts, checks, "reviewed_export", reviewed_root, _REVIEWED_SCHEMA_CONTRACTS, preserve_paths)
+        _add_dataset_selection(
+            dataset_selection,
+            checks,
+            "reviewed_export",
+            reviewed_root,
+            preserve_paths,
+            required_dataset_versions,
+        )
     if evidence_bundle_path is not None:
         bundle_path = Path(evidence_bundle_path)
         artifacts["evidence_bundle"] = _file_record(bundle_path, preserve_paths)
@@ -180,6 +205,7 @@ def build_trainer_preflight(
         "gate_count": len(gates),
         "passed_gate_count": sum(1 for gate in gates if gate.get("passed") is True),
         "required_gates": list(dict.fromkeys(require_gates or [])),
+        "required_dataset_versions": required_dataset_versions,
         "check_count": len(checks),
         "failed_check_count": failed_checks,
         "checks": checks,
@@ -187,10 +213,12 @@ def build_trainer_preflight(
         "validation_summaries": validation_summaries,
         "schema_contracts": schema_contracts,
         "artifacts": artifacts,
+        "dataset_selection": dataset_selection,
         "trainer_command": command,
         "notes": [
             "Trainer preflight records evidence for a downstream launch guard; it does not train, sandbox, or execute commands.",
             "A ready preflight means the referenced gates and artifacts passed the configured handoff checks.",
+            "Use --require-dataset-version to bind launch readiness to an exact manifest dataset_version.",
         ],
     }
     clean_metadata = _metadata(metadata)
@@ -205,6 +233,7 @@ def build_trainer_launch_check(
     preflight: dict[str, Any],
     validation_summary: dict[str, Any],
     require_gates: list[str] | None = None,
+    required_dataset_versions: list[str] | None = None,
     require_metadata: dict[str, str] | None = None,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
@@ -218,8 +247,21 @@ def build_trainer_launch_check(
     gates = _launch_gate_records(preflight.get("gates"))
     metadata = _metadata(preflight.get("metadata") if isinstance(preflight.get("metadata"), dict) else None)
     required_gates = list(dict.fromkeys(require_gates or []))
+    preflight_required_dataset_versions = (
+        preflight.get("required_dataset_versions") if isinstance(preflight.get("required_dataset_versions"), list) else []
+    )
+    required_dataset_versions = list(
+        dict.fromkeys(
+            [
+                str(version)
+                for version in [*(required_dataset_versions or []), *preflight_required_dataset_versions]
+                if isinstance(version, str) and version
+            ]
+        )
+    )
     required_metadata = _metadata(require_metadata)
     command = _approved_command_record(preflight.get("trainer_command"))
+    dataset_selection = preflight.get("dataset_selection") if isinstance(preflight.get("dataset_selection"), list) else []
 
     _add_bool_check(checks, "preflight_validation_passed", validation["passed"], {"preflight": display_preflight_path})
     _add_bool_check(
@@ -258,6 +300,18 @@ def build_trainer_launch_check(
             actual == expected,
             {"key": key, "expected": expected, "actual": "" if actual is None else actual},
         )
+    for version in required_dataset_versions:
+        matching = [
+            item
+            for item in dataset_selection
+            if isinstance(item, dict) and item.get("dataset_version") == version and item.get("matches_required") is True
+        ]
+        _add_bool_check(
+            checks,
+            "required_dataset_version_selected",
+            bool(matching),
+            {"dataset_version": version},
+        )
 
     failed_checks = sum(1 for check in checks if check.get("passed") is False)
     passed = failed_checks == 0
@@ -274,15 +328,18 @@ def build_trainer_launch_check(
         "checks": checks,
         "validation": validation,
         "required_gates": required_gates,
+        "required_dataset_versions": required_dataset_versions,
         "required_metadata": required_metadata,
         "gates": gates,
         "gate_count": len(gates),
         "passed_gate_count": sum(1 for gate in gates if gate.get("passed") is True),
         "artifacts": {"count": len(artifacts), "names": sorted(str(name) for name in artifacts.keys())},
+        "dataset_selection": dataset_selection,
         "approved_command": command,
         "notes": [
             "Trainer launch check validates the preflight and emits the approved command; it does not execute it.",
             "A ready launch check means the preflight artifact, referenced hashes, required gates, and required metadata passed.",
+            "Dataset selections are inherited from the trainer preflight and can be enforced again with --require-dataset-version.",
         ],
     }
 
@@ -512,6 +569,86 @@ def _add_export_artifacts(
         _add_bool_check(checks, "artifact_file_regular", _is_regular_file(path), {"artifact": name, "file": relative})
 
 
+def _add_dataset_selection(
+    dataset_selection: list[dict[str, Any]],
+    checks: list[dict[str, Any]],
+    artifact: str,
+    root: Path,
+    preserve_paths: bool,
+    required_dataset_versions: list[str],
+) -> None:
+    manifest_path = root / "manifest.json"
+    registry_path = root / "dataset_registry.json"
+    manifest = _read_json_safely(manifest_path)
+    registry = _read_json_safely(registry_path)
+    dataset_version = str(manifest.get("dataset_version") or "") if isinstance(manifest, dict) else ""
+    manifest_sha256 = _sha256(manifest_path) if _is_regular_file(manifest_path) else ""
+    registry_sha256 = _sha256(registry_path) if _is_regular_file(registry_path) else ""
+    registry_selection = registry.get("selection") if isinstance(registry, dict) and isinstance(registry.get("selection"), dict) else {}
+    registry_dataset_version = str(registry.get("dataset_version") or "") if isinstance(registry, dict) else ""
+    registry_manifest_sha256 = str(registry.get("manifest_sha256") or "") if isinstance(registry, dict) else ""
+    leakage = registry.get("leakage_checks") if isinstance(registry, dict) and isinstance(registry.get("leakage_checks"), dict) else {}
+    manifest_registry = manifest.get("registry") if isinstance(manifest, dict) and isinstance(manifest.get("registry"), dict) else {}
+    redaction_status = registry.get("redaction_status") if isinstance(registry, dict) and isinstance(registry.get("redaction_status"), dict) else {}
+    matches_required = bool(dataset_version and (not required_dataset_versions or dataset_version in required_dataset_versions))
+    record: dict[str, Any] = {
+        "artifact": artifact,
+        "root": _display_path(root, preserve_paths),
+        "manifest_path": _display_path(manifest_path, preserve_paths),
+        "manifest_sha256": manifest_sha256,
+        "registry_path": _display_path(registry_path, preserve_paths),
+        "registry_sha256": registry_sha256,
+        "dataset_version": dataset_version,
+        "required_dataset_versions": list(required_dataset_versions),
+        "matches_required": matches_required,
+        "registry_dataset_version": registry_dataset_version,
+        "registry_selection_key": str(registry_selection.get("key") or ""),
+        "registry_manifest_sha256": registry_manifest_sha256,
+        "redaction_passed": redaction_status.get("passed") is True or manifest_registry.get("redaction_passed") is True,
+    }
+    if artifact == "training_export":
+        record["heldout_scenario_exclusive"] = (
+            leakage.get("heldout_scenario_exclusive") is True
+            or manifest_registry.get("heldout_scenario_exclusive") is True
+        )
+        record["heldout_scenario_ids"] = leakage.get("heldout_scenario_ids") if isinstance(leakage.get("heldout_scenario_ids"), list) else []
+    dataset_selection.append(record)
+    _add_bool_check(checks, "dataset_version_present", bool(dataset_version), {"artifact": artifact})
+    if required_dataset_versions:
+        _add_bool_check(
+            checks,
+            "dataset_version_matches_required",
+            matches_required,
+            {"artifact": artifact, "dataset_version": dataset_version, "required": ",".join(required_dataset_versions)},
+        )
+    _add_bool_check(checks, "dataset_registry_exists", _is_regular_file(registry_path), {"artifact": artifact})
+    _add_bool_check(
+        checks,
+        "dataset_registry_version_matches_manifest",
+        bool(dataset_version and registry_dataset_version == dataset_version and registry_selection.get("key") == dataset_version),
+        {"artifact": artifact, "dataset_version": dataset_version},
+    )
+    _add_bool_check(
+        checks,
+        "dataset_registry_manifest_hash_matches",
+        bool(manifest_sha256 and registry_manifest_sha256 == manifest_sha256),
+        {"artifact": artifact, "dataset_version": dataset_version},
+    )
+    _add_bool_check(
+        checks,
+        "dataset_redaction_passed",
+        record["redaction_passed"] is True,
+        {"artifact": artifact, "dataset_version": dataset_version},
+    )
+    if artifact == "training_export":
+        _add_bool_check(
+            checks,
+            "dataset_heldout_scenario_exclusive",
+            record.get("heldout_scenario_exclusive") is True,
+            {"artifact": artifact, "dataset_version": dataset_version},
+        )
+
+
 def _trainer_command_record(value: str | None) -> dict[str, Any]:
     if not value:
         return {"provided": False, "raw": "", "argv": []}
@@ -602,6 +739,14 @@ def _read_json_optional(path: Path) -> dict[str, Any] | None:
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     return payload if isinstance(payload, dict) else None
+
+
+def _read_json_safely(path: Path) -> dict[str, Any]:
+    try:
+        payload = _read_json_optional(path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload or {}
 
 
 def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:

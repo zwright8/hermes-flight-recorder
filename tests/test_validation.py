@@ -424,6 +424,46 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("dataset_splits.split_counts.validation.episode_count", errors)
             self.assertIn("manifest.artifact_fingerprints.train_episodes.sha256", errors)
 
+    def test_validate_rejects_dataset_split_scenario_leakage_metadata_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--export-rl"])
+            export = runs / "training_export"
+            splits_path = export / "dataset_splits.json"
+            splits = json.loads(splits_path.read_text(encoding="utf-8"))
+            splits["leakage_checks"]["heldout_scenario_exclusive"] = False
+            splits["leakage_checks"]["cross_split_scenario_ids"] = ["forged_scenario"]
+            splits_path.write_text(json.dumps(splits, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("dataset_splits.leakage_checks.heldout_scenario_exclusive", errors)
+            self.assertIn("dataset_splits.leakage_checks.cross_split_scenario_ids", errors)
+
+    def test_validate_rejects_dataset_registry_manifest_hash_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            manifest_path = export / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["notes"].append("tampered after registry emission")
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("dataset_registry.manifest_sha256 must match manifest.json contents", errors)
+
     def test_validate_rejects_training_manifest_artifact_fingerprint_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -480,15 +520,18 @@ class ValidationTests(unittest.TestCase):
                 path.unlink()
             (export / "dataset_splits.json").unlink()
             (export / "dataset_metrics.json").unlink()
+            (export / "dataset_registry.json").unlink()
             (export / "DATASET_CARD.md").unlink()
             manifest_path = export / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            for name in ("sft", "dpo", "reward_model", "dataset_metrics", "dataset_splits", "dataset_card"):
+            for name in ("sft", "dpo", "reward_model", "dataset_metrics", "dataset_splits", "dataset_registry", "dataset_card"):
                 manifest["outputs"].pop(name, None)
             for split_name in ("train", "validation", "test"):
                 for artifact_name in ("episodes", "rewards", "step_rewards", "preferences", "failure_modes", "sft", "dpo", "reward_model"):
                     manifest["outputs"].pop(f"{split_name}_{artifact_name}", None)
             for name in ("sft_count", "dpo_count", "reward_model_count", "quality_flag_count"):
+                manifest.pop(name, None)
+            for name in ("dataset_version", "redaction_status", "label_provenance", "registry"):
                 manifest.pop(name, None)
             manifest.pop("dataset_splits", None)
             manifest.pop("artifact_fingerprints", None)

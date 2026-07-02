@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -6,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
-from flightrecorder.training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES
+from flightrecorder.training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES, TrainingExportError, export_rl_dataset
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,9 +51,18 @@ class TrainingExportTests(unittest.TestCase):
             curriculum = json.loads((out / "curriculum.json").read_text(encoding="utf-8"))
             dataset_metrics = json.loads((out / "dataset_metrics.json").read_text(encoding="utf-8"))
             dataset_splits = json.loads((out / "dataset_splits.json").read_text(encoding="utf-8"))
+            dataset_registry = json.loads((out / "dataset_registry.json").read_text(encoding="utf-8"))
             dataset_card = (out / "DATASET_CARD.md").read_text(encoding="utf-8")
 
             self.assertEqual(manifest["schema_version"], "hfr.rl.manifest.v1")
+            self.assertRegex(manifest["dataset_version"], r"^hfrds-[0-9a-f]+$")
+            self.assertEqual(manifest["dataset_version"], dataset_registry["dataset_version"])
+            self.assertEqual(manifest["registry"]["selection_key"], manifest["dataset_version"])
+            self.assertTrue(manifest["redaction_status"]["passed"])
+            self.assertTrue(dataset_metrics["redaction_status"]["passed"])
+            self.assertEqual(manifest["label_provenance"], dataset_metrics["label_provenance"])
+            self.assertEqual(dataset_registry["manifest_sha256"], hashlib.sha256((out / "manifest.json").read_bytes()).hexdigest())
+            self.assertIn("dataset_registry", manifest["outputs"])
             self.assertEqual(manifest["episode_count"], 2)
             self.assertEqual(manifest["reward_count"], 2)
             self.assertEqual(manifest["step_reward_count"], len(step_rewards))
@@ -153,8 +163,12 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual(dataset_splits["summary"]["validation_episode_count"], 0)
             self.assertEqual(dataset_splits["summary"]["test_episode_count"], 0)
             self.assertTrue(dataset_splits["summary"]["family_exclusive"])
+            self.assertTrue(dataset_splits["summary"]["heldout_scenario_exclusive"])
             self.assertTrue(dataset_splits["leakage_checks"]["family_exclusive"])
+            self.assertTrue(dataset_splits["leakage_checks"]["heldout_scenario_exclusive"])
             self.assertEqual(dataset_splits["leakage_checks"]["cross_split_task_families"], [])
+            self.assertEqual(dataset_splits["leakage_checks"]["cross_split_scenario_ids"], [])
+            self.assertEqual(dataset_registry["leakage_checks"], dataset_splits["leakage_checks"])
             self.assertEqual(dataset_splits["assignments"][0]["task_family"], "prompt_injection")
             self.assertEqual(dataset_splits["assignments"][0]["split"], "train")
             self.assertEqual(dataset_splits["assignments"][0]["episode_ids"], ["prompt_injection_bad", "prompt_injection_good"])
@@ -179,6 +193,8 @@ class TrainingExportTests(unittest.TestCase):
             self.assertIn("Fully verified trainer-view rows", dataset_card)
             self.assertIn("## Trace Signal", dataset_card)
             self.assertIn("## Dataset Splits", dataset_card)
+            self.assertIn("## Redaction", dataset_card)
+            self.assertIn("## Label Provenance", dataset_card)
             self.assertIn("## Task Families", dataset_card)
             self.assertEqual([sample["episode_id"] for sample in sft], ["prompt_injection_good"])
             self.assertEqual(sft[0]["source_fingerprint_status"], "verified")
@@ -198,6 +214,39 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual({sample["episode_id"] for sample in reward_model}, {"prompt_injection_good", "prompt_injection_bad"})
             self.assertEqual({sample["source_fingerprint_status"] for sample in reward_model}, {"verified"})
             self.assertEqual({sample["task_completion_status"] for sample in reward_model}, {"complete", "incomplete"})
+
+    def test_export_rl_blocks_unredacted_secret_like_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            good = runs / "prompt_injection_good"
+            out = Path(tmp) / "training"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(good)])
+
+            with self.assertRaises(TrainingExportError):
+                export_rl_dataset(runs, out, metadata={"api_key": "sk-test-unredacted"})
+
+    def test_export_rl_excludes_final_answer_only_positive_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            good = runs / "prompt_injection_good"
+            out = Path(tmp) / "training"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(good)])
+            scorecard_path = good / "scorecard.json"
+            scorecard = json.loads(scorecard_path.read_text(encoding="utf-8"))
+            scorecard.pop("task_completion", None)
+            scorecard_path.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            export_rl_dataset(runs, out)
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            dataset_metrics = json.loads((out / "dataset_metrics.json").read_text(encoding="utf-8"))
+            self.assertEqual(read_jsonl(out / "sft.jsonl"), [])
+            self.assertEqual(read_jsonl(out / "reward_model.jsonl"), [])
+            self.assertEqual(manifest["label_provenance"]["final_answer_only_excluded_count"], 1)
+            self.assertIn(
+                "final_answer_only_success_excluded",
+                {flag["id"] for flag in dataset_metrics["quality_flags"]},
+            )
 
     def test_export_rl_includes_failed_rule_attribution(self):
         with tempfile.TemporaryDirectory() as tmp:

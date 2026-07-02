@@ -128,6 +128,7 @@ class TrainerPreflightTests(unittest.TestCase):
             gate = Path(tmp) / "training_gate.json"
             preflight = Path(tmp) / "trainer_preflight.json"
             run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--export-rl"])
+            dataset_version = json.loads((runs / "training_export" / "manifest.json").read_text(encoding="utf-8"))["dataset_version"]
             self.assertEqual(
                 run_cli(
                     [
@@ -152,6 +153,8 @@ class TrainerPreflightTests(unittest.TestCase):
                     str(runs / "training_export"),
                     "--require-gate",
                     "training_gate",
+                    "--require-dataset-version",
+                    dataset_version,
                     "--trainer-command",
                     f"python train.py --dataset {runs / 'training_export'}",
                     "--metadata",
@@ -169,6 +172,11 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["recommendation"], "launch_allowed")
             self.assertEqual(result["gate_count"], 1)
             self.assertEqual(result["gates"][0]["id"], "training_gate")
+            self.assertEqual(result["required_dataset_versions"], [dataset_version])
+            self.assertEqual(result["dataset_selection"][0]["dataset_version"], dataset_version)
+            self.assertTrue(result["dataset_selection"][0]["matches_required"])
+            self.assertTrue(result["dataset_selection"][0]["redaction_passed"])
+            self.assertTrue(result["dataset_selection"][0]["heldout_scenario_exclusive"])
             self.assertTrue(result["gates"][0]["validation"]["passed"])
             self.assertEqual(result["metadata"]["launcher"], "dry-run")
             self.assertEqual(result["trainer_command"]["argv"][:2], ["python", "train.py"])
@@ -193,6 +201,8 @@ class TrainerPreflightTests(unittest.TestCase):
                         str(preflight),
                         "--require-gate",
                         "training_gate",
+                        "--require-dataset-version",
+                        dataset_version,
                         "--require-metadata",
                         "launcher=dry-run",
                         "--out",
@@ -204,6 +214,8 @@ class TrainerPreflightTests(unittest.TestCase):
             launch = json.loads(launch_check.read_text(encoding="utf-8"))
             self.assertEqual(launch["schema_version"], "hfr.trainer_launch_check.v1")
             self.assertTrue(launch["passed"])
+            self.assertEqual(launch["required_dataset_versions"], [dataset_version])
+            self.assertEqual(launch["dataset_selection"][0]["dataset_version"], dataset_version)
             self.assertEqual(launch["recommendation"], "launch_allowed")
             self.assertEqual(launch["approved_command"]["argv"][:2], ["python", "train.py"])
             self.assertTrue(launch["approved_command"]["approved"])
@@ -404,6 +416,50 @@ class TrainerPreflightTests(unittest.TestCase):
             code, output = run_cli_output(["trainer-launch-check", "--preflight", str(preflight), "--print-command"])
             self.assertEqual(code, 0)
             self.assertEqual(output.strip(), f"python train.py --dataset {runs / 'training_export'}")
+
+    def test_trainer_preflight_blocks_unselected_dataset_version(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            gate = Path(tmp) / "training_gate.json"
+            preflight = Path(tmp) / "trainer_preflight.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--export-rl"])
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-export",
+                        "--training-export",
+                        str(runs / "training_export"),
+                        "--policy",
+                        str(ROOT / "examples" / "training_gate_policy.demo.json"),
+                        "--out",
+                        str(gate),
+                    ]
+                ),
+                0,
+            )
+
+            code = run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--training-export",
+                    str(runs / "training_export"),
+                    "--require-dataset-version",
+                    "hfrds-deadbeef",
+                    "--trainer-command",
+                    f"python train.py --dataset {runs / 'training_export'}",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertFalse(result["passed"])
+            self.assertFalse(result["dataset_selection"][0]["matches_required"])
+            failed = {check["id"] for check in result["checks"] if check["passed"] is False}
+            self.assertIn("dataset_version_matches_required", failed)
 
     def test_trainer_preflight_blocks_failed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:

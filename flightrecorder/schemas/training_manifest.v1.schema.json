@@ -13,6 +13,10 @@
     "dataset_metrics": {
       "type": "string"
     },
+    "dataset_version": {
+      "pattern": "^hfrds-[0-9a-f]+$",
+      "type": "string"
+    },
     "dataset_splits": {
       "additionalProperties": true,
       "properties": {
@@ -109,6 +113,53 @@
         "signed"
       ]
     },
+    "label_provenance": {
+      "properties": {
+        "schema_version": {
+          "const": "hfr.rl.label_provenance.v1"
+        }
+      },
+      "required": [
+        "schema_version"
+      ],
+      "type": "object"
+    },
+    "redaction_status": {
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "hfr.rl.redaction_status.v1"
+        },
+        "unredacted_secret_like_finding_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "passed",
+        "unredacted_secret_like_finding_count"
+      ],
+      "type": "object"
+    },
+    "registry": {
+      "properties": {
+        "schema_version": {
+          "const": "hfr.rl.dataset_registry.v1"
+        },
+        "selection_key": {
+          "pattern": "^hfrds-[0-9a-f]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "selection_key"
+      ],
+      "type": "object"
+    },
     "run_count": {
       "minimum": 0,
       "type": "integer"
@@ -139,6 +190,7 @@
   },
   "required": [
     "schema_version",
+    "dataset_version",
     "generated_at",
     "source_runs_dir",
     "output_dir",
@@ -155,6 +207,9 @@
     "dpo_count",
     "reward_model_count",
     "quality_flag_count",
+    "redaction_status",
+    "label_provenance",
+    "registry",
     "task_families",
     "outputs",
     "artifact_fingerprints"

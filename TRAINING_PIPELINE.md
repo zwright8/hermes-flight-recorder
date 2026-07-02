@@ -301,11 +301,13 @@ use `--preserve-paths` only for private local debugging.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the
-trainer-facing export files, including `dataset_splits.json` and every
-`splits/<split>/*.jsonl` file, verifies required gates are present and passed,
-and refuses training, compare, reviewed, or review-calibration handoffs that
-skipped embedded export validation unless `--allow-unvalidated-gates` is
-explicitly set:
+trainer-facing export files, including `dataset_registry.json`,
+`dataset_splits.json`, and every `splits/<split>/*.jsonl` file, verifies
+required gates are present and passed, and refuses training, compare, reviewed,
+or review-calibration handoffs that skipped embedded export validation unless
+`--allow-unvalidated-gates` is explicitly set. Use
+`--require-dataset-version` with the manifest `dataset_version` whenever the
+trainer should consume one exact dataset lineage:
 
 ```bash
 flightrecorder trainer-preflight \
@@ -316,6 +318,7 @@ flightrecorder trainer-preflight \
   --evidence-bundle runs/evidence_bundle.json \
   --require-gate training_gate \
   --require-gate compare_gate \
+  --require-dataset-version "$(jq -r .dataset_version runs/training_export/manifest.json)" \
   --trainer-command "python train.py --dry-run --dataset runs/training_export" \
   --out runs/trainer_preflight.json
 
@@ -325,6 +328,7 @@ flightrecorder trainer-launch-check \
   --preflight runs/trainer_preflight.json \
   --require-gate training_gate \
   --require-gate compare_gate \
+  --require-dataset-version "$(jq -r .dataset_version runs/training_export/manifest.json)" \
   --out runs/trainer_launch_check.json
 
 flightrecorder validate --trainer-launch-check runs/trainer_launch_check.json --strict
@@ -489,13 +493,17 @@ flightrecorder review-calibration \
 
 The reviewed export writes `reviewed_labels.jsonl`, `reviewed_sft.jsonl`,
 `reviewed_reward_model.jsonl`, `reviewed_preferences.jsonl`,
-`reviewed_dpo.jsonl`, and a manifest. Labels marked `needs_review` remain in
-`reviewed_labels.jsonl` but are excluded from trainer-ready views.
+`reviewed_dpo.jsonl`, `dataset_registry.json`, and a manifest. Labels marked
+`needs_review` remain in `reviewed_labels.jsonl` but are excluded from
+trainer-ready views.
 Trainer-ready reviewed rows preserve the originating `review_item_sha256`, so
 SFT, reward-model, preference, and DPO consumers can trace each row back to the
 review evidence that authorized it. They also preserve `reviewer_confidence`,
 letting trainers or CI jobs filter low-confidence labels without losing
-provenance.
+provenance. Reviewed manifests also carry `dataset_version`, redaction status,
+label provenance, and a registry pointer so `trainer-preflight
+--require-dataset-version` can select reviewed datasets exactly like automated
+training exports.
 
 `gate-reviewed` is the CI handoff for human-curated training signal. Use it to
 require completed labels, enough accepted and negative examples, reviewed
@@ -586,18 +594,22 @@ The export directory contains:
   score and reward fields.
 - `dataset_metrics.json`: machine-readable export coverage, source-fingerprint
   coverage, trainer-view source-fingerprint coverage, task-completion coverage,
-  trace-signal coverage, reward/score distribution, failure pressure, and
-  quality flags.
+  trace-signal coverage, reward/score distribution, failure pressure,
+  redaction status, label provenance, and quality flags.
 - `dataset_splits.json`: deterministic task-family train/validation/test split
-  metadata, including family-exclusivity leakage checks and per-split artifact
-  counts.
+  metadata, including family-exclusivity leakage checks, held-out scenario ID
+  exclusivity checks, and per-split artifact counts.
+- `dataset_registry.json`: trainer-facing selection record that binds
+  `dataset_version` to `manifest.json` SHA-256, artifact fingerprints,
+  redaction status, label provenance, source runs, and split leakage checks.
 - `splits/<split>/*.jsonl`: split copies of `episodes`, `rewards`,
   `step_rewards`, `preferences`, `failure_modes`, `sft`, `dpo`, and
   `reward_model` rows for external trainers.
 - `DATASET_CARD.md`: human-readable dataset summary for review before training
   jobs consume the JSONL views.
-- `manifest.json`: generation settings, counts, output paths, artifact
-  fingerprints, caveats, and optional experiment metadata.
+- `manifest.json`: generation settings, counts, `dataset_version`, output
+  paths, artifact fingerprints, redaction status, label provenance, registry
+  pointer, caveats, and optional experiment metadata.
 
 All exports are built from `normalized_trace.json` and `scorecard.json`, so they
 use the redacted evidence surface rather than raw sensitive traces. When a run
@@ -606,7 +618,9 @@ and `source_fingerprints` so downstream training rows can be traced back to the
 provenance graph and filtered by the scenario/source-trace hashes that produced
 the label.
 The manifest fingerprints each generated JSONL, JSON, and Markdown export
-artifact except the manifest itself, including every split file.
+artifact except the manifest and registry, including every split file. The
+registry then fingerprints the manifest to avoid a circular hash while still
+letting trainers verify the exact manifest they selected.
 `flightrecorder validate --training-export` recomputes those SHA-256 hashes,
 verifies split row counts, and checks that task families do not leak across
 train/validation/test files. This lets a training launcher reject stale,

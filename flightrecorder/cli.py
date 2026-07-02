@@ -1472,6 +1472,7 @@ def cmd_trainer_preflight(args: argparse.Namespace) -> int:
         evidence_bundle_path=args.evidence_bundle,
         validation_summary_paths=args.validation,
         require_gates=args.require_gate,
+        required_dataset_versions=args.require_dataset_version,
         trainer_command=args.trainer_command,
         allow_unvalidated_gates=args.allow_unvalidated_gates,
         preserve_paths=args.preserve_paths,
@@ -1496,6 +1497,7 @@ def cmd_trainer_launch_check(args: argparse.Namespace) -> int:
         preflight=preflight,
         validation_summary=validation_summary,
         require_gates=args.require_gate,
+        required_dataset_versions=args.require_dataset_version,
         require_metadata=_metadata_options(args.require_metadata),
         preserve_paths=args.preserve_paths,
     )
@@ -2489,6 +2491,12 @@ def _parser() -> argparse.ArgumentParser:
         help="flightrecorder validate --out summary that proves non-embedded gate artifacts; may be repeated",
     )
     trainer_preflight.add_argument("--require-gate", action="append", default=[], help="Require this gate id to be present")
+    trainer_preflight.add_argument(
+        "--require-dataset-version",
+        action="append",
+        default=[],
+        help="Require an exact manifest dataset_version before trainer launch; may be repeated",
+    )
     trainer_preflight.add_argument("--trainer-command", help="Trainer command to record but not execute")
     trainer_preflight.add_argument(
         "--allow-unvalidated-gates",
@@ -2513,6 +2521,12 @@ def _parser() -> argparse.ArgumentParser:
     trainer_launch_check.add_argument("--preflight", required=True, help="trainer_preflight.json to verify before trainer launch")
     trainer_launch_check.add_argument("--out", help="Write trainer launch-check JSON to this path")
     trainer_launch_check.add_argument("--require-gate", action="append", default=[], help="Require this preflight gate id to be present and passed")
+    trainer_launch_check.add_argument(
+        "--require-dataset-version",
+        action="append",
+        default=[],
+        help="Require an exact dataset_version already selected by the trainer preflight; may be repeated",
+    )
     trainer_launch_check.add_argument(
         "--require-metadata",
         action="append",

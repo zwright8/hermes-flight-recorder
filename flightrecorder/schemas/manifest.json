@@ -162,6 +162,14 @@
       "name": "training_manifest"
     },
     {
+      "artifact": "dataset_registry",
+      "artifact_schema_version": "hfr.rl.dataset_registry.v1",
+      "description": "Selectable dataset registry entry for trainer handoffs.",
+      "filename": "dataset_registry.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/dataset_registry.v1.schema.json",
+      "name": "dataset_registry"
+    },
+    {
       "artifact": "rl_episode",
       "artifact_schema_version": "hfr.rl.episode.v1",
       "description": "Canonical episode row emitted in export-rl episodes.jsonl.",

@@ -24,6 +24,12 @@
       "minimum": 0,
       "type": "integer"
     },
+    "dataset_selection": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
     "gate_count": {
       "minimum": 0,
       "type": "integer"
@@ -75,6 +81,12 @@
       },
       "type": "array"
     },
+    "required_dataset_versions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "schema_version": {
       "const": "hfr.trainer_preflight.v1"
     },
@@ -103,11 +115,13 @@
     "gate_count",
     "passed_gate_count",
     "required_gates",
+    "required_dataset_versions",
     "check_count",
     "failed_check_count",
     "checks",
     "gates",
     "artifacts",
+    "dataset_selection",
     "trainer_command",
     "notes"
   ],
