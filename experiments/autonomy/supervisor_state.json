@@ -93,8 +93,9 @@
           "experiments/autonomy/journal/2026-07-02.md",
           "experiments/autonomy/supervisor_state.json"
         ],
-        "latest_observed_remote_main_at": "2026-07-02T15:09:25Z",
-        "latest_observed_remote_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+        "latest_observed_branch_sha": "1263df4843ef030af12aeccdb3e67ab8c608f7f8",
+        "latest_observed_remote_main_at": "2026-07-02T15:17:41Z",
+        "latest_observed_remote_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
         "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
         "lock_status": "not_acquired_after_retries",
         "lock_status_at_record": "exists_not_acquired",
@@ -110,6 +111,7 @@
         "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
         "origin_main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
         "origin_main_summary": "Integrate verified supervisor contracts onto current main",
+        "pr_merge_state_status": "DIRTY",
         "pr_state": "OPEN",
         "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
         "rebase_head": "071128c1c84fb37101a5762f20b98d14498dd7b3",
@@ -158,7 +160,9 @@
         "git fetch origin # origin/main=20246405e0fb18b5c047f9968a49686b07d3e191",
         "git rebase origin/main # blocked: add/add conflicts in experiments/autonomy/journal/2026-07-02.md and experiments/autonomy/supervisor_state.json",
         "git rebase --abort",
-        "git merge-tree $(git merge-base HEAD origin/main) origin/main HEAD # read-only conflict evidence captured"
+        "git merge-tree $(git merge-base HEAD origin/main) origin/main HEAD # read-only conflict evidence captured",
+        "final git ls-remote --heads origin main codex/hermes-goal-6-serving-demo-20260702-1027 # main=53357ff5c838c894ec1eca8515f6601dbfee4e8c branch=1263df4843ef030af12aeccdb3e67ab8c608f7f8",
+        "final gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json mergeStateStatus # DIRTY"
       ]
     }
   ],
@@ -220,7 +224,9 @@
     "git fetch origin # origin/main=20246405e0fb18b5c047f9968a49686b07d3e191",
     "git rebase origin/main # blocked: add/add conflicts in experiments/autonomy/journal/2026-07-02.md and experiments/autonomy/supervisor_state.json",
     "git rebase --abort",
-    "git merge-tree $(git merge-base HEAD origin/main) origin/main HEAD # read-only conflict evidence captured"
+    "git merge-tree $(git merge-base HEAD origin/main) origin/main HEAD # read-only conflict evidence captured",
+    "final git ls-remote --heads origin main codex/hermes-goal-6-serving-demo-20260702-1027 # main=53357ff5c838c894ec1eca8515f6601dbfee4e8c branch=1263df4843ef030af12aeccdb3e67ab8c608f7f8",
+    "final gh pr view codex/hermes-goal-6-serving-demo-20260702-1027 --json mergeStateStatus # DIRTY"
   ],
   "layer_status": {
     "serving_demo": {
@@ -238,21 +244,25 @@
       "experiments/autonomy/journal/2026-07-02.md",
       "experiments/autonomy/supervisor_state.json"
     ],
-    "latest_observed_remote_main_at": "2026-07-02T15:09:25Z",
-    "latest_observed_remote_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+    "latest_observed_branch_sha": "1263df4843ef030af12aeccdb3e67ab8c608f7f8",
+    "latest_observed_remote_main_at": "2026-07-02T15:17:41Z",
+    "latest_observed_remote_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
     "lock_status": "not_acquired_after_retries",
+    "lock_status_at_final_check": "exists_not_acquired",
     "lock_status_at_record": "exists_not_acquired",
     "main_sha": null,
     "merge_base": "7976f618d357ee95010902295b044b45918a831e",
     "notes": [
       "git ls-remote --heads origin main after lock blocker returned ebd562fc39251d32778f6d2265e257dbf5a60b90; future integration must fetch/rebase again.",
-      "Final handoff check saw origin/main at b671b9671fff7e891fa0ee58a69f64e818694b11 while the lock still existed; do not assume the rebased branch is current without fetching again."
+      "Final handoff check saw origin/main at b671b9671fff7e891fa0ee58a69f64e818694b11 while the lock still existed; do not assume the rebased branch is current without fetching again.",
+      "Final check after blocker checkpoint saw origin/main at 53357ff5c838c894ec1eca8515f6601dbfee4e8c and PR mergeStateStatus DIRTY; future integration must fetch/rebase again under supervisor conflict resolution."
     ],
     "observed_remote_main_at": "2026-07-02T15:07:12Z",
     "observed_remote_main_sha_after_blocker": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
     "origin_main_sha": "20246405e0fb18b5c047f9968a49686b07d3e191",
     "origin_main_summary": "Integrate verified supervisor contracts onto current main",
+    "pr_merge_state_status": "DIRTY",
     "pr_state": "OPEN",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/7",
     "rebase_head": "071128c1c84fb37101a5762f20b98d14498dd7b3",
@@ -280,5 +290,5 @@
     "serving_demo": "managed_mock_lifecycle_verified"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:16:10Z"
+  "updated_at": "2026-07-02T15:17:41Z"
 }
