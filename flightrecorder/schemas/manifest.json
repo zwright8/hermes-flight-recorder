@@ -378,6 +378,14 @@
       "name": "heldout_manifest"
     },
     {
+      "artifact": "eval_suite_manifest",
+      "artifact_schema_version": "hfr.eval_suite_manifest.v1",
+      "description": "Ordered eval suite selector consumed by run-suite --suite-manifest.",
+      "filename": "eval_suite_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/eval_suite_manifest.v1.schema.json",
+      "name": "eval_suite_manifest"
+    },
+    {
       "artifact": "external_eval_plan",
       "artifact_schema_version": "hfr.external_eval_adapters.v1",
       "description": "Fail-closed external eval adapter readiness plan emitted by external-eval-plan.",

@@ -146,11 +146,10 @@ from .training_gate import (
     evaluate_training_gate,
     load_training_gate_policy,
 )
-from .validation import validate_artifacts
+from .validation import EVAL_SUITE_MANIFEST_SCHEMA_VERSION, validate_artifacts
 from .verifiers import VerifierError, capture_verified_state
 
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
-EVAL_SUITE_MANIFEST_SCHEMA_VERSION = "hfr.eval_suite_manifest.v1"
 FAMILY_SUFFIX_RE = re.compile(r"([_-](good|bad|pass|fail|passing|failing|chosen|rejected))+$", re.IGNORECASE)
 TRACE_FORMAT_CHOICES = [
     "auto",
@@ -910,6 +909,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         scenario_quality_paths=args.scenario_quality,
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
+        eval_suite_manifest_paths=args.eval_suite_manifest,
         state_snapshot_paths=args.state_snapshot,
         state_diff_paths=args.state_diff,
         run_digest_paths=args.run_digest,
@@ -2472,6 +2472,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--scenario-quality", action="append", default=[], help="Validate one scenario_quality.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")
+    validate.add_argument("--eval-suite-manifest", action="append", default=[], help="Validate one hfr.eval_suite_manifest.v1 JSON file; may be repeated")
     validate.add_argument("--state-snapshot", action="append", default=[], help="Validate one hfr.state_snapshot.v1 JSON file; may be repeated")
     validate.add_argument("--state-diff", action="append", default=[], help="Validate one hfr.state_diff.v1 JSON file; may be repeated")
     validate.add_argument("--run-digest", action="append", default=[], help="Validate one hfr.run_digest.v1 JSON file; may be repeated")

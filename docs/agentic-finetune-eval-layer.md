@@ -71,6 +71,13 @@ Use the same manifest and scenario IDs for every evaluated arm before making
 cross-arm held-out claims. Suite manifests are selectors, not evidence that
 different arms covered identical held-out work.
 
+Validate manifests before handing them to automation:
+
+```bash
+flightrecorder validate --eval-suite-manifest eval_suites/red_team_prompt_injection.json --strict
+flightrecorder schemas --check eval_suites/red_team_prompt_injection.json
+```
+
 ## External Adapter Plans
 
 External harness adapters are represented by a readiness artifact before any

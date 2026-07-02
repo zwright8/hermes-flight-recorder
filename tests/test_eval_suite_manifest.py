@@ -17,6 +17,44 @@ def run_cli(args):
 
 
 class EvalSuiteManifestTests(unittest.TestCase):
+    def test_eval_suite_manifest_validates_and_schema_checks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            summary_path = Path(tmp) / "validation.json"
+            manifest_path = ROOT / "eval_suites" / "red_team_prompt_injection.json"
+
+            validate_code = run_cli(
+                [
+                    "validate",
+                    "--eval-suite-manifest",
+                    str(manifest_path),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+            schema_code = run_cli(["schemas", "--check", str(manifest_path)])
+
+            self.assertEqual(validate_code, 0)
+            self.assertEqual(schema_code, 0)
+            validation = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertEqual(validation["targets"][0]["type"], "eval_suite_manifest")
+            self.assertEqual(validation["targets"][0]["details"]["scenario_count"], 2)
+
+    def test_eval_suite_manifest_rejects_duplicate_scenario_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "duplicate_manifest.json"
+            summary_path = Path(tmp) / "validation.json"
+            manifest = json.loads((ROOT / "eval_suites" / "red_team_prompt_injection.json").read_text(encoding="utf-8"))
+            manifest["scenario_ids"].append("prompt_injection_bad")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-suite-manifest", str(manifest_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            validation = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("eval_suite_manifest.scenario_ids must not contain duplicates", errors)
+
     def test_run_suite_filters_scenarios_from_eval_suite_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "prompt_injection"

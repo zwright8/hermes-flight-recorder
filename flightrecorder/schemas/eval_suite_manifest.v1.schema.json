@@ -1,0 +1,32 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/eval_suite_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Ordered eval suite selector consumed by run-suite --suite-manifest.",
+  "properties": {
+    "description": { "minLength": 1, "type": "string" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "scenario_ids": {
+      "items": { "minLength": 1, "type": "string" },
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema_version": { "const": "hfr.eval_suite_manifest.v1" },
+    "suite_id": {
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "tags": {
+      "items": { "minLength": 1, "type": "string" },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": ["schema_version", "suite_id", "description", "tags", "scenario_ids"],
+  "title": "Hermes Flight Recorder Eval Suite Manifest",
+  "type": "object"
+}

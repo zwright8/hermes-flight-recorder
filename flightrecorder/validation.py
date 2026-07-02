@@ -119,6 +119,7 @@ from .verifiers import VERIFIER_SOURCES_SCHEMA_VERSION
 
 VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
+EVAL_SUITE_MANIFEST_SCHEMA_VERSION = "hfr.eval_suite_manifest.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
@@ -191,6 +192,7 @@ def validate_artifacts(
     scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
+    eval_suite_manifest_paths: list[str | Path] | None = None,
     state_snapshot_paths: list[str | Path] | None = None,
     state_diff_paths: list[str | Path] | None = None,
     run_digest_paths: list[str | Path] | None = None,
@@ -293,6 +295,8 @@ def validate_artifacts(
         targets.append(validate_suite_summary(suite_summary_path))
     for suite_trend_path in suite_trend_paths or []:
         targets.append(validate_suite_trend(suite_trend_path))
+    for eval_suite_manifest_path in eval_suite_manifest_paths or []:
+        targets.append(validate_eval_suite_manifest(eval_suite_manifest_path))
     for state_snapshot_path in state_snapshot_paths or []:
         targets.append(validate_state_snapshot(state_snapshot_path))
     for state_diff_path in state_diff_paths or []:
@@ -740,6 +744,16 @@ def validate_suite_summary(path: str | Path) -> ValidationTarget:
     if summary is None:
         return target
     _validate_suite_summary(summary, target)
+    return target
+
+
+def validate_eval_suite_manifest(path: str | Path) -> ValidationTarget:
+    """Validate one eval suite manifest artifact."""
+    manifest_path = Path(path)
+    target = ValidationTarget("eval_suite_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "eval_suite_manifest.json")
+    if manifest is not None:
+        _validate_eval_suite_manifest(manifest, target)
     return target
 
 
@@ -6040,6 +6054,39 @@ def _validate_heldout_manifest_mismatch(mismatch: Any, index: int, target: Valid
     for field_name in ("missing_from_source", "extra_in_source"):
         if not _is_string_list(mismatch.get(field_name)):
             target.errors.append(f"heldout_manifest.mismatches[{index}].{field_name} must be a list of strings.")
+
+
+def _validate_eval_suite_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(manifest, "schema_version", EVAL_SUITE_MANIFEST_SCHEMA_VERSION, target, prefix="eval_suite_manifest.")
+    for field_name in ("suite_id", "description"):
+        if not isinstance(manifest.get(field_name), str) or not manifest.get(field_name):
+            target.errors.append(f"eval_suite_manifest.{field_name} must be a non-empty string.")
+
+    tags = manifest.get("tags")
+    if not _is_string_list(tags) or not tags or any(not tag for tag in tags or []):
+        target.errors.append("eval_suite_manifest.tags must be a non-empty list of non-empty strings.")
+        tags = []
+    elif len(set(tags)) != len(tags):
+        target.errors.append("eval_suite_manifest.tags must not contain duplicates.")
+
+    scenario_ids = manifest.get("scenario_ids")
+    if not _is_string_list(scenario_ids) or not scenario_ids or any(not scenario_id for scenario_id in scenario_ids or []):
+        target.errors.append("eval_suite_manifest.scenario_ids must be a non-empty list of non-empty strings.")
+        scenario_ids = []
+    elif len(set(scenario_ids)) != len(scenario_ids):
+        target.errors.append("eval_suite_manifest.scenario_ids must not contain duplicates.")
+
+    notes = manifest.get("notes")
+    if notes is not None and not _is_string_list(notes):
+        target.errors.append("eval_suite_manifest.notes must be a list of strings when present.")
+
+    target.details.update(
+        {
+            "suite_id": manifest.get("suite_id"),
+            "scenario_count": len(scenario_ids),
+            "tag_count": len(tags),
+        }
+    )
 
 
 def _validate_suite_metrics(metrics: dict[str, Any], target: ValidationTarget, runs: list[dict[str, Any]]) -> None:
