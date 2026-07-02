@@ -1,0 +1,75 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/harness_probe_result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "No-network receipt emitted before a harness suite verifies runner/provider readiness.",
+  "properties": {
+    "checks": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "id": { "minLength": 1, "type": "string" },
+          "passed": { "type": "boolean" },
+          "summary": { "minLength": 1, "type": "string" }
+        },
+        "required": ["id", "passed", "summary"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "created_at": { "type": "string" },
+    "model": {
+      "additionalProperties": true,
+      "properties": {
+        "base_url": { "type": ["string", "null"] },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id"],
+      "type": "object"
+    },
+    "passed": { "type": "boolean" },
+    "probe": {
+      "additionalProperties": true,
+      "properties": {
+        "endpoint_checked": { "type": "boolean" },
+        "mode": { "minLength": 1, "type": "string" },
+        "network": { "minLength": 1, "type": "string" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["mode", "network", "endpoint_checked"],
+      "type": "object"
+    },
+    "provider": { "minLength": 1, "type": "string" },
+    "runner": { "minLength": 1, "type": "string" },
+    "sandbox": {
+      "additionalProperties": true,
+      "properties": {
+        "audit_artifacts_kept": { "type": "boolean" },
+        "ephemeral": { "type": "boolean" },
+        "events": { "minLength": 1, "type": "string" },
+        "fake_secret_canaries": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "name": { "minLength": 1, "type": "string" },
+              "sha256": { "minLength": 64, "type": "string" }
+            },
+            "required": ["name", "sha256"],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "home": { "minLength": 1, "type": "string" },
+        "root": { "minLength": 1, "type": "string" },
+        "workspace": { "minLength": 1, "type": "string" }
+      },
+      "required": ["root", "home", "workspace", "events", "fake_secret_canaries"],
+      "type": "object"
+    },
+    "schema_version": { "const": "hfr.harness_probe_result.v1" },
+    "tool_policy": { "type": "object" }
+  },
+  "required": ["schema_version", "runner", "provider", "model", "passed", "checks", "probe", "sandbox", "tool_policy"],
+  "title": "Hermes Flight Recorder Harness Probe Result",
+  "type": "object"
+}

@@ -143,7 +143,7 @@ Run a deterministic offline harness packet without launching Hermes or a model
 provider:
 
 ```bash
-python3.11 scripts/hermes_harness.py run \
+python3.11 scripts/hermes_harness.py run-scenario \
   --scenario scenarios/prompt_injection_good.json \
   --mock-response "Summary: the issue asks for quality gates for autonomous runs." \
   --out runs/harness_prompt_injection_good
@@ -707,6 +707,18 @@ and blocked-action canaries derived from forbidden tools, commands, and URLs.
 Mock harness coverage verifies those canaries against scorecard failures and
 replay so policy regressions are visible without a live agent runtime.
 
+Probe a runner/provider pair without contacting an external endpoint:
+
+```bash
+python3.11 scripts/hermes_harness.py probe-model \
+  --out runs/harness_probe \
+  --force
+
+flightrecorder validate \
+  --harness-probe-result runs/harness_probe/harness_probe_result.json \
+  --strict
+```
+
 Run a local mock scenario without an external model endpoint:
 
 ```bash
@@ -728,6 +740,20 @@ file:
 ```bash
 python3.11 scripts/hermes_harness.py run-scenario \
   --manifest harness/mock_manifest.json
+```
+
+Run multiple scenarios as one harness suite:
+
+```bash
+python3.11 scripts/hermes_harness.py run-suite \
+  --scenario scenarios/prompt_injection_good.json \
+  --out runs/harness_suite \
+  --force
+
+flightrecorder validate \
+  --harness-probe-result runs/harness_suite/probe/harness_probe_result.json \
+  --harness-suite-result runs/harness_suite/harness_suite_result.json \
+  --strict
 ```
 
 Replay from a generated lineage:

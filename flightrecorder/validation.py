@@ -120,6 +120,8 @@ TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1
 HARNESS_RUN_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
 HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
+HARNESS_PROBE_RESULT_SCHEMA_VERSION = "hfr.harness_probe_result.v1"
+HARNESS_SUITE_RESULT_SCHEMA_VERSION = "hfr.harness_suite_result.v1"
 _COMPANION_NOT_PROVIDED = object()
 
 
@@ -193,6 +195,8 @@ def validate_artifacts(
     harness_manifest_paths: list[str | Path] | None = None,
     harness_result_paths: list[str | Path] | None = None,
     harness_replay_result_paths: list[str | Path] | None = None,
+    harness_probe_result_paths: list[str | Path] | None = None,
+    harness_suite_result_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     eval_summary_paths: list[str | Path] | None = None,
     external_eval_plan_paths: list[str | Path] | None = None,
@@ -299,6 +303,10 @@ def validate_artifacts(
         targets.append(validate_harness_run_result(harness_result_path))
     for harness_replay_result_path in harness_replay_result_paths or []:
         targets.append(validate_harness_replay_result(harness_replay_result_path))
+    for harness_probe_result_path in harness_probe_result_paths or []:
+        targets.append(validate_harness_probe_result(harness_probe_result_path))
+    for harness_suite_result_path in harness_suite_result_paths or []:
+        targets.append(validate_harness_suite_result(harness_suite_result_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     for eval_summary_path in eval_summary_paths or []:
@@ -1173,6 +1181,26 @@ def validate_harness_replay_result(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_harness_probe_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness_probe_result.json artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_probe_result", str(result_path))
+    result = _read_object(result_path, target, "harness_probe_result.json")
+    if result is not None:
+        _validate_harness_probe_result(result, target, source_dir=result_path.parent)
+    return target
+
+
+def validate_harness_suite_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness_suite_result.json artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_suite_result", str(result_path))
+    result = _read_object(result_path, target, "harness_suite_result.json")
+    if result is not None:
+        _validate_harness_suite_result(result, target, source_dir=result_path.parent)
+    return target
+
+
 def validate_review_calibration(path: str | Path) -> ValidationTarget:
     """Validate a review-calibration report."""
     calibration_path = Path(path)
@@ -1386,6 +1414,128 @@ def _validate_harness_replay_result(result: dict[str, Any], target: ValidationTa
         _validate_existing_path_field(result, "scorecard", target, "harness_replay_result.scorecard")
     if not isinstance(result.get("passed"), bool):
         target.errors.append("harness_replay_result.passed must be a boolean.")
+
+
+def _validate_harness_probe_result(result: dict[str, Any], target: ValidationTarget, source_dir: Path | None = None) -> None:
+    if result.get("schema_version") != HARNESS_PROBE_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_probe_result.schema_version must be {HARNESS_PROBE_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
+        )
+    for field_name in ("runner", "provider"):
+        if not isinstance(result.get(field_name), str) or not result.get(field_name):
+            target.errors.append(f"harness_probe_result.{field_name} must be a non-empty string.")
+    model = result.get("model") if isinstance(result.get("model"), dict) else {}
+    if not isinstance(model.get("id"), str) or not model.get("id"):
+        target.errors.append("harness_probe_result.model.id must be a non-empty string.")
+    if not isinstance(result.get("passed"), bool):
+        target.errors.append("harness_probe_result.passed must be a boolean.")
+    _validate_harness_receipt_checks(result.get("checks"), target, "harness_probe_result.checks")
+    probe = result.get("probe") if isinstance(result.get("probe"), dict) else {}
+    for field_name in ("mode", "network"):
+        if not isinstance(probe.get(field_name), str) or not probe.get(field_name):
+            target.errors.append(f"harness_probe_result.probe.{field_name} must be a non-empty string.")
+    if not isinstance(probe.get("endpoint_checked"), bool):
+        target.errors.append("harness_probe_result.probe.endpoint_checked must be a boolean.")
+    sandbox = result.get("sandbox") if isinstance(result.get("sandbox"), dict) else {}
+    for field_name in ("root", "home", "workspace", "events"):
+        if not isinstance(sandbox.get(field_name), str) or not sandbox.get(field_name):
+            target.errors.append(f"harness_probe_result.sandbox.{field_name} must be a non-empty string.")
+    if not isinstance(sandbox.get("fake_secret_canaries"), list) or not sandbox.get("fake_secret_canaries"):
+        target.errors.append("harness_probe_result.sandbox.fake_secret_canaries must be a non-empty list.")
+    fake_secret_files = sandbox.get("fake_secret_files")
+    if isinstance(fake_secret_files, list):
+        for index, path_value in enumerate(fake_secret_files):
+            _validate_existing_path_field(
+                {"path": path_value},
+                "path",
+                target,
+                f"harness_probe_result.sandbox.fake_secret_files[{index}]",
+                base_dir=source_dir,
+            )
+    _validate_harness_tool_policy(result.get("tool_policy"), target, "harness_probe_result.tool_policy")
+
+
+def _validate_harness_suite_result(result: dict[str, Any], target: ValidationTarget, source_dir: Path | None = None) -> None:
+    if result.get("schema_version") != HARNESS_SUITE_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_suite_result.schema_version must be {HARNESS_SUITE_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
+        )
+    for field_name in ("runner", "provider"):
+        if not isinstance(result.get(field_name), str) or not result.get(field_name):
+            target.errors.append(f"harness_suite_result.{field_name} must be a non-empty string.")
+    model = result.get("model") if isinstance(result.get("model"), dict) else {}
+    if not isinstance(model.get("id"), str) or not model.get("id"):
+        target.errors.append("harness_suite_result.model.id must be a non-empty string.")
+    if not isinstance(result.get("passed"), bool):
+        target.errors.append("harness_suite_result.passed must be a boolean.")
+    _validate_existing_path_field(result, "result_path", target, "harness_suite_result.result_path", base_dir=source_dir)
+    _validate_existing_path_field(result, "probe_result", target, "harness_suite_result.probe_result", base_dir=source_dir)
+    out_dir = result.get("out_dir")
+    if not isinstance(out_dir, str) or not out_dir:
+        target.errors.append("harness_suite_result.out_dir must be a non-empty string.")
+    elif not Path(out_dir).is_dir():
+        target.errors.append(f"harness_suite_result.out_dir does not exist or is not a directory: {out_dir}.")
+    for field_name in ("scenario_count", "run_count", "passed_count", "failed_count"):
+        if not _is_non_negative_int(result.get(field_name)):
+            target.errors.append(f"harness_suite_result.{field_name} must be a non-negative integer.")
+    _validate_harness_receipt_checks(result.get("checks"), target, "harness_suite_result.checks")
+    rows = result.get("results")
+    if not isinstance(rows, list):
+        target.errors.append("harness_suite_result.results must be a list.")
+        return
+    passed_count = 0
+    failed_count = 0
+    for index, row in enumerate(rows):
+        label = f"harness_suite_result.results[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(row.get("scenario_id"), str) or not row.get("scenario_id"):
+            target.errors.append(f"{label}.scenario_id must be a non-empty string.")
+        if row.get("passed") is True:
+            passed_count += 1
+        elif row.get("passed") is False:
+            failed_count += 1
+        else:
+            target.errors.append(f"{label}.passed must be a boolean.")
+        if "score" in row and (not isinstance(row.get("score"), (int, float)) or isinstance(row.get("score"), bool)):
+            target.errors.append(f"{label}.score must be numeric when present.")
+        for field_name in ("manifest", "result", "scorecard", "lineage"):
+            if row.get(field_name):
+                _validate_existing_path_field(row, field_name, target, f"{label}.{field_name}", base_dir=source_dir)
+    if _is_non_negative_int(result.get("run_count")) and result["run_count"] != len(rows):
+        target.errors.append("harness_suite_result.run_count must match the number of results rows.")
+    if _is_non_negative_int(result.get("passed_count")) and result["passed_count"] != passed_count:
+        target.errors.append("harness_suite_result.passed_count must match passing results rows.")
+    if _is_non_negative_int(result.get("failed_count")) and result["failed_count"] != failed_count:
+        target.errors.append("harness_suite_result.failed_count must match failing results rows.")
+
+
+def _validate_harness_receipt_checks(value: Any, target: ValidationTarget, label: str) -> int:
+    if not isinstance(value, list) or not value:
+        target.errors.append(f"{label} must be a non-empty list.")
+        return 0
+    failed_count = 0
+    seen: set[str] = set()
+    for index, check in enumerate(value):
+        row_label = f"{label}[{index}]"
+        if not isinstance(check, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        check_id = check.get("id")
+        if not isinstance(check_id, str) or not check_id:
+            target.errors.append(f"{row_label}.id must be a non-empty string.")
+        elif check_id in seen:
+            target.errors.append(f"{row_label}.id duplicates an earlier check id.")
+        else:
+            seen.add(check_id)
+        if check.get("passed") is False:
+            failed_count += 1
+        elif check.get("passed") is not True:
+            target.errors.append(f"{row_label}.passed must be a boolean.")
+        if not isinstance(check.get("summary"), str) or not check.get("summary"):
+            target.errors.append(f"{row_label}.summary must be a non-empty string.")
+    return failed_count
 
 
 def _validate_existing_path_field(

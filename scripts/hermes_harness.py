@@ -7,7 +7,7 @@ import argparse
 import hashlib
 import json
 import shutil
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,8 @@ from flightrecorder.schema import load_scenario
 HARNESS_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
 HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
+HARNESS_PROBE_RESULT_SCHEMA_VERSION = "hfr.harness_probe_result.v1"
+HARNESS_SUITE_RESULT_SCHEMA_VERSION = "hfr.harness_suite_result.v1"
 
 DEFAULT_FAKE_SECRET_CANARIES = {
     "HFR_FAKE_API_KEY": "hfr_fake_api_key_canary_do_not_use_123",
@@ -160,6 +162,146 @@ def run_scenario(manifest: dict[str, Any] | str | Path) -> dict[str, Any]:
     return _run_mock_scenario(resolved)
 
 
+def probe_model(
+    *,
+    out_dir: str | Path,
+    runner: str = "mock",
+    provider: str = "mock",
+    model: str = "hfr-mock",
+    base_url: str | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Write a no-network harness probe receipt for a runner/provider pair."""
+    out_dir = Path(out_dir).expanduser().resolve()
+    _prepare_output_dir(out_dir, force=force)
+    sandbox_root = out_dir / "sandbox"
+    home_dir = sandbox_root / "home"
+    workspace = sandbox_root / "workspace"
+    events_dir = sandbox_root / "events"
+    for path in (sandbox_root, home_dir, workspace, events_dir):
+        path.mkdir(parents=True, exist_ok=True)
+    fake_secret_files = write_fake_secret_canaries(home_dir)
+
+    checks = [
+        _check("runner_supported", runner == "mock", "Harness probe currently supports the mock runner."),
+        _check("provider_supported", provider == "mock", "Harness probe currently supports the mock provider."),
+        _check("network_disabled", base_url is None, "Mock probe does not contact a model endpoint."),
+        _check(
+            "fake_secret_canaries_written",
+            all(Path(path).is_file() for path in fake_secret_files),
+            "Fake-secret canaries were written inside the ephemeral home.",
+        ),
+    ]
+    passed = all(check["passed"] for check in checks)
+    result = {
+        "schema_version": HARNESS_PROBE_RESULT_SCHEMA_VERSION,
+        "created_at": _now_iso(),
+        "runner": runner,
+        "provider": provider,
+        "model": {"id": model, "base_url": base_url},
+        "passed": passed,
+        "checks": checks,
+        "probe": {
+            "mode": "offline_mock",
+            "network": "disabled",
+            "endpoint_checked": False,
+            "summary": "No external model endpoint was contacted.",
+        },
+        "sandbox": {
+            "root": str(sandbox_root),
+            "home": str(home_dir),
+            "workspace": str(workspace),
+            "events": str(events_dir),
+            "fake_secret_canaries": _fake_secret_canary_records(),
+            "fake_secret_files": fake_secret_files,
+            "ephemeral": True,
+            "audit_artifacts_kept": True,
+        },
+        "tool_policy": _effective_tool_policy({}, None),
+    }
+    _write_json(out_dir / "harness_probe_result.json", result)
+    return result
+
+
+def run_suite(
+    *,
+    out_dir: str | Path,
+    scenario_paths: list[str | Path] | None = None,
+    manifest_paths: list[str | Path] | None = None,
+    runner: str = "mock",
+    provider: str = "mock",
+    model: str = "hfr-mock",
+    base_url: str | None = None,
+    mock_response: str | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Run multiple scenarios through the harness and write a suite receipt."""
+    scenario_paths = list(scenario_paths or [])
+    manifest_paths = list(manifest_paths or [])
+    if not scenario_paths and not manifest_paths:
+        raise ValueError("run_suite requires at least one scenario path or manifest path")
+
+    out_dir = Path(out_dir).expanduser().resolve()
+    _prepare_output_dir(out_dir, force=force)
+    probe = probe_model(
+        out_dir=out_dir / "probe",
+        runner=runner,
+        provider=provider,
+        model=model,
+        base_url=base_url,
+        force=True,
+    )
+
+    rows: list[dict[str, Any]] = []
+    if probe["passed"]:
+        for manifest_path in manifest_paths:
+            manifest = _load_manifest(manifest_path)
+            manifest["force"] = True
+            rows.append(_run_suite_manifest_row(manifest))
+        for scenario_path in scenario_paths:
+            scenario = load_scenario(scenario_path)
+            run_dir = out_dir / "runs" / _safe_run_id(str(scenario["id"]))
+            manifest = build_harness_manifest(
+                scenario_path=scenario_path,
+                out_dir=run_dir,
+                provider=provider,
+                model=model,
+                runner=runner,
+                base_url=base_url,
+                mock_response=mock_response,
+                force=True,
+            )
+            rows.append(_run_suite_manifest_row(manifest))
+
+    passed_count = sum(1 for row in rows if row.get("passed") is True)
+    failed_count = sum(1 for row in rows if row.get("passed") is False)
+    scenario_count = len(scenario_paths) + len(manifest_paths)
+    checks = [
+        _check("probe_passed", probe["passed"] is True, "Harness runner/provider probe passed before suite execution."),
+        _check("all_inputs_executed", len(rows) == scenario_count, "Every requested scenario or manifest produced a row."),
+        _check("all_scenarios_passed", failed_count == 0 and len(rows) == scenario_count, "Every executed harness scenario passed."),
+    ]
+    suite = {
+        "schema_version": HARNESS_SUITE_RESULT_SCHEMA_VERSION,
+        "created_at": _now_iso(),
+        "runner": runner,
+        "provider": provider,
+        "model": {"id": model, "base_url": base_url},
+        "out_dir": str(out_dir),
+        "result_path": str(out_dir / "harness_suite_result.json"),
+        "probe_result": str(out_dir / "probe" / "harness_probe_result.json"),
+        "passed": all(check["passed"] for check in checks),
+        "scenario_count": scenario_count,
+        "run_count": len(rows),
+        "passed_count": passed_count,
+        "failed_count": failed_count,
+        "checks": checks,
+        "results": rows,
+    }
+    _write_json(out_dir / "harness_suite_result.json", suite)
+    return suite
+
+
 def replay_trace(lineage_path: str | Path, out_dir: str | Path, *, trace_format: str = "auto") -> dict[str, Any]:
     """Replay a lineage artifact and write harness_replay_result.json."""
     out_dir = Path(out_dir).expanduser().resolve()
@@ -253,6 +395,32 @@ def _run_mock_scenario(manifest: dict[str, Any]) -> dict[str, Any]:
         metadata={"source": "scripts/hermes_harness.py"},
         force=bool(manifest.get("force")),
     )
+
+
+def _run_suite_manifest_row(manifest: dict[str, Any]) -> dict[str, Any]:
+    try:
+        result = run_scenario(manifest)
+    except Exception as exc:  # pragma: no cover - defensive receipt path for live/manual manifests.
+        scenario = manifest.get("scenario") if isinstance(manifest.get("scenario"), dict) else {}
+        return {
+            "scenario_id": str(scenario.get("id") or ""),
+            "run_dir": str((manifest.get("outputs") or {}).get("run_dir") or ""),
+            "manifest": str((manifest.get("outputs") or {}).get("manifest") or ""),
+            "result": str((manifest.get("outputs") or {}).get("result") or ""),
+            "passed": False,
+            "score": 0,
+            "error": str(exc),
+        }
+    return {
+        "scenario_id": result["scenario_id"],
+        "run_dir": str((manifest.get("outputs") or {}).get("run_dir") or ""),
+        "manifest": str((manifest.get("outputs") or {}).get("manifest") or ""),
+        "result": str((manifest.get("outputs") or {}).get("result") or ""),
+        "scorecard": str(result["scorecard"]["path"]),
+        "lineage": str(result["replay"]["lineage"]),
+        "passed": bool(result["scorecard"]["passed"]),
+        "score": result["scorecard"]["score"],
+    }
 
 
 def _mock_observer_rows(scenario: dict[str, Any], manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -459,12 +627,26 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf-8")
 
 
+def _prepare_output_dir(path: Path, *, force: bool) -> None:
+    if path.exists() and not path.is_dir():
+        raise ValueError(f"harness output path is not a directory: {path}")
+    if path.exists() and any(path.iterdir()):
+        if not force:
+            raise ValueError(f"harness output directory is not empty: {path}; pass --force to replace it")
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _check(check_id: str, passed: bool, summary: str) -> dict[str, Any]:
+    return {"id": check_id, "passed": bool(passed), "summary": summary}
+
+
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _now_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -480,6 +662,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     run.add_argument("--base-url")
     run.add_argument("--mock-response")
     run.add_argument("--force", action="store_true")
+    suite = subparsers.add_parser("run-suite", help="Run multiple scenarios or manifests through a harness runner")
+    suite.add_argument("--scenario", action="append", default=[], help="Scenario JSON/YAML path; may be repeated")
+    suite.add_argument("--manifest", action="append", default=[], help="Harness manifest JSON path; may be repeated")
+    suite.add_argument("--out", required=True, help="Suite output directory")
+    suite.add_argument("--runner", default="mock")
+    suite.add_argument("--provider", default="mock")
+    suite.add_argument("--model", default="hfr-mock")
+    suite.add_argument("--base-url")
+    suite.add_argument("--mock-response")
+    suite.add_argument("--force", action="store_true")
+    probe = subparsers.add_parser("probe-model", help="Write a no-network harness model/provider probe receipt")
+    probe.add_argument("--out", required=True, help="Probe output directory")
+    probe.add_argument("--runner", default="mock")
+    probe.add_argument("--provider", default="mock")
+    probe.add_argument("--model", default="hfr-mock")
+    probe.add_argument("--base-url")
+    probe.add_argument("--force", action="store_true")
     replay = subparsers.add_parser("replay-trace", help="Replay a run from artifact lineage")
     replay.add_argument("--lineage", required=True)
     replay.add_argument("--out", required=True)
@@ -510,6 +709,31 @@ def main(argv: list[str] | None = None) -> int:
         result = run_scenario(manifest)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result.get("scorecard", {}).get("passed") is True else 1
+    if args.command == "run-suite":
+        result = run_suite(
+            out_dir=args.out,
+            scenario_paths=args.scenario,
+            manifest_paths=args.manifest,
+            runner=args.runner,
+            provider=args.provider,
+            model=args.model,
+            base_url=args.base_url,
+            mock_response=args.mock_response,
+            force=args.force,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result.get("passed") is True else 1
+    if args.command == "probe-model":
+        result = probe_model(
+            out_dir=args.out,
+            runner=args.runner,
+            provider=args.provider,
+            model=args.model,
+            base_url=args.base_url,
+            force=args.force,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result.get("passed") is True else 1
     if args.command == "replay-trace":
         result = replay_trace(args.lineage, args.out, trace_format=args.format)
         print(json.dumps(result, indent=2, sort_keys=True))
