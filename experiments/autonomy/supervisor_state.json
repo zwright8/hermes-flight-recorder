@@ -142,22 +142,102 @@
           "summary": "Committed example plan regenerates cleanly with the fixed timestamp."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "training",
+          "path": "flightrecorder/agentic_training_runtime.py"
+        },
+        {
+          "kind": "script",
+          "layer": "training",
+          "path": "scripts/preflight_agentic_training_runtime.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "training",
+          "path": "flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "layer": "training",
+          "path": "tests/test_agentic_training_runtime.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "docs/agentic-finetune-training-layer.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "TRAINING_PIPELINE.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "training",
+          "path": "examples/agentic_training/README.md"
+        }
+      ],
+      "completed_at": "2026-07-02T15:01:51Z",
+      "id": "training_tiny_smoke_runtime_resolution",
+      "layer": "training",
+      "priority": "medium",
+      "status": "completed",
+      "summary": "Added a side-effect-free runtime preflight for ready agentic training plans. It validates selected trainer-view JSONL files against bundled schemas, checks backend or override Python module discoverability with importlib.util.find_spec, and emits ready_for_tiny_smoke_launch or block_tiny_smoke_launch without importing trainer stacks, downloading models, or launching training.",
+      "title": "Resolve tiny smoke training runtime dependencies",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_agentic_training_runtime tests.test_agentic_training_plan tests.test_trainer_preflight tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "status": "pass",
+          "summary": "28 focused tests passed across runtime preflight, existing plan/preflight behavior, and schema catalog registration."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/agentic_training_runtime.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_runtime.py flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py",
+          "status": "pass",
+          "summary": "Runtime preflight module, script, tests, and adjacent planner files compile."
+        },
+        {
+          "command": "python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-preflight/ready.json",
+          "status": "pass",
+          "summary": "Ready CLI path emitted hfr.agentic_training_runtime_preflight.v1 with ready_for_tiny_smoke_launch and no training/model-download side effects."
+        },
+        {
+          "command": "python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-preflight/blocked.json",
+          "status": "pass",
+          "summary": "Blocked CLI path exited 1, emitted block_tiny_smoke_launch, and classified the missing dependency."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-preflight/ready.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-preflight/blocked.json && python3 -m flightrecorder schemas --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-runtime-preflight/schema --force",
+          "status": "pass",
+          "summary": "Ready and blocked runtime-preflight artifacts validate, and the bundled schema exports through the registry."
+        },
+        {
+          "command": "python3 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json && python3 -m json.tool flightrecorder/schemas/manifest.json && git diff --check",
+          "status": "pass",
+          "summary": "New runtime schema, schema manifest, and whitespace checks passed."
+        }
+      ]
     }
   ],
   "current_packet": {
-    "id": "training_tiny_smoke_runtime_resolution",
+    "id": "training_result_archive_failure_contract",
     "layer": "training",
     "priority": "medium",
     "status": "ready",
-    "summary": "Resolve or document the bounded tiny smoke trainer runtime path, then run only dependency/preflight checks until registered inputs, license status, redaction gates, and no-download/no-expensive-job constraints pass.",
-    "title": "Resolve tiny smoke training runtime dependencies"
+    "summary": "Define the training result archive and classified failure contract that external tiny-smoke or full trainers must return before adapters/checkpoints can be registered.",
+    "title": "Define training result archives and failure classes"
   },
   "git_persistence": {
     "branch": "codex/hermes-goal-5-training-20260702-1027",
     "implementation_commit_sha": "892f7fe4116ca11bc634d8522f2c05062bf848a6",
+    "main_delivery_protocol": "branch commits must be verified, pushed, integrated to current origin/main under /tmp/hermes-flight-recorder-main-push.lock, and temporary PR/branch surfaces retired",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/4",
     "remote": "origin",
-    "remote_branch_verified": true
+    "remote_branch_verified": true,
+    "runtime_preflight_packet_delivery_status": "pending_main_integration_after_packet_commit"
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -170,48 +250,52 @@
   },
   "latest_verification": [
     {
-      "command": "python3 -m unittest tests.test_agentic_training_plan tests.test_schema_registry",
+      "command": "python3 -m unittest tests.test_agentic_training_runtime tests.test_agentic_training_plan tests.test_trainer_preflight tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
       "status": "pass"
     },
     {
-      "command": "python3 -m py_compile flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py",
+      "command": "python3 -m py_compile flightrecorder/agentic_training_runtime.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_runtime.py flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py",
       "status": "pass"
     },
     {
-      "command": "python3 scripts/plan_agentic_training.py --mode sft_then_dpo ... --out /tmp/hfr-agentic-training-plan/plan.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-training-plan/plan.json",
+      "command": "python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-preflight/ready.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-preflight/ready.json",
       "status": "pass"
     },
     {
-      "command": "python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force",
+      "command": "python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module hfr_missing_dependency_for_test --created-at 2026-07-02T00:00:00+00:00 --out /tmp/hfr-agentic-runtime-preflight/blocked.json && python3 -m flightrecorder schemas --check /tmp/hfr-agentic-runtime-preflight/blocked.json",
       "status": "pass"
     },
     {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json && python3 -m json.tool flightrecorder/schemas/agentic_training_plan.v1.schema.json && git diff --check",
+      "command": "python3 -m flightrecorder schemas --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-runtime-preflight/schema --force && python3 -m json.tool flightrecorder/schemas/agentic_training_runtime_preflight.v1.schema.json && git diff --check",
       "status": "pass"
     }
   ],
   "migration_notes": [
     "Dedicated worktree started clean at origin/main on codex/hermes-goal-5-training-20260702-1027.",
     "Requested shared docs and experiments/autonomy files were absent in this worktree at migration time.",
-    "No implementation edits were made in the shared checkout after the migration update."
+    "No implementation edits were made in the shared checkout after the migration update.",
+    "On 2026-07-02T15:01:51Z the branch fetched origin and rebased cleanly onto current origin/main before runtime-preflight work continued, making the shared autonomous docs available locally.",
+    "Delivery protocol changed to require verified branch packets to land on origin/main under /tmp/hermes-flight-recorder-main-push.lock before temporary branches and PRs are retired."
   ],
   "next_packets": [
     {
-      "id": "training_tiny_smoke_runtime_resolution",
+      "id": "training_result_archive_failure_contract",
       "layer": "training",
       "priority": "medium",
       "status": "ready",
-      "summary": "Resolve or document the bounded tiny smoke trainer runtime path, then run only dependency/preflight checks until registered inputs, license status, redaction gates, and no-download/no-expensive-job constraints pass.",
-      "title": "Resolve tiny smoke training runtime dependencies"
+      "summary": "Define the training result archive and classified failure contract that external tiny-smoke or full trainers must return before adapters/checkpoints can be registered.",
+      "title": "Define training result archives and failure classes"
     }
   ],
   "promotion_readiness": {
     "training": "in_progress"
   },
   "risks": [
-    "The planner emits dry-run contracts only; it does not prove that a real trainer stack is installed.",
-    "The dedicated worktree lacks the broader autonomous-goal docs from the shared checkout, so this state file bootstraps Goal 5 tracking locally."
+    "Runtime preflight checks module discoverability and trainer-view schemas only; it does not prove trainer version compatibility or execute a tiny smoke job.",
+    "Default backend dependency probes may remain blocked until the external trainer environment installs Axolotl, LLaMA Factory, Unsloth, or process-reward packages.",
+    "No model downloads, trainer imports, weight updates, or expensive jobs were launched in this packet.",
+    "The repository docs recommend schema-checking supervisor_state.json, but no bundled hfr.autonomy.supervisor_state.v1 schema is registered in this branch; this packet verified the state with json.tool instead."
   ],
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:49:08Z"
+  "updated_at": "2026-07-02T15:01:51Z"
 }

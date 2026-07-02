@@ -1,0 +1,410 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_runtime_preflight.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free runtime readiness preflight for an agentic training plan.",
+  "properties": {
+    "artifact_path": {
+      "type": "string"
+    },
+    "backend": {
+      "type": "string"
+    },
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "dependency_checks": {
+      "items": {
+        "$ref": "#/$defs/dependencyCheck"
+      },
+      "type": "array"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/executionBoundary"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "handoff_contract": {
+      "$ref": "#/$defs/handoffContract"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "plan_check": {
+      "$ref": "#/$defs/planCheck"
+    },
+    "plan_mode": {
+      "type": "string"
+    },
+    "plan_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "plan_sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "ready_for_tiny_smoke_launch",
+        "block_tiny_smoke_launch"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.agentic_training_runtime_preflight.v1"
+    },
+    "view_checks": {
+      "items": {
+        "$ref": "#/$defs/viewCheck"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "artifact_path",
+    "plan_path",
+    "plan_sha256",
+    "plan_mode",
+    "backend",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "plan_check",
+    "dependency_checks",
+    "view_checks",
+    "execution_boundary",
+    "handoff_contract",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Training Runtime Preflight",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "dependencyCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "module": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "required": {
+          "const": true
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "module",
+        "sources",
+        "required",
+        "available",
+        "passed",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": true,
+      "properties": {
+        "dependency_resolution_method": {
+          "const": "importlib.util.find_spec"
+        },
+        "dry_run_preflight_only": {
+          "const": true
+        },
+        "flight_recorder_launched_training": {
+          "const": false
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "trainer_modules_imported": {
+          "const": false
+        },
+        "training_started": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_preflight_only",
+        "flight_recorder_launched_training",
+        "training_started",
+        "model_downloads_started",
+        "trainer_modules_imported",
+        "dependency_resolution_method"
+      ],
+      "type": "object"
+    },
+    "handoffContract": {
+      "additionalProperties": true,
+      "properties": {
+        "disallow_unredacted_traces": {
+          "const": true
+        },
+        "flight_recorder_launched_training": {
+          "const": false
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "requires_known_license_status": {
+          "const": true
+        },
+        "requires_redacted_dataset": {
+          "const": true
+        },
+        "requires_registered_dataset": {
+          "const": true
+        },
+        "requires_registered_inputs": {
+          "const": true
+        },
+        "requires_registered_model": {
+          "const": true
+        },
+        "runner_must_require_recommendation": {
+          "const": "ready_for_tiny_smoke_launch"
+        },
+        "runner_owns_execution": {
+          "const": true
+        }
+      },
+      "required": [
+        "runner_owns_execution",
+        "runner_must_require_recommendation",
+        "requires_registered_inputs",
+        "requires_registered_model",
+        "requires_registered_dataset",
+        "requires_known_license_status",
+        "requires_redacted_dataset",
+        "disallow_unredacted_traces",
+        "flight_recorder_launched_training",
+        "model_downloads_started"
+      ],
+      "type": "object"
+    },
+    "planCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "observed_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "observed_recommendation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "required_recommendation": {
+          "const": "ready_for_external_trainer_plan"
+        },
+        "schema_name": {
+          "const": "agentic_training_plan"
+        },
+        "schema_passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "regular_file",
+        "schema_name",
+        "schema_passed",
+        "error_count",
+        "errors",
+        "required_recommendation",
+        "observed_recommendation",
+        "observed_passed"
+      ],
+      "type": "object"
+    },
+    "viewCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "expected_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "observed_row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "resolved_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "row_count_matches_manifest": {
+          "type": "boolean"
+        },
+        "row_schema_counts": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "schema_name": {
+          "type": "string"
+        },
+        "schema_version_declared": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "resolved_path",
+        "exists",
+        "regular_file",
+        "schema_name",
+        "schema_version_declared",
+        "expected_row_count",
+        "observed_row_count",
+        "row_count_matches_manifest",
+        "sha256",
+        "passed",
+        "error_count",
+        "errors",
+        "row_schema_counts"
+      ],
+      "type": "object"
+    }
+  }
+}

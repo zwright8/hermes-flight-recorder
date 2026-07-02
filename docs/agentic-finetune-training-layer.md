@@ -80,6 +80,39 @@ Plans use `hfr.agentic_training_plan.v1` and record:
 External runners must revalidate the plan, manifests, license status, redaction
 status, and current file hashes immediately before launch.
 
+## Runtime Preflight for Tiny Smoke
+
+Use `scripts/preflight_agentic_training_runtime.py` after a plan is ready and
+before any bounded tiny-smoke trainer launch:
+
+```bash
+python3 scripts/preflight_agentic_training_runtime.py \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --require-module json \
+  --skip-default-modules \
+  --out runs/agentic_training_runtime_preflight.json
+```
+
+Runtime preflight emits `hfr.agentic_training_runtime_preflight.v1` and checks:
+
+- the plan is schema-valid and still recommends
+  `ready_for_external_trainer_plan`
+- selected trainer-view JSONL files exist, pass their bundled row schemas, and
+  match the manifest row counts
+- required Python modules are discoverable with `importlib.util.find_spec`
+- Flight Recorder did not import trainer stacks, download models, mutate
+  weights, or launch training
+
+By default the checker uses backend-specific dependency probes for common
+external runners such as `axolotl`, `llama_factory`, `unsloth`, and process
+reward wrappers. Use `--skip-default-modules` plus one or more
+`--require-module` flags when CI needs a deterministic fixture or when an
+external runner owns dependency resolution.
+
+The command exits `0` for `ready_for_tiny_smoke_launch` and `1` for
+`block_tiny_smoke_launch`; blocked artifacts are still schema-checkable so they
+can be archived as failure evidence.
+
 ## Durable Example
 
 The repository includes a tiny synthetic fixture under
@@ -120,14 +153,15 @@ Focused verification for this packet:
 
 ```bash
 python3 -m unittest tests.test_agentic_training_plan
+python3 -m unittest tests.test_agentic_training_runtime
 python3 -m unittest tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts
-python3 -m py_compile flightrecorder/agentic_training_plan.py scripts/plan_agentic_training.py tests/test_agentic_training_plan.py
+python3 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py
 python3 -m flightrecorder schemas --name agentic_training_plan --write-dir /tmp/hfr-agentic-training-schema --force
+python3 -m flightrecorder schemas --name agentic_training_runtime_preflight --write-dir /tmp/hfr-agentic-runtime-preflight-schema --force
+python3 scripts/preflight_agentic_training_runtime.py --plan examples/agentic_training/plans/sft_then_dpo_plan.json --skip-default-modules --require-module json --out /tmp/hfr-agentic-runtime-preflight/ready.json
 python3 -m unittest tests.test_trainer_preflight.TrainerPreflightTests.test_trainer_preflight_archives_agentic_training_plan
 ```
 
-The dedicated worktree did not contain
-`docs/agentic-finetune-24-7-goals.md`,
-`docs/agentic-finetune-autonomous-operations.md`, or
-`docs/agentic-finetune-autonomous-goals.md` at migration time, so this document
-records the Goal 5 operating contract available in this branch.
+The dedicated worktree was rebased onto `origin/main` on 2026-07-02 before the
+runtime-preflight packet continued, so the shared autonomous Goal 5 docs are
+available alongside this layer-specific contract.

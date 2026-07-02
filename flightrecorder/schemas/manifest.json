@@ -344,6 +344,14 @@
       "filename": "agentic_training_plan.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/agentic_training_plan.v1.schema.json",
       "name": "agentic_training_plan"
+    },
+    {
+      "artifact": "agentic_training_runtime_preflight",
+      "artifact_schema_version": "hfr.agentic_training_runtime_preflight.v1",
+      "description": "Side-effect-free runtime readiness preflight for an agentic training plan.",
+      "filename": "agentic_training_runtime_preflight.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_training_runtime_preflight.v1.schema.json",
+      "name": "agentic_training_runtime_preflight"
     }
   ]
 }
