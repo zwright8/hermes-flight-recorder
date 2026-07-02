@@ -2,9 +2,58 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/dataset_registry.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "artifact_type": {
+            "const": "training_export"
+          }
+        },
+        "required": [
+          "artifact_type"
+        ]
+      },
+      "then": {
+        "required": [
+          "source_runs_dir",
+          "output_dir",
+          "counts",
+          "source_runs",
+          "dataset_splits",
+          "leakage_checks",
+          "source_fingerprint_coverage",
+          "quality_flags"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "artifact_type": {
+            "const": "reviewed_export"
+          }
+        },
+        "required": [
+          "artifact_type"
+        ]
+      },
+      "then": {
+        "required": [
+          "source_review_export",
+          "labels_path",
+          "source_review_artifacts",
+          "labels_artifact"
+        ]
+      }
+    }
+  ],
   "description": "Selectable dataset registry entry for trainer handoffs.",
   "properties": {
     "artifact_fingerprints": {
+      "additionalProperties": {
+        "$ref": "#/$defs/fileFingerprint"
+      },
       "type": "object"
     },
     "artifact_type": {
@@ -20,8 +69,98 @@
     "generated_at": {
       "type": "string"
     },
-    "label_provenance": {
+    "counts": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "properties": {
+        "dpo": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "episodes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reward_model": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sft": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "episodes",
+        "sft",
+        "dpo",
+        "reward_model"
+      ],
       "type": "object"
+    },
+    "dataset_splits": {
+      "properties": {
+        "episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "family_exclusive": {
+          "type": "boolean"
+        },
+        "task_family_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "test_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "train_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "validation_episode_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "label_provenance": {
+      "properties": {
+        "schema_version": {
+          "const": "hfr.rl.label_provenance.v1"
+        }
+      },
+      "required": [
+        "schema_version"
+      ],
+      "type": "object"
+    },
+    "labels_artifact": {
+      "$ref": "#/$defs/fileFingerprint"
+    },
+    "leakage_checks": {
+      "properties": {
+        "heldout_scenario_exclusive": {
+          "type": "boolean"
+        },
+        "heldout_scenario_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "split_group_key": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "labels_path": {
+      "type": "string"
     },
     "manifest_path": {
       "minLength": 1,
@@ -34,7 +173,33 @@
     "outputs": {
       "type": "object"
     },
+    "output_dir": {
+      "type": "string"
+    },
+    "quality_flags": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
     "redaction_status": {
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "hfr.rl.redaction_status.v1"
+        },
+        "unredacted_secret_like_finding_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "passed",
+        "unredacted_secret_like_finding_count"
+      ],
       "type": "object"
     },
     "schema_version": {
@@ -65,12 +230,54 @@
       "required": [
         "key",
         "trainer_preflight_arg",
-        "root_views"
+        "root_views",
+        "mode_to_view"
       ],
       "type": "object"
     },
-    "trainer_views": {
+    "source_fingerprint_coverage": {
       "type": "object"
+    },
+    "source_review_artifacts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/fileFingerprint"
+      },
+      "type": "object"
+    },
+    "source_review_export": {
+      "type": "string"
+    },
+    "source_runs": {
+      "items": {
+        "properties": {
+          "episode_id": {
+            "type": "string"
+          },
+          "scenario_id": {
+            "type": "string"
+          },
+          "source_fingerprint_status": {
+            "type": "string"
+          },
+          "task_family": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode_id",
+          "scenario_id",
+          "task_family",
+          "source_fingerprint_status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "source_runs_dir": {
+      "type": "string"
+    },
+    "trainer_views": {
+      "$ref": "#/$defs/trainerViews"
     }
   },
   "required": [
@@ -83,9 +290,127 @@
     "selection",
     "redaction_status",
     "label_provenance",
+    "trainer_views",
     "artifact_fingerprints",
     "outputs"
   ],
   "title": "Hermes Flight Recorder Dataset Registry",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "fileFingerprint": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "const": true
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "size_bytes",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "trainerViews": {
+      "properties": {
+        "contract_version": {
+          "const": "hfr.rl.trainer_views.v1"
+        },
+        "mode_to_view": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "root_views": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "views": {
+          "items": {
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "artifact_format": {
+                "type": "string"
+              },
+              "artifact_path": {
+                "type": "string"
+              },
+              "available": {
+                "type": "boolean"
+              },
+              "label_policy": {
+                "type": "string"
+              },
+              "row_count": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "schema_version": {
+                "type": "string"
+              },
+              "source_artifacts": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "training_modes": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "view_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "view_id",
+              "training_modes",
+              "artifact",
+              "artifact_path",
+              "artifact_format",
+              "schema_version",
+              "row_count",
+              "source_artifacts",
+              "label_policy",
+              "available"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "contract_version",
+        "mode_to_view",
+        "root_views",
+        "views"
+      ],
+      "type": "object"
+    }
+  }
 }

@@ -125,6 +125,7 @@
     "dataset_splits",
     "redaction_status",
     "label_provenance",
+    "trainer_views",
     "task_families",
     "quality_flags",
     "recommended_checks"

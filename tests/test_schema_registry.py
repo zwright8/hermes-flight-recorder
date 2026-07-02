@@ -941,6 +941,24 @@ class SchemaRegistryTests(unittest.TestCase):
             self.assertEqual(dataset_registry_result["schema"]["name"], "dataset_registry")
             self.assertTrue(curriculum_result["passed"], curriculum_result["errors"])
             self.assertEqual(curriculum_result["schema"]["name"], "rl_curriculum")
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            dataset_metrics = json.loads((out / "dataset_metrics.json").read_text(encoding="utf-8"))
+            dataset_registry = json.loads((out / "dataset_registry.json").read_text(encoding="utf-8"))
+            for payload, field_name in (
+                (manifest, "trainer_views"),
+                (dataset_metrics, "trainer_views"),
+                (dataset_registry, "trainer_views"),
+            ):
+                bad_payload = json.loads(json.dumps(payload))
+                bad_payload.pop(field_name)
+                bad_result = check_schema_contract(bad_payload)
+                self.assertFalse(bad_result["passed"])
+                self.assertIn(field_name, "\n".join(bad_result["errors"]))
+            bad_registry = json.loads(json.dumps(dataset_registry))
+            bad_registry["selection"].pop("mode_to_view")
+            bad_registry_result = check_schema_contract(bad_registry)
+            self.assertFalse(bad_registry_result["passed"])
+            self.assertIn("mode_to_view", "\n".join(bad_registry_result["errors"]))
 
     def test_schema_check_passes_trainer_handoff_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
