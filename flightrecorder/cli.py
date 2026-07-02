@@ -55,9 +55,11 @@ from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .model_registry import (
     ALIAS_NAMES,
+    MODEL_REGISTRY_LINK_COLLECTIONS,
     ModelRegistryError,
     build_dry_run_training_plan,
     build_model_compatibility_report,
+    link_model_registry_artifact,
     list_model_registry_entries,
     load_model_registry,
     model_candidate_errors,
@@ -939,6 +941,28 @@ def cmd_model_registry_alias(args: argparse.Namespace) -> int:
     )
     _write_json(registry_path, registry)
     print(f"moved {args.alias} -> {args.target} in {registry_path}")
+    return 0
+
+
+def cmd_model_registry_link(args: argparse.Namespace) -> int:
+    registry_path = Path(args.registry)
+    registry = load_model_registry(registry_path)
+    registry = link_model_registry_artifact(
+        registry,
+        entry_id=args.entry,
+        collection=args.collection,
+        artifact_id=args.artifact_id,
+        kind=args.kind,
+        status=args.status,
+        path=args.path,
+        sha256=args.sha256,
+        metadata=_metadata_options(args.metadata),
+        preserve_paths=args.preserve_paths,
+    )
+    _write_json(registry_path, registry)
+    if args.entry_out:
+        _write_json(Path(args.entry_out), registry["entries"][args.entry])
+    print(f"linked {args.collection}:{args.artifact_id} to {args.entry} in {registry_path}")
     return 0
 
 
@@ -2132,6 +2156,19 @@ def _parser() -> argparse.ArgumentParser:
     model_registry_alias.add_argument("--rollback-target", help="Required when moving champion")
     model_registry_alias.add_argument("--reason", default="", help="Reason recorded in alias history")
     model_registry_alias.set_defaults(func=cmd_model_registry_alias)
+    model_registry_link = model_registry_subparsers.add_parser("link", help="Link dataset, training, adapter, eval, or promotion artifacts")
+    model_registry_link.add_argument("--registry", default="experiments/registry/model_registry.json", help="Path to model_registry.json")
+    model_registry_link.add_argument("--entry", required=True, help="Model registry entry id to update")
+    model_registry_link.add_argument("--collection", choices=list(MODEL_REGISTRY_LINK_COLLECTIONS), required=True, help="Link collection to update")
+    model_registry_link.add_argument("--artifact-id", required=True, help="Stable linked artifact id")
+    model_registry_link.add_argument("--kind", required=True, help="Linked artifact kind")
+    model_registry_link.add_argument("--status", default="recorded", help="Linked artifact lifecycle status")
+    model_registry_link.add_argument("--path", help="Optional local artifact path to hash and record")
+    model_registry_link.add_argument("--sha256", help="Optional SHA-256 digest for pathless artifact refs or path verification")
+    model_registry_link.add_argument("--entry-out", help="Optionally write the updated registry entry JSON")
+    model_registry_link.add_argument("--metadata", action="append", default=[], type=_metadata_arg, help="Attach link metadata KEY=VALUE; may be repeated")
+    model_registry_link.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in link records")
+    model_registry_link.set_defaults(func=cmd_model_registry_link)
 
     training_plan = subparsers.add_parser("training-plan", help="Generate dry-run training plans")
     training_plan_subparsers = training_plan.add_subparsers(dest="training_plan_command", required=True)

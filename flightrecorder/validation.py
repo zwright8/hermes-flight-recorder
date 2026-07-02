@@ -1486,12 +1486,18 @@ def _validate_model_compatibility_report(report: dict[str, Any], target: Validat
 def _validate_model_registry_entry(entry: dict[str, Any], target: ValidationTarget) -> None:
     _require_equal(entry, "schema_version", MODEL_REGISTRY_ENTRY_SCHEMA_VERSION, target, prefix="model_registry_entry.")
     target.errors.extend(model_registry_entry_errors(entry))
+    links = entry.get("links") if isinstance(entry.get("links"), dict) else {}
     target.details.update(
         {
             "entry_id": entry.get("entry_id"),
             "candidate_id": entry.get("candidate_id"),
             "training_eligible": entry.get("training_eligible"),
             "license_status": entry.get("license_status"),
+            "link_counts": {
+                key: len(value)
+                for key, value in links.items()
+                if isinstance(key, str) and isinstance(value, list)
+            },
         }
     )
 
@@ -1501,6 +1507,12 @@ def _validate_model_registry(registry: dict[str, Any], target: ValidationTarget)
     target.errors.extend(model_registry_errors(registry))
     entries = registry.get("entries") if isinstance(registry.get("entries"), dict) else {}
     aliases = registry.get("aliases") if isinstance(registry.get("aliases"), dict) else {}
+    link_counts: dict[str, int] = {}
+    for entry in entries.values():
+        links = entry.get("links") if isinstance(entry, dict) and isinstance(entry.get("links"), dict) else {}
+        for collection, records in links.items():
+            if isinstance(collection, str) and isinstance(records, list):
+                link_counts[collection] = link_counts.get(collection, 0) + len(records)
     target.details.update(
         {
             "entry_count": len(entries),
@@ -1508,6 +1520,7 @@ def _validate_model_registry(registry: dict[str, Any], target: ValidationTarget)
                 1 for entry in entries.values() if isinstance(entry, dict) and entry.get("training_eligible") is True
             ),
             "aliases": aliases,
+            "link_counts": link_counts,
         }
     )
 

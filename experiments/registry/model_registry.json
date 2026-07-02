@@ -6,6 +6,13 @@
       "previous": null,
       "reason": "metadata-only local fixture ready for dry-run planning",
       "target": "local_mock_tiny_chat"
+    },
+    {
+      "alias": "candidate",
+      "moved_at": "2026-07-02T14:52:34Z",
+      "previous": "local_mock_tiny_chat",
+      "reason": "metadata-only local fixture ready for dry-run planning",
+      "target": "local_mock_tiny_chat"
     }
   ],
   "aliases": {
@@ -87,16 +94,45 @@
       "candidate_id": "local_mock_tiny_chat",
       "entry_id": "local_mock_tiny_chat",
       "license_status": "approved",
+      "links": {
+        "adapters": [],
+        "datasets": [
+          {
+            "id": "local_mock_dataset_v1",
+            "kind": "dataset_manifest",
+            "metadata": {
+              "role": "training_input"
+            },
+            "path": "experiments/registry/datasets/local_mock_dataset_manifest.json",
+            "recorded_at": "2026-07-02T14:52:35Z",
+            "sha256": "a13e8bd2c3cd18b7dc164824a9f7fd6feedda4a7002822efbe39c06c1605c281",
+            "status": "dry_run_stub"
+          }
+        ],
+        "evals": [],
+        "promotion_decisions": [],
+        "training_runs": [
+          {
+            "id": "local_mock_tiny_chat_sft_dry_run",
+            "kind": "training_plan",
+            "metadata": {},
+            "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
+            "recorded_at": "2026-07-02T14:52:35Z",
+            "sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8",
+            "status": "dry_run_plan"
+          }
+        ]
+      },
       "notes": [],
       "registered_at": "2026-07-02T14:43:54Z",
       "schema_version": "hfr.model_registry_entry.v1",
       "status": "registered",
       "training_eligible": true,
-      "updated_at": "2026-07-02T14:43:54Z"
+      "updated_at": "2026-07-02T14:52:35Z"
     }
   },
   "notes": [],
   "registry_path": "experiments/registry/model_registry.json",
   "schema_version": "hfr.model_registry.v1",
-  "updated_at": "2026-07-02T14:43:54Z"
+  "updated_at": "2026-07-02T14:52:35Z"
 }

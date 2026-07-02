@@ -52,6 +52,13 @@
         "candidate_id": "local_mock_tiny_chat",
         "entry_id": "local_mock_tiny_chat",
         "license_status": "approved",
+        "link_counts": {
+          "adapters": 0,
+          "datasets": 1,
+          "evals": 0,
+          "promotion_decisions": 0,
+          "training_runs": 1
+        },
         "training_eligible": true
       },
       "errors": [],
@@ -68,6 +75,13 @@
           "rollback": null
         },
         "entry_count": 1,
+        "link_counts": {
+          "adapters": 0,
+          "datasets": 1,
+          "evals": 0,
+          "promotion_decisions": 0,
+          "training_runs": 1
+        },
         "training_eligible_count": 1
       },
       "errors": [],

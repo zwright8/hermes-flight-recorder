@@ -13,10 +13,12 @@ from unittest.mock import patch
 from flightrecorder.cli import main
 from flightrecorder.model_registry import (
     MODEL_CANDIDATE_SCHEMA_VERSION,
+    MODEL_REGISTRY_LINK_COLLECTIONS,
     MODEL_SCOUT_MANIFEST_SCHEMA_VERSION,
     ModelRegistryError,
     build_dry_run_training_plan,
     build_model_compatibility_report,
+    link_model_registry_artifact,
     model_candidate_errors,
     move_model_alias,
     new_model_registry,
@@ -122,6 +124,7 @@ class ModelRegistryTests(unittest.TestCase):
             registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
             entry = select_model_for_training(registry, "candidate")
             self.assertTrue(entry["training_eligible"])
+            self.assertEqual(set(entry["links"]), set(MODEL_REGISTRY_LINK_COLLECTIONS))
 
             plan = build_dry_run_training_plan(
                 registry,
@@ -144,6 +147,62 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertTrue(check_schema_contract(candidate)["passed"])
             self.assertTrue(check_schema_contract(report)["passed"])
             self.assertTrue(check_schema_contract(plan)["passed"])
+
+    def test_registry_links_artifacts_with_hashes_and_upserts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                status="dry_run_stub",
+                path=dataset_manifest,
+                metadata={"role": "training_input"},
+            )
+            links = registry["entries"][candidate["candidate_id"]]["links"]
+            self.assertEqual(len(links["datasets"]), 1)
+            self.assertEqual(links["datasets"][0]["id"], "local_mock_dataset_v1")
+            self.assertEqual(len(links["datasets"][0]["sha256"]), 64)
+
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                status="verified",
+                path=dataset_manifest,
+            )
+            links = registry["entries"][candidate["candidate_id"]]["links"]
+            self.assertEqual(len(links["datasets"]), 1)
+            self.assertEqual(links["datasets"][0]["status"], "verified")
+            rows = [row for row in registry["entries"].values()]
+            self.assertEqual(rows[0]["links"]["training_runs"], [])
+            with self.assertRaises(ModelRegistryError):
+                link_model_registry_artifact(
+                    registry,
+                    entry_id=candidate["candidate_id"],
+                    collection="datasets",
+                    artifact_id="local_mock_dataset_v1",
+                    kind="dataset_manifest",
+                    path=dataset_manifest,
+                    sha256="0" * 64,
+                )
+            with self.assertRaises(ModelRegistryError):
+                link_model_registry_artifact(
+                    registry,
+                    entry_id=candidate["candidate_id"],
+                    collection="unknown",
+                    artifact_id="x",
+                    kind="x",
+                )
 
     def test_unknown_license_blocks_training_selection_and_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -329,6 +388,58 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(
                 run_cli(
                     [
+                        "model-registry",
+                        "link",
+                        "--registry",
+                        str(registry_path),
+                        "--entry",
+                        candidate["candidate_id"],
+                        "--collection",
+                        "datasets",
+                        "--artifact-id",
+                        "local_mock_dataset_v1",
+                        "--kind",
+                        "dataset_manifest",
+                        "--status",
+                        "dry_run_stub",
+                        "--path",
+                        str(dataset_manifest),
+                        "--entry-out",
+                        str(entry_path),
+                        "--metadata",
+                        "role=training_input",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-registry",
+                        "link",
+                        "--registry",
+                        str(registry_path),
+                        "--entry",
+                        candidate["candidate_id"],
+                        "--collection",
+                        "training_runs",
+                        "--artifact-id",
+                        "local_mock_tiny_chat_sft_dry_run",
+                        "--kind",
+                        "training_plan",
+                        "--status",
+                        "dry_run_plan",
+                        "--path",
+                        str(plan_path),
+                        "--entry-out",
+                        str(entry_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
                         "validate",
                         "--model-candidate",
                         str(candidate_path),
@@ -350,6 +461,10 @@ class ModelRegistryTests(unittest.TestCase):
             validation = json.loads(validation_path.read_text(encoding="utf-8"))
             self.assertTrue(validation["passed"], validation["targets"])
             self.assertEqual(validation["target_count"], 5)
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            link_counts = registry["entries"][candidate["candidate_id"]]["links"]
+            self.assertEqual(len(link_counts["datasets"]), 1)
+            self.assertEqual(len(link_counts["training_runs"]), 1)
 
     def test_dry_run_plan_avoids_heavy_imports_network_and_process_launches(self):
         with tempfile.TemporaryDirectory() as tmp:

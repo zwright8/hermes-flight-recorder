@@ -8,6 +8,18 @@
     "candidate_id": {"minLength": 1, "type": "string"},
     "entry_id": {"minLength": 1, "type": "string"},
     "license_status": {"type": "string"},
+    "links": {
+      "additionalProperties": true,
+      "properties": {
+        "adapters": {"items": {"type": "object"}, "type": "array"},
+        "datasets": {"items": {"type": "object"}, "type": "array"},
+        "evals": {"items": {"type": "object"}, "type": "array"},
+        "promotion_decisions": {"items": {"type": "object"}, "type": "array"},
+        "training_runs": {"items": {"type": "object"}, "type": "array"}
+      },
+      "required": ["datasets", "training_runs", "adapters", "evals", "promotion_decisions"],
+      "type": "object"
+    },
     "notes": {"items": {"type": "string"}, "type": "array"},
     "registered_at": {"minLength": 1, "type": "string"},
     "schema_version": {"const": "hfr.model_registry_entry.v1"},
@@ -23,6 +35,7 @@
     "updated_at",
     "status",
     "training_eligible",
+    "links",
     "candidate"
   ],
   "title": "Hermes Flight Recorder Model Registry Entry",

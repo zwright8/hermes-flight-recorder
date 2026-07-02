@@ -17,6 +17,7 @@ MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
 TRAINING_PLAN_SCHEMA_VERSION = "hfr.training_plan.v1"
 
 ALIAS_NAMES = ("candidate", "champion", "rollback")
+MODEL_REGISTRY_LINK_COLLECTIONS = ("datasets", "training_runs", "adapters", "evals", "promotion_decisions")
 COMPATIBILITY_FIELDS = (
     "tokenizer",
     "chat_template",
@@ -249,8 +250,9 @@ def load_model_registry(path: str | Path) -> dict[str, Any]:
     if not registry_path.exists():
         return new_model_registry(registry_path=registry_path)
     payload = json.loads(registry_path.read_text(encoding="utf-8"))
-    validate_model_registry(payload)
-    return payload
+    registry = _registry_with_defaults(payload)
+    validate_model_registry(registry)
+    return registry
 
 
 def model_registry_entry_errors(entry: Any) -> list[str]:
@@ -273,6 +275,7 @@ def model_registry_entry_errors(entry: Any) -> list[str]:
         )
     if not _is_string_list(entry.get("notes", [])):
         errors.append("model_registry_entry.notes must be a list of strings when present.")
+    _model_registry_links_errors(entry.get("links"), errors)
     return errors
 
 
@@ -341,6 +344,7 @@ def register_model_candidate(registry: dict[str, Any], candidate: dict[str, Any]
         "training_eligible": is_training_license_approved(candidate),
         "license_status": str(license_review.get("status") or ""),
         "candidate": copy.deepcopy(candidate),
+        "links": _model_registry_links_with_defaults(existing.get("links")),
         "notes": list(existing.get("notes") if _is_string_list(existing.get("notes")) else []),
     }
     next_registry["entries"][candidate_id] = entry
@@ -390,6 +394,7 @@ def list_model_registry_entries(registry: dict[str, Any]) -> list[dict[str, Any]
                 "training_eligible": entry.get("training_eligible") is True,
                 "license_status": entry.get("license_status"),
                 "aliases": sorted(alias for alias, target in aliases.items() if target == entry_id),
+                "link_counts": _model_registry_link_counts(entry.get("links")),
             }
         )
     return rows
@@ -408,6 +413,60 @@ def select_model_for_training(registry: dict[str, Any], model_ref: str) -> dict[
     if entry.get("training_eligible") is not True:
         raise ModelRegistryError(f"model entry {entry.get('entry_id')!r} is not training eligible")
     return copy.deepcopy(entry)
+
+
+def link_model_registry_artifact(
+    registry: dict[str, Any],
+    *,
+    entry_id: str,
+    collection: str,
+    artifact_id: str,
+    kind: str,
+    status: str = "recorded",
+    path: str | Path | None = None,
+    sha256: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    preserve_paths: bool = False,
+) -> dict[str, Any]:
+    next_registry = _registry_with_defaults(registry)
+    if collection not in MODEL_REGISTRY_LINK_COLLECTIONS:
+        raise ModelRegistryError(f"collection must be one of {', '.join(MODEL_REGISTRY_LINK_COLLECTIONS)}")
+    entry = next_registry["entries"].get(entry_id)
+    if not isinstance(entry, dict):
+        raise ModelRegistryError(f"model registry entry {entry_id!r} is not registered")
+    if not artifact_id:
+        raise ModelRegistryError("artifact_id must be a non-empty string")
+    if not kind:
+        raise ModelRegistryError("kind must be a non-empty string")
+    if not status:
+        raise ModelRegistryError("status must be a non-empty string")
+    record: dict[str, Any] = {
+        "id": artifact_id,
+        "kind": kind,
+        "status": status,
+        "recorded_at": _now_iso(),
+        "metadata": copy.deepcopy(metadata or {}),
+    }
+    if path is not None and str(path):
+        source_path = Path(path)
+        if not source_path.exists() or not source_path.is_file() or source_path.is_symlink():
+            raise ModelRegistryError(f"linked artifact path must be an existing regular file: {source_path}")
+        computed_sha256 = _sha256(source_path)
+        if sha256 is not None and sha256.lower() != computed_sha256:
+            raise ModelRegistryError("linked artifact sha256 does not match path contents")
+        record["path"] = _display_path(source_path, preserve_paths)
+        record["sha256"] = computed_sha256
+    elif sha256 is not None:
+        normalized_sha256 = sha256.lower()
+        if not _is_sha256(normalized_sha256):
+            raise ModelRegistryError("sha256 must be a 64-character hex digest")
+        record["sha256"] = normalized_sha256
+    entry["links"] = _model_registry_links_with_defaults(entry.get("links"))
+    _upsert_link_record(entry["links"][collection], record)
+    entry["updated_at"] = _now_iso()
+    next_registry["updated_at"] = _now_iso()
+    validate_model_registry(next_registry)
+    return next_registry
 
 
 def build_dry_run_training_plan(
@@ -652,6 +711,9 @@ def _registry_with_defaults(registry: dict[str, Any]) -> dict[str, Any]:
     next_registry.setdefault("registry_path", "experiments/registry/model_registry.json")
     next_registry.setdefault("updated_at", _now_iso())
     next_registry.setdefault("entries", {})
+    for entry in next_registry["entries"].values():
+        if isinstance(entry, dict):
+            entry["links"] = _model_registry_links_with_defaults(entry.get("links"))
     aliases = next_registry.setdefault("aliases", {})
     for alias in ALIAS_NAMES:
         aliases.setdefault(alias, None)
@@ -673,6 +735,59 @@ def _require_registered_target(registry: dict[str, Any], target: str) -> None:
         raise ModelRegistryError("alias target must be a non-empty entry id")
     if target not in registry.get("entries", {}):
         raise ModelRegistryError(f"alias target {target!r} is not registered")
+
+
+def _model_registry_links_errors(links: Any, errors: list[str]) -> None:
+    if not isinstance(links, dict):
+        errors.append("model_registry_entry.links must be an object.")
+        return
+    for collection in MODEL_REGISTRY_LINK_COLLECTIONS:
+        records = links.get(collection)
+        if not isinstance(records, list):
+            errors.append(f"model_registry_entry.links.{collection} must be a list.")
+            continue
+        seen: set[tuple[str, str]] = set()
+        for index, record in enumerate(records):
+            prefix = f"model_registry_entry.links.{collection}[{index}]."
+            if not isinstance(record, dict):
+                errors.append(f"model_registry_entry.links.{collection}[{index}] must be an object.")
+                continue
+            for field_name in ("id", "kind", "status", "recorded_at"):
+                _require_non_empty_string(record, field_name, errors, prefix)
+            record_key = (str(record.get("id") or ""), str(record.get("kind") or ""))
+            if record_key in seen:
+                errors.append(f"{prefix}id and kind duplicate an earlier link record.")
+            seen.add(record_key)
+            if "path" in record:
+                _require_non_empty_string(record, "path", errors, prefix)
+            if "sha256" in record and not _is_sha256(str(record.get("sha256") or "").lower()):
+                errors.append(f"{prefix}sha256 must be a 64-character hex digest.")
+            if not isinstance(record.get("metadata", {}), dict):
+                errors.append(f"{prefix}metadata must be an object when present.")
+
+
+def _model_registry_links_with_defaults(links: Any) -> dict[str, list[dict[str, Any]]]:
+    normalized: dict[str, list[dict[str, Any]]] = {collection: [] for collection in MODEL_REGISTRY_LINK_COLLECTIONS}
+    if not isinstance(links, dict):
+        return normalized
+    for collection in MODEL_REGISTRY_LINK_COLLECTIONS:
+        records = links.get(collection)
+        if isinstance(records, list):
+            normalized[collection] = [copy.deepcopy(record) for record in records if isinstance(record, dict)]
+    return normalized
+
+
+def _model_registry_link_counts(links: Any) -> dict[str, int]:
+    normalized = _model_registry_links_with_defaults(links)
+    return {collection: len(records) for collection, records in normalized.items()}
+
+
+def _upsert_link_record(records: list[dict[str, Any]], record: dict[str, Any]) -> None:
+    for index, existing in enumerate(records):
+        if existing.get("id") == record["id"] and existing.get("kind") == record["kind"]:
+            records[index] = record
+            return
+    records.append(record)
 
 
 def _license_errors(license_review: dict[str, Any], errors: list[str], prefix: str) -> None:

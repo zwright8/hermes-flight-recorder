@@ -43,6 +43,25 @@ flightrecorder training-plan dry-run \
   --output-dir experiments/registry/training_outputs/local_mock_tiny_chat \
   --out experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json \
   --compatibility-report experiments/registry/compatibility/local_mock_tiny_chat.compatibility_report.json
+flightrecorder model-registry link \
+  --registry experiments/registry/model_registry.json \
+  --entry local_mock_tiny_chat \
+  --collection datasets \
+  --artifact-id local_mock_dataset_v1 \
+  --kind dataset_manifest \
+  --status dry_run_stub \
+  --path experiments/registry/datasets/local_mock_dataset_manifest.json \
+  --entry-out experiments/registry/model_registry_entries/local_mock_tiny_chat.json \
+  --metadata role=training_input
+flightrecorder model-registry link \
+  --registry experiments/registry/model_registry.json \
+  --entry local_mock_tiny_chat \
+  --collection training_runs \
+  --artifact-id local_mock_tiny_chat_sft_dry_run \
+  --kind training_plan \
+  --status dry_run_plan \
+  --path experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json \
+  --entry-out experiments/registry/model_registry_entries/local_mock_tiny_chat.json
 flightrecorder validate \
   --model-scout-manifest experiments/registry/model_scout_manifest.json \
   --model-candidate experiments/registry/model_candidates/local_mock_tiny_chat.json \
