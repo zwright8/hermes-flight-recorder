@@ -1,0 +1,212 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/scenario_quality.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Scenario contract quality summary emitted as scenario_quality.json.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "passed": { "type": "boolean" },
+    "pattern": { "minLength": 1, "type": "string" },
+    "recursive": { "type": "boolean" },
+    "require_traces": { "type": "boolean" },
+    "scenarios": {
+      "items": { "$ref": "#/$defs/scenario" },
+      "type": "array"
+    },
+    "scenarios_dir": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.scenario_quality.v1" }
+  },
+  "required": [
+    "schema_version",
+    "scenarios_dir",
+    "pattern",
+    "recursive",
+    "require_traces",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics",
+    "scenarios"
+  ],
+  "title": "Hermes Flight Recorder Scenario Quality",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": { "type": ["integer", "number", "object", "string", "boolean", "null"] },
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "scope": { "type": "object" },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "passed", "summary"],
+      "type": "object"
+    },
+    "count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "average_contract_score": { "minimum": 0, "type": "number" },
+        "final_only_scenario_count": { "minimum": 0, "type": "integer" },
+        "invalid_scenario_count": { "minimum": 0, "type": "integer" },
+        "max_contract_score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "min_contract_score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "missing_state_count": { "minimum": 0, "type": "integer" },
+        "missing_trace_count": { "minimum": 0, "type": "integer" },
+        "observable_scenario_count": { "minimum": 0, "type": "integer" },
+        "observable_scenario_rate": { "minimum": 0, "type": "number" },
+        "risk_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "scenario_count": { "minimum": 0, "type": "integer" },
+        "task_families": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "task_family_count": { "minimum": 0, "type": "integer" },
+        "valid_scenario_count": { "minimum": 0, "type": "integer" },
+        "weak_scenario_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "scenario_count",
+        "valid_scenario_count",
+        "invalid_scenario_count",
+        "task_family_count",
+        "average_contract_score",
+        "min_contract_score",
+        "max_contract_score",
+        "observable_scenario_count",
+        "observable_scenario_rate",
+        "weak_scenario_count",
+        "final_only_scenario_count",
+        "missing_trace_count",
+        "missing_state_count",
+        "task_families",
+        "risk_counts"
+      ],
+      "type": "object"
+    },
+    "scenario": {
+      "additionalProperties": true,
+      "properties": {
+        "contract_score": { "maximum": 100, "minimum": 0, "type": "integer" },
+        "errors": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "id": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "quality": { "enum": ["strong", "moderate", "weak", "invalid"], "type": "string" },
+        "risks": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "signals": { "$ref": "#/$defs/signals" },
+        "state": { "$ref": "#/$defs/state" },
+        "task_family": { "minLength": 1, "type": "string" },
+        "title": { "minLength": 1, "type": "string" },
+        "trace": { "$ref": "#/$defs/trace" }
+      },
+      "required": [
+        "path",
+        "id",
+        "title",
+        "task_family",
+        "contract_score",
+        "quality",
+        "errors",
+        "risks"
+      ],
+      "type": "object"
+    },
+    "signals": {
+      "additionalProperties": true,
+      "properties": {
+        "before_state_exists": { "type": "boolean" },
+        "budget_constraint_count": { "minimum": 0, "type": "integer" },
+        "final_assertion_count": { "minimum": 0, "type": "integer" },
+        "has_before_state_path": { "type": "boolean" },
+        "has_budget_limits": { "type": "boolean" },
+        "has_secret_policy": { "type": "boolean" },
+        "has_state_path": { "type": "boolean" },
+        "has_trace_path": { "type": "boolean" },
+        "observable_assertion_count": { "minimum": 0, "type": "integer" },
+        "pass_threshold": { "type": ["integer", "null"] },
+        "regex_constraint_count": { "minimum": 0, "type": "integer" },
+        "required_action_count": { "minimum": 0, "type": "integer" },
+        "required_action_sequence_count": { "minimum": 0, "type": "integer" },
+        "required_event_count_count": { "minimum": 0, "type": "integer" },
+        "required_evidence_count": { "minimum": 0, "type": "integer" },
+        "required_state_count": { "minimum": 0, "type": "integer" },
+        "required_state_transition_count": { "minimum": 0, "type": "integer" },
+        "state_exists": { "type": "boolean" },
+        "task_completion_assertion_count": { "minimum": 0, "type": "integer" },
+        "trace_exists": { "type": "boolean" }
+      },
+      "required": [
+        "has_trace_path",
+        "trace_exists",
+        "has_before_state_path",
+        "before_state_exists",
+        "has_state_path",
+        "state_exists",
+        "regex_constraint_count",
+        "budget_constraint_count",
+        "has_secret_policy",
+        "has_budget_limits",
+        "required_evidence_count",
+        "required_action_count",
+        "required_action_sequence_count",
+        "required_event_count_count",
+        "required_state_count",
+        "required_state_transition_count",
+        "observable_assertion_count",
+        "task_completion_assertion_count",
+        "final_assertion_count"
+      ],
+      "type": "object"
+    },
+    "state": {
+      "additionalProperties": true,
+      "properties": {
+        "before_state_exists": { "type": "boolean" },
+        "before_state_path": { "type": "string" },
+        "has_before_state_path": { "type": "boolean" },
+        "has_state_path": { "type": "boolean" },
+        "state_exists": { "type": "boolean" },
+        "state_path": { "type": "string" }
+      },
+      "required": ["has_before_state_path", "before_state_exists", "has_state_path", "state_exists"],
+      "type": "object"
+    },
+    "trace": {
+      "additionalProperties": true,
+      "properties": {
+        "has_trace_path": { "type": "boolean" },
+        "trace_exists": { "type": "boolean" },
+        "trace_path": { "type": "string" },
+        "trace_required": { "type": "boolean" }
+      },
+      "required": ["has_trace_path", "trace_exists", "trace_required"],
+      "type": "object"
+    }
+  }
+}

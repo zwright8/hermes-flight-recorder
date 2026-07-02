@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +70,9 @@ class ScenarioQualityTests(unittest.TestCase):
 
             validate_code = run_cli(["validate", "--scenario-quality", str(out), "--strict"])
             self.assertEqual(validate_code, 0)
+            schema = check_schema_file(out)
+            self.assertTrue(schema["passed"], schema["errors"])
+            self.assertEqual(schema["schema"]["name"], "scenario_quality")
 
     def test_scenario_quality_fails_unmet_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:

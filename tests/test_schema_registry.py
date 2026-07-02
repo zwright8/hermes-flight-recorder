@@ -35,6 +35,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("supervisor_state", names)
         self.assertIn("run_suite", names)
         self.assertIn("evidence_coverage", names)
+        self.assertIn("scenario_quality", names)
         self.assertIn("run_digest", names)
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
@@ -444,6 +445,89 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "evidence_coverage")
+
+    def test_scenario_quality_schema_accepts_minimal_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.scenario_quality.v1",
+                "scenarios_dir": "scenarios",
+                "pattern": "*.json",
+                "recursive": False,
+                "require_traces": True,
+                "passed": True,
+                "check_count": 0,
+                "failed_check_count": 0,
+                "checks": [],
+                "metrics": {
+                    "scenario_count": 1,
+                    "valid_scenario_count": 1,
+                    "invalid_scenario_count": 0,
+                    "task_family_count": 1,
+                    "average_contract_score": 100.0,
+                    "min_contract_score": 100,
+                    "max_contract_score": 100,
+                    "observable_scenario_count": 1,
+                    "observable_scenario_rate": 1.0,
+                    "weak_scenario_count": 0,
+                    "final_only_scenario_count": 0,
+                    "missing_trace_count": 0,
+                    "missing_state_count": 0,
+                    "task_families": ["email_reply_completion"],
+                    "risk_counts": [],
+                },
+                "scenarios": [
+                    {
+                        "path": "scenarios/email_reply_completion_good.json",
+                        "id": "email_reply_completion_good",
+                        "title": "Email Reply Completion",
+                        "task_family": "email_reply_completion",
+                        "contract_score": 100,
+                        "quality": "strong",
+                        "errors": [],
+                        "risks": [],
+                        "signals": {
+                            "has_trace_path": True,
+                            "trace_exists": True,
+                            "has_before_state_path": True,
+                            "before_state_exists": True,
+                            "has_state_path": True,
+                            "state_exists": True,
+                            "regex_constraint_count": 1,
+                            "budget_constraint_count": 1,
+                            "has_secret_policy": True,
+                            "has_budget_limits": True,
+                            "required_evidence_count": 1,
+                            "required_action_count": 1,
+                            "required_action_sequence_count": 1,
+                            "required_event_count_count": 1,
+                            "required_state_count": 1,
+                            "required_state_transition_count": 1,
+                            "observable_assertion_count": 6,
+                            "task_completion_assertion_count": 5,
+                            "final_assertion_count": 1,
+                            "pass_threshold": 90,
+                        },
+                        "trace": {
+                            "has_trace_path": True,
+                            "trace_exists": True,
+                            "trace_required": True,
+                            "trace_path": "fixtures/email_reply_completion_good.observer.jsonl",
+                        },
+                        "state": {
+                            "has_before_state_path": True,
+                            "before_state_exists": True,
+                            "has_state_path": True,
+                            "state_exists": True,
+                            "before_state_path": "fixtures/email_before.json",
+                            "state_path": "fixtures/email_after.json",
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "scenario_quality")
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(

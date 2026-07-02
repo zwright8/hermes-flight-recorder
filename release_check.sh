@@ -228,6 +228,7 @@ test -f runs/suite_compare.html
 test -f runs/suite_trend.json
 test -f runs/suite_trend.html
 test -f runs/scenario_quality.json
+"$PYTHON" -m flightrecorder schemas --check runs/scenario_quality.json >/dev/null
 test -f runs/evidence_coverage.json
 "$PYTHON" -m flightrecorder schemas --check runs/evidence_coverage.json >/dev/null
 test -f runs/trace_observability.json

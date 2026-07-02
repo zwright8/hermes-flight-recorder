@@ -90,6 +90,14 @@
       "name": "evidence_coverage"
     },
     {
+      "artifact": "scenario_quality",
+      "artifact_schema_version": "hfr.scenario_quality.v1",
+      "description": "Scenario contract quality summary emitted as scenario_quality.json.",
+      "filename": "scenario_quality.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/scenario_quality.v1.schema.json",
+      "name": "scenario_quality"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",
