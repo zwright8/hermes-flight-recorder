@@ -956,6 +956,14 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual({gate["id"] for gate in result["gates"]}, {"reviewed_gate", "review_calibration"})
             self.assertTrue(all(gate["validation"]["passed"] for gate in result["gates"]))
             self.assertIn("reviewed_export_reviewed_labels_jsonl", result["artifacts"])
+            dataset_selection = result["dataset_selection"][0]
+            self.assertIn("sft", dataset_selection["trainer_modes"])
+            self.assertIn("action_sft", dataset_selection["trainer_modes"])
+            self.assertIn("dpo", dataset_selection["trainer_modes"])
+            self.assertIn("reward_model", dataset_selection["trainer_modes"])
+            self.assertEqual(dataset_selection["trainer_views"]["contract_version"], "hfr.rl.trainer_views.v1")
+            self.assertEqual(dataset_selection["trainer_views"]["mode_to_view"]["action_sft"], "reviewed_sft")
+            self.assertEqual(dataset_selection["trainer_views"]["mode_to_view"]["dpo"], "reviewed_dpo")
 
     def test_trainer_preflight_blocks_symlinked_training_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:

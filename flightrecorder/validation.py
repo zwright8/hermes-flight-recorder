@@ -119,6 +119,7 @@ from .training import (
     RL_REWARD_MODEL_SCHEMA_VERSION,
     RL_SFT_SCHEMA_VERSION,
     RL_STEP_REWARD_SCHEMA_VERSION,
+    RL_TRAINER_VIEWS_CONTRACT_VERSION,
     REWARD_SCALES,
     build_label_provenance_summary,
     build_redaction_status,
@@ -4027,6 +4028,7 @@ def _validate_reviewed_manifest(
         target.errors.append("manifest.redaction_status must match recomputed reviewed redaction scan.")
     if manifest.get("label_provenance") != expected_label_provenance:
         target.errors.append("manifest.label_provenance must match recomputed reviewed label provenance.")
+    reviewed_trainer_views = _validate_reviewed_trainer_views(manifest, target, sft, reward_model, dpo)
     registry = manifest.get("registry")
     if not isinstance(registry, dict):
         target.errors.append("manifest.registry must be an object.")
@@ -4036,6 +4038,10 @@ def _validate_reviewed_manifest(
             target.errors.append("manifest.registry.selection_key must match manifest.dataset_version.")
         if registry.get("redaction_passed") is not (expected_redaction_status.get("passed") is True):
             target.errors.append("manifest.registry.redaction_passed must match redaction_status.passed.")
+        if registry.get("mode_to_view") != reviewed_trainer_views.get("mode_to_view"):
+            target.errors.append("manifest.registry.mode_to_view must match manifest.trainer_views.mode_to_view.")
+        if registry.get("root_views") != reviewed_trainer_views.get("root_views"):
+            target.errors.append("manifest.registry.root_views must match manifest.trainer_views.root_views.")
     if dataset_registry is None:
         target.errors.append("manifest has no validated dataset_registry.json companion.")
     else:
@@ -4046,6 +4052,7 @@ def _validate_reviewed_manifest(
             export_dir,
             expected_redaction_status,
             expected_label_provenance,
+            reviewed_trainer_views,
         )
     if _looks_absolute(str(manifest.get("source_review_export", ""))):
         target.warnings.append("manifest.source_review_export is absolute; prefer redacted or relative exports for sharing.")
@@ -4083,6 +4090,72 @@ def _expected_reviewed_label_provenance(
     }
 
 
+def _validate_reviewed_trainer_views(
+    manifest: dict[str, Any],
+    target: ValidationTarget,
+    sft: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+) -> dict[str, Any]:
+    trainer_views = manifest.get("trainer_views")
+    if not isinstance(trainer_views, dict):
+        target.errors.append("manifest.trainer_views must be an object.")
+        return {}
+
+    expected_mode_to_view = {
+        "sft": "reviewed_sft",
+        "action_sft": "reviewed_sft",
+        "dpo": "reviewed_dpo",
+        "reward_model": "reviewed_reward_model",
+    }
+    expected_root_views = ["reviewed_sft.jsonl", "reviewed_dpo.jsonl", "reviewed_reward_model.jsonl"]
+    if trainer_views.get("contract_version") != RL_TRAINER_VIEWS_CONTRACT_VERSION:
+        target.errors.append("manifest.trainer_views.contract_version must be hfr.rl.trainer_views.v1.")
+    if trainer_views.get("mode_to_view") != expected_mode_to_view:
+        target.errors.append("manifest.trainer_views.mode_to_view must map reviewed SFT, DPO, and reward-model modes.")
+    if trainer_views.get("root_views") != expected_root_views:
+        target.errors.append("manifest.trainer_views.root_views must list reviewed SFT, DPO, and reward-model artifacts.")
+
+    views = trainer_views.get("views")
+    if not isinstance(views, list):
+        target.errors.append("manifest.trainer_views.views must be a list.")
+        return trainer_views
+    views_by_id = {view.get("view_id"): view for view in views if isinstance(view, dict)}
+    expected_views = {
+        "reviewed_sft": {
+            "training_modes": ["sft", "action_sft"],
+            "artifact_path": "reviewed_sft.jsonl",
+            "schema_version": REVIEWED_SFT_SCHEMA_VERSION,
+            "row_count": len(sft),
+        },
+        "reviewed_dpo": {
+            "training_modes": ["dpo"],
+            "artifact_path": "reviewed_dpo.jsonl",
+            "schema_version": REVIEWED_DPO_SCHEMA_VERSION,
+            "row_count": len(dpo),
+        },
+        "reviewed_reward_model": {
+            "training_modes": ["reward_model"],
+            "artifact_path": "reviewed_reward_model.jsonl",
+            "schema_version": REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
+            "row_count": len(reward_model),
+        },
+    }
+    for view_id, expected in expected_views.items():
+        view = views_by_id.get(view_id)
+        if not isinstance(view, dict):
+            target.errors.append(f"manifest.trainer_views.views missing {view_id!r}.")
+            continue
+        for field_name, expected_value in expected.items():
+            if view.get(field_name) != expected_value:
+                target.errors.append(
+                    f"manifest.trainer_views.views.{view_id}.{field_name} expected {expected_value!r}, got {view.get(field_name)!r}."
+                )
+        if view.get("available") is not True:
+            target.errors.append(f"manifest.trainer_views.views.{view_id}.available must be true.")
+    return trainer_views
+
+
 def _validate_reviewed_dataset_registry(
     registry: dict[str, Any],
     target: ValidationTarget,
@@ -4090,6 +4163,7 @@ def _validate_reviewed_dataset_registry(
     export_dir: Path,
     expected_redaction_status: dict[str, Any],
     expected_label_provenance: dict[str, Any],
+    reviewed_trainer_views: dict[str, Any],
 ) -> None:
     _require_equal(registry, "schema_version", RL_DATASET_REGISTRY_SCHEMA_VERSION, target, prefix="dataset_registry.")
     if registry.get("artifact_type") != "reviewed_export":
@@ -4103,6 +4177,13 @@ def _validate_reviewed_dataset_registry(
         target.errors.append("dataset_registry.selection must be an object.")
     elif selection.get("key") != manifest.get("dataset_version"):
         target.errors.append("dataset_registry.selection.key must match manifest.dataset_version.")
+    else:
+        if selection.get("mode_to_view") != reviewed_trainer_views.get("mode_to_view"):
+            target.errors.append("dataset_registry.selection.mode_to_view must match manifest.trainer_views.mode_to_view.")
+        if selection.get("root_views") != reviewed_trainer_views.get("root_views"):
+            target.errors.append("dataset_registry.selection.root_views must match manifest.trainer_views.root_views.")
+    if registry.get("trainer_views") != reviewed_trainer_views:
+        target.errors.append("dataset_registry.trainer_views must match manifest.trainer_views.")
     if registry.get("redaction_status") != expected_redaction_status:
         target.errors.append("dataset_registry.redaction_status must match recomputed reviewed redaction scan.")
     if registry.get("label_provenance") != expected_label_provenance:

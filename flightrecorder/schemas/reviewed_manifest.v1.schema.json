@@ -134,6 +134,18 @@
         "schema_version": {
           "const": "hfr.rl.dataset_registry.v1"
         },
+        "mode_to_view": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "root_views": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "selection_key": {
           "pattern": "^hfrds-[0-9a-f]+$",
           "type": "string"
@@ -141,7 +153,9 @@
       },
       "required": [
         "schema_version",
-        "selection_key"
+        "selection_key",
+        "root_views",
+        "mode_to_view"
       ],
       "type": "object"
     },
@@ -171,6 +185,9 @@
       },
       "type": "array"
     },
+    "trainer_views": {
+      "type": "object"
+    },
     "unknown_confidence_label_count": {
       "minimum": 0,
       "type": "integer"
@@ -197,6 +214,7 @@
     "unknown_confidence_label_count",
     "redaction_status",
     "label_provenance",
+    "trainer_views",
     "registry",
     "task_families",
     "outputs",

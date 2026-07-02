@@ -180,6 +180,20 @@ class ReviewExportTests(unittest.TestCase):
             self.assertTrue(manifest["redaction_status"]["passed"])
             self.assertEqual(manifest["label_provenance"], dataset_registry["label_provenance"])
             self.assertIn("dataset_registry", manifest["outputs"])
+            trainer_views = manifest["trainer_views"]
+            self.assertEqual(trainer_views["contract_version"], "hfr.rl.trainer_views.v1")
+            self.assertEqual(trainer_views, dataset_registry["trainer_views"])
+            self.assertEqual(manifest["registry"]["mode_to_view"], trainer_views["mode_to_view"])
+            self.assertEqual(dataset_registry["selection"]["mode_to_view"], trainer_views["mode_to_view"])
+            self.assertEqual(dataset_registry["selection"]["root_views"], trainer_views["root_views"])
+            self.assertEqual(trainer_views["mode_to_view"]["sft"], "reviewed_sft")
+            self.assertEqual(trainer_views["mode_to_view"]["action_sft"], "reviewed_sft")
+            self.assertEqual(trainer_views["mode_to_view"]["dpo"], "reviewed_dpo")
+            self.assertEqual(trainer_views["mode_to_view"]["reward_model"], "reviewed_reward_model")
+            views_by_id = {view["view_id"]: view for view in trainer_views["views"]}
+            self.assertEqual(views_by_id["reviewed_sft"]["row_count"], 1)
+            self.assertEqual(views_by_id["reviewed_dpo"]["row_count"], 1)
+            self.assertEqual(views_by_id["reviewed_reward_model"]["row_count"], 2)
             self.assertEqual(manifest["reviewed_label_count"], 2)
             self.assertEqual(manifest["sft_count"], 1)
             self.assertEqual(manifest["reward_model_count"], 2)
@@ -236,6 +250,29 @@ class ReviewExportTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("dataset_registry.manifest_sha256 must match manifest.json contents", errors)
+
+    def test_validate_reviewed_export_rejects_trainer_view_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+            registry_path = out / "dataset_registry.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["selection"]["mode_to_view"]["dpo"] = "reviewed_sft"
+            registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--reviewed-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("dataset_registry.selection.mode_to_view must match manifest.trainer_views.mode_to_view", errors)
 
     def test_apply_review_rejects_invalid_reviewer_confidence(self):
         with tempfile.TemporaryDirectory() as tmp:

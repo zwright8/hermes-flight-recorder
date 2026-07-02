@@ -12,6 +12,7 @@ from typing import Any
 from .training import (
     RL_DATASET_REGISTRY_SCHEMA_VERSION,
     RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+    RL_TRAINER_VIEWS_CONTRACT_VERSION,
     RunRecord,
     TrainingExportError,
     build_redaction_status,
@@ -163,6 +164,7 @@ def apply_review_labels(
     labels_artifact = _file_fingerprint(label_file, preserve_paths)
     pre_manifest_fingerprints = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest", "dataset_registry"})
     dataset_version = _reviewed_dataset_version_id(pre_manifest_fingerprints, source_review_artifacts, labels_artifact)
+    trainer_views = _reviewed_trainer_views(sft, dpo, reward_model)
 
     manifest = {
         "schema_version": REVIEWED_MANIFEST_SCHEMA_VERSION,
@@ -189,12 +191,15 @@ def apply_review_labels(
         "labels_artifact": labels_artifact,
         "redaction_status": redaction_status,
         "label_provenance": label_provenance,
+        "trainer_views": trainer_views,
         "registry": {
             "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
             "path": _display_path(paths["dataset_registry"], preserve_paths),
             "selection_key": dataset_version,
             "manifest_path": _display_path(paths["manifest"], preserve_paths),
             "redaction_passed": redaction_status.get("passed") is True,
+            "root_views": trainer_views["root_views"],
+            "mode_to_view": trainer_views["mode_to_view"],
         },
         "notes": [
             "Reviewed exports are derived from review_items.jsonl plus completed human labels.",
@@ -204,6 +209,7 @@ def apply_review_labels(
             "Reviewed reward-model rows include accept/reject/unsafe/incomplete labels.",
             "Reviewed preferences pair accepted rows against rejected/unsafe/incomplete rows in the same task family.",
             "reviewer_confidence is human-entered evidence quality metadata; gate-reviewed can reject low or unknown confidence.",
+            "trainer_views maps supported reviewed training modes to reviewed SFT, DPO, and reward-model artifacts.",
             "dataset_registry.json binds dataset_version to manifest SHA-256, source review artifacts, labels artifact, and redaction status.",
         ],
     }
@@ -687,7 +693,87 @@ def _reviewed_dataset_version_id(
     return f"hfrds-{_canonical_sha256({'artifacts': artifact_fingerprints, 'labels': labels_artifact, 'source': source_review_artifacts})[:16]}"
 
 
+def _reviewed_trainer_views(
+    sft: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+) -> dict[str, Any]:
+    views = [
+        _reviewed_trainer_view_record(
+            "reviewed_sft",
+            ["sft", "action_sft"],
+            "reviewed_sft.jsonl",
+            REVIEWED_SFT_SCHEMA_VERSION,
+            len(sft),
+            "human_reviewed_accept",
+            ["reviewed_labels.jsonl"],
+            ["Action SFT consumes the same human-accepted rows; no separate row copy is emitted."],
+        ),
+        _reviewed_trainer_view_record(
+            "reviewed_dpo",
+            ["dpo"],
+            "reviewed_dpo.jsonl",
+            REVIEWED_DPO_SCHEMA_VERSION,
+            len(dpo),
+            "human_reviewed_within_family_preference",
+            ["reviewed_preferences.jsonl"],
+            ["DPO rows are derived from human-accepted versus rejected/unsafe/incomplete reviewed preferences."],
+        ),
+        _reviewed_trainer_view_record(
+            "reviewed_reward_model",
+            ["reward_model"],
+            "reviewed_reward_model.jsonl",
+            REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
+            len(reward_model),
+            "human_reviewed_label_reward",
+            ["reviewed_labels.jsonl"],
+            ["Reward rows exclude needs_review labels and carry reviewer confidence metadata."],
+        ),
+    ]
+    return {
+        "contract_version": RL_TRAINER_VIEWS_CONTRACT_VERSION,
+        "mode_to_view": {
+            mode: str(view["view_id"])
+            for view in views
+            for mode in view["training_modes"]
+        },
+        "root_views": [str(view["artifact_path"]) for view in views],
+        "views": views,
+        "notes": [
+            "Reviewed trainer views are selectors over human-reviewed artifacts.",
+            "Use gate-reviewed and review-calibration before launching reviewed dataset training.",
+        ],
+    }
+
+
+def _reviewed_trainer_view_record(
+    view_id: str,
+    training_modes: list[str],
+    artifact_path: str,
+    schema_version: str,
+    row_count: int,
+    label_policy: str,
+    source_artifacts: list[str],
+    notes: list[str],
+) -> dict[str, Any]:
+    return {
+        "view_id": view_id,
+        "training_modes": training_modes,
+        "artifact": view_id,
+        "artifact_path": artifact_path,
+        "artifact_format": "jsonl",
+        "schema_version": schema_version,
+        "row_count": row_count,
+        "source_artifacts": source_artifacts,
+        "label_policy": label_policy,
+        "available": True,
+        "split_paths": {},
+        "notes": notes,
+    }
+
+
 def _reviewed_dataset_registry_record(manifest: dict[str, Any], paths: dict[str, Path], preserve_paths: bool) -> dict[str, Any]:
+    trainer_views = manifest.get("trainer_views") if isinstance(manifest.get("trainer_views"), dict) else {}
     return {
         "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
         "dataset_version": str(manifest.get("dataset_version") or ""),
@@ -700,8 +786,13 @@ def _reviewed_dataset_registry_record(manifest: dict[str, Any], paths: dict[str,
         "selection": {
             "key": str(manifest.get("dataset_version") or ""),
             "trainer_preflight_arg": f"--require-dataset-version {manifest.get('dataset_version')}",
-            "root_views": ["reviewed_sft.jsonl", "reviewed_dpo.jsonl", "reviewed_reward_model.jsonl"],
+            "root_views": trainer_views.get(
+                "root_views",
+                ["reviewed_sft.jsonl", "reviewed_dpo.jsonl", "reviewed_reward_model.jsonl"],
+            ),
+            "mode_to_view": trainer_views.get("mode_to_view", {}),
         },
+        "trainer_views": trainer_views,
         "redaction_status": manifest.get("redaction_status", {}),
         "label_provenance": manifest.get("label_provenance", {}),
         "source_review_artifacts": manifest.get("source_review_artifacts", {}),
