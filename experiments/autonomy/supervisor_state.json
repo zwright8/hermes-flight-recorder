@@ -147,6 +147,68 @@
       ],
       "resolved_at": "2026-07-02T16:26:16Z",
       "resolved_by_main_sha": "62ec2084f60af5a576548ca8d999afd6c4f5d886"
+    },
+    {
+      "id": "governance_rollback_receipts_main_delivery_lock_unavailable",
+      "layer": "governance",
+      "priority": "high",
+      "status": "blocked",
+      "blocked_at": "2026-07-02T16:48:37Z",
+      "branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
+      "branch_sha": "93004267c28e204e30bba44c68011eed76305734",
+      "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
+      "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/16",
+      "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+      "lock_retry": "bounded 120-second mkdir retry",
+      "main_push_status": "not_pushed",
+      "summary": "Rollback receipt packet is verified and published on PR #16, but main integration is blocked because the serialized main-push lock remained held for the full retry window.",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py tests/test_schema_registry.py",
+          "status": "pass",
+          "summary": "Touched governance, CLI, validation, and tests compile."
+        },
+        {
+          "command": "python3 -m json.tool flightrecorder/schemas/promotion_rollback_receipt.v1.schema.json && python3 -m json.tool flightrecorder/schemas/manifest.json",
+          "status": "pass",
+          "summary": "New rollback receipt schema and schema manifest parse as JSON."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_schema_registry",
+          "status": "pass",
+          "summary": "36 focused promotion and schema-registry tests passed."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_schema_registry tests.test_validation",
+          "status": "pass",
+          "summary": "66 focused promotion, schema-registry, and validation tests passed after refreshing from current main."
+        },
+        {
+          "command": "python3 -m flightrecorder promotion-rollback-receipt --help",
+          "status": "pass",
+          "summary": "CLI help exposes --registry, --rollback-id, and --out."
+        },
+        {
+          "command": "generated rollback receipt validates with validate --promotion-rollback-receipt and schemas --check",
+          "status": "pass",
+          "summary": "A temporary hfr.model_registry.v1 registry produced a passing rollback receipt accepted by semantic validation and schema checks."
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass",
+          "summary": "Branch diff has no whitespace errors after refreshing from current main."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+          "status": "pass",
+          "summary": "343 tests passed under Python 3.11."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "status": "blocked",
+          "summary": "System Python 3.9 ran 331 tests but cannot import tomllib or datetime.UTC in existing harness/deployment tests; Python 3.11 discovery passed."
+        }
+      ]
     }
   ],
   "completed_packets": [
@@ -1544,7 +1606,7 @@
       "id": "governance_rollback_target_receipts",
       "layer": "governance",
       "priority": "high",
-      "status": "verified_pending_main_delivery",
+      "status": "verified_branch_pushed_main_delivery_blocked",
       "title": "Require rollback target receipts",
       "summary": "Added side-effect-free promotion rollback receipts that fingerprint the model registry, prove the rollback target is registered as the current champion, validate through CLI/schema checks, and block promotion when a receipt fails.",
       "completed_at": "2026-07-02T16:44:47Z",
@@ -1660,27 +1722,26 @@
       "github_persistence": {
         "branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
         "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
-        "branch_sha": "caf7368e0cf203a34de3876e63d6df095f2af00b",
-        "pushed": false,
-        "remote_branch_verified": false,
+        "branch_sha": "93004267c28e204e30bba44c68011eed76305734",
+        "pushed": true,
+        "remote_branch_verified": true,
         "remote_branch_deleted": false,
-        "pr_url": null,
-        "pr_state": "not_created_yet",
+        "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/16",
+        "pr_state": "OPEN",
         "main_sha": null,
-        "remote_main_verified": false
+        "remote_main_verified": false,
+        "remote_branch_verified_sha": "93004267c28e204e30bba44c68011eed76305734",
+        "main_delivery_blocker": "main-push lock unavailable after 120-second retry"
       }
     }
   ],
   "current_packet": {
-    "id": "governance_promotion_artifact_schemas",
+    "id": "governance_rollback_target_receipts",
     "layer": "governance",
-    "priority": "medium",
-    "status": "ready",
-    "title": "Register promotion artifact schemas",
-    "summary": "Add public schemas for promotion decisions, cards, alias-apply receipts, and release records so every governed promotion artifact can be checked through the schema catalog.",
-    "depends_on": [
-      "governance_rollback_target_receipts"
-    ]
+    "priority": "high",
+    "status": "verified_branch_pushed_main_delivery_blocked",
+    "title": "Require rollback target receipts",
+    "summary": "Verified rollback receipt packet is published as PR #16 and awaiting the serialized main-push lock for integration."
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -2259,9 +2320,9 @@
       "latest_packet": "evidence_pr5_main_delivery"
     },
     "governance": {
-      "next_packet": "governance_promotion_artifact_schemas",
+      "next_packet": "governance_rollback_target_receipts",
       "status": "in_progress",
-      "summary": "Rollback target receipts are implemented and verified on the Goal 8 branch; branch/main delivery is pending, with promotion artifact schemas queued next."
+      "summary": "Rollback receipt packet is verified and open as PR #16, but main delivery is blocked by the held main-push lock."
     },
     "harness": {
       "next_packet": null,
@@ -2356,15 +2417,17 @@
       "id": "governance_rollback_target_receipts",
       "layer": "governance",
       "priority": "high",
-      "status": "verified_pending_main_delivery",
+      "status": "verified_branch_pushed_main_delivery_blocked",
       "summary": "Added side-effect-free promotion rollback receipts that fingerprint the model registry, prove the rollback target is registered as the current champion, validate through CLI/schema checks, and block promotion when a receipt fails.",
       "title": "Require rollback target receipts",
       "depends_on": [
         "governance_policy_schema_registry"
       ],
       "source_branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
-      "source_branch_sha": "caf7368e0cf203a34de3876e63d6df095f2af00b",
-      "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4"
+      "source_branch_sha": "93004267c28e204e30bba44c68011eed76305734",
+      "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
+      "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/16",
+      "main_delivery_blocker": "main-push lock unavailable after 120-second retry"
     },
     {
       "id": "governance_promotion_artifact_schemas",
@@ -2389,7 +2452,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:44:47Z",
+  "updated_at": "2026-07-02T16:48:37Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2462,14 +2525,14 @@
     "branch": "codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
     "remote_ref": "refs/heads/codex/hermes-goal-8-governance-rollback-receipts-20260702-1638",
     "implementation_commit_sha": "4e6a2368d5576234f50870e504f5cf01c0f206a4",
-    "branch_head_before_locked_merge_sha": "caf7368e0cf203a34de3876e63d6df095f2af00b",
-    "branch_remote_status": "pending_push",
-    "branch_remote_verified_sha": null,
-    "pr_url": null,
-    "pr_status": "not_created_yet",
+    "branch_head_before_locked_merge_sha": "93004267c28e204e30bba44c68011eed76305734",
+    "branch_remote_status": "pushed_and_verified",
+    "branch_remote_verified_sha": "93004267c28e204e30bba44c68011eed76305734",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/16",
+    "pr_status": "OPEN",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "not_acquired_yet",
-    "main_integration_status": "pending_locked_delivery",
+    "lock_status": "unavailable_after_120s",
+    "main_integration_status": "blocked_lock_unavailable",
     "main_sha": null,
     "remote_main_verified_sha": null,
     "verification": [
@@ -2523,7 +2586,10 @@
     "risks": [
       "Legacy bare rollback metadata remains accepted for compatibility; policy and docs now route new promotion flows through hfr.promotion_rollback_receipt.v1 receipts.",
       "System python3 is Python 3.9.6 and cannot run full discovery because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11."
-    ]
+    ],
+    "main_push_status": "not_pushed",
+    "blocker": "main-push lock unavailable after bounded 120-second retry",
+    "blocked_at": "2026-07-02T16:48:37Z"
   },
   "risks": [
     "Real upstream model licenses and terms still need re-checking immediately before any actual training launch.",
