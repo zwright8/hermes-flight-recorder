@@ -57,26 +57,62 @@
           "status": "pass"
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "test",
+          "path": "tests/test_harness_replay_matrix.py"
+        },
+        {
+          "kind": "doc",
+          "path": "README.md"
+        }
+      ],
+      "commit_sha": "5ae421cc14446b252e26a317ba6171e5d6ca7bbc",
+      "completed_at": "2026-07-02T14:47:25Z",
+      "id": "harness_live_replay_matrix",
+      "layer": "harness",
+      "status": "completed",
+      "summary": "Added fixture-backed replay matrix coverage for Hermes observer, OpenClaw, and Coven live-shaped harness artifacts, including schema validation, replay receipts, fake-secret canary metadata, and a failing scorecard publication path.",
+      "verification": [
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile tests/test_harness_replay_matrix.py scripts/hermes_harness.py scripts/live_hermes_smoke.py scripts/live_openclaw_smoke.py scripts/live_coven_smoke.py",
+          "status": "pass"
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_harness_replay_matrix",
+          "status": "pass"
+        },
+        {
+          "command": "/Users/zacharywright/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest tests.test_deployment_hardening tests.test_harness_replay_matrix tests.test_openclaw_integration tests.test_coven_integration tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts",
+          "status": "pass"
+        },
+        {
+          "command": "git diff --cached --name-status && git diff --cached --check before commit",
+          "status": "pass"
+        }
+      ]
     }
   ],
   "current_packet": null,
-  "latest_commit_sha": "b9faaa1461e3b734a8e40eec0e3ecad9eca3ddc2",
+  "latest_commit_sha": "5ae421cc14446b252e26a317ba6171e5d6ca7bbc",
   "latest_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
   "latest_risks": [
-    "Real Hermes, OpenClaw, and Coven runtimes were not launched in this packet; coverage uses mock and artifact-writer paths.",
+    "Real Hermes, OpenClaw, and Coven runtimes were not launched in this packet; coverage uses fixture-backed live-shaped artifact writers and replay.",
     "The dedicated worktree did not include the broader autonomous docs/state files from the shared checkout, so this branch starts its own scoped state handoff."
   ],
   "next_packets": [
     {
-      "id": "harness_live_replay_matrix",
+      "id": "harness_tool_policy_enforcement_matrix",
       "layer": "harness",
       "status": "ready",
-      "summary": "Add fixture-backed replay matrix coverage across Hermes-style observer, OpenClaw, and Coven harness outputs."
+      "summary": "Exercise denied tool/action metadata and fake-secret canary detection across mock and replayed harness runs."
     }
   ],
   "promotion_readiness": {
     "harness": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:39:10Z"
+  "updated_at": "2026-07-02T14:47:25Z"
 }
