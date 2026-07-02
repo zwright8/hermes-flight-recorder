@@ -1,0 +1,188 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/action_ledger.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Longitudinal ledger over evidence-bundle next actions emitted as action_ledger.json.",
+  "properties": {
+    "action_count": { "minimum": 0, "type": "integer" },
+    "bundle_count": { "minimum": 0, "type": "integer" },
+    "bundles": {
+      "items": { "$ref": "#/$defs/bundle" },
+      "type": "array"
+    },
+    "entries": {
+      "items": { "$ref": "#/$defs/entry" },
+      "type": "array"
+    },
+    "ledger_path": { "type": "string" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "const": true },
+    "schema_version": { "const": "hfr.action_ledger.v1" },
+    "unique_action_count": { "minimum": 0, "type": "integer" }
+  },
+  "required": [
+    "schema_version",
+    "ledger_path",
+    "passed",
+    "bundle_count",
+    "action_count",
+    "unique_action_count",
+    "bundles",
+    "metrics",
+    "entries",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Action Ledger",
+  "type": "object",
+  "$defs": {
+    "bundle": {
+      "additionalProperties": true,
+      "properties": {
+        "action_count": { "minimum": 0, "type": "integer" },
+        "exists": { "type": "boolean" },
+        "index": { "minimum": 0, "type": "integer" },
+        "passed": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" },
+        "readiness": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "schema_version": { "const": "hfr.evidence_bundle.v1" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "index",
+        "path",
+        "exists",
+        "schema_version",
+        "passed",
+        "readiness",
+        "recommendation",
+        "action_count"
+      ],
+      "type": "object"
+    },
+    "bundle_action_count": {
+      "additionalProperties": true,
+      "properties": {
+        "action_count": { "minimum": 0, "type": "integer" },
+        "index": { "minimum": 0, "type": "integer" },
+        "path": { "minLength": 1, "type": "string" }
+      },
+      "required": ["index", "path", "action_count"],
+      "type": "object"
+    },
+    "count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    },
+    "entry": {
+      "additionalProperties": true,
+      "properties": {
+        "action_fingerprint": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "artifact": { "minLength": 1, "type": "string" },
+        "bundle_indexes": {
+          "items": { "minimum": 0, "type": "integer" },
+          "type": "array"
+        },
+        "evidence": { "type": "object" },
+        "first_seen_index": { "minimum": 0, "type": "integer" },
+        "first_seen_path": { "minLength": 1, "type": "string" },
+        "id": { "minLength": 1, "type": "string" },
+        "last_seen_index": { "minimum": 0, "type": "integer" },
+        "last_seen_path": { "minLength": 1, "type": "string" },
+        "occurrence_count": { "minimum": 0, "type": "integer" },
+        "occurrences": {
+          "items": { "$ref": "#/$defs/occurrence" },
+          "type": "array"
+        },
+        "open": { "type": "boolean" },
+        "priority": { "enum": ["critical", "high", "medium", "low"], "type": "string" },
+        "routing_key": { "minLength": 1, "type": "string" },
+        "status": { "enum": ["new", "recurring", "open", "resolved"], "type": "string" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "routing_key",
+        "action_fingerprint",
+        "id",
+        "priority",
+        "artifact",
+        "summary",
+        "evidence",
+        "occurrences",
+        "status",
+        "open",
+        "occurrence_count",
+        "bundle_indexes",
+        "first_seen_index",
+        "last_seen_index",
+        "first_seen_path",
+        "last_seen_path"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "action_count": { "minimum": 0, "type": "integer" },
+        "artifact_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "bundle_action_counts": {
+          "items": { "$ref": "#/$defs/bundle_action_count" },
+          "type": "array"
+        },
+        "bundle_count": { "minimum": 0, "type": "integer" },
+        "new_action_count": { "minimum": 0, "type": "integer" },
+        "open_action_count": { "minimum": 0, "type": "integer" },
+        "priority_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "recurring_action_count": { "minimum": 0, "type": "integer" },
+        "resolved_action_count": { "minimum": 0, "type": "integer" },
+        "status_counts": {
+          "items": { "$ref": "#/$defs/count" },
+          "type": "array"
+        },
+        "unique_action_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "bundle_count",
+        "action_count",
+        "unique_action_count",
+        "open_action_count",
+        "new_action_count",
+        "recurring_action_count",
+        "resolved_action_count",
+        "status_counts",
+        "priority_counts",
+        "artifact_counts",
+        "bundle_action_counts"
+      ],
+      "type": "object"
+    },
+    "occurrence": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact": { "type": "string" },
+        "bundle_index": { "minimum": 0, "type": "integer" },
+        "bundle_path": { "type": "string" },
+        "priority": { "enum": ["critical", "high", "medium", "low"], "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": ["bundle_index", "bundle_path", "summary", "priority", "artifact"],
+      "type": "object"
+    }
+  }
+}

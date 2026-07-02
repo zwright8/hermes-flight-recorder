@@ -44,6 +44,7 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertTrue(all(len(entry["action_fingerprint"]) == 64 for entry in ledger["entries"]))
             self.assertTrue(all(entry["routing_key"].endswith(entry["action_fingerprint"][:12]) for entry in ledger["entries"]))
             self.assertEqual(run_cli(["validate", "--action-ledger", str(ledger_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger_path)]), 0)
 
             gate_path = root / "action_ledger_gate.json"
             self.assertEqual(
@@ -148,6 +149,7 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertGreater(ledger["metrics"]["resolved_action_count"], 0)
             self.assertGreater(ledger["metrics"]["new_action_count"], 0)
             self.assertEqual(run_cli(["validate", "--action-ledger", str(ledger_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger_path)]), 0)
 
             resolved_key = next(entry["routing_key"] for entry in ledger["entries"] if entry["status"] == "resolved")
             gate_path = root / "resolved_action_ledger_gate.json"

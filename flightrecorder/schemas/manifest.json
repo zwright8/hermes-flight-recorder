@@ -674,6 +674,14 @@
       "name": "promotion_decision"
     },
     {
+      "artifact": "action_ledger",
+      "artifact_schema_version": "hfr.action_ledger.v1",
+      "description": "Longitudinal ledger over evidence-bundle next actions emitted as action_ledger.json.",
+      "filename": "action_ledger.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/action_ledger.v1.schema.json",
+      "name": "action_ledger"
+    },
+    {
       "artifact": "action_ledger_gate",
       "artifact_schema_version": "hfr.action_ledger_gate.v1",
       "description": "Gate result over longitudinal action-ledger repair pressure and optional action-ledger-gate policy.",

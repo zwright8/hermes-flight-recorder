@@ -767,6 +767,77 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "action_ledger_gate")
 
+    def test_action_ledger_schema_accepts_minimal_ledger(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.action_ledger.v1",
+                "ledger_path": "runs/action_ledger.json",
+                "passed": True,
+                "bundle_count": 1,
+                "action_count": 1,
+                "unique_action_count": 1,
+                "bundles": [
+                    {
+                        "index": 0,
+                        "path": "runs/evidence_bundle.json",
+                        "exists": True,
+                        "schema_version": "hfr.evidence_bundle.v1",
+                        "passed": True,
+                        "readiness": "ready",
+                        "recommendation": "promote_handoff",
+                        "action_count": 1,
+                        "size_bytes": 1234,
+                        "sha256": "0" * 64,
+                    }
+                ],
+                "metrics": {
+                    "bundle_count": 1,
+                    "action_count": 1,
+                    "unique_action_count": 1,
+                    "open_action_count": 1,
+                    "new_action_count": 1,
+                    "recurring_action_count": 0,
+                    "resolved_action_count": 0,
+                    "status_counts": [{"id": "new", "count": 1}],
+                    "priority_counts": [{"id": "high", "count": 1}],
+                    "artifact_counts": [{"id": "suite_summary", "count": 1}],
+                    "bundle_action_counts": [{"index": 0, "path": "runs/evidence_bundle.json", "action_count": 1}],
+                },
+                "entries": [
+                    {
+                        "routing_key": "suite_summary:repair_failed_scenarios:000000000000",
+                        "action_fingerprint": "0" * 64,
+                        "id": "repair_failed_scenarios",
+                        "priority": "high",
+                        "artifact": "suite_summary",
+                        "summary": "Repair failing scenarios.",
+                        "evidence": {"failed": 1},
+                        "occurrences": [
+                            {
+                                "bundle_index": 0,
+                                "bundle_path": "runs/evidence_bundle.json",
+                                "summary": "Repair failing scenarios.",
+                                "priority": "high",
+                                "artifact": "suite_summary",
+                            }
+                        ],
+                        "status": "new",
+                        "open": True,
+                        "occurrence_count": 1,
+                        "bundle_indexes": [0],
+                        "first_seen_index": 0,
+                        "last_seen_index": 0,
+                        "first_seen_path": "runs/evidence_bundle.json",
+                        "last_seen_path": "runs/evidence_bundle.json",
+                    }
+                ],
+                "notes": ["Action ledger fixture."],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "action_ledger")
+
     def test_evidence_coverage_schema_accepts_minimal_summary(self):
         result = check_schema_contract(
             {

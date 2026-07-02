@@ -509,6 +509,7 @@ flightrecorder schemas --name evidence_bundle --out evidence_bundle.schema.json
 flightrecorder schemas --check runs/evidence_bundle.json
 flightrecorder schemas --check runs/captured_state.json
 flightrecorder schemas --check runs/promotion_decision.json
+flightrecorder schemas --check runs/action_ledger.json
 flightrecorder schemas --check runs/action_ledger_gate.json
 flightrecorder schemas --check runs/training_gate.json
 flightrecorder schemas --check runs/suite_gate.json

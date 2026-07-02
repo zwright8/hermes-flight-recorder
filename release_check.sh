@@ -1146,6 +1146,7 @@ test -f runs/evidence_bundle_full.json
   --bundle runs/evidence_bundle_full.json \
   --out runs/action_ledger.json >/dev/null
 test -f runs/action_ledger.json
+"$PYTHON" -m flightrecorder schemas --check runs/action_ledger.json >/dev/null
 "$PYTHON" -m flightrecorder gate-action-ledger \
   --action-ledger runs/action_ledger.json \
   --policy examples/action_ledger_gate_policy.demo.json \
