@@ -48,6 +48,8 @@ test -f schema_contracts_check/trainer_archive.v1.schema.json
 test -f schema_contracts_check/trainer_archive_check.v1.schema.json
 test -f schema_contracts_check/trainer_consumer_plan.v1.schema.json
 test -f schema_contracts_check/trainer_wrapper_dry_run.v1.schema.json
+test -f schema_contracts_check/harness_run_manifest.v1.schema.json
+test -f schema_contracts_check/harness_run_result.v1.schema.json
 "$PYTHON" scripts/live_verifier_smoke.py \
   --out runs/live_verifier_smoke_release_check \
   --provider slack >/dev/null
@@ -1054,6 +1056,12 @@ PY
 "$PYTHON" -m flightrecorder validate \
   --live-smoke-summary runs/live_smoke_summary.json \
   --strict >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/harness_handoff/harness_manifest.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/harness_handoff/harness_result.json >/dev/null
+"$PYTHON" -m flightrecorder validate \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
+  --strict >/dev/null
 "$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
@@ -1068,10 +1076,14 @@ PY
   --reviewed-export runs/reviewed_export \
   --review-calibration runs/review_calibration.json \
   --live-smoke-summary runs/live_smoke_summary.json \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
   --gate runs/suite_gate.json \
   --gate runs/compare_gate.json \
   --gate runs/training_gate.json \
   --gate runs/reviewed_gate.json \
+  --require-harness \
+  --require-gate \
   --out runs/evidence_bundle_full.json >/dev/null
 test -f runs/evidence_bundle_full.json
 "$PYTHON" -m flightrecorder action-ledger \
@@ -1209,6 +1221,8 @@ test -f runs/evidence_bundle_trainer.json
   --evidence-bundle runs/evidence_bundle.json \
   --evidence-bundle runs/evidence_bundle_full.json \
   --evidence-bundle runs/evidence_bundle_trainer.json \
+  --harness-manifest runs/harness_handoff/harness_manifest.json \
+  --harness-result runs/harness_handoff/harness_result.json \
   --improvement-ledger-gate runs/improvement_ledger_gate.json \
   --action-ledger runs/action_ledger.json \
   --action-ledger-gate runs/action_ledger_gate.json \
@@ -1255,6 +1269,14 @@ assert trainer_bundle["decision"]["key_metrics"]["trainer_handoff"]["complete_ch
 assert bundle["decision"]["gate_count"] == 4
 assert bundle["decision"]["passed_gate_count"] == 4
 assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
+assert bundle["decision"]["key_metrics"]["harness_handoff"]["pair_count"] == 1
+assert bundle["decision"]["key_metrics"]["harness_handoff"]["passed_pair_count"] == 1
+assert bundle["decision"]["key_metrics"]["harness_handoff"]["missing_pair_count"] == 0
+assert bundle["metrics"]["harness_handoff"]["pair_count"] == 1
+assert bundle["metrics"]["harness_handoff"]["schema_valid_pair_count"] == 1
+assert bundle["metrics"]["harness_handoff"]["consistent_pair_count"] == 1
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["runner"] == "flightrecorder_run_suite"
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["provider"] == "fixture"
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_count"] == 1
 assert bundle["decision"]["key_metrics"]["compare_export"]["task_completion_improvement_count"] == 1
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_scenarios"] == ["email_reply_completion"]
@@ -1475,6 +1497,8 @@ assert_help_contains "--trainer-archive" "$VENV_DIR/bin/python" -m flightrecorde
 assert_help_contains "--trainer-archive-check" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--trainer-consumer-plan" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--trainer-wrapper-dry-run" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--harness-manifest" "$VENV_DIR/bin/python" -m flightrecorder validate --help
+assert_help_contains "--harness-result" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--improvement-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
 assert_help_contains "--action-ledger-gate" "$VENV_DIR/bin/python" -m flightrecorder validate --help
@@ -1498,6 +1522,10 @@ assert_help_contains "--trainer-archive" "$VENV_DIR/bin/python" -m flightrecorde
 assert_help_contains "--trainer-archive-check" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
 assert_help_contains "--trainer-consumer-plan" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
 assert_help_contains "--trainer-wrapper-dry-run" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--harness-manifest" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--harness-result" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--require-harness" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
+assert_help_contains "--require-gate" "$VENV_DIR/bin/python" -m flightrecorder evidence-bundle --help
 "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help >/dev/null
 assert_help_contains "--bundle" "$VENV_DIR/bin/python" -m flightrecorder action-ledger --help
 "$VENV_DIR/bin/python" -m flightrecorder gate-improvement-ledger --help >/dev/null

@@ -50,6 +50,65 @@
       ],
       "resolved_at": "2026-07-02T15:56:29Z",
       "resolved_by_main_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96"
+    },
+    {
+      "blocked_at": "2026-07-02T15:17:40Z",
+      "branch": "codex/hermes-goal-1-evidence-20260702-1027",
+      "branch_commit_sha": "6bbd2b1e4d4eeb60b414f4ba4f5ad2b6a509b280",
+      "conflicting_paths": [
+        "README.md",
+        "experiments/autonomy/journal/2026-07-02.md",
+        "experiments/autonomy/supervisor_state.json",
+        "flightrecorder/bundle.py",
+        "flightrecorder/cli.py",
+        "flightrecorder/schemas/harness_run_manifest.v1.schema.json",
+        "flightrecorder/schemas/harness_run_result.v1.schema.json",
+        "flightrecorder/schemas/manifest.json",
+        "tests/test_evidence_bundle.py"
+      ],
+      "id": "evidence_real_harness_publisher_contract",
+      "layer": "evidence",
+      "lock_status": "acquired_then_released_after_merge_abort",
+      "main_candidate_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+      "main_push_status": "not_pushed",
+      "pr_status": "left_open",
+      "pull_request_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
+      "remote_branch_status": "left_open",
+      "remote_branch_verified": true,
+      "status": "resolved_in_supervisor_integration",
+      "summary": "Supervisor merged PR #5 into the fresh Goal 0 branch after Harness PR #3 landed, preserving main autonomy history and the run-suite harness publisher contract; verification is pending before main delivery.",
+      "title": "Publish real harness run manifests and results for evidence handoff",
+      "verification": [
+        {
+          "command": "python3.11 -m py_compile flightrecorder/cli.py tests/test_cli_report.py",
+          "status": "pass"
+        },
+        {
+          "command": "python3.11 -m unittest tests.test_cli_report tests.test_evidence_bundle tests.test_validation tests.test_schema_registry",
+          "status": "pass"
+        },
+        {
+          "command": "bash -n release_check.sh && git diff --check",
+          "status": "pass"
+        },
+        {
+          "command": "PYTHON=python3.11 ./release_check.sh",
+          "status": "pass"
+        },
+        {
+          "command": "git ls-remote --heads origin codex/hermes-goal-1-evidence-20260702-1027",
+          "sha": "6bbd2b1e4d4eeb60b414f4ba4f5ad2b6a509b280",
+          "status": "pass"
+        },
+        {
+          "base": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+          "command": "git merge --no-ff codex/hermes-goal-1-evidence-20260702-1027",
+          "status": "blocked"
+        }
+      ],
+      "resolved_at": "2026-07-02T16:03:36Z",
+      "resolved_by_branch": "codex/hermes-goal-0-supervisor-20260702-1158",
+      "resolved_base_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     }
   ],
   "completed_packets": [
@@ -976,21 +1035,127 @@
           "summary": "Only refs/heads/main was returned, at 98dddf36e75a315c3a232e7542ca7a2802d53c96; the source and supervisor remote branches were absent."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "code",
+          "path": "flightrecorder/bundle.py"
+        },
+        {
+          "kind": "code",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "code",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "schema",
+          "path": "flightrecorder/schemas/harness_run_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "path": "flightrecorder/schemas/harness_run_result.v1.schema.json"
+        },
+        {
+          "kind": "test",
+          "path": "tests/test_evidence_bundle.py"
+        },
+        {
+          "kind": "test",
+          "path": "tests/test_schema_registry.py"
+        },
+        {
+          "kind": "doc",
+          "path": "README.md"
+        }
+      ],
+      "commit_sha": "ebdd02e",
+      "completed_at": "2026-07-02T14:40:56Z",
+      "id": "evidence_live_harness_handoff_contracts",
+      "layer": "evidence",
+      "pull_request_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
+      "rebased_from_commit_sha": "e5833c91375b69e6197cebc423276d082ef0bf4f",
+      "status": "completed",
+      "summary": "Evidence bundles now require matched harness manifest/result lineage and gate summaries before downstream Eval or Governance handoff.",
+      "title": "Bind live harness outputs into evidence handoffs",
+      "verification": [
+        {
+          "command": "python3.11 -m py_compile flightrecorder/bundle.py flightrecorder/cli.py flightrecorder/validation.py tests/test_evidence_bundle.py tests/test_schema_registry.py",
+          "status": "pass"
+        },
+        {
+          "command": "python3.11 -m unittest tests.test_evidence_bundle tests.test_schema_registry tests.test_validation",
+          "status": "pass"
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "status": "pass"
+        },
+        {
+          "command": "python3.11 -m flightrecorder schemas --name harness_run_manifest",
+          "status": "pass"
+        },
+        {
+          "command": "python3.11 -m flightrecorder schemas --name harness_run_result",
+          "status": "pass"
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass"
+        },
+        {
+          "command": "PYTHON=python3.11 ./release_check.sh",
+          "status": "pass"
+        }
+      ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "release_check",
+          "path": "release_check.sh"
+        }
+      ],
+      "commit_sha": "f072082",
+      "completed_at": "2026-07-02T14:46:18Z",
+      "id": "evidence_harness_handoff_adoption_in_release_check",
+      "layer": "evidence",
+      "pull_request_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
+      "rebased_from_commit_sha": "475c2d55fc05496c080c968be0371a3a7c82a60a",
+      "status": "completed",
+      "summary": "The release gate now exports harness schemas, generates and validates a mock harness pair, requires it in evidence_bundle_full.json, and asserts harness handoff metrics plus installed CLI help flags.",
+      "title": "Adopt required harness handoff in release evidence checks",
+      "verification": [
+        {
+          "command": "bash -n release_check.sh",
+          "status": "pass"
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass"
+        },
+        {
+          "command": "PYTHON=python3.11 ./release_check.sh",
+          "status": "pass"
+        }
+      ]
     }
   ],
   "current_packet": {
     "id": "land_goal1_evidence_pr5",
     "layer": "evidence",
     "priority": "critical",
-    "status": "ready_after_harness_main",
-    "summary": "Evidence PR #5 remains open and is the next dependency-ordered packet after landing Harness PR #3 on main.",
+    "status": "verified_pending_branch_push",
+    "summary": "Evidence PR #5 is merged into the Goal 0 supervisor branch, conflicts are resolved, and focused plus release-check verification passed; branch push and locked main delivery remain.",
     "title": "Land harness lineage evidence handoff promotion"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
-    "branch": "codex/hermes-goal-0-supervisor-20260702-1115",
-    "branch_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96",
-    "commit_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96",
+    "branch": "codex/hermes-goal-0-supervisor-20260702-1158",
+    "branch_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
+    "commit_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "main_delivery": {
       "attempted_at": "2026-07-02T15:09:17Z",
       "branch_delete_status": "remote_deleted",
@@ -1029,11 +1194,11 @@
         }
       ]
     },
-    "main_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96",
+    "main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "persistence_checkpoint": "state records packet commit and PR URL; branch head is verified after push because commits cannot self-record their final SHA",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
     "remote": "origin",
-    "remote_branch_verified_at": "2026-07-02T15:56:29Z",
+    "remote_branch_verified_at": "2026-07-02T16:03:36Z",
     "harness_pr3_main_delivery": {
       "attempted_at": "2026-07-02T15:50:00Z",
       "branch_delete_status": "remote_deleted",
@@ -1045,7 +1210,7 @@
       "integrated_main_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96",
       "latest_origin_main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-      "lock_release_status": "pending_after_checkpoint_push",
+      "lock_release_status": "released",
       "lock_status": "acquired",
       "merge_conflict_resolution": "Merged release-record main into the supervisor harness integration branch and resolved only autonomy state/journal conflicts while preserving the Goal 8 release-record packet and Harness PR #3 as landed history.",
       "post_delivery_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the post-checkpoint commit SHA is verified after pushing because a commit cannot self-record its own final SHA.",
@@ -1073,7 +1238,9 @@
           "status": "pass",
           "summary": "Only refs/heads/main was returned, at 98dddf36e75a315c3a232e7542ca7a2802d53c96; the source and supervisor remote branches were absent."
         }
-      ]
+      ],
+      "lock_released_at": "2026-07-02T16:03:36Z",
+      "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     }
   },
   "governance_main_delivery": {
@@ -1320,9 +1487,9 @@
     "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1115",
     "integration_branch_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96",
     "latest_head_note": "PR #3 advanced while the main-push lock was unavailable; latest head was merged before any main push attempt.",
-    "latest_origin_main_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96",
+    "latest_origin_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
     "lock_rechecked_at": "2026-07-02T15:49:10Z",
-    "lock_status": "held_pending_post_delivery_checkpoint_push",
+    "lock_status": "released_after_checkpoint_push",
     "main_push_status": "pushed_and_verified",
     "pr_status": "MERGED",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
@@ -1402,7 +1569,7 @@
       "integrated_main_sha": "98dddf36e75a315c3a232e7542ca7a2802d53c96",
       "latest_origin_main_sha": "bc15b6bd27e0a8a6649a5c66e19943f20949da7e",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-      "lock_release_status": "pending_after_checkpoint_push",
+      "lock_release_status": "released",
       "lock_status": "acquired",
       "merge_conflict_resolution": "Merged release-record main into the supervisor harness integration branch and resolved only autonomy state/journal conflicts while preserving the Goal 8 release-record packet and Harness PR #3 as landed history.",
       "post_delivery_checkpoint_note": "This checkpoint records the landed main SHA and branch deletion; the post-checkpoint commit SHA is verified after pushing because a commit cannot self-record its own final SHA.",
@@ -1430,7 +1597,9 @@
           "status": "pass",
           "summary": "Only refs/heads/main was returned, at 98dddf36e75a315c3a232e7542ca7a2802d53c96; the source and supervisor remote branches were absent."
         }
-      ]
+      ],
+      "lock_released_at": "2026-07-02T16:03:36Z",
+      "post_checkpoint_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394"
     },
     "remote_branch_status": "deleted",
     "integration_remote_branch_status": "deleted"
@@ -1603,29 +1772,29 @@
   ],
   "latest_verification": [
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_model_registry tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_replay_matrix tests.test_harness_tool_policy tests.test_deployment_hardening tests.test_promotion_decision tests.test_promotion_ledger",
+      "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/cli.py flightrecorder/validation.py tests/test_evidence_bundle.py tests/test_schema_registry.py",
       "status": "pass",
-      "summary": "94 focused Model/Harness/Governance tests passed under the main-push lock before the main push."
+      "summary": "Merged Evidence/Harness CLI, validation, and test surfaces compile after conflict resolution."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle tests.test_cli_report tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_tool_policy tests.test_harness_replay_matrix tests.test_deployment_hardening",
       "status": "pass",
-      "summary": "334 tests passed under the main-push lock after merging origin/main bc15b6bd27e0a8a6649a5c66e19943f20949da7e."
+      "summary": "120 focused Evidence/Harness/schema/validation/deployment tests passed."
     },
     {
-      "command": "git ls-remote --heads origin main codex/hermes-goal-2-harness-20260702-1027 codex/hermes-goal-0-supervisor-20260702-1115",
+      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle.EvidenceBundleTests.test_evidence_bundle_summarizes_ready_handoff tests.test_cli_report.CliReportTests.test_run_suite_generates_complete_evidence_bundle tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts tests.test_schema_registry.SchemaRegistryTests.test_harness_run_schemas_accept_minimal_handoff",
       "status": "pass",
-      "summary": "Only refs/heads/main was returned, at 98dddf36e75a315c3a232e7542ca7a2802d53c96; the source and supervisor remote branches were absent."
+      "summary": "Targeted regressions for ready handoff, run-suite handoff generation, schema catalog uniqueness, and minimal harness schema fixtures passed."
     },
     {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+      "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
       "status": "pass",
-      "summary": "Supervisor state JSON validates after the harness landing checkpoint update."
+      "summary": "Release check passed; it includes Python 3.11 unittest discovery with 336 tests plus demo, schema, training, governance, and installed-CLI checks."
     },
     {
-      "command": "git diff --check",
+      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --name harness_run_manifest && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name harness_run_result",
       "status": "pass",
-      "summary": "No whitespace errors in the post-delivery checkpoint diff."
+      "summary": "Harness manifest/result schemas render from the catalog after duplicate entries were removed."
     }
   ],
   "layer_status": {
@@ -1640,9 +1809,10 @@
       "summary": "Not yet updated in this dedicated worktree."
     },
     "evidence": {
-      "next_packet": "land_goal1_evidence_pr5",
-      "status": "in_progress",
-      "summary": "Evidence bundles require gate decision contracts; PR #5 remains the next dependency-ordered landing target now that Harness PR #3 is on main."
+      "next_packet": "push_and_land_goal1_evidence_pr5",
+      "status": "verified_pending_branch_push",
+      "summary": "PR #5 harness-lineage evidence handoff contract is merged and locally verified on the supervisor branch; push branch, acquire main lock, rerun verification, then land on main.",
+      "latest_packet": "evidence_real_harness_publisher_contract"
     },
     "governance": {
       "next_packet": "governance_policy_artifact",
@@ -1652,7 +1822,7 @@
     "harness": {
       "next_packet": null,
       "status": "completed_landed_on_main",
-      "summary": "Harness PR #3 landed on origin/main at 98dddf36e75a315c3a232e7542ca7a2802d53c96; PR #3 is merged and the source plus supervisor remote branches are deleted."
+      "summary": "Harness PR #3 landed on origin/main at 98dddf36e75a315c3a232e7542ca7a2802d53c96, post-checkpoint main verified at 075506bb78726cb8274ef00fe7f10d480f4bb394, and the integration lock was released."
     },
     "model": {
       "next_packet": "model_real_metadata_scout_packet",
@@ -1679,15 +1849,15 @@
   },
   "next_packets": [
     {
-      "id": "land_goal1_evidence_pr5",
+      "id": "push_and_land_goal1_evidence_pr5",
       "layer": "evidence",
       "priority": "critical",
       "pr": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
       "source_branch": "codex/hermes-goal-1-evidence-20260702-1027",
       "source_branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
-      "status": "open_ready_for_supervisor_integration",
-      "summary": "Require harness lineage before evidence handoff promotion; now unblocked by Harness main delivery.",
-      "title": "Land Evidence PR #5"
+      "status": "verified_pending_branch_push",
+      "summary": "Push the verified supervisor integration branch, then perform locked main delivery for PR #5.",
+      "title": "Push and land Evidence PR #5"
     },
     {
       "id": "land_goal4_model_pr12",
@@ -1745,5 +1915,64 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:56:29Z"
+  "updated_at": "2026-07-02T16:10:52Z",
+  "evidence_pr5": {
+    "branch": "codex/hermes-goal-1-evidence-20260702-1027",
+    "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
+    "integration_branch": "codex/hermes-goal-0-supervisor-20260702-1158",
+    "integration_base_main_sha": "075506bb78726cb8274ef00fe7f10d480f4bb394",
+    "merged_at": "2026-07-02T16:03:36Z",
+    "pr_status": "OPEN",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/5",
+    "source_branch_status": "remote_present",
+    "status": "verified_pending_branch_push",
+    "summary": "PR #5 adds required harness-manifest/result lineage to evidence bundles and publishes run-suite harness handoff artifacts; conflicts are resolved on the supervisor branch pending verification and locked main delivery.",
+    "verification": [
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m py_compile flightrecorder/cli.py flightrecorder/validation.py tests/test_evidence_bundle.py tests/test_schema_registry.py",
+        "status": "pass",
+        "summary": "Merged Evidence/Harness CLI, validation, and test surfaces compile after conflict resolution."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle tests.test_cli_report tests.test_schema_registry tests.test_validation tests.test_harness_manifest_cli tests.test_harness_tool_policy tests.test_harness_replay_matrix tests.test_deployment_hardening",
+        "status": "pass",
+        "summary": "120 focused Evidence/Harness/schema/validation/deployment tests passed."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_evidence_bundle.EvidenceBundleTests.test_evidence_bundle_summarizes_ready_handoff tests.test_cli_report.CliReportTests.test_run_suite_generates_complete_evidence_bundle tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts tests.test_schema_registry.SchemaRegistryTests.test_harness_run_schemas_accept_minimal_handoff",
+        "status": "pass",
+        "summary": "Targeted regressions for ready handoff, run-suite handoff generation, schema catalog uniqueness, and minimal harness schema fixtures passed."
+      },
+      {
+        "command": "PYTHON=/opt/homebrew/bin/python3.11 ./release_check.sh",
+        "status": "pass",
+        "summary": "Release check passed; it includes Python 3.11 unittest discovery with 336 tests plus demo, schema, training, governance, and installed-CLI checks."
+      },
+      {
+        "command": "/opt/homebrew/bin/python3.11 -m flightrecorder schemas --name harness_run_manifest && /opt/homebrew/bin/python3.11 -m flightrecorder schemas --name harness_run_result",
+        "status": "pass",
+        "summary": "Harness manifest/result schemas render from the catalog after duplicate entries were removed."
+      }
+    ],
+    "verified_at": "2026-07-02T16:10:52Z",
+    "conflict_resolution": [
+      "Preserved main Harness schemas and removed duplicate schema catalog entries introduced by the older Evidence branch.",
+      "Combined gate decision contract validation with PR #5 required harness-manifest/result evidence-bundle checks.",
+      "Updated run-suite harness handoff publisher to emit structured tool-policy metadata and schema-shaped fake-secret canaries.",
+      "Resolved harness-result validation so relative lineage paths are checked from the result artifact directory.",
+      "Merged main autonomy history with PR #5 branch packet and blocker metadata."
+    ],
+    "remaining_delivery_steps": [
+      "commit verified supervisor merge",
+      "push supervisor branch",
+      "verify remote branch",
+      "acquire main-push lock",
+      "fetch and integrate current origin/main",
+      "rerun relevant verification under lock",
+      "push and verify origin/main",
+      "close PR #5 or observe merged",
+      "delete remote source/supervisor branches",
+      "release lock"
+    ]
+  }
 }

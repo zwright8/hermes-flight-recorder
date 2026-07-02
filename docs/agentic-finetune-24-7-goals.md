@@ -180,6 +180,16 @@ and gates.
 - Weak, malformed, low-signal, or unsafe evidence is blocked.
 - Every gate returns readiness, recommendation, failed checks, and next actions.
 
+### Current Packet Focus
+
+- Publish a canonical `run-suite --evidence-handoff` harness manifest/result
+  pair from an actual passing scenario run.
+- Require generated evidence bundles to consume the matched pair before Eval or
+  Governance handoff.
+- Keep release checks pointed at generated harness lineage instead of mock
+  fixtures.
+- Validate the publisher contract with unit tests and schema checks.
+
 ### 24/7 Prompt
 
 ```text
