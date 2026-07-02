@@ -150,6 +150,62 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertIn("registry_alias_history_list", failed_check_ids(receipt))
             self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
 
+    def test_promotion_rollback_receipt_validates_current_champion_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = write_model_registry(root)
+            receipt_path = root / "rollback.json"
+
+            code = run_cli(promotion_rollback_receipt_args(registry_path, receipt_path))
+
+            self.assertEqual(code, 0)
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(receipt["schema_version"], "hfr.promotion_rollback_receipt.v1")
+            self.assertTrue(receipt["passed"])
+            self.assertTrue(receipt["available"])
+            self.assertEqual(receipt["rollback_id"], "champion-v1")
+            self.assertEqual(receipt["registry"]["aliases"]["champion"], "champion-v1")
+            self.assertEqual(run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
+
+    def test_promotion_decision_accepts_passing_rollback_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            receipt_path = root / "rollback.json"
+            decision_path = root / "promotion_decision.json"
+            self.assertEqual(run_cli(promotion_rollback_receipt_args(registry_path, receipt_path)), 0)
+            artifacts["rollback_metadata"] = receipt_path
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 0)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertTrue(decision["passed"])
+            self.assertNotIn("rollback_receipt_passed", failed_check_ids(decision))
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_promotion_decision_blocks_failed_rollback_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root, champion_alias="other-model")
+            receipt_path = root / "rollback.json"
+            decision_path = root / "promotion_decision.json"
+            self.assertEqual(run_cli(promotion_rollback_receipt_args(registry_path, receipt_path)), 1)
+            artifacts["rollback_metadata"] = receipt_path
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertFalse(decision["passed"])
+            failed_ids = failed_check_ids(decision)
+            self.assertIn("rollback_metadata_matches_target", failed_ids)
+            self.assertIn("rollback_receipt_passed", failed_ids)
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
     def test_promotion_release_record_binds_decision_cards_alias_rollback_eval_and_notes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -540,6 +596,19 @@ def promotion_alias_apply_args(registry_path: Path, decision_path: Path, receipt
         str(registry_path),
         "--promotion-decision",
         str(decision_path),
+        "--out",
+        str(receipt_path),
+        "--preserve-paths",
+    ]
+
+
+def promotion_rollback_receipt_args(registry_path: Path, receipt_path: Path, rollback_id: str = "champion-v1") -> list[str]:
+    return [
+        "promotion-rollback-receipt",
+        "--registry",
+        str(registry_path),
+        "--rollback-id",
+        rollback_id,
         "--out",
         str(receipt_path),
         "--preserve-paths",

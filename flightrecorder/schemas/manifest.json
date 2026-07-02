@@ -418,6 +418,14 @@
       "name": "promotion_policy"
     },
     {
+      "artifact": "promotion_rollback_receipt",
+      "artifact_schema_version": "hfr.promotion_rollback_receipt.v1",
+      "description": "Promotion rollback receipt proving the rollback target is registered and matches the current champion before alias movement.",
+      "filename": "promotion_rollback_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_rollback_receipt.v1.schema.json",
+      "name": "promotion_rollback_receipt"
+    },
+    {
       "artifact": "training_plan",
       "artifact_schema_version": "hfr.training_plan.v1",
       "description": "Model-layer dry-run training plan written before downloads, heavy ML imports, or GPU work.",

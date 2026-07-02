@@ -55,6 +55,7 @@ from .governance import (
     build_promotion_cards,
     build_promotion_decision,
     build_promotion_release_record,
+    build_promotion_rollback_receipt,
 )
 from .improvement_gate import (
     IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION,
@@ -842,6 +843,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         promotion_cards_paths=args.promotion_cards,
         promotion_decision_paths=args.promotion_decision,
         promotion_alias_apply_paths=args.promotion_alias_apply,
+        promotion_rollback_receipt_paths=args.promotion_rollback_receipt,
         promotion_release_record_paths=args.promotion_release_record,
         promotion_policy_paths=args.promotion_policy,
         promotion_ledger_paths=args.promotion_ledger,
@@ -1264,6 +1266,23 @@ def cmd_promotion_alias_apply(args: argparse.Namespace) -> int:
     )
     print(
         f"{'APPLIED' if receipt['passed'] else 'BLOCKED'} promotion-alias-apply "
+        f"checks={receipt['check_count'] - receipt['failed_check_count']}/{receipt['check_count']} "
+        f"out={args.out}"
+    )
+    return 0 if receipt["passed"] else 1
+
+
+def cmd_promotion_rollback_receipt(args: argparse.Namespace) -> int:
+    receipt = build_promotion_rollback_receipt(
+        registry_path=args.registry,
+        rollback_id=args.rollback_id,
+        champion_id=args.champion_id,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        metadata=_metadata_options(args.metadata),
+    )
+    print(
+        f"{'READY' if receipt['passed'] else 'BLOCKED'} promotion-rollback-receipt "
         f"checks={receipt['check_count'] - receipt['failed_check_count']}/{receipt['check_count']} "
         f"out={args.out}"
     )
@@ -2189,6 +2208,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--promotion-cards", action="append", default=[], help="Validate one promotion-cards directory or manifest; may be repeated")
     validate.add_argument("--promotion-decision", action="append", default=[], help="Validate one promotion_decision.json; may be repeated")
     validate.add_argument("--promotion-alias-apply", action="append", default=[], help="Validate one promotion_alias_apply.json receipt; may be repeated")
+    validate.add_argument("--promotion-rollback-receipt", action="append", default=[], help="Validate one promotion rollback receipt; may be repeated")
     validate.add_argument("--promotion-release-record", action="append", default=[], help="Validate one promotion_release_record.json; may be repeated")
     validate.add_argument("--promotion-policy", action="append", default=[], help="Validate one promotion_policy.json; may be repeated")
     validate.add_argument("--promotion-ledger", action="append", default=[], help="Validate one promotion_ledger.json; may be repeated")
@@ -2611,6 +2631,28 @@ def _parser() -> argparse.ArgumentParser:
     )
     promotion_alias_apply.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the receipt")
     promotion_alias_apply.set_defaults(func=cmd_promotion_alias_apply)
+
+    promotion_rollback_receipt = subparsers.add_parser(
+        "promotion-rollback-receipt",
+        help="Prove the rollback target is registered before promotion",
+    )
+    promotion_rollback_receipt.add_argument("--registry", required=True, help="Model registry JSON used to verify the rollback target")
+    promotion_rollback_receipt.add_argument("--rollback-id", required=True, help="Model id to use as rollback if the candidate is promoted")
+    promotion_rollback_receipt.add_argument(
+        "--champion-id",
+        help="Expected current champion model id; defaults to the registry champion alias",
+    )
+    promotion_rollback_receipt.add_argument("--out", required=True, help="Write rollback receipt JSON")
+    promotion_rollback_receipt.add_argument(
+        "--metadata",
+        action="append",
+        nargs=2,
+        metavar=("KEY", "VALUE"),
+        default=[],
+        help="Attach metadata to the rollback receipt; may be repeated",
+    )
+    promotion_rollback_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the receipt")
+    promotion_rollback_receipt.set_defaults(func=cmd_promotion_rollback_receipt)
 
     promotion_release_record = subparsers.add_parser(
         "promotion-release-record",

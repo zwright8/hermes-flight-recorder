@@ -16,6 +16,7 @@ from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 PROMOTION_DECISION_SCHEMA_VERSION = "hfr.promotion_decision.v1"
 PROMOTION_CARDS_SCHEMA_VERSION = "hfr.promotion_cards.v1"
 PROMOTION_ALIAS_APPLY_SCHEMA_VERSION = "hfr.promotion_alias_apply.v1"
+PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION = "hfr.promotion_rollback_receipt.v1"
 PROMOTION_RELEASE_RECORD_SCHEMA_VERSION = "hfr.promotion_release_record.v1"
 PROMOTION_POLICY_SCHEMA_VERSION = "hfr.promotion_policy.v1"
 MODEL_REGISTRY_SCHEMA_VERSION = "hfr.model_registry.v1"
@@ -522,6 +523,143 @@ def apply_promotion_aliases(
         "notes": [
             "Promotion alias application is the guarded side-effectful step after promotion-decision validation.",
             "Registry aliases are written only when the decision passed, authorized alias movement, and the current champion alias still matches the decision previous target.",
+        ],
+    }
+    if metadata:
+        receipt["metadata"] = dict(sorted(metadata.items()))
+    _write_json(receipt_path, receipt)
+    return receipt
+
+
+def build_promotion_rollback_receipt(
+    *,
+    registry_path: str | Path,
+    rollback_id: str,
+    out_path: str | Path,
+    champion_id: str | None = None,
+    preserve_paths: bool = False,
+    metadata: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Prove the rollback target is registered before a promotion decision consumes it."""
+    registry_file = Path(registry_path)
+    receipt_path = Path(out_path)
+    registry_record = _artifact_record("registry", registry_file, preserve_paths)
+    registry = _read_json_artifact(registry_file)
+    registry_obj = registry if isinstance(registry, dict) else {}
+    aliases = _registry_aliases(registry_obj)
+    model_ids = _registry_model_ids(registry_obj)
+    expected_champion_id = champion_id or aliases.get("champion", "")
+
+    checks: list[dict[str, Any]] = []
+    _add_check(
+        checks,
+        "rollback_id_present",
+        bool(rollback_id),
+        actual=bool(rollback_id),
+        expected={"present": True},
+        summary="rollback target model id is present",
+    )
+    _add_check(
+        checks,
+        "registry_present",
+        registry_record["exists"] is True and registry_record["kind"] == "file",
+        actual={"exists": registry_record["exists"], "kind": registry_record["kind"], "path": registry_record["path"]},
+        expected={"exists": True, "kind": "file"},
+        scope={"artifact_role": "registry"},
+        summary="model registry file is present",
+    )
+    _add_check(
+        checks,
+        "registry_schema",
+        registry_obj.get("schema_version") == MODEL_REGISTRY_SCHEMA_VERSION,
+        actual=registry_obj.get("schema_version"),
+        expected={"schema_version": MODEL_REGISTRY_SCHEMA_VERSION},
+        scope={"artifact_role": "registry"},
+        summary="model registry uses the expected schema version",
+    )
+    _add_check(
+        checks,
+        "registry_aliases_object",
+        isinstance(registry_obj.get("aliases"), dict),
+        actual=type(registry_obj.get("aliases")).__name__,
+        expected={"type": "object"},
+        scope={"artifact_role": "registry"},
+        summary="model registry aliases are stored as an object",
+    )
+    _add_check(
+        checks,
+        "champion_id_present",
+        bool(expected_champion_id),
+        actual=bool(expected_champion_id),
+        expected={"present": True},
+        scope={"alias": "champion"},
+        summary="current champion model id is known",
+    )
+    _add_check(
+        checks,
+        "champion_alias_matches_target",
+        bool(expected_champion_id) and aliases.get("champion") == expected_champion_id,
+        actual={"champion_alias": aliases.get("champion"), "expected_champion": expected_champion_id},
+        expected={"champion_alias": expected_champion_id},
+        scope={"alias": "champion"},
+        summary="registry champion alias matches the expected current champion",
+    )
+    for role, model_id in (("rollback", rollback_id), ("champion", expected_champion_id)):
+        _add_check(
+            checks,
+            f"{role}_target_registered",
+            bool(model_id) and model_id in model_ids,
+            actual={"target": model_id, "registered": model_id in model_ids},
+            expected={"registered": True},
+            scope={"alias": role},
+            summary=f"{role} target is registered in the model registry",
+        )
+    _add_check(
+        checks,
+        "rollback_target_is_current_champion",
+        bool(rollback_id) and bool(expected_champion_id) and rollback_id == expected_champion_id,
+        actual={"rollback_id": rollback_id, "champion_id": expected_champion_id},
+        expected={"same_model": True},
+        scope={"artifact_role": "rollback_metadata"},
+        summary="rollback target points to the current champion before candidate promotion",
+    )
+
+    failed_checks = sum(1 for check in checks if not check["passed"])
+    passed = failed_checks == 0
+    receipt: dict[str, Any] = {
+        "schema_version": PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION,
+        "receipt_path": _display_path(receipt_path, preserve_paths),
+        "passed": passed,
+        "available": passed,
+        "readiness": "ready" if passed else "blocked",
+        "recommendation": "use_rollback_target" if passed else "block_promotion",
+        "rollback_id": rollback_id,
+        "target_model_id": rollback_id,
+        "champion_id": expected_champion_id,
+        "check_count": len(checks),
+        "failed_check_count": failed_checks,
+        "checks": checks,
+        "rollback": {
+            "id": rollback_id,
+            "target_model_id": rollback_id,
+            "champion_id": expected_champion_id,
+            "available": passed,
+        },
+        "registry": {
+            "path": registry_record.get("path", ""),
+            "sha256": registry_record.get("sha256"),
+            "aliases": aliases,
+        },
+        "artifacts": {"registry": registry_record},
+        "metrics": {
+            "check_count": len(checks),
+            "failed_check_count": failed_checks,
+            "registered_model_count": len(model_ids),
+            "alias_count": len(aliases),
+        },
+        "notes": [
+            "Rollback receipts are side-effect free; they do not move registry aliases.",
+            "A passing receipt proves the rollback target is registered and still matches the current champion before promotion.",
         ],
     }
     if metadata:
@@ -1399,9 +1537,21 @@ def _add_license_check(checks: list[dict[str, Any]], payload: dict[str, Any] | N
 def _add_rollback_metadata_check(checks: list[dict[str, Any]], payload: dict[str, Any] | None, rollback_id: str | None) -> None:
     actual_id = ""
     available = None
+    receipt_passed = None
     if isinstance(payload, dict):
-        actual_id = str(payload.get("rollback_id") or payload.get("target_model_id") or "")
+        rollback = payload.get("rollback") if isinstance(payload.get("rollback"), dict) else {}
+        actual_id = str(
+            payload.get("rollback_id")
+            or payload.get("target_model_id")
+            or rollback.get("id")
+            or rollback.get("target_model_id")
+            or ""
+        )
         available = payload.get("available")
+        if available is None:
+            available = rollback.get("available")
+        if payload.get("schema_version") == PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION:
+            receipt_passed = payload.get("passed")
     _add_check(
         checks,
         "rollback_metadata_matches_target",
@@ -1411,6 +1561,16 @@ def _add_rollback_metadata_check(checks: list[dict[str, Any]], payload: dict[str
         scope={"artifact_role": "rollback_metadata"},
         summary="rollback metadata points at the declared rollback target",
     )
+    if isinstance(payload, dict) and payload.get("schema_version") == PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION:
+        _add_check(
+            checks,
+            "rollback_receipt_passed",
+            receipt_passed is True,
+            actual=receipt_passed,
+            expected={"passed": True},
+            scope={"artifact_role": "rollback_metadata"},
+            summary="rollback metadata is a passing rollback receipt",
+        )
 
 
 def _add_card_claims_check(checks: list[dict[str, Any]], role: str, path: Path | None) -> None:
