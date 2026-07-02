@@ -9,7 +9,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .training import RunRecord, TrainingExportError, load_run_records
+from .training import (
+    RL_DATASET_REGISTRY_SCHEMA_VERSION,
+    RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+    RunRecord,
+    TrainingExportError,
+    build_redaction_status,
+    load_run_records,
+    redaction_scan_artifacts,
+)
 
 REVIEW_MANIFEST_SCHEMA_VERSION = "hfr.review.manifest.v1"
 REVIEW_ITEM_SCHEMA_VERSION = "hfr.review.item.v1"
@@ -121,6 +129,7 @@ def apply_review_labels(
         "reviewed_reward_model": target / "reviewed_reward_model.jsonl",
         "reviewed_preferences": target / "reviewed_preferences.jsonl",
         "reviewed_dpo": target / "reviewed_dpo.jsonl",
+        "dataset_registry": target / "dataset_registry.json",
         "manifest": target / "manifest.json",
     }
     _write_jsonl(paths["reviewed_labels"], reviewed_labels)
@@ -129,9 +138,35 @@ def apply_review_labels(
     _write_jsonl(paths["reviewed_preferences"], preferences)
     _write_jsonl(paths["reviewed_dpo"], dpo)
     confidence_counts = _confidence_counts(reviewed_labels)
+    rows_by_artifact = {
+        "reviewed_labels": reviewed_labels,
+        "reviewed_sft": sft,
+        "reviewed_reward_model": reward_model,
+        "reviewed_preferences": preferences,
+        "reviewed_dpo": dpo,
+    }
+    redaction_status = build_redaction_status(redaction_scan_artifacts(rows_by_artifact))
+    if redaction_status["passed"] is not True:
+        raise ReviewExportError(
+            "Reviewed export contains unredacted secret-like values; redact review labels or source traces before export."
+        )
+    label_provenance = _reviewed_label_provenance_summary(reviewed_labels, sft, reward_model, preferences, dpo)
+    source_review_artifacts = _artifact_fingerprints(
+        {
+            "review_items": source / "review_items.jsonl",
+            "label_template": source / "label_template.jsonl",
+            "review_manifest": source / "manifest.json",
+        },
+        preserve_paths,
+        exclude=set(),
+    )
+    labels_artifact = _file_fingerprint(label_file, preserve_paths)
+    pre_manifest_fingerprints = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest", "dataset_registry"})
+    dataset_version = _reviewed_dataset_version_id(pre_manifest_fingerprints, source_review_artifacts, labels_artifact)
 
     manifest = {
         "schema_version": REVIEWED_MANIFEST_SCHEMA_VERSION,
+        "dataset_version": dataset_version,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_review_export": _display_path(source, preserve_paths),
         "labels_path": _display_path(label_file, preserve_paths),
@@ -150,16 +185,17 @@ def apply_review_labels(
         "unknown_confidence_label_count": confidence_counts["unknown"],
         "task_families": sorted({str(row["task_family"]) for row in reviewed_labels}),
         "outputs": {name: _display_path(path, preserve_paths) for name, path in paths.items()},
-        "source_review_artifacts": _artifact_fingerprints(
-            {
-                "review_items": source / "review_items.jsonl",
-                "label_template": source / "label_template.jsonl",
-                "review_manifest": source / "manifest.json",
-            },
-            preserve_paths,
-            exclude=set(),
-        ),
-        "labels_artifact": _file_fingerprint(label_file, preserve_paths),
+        "source_review_artifacts": source_review_artifacts,
+        "labels_artifact": labels_artifact,
+        "redaction_status": redaction_status,
+        "label_provenance": label_provenance,
+        "registry": {
+            "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
+            "path": _display_path(paths["dataset_registry"], preserve_paths),
+            "selection_key": dataset_version,
+            "manifest_path": _display_path(paths["manifest"], preserve_paths),
+            "redaction_passed": redaction_status.get("passed") is True,
+        },
         "notes": [
             "Reviewed exports are derived from review_items.jsonl plus completed human labels.",
             "Completed labels are bound to review_item_sha256 so stale labels cannot silently attach to changed review items.",
@@ -168,10 +204,12 @@ def apply_review_labels(
             "Reviewed reward-model rows include accept/reject/unsafe/incomplete labels.",
             "Reviewed preferences pair accepted rows against rejected/unsafe/incomplete rows in the same task family.",
             "reviewer_confidence is human-entered evidence quality metadata; gate-reviewed can reject low or unknown confidence.",
+            "dataset_registry.json binds dataset_version to manifest SHA-256, source review artifacts, labels artifact, and redaction status.",
         ],
     }
-    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest"})
+    manifest["artifact_fingerprints"] = _artifact_fingerprints(paths, preserve_paths, exclude={"manifest", "dataset_registry"})
     _write_json(paths["manifest"], manifest)
+    _write_json(paths["dataset_registry"], _reviewed_dataset_registry_record(manifest, paths, preserve_paths))
     return manifest
 
 
@@ -611,6 +649,69 @@ def _score(scorecard: dict[str, Any]) -> int:
 
 def _task_family(scenario_id: str) -> str:
     return FAMILY_SUFFIX_RE.sub("", scenario_id) or scenario_id
+
+
+def _reviewed_label_provenance_summary(
+    reviewed_labels: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+    preferences: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+) -> dict[str, Any]:
+    label_counts = _label_counts(reviewed_labels)
+    return {
+        "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+        "policy": "Completed human labels bound to review_item_sha256 drive reviewed trainer views.",
+        "reviewed_label_count": len(reviewed_labels),
+        "accepted_label_count": label_counts.get("accept", 0),
+        "negative_label_count": sum(label_counts.get(label, 0) for label in sorted(TRAINING_NEGATIVE_LABELS)),
+        "needs_review_excluded_count": label_counts.get("needs_review", 0),
+        "trainer_view_counts": {
+            "reviewed_sft": len(sft),
+            "reviewed_reward_model": len(reward_model),
+            "reviewed_preferences": len(preferences),
+            "reviewed_dpo": len(dpo),
+        },
+        "notes": [
+            "Reviewed SFT rows require human_label='accept'.",
+            "Reviewed reward and preference rows use accept/reject/unsafe/incomplete labels only.",
+        ],
+    }
+
+
+def _reviewed_dataset_version_id(
+    artifact_fingerprints: dict[str, Any],
+    source_review_artifacts: dict[str, Any],
+    labels_artifact: dict[str, Any],
+) -> str:
+    return f"hfrds-{_canonical_sha256({'artifacts': artifact_fingerprints, 'labels': labels_artifact, 'source': source_review_artifacts})[:16]}"
+
+
+def _reviewed_dataset_registry_record(manifest: dict[str, Any], paths: dict[str, Path], preserve_paths: bool) -> dict[str, Any]:
+    return {
+        "schema_version": RL_DATASET_REGISTRY_SCHEMA_VERSION,
+        "dataset_version": str(manifest.get("dataset_version") or ""),
+        "generated_at": str(manifest.get("generated_at") or ""),
+        "artifact_type": "reviewed_export",
+        "manifest_path": _display_path(paths["manifest"], preserve_paths),
+        "manifest_sha256": _sha256_file(paths["manifest"]),
+        "source_review_export": str(manifest.get("source_review_export") or ""),
+        "labels_path": str(manifest.get("labels_path") or ""),
+        "selection": {
+            "key": str(manifest.get("dataset_version") or ""),
+            "trainer_preflight_arg": f"--require-dataset-version {manifest.get('dataset_version')}",
+            "root_views": ["reviewed_sft.jsonl", "reviewed_dpo.jsonl", "reviewed_reward_model.jsonl"],
+        },
+        "redaction_status": manifest.get("redaction_status", {}),
+        "label_provenance": manifest.get("label_provenance", {}),
+        "source_review_artifacts": manifest.get("source_review_artifacts", {}),
+        "labels_artifact": manifest.get("labels_artifact", {}),
+        "artifact_fingerprints": manifest.get("artifact_fingerprints", {}),
+        "outputs": manifest.get("outputs", {}),
+        "notes": [
+            "Select this reviewed dataset by dataset_version and verify manifest_sha256 before launching training.",
+        ],
+    }
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:

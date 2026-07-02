@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -171,7 +172,14 @@ class ReviewExportTests(unittest.TestCase):
             reward_model = read_jsonl(out / "reviewed_reward_model.jsonl")
             preferences = read_jsonl(out / "reviewed_preferences.jsonl")
             dpo = read_jsonl(out / "reviewed_dpo.jsonl")
+            dataset_registry = json.loads((out / "dataset_registry.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["schema_version"], "hfr.reviewed.manifest.v1")
+            self.assertRegex(manifest["dataset_version"], r"^hfrds-[0-9a-f]+$")
+            self.assertEqual(dataset_registry["dataset_version"], manifest["dataset_version"])
+            self.assertEqual(dataset_registry["manifest_sha256"], hashlib.sha256((out / "manifest.json").read_bytes()).hexdigest())
+            self.assertTrue(manifest["redaction_status"]["passed"])
+            self.assertEqual(manifest["label_provenance"], dataset_registry["label_provenance"])
+            self.assertIn("dataset_registry", manifest["outputs"])
             self.assertEqual(manifest["reviewed_label_count"], 2)
             self.assertEqual(manifest["sft_count"], 1)
             self.assertEqual(manifest["reward_model_count"], 2)
@@ -205,6 +213,29 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(dpo[0]["chosen_reviewer_confidence"], "high")
             self.assertEqual(dpo[0]["chosen"], sft[0]["response"])
             self.assertEqual(run_cli(["validate", "--reviewed-export", str(out), "--strict"]), 0)
+
+    def test_validate_reviewed_export_rejects_dataset_registry_hash_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+            manifest_path = out / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["notes"].append("tampered after registry emission")
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--reviewed-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("dataset_registry.manifest_sha256 must match manifest.json contents", errors)
 
     def test_apply_review_rejects_invalid_reviewer_confidence(self):
         with tempfile.TemporaryDirectory() as tmp:

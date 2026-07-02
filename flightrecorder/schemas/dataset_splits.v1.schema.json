@@ -47,6 +47,9 @@
     "split_counts": {
       "$ref": "#/$defs/splitCounts"
     },
+    "split_scenario_ids": {
+      "$ref": "#/$defs/splitScenarioIds"
+    },
     "split_names": {
       "items": {
         "enum": [
@@ -73,6 +76,7 @@
     "artifact_names",
     "summary",
     "split_counts",
+    "split_scenario_ids",
     "assignments",
     "leakage_checks",
     "notes"
@@ -177,13 +181,52 @@
           },
           "type": "array"
         },
+        "cross_split_scenario_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "family_exclusive": {
           "type": "boolean"
+        },
+        "heldout_scenario_exclusive": {
+          "type": "boolean"
+        },
+        "heldout_scenario_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "heldout_task_families": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "train_scenario_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "train_task_families": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
         "family_exclusive",
-        "cross_split_task_families"
+        "cross_split_task_families",
+        "train_task_families",
+        "heldout_task_families",
+        "train_scenario_ids",
+        "heldout_scenario_ids",
+        "cross_split_scenario_ids",
+        "heldout_scenario_exclusive"
       ],
       "type": "object"
     },
@@ -252,6 +295,35 @@
       ],
       "type": "object"
     },
+    "splitScenarioIds": {
+      "additionalProperties": false,
+      "properties": {
+        "test": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "train": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "validation": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "type": "object"
+    },
     "summary": {
       "additionalProperties": true,
       "properties": {
@@ -260,6 +332,13 @@
           "type": "integer"
         },
         "family_exclusive": {
+          "type": "boolean"
+        },
+        "heldout_scenario_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "heldout_scenario_exclusive": {
           "type": "boolean"
         },
         "task_family_count": {
@@ -274,6 +353,10 @@
           "minimum": 0,
           "type": "integer"
         },
+        "train_scenario_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "validation_episode_count": {
           "minimum": 0,
           "type": "integer"
@@ -285,7 +368,10 @@
         "train_episode_count",
         "validation_episode_count",
         "test_episode_count",
-        "family_exclusive"
+        "family_exclusive",
+        "train_scenario_count",
+        "heldout_scenario_count",
+        "heldout_scenario_exclusive"
       ],
       "type": "object"
     }

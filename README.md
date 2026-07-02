@@ -569,7 +569,9 @@ flightrecorder gate-export \
 
 The export can include episodes, terminal rewards, step rewards, preference
 pairs, SFT rows, DPO rows, reward-model rows, failure modes, curriculum
-metadata, dataset split manifests, dataset metrics, and a dataset card.
+metadata, dataset split manifests, dataset metrics, a dataset card, and
+`dataset_registry.json`. The manifest now carries a stable `dataset_version`;
+use that value, not only a directory path, when handing data to a trainer.
 
 For launch safety, the trainer flow is side-effect free until an external
 trainer consumes the approved plan:
@@ -578,11 +580,13 @@ trainer consumes the approved plan:
 flightrecorder trainer-preflight \
   --gate runs/training_gate.json \
   --training-export runs/training_export \
+  --require-dataset-version "$(jq -r .dataset_version runs/training_export/manifest.json)" \
   --trainer-command "python train.py --dataset runs/training_export" \
   --out runs/trainer_preflight.json
 
 flightrecorder trainer-launch-check \
   --preflight runs/trainer_preflight.json \
+  --require-dataset-version "$(jq -r .dataset_version runs/training_export/manifest.json)" \
   --out runs/trainer_launch_check.json
 
 flightrecorder trainer-archive \

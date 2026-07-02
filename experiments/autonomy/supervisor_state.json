@@ -1,5 +1,5 @@
 {
-  "active_layer": "harness",
+  "active_layer": "model",
   "blocked_packets": [
     {
       "blocked_at": "2026-07-02T14:32:48Z",
@@ -9,15 +9,6 @@
       "status": "blocked",
       "summary": "The migrated dedicated worktree does not contain docs/agentic-finetune-*.md or a prior experiments/autonomy state directory; supervisor state was bootstrapped from the migration directive and current branch contents.",
       "title": "Recover missing source goal docs in dedicated worktree"
-    },
-    {
-      "blocked_at": "2026-07-02T15:02:50Z",
-      "id": "main_integration_lock_unavailable_goal0_supervisor_branch",
-      "layer": "supervisor",
-      "priority": "critical",
-      "status": "blocked",
-      "summary": "Verified Goal 0 branch codex/hermes-goal-0-supervisor-20260702-1027 is pushed at 10117e660542e9d8aaf0df74e90a32ed81eed0ef before blocker metadata, but main delivery could not proceed because /tmp/hermes-flight-recorder-main-push.lock remained unavailable after 12 bounded retries and origin/main advanced to ebd562fc39251d32778f6d2265e257dbf5a60b90.",
-      "title": "Land verified Goal 0 branch to main"
     }
   ],
   "completed_packets": [
@@ -158,8 +149,8 @@
           "path": "TRAINING_PIPELINE.md"
         }
       ],
-      "completed_at": "2026-07-02T14:51:50Z",
       "commit_sha": "3c8ae3bec9843a47cd3146b25dcc9a05663c46c5",
+      "completed_at": "2026-07-02T14:51:50Z",
       "id": "harness_manifest_runner_contracts",
       "layer": "harness",
       "priority": "high",
@@ -228,41 +219,205 @@
           "summary": "System Python 3.9.6 still lacks tomllib, so tests.test_deployment_hardening cannot import under that interpreter."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "data",
+          "path": "flightrecorder/training.py"
+        },
+        {
+          "kind": "module",
+          "layer": "data",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "module",
+          "layer": "data",
+          "path": "flightrecorder/preflight.py"
+        },
+        {
+          "kind": "module",
+          "layer": "data",
+          "path": "flightrecorder/review.py"
+        },
+        {
+          "kind": "module",
+          "layer": "data",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/dataset_registry.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/training_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/rl_dataset_metrics.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/dataset_splits.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/reviewed_manifest.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/trainer_preflight.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/trainer_launch_check.v1.schema.json"
+        },
+        {
+          "kind": "schema",
+          "layer": "data",
+          "path": "flightrecorder/schemas/manifest.json"
+        }
+      ],
+      "commit_sha": "48f7660058d8692962f80a075c1e25411cf4f254",
+      "completed_at": "2026-07-02T11:06:31-04:00",
+      "github_persistence": {
+        "branch_sha": "48f7660058d8692962f80a075c1e25411cf4f254",
+        "local_branch_retired": true,
+        "local_branch_retired_at": "2026-07-02T11:06:31-04:00",
+        "main_sha": "48f7660058d8692962f80a075c1e25411cf4f254",
+        "pr_blocker": null,
+        "pr_state": "MERGED",
+        "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/10",
+        "pushed": true,
+        "remote_branch_deleted": true,
+        "remote_branch_verified": true,
+        "remote_main_verified": true,
+        "state_checkpoint_sha": "ebd562fc39251d32778f6d2265e257dbf5a60b90"
+      },
+      "id": "data_registry_contracts",
+      "layer": "data",
+      "priority": "high",
+      "risks": [
+        "System python3 is Python 3.9.6 and cannot run tests/test_deployment_hardening.py because it imports Python 3.11 tomllib; full suite passed under /opt/homebrew/bin/python3.11.",
+        "Legacy training exports without dataset_version are still accepted in non-strict validation with warnings for backward compatibility."
+      ],
+      "status": "completed",
+      "summary": "Add manifest-backed dataset versions, dataset_registry.json, redaction proof, label provenance, split scenario leakage checks, and exact trainer-preflight dataset selection.",
+      "title": "Register dataset versions",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/preflight.py flightrecorder/cli.py flightrecorder/validation.py flightrecorder/review.py flightrecorder/training.py",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "python3 -m py_compile flightrecorder/preflight.py flightrecorder/cli.py flightrecorder/validation.py flightrecorder/review.py flightrecorder/training.py"
+        },
+        {
+          "command": "python3 -m json.tool selected schema files and schema catalog",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "python3 -m json.tool selected schema files and schema catalog"
+        },
+        {
+          "command": "python3 -m unittest tests.test_training_export tests.test_validation tests.test_review_export tests.test_trainer_preflight tests.test_schema_registry",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "python3 -m unittest tests.test_training_export tests.test_validation tests.test_review_export tests.test_trainer_preflight tests.test_schema_registry"
+        },
+        {
+          "command": "python3 -m flightrecorder run-suite --scenarios scenarios --out /tmp/hfr-goal3-main.QJ4Kd0/runs --export-rl",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "python3 -m flightrecorder run-suite --scenarios scenarios --out /tmp/hfr-goal3-main.QJ4Kd0/runs --export-rl"
+        },
+        {
+          "command": "python3 -m flightrecorder validate --training-export /tmp/hfr-goal3-main.QJ4Kd0/runs/training_export --strict --out /tmp/hfr-goal3-main.QJ4Kd0/validation.json",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "python3 -m flightrecorder validate --training-export /tmp/hfr-goal3-main.QJ4Kd0/runs/training_export --strict --out /tmp/hfr-goal3-main.QJ4Kd0/validation.json"
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check/--check-jsonl over generated manifest, dataset_registry, dataset_metrics, dataset_splits, sft, dpo, reward_model",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "python3 -m flightrecorder schemas --check/--check-jsonl over generated manifest, dataset_registry, dataset_metrics, dataset_splits, sft, dpo, reward_model"
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "/opt/homebrew/bin/python3.11 -m unittest discover"
+        },
+        {
+          "command": "git diff --check",
+          "completed_at": "2026-07-02T11:06:31-04:00",
+          "status": "pass",
+          "summary": "git diff --check"
+        }
+      ]
     }
   ],
   "current_packet": {
     "depends_on": [
-      "harness_manifest_runner_contracts"
+      "data_registry_contracts"
     ],
-    "id": "data_registry_contracts",
-    "layer": "data",
+    "id": "model_artifact_contracts",
+    "layer": "model",
     "priority": "high",
     "status": "ready",
-    "summary": "Add dataset registry and redaction provenance contracts after harness evidence is available.",
-    "title": "Register dataset versions"
+    "summary": "Define local model artifact and adapter lineage contracts after dataset registry versions are available.",
+    "title": "Bind model artifacts to dataset lineage"
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
-    "branch_sha": "10117e660542e9d8aaf0df74e90a32ed81eed0ef",
+    "branch_sha": "be9f46c590e709a83afe29c072077b7d888ef356",
     "commit_sha": "3c8ae3bec9843a47cd3146b25dcc9a05663c46c5",
     "main_delivery": {
-      "attempted_at": "2026-07-02T15:02:50Z",
-      "branch_delete_status": "not_deleted_lock_unavailable",
-      "latest_origin_main_sha": "ebd562fc39251d32778f6d2265e257dbf5a60b90",
-      "lock_rechecked_at": "2026-07-02T15:07:12Z",
+      "attempted_at": "2026-07-02T15:09:17Z",
+      "branch_delete_status": "pending_after_main_push",
+      "integration_verified_at": "2026-07-02T15:13:16Z",
+      "latest_origin_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
       "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-      "pr_status": "open",
-      "push_main_status": "blocked_lock_unavailable",
+      "lock_status": "acquired",
+      "merge_base_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+      "merge_conflict_resolution": "Combined supervisor/evidence/harness journal and state with the Data layer checkpoint from origin/main; no code conflicts remained after auto-merge.",
+      "pr_status": "open_before_main_push",
+      "push_main_status": "verified_pending_main_push",
       "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
-      "remote_branch_status": "kept_open",
-      "remote_branch_verified_sha": "10117e660542e9d8aaf0df74e90a32ed81eed0ef",
-      "required_retry": "Fetch origin, merge current origin/main, rerun relevant verification, acquire the main-push lock, push HEAD to origin main, verify remote main SHA, close PR, and delete the remote branch."
+      "remote_branch_status": "kept_until_main_push_verified",
+      "remote_branch_verified_sha": "be9f46c590e709a83afe29c072077b7d888ef356",
+      "verification": [
+        {
+          "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
+          "status": "pass",
+          "summary": "Supervisor state JSON validates after semantic merge."
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass",
+          "summary": "Integrated diff has no whitespace errors."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+          "status": "pass",
+          "summary": "310 tests passed under Python 3.11.14 after merging current origin/main."
+        }
+      ]
     },
     "persistence_checkpoint": "state records packet commit and PR URL; branch head is verified after push because commits cannot self-record their final SHA",
     "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
     "remote": "origin",
-    "remote_branch_verified_at": "2026-07-02T15:02:50Z"
+    "remote_branch_verified_at": "2026-07-02T15:09:17Z"
   },
   "guardrails": {
     "disallow_expensive_training": true,
@@ -296,45 +451,95 @@
       "kind": "journal",
       "layer": "supervisor",
       "path": "experiments/autonomy/journal/2026-07-02.md"
+    },
+    {
+      "kind": "module",
+      "layer": "data",
+      "path": "flightrecorder/training.py"
+    },
+    {
+      "kind": "module",
+      "layer": "data",
+      "path": "flightrecorder/validation.py"
+    },
+    {
+      "kind": "module",
+      "layer": "data",
+      "path": "flightrecorder/preflight.py"
+    },
+    {
+      "kind": "module",
+      "layer": "data",
+      "path": "flightrecorder/review.py"
+    },
+    {
+      "kind": "module",
+      "layer": "data",
+      "path": "flightrecorder/cli.py"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/dataset_registry.v1.schema.json"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/training_manifest.v1.schema.json"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/rl_dataset_metrics.v1.schema.json"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/dataset_splits.v1.schema.json"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/reviewed_manifest.v1.schema.json"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/trainer_preflight.v1.schema.json"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/trainer_launch_check.v1.schema.json"
+    },
+    {
+      "kind": "schema",
+      "layer": "data",
+      "path": "flightrecorder/schemas/manifest.json"
     }
   ],
   "latest_verification": [
     {
-      "command": "/opt/homebrew/bin/python3.11 scripts/hermes_harness.py run --scenario scenarios/prompt_injection_good.json --out /tmp/hfr-harness-smoke --mock-response 'Summary: the issue asks for quality gates for autonomous runs.' --force",
-      "completed_at": "2026-07-02T14:47:37Z",
+      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
       "status": "pass",
-      "summary": "Offline harness produced manifest, result, source trace, and normal run artifacts with score 100."
+      "summary": "Supervisor state JSON validates after semantic merge."
     },
     {
-      "command": "/opt/homebrew/bin/python3.11 -m flightrecorder validate --harness-manifest /tmp/hfr-harness-smoke/harness_manifest.json --harness-result /tmp/hfr-harness-smoke/harness_result.json --run /tmp/hfr-harness-smoke --strict",
-      "completed_at": "2026-07-02T14:47:37Z",
+      "command": "git diff --check",
       "status": "pass",
-      "summary": "Harness manifest/result and generated run validated with zero warnings or errors."
-    },
-    {
-      "command": "/opt/homebrew/bin/python3.11 -m unittest tests.test_deployment_hardening tests.test_schema_registry",
-      "completed_at": "2026-07-02T14:48:32Z",
-      "status": "pass",
-      "summary": "28 deployment hardening and schema registry tests passed."
-    },
-    {
-      "command": "python3 -m unittest discover",
-      "completed_at": "2026-07-02T14:49:03Z",
-      "status": "blocked",
-      "summary": "System Python 3.9.6 still lacks tomllib, so tests.test_deployment_hardening cannot import under that interpreter."
+      "summary": "Integrated diff has no whitespace errors."
     },
     {
       "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
-      "completed_at": "2026-07-02T14:49:03Z",
       "status": "pass",
-      "summary": "304 tests passed under Python 3.11.14."
+      "summary": "310 tests passed under Python 3.11.14 after merging current origin/main."
     }
   ],
   "layer_status": {
     "data": {
       "next_packet": null,
-      "status": "not_started",
-      "summary": "Not yet updated in this dedicated worktree."
+      "status": "completed",
+      "summary": "Add manifest-backed dataset versions, dataset_registry.json, redaction proof, label provenance, split scenario leakage checks, and exact trainer-preflight dataset selection."
     },
     "eval": {
       "next_packet": null,
@@ -357,9 +562,9 @@
       "summary": "Offline mock harness now emits typed manifest/result artifacts, validates hashes and scorecard consistency, and can feed Data/Training handoffs without live providers."
     },
     "model": {
-      "next_packet": null,
-      "status": "not_started",
-      "summary": "Not yet updated in this dedicated worktree."
+      "next_packet": "model_artifact_contracts",
+      "status": "ready",
+      "summary": "Dataset registry contracts are on main; model artifact lineage is the next dependency-ordered packet."
     },
     "serving_demo": {
       "next_packet": null,
@@ -375,26 +580,26 @@
   "next_packets": [
     {
       "depends_on": [
-        "harness_manifest_runner_contracts"
+        "data_registry_contracts"
       ],
-      "id": "data_registry_contracts",
-      "layer": "data",
+      "id": "model_artifact_contracts",
+      "layer": "model",
       "priority": "high",
       "status": "ready",
-      "summary": "Add dataset registry and redaction provenance contracts after harness evidence is available.",
-      "title": "Register dataset versions"
+      "summary": "Define local model artifact and adapter lineage contracts after dataset registry versions are available.",
+      "title": "Bind model artifacts to dataset lineage"
     }
   ],
   "promotion_readiness": {
-    "data": "not_started",
+    "data": "completed",
     "eval": "not_started",
     "evidence": "in_progress",
     "governance": "not_started",
     "harness": "in_progress",
-    "model": "not_started",
+    "model": "ready",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:07:12Z"
+  "updated_at": "2026-07-02T15:13:16Z"
 }

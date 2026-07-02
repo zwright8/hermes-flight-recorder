@@ -55,6 +55,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("rl_reward_model", names)
         self.assertIn("rl_dataset_metrics", names)
         self.assertIn("dataset_splits", names)
+        self.assertIn("dataset_registry", names)
         self.assertIn("compare_rl_manifest", names)
         self.assertIn("compare_rl_pair", names)
         self.assertIn("compare_rl_dpo", names)
@@ -471,9 +472,12 @@ class SchemaRegistryTests(unittest.TestCase):
             self.assertEqual(bad_code, 1)
 
             dataset_metrics_result = check_schema_file(out / "dataset_metrics.json")
+            dataset_registry_result = check_schema_file(out / "dataset_registry.json")
             curriculum_result = check_schema_file(out / "curriculum.json")
             self.assertTrue(dataset_metrics_result["passed"], dataset_metrics_result["errors"])
             self.assertEqual(dataset_metrics_result["schema"]["name"], "rl_dataset_metrics")
+            self.assertTrue(dataset_registry_result["passed"], dataset_registry_result["errors"])
+            self.assertEqual(dataset_registry_result["schema"]["name"], "dataset_registry")
             self.assertTrue(curriculum_result["passed"], curriculum_result["errors"])
             self.assertEqual(curriculum_result["schema"]["name"], "rl_curriculum")
 

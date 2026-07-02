@@ -57,11 +57,13 @@ from .training import (
     DATASET_SPLIT_ARTIFACTS,
     DATASET_SPLIT_NAMES,
     RL_CURRICULUM_SCHEMA_VERSION,
+    RL_DATASET_REGISTRY_SCHEMA_VERSION,
     RL_DATASET_METRICS_SCHEMA_VERSION,
     RL_DATASET_SPLITS_SCHEMA_VERSION,
     RL_DPO_SCHEMA_VERSION,
     RL_EPISODE_SCHEMA_VERSION,
     RL_FAILURE_MODE_SCHEMA_VERSION,
+    RL_LABEL_PROVENANCE_SCHEMA_VERSION,
     COMPARE_RL_DPO_SCHEMA_VERSION,
     COMPARE_RL_MANIFEST_SCHEMA_VERSION,
     COMPARE_RL_PAIR_SCHEMA_VERSION,
@@ -71,7 +73,12 @@ from .training import (
     RL_REWARD_MODEL_SCHEMA_VERSION,
     RL_SFT_SCHEMA_VERSION,
     RL_STEP_REWARD_SCHEMA_VERSION,
+    RL_REDACTION_STATUS_SCHEMA_VERSION,
     REWARD_SCALES,
+    build_label_provenance_summary,
+    build_redaction_status,
+    positive_label_eligible,
+    redaction_scan_artifacts,
 )
 from .verifiers import VERIFIER_SOURCES_SCHEMA_VERSION
 
@@ -351,6 +358,7 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     reward_model_path = export_dir / "reward_model.jsonl"
     dataset_metrics_path = export_dir / "dataset_metrics.json"
     dataset_splits_path = export_dir / "dataset_splits.json"
+    dataset_registry_path = export_dir / "dataset_registry.json"
     dataset_card_path = export_dir / "DATASET_CARD.md"
     sft = _read_jsonl_objects_optional(sft_path, target, "sft.jsonl", "rerun export-rl to emit trainer-ready SFT rows")
     dpo = _read_jsonl_objects_optional(dpo_path, target, "dpo.jsonl", "rerun export-rl to emit trainer-ready DPO rows")
@@ -372,6 +380,12 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         "dataset_splits.json",
         "rerun export-rl to emit deterministic train/validation/test split metadata",
     )
+    dataset_registry = _read_object_optional(
+        dataset_registry_path,
+        target,
+        "dataset_registry.json",
+        "rerun export-rl to emit a selectable dataset registry",
+    )
     split_rows = _read_training_split_rows(export_dir, target)
     rows_by_artifact = {
         "episodes": episodes,
@@ -383,6 +397,22 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         "dpo": dpo,
         "reward_model": reward_model,
     }
+    metadata = manifest.get("metadata") if isinstance(manifest, dict) and isinstance(manifest.get("metadata"), dict) else None
+    expected_redaction_status = build_redaction_status(
+        redaction_scan_artifacts(
+            rows_by_artifact,
+            curriculum,
+            metadata=metadata,
+            extra_artifacts={
+                "manifest": manifest or {},
+                "dataset_metrics": dataset_metrics or {},
+                "dataset_registry": dataset_registry or {},
+            },
+        )
+    )
+    expected_label_provenance = build_label_provenance_summary(episodes, sft, dpo, reward_model)
+    if expected_redaction_status.get("passed") is not True:
+        target.errors.append("training export contains unredacted secret-like values.")
     if manifest is not None:
         _validate_training_manifest(
             manifest,
@@ -398,6 +428,9 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             reward_model,
             dataset_metrics,
             dataset_splits,
+            dataset_registry,
+            expected_redaction_status,
+            expected_label_provenance,
             dataset_card_path.exists(),
             export_dir,
         )
@@ -427,9 +460,23 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
             dpo,
             reward_model,
             dataset_splits,
+            expected_redaction_status,
+            expected_label_provenance,
         )
     if dataset_splits is not None:
         _validate_dataset_splits(dataset_splits, target, rows_by_artifact, split_rows)
+    if dataset_registry is not None and manifest is not None:
+        _validate_dataset_registry(
+            dataset_registry,
+            target,
+            manifest,
+            export_dir,
+            expected_redaction_status,
+            expected_label_provenance,
+            dataset_splits,
+            dataset_metrics,
+            episodes,
+        )
     if dataset_card_path.exists():
         _validate_dataset_card(dataset_card_path, target)
     else:
@@ -532,8 +579,45 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
     reward_model = _read_jsonl_objects(export_dir / "reviewed_reward_model.jsonl", target, "reviewed_reward_model.jsonl")
     preferences = _read_jsonl_objects(export_dir / "reviewed_preferences.jsonl", target, "reviewed_preferences.jsonl")
     dpo = _read_jsonl_objects(export_dir / "reviewed_dpo.jsonl", target, "reviewed_dpo.jsonl")
+    dataset_registry = _read_object_optional(
+        export_dir / "dataset_registry.json",
+        target,
+        "dataset_registry.json",
+        "rerun apply-review to emit a selectable reviewed dataset registry",
+    )
+    rows_by_artifact = {
+        "reviewed_labels": labels,
+        "reviewed_sft": sft,
+        "reviewed_reward_model": reward_model,
+        "reviewed_preferences": preferences,
+        "reviewed_dpo": dpo,
+    }
+    expected_redaction_status = build_redaction_status(
+        redaction_scan_artifacts(
+            rows_by_artifact,
+            extra_artifacts={
+                "manifest": manifest or {},
+                "dataset_registry": dataset_registry or {},
+            },
+        )
+    )
+    expected_label_provenance = _expected_reviewed_label_provenance(labels, sft, reward_model, preferences, dpo)
+    if expected_redaction_status.get("passed") is not True:
+        target.errors.append("reviewed export contains unredacted secret-like values.")
     if manifest is not None:
-        _validate_reviewed_manifest(manifest, target, labels, sft, reward_model, preferences, dpo)
+        _validate_reviewed_manifest(
+            manifest,
+            target,
+            labels,
+            sft,
+            reward_model,
+            preferences,
+            dpo,
+            dataset_registry,
+            expected_redaction_status,
+            expected_label_provenance,
+            export_dir,
+        )
         _validate_manifest_artifact_fingerprints(
             manifest.get("artifact_fingerprints"),
             target,
@@ -2131,10 +2215,17 @@ def _validate_training_manifest(
     reward_model: list[dict[str, Any]],
     dataset_metrics: dict[str, Any] | None,
     dataset_splits: dict[str, Any] | None,
+    dataset_registry: dict[str, Any] | None,
+    expected_redaction_status: dict[str, Any],
+    expected_label_provenance: dict[str, Any],
     has_dataset_card: bool,
     export_dir: Path,
 ) -> None:
     _require_equal(manifest, "schema_version", RL_MANIFEST_SCHEMA_VERSION, target)
+    dataset_version = manifest.get("dataset_version")
+    versioned_manifest = _is_dataset_version(dataset_version)
+    if not versioned_manifest:
+        target.warnings.append("manifest.dataset_version is missing; rerun export-rl to emit a selectable dataset version.")
     expected_counts = {
         "episode_count": len(episodes),
         "reward_count": len(rewards),
@@ -2179,6 +2270,11 @@ def _validate_training_manifest(
             target.warnings.append("manifest.outputs.dataset_splits is missing; rerun export-rl to refresh deterministic split artifacts.")
         if "dataset_card" not in manifest["outputs"]:
             target.warnings.append("manifest.outputs.dataset_card is missing; rerun export-rl to refresh the dataset card.")
+        if "dataset_registry" not in manifest["outputs"]:
+            if versioned_manifest:
+                target.errors.append("manifest.outputs.dataset_registry is missing.")
+            else:
+                target.warnings.append("manifest.outputs.dataset_registry is missing; rerun export-rl to emit dataset lineage.")
         for split_name in DATASET_SPLIT_NAMES:
             for artifact_name in DATASET_SPLIT_ARTIFACTS:
                 output_name = f"{split_name}_{artifact_name}"
@@ -2196,6 +2292,36 @@ def _validate_training_manifest(
         target.warnings.append("manifest has no validated dataset_splits.json companion.")
     elif manifest.get("dataset_splits") != dataset_splits.get("summary"):
         target.errors.append("manifest.dataset_splits must match dataset_splits.summary.")
+    if dataset_registry is None:
+        if versioned_manifest:
+            target.errors.append("manifest has no validated dataset_registry.json companion.")
+        else:
+            target.warnings.append("manifest has no dataset_registry.json companion; rerun export-rl to emit dataset lineage.")
+    if "redaction_status" in manifest:
+        if manifest.get("redaction_status") != expected_redaction_status:
+            target.errors.append("manifest.redaction_status must match recomputed redaction scan.")
+    else:
+        target.warnings.append("manifest.redaction_status is missing; rerun export-rl to emit redaction proof.")
+    if "label_provenance" in manifest:
+        if manifest.get("label_provenance") != expected_label_provenance:
+            target.errors.append("manifest.label_provenance must match recomputed label provenance.")
+    else:
+        target.warnings.append("manifest.label_provenance is missing; rerun export-rl to emit label provenance.")
+    registry = manifest.get("registry")
+    if not isinstance(registry, dict):
+        if versioned_manifest:
+            target.errors.append("manifest.registry must be an object.")
+        else:
+            target.warnings.append("manifest.registry is missing; rerun export-rl to emit dataset lineage.")
+    else:
+        _require_equal(registry, "schema_version", RL_DATASET_REGISTRY_SCHEMA_VERSION, target, prefix="manifest.registry.")
+        if registry.get("selection_key") != dataset_version:
+            target.errors.append("manifest.registry.selection_key must match manifest.dataset_version.")
+        if registry.get("redaction_passed") is not (expected_redaction_status.get("passed") is True):
+            target.errors.append("manifest.registry.redaction_passed must match redaction_status.passed.")
+        leakage = dataset_splits.get("leakage_checks") if isinstance(dataset_splits, dict) else {}
+        if registry.get("heldout_scenario_exclusive") is not (isinstance(leakage, dict) and leakage.get("heldout_scenario_exclusive") is True):
+            target.errors.append("manifest.registry.heldout_scenario_exclusive must match dataset_splits.leakage_checks.")
     if not has_dataset_card:
         target.warnings.append("manifest has no DATASET_CARD.md companion.")
     if "metadata" in manifest:
@@ -2444,9 +2570,59 @@ def _validate_dataset_splits(
     placement_errors = _validate_split_row_placement(rows_by_artifact, split_rows, family_to_split, episode_by_id, target)
     cross_split_families = _cross_split_families(split_rows)
     family_exclusive = not cross_split_families and not placement_errors
+    split_scenario_ids = _split_scenario_ids(split_rows)
+    train_scenario_ids = split_scenario_ids["train"]
+    heldout_scenario_ids = sorted(set(split_scenario_ids["validation"]) | set(split_scenario_ids["test"]))
+    cross_split_scenario_ids = sorted(set(train_scenario_ids) & set(heldout_scenario_ids))
+    heldout_scenario_exclusive = not cross_split_scenario_ids
+    train_task_families = _split_task_families(split_rows)["train"]
+    heldout_task_families = sorted(set(_split_task_families(split_rows)["validation"]) | set(_split_task_families(split_rows)["test"]))
+    if value.get("split_scenario_ids") != split_scenario_ids:
+        target.errors.append("dataset_splits.split_scenario_ids must match split episode scenario IDs.")
     _validate_dataset_split_counts(value.get("split_counts"), target, assignments, split_rows)
-    _validate_dataset_split_summary(value.get("summary"), target, family_to_split, episodes, split_rows, family_exclusive)
-    _validate_dataset_split_leakage(value.get("leakage_checks"), target, family_exclusive, cross_split_families)
+    _validate_dataset_split_summary(
+        value.get("summary"),
+        target,
+        family_to_split,
+        episodes,
+        split_rows,
+        family_exclusive,
+        train_scenario_ids,
+        heldout_scenario_ids,
+        heldout_scenario_exclusive,
+    )
+    _validate_dataset_split_leakage(
+        value.get("leakage_checks"),
+        target,
+        family_exclusive,
+        cross_split_families,
+        train_scenario_ids,
+        heldout_scenario_ids,
+        cross_split_scenario_ids,
+        heldout_scenario_exclusive,
+        train_task_families,
+        heldout_task_families,
+    )
+
+
+def _split_scenario_ids(split_rows: dict[str, dict[str, list[dict[str, Any]]]]) -> dict[str, list[str]]:
+    return {
+        split_name: sorted(
+            {
+                str(episode.get("scenario_id") or "")
+                for episode in split_rows[split_name]["episodes"]
+                if str(episode.get("scenario_id") or "")
+            }
+        )
+        for split_name in DATASET_SPLIT_NAMES
+    }
+
+
+def _split_task_families(split_rows: dict[str, dict[str, list[dict[str, Any]]]]) -> dict[str, list[str]]:
+    return {
+        split_name: sorted({str(episode.get("task_family") or "unknown") for episode in split_rows[split_name]["episodes"]})
+        for split_name in DATASET_SPLIT_NAMES
+    }
 
 
 def _validate_split_row_placement(
@@ -2574,6 +2750,9 @@ def _validate_dataset_split_summary(
     episodes: list[dict[str, Any]],
     split_rows: dict[str, dict[str, list[dict[str, Any]]]],
     family_exclusive: bool,
+    train_scenario_ids: list[str],
+    heldout_scenario_ids: list[str],
+    heldout_scenario_exclusive: bool,
 ) -> None:
     if not isinstance(value, dict):
         target.errors.append("dataset_splits.summary must be an object.")
@@ -2585,6 +2764,9 @@ def _validate_dataset_split_summary(
         "validation_episode_count": len(split_rows["validation"]["episodes"]),
         "test_episode_count": len(split_rows["test"]["episodes"]),
         "family_exclusive": family_exclusive,
+        "train_scenario_count": len(train_scenario_ids),
+        "heldout_scenario_count": len(heldout_scenario_ids),
+        "heldout_scenario_exclusive": heldout_scenario_exclusive,
     }
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
@@ -2596,6 +2778,12 @@ def _validate_dataset_split_leakage(
     target: ValidationTarget,
     family_exclusive: bool,
     cross_split_families: list[str],
+    train_scenario_ids: list[str],
+    heldout_scenario_ids: list[str],
+    cross_split_scenario_ids: list[str],
+    heldout_scenario_exclusive: bool,
+    train_task_families: list[str],
+    heldout_task_families: list[str],
 ) -> None:
     if not isinstance(value, dict):
         target.errors.append("dataset_splits.leakage_checks must be an object.")
@@ -2608,6 +2796,65 @@ def _validate_dataset_split_leakage(
         target.errors.append(
             f"dataset_splits.leakage_checks.cross_split_task_families expected {cross_split_families!r}, got {value.get('cross_split_task_families')!r}."
         )
+    expected = {
+        "train_scenario_ids": train_scenario_ids,
+        "heldout_scenario_ids": heldout_scenario_ids,
+        "cross_split_scenario_ids": cross_split_scenario_ids,
+        "heldout_scenario_exclusive": heldout_scenario_exclusive,
+        "train_task_families": train_task_families,
+        "heldout_task_families": heldout_task_families,
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                f"dataset_splits.leakage_checks.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}."
+            )
+
+
+def _validate_dataset_registry(
+    registry: dict[str, Any],
+    target: ValidationTarget,
+    manifest: dict[str, Any],
+    export_dir: Path,
+    expected_redaction_status: dict[str, Any],
+    expected_label_provenance: dict[str, Any],
+    dataset_splits: dict[str, Any] | None,
+    dataset_metrics: dict[str, Any] | None,
+    episodes: list[dict[str, Any]],
+) -> None:
+    _require_equal(registry, "schema_version", RL_DATASET_REGISTRY_SCHEMA_VERSION, target, prefix="dataset_registry.")
+    if registry.get("artifact_type") != "training_export":
+        target.errors.append("dataset_registry.artifact_type must be 'training_export'.")
+    if registry.get("dataset_version") != manifest.get("dataset_version"):
+        target.errors.append("dataset_registry.dataset_version must match manifest.dataset_version.")
+    if registry.get("manifest_sha256") != _sha256(export_dir / "manifest.json"):
+        target.errors.append("dataset_registry.manifest_sha256 must match manifest.json contents.")
+    selection = registry.get("selection")
+    if not isinstance(selection, dict):
+        target.errors.append("dataset_registry.selection must be an object.")
+    elif selection.get("key") != manifest.get("dataset_version"):
+        target.errors.append("dataset_registry.selection.key must match manifest.dataset_version.")
+    if registry.get("redaction_status") != expected_redaction_status:
+        target.errors.append("dataset_registry.redaction_status must match recomputed redaction scan.")
+    if registry.get("label_provenance") != expected_label_provenance:
+        target.errors.append("dataset_registry.label_provenance must match recomputed label provenance.")
+    if registry.get("dataset_splits") != (dataset_splits.get("summary") if isinstance(dataset_splits, dict) else None):
+        target.errors.append("dataset_registry.dataset_splits must match dataset_splits.summary.")
+    if registry.get("leakage_checks") != (dataset_splits.get("leakage_checks") if isinstance(dataset_splits, dict) else None):
+        target.errors.append("dataset_registry.leakage_checks must match dataset_splits.leakage_checks.")
+    if registry.get("source_fingerprint_coverage") != (
+        dataset_metrics.get("source_fingerprint_coverage") if isinstance(dataset_metrics, dict) else None
+    ):
+        target.errors.append("dataset_registry.source_fingerprint_coverage must match dataset_metrics.source_fingerprint_coverage.")
+    if registry.get("quality_flags") != (dataset_metrics.get("quality_flags") if isinstance(dataset_metrics, dict) else None):
+        target.errors.append("dataset_registry.quality_flags must match dataset_metrics.quality_flags.")
+    if registry.get("artifact_fingerprints") != manifest.get("artifact_fingerprints"):
+        target.errors.append("dataset_registry.artifact_fingerprints must match manifest.artifact_fingerprints.")
+    source_runs = registry.get("source_runs")
+    if not isinstance(source_runs, list):
+        target.errors.append("dataset_registry.source_runs must be a list.")
+    elif len(source_runs) != len(episodes):
+        target.errors.append(f"dataset_registry.source_runs expected {len(episodes)} rows, got {len(source_runs)}.")
 
 
 def _compare_export_artifact_paths(export_dir: Path) -> dict[str, Path]:
@@ -3050,8 +3297,14 @@ def _validate_reviewed_manifest(
     reward_model: list[dict[str, Any]],
     preferences: list[dict[str, Any]],
     dpo: list[dict[str, Any]],
+    dataset_registry: dict[str, Any] | None,
+    expected_redaction_status: dict[str, Any],
+    expected_label_provenance: dict[str, Any],
+    export_dir: Path,
 ) -> None:
     _require_equal(manifest, "schema_version", REVIEWED_MANIFEST_SCHEMA_VERSION, target)
+    if not _is_dataset_version(manifest.get("dataset_version")):
+        target.errors.append("manifest.dataset_version must be a non-empty hfrds-* dataset selection key.")
     expected_counts = {
         "reviewed_label_count": len(labels),
         "sft_count": len(sft),
@@ -3088,15 +3341,107 @@ def _validate_reviewed_manifest(
     if not isinstance(outputs, dict):
         target.errors.append("manifest.outputs must be an object.")
     else:
-        for output_name in ("reviewed_labels", "reviewed_sft", "reviewed_reward_model", "reviewed_preferences", "reviewed_dpo", "manifest"):
+        for output_name in (
+            "reviewed_labels",
+            "reviewed_sft",
+            "reviewed_reward_model",
+            "reviewed_preferences",
+            "reviewed_dpo",
+            "dataset_registry",
+            "manifest",
+        ):
             if output_name not in outputs:
                 target.errors.append(f"manifest.outputs.{output_name} is missing.")
+    if manifest.get("redaction_status") != expected_redaction_status:
+        target.errors.append("manifest.redaction_status must match recomputed reviewed redaction scan.")
+    if manifest.get("label_provenance") != expected_label_provenance:
+        target.errors.append("manifest.label_provenance must match recomputed reviewed label provenance.")
+    registry = manifest.get("registry")
+    if not isinstance(registry, dict):
+        target.errors.append("manifest.registry must be an object.")
+    else:
+        _require_equal(registry, "schema_version", RL_DATASET_REGISTRY_SCHEMA_VERSION, target, prefix="manifest.registry.")
+        if registry.get("selection_key") != manifest.get("dataset_version"):
+            target.errors.append("manifest.registry.selection_key must match manifest.dataset_version.")
+        if registry.get("redaction_passed") is not (expected_redaction_status.get("passed") is True):
+            target.errors.append("manifest.registry.redaction_passed must match redaction_status.passed.")
+    if dataset_registry is None:
+        target.errors.append("manifest has no validated dataset_registry.json companion.")
+    else:
+        _validate_reviewed_dataset_registry(
+            dataset_registry,
+            target,
+            manifest,
+            export_dir,
+            expected_redaction_status,
+            expected_label_provenance,
+        )
     if _looks_absolute(str(manifest.get("source_review_export", ""))):
         target.warnings.append("manifest.source_review_export is absolute; prefer redacted or relative exports for sharing.")
     if _looks_absolute(str(manifest.get("labels_path", ""))):
         target.warnings.append("manifest.labels_path is absolute; prefer redacted or relative exports for sharing.")
     if _looks_absolute(str(manifest.get("output_dir", ""))):
         target.warnings.append("manifest.output_dir is absolute; prefer redacted or relative exports for sharing.")
+
+
+def _expected_reviewed_label_provenance(
+    labels: list[dict[str, Any]],
+    sft: list[dict[str, Any]],
+    reward_model: list[dict[str, Any]],
+    preferences: list[dict[str, Any]],
+    dpo: list[dict[str, Any]],
+) -> dict[str, Any]:
+    label_counts = _reviewed_label_counts(labels)
+    return {
+        "schema_version": RL_LABEL_PROVENANCE_SCHEMA_VERSION,
+        "policy": "Completed human labels bound to review_item_sha256 drive reviewed trainer views.",
+        "reviewed_label_count": len(labels),
+        "accepted_label_count": label_counts.get("accept", 0),
+        "negative_label_count": sum(label_counts.get(label, 0) for label in sorted(TRAINING_NEGATIVE_LABELS)),
+        "needs_review_excluded_count": label_counts.get("needs_review", 0),
+        "trainer_view_counts": {
+            "reviewed_sft": len(sft),
+            "reviewed_reward_model": len(reward_model),
+            "reviewed_preferences": len(preferences),
+            "reviewed_dpo": len(dpo),
+        },
+        "notes": [
+            "Reviewed SFT rows require human_label='accept'.",
+            "Reviewed reward and preference rows use accept/reject/unsafe/incomplete labels only.",
+        ],
+    }
+
+
+def _validate_reviewed_dataset_registry(
+    registry: dict[str, Any],
+    target: ValidationTarget,
+    manifest: dict[str, Any],
+    export_dir: Path,
+    expected_redaction_status: dict[str, Any],
+    expected_label_provenance: dict[str, Any],
+) -> None:
+    _require_equal(registry, "schema_version", RL_DATASET_REGISTRY_SCHEMA_VERSION, target, prefix="dataset_registry.")
+    if registry.get("artifact_type") != "reviewed_export":
+        target.errors.append("dataset_registry.artifact_type must be 'reviewed_export'.")
+    if registry.get("dataset_version") != manifest.get("dataset_version"):
+        target.errors.append("dataset_registry.dataset_version must match manifest.dataset_version.")
+    if registry.get("manifest_sha256") != _sha256(export_dir / "manifest.json"):
+        target.errors.append("dataset_registry.manifest_sha256 must match manifest.json contents.")
+    selection = registry.get("selection")
+    if not isinstance(selection, dict):
+        target.errors.append("dataset_registry.selection must be an object.")
+    elif selection.get("key") != manifest.get("dataset_version"):
+        target.errors.append("dataset_registry.selection.key must match manifest.dataset_version.")
+    if registry.get("redaction_status") != expected_redaction_status:
+        target.errors.append("dataset_registry.redaction_status must match recomputed reviewed redaction scan.")
+    if registry.get("label_provenance") != expected_label_provenance:
+        target.errors.append("dataset_registry.label_provenance must match recomputed reviewed label provenance.")
+    if registry.get("source_review_artifacts") != manifest.get("source_review_artifacts"):
+        target.errors.append("dataset_registry.source_review_artifacts must match manifest.source_review_artifacts.")
+    if registry.get("labels_artifact") != manifest.get("labels_artifact"):
+        target.errors.append("dataset_registry.labels_artifact must match manifest.labels_artifact.")
+    if registry.get("artifact_fingerprints") != manifest.get("artifact_fingerprints"):
+        target.errors.append("dataset_registry.artifact_fingerprints must match manifest.artifact_fingerprints.")
 
 
 def _validate_reviewed_labels(labels: list[dict[str, Any]], target: ValidationTarget) -> None:
@@ -3608,10 +3953,7 @@ def _validate_sft_records(
         str(episode.get("episode_id"))
         for episode in episodes
         if isinstance(episode.get("episode_id"), str)
-        and isinstance(episode.get("outcome"), dict)
-        and episode["outcome"].get("passed") is True
-        and isinstance(episode.get("final_answer"), str)
-        and bool(episode.get("final_answer"))
+        and positive_label_eligible(episode)
     }
     seen: set[str] = set()
     for index, sample in enumerate(sft):
@@ -3625,6 +3967,8 @@ def _validate_sft_records(
             outcome = episode.get("outcome") if isinstance(episode, dict) and isinstance(episode.get("outcome"), dict) else {}
             if outcome.get("passed") is not True:
                 target.errors.append(f"sft[{index}].episode_id {episode_id!r} does not reference a passing episode.")
+            if episode is not None and not positive_label_eligible(episode):
+                target.errors.append(f"sft[{index}].episode_id {episode_id!r} is not eligible for positive trainer labels.")
             if sample.get("quality_gate") != "passed_scorecard":
                 target.errors.append(f"sft[{index}].quality_gate must be 'passed_scorecard'.")
             _validate_training_view_task_completion(sample, episode, target, f"sft[{index}]")
@@ -3690,6 +4034,15 @@ def _validate_reward_model_records(
     episodes: list[dict[str, Any]],
 ) -> None:
     episode_by_id = {episode.get("episode_id"): episode for episode in episodes if isinstance(episode.get("episode_id"), str)}
+    expected_ids = {
+        str(episode.get("episode_id"))
+        for episode in episodes
+        if isinstance(episode.get("episode_id"), str)
+        and (
+            not (isinstance(episode.get("outcome"), dict) and episode["outcome"].get("passed") is True)
+            or positive_label_eligible(episode)
+        )
+    }
     seen: set[str] = set()
     for index, sample in enumerate(reward_model):
         _require_equal(sample, "schema_version", RL_REWARD_MODEL_SCHEMA_VERSION, target, prefix=f"reward_model[{index}].")
@@ -3702,13 +4055,16 @@ def _validate_reward_model_records(
             target.errors.append(f"reward_model[{index}].passed must be a boolean.")
         episode = episode_by_id.get(episode_id) if episode_id else None
         if isinstance(episode, dict):
+            outcome = episode.get("outcome") if isinstance(episode.get("outcome"), dict) else {}
+            if outcome.get("passed") is True and not positive_label_eligible(episode):
+                target.errors.append(f"reward_model[{index}].episode_id {episode_id!r} is not eligible as a positive reward label.")
             _validate_training_view_task_completion(sample, episode, target, f"reward_model[{index}]")
         for field_name in ("failed_rules", "critical_failures"):
             if not _is_string_list(sample.get(field_name)):
                 target.errors.append(f"reward_model[{index}].{field_name} must be a list of strings.")
-    missing = sorted(set(episode_by_id) - seen)
+    missing = sorted(expected_ids - seen)
     if missing:
-        target.errors.append(f"reward_model.jsonl missing episode samples: {missing!r}.")
+        target.errors.append(f"reward_model.jsonl missing eligible episode samples: {missing!r}.")
 
 
 def _validate_training_view_common(
@@ -4037,6 +4393,8 @@ def _validate_dataset_metrics(
     dpo: list[dict[str, Any]],
     reward_model: list[dict[str, Any]],
     dataset_splits: dict[str, Any] | None,
+    expected_redaction_status: dict[str, Any],
+    expected_label_provenance: dict[str, Any],
 ) -> None:
     _require_equal(metrics, "schema_version", RL_DATASET_METRICS_SCHEMA_VERSION, target, prefix="dataset_metrics.")
     artifact_counts = metrics.get("artifact_counts")
@@ -4133,6 +4491,16 @@ def _validate_dataset_metrics(
             target.errors.append("dataset_metrics.dataset_splits must match dataset_splits.summary.")
     else:
         target.warnings.append("dataset_metrics.dataset_splits is missing; rerun export-rl to refresh split metrics.")
+    if "redaction_status" in metrics:
+        if metrics.get("redaction_status") != expected_redaction_status:
+            target.errors.append("dataset_metrics.redaction_status must match recomputed redaction scan.")
+    else:
+        target.warnings.append("dataset_metrics.redaction_status is missing; rerun export-rl to emit redaction proof.")
+    if "label_provenance" in metrics:
+        if metrics.get("label_provenance") != expected_label_provenance:
+            target.errors.append("dataset_metrics.label_provenance must match recomputed label provenance.")
+    else:
+        target.warnings.append("dataset_metrics.label_provenance is missing; rerun export-rl to emit label provenance.")
     _validate_dataset_family_metrics(metrics.get("task_families"), target, episodes, step_rewards, failure_modes, sft, dpo, reward_model)
     _validate_quality_flags(metrics.get("quality_flags"), target)
     if "metadata" in metrics:
@@ -4420,6 +4788,8 @@ def _validate_preferences(preferences: list[dict[str, Any]], target: ValidationT
         rejected = episode_by_id.get(rejected_id)
         if chosen is None:
             target.errors.append(f"preferences[{index}].chosen_episode_id {chosen_id!r} does not reference an episode.")
+        elif not positive_label_eligible(chosen):
+            target.errors.append(f"preferences[{index}].chosen_episode_id {chosen_id!r} is not eligible for a positive preference label.")
         if rejected is None:
             target.errors.append(f"preferences[{index}].rejected_episode_id {rejected_id!r} does not reference an episode.")
         if chosen is not None and rejected is not None:
@@ -8459,6 +8829,8 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
         target.errors.append("trainer_preflight.artifacts must not be empty.")
     if not _is_string_list(preflight.get("required_gates")):
         target.errors.append("trainer_preflight.required_gates must be a list of strings.")
+    if not _is_string_list(preflight.get("required_dataset_versions")):
+        target.errors.append("trainer_preflight.required_dataset_versions must be a list of strings.")
     if not _is_string_list(preflight.get("notes")):
         target.errors.append("trainer_preflight.notes must be a list of strings.")
     if "metadata" in preflight:
@@ -8499,6 +8871,8 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
         _validate_trainer_preflight_artifact_record(name, record, target, source_path)
     for name, record in schema_contracts.items():
         _validate_trainer_preflight_schema_contract_record(name, record, target, source_path)
+    dataset_selection = preflight.get("dataset_selection", [])
+    _validate_trainer_preflight_dataset_selection(dataset_selection, target)
     _validate_trainer_command(preflight.get("trainer_command"), target)
     target.details.update(
         {
@@ -8507,6 +8881,7 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
             "failed_check_count": failed_checks,
             "artifact_count": len(artifacts),
             "schema_contract_count": len(schema_contracts),
+            "dataset_selection_count": len(dataset_selection) if isinstance(dataset_selection, list) else 0,
             "validation_summary_count": len(validation_summaries) if isinstance(validation_summaries, list) else 0,
         }
     )
@@ -8544,6 +8919,9 @@ def _validate_trainer_launch_check(launch_check: dict[str, Any], target: Validat
         )
     if not _is_string_list(launch_check.get("required_gates")):
         target.errors.append("trainer_launch_check.required_gates must be a list of strings.")
+    if not _is_string_list(launch_check.get("required_dataset_versions")):
+        target.errors.append("trainer_launch_check.required_dataset_versions must be a list of strings.")
+    _validate_trainer_preflight_dataset_selection(launch_check.get("dataset_selection", []), target)
     required_metadata = launch_check.get("required_metadata")
     if not isinstance(required_metadata, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in required_metadata.items()):
         target.errors.append("trainer_launch_check.required_metadata must be an object of string values.")
@@ -8786,6 +9164,40 @@ def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: 
             target.errors.append(f"{label}.symlink must be a boolean when present.")
         if record.get("regular_directory") is True and not _is_non_negative_int(record.get("entry_count")):
             target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
+
+
+def _validate_trainer_preflight_dataset_selection(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, list):
+        target.errors.append("trainer_preflight.dataset_selection must be a list.")
+        return
+    for index, record in enumerate(value):
+        label = f"trainer_preflight.dataset_selection[{index}]"
+        if not isinstance(record, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if record.get("artifact") not in {"training_export", "reviewed_export"}:
+            target.errors.append(f"{label}.artifact must be training_export or reviewed_export.")
+        if not _is_dataset_version(record.get("dataset_version")):
+            target.errors.append(f"{label}.dataset_version must be an hfrds-* selection key.")
+        for field_name in ("manifest_path", "registry_path"):
+            if not isinstance(record.get(field_name), str) or not record.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        for field_name in ("manifest_sha256", "registry_sha256", "registry_manifest_sha256"):
+            if record.get(field_name) and not _is_sha256(record.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a SHA-256 hex string when present.")
+        if record.get("manifest_sha256") and record.get("registry_manifest_sha256") and record.get("manifest_sha256") != record.get("registry_manifest_sha256"):
+            target.errors.append(f"{label}.registry_manifest_sha256 must match manifest_sha256.")
+        for field_name in ("registry_dataset_version", "registry_selection_key"):
+            if record.get(field_name) != record.get("dataset_version"):
+                target.errors.append(f"{label}.{field_name} must match dataset_version.")
+        if not isinstance(record.get("matches_required"), bool):
+            target.errors.append(f"{label}.matches_required must be a boolean.")
+        if record.get("redaction_passed") is not True:
+            target.errors.append(f"{label}.redaction_passed must be true.")
+        if record.get("artifact") == "training_export" and record.get("heldout_scenario_exclusive") is not True:
+            target.errors.append(f"{label}.heldout_scenario_exclusive must be true for training exports.")
+        if not _is_string_list(record.get("required_dataset_versions")):
+            target.errors.append(f"{label}.required_dataset_versions must be a list of strings.")
 
 
 def _validate_preflight_file_hash(
@@ -10588,6 +11000,15 @@ def _is_number_between(value: Any, minimum: float, maximum: float) -> bool:
 
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value.lower())
+
+
+def _is_dataset_version(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith("hfrds-")
+        and len(value) > len("hfrds-")
+        and all(char in "0123456789abcdef" for char in value.removeprefix("hfrds-").lower())
+    )
 
 
 def _looks_absolute(value: str) -> bool:

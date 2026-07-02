@@ -39,6 +39,10 @@
       },
       "type": "object"
     },
+    "dataset_version": {
+      "pattern": "^hfrds-[0-9a-f]+$",
+      "type": "string"
+    },
     "generated_at": {
       "type": "string"
     },
@@ -51,6 +55,17 @@
         "minimum": 0,
         "type": "integer"
       },
+      "type": "object"
+    },
+    "label_provenance": {
+      "properties": {
+        "schema_version": {
+          "const": "hfr.rl.label_provenance.v1"
+        }
+      },
+      "required": [
+        "schema_version"
+      ],
       "type": "object"
     },
     "labels_artifact": {
@@ -94,6 +109,42 @@
       "minimum": 0,
       "type": "integer"
     },
+    "redaction_status": {
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "hfr.rl.redaction_status.v1"
+        },
+        "unredacted_secret_like_finding_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "passed",
+        "unredacted_secret_like_finding_count"
+      ],
+      "type": "object"
+    },
+    "registry": {
+      "properties": {
+        "schema_version": {
+          "const": "hfr.rl.dataset_registry.v1"
+        },
+        "selection_key": {
+          "pattern": "^hfrds-[0-9a-f]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "selection_key"
+      ],
+      "type": "object"
+    },
     "reward_model_count": {
       "minimum": 0,
       "type": "integer"
@@ -127,6 +178,7 @@
   },
   "required": [
     "schema_version",
+    "dataset_version",
     "generated_at",
     "source_review_export",
     "labels_path",
@@ -143,6 +195,9 @@
     "medium_or_high_confidence_label_count",
     "low_confidence_label_count",
     "unknown_confidence_label_count",
+    "redaction_status",
+    "label_provenance",
+    "registry",
     "task_families",
     "outputs",
     "source_review_artifacts",

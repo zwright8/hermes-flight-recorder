@@ -24,6 +24,12 @@
       "minimum": 0,
       "type": "integer"
     },
+    "dataset_selection": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
     "gate_count": {
       "minimum": 0,
       "type": "integer"
@@ -69,6 +75,12 @@
       },
       "type": "array"
     },
+    "required_dataset_versions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "required_metadata": {
       "additionalProperties": {
         "type": "string"
@@ -93,11 +105,13 @@
     "checks",
     "validation",
     "required_gates",
+    "required_dataset_versions",
     "required_metadata",
     "gates",
     "gate_count",
     "passed_gate_count",
     "artifacts",
+    "dataset_selection",
     "approved_command",
     "notes"
   ],
