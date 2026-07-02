@@ -116,9 +116,11 @@
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
     "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
-    "commit_sha": "pending",
-    "pr_url": "pending",
-    "remote": "origin"
+    "commit_sha": "4cc21a6f97dc8f76ff81f0edddbd4665cfc9ddc6",
+    "persistence_checkpoint": "state records packet commit and PR URL; branch head is verified after push because commits cannot self-record their final SHA",
+    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/2",
+    "remote": "origin",
+    "remote_branch_verified_at": "2026-07-02T14:35:33Z"
   },
   "guardrails": {
     "disallow_expensive_training": true,
