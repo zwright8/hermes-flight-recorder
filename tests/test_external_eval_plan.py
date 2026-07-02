@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from flightrecorder.cli import main
 from flightrecorder.external_eval import build_external_eval_plan, write_external_eval_plan
+from flightrecorder.schema_registry import check_schema_file
 
 
 def run_cli(args):
@@ -24,9 +25,11 @@ class ExternalEvalPlanTests(unittest.TestCase):
 
             code = run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
             validate_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict"])
+            schema_result = check_schema_file(out)
 
             self.assertEqual(code, 1)
             self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             plan = _read_json(out)
             self.assertFalse(plan["ready"])
             self.assertEqual(plan["adapter_count"], 4)
@@ -56,8 +59,10 @@ class ExternalEvalPlanTests(unittest.TestCase):
                 )
             write_external_eval_plan(plan, out)
             validate_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict"])
+            schema_result = check_schema_file(out)
 
             self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             self.assertTrue(plan["ready"])
             self.assertEqual(plan["ready_adapter_count"], 1)
             self.assertEqual(plan["blocking_reasons"], [])

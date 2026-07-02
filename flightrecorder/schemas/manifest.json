@@ -370,6 +370,22 @@
       "name": "compare_rl_dpo"
     },
     {
+      "artifact": "heldout_manifest",
+      "artifact_schema_version": "hfr.heldout_scenario_manifest.v1",
+      "description": "Held-out scenario manifest emitted by heldout-manifest.",
+      "filename": "heldout_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/heldout_manifest.v1.schema.json",
+      "name": "heldout_manifest"
+    },
+    {
+      "artifact": "external_eval_plan",
+      "artifact_schema_version": "hfr.external_eval_adapters.v1",
+      "description": "Fail-closed external eval adapter readiness plan emitted by external-eval-plan.",
+      "filename": "external_eval_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/external_eval_plan.v1.schema.json",
+      "name": "external_eval_plan"
+    },
+    {
       "artifact": "eval_summary",
       "artifact_schema_version": "hfr.eval_summary.v1",
       "description": "Governance-facing held-out evaluation summary emitted by eval-summary.",

@@ -1,0 +1,85 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/heldout_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Held-out scenario manifest proving scenario-set readiness for eval and external-adapter handoffs.",
+  "properties": {
+    "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+    "cross_arm_claims_allowed": { "type": "boolean" },
+    "generated_at": { "minLength": 1, "type": "string" },
+    "governance_handoff": {
+      "additionalProperties": true,
+      "properties": {
+        "cross_arm_claims_allowed": { "type": "boolean" },
+        "external_adapter_manifest_allowed": { "type": "boolean" },
+        "recommendation": { "minLength": 1, "type": "string" }
+      },
+      "required": ["external_adapter_manifest_allowed", "cross_arm_claims_allowed", "recommendation"],
+      "type": "object"
+    },
+    "identical": { "type": "boolean" },
+    "mismatches": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "extra_in_source": { "items": { "type": "string" }, "type": "array" },
+          "label": { "minLength": 1, "type": "string" },
+          "missing_from_source": { "items": { "type": "string" }, "type": "array" }
+        },
+        "required": ["label", "missing_from_source", "extra_in_source"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "ready": { "type": "boolean" },
+    "scenario_count": { "minimum": 0, "type": "integer" },
+    "scenario_ids": { "items": { "type": "string" }, "type": "array" },
+    "schema_version": { "const": "hfr.heldout_scenario_manifest.v1" },
+    "source_count": { "minimum": 1, "type": "integer" },
+    "sources": {
+      "items": { "$ref": "#/$defs/source" },
+      "type": "array"
+    },
+    "status": {
+      "enum": ["single_source", "identical", "mismatched", "empty", "blocked"],
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "ready",
+    "status",
+    "identical",
+    "cross_arm_claims_allowed",
+    "source_count",
+    "scenario_count",
+    "scenario_ids",
+    "sources",
+    "mismatches",
+    "blocking_reasons",
+    "governance_handoff"
+  ],
+  "title": "Hermes Flight Recorder Held-Out Manifest",
+  "type": "object",
+  "$defs": {
+    "source": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "duplicate_scenario_ids": { "items": { "type": "string" }, "type": "array" },
+        "label": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "scenario_count": { "minimum": 0, "type": "integer" },
+        "scenario_fingerprints": {
+          "additionalProperties": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "type": "object"
+        },
+        "scenario_ids": { "items": { "type": "string" }, "type": "array" },
+        "schema_version": { "type": ["string", "null"] }
+      },
+      "required": ["label", "path", "scenario_count", "scenario_ids", "duplicate_scenario_ids", "blocking_reasons"],
+      "type": "object"
+    }
+  }
+}

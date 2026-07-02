@@ -455,12 +455,36 @@ test -f runs/compare_rl_export/IMPROVEMENT_CARD.md
   --out runs/compare_gate.json >/dev/null
 test -f runs/compare_gate.json
 test -f examples/compare_gate_policy.demo.json
+"$PYTHON" -m flightrecorder heldout-manifest \
+  --suite-summary baseline=runs/suite_summary.json \
+  --suite-summary candidate=runs/suite_summary.json \
+  --out runs/heldout_scenarios.json >/dev/null
+test -f runs/heldout_scenarios.json
+"$PYTHON" -m flightrecorder validate \
+  --heldout-manifest runs/heldout_scenarios.json \
+  --strict >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/heldout_scenarios.json >/dev/null
+external_eval_plan_status=0
+"$PYTHON" -m flightrecorder external-eval-plan \
+  --scenario-manifest runs/heldout_scenarios.json \
+  --model-endpoint http://127.0.0.1:8000/v1 \
+  --out runs/external_eval_plan.json >/dev/null || external_eval_plan_status=$?
+if [[ "$external_eval_plan_status" -gt 1 ]]; then
+  echo "external-eval-plan failed unexpectedly with exit code $external_eval_plan_status" >&2
+  exit "$external_eval_plan_status"
+fi
+test -f runs/external_eval_plan.json
+"$PYTHON" -m flightrecorder validate \
+  --external-eval-plan runs/external_eval_plan.json \
+  --strict >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/external_eval_plan.json >/dev/null
 eval_summary_status=0
 "$PYTHON" -m flightrecorder eval-summary \
   --suite-summary baseline=runs/suite_summary.json \
   --suite-summary candidate=runs/suite_summary.json \
   --compare-export candidate=runs/compare_rl_export \
   --compare-gate candidate=runs/compare_gate.json \
+  --external-adapter-plan external=runs/external_eval_plan.json \
   --out runs/eval_summary.json >/dev/null || eval_summary_status=$?
 if [[ "$eval_summary_status" -gt 1 ]]; then
   echo "eval-summary failed unexpectedly with exit code $eval_summary_status" >&2

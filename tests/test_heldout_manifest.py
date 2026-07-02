@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_file
 
 
 def run_cli(args):
@@ -22,9 +23,11 @@ class HeldoutManifestTests(unittest.TestCase):
 
             code = run_cli(["heldout-manifest", "--suite-summary", f"baseline={suite}", "--out", str(out)])
             validate_code = run_cli(["validate", "--heldout-manifest", str(out), "--strict"])
+            schema_result = check_schema_file(out)
 
             self.assertEqual(code, 0)
             self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             manifest = _read_json(out)
             self.assertTrue(manifest["ready"])
             self.assertEqual(manifest["status"], "single_source")
@@ -50,9 +53,11 @@ class HeldoutManifestTests(unittest.TestCase):
                 ]
             )
             validate_code = run_cli(["validate", "--heldout-manifest", str(out), "--strict"])
+            schema_result = check_schema_file(out)
 
             self.assertEqual(code, 0)
             self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             manifest = _read_json(out)
             self.assertTrue(manifest["ready"])
             self.assertEqual(manifest["status"], "identical")
@@ -124,9 +129,11 @@ class HeldoutManifestTests(unittest.TestCase):
                 ]
             )
             validate_code = run_cli(["validate", "--external-eval-plan", str(plan), "--strict"])
+            schema_result = check_schema_file(plan)
 
             self.assertEqual(code, 1)
             self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
             adapter = _read_json(plan)["adapters"][0]
             self.assertIn("scenario_manifest_not_ready", adapter["blocking_reasons"])
 

@@ -86,7 +86,9 @@ Validate summaries before handoff:
 flightrecorder validate --eval-summary runs/eval_summary.json --strict
 flightrecorder schemas --check runs/eval_summary.json
 flightrecorder validate --heldout-manifest runs/heldout_scenarios.json --strict
+flightrecorder schemas --check runs/heldout_scenarios.json
 flightrecorder validate --external-eval-plan runs/external_eval_plan.json --strict
+flightrecorder schemas --check runs/external_eval_plan.json
 ```
 
 ## Blocking Conditions

@@ -1,0 +1,96 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/external_eval_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Fail-closed readiness plan for optional external eval harness adapters.",
+  "properties": {
+    "adapter_count": { "minimum": 0, "type": "integer" },
+    "adapters": {
+      "items": { "$ref": "#/$defs/adapter" },
+      "type": "array"
+    },
+    "allow_installed": { "type": "boolean" },
+    "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+    "generated_at": { "minLength": 1, "type": "string" },
+    "governance_handoff": {
+      "additionalProperties": true,
+      "properties": {
+        "external_eval_claims_allowed": { "type": "boolean" },
+        "recommendation": { "minLength": 1, "type": "string" },
+        "requires_identical_heldout_scenarios": { "type": "boolean" }
+      },
+      "required": ["external_eval_claims_allowed", "requires_identical_heldout_scenarios", "recommendation"],
+      "type": "object"
+    },
+    "inputs": {
+      "additionalProperties": true,
+      "properties": {
+        "inspect_task_set": { "type": ["string", "null"] },
+        "lm_eval_task_list": { "items": { "type": "string" }, "type": "array" },
+        "model": { "type": ["string", "null"] },
+        "model_endpoint": { "type": ["string", "null"] },
+        "sandbox_policy": { "type": ["string", "null"] },
+        "scenario_manifest": { "$ref": "#/$defs/scenario_manifest_ref" },
+        "swe_bench_task_set": { "type": ["string", "null"] },
+        "tool_schema_set": { "type": ["string", "null"] }
+      },
+      "required": ["scenario_manifest", "model_endpoint", "model", "tool_schema_set", "inspect_task_set", "lm_eval_task_list", "swe_bench_task_set", "sandbox_policy"],
+      "type": "object"
+    },
+    "ready": { "type": "boolean" },
+    "ready_adapter_count": { "minimum": 0, "type": "integer" },
+    "schema_version": { "const": "hfr.external_eval_adapters.v1" },
+    "selected_adapters": {
+      "items": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "ready",
+    "adapter_count",
+    "ready_adapter_count",
+    "selected_adapters",
+    "allow_installed",
+    "inputs",
+    "adapters",
+    "blocking_reasons",
+    "governance_handoff"
+  ],
+  "title": "Hermes Flight Recorder External Eval Plan",
+  "type": "object",
+  "$defs": {
+    "adapter": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "dependency_status": { "type": "object" },
+        "domain": { "minLength": 1, "type": "string" },
+        "execution_contract": { "type": "object" },
+        "full_name": { "minLength": 1, "type": "string" },
+        "id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+        "name": { "minLength": 1, "type": "string" },
+        "provided_inputs": { "items": { "type": "string" }, "type": "array" },
+        "ready": { "type": "boolean" },
+        "required_inputs": { "items": { "type": "string" }, "type": "array" },
+        "suite_tags": { "items": { "type": "string" }, "type": "array" }
+      },
+      "required": ["id", "name", "full_name", "domain", "suite_tags", "required_inputs", "provided_inputs", "dependency_status", "execution_contract", "ready", "blocking_reasons"],
+      "type": "object"
+    },
+    "scenario_manifest_ref": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "path": { "type": ["string", "null"] },
+        "ready": { "type": ["boolean", "null"] },
+        "scenario_count": { "type": ["integer", "null"], "minimum": 0 },
+        "schema_version": { "type": ["string", "null"] },
+        "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" }
+      },
+      "required": ["path", "exists", "sha256", "schema_version", "ready", "scenario_count"],
+      "type": "object"
+    }
+  }
+}
