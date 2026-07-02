@@ -765,6 +765,7 @@ flightrecorder promotion-cards \
   --out runs/promotion_cards
 
 flightrecorder validate --promotion-cards runs/promotion_cards --strict
+flightrecorder schemas --check runs/promotion_cards/promotion_cards.json
 
 flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict
 flightrecorder schemas --check examples/promotion_policy.demo.json
@@ -775,6 +776,7 @@ flightrecorder promotion-rollback-receipt \
   --out runs/rollback.json
 
 flightrecorder validate --promotion-rollback-receipt runs/rollback.json --strict
+flightrecorder schemas --check runs/rollback.json
 
 flightrecorder promotion-decision \
   --candidate-id candidate-v2 \
@@ -795,6 +797,7 @@ flightrecorder promotion-decision \
   --out runs/promotion_decision.json
 
 flightrecorder validate --promotion-decision runs/promotion_decision.json --strict
+flightrecorder schemas --check runs/promotion_decision.json
 
 flightrecorder promotion-alias-apply \
   --registry registry/model_registry.json \
@@ -802,6 +805,7 @@ flightrecorder promotion-alias-apply \
   --out runs/promotion_alias_apply.json
 
 flightrecorder validate --promotion-alias-apply runs/promotion_alias_apply.json --strict
+flightrecorder schemas --check runs/promotion_alias_apply.json
 
 flightrecorder promotion-release-record \
   --release-id release-2026-07-02 \
@@ -815,6 +819,7 @@ flightrecorder promotion-release-record \
   --out runs/promotion_release_record.json
 
 flightrecorder validate --promotion-release-record runs/promotion_release_record.json --strict
+flightrecorder schemas --check runs/promotion_release_record.json
 ```
 
 `promotion-decision` is side-effect free. It emits an alias-update receipt only

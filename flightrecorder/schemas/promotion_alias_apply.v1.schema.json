@@ -1,0 +1,56 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_alias_apply.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Guarded alias-apply receipt proving registry aliases moved only after a passing promotion decision.",
+  "properties": {
+    "alias_history_entry": {"type": ["object", "null"]},
+    "artifacts": {"type": "object"},
+    "check_count": {"minimum": 0, "type": "integer"},
+    "checks": {"items": {"type": "object"}, "type": "array"},
+    "failed_check_count": {"minimum": 0, "type": "integer"},
+    "metadata": {"type": "object"},
+    "metrics": {"type": "object"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "passed": {"type": "boolean"},
+    "promotion_decision": {
+      "additionalProperties": true,
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "champion_previous_target": {"type": "string"},
+        "path": {"type": "string"},
+        "rollback_id": {"type": "string"},
+        "sha256": {"type": ["string", "null"]}
+      },
+      "required": ["path", "sha256", "candidate_id", "champion_previous_target", "rollback_id"],
+      "type": "object"
+    },
+    "promotion_decision_validation": {"type": "object"},
+    "readiness": {"enum": ["applied", "blocked"], "type": "string"},
+    "receipt_path": {"type": "string"},
+    "recommendation": {"enum": ["alias_update_applied", "hold_aliases"], "type": "string"},
+    "registry_after": {"type": "object"},
+    "registry_before": {"type": "object"},
+    "schema_version": {"const": "hfr.promotion_alias_apply.v1"}
+  },
+  "required": [
+    "schema_version",
+    "receipt_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "promotion_decision",
+    "promotion_decision_validation",
+    "registry_before",
+    "registry_after",
+    "alias_history_entry",
+    "artifacts",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Promotion Alias Apply Receipt",
+  "type": "object"
+}

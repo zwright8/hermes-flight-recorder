@@ -78,7 +78,13 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("model_serving_probe_receipt", names)
         self.assertIn("model_registry_entry", names)
         self.assertIn("model_registry", names)
+        self.assertIn("promotion_alias_apply", names)
+        self.assertIn("promotion_cards", names)
+        self.assertIn("promotion_decision", names)
+        self.assertIn("promotion_ledger", names)
+        self.assertIn("promotion_ledger_gate", names)
         self.assertIn("promotion_policy", names)
+        self.assertIn("promotion_release_record", names)
         self.assertIn("promotion_rollback_receipt", names)
         self.assertIn("training_plan", names)
         for record in records:

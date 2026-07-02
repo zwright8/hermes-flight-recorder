@@ -1,0 +1,80 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_decision.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free governance decision authorizing or blocking promotion alias movement.",
+  "properties": {
+    "alias_update": {
+      "additionalProperties": true,
+      "properties": {
+        "aliases": {"items": {"type": "object"}, "type": "array"},
+        "authorized": {"type": "boolean"}
+      },
+      "required": ["authorized", "aliases"],
+      "type": "object"
+    },
+    "artifacts": {"type": "object"},
+    "blocking_check_count": {"minimum": 0, "type": "integer"},
+    "check_count": {"minimum": 0, "type": "integer"},
+    "checks": {"items": {"type": "object"}, "type": "array"},
+    "decision": {
+      "additionalProperties": true,
+      "properties": {
+        "blocking_check_count": {"minimum": 0, "type": "integer"},
+        "blocking_checks": {"items": {"type": "object"}, "type": "array"},
+        "key_metrics": {"type": "object"},
+        "readiness": {"enum": ["ready", "blocked"], "type": "string"},
+        "recommendation": {"enum": ["apply_alias_update", "block_promotion"], "type": "string"},
+        "summary": {"type": "string"}
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "decision_path": {"type": "string"},
+    "failed_check_count": {"minimum": 0, "type": "integer"},
+    "metadata": {"type": "object"},
+    "metrics": {"type": "object"},
+    "models": {
+      "additionalProperties": true,
+      "properties": {
+        "candidate": {"type": "object"},
+        "champion": {"type": "object"},
+        "rollback": {"type": "object"}
+      },
+      "required": ["candidate", "champion", "rollback"],
+      "type": "object"
+    },
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "passed": {"type": "boolean"},
+    "policy": {"type": "object"},
+    "readiness": {"enum": ["ready", "blocked"], "type": "string"},
+    "recommendation": {"enum": ["apply_alias_update", "block_promotion"], "type": "string"},
+    "schema_version": {"const": "hfr.promotion_decision.v1"}
+  },
+  "required": [
+    "schema_version",
+    "decision_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "models",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "artifacts",
+    "policy",
+    "metrics",
+    "alias_update",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Promotion Decision",
+  "type": "object"
+}

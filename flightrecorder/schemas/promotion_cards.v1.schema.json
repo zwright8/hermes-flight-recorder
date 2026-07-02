@@ -1,0 +1,58 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_cards.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Promotion model-card and dataset-card manifest with input evidence fingerprints.",
+  "properties": {
+    "artifacts": {"type": "object"},
+    "candidate": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {"type": "string"},
+        "license_status": {"type": "string"},
+        "model_source": {"type": "string"}
+      },
+      "required": ["id", "model_source", "license_status"],
+      "type": "object"
+    },
+    "cards_dir": {"type": "string"},
+    "check_count": {"minimum": 0, "type": "integer"},
+    "checks": {"items": {"type": "object"}, "type": "array"},
+    "dataset": {
+      "additionalProperties": true,
+      "properties": {"id": {"type": "string"}},
+      "required": ["id"],
+      "type": "object"
+    },
+    "failed_check_count": {"minimum": 0, "type": "integer"},
+    "manifest_path": {"type": "string"},
+    "metadata": {"type": "object"},
+    "metrics": {"type": "object"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "passed": {"type": "boolean"},
+    "readiness": {"enum": ["ready", "blocked"], "type": "string"},
+    "recommendation": {
+      "enum": ["use_cards_for_promotion_decision", "regenerate_or_block_promotion"],
+      "type": "string"
+    },
+    "schema_version": {"const": "hfr.promotion_cards.v1"}
+  },
+  "required": [
+    "schema_version",
+    "manifest_path",
+    "cards_dir",
+    "passed",
+    "readiness",
+    "recommendation",
+    "candidate",
+    "dataset",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "artifacts",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Promotion Cards",
+  "type": "object"
+}

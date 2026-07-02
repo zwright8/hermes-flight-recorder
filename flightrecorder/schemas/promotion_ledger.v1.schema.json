@@ -1,0 +1,26 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_ledger.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Longitudinal ledger over promotion decision gates.",
+  "properties": {
+    "decision_count": {"minimum": 0, "type": "integer"},
+    "ledger_path": {"type": "string"},
+    "metrics": {"type": "object"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "passed": {"type": "boolean"},
+    "records": {"items": {"type": "object"}, "type": "array"},
+    "schema_version": {"const": "hfr.promotion_ledger.v1"}
+  },
+  "required": [
+    "schema_version",
+    "ledger_path",
+    "passed",
+    "decision_count",
+    "records",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Promotion Ledger",
+  "type": "object"
+}

@@ -1,0 +1,29 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_ledger_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Gate result over a promotion ledger and optional promotion-ledger gate policy.",
+  "properties": {
+    "check_count": {"minimum": 0, "type": "integer"},
+    "checks": {"items": {"type": "object"}, "type": "array"},
+    "decision": {"type": "object"},
+    "failed_check_count": {"minimum": 0, "type": "integer"},
+    "metrics": {"type": "object"},
+    "passed": {"type": "boolean"},
+    "policy": {"type": "object"},
+    "promotion_ledger": {"type": "string"},
+    "schema_version": {"const": "hfr.promotion_ledger_gate.v1"}
+  },
+  "required": [
+    "schema_version",
+    "promotion_ledger",
+    "passed",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics"
+  ],
+  "title": "Hermes Flight Recorder Promotion Ledger Gate",
+  "type": "object"
+}

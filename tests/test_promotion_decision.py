@@ -36,6 +36,7 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertNotIn("todo", cards_text)
             self.assertNotIn("unsupported claim", cards_text)
             self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(cards_dir / "promotion_cards.json")]), 0)
 
     def test_promotion_cards_block_unknown_license(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -83,6 +84,7 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(aliases["champion"]["target"], "candidate-v2")
             self.assertEqual(aliases["rollback"]["target"], "champion-v1")
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(decision_path)]), 0)
 
     def test_promotion_alias_apply_moves_aliases_after_valid_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -108,6 +110,7 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(receipt["alias_history_entry"]["promotion_decision_sha256"], receipt["promotion_decision"]["sha256"])
             self.assertEqual(receipt["alias_history_entry"]["updated_aliases"]["champion"], "candidate-v2")
             self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
 
     def test_promotion_alias_apply_blocks_stale_champion_alias_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -244,6 +247,7 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(record["release"]["dataset_id"], "dataset-v1")
             self.assertEqual(record["artifact_validation"]["passed"], True)
             self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(release_record_path)]), 0)
 
     def test_validate_promotion_release_record_rejects_stale_release_notes(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -458,12 +458,60 @@
       "name": "model_registry"
     },
     {
+      "artifact": "promotion_alias_apply",
+      "artifact_schema_version": "hfr.promotion_alias_apply.v1",
+      "description": "Guarded alias-apply receipt proving registry aliases moved only after a passing promotion decision.",
+      "filename": "promotion_alias_apply.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_alias_apply.v1.schema.json",
+      "name": "promotion_alias_apply"
+    },
+    {
+      "artifact": "promotion_cards",
+      "artifact_schema_version": "hfr.promotion_cards.v1",
+      "description": "Promotion model-card and dataset-card manifest with input evidence fingerprints.",
+      "filename": "promotion_cards.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_cards.v1.schema.json",
+      "name": "promotion_cards"
+    },
+    {
+      "artifact": "promotion_decision",
+      "artifact_schema_version": "hfr.promotion_decision.v1",
+      "description": "Side-effect-free governance decision authorizing or blocking promotion alias movement.",
+      "filename": "promotion_decision.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_decision.v1.schema.json",
+      "name": "promotion_decision"
+    },
+    {
+      "artifact": "promotion_ledger",
+      "artifact_schema_version": "hfr.promotion_ledger.v1",
+      "description": "Longitudinal ledger over promotion decision gates.",
+      "filename": "promotion_ledger.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_ledger.v1.schema.json",
+      "name": "promotion_ledger"
+    },
+    {
+      "artifact": "promotion_ledger_gate",
+      "artifact_schema_version": "hfr.promotion_ledger_gate.v1",
+      "description": "Gate result over a promotion ledger and optional promotion-ledger gate policy.",
+      "filename": "promotion_ledger_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_ledger_gate.v1.schema.json",
+      "name": "promotion_ledger_gate"
+    },
+    {
       "artifact": "promotion_policy",
       "artifact_schema_version": "hfr.promotion_policy.v1",
       "description": "Promotion governance policy declaring required evidence, model classes, safety limits, forbidden-rule blockers, and release artifact contracts.",
       "filename": "promotion_policy.v1.schema.json",
       "id": "https://schemas.hermes-flight-recorder.dev/promotion_policy.v1.schema.json",
       "name": "promotion_policy"
+    },
+    {
+      "artifact": "promotion_release_record",
+      "artifact_schema_version": "hfr.promotion_release_record.v1",
+      "description": "Reviewable release record binding promotion decision, cards, alias receipt, rollback, eval gate, and notes.",
+      "filename": "promotion_release_record.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_release_record.v1.schema.json",
+      "name": "promotion_release_record"
     },
     {
       "artifact": "promotion_rollback_receipt",

@@ -139,6 +139,7 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertEqual(len(ledger["records"][0]["sha256"]), 64)
             self.assertEqual(len(ledger["records"][0]["source"]["artifact_sha256"]), 64)
             self.assertEqual(run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger_path)]), 0)
 
             ledger["metrics"]["allowed_count"] = 99
             ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -222,6 +223,7 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertEqual(gate["policy"]["effective"]["require_latest_recommendation"], "allow_promotion")
             self.assertTrue(gate["policy"]["effective"]["require_latest_passed"])
             self.assertEqual(run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(gate_path)]), 0)
 
             gate["metrics"]["blocked_rate"] = 1.0
             gate_path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")

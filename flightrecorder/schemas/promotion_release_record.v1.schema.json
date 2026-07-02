@@ -1,0 +1,54 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_release_record.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Reviewable release record binding promotion decision, cards, alias receipt, rollback, eval gate, and notes.",
+  "properties": {
+    "artifact_validation": {"type": "object"},
+    "artifacts": {"type": "object"},
+    "bindings": {"type": "object"},
+    "check_count": {"minimum": 0, "type": "integer"},
+    "checks": {"items": {"type": "object"}, "type": "array"},
+    "failed_check_count": {"minimum": 0, "type": "integer"},
+    "metadata": {"type": "object"},
+    "metrics": {"type": "object"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "passed": {"type": "boolean"},
+    "policy": {"type": "object"},
+    "readiness": {"enum": ["ready", "blocked"], "type": "string"},
+    "recommendation": {"enum": ["publish_release", "hold_release"], "type": "string"},
+    "release": {
+      "additionalProperties": true,
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "champion_previous_target": {"type": "string"},
+        "dataset_id": {"type": "string"},
+        "id": {"type": "string"},
+        "rollback_id": {"type": "string"}
+      },
+      "required": ["id", "candidate_id", "champion_previous_target", "rollback_id", "dataset_id"],
+      "type": "object"
+    },
+    "release_record_path": {"type": "string"},
+    "schema_version": {"const": "hfr.promotion_release_record.v1"}
+  },
+  "required": [
+    "schema_version",
+    "release_record_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "release",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "artifacts",
+    "policy",
+    "artifact_validation",
+    "bindings",
+    "metrics",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Promotion Release Record",
+  "type": "object"
+}
