@@ -602,8 +602,16 @@ flightrecorder evidence-bundle \
   --trace-observability runs/trace_observability.json \
   --training-export runs/training_export \
   --gate runs/suite_gate.json \
+  --require-gate \
   --out runs/evidence_bundle.json
 ```
+
+Gate outputs include a shared machine-readable `decision` contract with
+`readiness`, `recommendation`, `failed_checks`, and `next_actions`.
+`evidence-bundle --gate` blocks weak handoffs whose gate artifact lacks that
+contract, even when top-level `passed` is true. Add `--require-gate` at Eval,
+training, or Governance boundaries so bundles cannot pass without at least one
+gate summary.
 
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI
 promotion-gate example.

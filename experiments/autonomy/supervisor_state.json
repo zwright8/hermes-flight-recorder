@@ -1,0 +1,262 @@
+{
+  "active_layer": "harness",
+  "blocked_packets": [
+    {
+      "blocked_at": "2026-07-02T14:32:48Z",
+      "id": "source_goal_docs_missing_in_dedicated_worktree",
+      "layer": "supervisor",
+      "priority": "medium",
+      "status": "blocked",
+      "summary": "The migrated dedicated worktree does not contain docs/agentic-finetune-*.md or a prior experiments/autonomy state directory; supervisor state was bootstrapped from the migration directive and current branch contents.",
+      "title": "Recover missing source goal docs in dedicated worktree"
+    }
+  ],
+  "completed_packets": [
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/gate_contract.py"
+        },
+        {
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/suite_gate.py"
+        },
+        {
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/bundle.py"
+        },
+        {
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "evidence",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "evidence",
+          "path": "tests/test_evidence_bundle.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "evidence",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "evidence",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "completed_at": "2026-07-02T14:35:33Z",
+      "id": "evidence_required_gate_decision_contracts",
+      "layer": "evidence",
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added a shared gate decision contract, made suite gates emit it, made evidence bundles summarize and validate gate contracts, and added --require-gate so handoffs can block when no gate summary is present.",
+      "title": "Require gate decision contracts in evidence handoffs",
+      "verification": [
+        {
+          "command": "python3 -m unittest tests.test_evidence_bundle tests.test_cli_report.CliReportTests.test_gate_suite_accepts_thresholds tests.test_cli_report.CliReportTests.test_gate_suite_fails_thresholds_and_forbidden_rules tests.test_cli_report.CliReportTests.test_run_suite_generates_complete_evidence_bundle",
+          "completed_at": "2026-07-02T14:32:48Z",
+          "status": "pass",
+          "summary": "13 focused Evidence/Gate tests passed."
+        },
+        {
+          "command": "python3 -m py_compile flightrecorder/gate_contract.py flightrecorder/suite_gate.py flightrecorder/bundle.py flightrecorder/cli.py flightrecorder/validation.py tests/test_evidence_bundle.py",
+          "completed_at": "2026-07-02T14:32:48Z",
+          "status": "pass",
+          "summary": "Touched Python modules compile successfully."
+        },
+        {
+          "command": "python3 -m unittest tests.test_validation",
+          "completed_at": "2026-07-02T14:32:48Z",
+          "status": "pass",
+          "summary": "28 validation tests passed."
+        },
+        {
+          "command": "python3 -m unittest tests.test_cli_report",
+          "completed_at": "2026-07-02T14:32:48Z",
+          "status": "pass",
+          "summary": "46 CLI report/gate tests passed."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "completed_at": "2026-07-02T14:35:33Z",
+          "status": "blocked",
+          "summary": "System Python 3.9.6 lacks tomllib, so tests.test_deployment_hardening cannot import under that interpreter."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T14:35:33Z",
+          "status": "pass",
+          "summary": "302 tests passed under Python 3.11.14."
+        }
+      ]
+    }
+  ],
+  "current_packet": {
+    "depends_on": [
+      "evidence_required_gate_decision_contracts"
+    ],
+    "id": "harness_manifest_runner_contracts",
+    "layer": "harness",
+    "priority": "high",
+    "status": "ready",
+    "summary": "Add a manifest-backed local harness runner or bridge using only branch-native code and tests.",
+    "title": "Bootstrap harness run manifest contracts"
+  },
+  "git": {
+    "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
+    "branch": "codex/hermes-goal-0-supervisor-20260702-1027",
+    "commit_sha": "pending",
+    "pr_url": "pending",
+    "remote": "origin"
+  },
+  "guardrails": {
+    "disallow_expensive_training": true,
+    "disallow_model_promotion_without_governance": true,
+    "require_journal_checkpoint": true,
+    "require_redaction_before_training": true,
+    "require_verification_before_completion": true
+  },
+  "latest_artifacts": [
+    {
+      "kind": "module",
+      "layer": "evidence",
+      "path": "flightrecorder/gate_contract.py"
+    },
+    {
+      "kind": "test",
+      "layer": "evidence",
+      "path": "tests/test_evidence_bundle.py"
+    },
+    {
+      "kind": "state",
+      "layer": "supervisor",
+      "path": "experiments/autonomy/supervisor_state.json"
+    },
+    {
+      "kind": "journal",
+      "layer": "supervisor",
+      "path": "experiments/autonomy/journal/2026-07-02.md"
+    }
+  ],
+  "latest_verification": [
+    {
+      "command": "python3 -m unittest tests.test_evidence_bundle tests.test_cli_report.CliReportTests.test_gate_suite_accepts_thresholds tests.test_cli_report.CliReportTests.test_gate_suite_fails_thresholds_and_forbidden_rules tests.test_cli_report.CliReportTests.test_run_suite_generates_complete_evidence_bundle",
+      "completed_at": "2026-07-02T14:32:48Z",
+      "status": "pass",
+      "summary": "13 focused Evidence/Gate tests passed."
+    },
+    {
+      "command": "python3 -m unittest tests.test_validation",
+      "completed_at": "2026-07-02T14:32:48Z",
+      "status": "pass",
+      "summary": "28 validation tests passed."
+    },
+    {
+      "command": "python3 -m unittest tests.test_cli_report",
+      "completed_at": "2026-07-02T14:32:48Z",
+      "status": "pass",
+      "summary": "46 CLI report/gate tests passed."
+    },
+    {
+      "command": "python3 -m unittest discover",
+      "completed_at": "2026-07-02T14:35:33Z",
+      "status": "blocked",
+      "summary": "System Python 3.9.6 lacks tomllib, so tests.test_deployment_hardening cannot import under that interpreter."
+    },
+    {
+      "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+      "completed_at": "2026-07-02T14:35:33Z",
+      "status": "pass",
+      "summary": "302 tests passed under Python 3.11.14."
+    }
+  ],
+  "layer_status": {
+    "data": {
+      "next_packet": null,
+      "status": "not_started",
+      "summary": "Not yet updated in this dedicated worktree."
+    },
+    "eval": {
+      "next_packet": null,
+      "status": "not_started",
+      "summary": "Not yet updated in this dedicated worktree."
+    },
+    "evidence": {
+      "next_packet": null,
+      "status": "in_progress",
+      "summary": "Evidence bundles now require gate decision contracts when gates are included and can require at least one gate summary."
+    },
+    "governance": {
+      "next_packet": null,
+      "status": "not_started",
+      "summary": "No promotion or alias movement attempted."
+    },
+    "harness": {
+      "next_packet": "harness_manifest_runner_contracts",
+      "status": "not_started",
+      "summary": "Harness manifest contracts are the next dependency-ordered packet for this branch."
+    },
+    "model": {
+      "next_packet": null,
+      "status": "not_started",
+      "summary": "Not yet updated in this dedicated worktree."
+    },
+    "serving_demo": {
+      "next_packet": null,
+      "status": "not_started",
+      "summary": "No serving processes launched."
+    },
+    "training": {
+      "next_packet": null,
+      "status": "not_started",
+      "summary": "No training or model download launched."
+    }
+  },
+  "next_packets": [
+    {
+      "depends_on": [
+        "evidence_required_gate_decision_contracts"
+      ],
+      "id": "harness_manifest_runner_contracts",
+      "layer": "harness",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Add a manifest-backed local harness runner or bridge using only branch-native code and tests.",
+      "title": "Bootstrap harness run manifest contracts"
+    },
+    {
+      "depends_on": [
+        "harness_manifest_runner_contracts"
+      ],
+      "id": "data_registry_contracts",
+      "layer": "data",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Add dataset registry and redaction provenance contracts after harness evidence is available.",
+      "title": "Register dataset versions"
+    }
+  ],
+  "promotion_readiness": {
+    "data": "not_started",
+    "eval": "not_started",
+    "evidence": "in_progress",
+    "governance": "not_started",
+    "harness": "not_started",
+    "model": "not_started",
+    "serving_demo": "not_started",
+    "training": "not_started"
+  },
+  "schema_version": "hfr.autonomy.supervisor_state.v1",
+  "updated_at": "2026-07-02T14:35:33Z"
+}

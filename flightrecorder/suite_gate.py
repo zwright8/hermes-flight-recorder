@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import build_gate_decision
+
 SUITE_GATE_SCHEMA_VERSION = "hfr.suite_gate.v1"
 SUITE_GATE_POLICY_SCHEMA_VERSION = "hfr.suite_gate.policy.v1"
 
@@ -113,6 +115,13 @@ def evaluate_suite_gate(
         _evaluate_task_family_gate(checks, gate, family_rows)
 
     passed = all(check["passed"] for check in checks)
+    gate_metrics = {
+        "pass_rate": metrics.get("pass_rate"),
+        "average_score": metrics.get("average_score"),
+        "failed": metrics.get("failed", suite_summary.get("failed")),
+        "error_count": suite_summary.get("error_count"),
+        "critical_failure_total": _total_count(metrics.get("critical_failure_counts")),
+    }
     return {
         "schema_version": SUITE_GATE_SCHEMA_VERSION,
         "suite_summary": str(suite_summary_path),
@@ -120,13 +129,8 @@ def evaluate_suite_gate(
         "check_count": len(checks),
         "failed_check_count": sum(1 for check in checks if not check["passed"]),
         "checks": checks,
-        "metrics": {
-            "pass_rate": metrics.get("pass_rate"),
-            "average_score": metrics.get("average_score"),
-            "failed": metrics.get("failed", suite_summary.get("failed")),
-            "error_count": suite_summary.get("error_count"),
-            "critical_failure_total": _total_count(metrics.get("critical_failure_counts")),
-        },
+        "metrics": gate_metrics,
+        "decision": build_gate_decision(passed=passed, checks=checks, metrics=gate_metrics),
     }
 
 

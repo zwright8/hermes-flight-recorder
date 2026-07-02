@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .gate_contract import summarize_gate_contract
+
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "hfr.evidence_bundle.v1"
 _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.training_gate.v1",
@@ -76,6 +78,7 @@ def build_evidence_bundle(
     trainer_consumer_plan_path: str | Path | None = None,
     trainer_wrapper_dry_run_path: str | Path | None = None,
     gate_paths: list[str | Path] | None = None,
+    require_gate: bool = False,
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Build a compact handoff manifest over existing evidence artifacts."""
@@ -308,16 +311,28 @@ def build_evidence_bundle(
         schema_version = str(gate.get("schema_version") or "")
         passed = bool(gate.get("passed")) if isinstance(gate, dict) else False
         validation = _gate_validation_metrics(gate)
+        contract = summarize_gate_contract(gate)
         gate_row: dict[str, Any] = {
             "id": gate_id,
             "path": artifacts[gate_name]["path"],
             "schema_version": schema_version,
             "passed": passed,
+            "contract": contract,
         }
         if validation["available"] or _gate_requires_validation(gate):
             gate_row["validation"] = validation
         gate_rows.append(gate_row)
         _add_presence_check(checks, "gate_passed", passed, {"gate": gate_id})
+        _add_presence_check(
+            checks,
+            "gate_contract_valid",
+            bool(contract["valid"]),
+            {
+                "gate": gate_id,
+                "contract_available": str(contract["available"]).lower(),
+                "contract_errors": "; ".join(contract["errors"][:3]),
+            },
+        )
         if _gate_requires_validation(gate):
             _add_presence_check(
                 checks,
@@ -331,6 +346,8 @@ def build_evidence_bundle(
             )
     if gate_rows:
         metrics["gates"] = gate_rows
+    if require_gate:
+        _add_presence_check(checks, "gate_summary_present", bool(gate_rows), {"artifact": "gates"})
 
     if not artifacts:
         raise EvidenceBundleError("At least one evidence artifact or directory must be provided.")

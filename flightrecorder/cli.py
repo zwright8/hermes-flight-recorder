@@ -952,6 +952,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         trainer_consumer_plan_path=args.trainer_consumer_plan,
         trainer_wrapper_dry_run_path=args.trainer_wrapper_dry_run,
         gate_paths=args.gate,
+        require_gate=args.require_gate,
         preserve_paths=args.preserve_paths,
     )
     _write_json(Path(args.out), bundle)
@@ -1999,6 +2000,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--trainer-consumer-plan", help="trainer_consumer_plan.json included in the handoff")
     evidence_bundle.add_argument("--trainer-wrapper-dry-run", help="trainer_wrapper_dry_run.json included in the handoff")
     evidence_bundle.add_argument("--gate", action="append", default=[], help="Gate result JSON to require; may be repeated")
+    evidence_bundle.add_argument("--require-gate", action="store_true", help="Block unless at least one gate summary is included")
     evidence_bundle.add_argument("--preserve-paths", action="store_true", help="Allow absolute paths in the bundle summary")
     evidence_bundle.set_defaults(func=cmd_evidence_bundle)
 

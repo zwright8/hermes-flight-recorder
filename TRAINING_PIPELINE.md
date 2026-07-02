@@ -102,6 +102,7 @@ flightrecorder evidence-bundle \
   --live-smoke-summary runs/live_smoke_summary.json \
   --gate runs/suite_gate.json \
   --gate runs/training_gate.json \
+  --require-gate \
   --out runs/evidence_bundle.json
 ```
 
@@ -110,6 +111,10 @@ metrics, and a `decision` block with `promote_handoff` or `block_handoff`. It is
 useful for provenance and job routing, but it should not be read as permission
 to train unless the included scenario, evidence-coverage, validation, review,
 and gate policies are also appropriate for the target job.
+Use `--require-gate` at trainer, Eval, or Governance boundaries so a bundle
+cannot pass without at least one gate summary. Included gates must carry the
+shared `decision` contract; weak legacy gates without `readiness`,
+`recommendation`, `failed_checks`, and `next_actions` block the handoff.
 When trainer handoff artifacts are available, include them in a second
 trainer-facing bundle so the final preflight, launch-check, archive,
 archive-check, consumer-plan, and wrapper dry-run chain is visible in one

@@ -9083,8 +9083,39 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].schema_version must be a string when present.")
             if not isinstance(gate.get("passed"), bool):
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
+            if "contract" not in gate:
+                target.errors.append(f"evidence_bundle.metrics.gates[{index}].contract is required.")
+            else:
+                _validate_bundle_gate_contract(gate.get("contract"), gate, target, f"evidence_bundle.metrics.gates[{index}].contract")
             if "validation" in gate:
                 _validate_bundle_gate_validation(gate.get("validation"), target, f"evidence_bundle.metrics.gates[{index}].validation")
+
+
+def _validate_bundle_gate_contract(value: Any, gate: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("available", "valid"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    for field_name in ("failed_check_count", "blocking_check_count", "next_action_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
+    for field_name in ("readiness", "recommendation"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    errors = value.get("errors")
+    if not isinstance(errors, list) or not all(isinstance(item, str) for item in errors):
+        target.errors.append(f"{label}.errors must be a list of strings.")
+        errors = []
+    if value.get("valid") is True and errors:
+        target.errors.append(f"{label}.errors must be empty when contract is valid.")
+    if value.get("valid") is False and not errors:
+        target.errors.append(f"{label}.errors must explain an invalid contract.")
+    if isinstance(gate.get("passed"), bool):
+        expected_readiness = "ready" if gate["passed"] else "blocked"
+        if value.get("readiness") and value.get("readiness") != expected_readiness:
+            target.errors.append(f"{label}.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
 
 
 def _validate_bundle_gate_validation(value: Any, target: ValidationTarget, label: str) -> None:
