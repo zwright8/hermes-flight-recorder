@@ -5361,6 +5361,10 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
     if not isinstance(adapters, list):
         target.errors.append("eval_summary.external_adapter_plans must be a list.")
         adapters = []
+    repair_curriculum = summary.get("repair_curriculum")
+    if not isinstance(repair_curriculum, dict):
+        target.errors.append("eval_summary.repair_curriculum must be an object.")
+        repair_curriculum = {}
     risks = summary.get("risks")
     if not isinstance(risks, list):
         target.errors.append("eval_summary.risks must be a list.")
@@ -5390,6 +5394,7 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
         _validate_eval_summary_gate(gate, index, target)
     for index, adapter in enumerate(adapters):
         _validate_eval_summary_external_adapter(adapter, index, target)
+    _validate_eval_summary_repair_curriculum(repair_curriculum, target)
     for index, risk in enumerate(risks):
         if not isinstance(risk, dict):
             target.errors.append(f"eval_summary.risks[{index}] must be an object.")
@@ -5419,6 +5424,7 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
             "comparison_count": len(comparisons),
             "risk_count": len(risks),
             "heldout_status": heldout.get("status"),
+            "repair_curriculum_work_item_count": repair_curriculum.get("work_item_count"),
         }
     )
 
@@ -5591,6 +5597,71 @@ def _validate_eval_summary_external_adapter(adapter: Any, index: int, target: Va
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must be a list of strings.")
     if adapter.get("ready") is False and not adapter.get("blocking_reasons"):
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].blocking_reasons must explain why the plan is not ready.")
+
+
+def _validate_eval_summary_repair_curriculum(value: dict[str, Any], target: ValidationTarget) -> None:
+    items = value.get("items")
+    if not isinstance(items, list):
+        target.errors.append("eval_summary.repair_curriculum.items must be a list.")
+        items = []
+    if value.get("work_item_count") != len(items):
+        target.errors.append(f"eval_summary.repair_curriculum.work_item_count expected {len(items)}, got {value.get('work_item_count')!r}.")
+    critical_count = sum(1 for item in items if isinstance(item, dict) and item.get("priority") == "critical")
+    if value.get("critical_work_item_count") != critical_count:
+        target.errors.append(
+            "eval_summary.repair_curriculum.critical_work_item_count "
+            f"expected {critical_count}, got {value.get('critical_work_item_count')!r}."
+        )
+    priority_counts = _validate_count_rows(value.get("priority_counts"), target, "eval_summary.repair_curriculum.priority_counts")
+    expected_priority_counts = _count_eval_summary_work_item_field(items, "priority")
+    if priority_counts != expected_priority_counts:
+        target.errors.append("eval_summary.repair_curriculum.priority_counts do not match work items.")
+    category_counts = _validate_count_rows(value.get("category_counts"), target, "eval_summary.repair_curriculum.category_counts")
+    expected_category_counts = _count_eval_summary_work_item_field(items, "category")
+    if category_counts != expected_category_counts:
+        target.errors.append("eval_summary.repair_curriculum.category_counts do not match work items.")
+    seen_ids: set[str] = set()
+    for index, item in enumerate(items):
+        _validate_eval_summary_work_item(item, index, target, seen_ids)
+    notes = value.get("notes")
+    if notes is not None and not _is_string_list(notes):
+        target.errors.append("eval_summary.repair_curriculum.notes must be a list of strings when present.")
+
+
+def _validate_eval_summary_work_item(item: Any, index: int, target: ValidationTarget, seen_ids: set[str]) -> None:
+    label = f"eval_summary.repair_curriculum.items[{index}]"
+    if not isinstance(item, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("work_item_id", "category", "priority", "source", "label", "reason", "summary", "suggested_action"):
+        if not isinstance(item.get(field_name), str) or not item.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    item_id = item.get("work_item_id")
+    if isinstance(item_id, str):
+        if item_id in seen_ids:
+            target.errors.append(f"{label}.work_item_id duplicates {item_id!r}.")
+        seen_ids.add(item_id)
+    if item.get("priority") not in {"critical", "high", "medium", "low"}:
+        target.errors.append(f"{label}.priority must be critical, high, medium, or low.")
+    if item.get("category") not in {"repair", "curriculum", "eval_gate", "eval_harness"}:
+        target.errors.append(f"{label}.category must be repair, curriculum, eval_gate, or eval_harness.")
+    for field_name in ("scenario_id", "rule_id"):
+        if field_name in item and (not isinstance(item.get(field_name), str) or not item.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string when present.")
+    if "count" in item and not _is_non_negative_int(item.get("count")):
+        target.errors.append(f"{label}.count must be a non-negative integer when present.")
+
+
+def _count_eval_summary_work_item_field(items: list[Any], field_name: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        value = item.get(field_name)
+        if not isinstance(value, str) or not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    return counts
 
 
 def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget) -> None:

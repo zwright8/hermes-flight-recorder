@@ -30,6 +30,8 @@ The summary reports:
 - per-arm operational metrics for cost, latency, token usage, and
   task-completion status when suite summaries provide them,
 - compare-gate failures,
+- repair/curriculum work items for candidate regressions, failed rules,
+  critical failures, gate failures, and adapter blockers,
 - external adapter readiness blockers when adapter plans are included.
 
 ## Held-Out Manifests
@@ -110,3 +112,22 @@ best-effort summaries of values already present in suite summary run rows or
 suite-level metrics. Missing values remain explicit through `source: "missing"`
 and `missing_run_count`; they do not become evidence of low cost, low latency,
 or task completion.
+
+## Repair And Curriculum Handoff
+
+`eval-summary` always emits a `repair_curriculum` section. These work items are
+deterministic routing hints derived from suite summaries, comparison manifests,
+compare gates, and external adapter plans.
+
+The section includes:
+
+- `repair` items for baseline wins, task-completion regressions, suite critical
+  failures, and new critical failures,
+- `curriculum` items for repeated failed-rule and regressed-rule patterns,
+- `eval_gate` items for failed comparison-gate checks,
+- `eval_harness` items for held-out mismatch, contract, and external adapter
+  readiness blockers.
+
+These items are not promotion evidence and do not unsuppress raw candidate
+movement. They exist so repair, scenario, curriculum, or adapter-readiness work
+can be queued without manually interpreting raw eval artifacts.

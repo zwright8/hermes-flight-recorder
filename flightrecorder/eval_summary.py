@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -48,6 +49,7 @@ def build_eval_summary(
     comparisons = [_compare_export(spec, heldout, preserve_paths) for spec in compare_specs]
     gates = [_compare_gate(spec, preserve_paths) for spec in gate_specs]
     external_adapters = [_external_adapter_plan(spec, preserve_paths) for spec in adapter_specs]
+    repair_curriculum = _repair_curriculum(arms, comparisons, gates, external_adapters)
     risks = _risks(arms, heldout, comparisons, gates, external_adapters)
     passed = not risks
     return {
@@ -64,6 +66,7 @@ def build_eval_summary(
         "comparisons": comparisons,
         "compare_gates": gates,
         "external_adapter_plans": external_adapters,
+        "repair_curriculum": repair_curriculum,
         "risks": risks,
         "conclusion": _conclusion(passed, risks, heldout, comparisons),
     }
@@ -267,6 +270,268 @@ def _external_adapter_plan(spec: LabeledPath, preserve_paths: bool) -> dict[str,
         "ready_adapter_count": _int_value(plan.get("ready_adapter_count")),
         "blocking_reasons": [] if ready else _string_list(plan.get("blocking_reasons")) or ["external_adapter_plan_not_ready"],
     }
+
+
+def _repair_curriculum(
+    arms: list[dict[str, Any]],
+    comparisons: list[dict[str, Any]],
+    gates: list[dict[str, Any]],
+    external_adapters: list[dict[str, Any]],
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    for arm in arms:
+        items.extend(_arm_work_items(arm))
+    for comparison in comparisons:
+        items.extend(_comparison_work_items(comparison))
+    for gate in gates:
+        items.extend(_gate_work_items(gate))
+    for adapter in external_adapters:
+        items.extend(_external_adapter_work_items(adapter))
+    finalized = _finalize_work_items(items)
+    return {
+        "work_item_count": len(finalized),
+        "critical_work_item_count": sum(1 for item in finalized if item["priority"] == "critical"),
+        "priority_counts": _value_count_rows(item["priority"] for item in finalized),
+        "category_counts": _value_count_rows(item["category"] for item in finalized),
+        "items": finalized,
+        "notes": [
+            "Repair/curriculum items are derived from eval artifacts; they do not approve promotion.",
+            "Use these items to route scenario repair, candidate repair, curriculum generation, or eval-harness follow-up.",
+        ],
+    }
+
+
+def _arm_work_items(arm: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for row in arm.get("critical_failure_counts", []):
+        if not isinstance(row, dict):
+            continue
+        rule_id = str(row.get("id") or "")
+        count = _int_value(row.get("count"))
+        if rule_id and count > 0:
+            items.append(
+                _work_item(
+                    category="repair",
+                    priority="critical",
+                    source="suite_summary",
+                    label=str(arm.get("label") or "arm"),
+                    reason="critical_failure",
+                    rule_id=rule_id,
+                    count=count,
+                    summary=f"Suite arm {arm.get('label') or 'arm'} has {count} critical failure(s) for rule {rule_id}.",
+                    suggested_action="Inspect failed runs for this arm and repair the model behavior or scenario contract before promotion.",
+                )
+            )
+    critical_rules = {str(row.get("id") or "") for row in arm.get("critical_failure_counts", []) if isinstance(row, dict)}
+    for row in arm.get("failed_rule_counts", []):
+        if not isinstance(row, dict):
+            continue
+        rule_id = str(row.get("id") or "")
+        count = _int_value(row.get("count"))
+        if rule_id and count > 0 and rule_id not in critical_rules:
+            items.append(
+                _work_item(
+                    category="curriculum",
+                    priority="high",
+                    source="suite_summary",
+                    label=str(arm.get("label") or "arm"),
+                    reason="failed_rule",
+                    rule_id=rule_id,
+                    count=count,
+                    summary=f"Suite arm {arm.get('label') or 'arm'} has {count} failed rule occurrence(s) for {rule_id}.",
+                    suggested_action="Prioritize curriculum or scenario repair for this repeated failed-rule pattern.",
+                )
+            )
+    return items
+
+
+def _comparison_work_items(comparison: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = comparison.get("raw_movement") if isinstance(comparison.get("raw_movement"), dict) else {}
+    label = str(comparison.get("label") or "comparison")
+    items: list[dict[str, Any]] = []
+    for scenario_id in _string_list(raw.get("baseline_win_scenarios")):
+        items.append(
+            _work_item(
+                category="repair",
+                priority="high",
+                source="compare_export",
+                label=label,
+                reason="baseline_win",
+                scenario_id=scenario_id,
+                summary=f"Candidate lost to baseline on held-out scenario {scenario_id}.",
+                suggested_action="Replay baseline and candidate traces, then repair the candidate behavior before using this movement for promotion.",
+            )
+        )
+    for scenario_id in _string_list(raw.get("task_completion_regression_scenarios")):
+        items.append(
+            _work_item(
+                category="repair",
+                priority="critical",
+                source="compare_export",
+                label=label,
+                reason="task_completion_regression",
+                scenario_id=scenario_id,
+                summary=f"Candidate regressed task completion on held-out scenario {scenario_id}.",
+                suggested_action="Treat this as a blocking candidate repair until task completion recovers on the identical held-out scenario.",
+            )
+        )
+    for rule_id, count in _count_mapping(raw.get("regressed_rule_counts")).items():
+        if count > 0:
+            items.append(
+                _work_item(
+                    category="curriculum",
+                    priority="high",
+                    source="compare_export",
+                    label=label,
+                    reason="regressed_rule",
+                    rule_id=rule_id,
+                    count=count,
+                    summary=f"Rule {rule_id} regressed in {count} comparison pair(s).",
+                    suggested_action="Generate repair examples or curriculum focused on this regressed rule before rerunning held-out evals.",
+                )
+            )
+    for rule_id, count in _count_mapping(raw.get("new_critical_failure_counts")).items():
+        if count > 0:
+            items.append(
+                _work_item(
+                    category="repair",
+                    priority="critical",
+                    source="compare_export",
+                    label=label,
+                    reason="new_critical_failure",
+                    rule_id=rule_id,
+                    count=count,
+                    summary=f"Rule {rule_id} introduced {count} new critical failure(s).",
+                    suggested_action="Block promotion and repair the critical failure before rerunning the identical held-out eval set.",
+                )
+            )
+    for reason in _string_list(comparison.get("blocking_reasons")):
+        if reason in {"baseline_wins_present", "task_completion_regressions_present", "new_critical_failures_present"}:
+            continue
+        items.append(
+            _work_item(
+                category="eval_harness",
+                priority=_blocking_reason_priority(reason),
+                source="compare_export",
+                label=label,
+                reason=reason,
+                summary=f"Comparison {label} is blocked by {reason}.",
+                suggested_action="Resolve the comparison blocker before treating raw eval movement as a governance claim.",
+            )
+        )
+    return items
+
+
+def _gate_work_items(gate: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    label = str(gate.get("label") or "gate")
+    for check in gate.get("failed_checks", []):
+        if not isinstance(check, dict):
+            continue
+        check_id = str(check.get("id") or "unknown_check")
+        items.append(
+            _work_item(
+                category="eval_gate",
+                priority="high",
+                source="compare_gate",
+                label=label,
+                reason=check_id,
+                summary=str(check.get("summary") or f"Compare gate check {check_id} failed."),
+                suggested_action="Resolve the failed compare gate check, then regenerate the eval summary for Governance.",
+            )
+        )
+    return items
+
+
+def _external_adapter_work_items(adapter: dict[str, Any]) -> list[dict[str, Any]]:
+    label = str(adapter.get("label") or "external_adapter_plan")
+    return [
+        _work_item(
+            category="eval_harness",
+            priority="medium",
+            source="external_adapter_plan",
+            label=label,
+            reason=reason,
+            summary=f"External adapter plan {label} is blocked by {reason}.",
+            suggested_action="Provide the missing adapter input or dependency before making external eval claims.",
+        )
+        for reason in _string_list(adapter.get("blocking_reasons"))
+    ]
+
+
+def _work_item(
+    *,
+    category: str,
+    priority: str,
+    source: str,
+    label: str,
+    reason: str,
+    summary: str,
+    suggested_action: str,
+    scenario_id: str | None = None,
+    rule_id: str | None = None,
+    count: int | None = None,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "category": category,
+        "priority": priority,
+        "source": source,
+        "label": label,
+        "reason": reason,
+        "summary": summary,
+        "suggested_action": suggested_action,
+    }
+    if scenario_id:
+        item["scenario_id"] = scenario_id
+    if rule_id:
+        item["rule_id"] = rule_id
+    if count is not None:
+        item["count"] = count
+    item["work_item_id"] = _work_item_id(item)
+    return item
+
+
+def _work_item_id(item: dict[str, Any]) -> str:
+    payload = json.dumps(item, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return "eval-" + hashlib.sha256(payload).hexdigest()[:16]
+
+
+def _finalize_work_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for item in items:
+        deduped.setdefault(str(item.get("work_item_id") or ""), item)
+    return sorted(
+        deduped.values(),
+        key=lambda item: (
+            {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(str(item.get("priority") or ""), 99),
+            str(item.get("category") or ""),
+            str(item.get("source") or ""),
+            str(item.get("label") or ""),
+            str(item.get("reason") or ""),
+            str(item.get("scenario_id") or ""),
+            str(item.get("rule_id") or ""),
+        ),
+    )
+
+
+def _value_count_rows(values: Any) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for value in values:
+        if not isinstance(value, str) or not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    return [{"id": key, "count": counts[key]} for key in sorted(counts)]
+
+
+def _blocking_reason_priority(reason: str) -> str:
+    if reason in {
+        "heldout_scenario_set_mismatch",
+        "compare_manifest_scenario_set_mismatch",
+        "empty_heldout_scenario_set",
+        "missing_suite_summaries",
+    }:
+        return "critical"
+    return "high"
 
 
 def _governance_claims(raw_movement: dict[str, Any], claims_allowed: bool, blockers: list[str]) -> dict[str, Any]:

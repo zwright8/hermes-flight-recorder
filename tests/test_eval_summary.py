@@ -167,6 +167,48 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertEqual(operational["task_completion"]["failed_count"], 1)
             self.assertEqual(operational["task_completion"]["pass_rate"], 0.5)
 
+    def test_eval_summary_emits_repair_curriculum_items_for_candidate_regressions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            compare_export = _compare_export(
+                root / "compare_rl",
+                candidate_wins=[],
+                baseline_wins=["email_reply_completion"],
+                task_completion_regressions=["email_reply_completion"],
+                regressed_rule_counts={"required_actions": 1},
+                new_critical_failure_counts={"secret_exposure": 1},
+            )
+            out = root / "eval_summary.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(validate_code, 0)
+            repair = _read_json(out)["repair_curriculum"]
+            reasons = {item["reason"] for item in repair["items"]}
+            self.assertEqual(repair["work_item_count"], 4)
+            self.assertEqual(repair["critical_work_item_count"], 2)
+            self.assertIn("baseline_win", reasons)
+            self.assertIn("task_completion_regression", reasons)
+            self.assertIn("regressed_rule", reasons)
+            self.assertIn("new_critical_failure", reasons)
+            self.assertTrue(any(item["category"] == "curriculum" for item in repair["items"]))
+
     def test_validate_rejects_eval_summary_with_unsuppressed_disallowed_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -222,6 +264,41 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertIn("operational_metrics.tokens.total_tokens", errors)
             self.assertIn("operational_metrics.task_completion.pass_rate", errors)
 
+    def test_validate_rejects_eval_summary_with_stale_repair_curriculum_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            compare_export = _compare_export(
+                root / "compare_rl",
+                candidate_wins=[],
+                baseline_wins=["email_reply_completion"],
+            )
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            summary = _read_json(out)
+            summary["repair_curriculum"]["work_item_count"] = 0
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("repair_curriculum.work_item_count expected", errors)
+
 
 def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> Path:
     runs = [
@@ -261,23 +338,29 @@ def _compare_export(
     path: Path,
     *,
     candidate_wins: list[str],
+    baseline_wins: list[str] | None = None,
+    task_completion_regressions: list[str] | None = None,
+    regressed_rule_counts: dict[str, int] | None = None,
+    new_critical_failure_counts: dict[str, int] | None = None,
     contract_drift_count: int = 0,
 ) -> Path:
     path.mkdir(parents=True)
+    baseline_wins = baseline_wins or []
+    task_completion_regressions = task_completion_regressions or []
     payload = {
         "schema_version": "hfr.compare_rl.manifest.v1",
-        "pair_count": len(candidate_wins),
+        "pair_count": len(candidate_wins) + len(baseline_wins),
         "candidate_win_count": len(candidate_wins),
-        "baseline_win_count": 0,
+        "baseline_win_count": len(baseline_wins),
         "candidate_win_scenarios": candidate_wins,
-        "baseline_win_scenarios": [],
+        "baseline_win_scenarios": baseline_wins,
         "task_completion_improvement_count": len(candidate_wins),
-        "task_completion_regression_count": 0,
+        "task_completion_regression_count": len(task_completion_regressions),
         "task_completion_improvement_scenarios": candidate_wins,
-        "task_completion_regression_scenarios": [],
+        "task_completion_regression_scenarios": task_completion_regressions,
         "fixed_rule_counts": {},
-        "regressed_rule_counts": {},
-        "new_critical_failure_counts": {},
+        "regressed_rule_counts": regressed_rule_counts or {},
+        "new_critical_failure_counts": new_critical_failure_counts or {},
         "contract_drift_count": contract_drift_count,
         "unverified_contract_count": 0,
         "skipped_pair_count": 0,
