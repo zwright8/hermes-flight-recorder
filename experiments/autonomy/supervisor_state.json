@@ -60,8 +60,8 @@
     }
   ],
   "current_packet": null,
-  "latest_commit_sha": "pending_commit",
-  "latest_pr_url": "pending_push",
+  "latest_commit_sha": "b9faaa1461e3b734a8e40eec0e3ecad9eca3ddc2",
+  "latest_pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/3",
   "latest_risks": [
     "Real Hermes, OpenClaw, and Coven runtimes were not launched in this packet; coverage uses mock and artifact-writer paths.",
     "The dedicated worktree did not include the broader autonomous docs/state files from the shared checkout, so this branch starts its own scoped state handoff."
@@ -78,5 +78,5 @@
     "harness": "in_progress"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:36:12Z"
+  "updated_at": "2026-07-02T14:39:10Z"
 }
