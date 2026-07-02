@@ -1275,11 +1275,21 @@ assert bundle["decision"]["key_metrics"]["gates"]["failed"] == 0
 assert bundle["decision"]["key_metrics"]["harness_handoff"]["pair_count"] == 1
 assert bundle["decision"]["key_metrics"]["harness_handoff"]["passed_pair_count"] == 1
 assert bundle["decision"]["key_metrics"]["harness_handoff"]["missing_pair_count"] == 0
+assert bundle["decision"]["key_metrics"]["harness_handoff"]["run_suite_pair_count"] == 1
+assert bundle["decision"]["key_metrics"]["harness_handoff"]["run_suite_lineage_valid_pair_count"] == 1
 assert bundle["metrics"]["harness_handoff"]["pair_count"] == 1
 assert bundle["metrics"]["harness_handoff"]["schema_valid_pair_count"] == 1
 assert bundle["metrics"]["harness_handoff"]["consistent_pair_count"] == 1
+assert bundle["metrics"]["harness_handoff"]["run_suite_pair_count"] == 1
+assert bundle["metrics"]["harness_handoff"]["run_suite_lineage_valid_pair_count"] == 1
 assert bundle["metrics"]["harness_handoff"]["runs"][0]["runner"] == "flightrecorder_run_suite"
 assert bundle["metrics"]["harness_handoff"]["runs"][0]["provider"] == "fixture"
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["handoff_source"] == "flightrecorder run-suite --evidence-handoff"
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["suite_summary_path"] == "../suite_summary.json"
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["suite_total"] == 7
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["suite_passed"] == 2
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["suite_failed"] == 5
+assert bundle["metrics"]["harness_handoff"]["runs"][0]["run_suite_lineage_valid"] is True
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_count"] == 1
 assert bundle["decision"]["key_metrics"]["compare_export"]["task_completion_improvement_count"] == 1
 assert bundle["decision"]["key_metrics"]["compare_export"]["candidate_win_scenarios"] == ["email_reply_completion"]

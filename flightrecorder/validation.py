@@ -120,6 +120,7 @@ RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
+RUN_SUITE_HARNESS_SOURCE = "flightrecorder run-suite --evidence-handoff"
 _COMPANION_NOT_PROVIDED = object()
 
 
@@ -6459,6 +6460,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
     for name, record in artifacts.items():
         _validate_evidence_bundle_artifact_record(name, record, target)
     _validate_evidence_bundle_metrics(metrics, target)
+    _validate_evidence_bundle_harness_checks(metrics, checks, target)
     target.details.update(
         {
             "readiness": bundle.get("readiness"),
@@ -11792,6 +11794,33 @@ def _evidence_bundle_action_fingerprint(action: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _validate_evidence_bundle_harness_checks(metrics: dict[str, Any], checks: list[Any], target: ValidationTarget) -> None:
+    harness = metrics.get("harness_handoff")
+    if not isinstance(harness, dict):
+        return
+    runs = harness.get("runs")
+    if not isinstance(runs, list):
+        return
+    invalid_run_suite_rows = [
+        row
+        for row in runs
+        if isinstance(row, dict)
+        and row.get("runner") == "flightrecorder_run_suite"
+        and row.get("run_suite_lineage_valid") is False
+    ]
+    if not invalid_run_suite_rows:
+        return
+    failed_check_ids = {
+        check.get("id")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is False and isinstance(check.get("id"), str)
+    }
+    if "run_suite_harness_lineage_valid" not in failed_check_ids:
+        target.errors.append(
+            "evidence_bundle.checks must include a failed run_suite_harness_lineage_valid check when run-suite lineage is invalid."
+        )
+
+
 def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
     expected_sections = (
         "suite_summary",
@@ -11907,6 +11936,8 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
         "schema_valid_pair_count",
         "consistent_pair_count",
         "missing_pair_count",
+        "run_suite_pair_count",
+        "run_suite_lineage_valid_pair_count",
     ):
         if not _is_non_negative_int(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
@@ -11923,17 +11954,35 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
     failed_count = 0
     schema_valid_count = 0
     consistent_count = 0
+    run_suite_count = 0
+    run_suite_lineage_valid_count = 0
     for index, row in enumerate(runs):
         row_label = f"{label}.runs[{index}]"
         if not isinstance(row, dict):
             target.errors.append(f"{row_label} must be an object.")
             continue
-        for field_name in ("id", "scenario_id", "runner", "provider", "model", "manifest_path", "result_path", "trace_format"):
+        for field_name in (
+            "id",
+            "scenario_id",
+            "runner",
+            "provider",
+            "model",
+            "manifest_path",
+            "result_path",
+            "handoff_source",
+            "trace_format",
+        ):
             if not isinstance(row.get(field_name), str) or not row.get(field_name):
                 target.errors.append(f"{row_label}.{field_name} must be a non-empty string.")
-        for field_name in ("passed", "schema_valid", "consistent"):
+        for field_name in ("passed", "schema_valid", "consistent", "run_suite_lineage_valid"):
             if not isinstance(row.get(field_name), bool):
                 target.errors.append(f"{row_label}.{field_name} must be a boolean.")
+        for field_name in ("suite_summary_path", "suite_selected_scenario_id"):
+            if row.get(field_name) is not None and not isinstance(row.get(field_name), str):
+                target.errors.append(f"{row_label}.{field_name} must be a string when present.")
+        for field_name in ("suite_total", "suite_passed", "suite_failed"):
+            if row.get(field_name) is not None and not _is_non_negative_int(row.get(field_name)):
+                target.errors.append(f"{row_label}.{field_name} must be a non-negative integer or null.")
         if row.get("score") is not None and (not isinstance(row.get("score"), (int, float)) or isinstance(row.get("score"), bool)):
             target.errors.append(f"{row_label}.score must be numeric when present.")
         if not _is_string_list(row.get("schema_errors")):
@@ -11948,12 +11997,35 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
             schema_valid_count += 1
         if row.get("consistent") is True:
             consistent_count += 1
+        if row.get("runner") == "flightrecorder_run_suite":
+            run_suite_count += 1
+            if row.get("run_suite_lineage_valid") is True:
+                run_suite_lineage_valid_count += 1
+                if row.get("handoff_source") != RUN_SUITE_HARNESS_SOURCE:
+                    target.errors.append(f"{row_label}.handoff_source must be {RUN_SUITE_HARNESS_SOURCE!r}.")
+                if not isinstance(row.get("suite_summary_path"), str) or not row.get("suite_summary_path"):
+                    target.errors.append(f"{row_label}.suite_summary_path must be a non-empty string for run-suite handoffs.")
+                if row.get("suite_selected_scenario_id") != row.get("scenario_id"):
+                    target.errors.append(f"{row_label}.suite_selected_scenario_id must match scenario_id.")
+                suite_total = row.get("suite_total")
+                suite_passed = row.get("suite_passed")
+                suite_failed = row.get("suite_failed")
+                if not (
+                    _is_non_negative_int(suite_total)
+                    and _is_non_negative_int(suite_passed)
+                    and _is_non_negative_int(suite_failed)
+                ):
+                    target.errors.append(f"{row_label}.suite_total, suite_passed, and suite_failed are required for run-suite handoffs.")
+                elif int(suite_passed) + int(suite_failed) != int(suite_total):
+                    target.errors.append(f"{row_label}.suite_passed + suite_failed must equal suite_total.")
 
     expected_counts = {
         "passed_pair_count": passed_count,
         "failed_pair_count": failed_count,
         "schema_valid_pair_count": schema_valid_count,
         "consistent_pair_count": consistent_count,
+        "run_suite_pair_count": run_suite_count,
+        "run_suite_lineage_valid_pair_count": run_suite_lineage_valid_count,
     }
     for field_name, expected in expected_counts.items():
         if _is_non_negative_int(value.get(field_name)) and int(value[field_name]) != expected:

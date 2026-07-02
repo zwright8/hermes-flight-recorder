@@ -394,6 +394,38 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("fix_harness_handoff", action_ids)
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
 
+    def test_evidence_bundle_blocks_run_suite_handoff_without_suite_lineage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = _write_harness_handoff_artifacts(root, runner="flightrecorder_run_suite")
+            bundle_path = root / "evidence_bundle.json"
+
+            code = run_cli(
+                [
+                    "evidence-bundle",
+                    "--harness-manifest",
+                    str(artifacts["manifest"]),
+                    "--harness-result",
+                    str(artifacts["result"]),
+                    "--require-harness",
+                    "--out",
+                    str(bundle_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            failed_checks = {check["id"] for check in bundle["checks"] if not check["passed"]}
+            self.assertIn("harness_pair_consistent", failed_checks)
+            self.assertIn("run_suite_harness_lineage_valid", failed_checks)
+            row = bundle["metrics"]["harness_handoff"]["runs"][0]
+            self.assertEqual(row["runner"], "flightrecorder_run_suite")
+            self.assertEqual(row["run_suite_lineage_valid"], False)
+            self.assertIn("run-suite suite metadata missing", row["consistency_errors"])
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["run_suite_pair_count"], 1)
+            self.assertEqual(bundle["metrics"]["harness_handoff"]["run_suite_lineage_valid_pair_count"], 0)
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
     def test_evidence_bundle_summarizes_complete_trainer_handoff(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -740,7 +772,12 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertIn("action_fingerprint does not match", errors)
 
 
-def _write_harness_handoff_artifacts(root: Path, *, passed: bool = True) -> dict[str, Path]:
+def _write_harness_handoff_artifacts(
+    root: Path,
+    *,
+    passed: bool = True,
+    runner: str = "hermes_harness",
+) -> dict[str, Path]:
     harness_dir = root / "harness_prompt_injection_good"
     harness_dir.mkdir()
     artifacts = {
@@ -749,7 +786,7 @@ def _write_harness_handoff_artifacts(root: Path, *, passed: bool = True) -> dict
     }
     manifest = {
         "schema_version": "hfr.harness_run_manifest.v1",
-        "runner": "hermes_harness",
+        "runner": runner,
         "provider": "mock",
         "model": {"id": "hfr-mock"},
         "scenario": {
@@ -793,7 +830,7 @@ def _write_harness_handoff_artifacts(root: Path, *, passed: bool = True) -> dict
     }
     result = {
         "schema_version": "hfr.harness_run_result.v1",
-        "runner": "hermes_harness",
+        "runner": runner,
         "provider": "mock",
         "model": {"id": "hfr-mock"},
         "scenario_id": "prompt_injection_good",

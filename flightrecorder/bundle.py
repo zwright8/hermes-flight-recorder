@@ -11,8 +11,10 @@ from .gate_contract import summarize_gate_contract
 from .schema_registry import SchemaRegistryError, check_schema_file
 
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "hfr.evidence_bundle.v1"
+RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 HARNESS_RUN_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
 HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
+RUN_SUITE_HARNESS_SOURCE = "flightrecorder run-suite --evidence-handoff"
 _VALIDATION_REQUIRED_GATE_SCHEMAS = {
     "hfr.training_gate.v1",
     "hfr.compare_gate.v1",
@@ -536,6 +538,8 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "schema_valid_pair_count",
             "consistent_pair_count",
             "missing_pair_count",
+            "run_suite_pair_count",
+            "run_suite_lineage_valid_pair_count",
             "runners",
             "providers",
             "models",
@@ -1149,6 +1153,8 @@ def _summarize_harness_handoff(
     provider_counts: dict[str, int] = {}
     model_counts: dict[str, int] = {}
     trace_format_counts: dict[str, int] = {}
+    run_suite_pair_count = 0
+    run_suite_lineage_valid_pair_count = 0
     for index, (manifest_path, result_path) in enumerate(zip(manifests, results), start=1):
         manifest_key = f"harness_manifest_{index}"
         result_key = f"harness_result_{index}"
@@ -1156,6 +1162,11 @@ def _summarize_harness_handoff(
         result = _read_json_artifact(result_path, artifacts, result_key, preserve_paths)
         row = _harness_pair_metrics(manifest_path, manifest, result_path, result, preserve_paths)
         rows.append(row)
+        is_run_suite_pair = row["runner"] == "flightrecorder_run_suite"
+        if is_run_suite_pair:
+            run_suite_pair_count += 1
+            if row["run_suite_lineage_valid"]:
+                run_suite_lineage_valid_pair_count += 1
         for counts, value in (
             (runner_counts, row["runner"]),
             (provider_counts, row["provider"]),
@@ -1174,6 +1185,8 @@ def _summarize_harness_handoff(
         _add_presence_check(checks, "harness_pair_schema_valid", bool(row["schema_valid"]), scope)
         _add_presence_check(checks, "harness_pair_consistent", bool(row["consistent"]), scope)
         _add_presence_check(checks, "harness_result_passed", bool(row["passed"]), scope)
+        if is_run_suite_pair:
+            _add_presence_check(checks, "run_suite_harness_lineage_valid", bool(row["run_suite_lineage_valid"]), scope)
 
     missing_pair_count = abs(len(manifests) - len(results))
     metrics["harness_handoff"] = {
@@ -1185,6 +1198,8 @@ def _summarize_harness_handoff(
         "schema_valid_pair_count": sum(1 for row in rows if row["schema_valid"]),
         "consistent_pair_count": sum(1 for row in rows if row["consistent"]),
         "missing_pair_count": missing_pair_count,
+        "run_suite_pair_count": run_suite_pair_count,
+        "run_suite_lineage_valid_pair_count": run_suite_lineage_valid_pair_count,
         "runners": _count_map_rows(runner_counts),
         "providers": _count_map_rows(provider_counts),
         "models": _count_map_rows(model_counts),
@@ -1205,6 +1220,8 @@ def _empty_harness_metrics() -> dict[str, Any]:
         "schema_valid_pair_count": 0,
         "consistent_pair_count": 0,
         "missing_pair_count": 1,
+        "run_suite_pair_count": 0,
+        "run_suite_lineage_valid_pair_count": 0,
         "runners": [],
         "providers": [],
         "models": [],
@@ -1226,12 +1243,14 @@ def _harness_pair_metrics(
     scorecard = result.get("scorecard") if isinstance(result.get("scorecard"), dict) else {}
     trace = result.get("trace") if isinstance(result.get("trace"), dict) else {}
     replay = result.get("replay") if isinstance(result.get("replay"), dict) else {}
+    suite = _harness_suite(manifest, result)
     schema_errors: list[str] = []
     for schema_name, path in (("harness_run_manifest", manifest_path), ("harness_run_result", result_path)):
         check = _schema_check_summary(path, schema_name)
         if not check["passed"]:
             schema_errors.extend(f"{schema_name}: {error}" for error in check["errors"])
     consistency_errors = _harness_consistency_errors(manifest_path, manifest, result_path, result)
+    run_suite_lineage_valid = _run_suite_harness_lineage_valid(manifest, result)
     return {
         "id": str(result.get("scenario_id") or scenario.get("id") or manifest_path.parent.name or "unknown"),
         "scenario_id": str(result.get("scenario_id") or scenario.get("id") or ""),
@@ -1240,17 +1259,56 @@ def _harness_pair_metrics(
         "model": str(result_model.get("id") or model.get("id") or ""),
         "manifest_path": _display_path(manifest_path, preserve_paths),
         "result_path": _display_path(result_path, preserve_paths),
+        "handoff_source": _harness_handoff_source(manifest, result),
         "trace_format": str(trace.get("format") or ""),
         "trace_path": str(trace.get("path") or ""),
         "score": scorecard.get("score"),
         "passed": scorecard.get("passed") is True,
         "schema_valid": not schema_errors,
         "consistent": not consistency_errors,
+        "run_suite_lineage_valid": run_suite_lineage_valid,
+        "suite_summary_path": str(suite.get("summary") or ""),
+        "suite_selected_scenario_id": str(suite.get("selected_scenario_id") or ""),
+        "suite_total": _optional_non_negative_int(suite.get("total")),
+        "suite_passed": _optional_non_negative_int(suite.get("passed")),
+        "suite_failed": _optional_non_negative_int(suite.get("failed")),
         "schema_errors": schema_errors[:5],
         "consistency_errors": consistency_errors[:5],
         "replay_lineage": str(replay.get("lineage") or ""),
         "replay_self_contained": replay.get("self_contained") if isinstance(replay.get("self_contained"), bool) else None,
     }
+
+
+def _harness_suite(manifest: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    result_suite = result.get("suite") if isinstance(result.get("suite"), dict) else {}
+    manifest_suite = manifest.get("suite") if isinstance(manifest.get("suite"), dict) else {}
+    return result_suite or manifest_suite
+
+
+def _harness_handoff_source(manifest: dict[str, Any], result: dict[str, Any]) -> str:
+    for payload in (
+        result.get("suite") if isinstance(result.get("suite"), dict) else {},
+        manifest.get("suite") if isinstance(manifest.get("suite"), dict) else {},
+        result.get("tool_policy") if isinstance(result.get("tool_policy"), dict) else {},
+        manifest.get("tool_policy") if isinstance(manifest.get("tool_policy"), dict) else {},
+    ):
+        value = payload.get("source") if isinstance(payload, dict) else None
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _optional_non_negative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _run_suite_harness_lineage_valid(manifest: dict[str, Any], result: dict[str, Any]) -> bool:
+    runner = str(result.get("runner") or manifest.get("runner") or "")
+    if runner != "flightrecorder_run_suite":
+        return False
+    return not _run_suite_harness_consistency_errors(manifest, result)
 
 
 def _schema_check_summary(path: Path, schema_name: str) -> dict[str, Any]:
@@ -1284,6 +1342,48 @@ def _harness_consistency_errors(manifest_path: Path, manifest: dict[str, Any], r
         errors.append("result schema_version mismatch")
     if manifest.get("schema_version") != HARNESS_RUN_MANIFEST_SCHEMA_VERSION:
         errors.append("manifest schema_version mismatch")
+    errors.extend(_run_suite_harness_consistency_errors(manifest, result))
+    return errors
+
+
+def _run_suite_harness_consistency_errors(manifest: dict[str, Any], result: dict[str, Any]) -> list[str]:
+    runner = str(result.get("runner") or manifest.get("runner") or "")
+    if runner != "flightrecorder_run_suite":
+        return []
+
+    errors: list[str] = []
+    manifest_suite = manifest.get("suite") if isinstance(manifest.get("suite"), dict) else {}
+    result_suite = result.get("suite") if isinstance(result.get("suite"), dict) else {}
+    if not manifest_suite or not result_suite:
+        return ["run-suite suite metadata missing"]
+
+    for field_name in ("source", "schema_version", "summary", "runs_dir", "selected_scenario_id"):
+        manifest_value = manifest_suite.get(field_name)
+        result_value = result_suite.get(field_name)
+        if not isinstance(manifest_value, str) or not manifest_value:
+            errors.append(f"manifest.suite.{field_name} missing")
+        if manifest_value != result_value:
+            errors.append(f"suite.{field_name} mismatch")
+
+    if manifest_suite.get("source") != RUN_SUITE_HARNESS_SOURCE:
+        errors.append("suite.source mismatch")
+    if manifest_suite.get("schema_version") != RUN_SUITE_SCHEMA_VERSION:
+        errors.append("suite.schema_version mismatch")
+    if manifest_suite.get("selected_scenario_id") != result.get("scenario_id"):
+        errors.append("suite.selected_scenario_id mismatch")
+
+    for field_name in ("total", "passed", "failed"):
+        manifest_value = manifest_suite.get(field_name)
+        result_value = result_suite.get(field_name)
+        if _optional_non_negative_int(manifest_value) is None:
+            errors.append(f"manifest.suite.{field_name} invalid")
+        if manifest_value != result_value:
+            errors.append(f"suite.{field_name} mismatch")
+    total = _optional_non_negative_int(manifest_suite.get("total"))
+    passed = _optional_non_negative_int(manifest_suite.get("passed"))
+    failed = _optional_non_negative_int(manifest_suite.get("failed"))
+    if total is not None and passed is not None and failed is not None and passed + failed != total:
+        errors.append("suite passed+failed does not equal total")
     return errors
 
 

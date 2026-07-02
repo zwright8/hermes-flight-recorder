@@ -561,6 +561,8 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                 }
             )
 
+    validation_path = Path(args.validation_out) if args.validation_out else out_dir / "validation.json"
+    summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
     handoff_paths: dict[str, Path] = {}
     handoff_bundle: dict[str, Any] | None = None
     if args.evidence_handoff:
@@ -594,7 +596,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
             _write_json(handoff_paths["repair_queue"], repair_queue)
             artifacts["repair_queue"] = _display_path(handoff_paths["repair_queue"], args.preserve_paths)
 
-            harness_paths = _write_run_suite_harness_handoff(out_dir, runs)
+            harness_paths = _write_run_suite_harness_handoff(out_dir, runs, summary_path=summary_path)
             if harness_paths:
                 handoff_paths.update(harness_paths)
                 artifacts["harness_manifest"] = _display_path(harness_paths["harness_manifest"], args.preserve_paths)
@@ -609,11 +611,9 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
             )
 
     validation_summary: dict[str, Any] | None = None
-    validation_path = Path(args.validation_out) if args.validation_out else out_dir / "validation.json"
     if args.validate:
         artifacts["validation"] = _display_path(validation_path, args.preserve_paths)
 
-    summary_path = Path(args.summary_out) if args.summary_out else out_dir / "suite_summary.json"
     summary = _run_suite_summary(
         scenarios_dir=Path(args.scenarios),
         out_dir=out_dir,
@@ -4509,7 +4509,12 @@ def _run_scenario_artifacts(
     }
 
 
-def _write_run_suite_harness_handoff(out_dir: Path, runs: list[dict[str, Any]]) -> dict[str, Path] | None:
+def _write_run_suite_harness_handoff(
+    out_dir: Path,
+    runs: list[dict[str, Any]],
+    *,
+    summary_path: Path,
+) -> dict[str, Path] | None:
     selected = _select_run_suite_harness_run(out_dir, runs)
     if selected is None:
         return None
@@ -4530,6 +4535,14 @@ def _write_run_suite_harness_handoff(out_dir: Path, runs: list[dict[str, Any]]) 
     scenario_id = str(run["scenario_id"])
     model_id = _run_suite_harness_model_id(trace)
     provider = _run_suite_harness_provider(trace)
+    suite = _run_suite_harness_suite_context(
+        harness_dir=harness_dir,
+        out_dir=out_dir,
+        summary_path=summary_path,
+        runs=runs,
+        selected_scenario_id=scenario_id,
+        selected_run_dir=run_dir,
+    )
     sandbox = {
         "root": _harness_relative_path(harness_dir, out_dir),
         "home": _harness_relative_path(harness_dir, out_dir),
@@ -4570,6 +4583,7 @@ def _write_run_suite_harness_handoff(out_dir: Path, runs: list[dict[str, Any]]) 
         },
         "sandbox": sandbox,
         "tool_policy": tool_policy,
+        "suite": suite,
     }
     result = {
         "schema_version": HARNESS_RUN_RESULT_SCHEMA_VERSION,
@@ -4600,10 +4614,36 @@ def _write_run_suite_harness_handoff(out_dir: Path, runs: list[dict[str, Any]]) 
             "lineage": _harness_relative_path(harness_dir, lineage_path),
             "self_contained": _run_suite_harness_replay_self_contained(lineage),
         },
+        "suite": suite,
     }
     _write_json(manifest_path, manifest)
     _write_json(result_path, result)
     return {"harness_manifest": manifest_path, "harness_result": result_path}
+
+
+def _run_suite_harness_suite_context(
+    *,
+    harness_dir: Path,
+    out_dir: Path,
+    summary_path: Path,
+    runs: list[dict[str, Any]],
+    selected_scenario_id: str,
+    selected_run_dir: Path,
+) -> dict[str, Any]:
+    passed = sum(1 for run in runs if run.get("passed") is True)
+    total = len(runs)
+    return {
+        "source": "flightrecorder run-suite --evidence-handoff",
+        "schema_version": RUN_SUITE_SCHEMA_VERSION,
+        "summary": _harness_relative_path(harness_dir, summary_path),
+        "runs_dir": _harness_relative_path(harness_dir, out_dir),
+        "selected_scenario_id": selected_scenario_id,
+        "selected_run_id": selected_run_dir.name,
+        "selected_run_dir": _harness_relative_path(harness_dir, selected_run_dir),
+        "total": total,
+        "passed": passed,
+        "failed": total - passed,
+    }
 
 
 def _select_run_suite_harness_run(out_dir: Path, runs: list[dict[str, Any]]) -> tuple[dict[str, Any], Path] | None:

@@ -417,12 +417,41 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(harness_manifest["provider"], "fixture")
             self.assertEqual(harness_result["provider"], "fixture")
             self.assertEqual(harness_manifest["scenario"]["id"], harness_result["scenario_id"])
+            self.assertEqual(harness_manifest["suite"], harness_result["suite"])
+            self.assertEqual(harness_manifest["suite"]["source"], "flightrecorder run-suite --evidence-handoff")
+            self.assertEqual(harness_manifest["suite"]["schema_version"], "hfr.run_suite.v1")
+            self.assertEqual(harness_manifest["suite"]["summary"], "../suite_summary.json")
+            self.assertEqual(harness_manifest["suite"]["selected_scenario_id"], harness_result["scenario_id"])
+            self.assertEqual(harness_manifest["suite"]["total"], 7)
+            self.assertEqual(harness_manifest["suite"]["passed"], 2)
+            self.assertEqual(harness_manifest["suite"]["failed"], 5)
             self.assertTrue(harness_result["scorecard"]["passed"])
             self.assertEqual(harness_result["trace"]["format"], "normalized_json")
             self.assertEqual(harness_manifest["outputs"]["result"], "harness_result.json")
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["pair_count"], 1)
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["passed_pair_count"], 1)
+            self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["run_suite_pair_count"], 1)
+            self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["run_suite_lineage_valid_pair_count"], 1)
             self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["runner"], "flightrecorder_run_suite")
+            self.assertEqual(
+                evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["handoff_source"],
+                "flightrecorder run-suite --evidence-handoff",
+            )
+            self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["suite_summary_path"], "../suite_summary.json")
+            self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["suite_total"], 7)
+            self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["suite_passed"], 2)
+            self.assertEqual(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["suite_failed"], 5)
+            self.assertTrue(evidence_bundle["metrics"]["harness_handoff"]["runs"][0]["run_suite_lineage_valid"])
+            forged_bundle = out / "evidence_bundle_forged.json"
+            evidence_bundle["metrics"]["harness_handoff"]["run_suite_lineage_valid_pair_count"] = 0
+            forged_bundle.write_text(json.dumps(evidence_bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(forged_bundle), "--strict"]), 1)
+            forged_missing_check = out / "evidence_bundle_forged_missing_check.json"
+            forged = json.loads((out / "evidence_bundle.json").read_text(encoding="utf-8"))
+            forged["metrics"]["harness_handoff"]["runs"][0]["run_suite_lineage_valid"] = False
+            forged["metrics"]["harness_handoff"]["run_suite_lineage_valid_pair_count"] = 0
+            forged_missing_check.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(forged_missing_check), "--strict"]), 1)
             self.assertEqual(summary["training_export"]["failure_mode_count"], 14)
             self.assertEqual(summary["metrics"]["pass_rate"], 0.2857)
             self.assertEqual(summary["metrics"]["average_score"], 50.71)
