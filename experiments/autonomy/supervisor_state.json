@@ -1,6 +1,6 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:16:21Z",
+  "updated_at": "2026-07-02T15:18:00Z",
   "active_layer": "governance",
   "current_packet": "governance guarded registry alias application",
   "completed_packets": [
@@ -127,6 +127,11 @@
       "command": "mkdir /tmp/hermes-flight-recorder-main-push.lock",
       "status": "failed",
       "summary": "Main integration blocked because the lock directory already existed; retry after 30 seconds also failed."
+    },
+    {
+      "command": "git ls-remote origin refs/heads/main",
+      "status": "passed",
+      "summary": "Observed remote main at 53357ff5c838c894ec1eca8515f6601dbfee4e8c after the lock blocker; this worker did not push main."
     }
   ],
   "promotion_readiness": {
@@ -151,6 +156,7 @@
   "github_persistence": {
     "branch": "codex/hermes-goal-8-governance-20260702-1027",
     "base_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+    "remote_main_observed_after_blocker": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
     "implementation_commit_sha": "6f8a045411752f8c930eb266fc6577fda0828fd1",
     "metadata_commit_sha": "ca045e265ccc82290a061d3ea65a8c3b5d1295d0",
     "remote_branch": "verified",
@@ -166,7 +172,7 @@
     },
     "remote_branch_deleted": false,
     "risks": [
-      "The verified packet branch is pushed, but main integration is blocked by the existing /tmp/hermes-flight-recorder-main-push.lock directory.",
+      "The verified packet branch is pushed, but main integration is blocked by the existing /tmp/hermes-flight-recorder-main-push.lock directory; origin/main has advanced after the packet base and must be fetched before retrying integration.",
       "System python3 is Python 3.9 and cannot run the full suite because tests/test_deployment_hardening.py imports tomllib; python3.11 -m unittest discover passed.",
       "flightrecorder schemas --check cannot validate supervisor_state.json because hfr.autonomy.supervisor_state.v1 is not bundled in this branch.",
       "Release-record binding remains the next Goal 8 packet."
