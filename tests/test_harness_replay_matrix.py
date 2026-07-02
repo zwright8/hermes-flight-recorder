@@ -11,6 +11,7 @@ from flightrecorder.schema_registry import check_schema_file
 from scripts.hermes_harness import (
     HARNESS_REPLAY_RESULT_SCHEMA_VERSION,
     HARNESS_RUN_RESULT_SCHEMA_VERSION,
+    main as harness_main,
     publish_harness_artifacts,
     replay_trace,
     write_fake_secret_canaries,
@@ -29,6 +30,14 @@ def _run_cli(args: list[str]) -> tuple[int, str, str]:
     stderr = StringIO()
     with redirect_stdout(stdout), redirect_stderr(stderr):
         rc = main(args)
+    return rc, stdout.getvalue(), stderr.getvalue()
+
+
+def _run_harness_cli(args: list[str]) -> tuple[int, str, str]:
+    stdout = StringIO()
+    stderr = StringIO()
+    with redirect_stdout(stdout), redirect_stderr(stderr):
+        rc = harness_main(args)
     return rc, stdout.getvalue(), stderr.getvalue()
 
 
@@ -64,6 +73,46 @@ class HarnessReplayMatrixTests(unittest.TestCase):
                     self._assert_cli_ok(
                         ["validate", "--harness-replay-result", str(replay_dir / "harness_replay_result.json"), "--strict"]
                     )
+
+    def test_publish_trace_cli_records_codex_style_trajectory_harness_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "codex_style"
+
+            rc, stdout, stderr = _run_harness_cli(
+                [
+                    "publish-trace",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                    "--trace",
+                    str(ROOT / "fixtures" / "prompt_injection_good.trajectory.jsonl"),
+                    "--format",
+                    "trajectory_jsonl",
+                    "--runner",
+                    "codex_style_trace",
+                    "--provider",
+                    "codex",
+                    "--out",
+                    str(out_dir),
+                ]
+            )
+
+            self.assertEqual(rc, 0, stderr or stdout)
+            harness_result = _json_from_stdout(stdout)
+            self.assertEqual(harness_result["runner"], "codex_style_trace")
+            self.assertEqual(harness_result["provider"], "codex")
+            self.assertEqual(harness_result["trace"]["format"], "trajectory_jsonl")
+            self.assertEqual(harness_result["model"]["id"], "fixture-model")
+            self.assertEqual(harness_result["process"]["mode"], "recorded_trace")
+            self.assertTrue(harness_result["scorecard"]["passed"])
+            self.assertTrue((out_dir / "sandbox" / "home" / ".hermes" / ".env").exists())
+            self._assert_harness_artifacts_validate(out_dir)
+
+            replay_dir = out_dir / "replay"
+            replay = _replay_trace_quietly(out_dir / "artifact_lineage.json", replay_dir)
+
+            self.assertEqual(replay["exit_code"], 0)
+            self.assertTrue(replay["passed"])
+            self.assertTrue(check_schema_file(replay_dir / "harness_replay_result.json", "harness_replay_result")["passed"])
 
     def test_failed_live_shaped_scorecard_still_publishes_valid_harness_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -236,6 +285,13 @@ def _replay_trace_quietly(lineage_path: Path, replay_dir: Path) -> dict:
     stdout = StringIO()
     with redirect_stdout(stdout):
         return replay_trace(lineage_path, replay_dir)
+
+
+def _json_from_stdout(stdout: str) -> dict:
+    start = stdout.find("{")
+    if start < 0:
+        raise AssertionError(f"stdout did not contain JSON: {stdout!r}")
+    return json.loads(stdout[start:])
 
 
 if __name__ == "__main__":

@@ -756,6 +756,19 @@ python3.11 scripts/hermes_harness.py probe-model \
   --out runs/harness_probe
 ```
 
+Publish an already-recorded Codex-style trajectory through the same harness
+handoff contract:
+
+```bash
+python3.11 scripts/hermes_harness.py publish-trace \
+  --scenario scenarios/prompt_injection_good.json \
+  --trace fixtures/prompt_injection_good.trajectory.jsonl \
+  --format trajectory_jsonl \
+  --runner codex_style_trace \
+  --provider codex \
+  --out runs/harness_codex_style
+```
+
 Replay from a generated lineage:
 
 ```bash

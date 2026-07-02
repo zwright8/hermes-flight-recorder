@@ -154,6 +154,63 @@ def publish_harness_artifacts(
     return result
 
 
+def publish_trace_run(
+    *,
+    scenario_path: str | Path,
+    trace_path: str | Path,
+    out_dir: str | Path,
+    trace_format: str = "auto",
+    runner: str = "recorded_trace",
+    provider: str = "recorded",
+    model: str | None = None,
+    base_url: str | None = None,
+    tool_policy: dict[str, Any] | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Publish a recorded trace as common harness manifest/result artifacts."""
+    run_dir = Path(out_dir).expanduser().resolve()
+    if force and run_dir.exists():
+        shutil.rmtree(run_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    resolved_trace = Path(trace_path).expanduser().resolve()
+    resolved_scenario = Path(scenario_path).expanduser().resolve()
+    artifact_result = _run_scenario_artifacts(
+        resolved_scenario,
+        run_dir,
+        trace_override=resolved_trace,
+        trace_format=trace_format,
+        preserve_paths=True,
+    )
+    sandbox_root = run_dir / "sandbox"
+    for path in (sandbox_root, sandbox_root / "home", sandbox_root / "workspace", sandbox_root / "events"):
+        path.mkdir(parents=True, exist_ok=True)
+    fake_secret_files = write_fake_secret_canaries(sandbox_root / "home")
+    return publish_harness_artifacts(
+        scenario_path=resolved_scenario,
+        run_dir=run_dir,
+        artifact_result=artifact_result,
+        trace_path=resolved_trace,
+        trace_format=_published_trace_format(artifact_result, trace_format),
+        runner=runner,
+        provider=provider,
+        model=model or _published_trace_model(artifact_result),
+        base_url=base_url,
+        sandbox={
+            "root": sandbox_root,
+            "home": sandbox_root / "home",
+            "workspace": sandbox_root / "workspace",
+            "events": sandbox_root / "events",
+            "ephemeral": True,
+            "audit_artifacts_kept": True,
+        },
+        tool_policy=tool_policy,
+        fake_secret_files=fake_secret_files,
+        process={"exit_code": 0, "mode": "recorded_trace"},
+        metadata={"source": "scripts/hermes_harness.py", "interface": "publish_trace_run"},
+        force=force,
+    )
+
+
 def run_scenario(manifest: dict[str, Any] | str | Path) -> dict[str, Any]:
     """Run a single scenario through a supported harness runner."""
     resolved = _load_manifest(manifest)
@@ -516,6 +573,30 @@ def _suite_run_record(result: dict[str, Any], run_dir: Path) -> dict[str, Any]:
     }
 
 
+def _published_trace_format(artifact_result: dict[str, Any], fallback: str) -> str:
+    trace = _published_normalized_trace(artifact_result)
+    session = trace.get("session") if isinstance(trace.get("session"), dict) else {}
+    source_format = session.get("source_format")
+    if isinstance(source_format, str) and source_format:
+        return source_format
+    return fallback
+
+
+def _published_trace_model(artifact_result: dict[str, Any]) -> str:
+    trace = _published_normalized_trace(artifact_result)
+    session = trace.get("session") if isinstance(trace.get("session"), dict) else {}
+    model = session.get("model")
+    return str(model) if isinstance(model, str) and model else "unknown"
+
+
+def _published_normalized_trace(artifact_result: dict[str, Any]) -> dict[str, Any]:
+    path = artifact_result.get("paths", {}).get("normalized_trace") if isinstance(artifact_result.get("paths"), dict) else None
+    if isinstance(path, Path) and path.exists():
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    return {}
+
+
 def _effective_tool_policy(scenario: dict[str, Any], tool_policy: dict[str, Any] | None) -> dict[str, Any]:
     scenario_policy = scenario.get("policy") or {}
     runtime_policy = {**DEFAULT_TOOL_POLICY, **(tool_policy or {})}
@@ -678,6 +759,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     probe.add_argument("--model", default="hfr-mock")
     probe.add_argument("--base-url")
     probe.add_argument("--allow-network", action="store_true")
+    publish = subparsers.add_parser("publish-trace", help="Publish a recorded trace as harness artifacts")
+    publish.add_argument("--scenario", required=True)
+    publish.add_argument("--trace", required=True)
+    publish.add_argument("--out", required=True)
+    publish.add_argument("--format", default="auto")
+    publish.add_argument("--runner", default="recorded_trace")
+    publish.add_argument("--provider", default="recorded")
+    publish.add_argument("--model")
+    publish.add_argument("--base-url")
+    publish.add_argument("--force", action="store_true")
     replay = subparsers.add_parser("replay-trace", help="Replay a run from artifact lineage")
     replay.add_argument("--lineage", required=True)
     replay.add_argument("--out", required=True)
@@ -738,6 +829,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["passed"] else 1
+    if args.command == "publish-trace":
+        result = publish_trace_run(
+            scenario_path=args.scenario,
+            trace_path=args.trace,
+            out_dir=args.out,
+            trace_format=args.format,
+            runner=args.runner,
+            provider=args.provider,
+            model=args.model,
+            base_url=args.base_url,
+            force=bool(args.force),
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result.get("scorecard", {}).get("passed") is True else 1
     if args.command == "replay-trace":
         result = replay_trace(args.lineage, args.out, trace_format=args.format)
         print(json.dumps(result, indent=2, sort_keys=True))
