@@ -621,6 +621,85 @@
           "summary": "Remote branch exists at f205afba87065981c4d31fcaa5fb28d0901edab7."
         }
       ]
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/governance.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/cli.py"
+        },
+        {
+          "kind": "module",
+          "layer": "governance",
+          "path": "flightrecorder/validation.py"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_promotion_decision.py"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md"
+        }
+      ],
+      "branch": "codex/hermes-goal-8-governance-20260702-1027",
+      "branch_sha": "edf46ed7cdfda1f329b96d478fe7c96264e103d8",
+      "completed_at": "2026-07-02T15:25:00Z",
+      "id": "governance_promotion_decision_cards_alias_apply",
+      "implementation_shas": [
+        "99440298b3e18ca2186708c5f1a44a974624ce49",
+        "60e8bf5a82fbcb64860bdad27f9a9a8bbd77c0c1",
+        "6f8a045411752f8c930eb266fc6577fda0828fd1"
+      ],
+      "layer": "governance",
+      "main_integration": {
+        "base_main_sha": "53357ff5c838c894ec1eca8515f6601dbfee4e8c",
+        "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
+        "lock_status": "acquired",
+        "merge_sha": "db1e2e8302c2df7d1c25242b433b79f626237aa7",
+        "pr_status": "MERGED",
+        "push_main_status": "pushed_and_verified",
+        "related_pr": "https://github.com/zwright8/hermes-flight-recorder/pull/9",
+        "remote_branch_status": "deleted",
+        "remote_main_verified_sha": "db1e2e8302c2df7d1c25242b433b79f626237aa7"
+      },
+      "priority": "high",
+      "status": "completed",
+      "summary": "Added side-effect-free promotion decisions, model/dataset card generation, and guarded promotion-alias-apply so candidate/champion/rollback aliases move only after a validated passing decision, fresh registered targets, matching live champion alias, and alias-history audit evidence.",
+      "title": "Guard promotion decisions, cards, and registry alias movement",
+      "verification": [
+        {
+          "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Touched governance modules compile."
+        },
+        {
+          "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Focused governance, ledger, and validation tests passed before main integration."
+        },
+        {
+          "command": "python3.11 -m unittest discover",
+          "completed_at": "2026-07-02T15:25:00Z",
+          "status": "pass",
+          "summary": "Full suite passed under Python 3.11 before main integration."
+        }
+      ]
     }
   ],
   "current_packet": "model main integration blocked by main-push lock after current rebase",
@@ -716,9 +795,9 @@
       "summary": "Evidence bundles now require gate decision contracts when gates are included and can require at least one gate summary."
     },
     "governance": {
-      "next_packet": null,
-      "status": "not_started",
-      "summary": "No promotion or alias movement attempted."
+      "next_packet": "governance_release_record",
+      "status": "in_progress",
+      "summary": "Promotion decisions, model/dataset cards, and guarded registry alias application are implemented; release-record binding remains."
     },
     "harness": {
       "next_packet": null,
@@ -770,20 +849,31 @@
       "layer": "model",
       "priority": "medium",
       "summary": "Extend registry entries with adapter, training-run, eval, and promotion-decision link slots."
+    },
+    {
+      "depends_on": [
+        "governance_promotion_decision_cards_alias_apply"
+      ],
+      "id": "governance_release_record",
+      "layer": "governance",
+      "priority": "high",
+      "status": "ready",
+      "summary": "Bind promotion decisions, cards, alias receipts, rollback metadata, evals, and release notes into a validated release-record artifact.",
+      "title": "Bind governance release records"
     }
   ],
   "promotion_readiness": {
     "data": "completed",
     "eval": "not_started",
     "evidence": "in_progress",
-    "governance": "not_started",
+    "governance": "in_progress",
     "harness": "in_progress",
     "model": "in_progress",
     "serving_demo": "not_started",
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T15:23:41Z",
+  "updated_at": "2026-07-02T15:28:00Z",
   "github_delivery": {
     "branch": "codex/hermes-goal-4-model-20260702-1027",
     "implementation_commit_sha": "500766b2efb78cd28605f298e47dc5753fe41e9a",
