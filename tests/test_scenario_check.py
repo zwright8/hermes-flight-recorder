@@ -42,6 +42,7 @@ class ScenarioCheckTests(unittest.TestCase):
             self.assertEqual(summary["warning_count"], 0)
             self.assertTrue(summary["passed"])
             self.assertTrue(all(item["trace_exists"] for item in summary["scenarios"]))
+            self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
 
     def test_check_scenarios_rejects_duplicate_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -61,6 +62,7 @@ class ScenarioCheckTests(unittest.TestCase):
             summary = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(summary["duplicate_id_count"], 1)
             self.assertIn("Duplicate scenario id", summary["scenarios"][1]["errors"][0])
+            self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
 
     def test_check_scenarios_strict_fails_on_missing_trace_warning(self):
         with tempfile.TemporaryDirectory() as tmp:

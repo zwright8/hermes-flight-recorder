@@ -1,0 +1,262 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/scenario_check.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Scenario definition validation receipt emitted by check-scenarios.",
+  "properties": {
+    "duplicate_id_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "duplicates": {
+      "items": {
+        "$ref": "#/$defs/duplicate"
+      },
+      "type": "array"
+    },
+    "error_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "pattern": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "recursive": {
+      "type": "boolean"
+    },
+    "require_traces": {
+      "type": "boolean"
+    },
+    "scenarios": {
+      "items": {
+        "$ref": "#/$defs/scenario"
+      },
+      "type": "array"
+    },
+    "scenarios_dir": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.scenario_check.v1"
+    },
+    "strict": {
+      "type": "boolean"
+    },
+    "total": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "warning_count": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scenarios_dir",
+    "pattern",
+    "recursive",
+    "strict",
+    "require_traces",
+    "passed",
+    "total",
+    "error_count",
+    "warning_count",
+    "duplicate_id_count",
+    "duplicates",
+    "scenarios"
+  ],
+  "title": "Hermes Flight Recorder Scenario Check",
+  "type": "object",
+  "$defs": {
+    "assertions": {
+      "additionalProperties": true,
+      "properties": {
+        "final_contains": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "final_not_contains": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_action_sequences": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_actions": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_event_counts": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_evidence": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_state": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_state_transitions": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "final_contains",
+        "final_not_contains",
+        "required_evidence",
+        "required_actions",
+        "required_action_sequences",
+        "required_event_counts",
+        "required_state",
+        "required_state_transitions"
+      ],
+      "type": "object"
+    },
+    "budget_constraints": {
+      "additionalProperties": {
+        "type": [
+          "integer",
+          "number",
+          "string",
+          "boolean",
+          "null"
+        ]
+      },
+      "properties": {
+        "max_api_calls": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_subagent_depth": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_subagents": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_tool_calls": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "duplicate": {
+      "additionalProperties": true,
+      "properties": {
+        "duplicate_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "first_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "first_path",
+        "duplicate_path"
+      ],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": true,
+      "properties": {
+        "budget_constraints": {
+          "$ref": "#/$defs/budget_constraints"
+        },
+        "regex_constraint_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "regex_constraint_count",
+        "budget_constraints"
+      ],
+      "type": "object"
+    },
+    "scenario": {
+      "additionalProperties": true,
+      "properties": {
+        "assertions": {
+          "$ref": "#/$defs/assertions"
+        },
+        "before_state_exists": {
+          "type": "boolean"
+        },
+        "before_state_path": {
+          "type": "string"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/policy"
+        },
+        "state_exists": {
+          "type": "boolean"
+        },
+        "state_path": {
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "trace_exists": {
+          "type": "boolean"
+        },
+        "trace_path": {
+          "type": "string"
+        },
+        "trace_required": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "passed",
+        "errors",
+        "warnings"
+      ],
+      "type": "object"
+    }
+  }
+}

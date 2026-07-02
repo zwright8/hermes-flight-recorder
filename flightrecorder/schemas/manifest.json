@@ -98,6 +98,14 @@
       "name": "run_suite"
     },
     {
+      "artifact": "scenario_check",
+      "artifact_schema_version": "hfr.scenario_check.v1",
+      "description": "Scenario definition validation receipt emitted by check-scenarios.",
+      "filename": "scenario_check.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/scenario_check.v1.schema.json",
+      "name": "scenario_check"
+    },
+    {
       "artifact": "suite_gate",
       "artifact_schema_version": "hfr.suite_gate.v1",
       "description": "Gate result over a run-suite summary and optional suite-gate policy.",

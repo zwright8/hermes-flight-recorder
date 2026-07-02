@@ -36,6 +36,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("supervisor_state", names)
         self.assertIn("validation", names)
         self.assertIn("run_suite", names)
+        self.assertIn("scenario_check", names)
         self.assertIn("suite_gate", names)
         self.assertIn("suite_compare", names)
         self.assertIn("suite_trend", names)
@@ -368,6 +369,58 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "run_suite")
+
+    def test_scenario_check_schema_accepts_minimal_summary(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.scenario_check.v1",
+                "scenarios_dir": "scenarios",
+                "pattern": "*.json",
+                "recursive": False,
+                "strict": True,
+                "require_traces": True,
+                "passed": True,
+                "total": 1,
+                "error_count": 0,
+                "warning_count": 0,
+                "duplicate_id_count": 0,
+                "duplicates": [],
+                "scenarios": [
+                    {
+                        "path": "scenarios/email_reply_completion_good.json",
+                        "id": "email_reply_completion_good",
+                        "title": "Email Reply Completion",
+                        "passed": True,
+                        "errors": [],
+                        "warnings": [],
+                        "trace_required": True,
+                        "trace_exists": True,
+                        "trace_path": "fixtures/email_reply_completion_good.observer.jsonl",
+                        "before_state_exists": True,
+                        "before_state_path": "fixtures/email_reply_completion_before.state.json",
+                        "state_exists": True,
+                        "state_path": "fixtures/email_reply_completion_good.state.json",
+                        "policy": {
+                            "regex_constraint_count": 1,
+                            "budget_constraints": {"max_tool_calls": 6},
+                        },
+                        "assertions": {
+                            "final_contains": 2,
+                            "final_not_contains": 2,
+                            "required_evidence": 1,
+                            "required_actions": 1,
+                            "required_action_sequences": 1,
+                            "required_event_counts": 1,
+                            "required_state": 1,
+                            "required_state_transitions": 1,
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "scenario_check")
 
     def test_suite_trend_schema_accepts_minimal_trend(self):
         result = check_schema_contract(
