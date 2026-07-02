@@ -1,0 +1,69 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_profile.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "OpenAI-compatible serving endpoint readiness profile.",
+  "properties": {
+    "arm": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "object"
+    },
+    "endpoint": {
+      "type": "object"
+    },
+    "eval_preflight": {
+      "properties": {
+        "failed_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "ready": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ready",
+        "readiness",
+        "failed_checks"
+      ],
+      "type": "object"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "model_identity": {
+      "type": "object"
+    },
+    "profile_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.serving_profile.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "profile_id",
+    "arm",
+    "endpoint",
+    "model_identity",
+    "capabilities",
+    "eval_preflight"
+  ],
+  "title": "Hermes Flight Recorder Serving Profile",
+  "type": "object"
+}

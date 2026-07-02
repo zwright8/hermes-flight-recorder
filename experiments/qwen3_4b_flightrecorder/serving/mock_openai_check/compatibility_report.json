@@ -1,0 +1,43 @@
+{
+  "checks": {
+    "openai_core": {
+      "chat_completion": true,
+      "health": true,
+      "model_metadata": true,
+      "models": true
+    },
+    "structured_outputs": {
+      "error": null,
+      "json_parse_passed": true,
+      "parsed": {
+        "evidence": "hfr-structured-smoke",
+        "status": "ok"
+      },
+      "response_ok": true,
+      "status": "supported",
+      "text": "{\"evidence\": \"hfr-structured-smoke\", \"status\": \"ok\"}"
+    },
+    "tool_calls": {
+      "error": null,
+      "response_ok": true,
+      "status": "supported",
+      "tool_call_count": 1,
+      "tool_calls": [
+        {
+          "function": {
+            "arguments": "{\"path\": \"demo.txt\"}",
+            "name": "read_file"
+          },
+          "id": "call_hfr_mock",
+          "type": "function"
+        }
+      ]
+    }
+  },
+  "engine": "transformers",
+  "generated_at": "2026-07-02T14:42:37Z",
+  "model": "hfr-mock-model",
+  "profile_id": "candidate-transformers-hfr-mock-model",
+  "schema_version": "hfr.serving_compatibility_report.v1",
+  "served_model_id": "hfr-mock-model"
+}

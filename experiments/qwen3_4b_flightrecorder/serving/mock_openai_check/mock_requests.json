@@ -1,0 +1,85 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/healthz"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models/hfr-mock-model"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "payload": {
+        "max_tokens": 32,
+        "messages": [
+          {
+            "content": "Reply with: hfr serving smoke ok",
+            "role": "user"
+          }
+        ],
+        "model": "hfr-mock-model",
+        "stream": false,
+        "temperature": 0
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "payload": {
+        "max_tokens": 64,
+        "messages": [
+          {
+            "content": "Call read_file for demo.txt.",
+            "role": "user"
+          }
+        ],
+        "model": "hfr-mock-model",
+        "temperature": 0,
+        "tool_choice": "auto",
+        "tools": [
+          {
+            "function": {
+              "name": "read_file",
+              "parameters": {
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "type": "object"
+              }
+            },
+            "type": "function"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "payload": {
+        "max_tokens": 64,
+        "messages": [
+          {
+            "content": "Return JSON with keys status and evidence.",
+            "role": "user"
+          }
+        ],
+        "model": "hfr-mock-model",
+        "response_format": {
+          "type": "json_object"
+        },
+        "temperature": 0
+      }
+    }
+  ]
+}

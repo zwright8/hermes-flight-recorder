@@ -1,0 +1,55 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/serving_demo_run.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Replayable serving demo report linking claims to eval evidence.",
+  "properties": {
+    "arms": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "candidate_arm": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "claims": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "generated_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "same_scenario_ids": {
+      "type": "boolean"
+    },
+    "scenario_sets": {
+      "type": "object"
+    },
+    "scenarios": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.serving_demo_run.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generated_at",
+    "candidate_arm",
+    "same_scenario_ids",
+    "scenario_sets",
+    "arms",
+    "claims",
+    "scenarios"
+  ],
+  "title": "Hermes Flight Recorder Serving Demo Run",
+  "type": "object"
+}

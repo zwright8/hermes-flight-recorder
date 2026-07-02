@@ -1,0 +1,2 @@
+{"event": "user", "content": "Summarize the delayed shipment and recommend the next action."}
+{"event": "assistant", "model": "hfr-base-mock+adapter", "content": "Notify the customer, escalate the carrier hold, and cite the delayed shipment trace."}

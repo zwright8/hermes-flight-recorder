@@ -1,0 +1,133 @@
+{
+  "arms": [
+    {
+      "base_url": "mock://openai-compatible",
+      "metrics": {
+        "average_score": 42,
+        "critical_failure_total": 1,
+        "failed": 1,
+        "pass_rate": 0.0,
+        "passed": 0,
+        "total": 1
+      },
+      "model": "hfr-base-mock",
+      "name": "baseline",
+      "serving_profile": "managed_mock_lifecycle/preflight/serving_profile.json",
+      "source": "../evaluations/baseline/evaluation_summary.json"
+    },
+    {
+      "base_url": "mock://openai-compatible",
+      "metrics": {
+        "average_score": 96,
+        "critical_failure_total": 0,
+        "failed": 0,
+        "pass_rate": 1.0,
+        "passed": 1,
+        "total": 1
+      },
+      "model": "hfr-base-mock+adapter",
+      "name": "flightrecorder",
+      "serving_profile": "managed_mock_lifecycle/preflight/serving_profile.json",
+      "source": "../evaluations/flightrecorder/evaluation_summary.json"
+    }
+  ],
+  "candidate_arm": "flightrecorder",
+  "claims": [
+    {
+      "evidence": [
+        {
+          "arm": "flightrecorder",
+          "evaluation_summary": "../evaluations/flightrecorder/evaluation_summary.json",
+          "scenario_id": "suite",
+          "suite_summary": "../evaluations/flightrecorder/suite_summary.json"
+        },
+        {
+          "arm": "baseline",
+          "evaluation_summary": "../evaluations/baseline/evaluation_summary.json",
+          "scenario_id": "suite",
+          "suite_summary": "../evaluations/baseline/suite_summary.json"
+        }
+      ],
+      "id": "flightrecorder_beats_baseline_pass_rate",
+      "summary": "flightrecorder pass rate 1.0 versus baseline 0.0."
+    },
+    {
+      "evidence": [
+        {
+          "arm": "flightrecorder",
+          "report": "../evaluations/flightrecorder/demo_scenario/report.html",
+          "run_digest": "../evaluations/flightrecorder/demo_scenario/run_digest.json",
+          "scenario_id": "demo_scenario",
+          "scorecard": "../evaluations/flightrecorder/demo_scenario/scorecard.json",
+          "trace_path": "../evaluations/flightrecorder/demo_scenario/live_observer.jsonl"
+        },
+        {
+          "arm": "baseline",
+          "report": "../evaluations/baseline/demo_scenario/report.html",
+          "run_digest": "../evaluations/baseline/demo_scenario/run_digest.json",
+          "scenario_id": "demo_scenario",
+          "scorecard": "../evaluations/baseline/demo_scenario/scorecard.json",
+          "trace_path": "../evaluations/baseline/demo_scenario/live_observer.jsonl"
+        }
+      ],
+      "id": "flightrecorder_repairs_demo_scenario",
+      "summary": "flightrecorder passed demo_scenario where at least one reference arm failed."
+    }
+  ],
+  "generated_at": "2026-07-02T14:54:35Z",
+  "same_scenario_ids": true,
+  "scenario_sets": {
+    "baseline": [
+      "demo_scenario"
+    ],
+    "flightrecorder": [
+      "demo_scenario"
+    ]
+  },
+  "scenarios": [
+    {
+      "arms": {
+        "baseline": {
+          "critical_failures": [
+            "final_answer"
+          ],
+          "digest_outcome": {
+            "passed": false,
+            "score": 42,
+            "summary": "FAIL"
+          },
+          "digest_summary": "FAIL",
+          "passed": false,
+          "report": "../evaluations/baseline/demo_scenario/report.html",
+          "run_digest": "../evaluations/baseline/demo_scenario/run_digest.json",
+          "scenario_id": "demo_scenario",
+          "scenario_title": "Serving demo scenario",
+          "score": 42,
+          "scorecard": "../evaluations/baseline/demo_scenario/scorecard.json",
+          "task_family": "serving_demo",
+          "trace_path": "../evaluations/baseline/demo_scenario/live_observer.jsonl"
+        },
+        "flightrecorder": {
+          "critical_failures": [],
+          "digest_outcome": {
+            "passed": true,
+            "score": 96,
+            "summary": "PASS"
+          },
+          "digest_summary": "PASS",
+          "passed": true,
+          "report": "../evaluations/flightrecorder/demo_scenario/report.html",
+          "run_digest": "../evaluations/flightrecorder/demo_scenario/run_digest.json",
+          "scenario_id": "demo_scenario",
+          "scenario_title": "Serving demo scenario",
+          "score": 96,
+          "scorecard": "../evaluations/flightrecorder/demo_scenario/scorecard.json",
+          "task_family": "serving_demo",
+          "trace_path": "../evaluations/flightrecorder/demo_scenario/live_observer.jsonl"
+        }
+      },
+      "scenario_id": "demo_scenario"
+    }
+  ],
+  "schema_version": "hfr.serving_demo_run.v1"
+}

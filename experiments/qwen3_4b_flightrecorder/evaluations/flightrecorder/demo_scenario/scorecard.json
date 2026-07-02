@@ -1,0 +1,15 @@
+{
+  "arm": "flightrecorder",
+  "checks": [
+    {
+      "id": "final_answer",
+      "passed": true,
+      "rationale": "Candidate keeps action grounded in the trace.",
+      "score": 96
+    }
+  ],
+  "passed": true,
+  "scenario_id": "demo_scenario",
+  "schema_version": "hfr.scorecard.v1",
+  "score": 96
+}

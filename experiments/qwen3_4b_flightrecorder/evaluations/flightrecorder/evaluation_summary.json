@@ -1,0 +1,14 @@
+{
+  "arm": "flightrecorder",
+  "average_score": 96,
+  "base_url": "mock://openai-compatible",
+  "critical_failure_total": 0,
+  "failed": 0,
+  "model": "hfr-base-mock+adapter",
+  "pass_rate": 1.0,
+  "passed": 1,
+  "schema_version": "hfr.hermes_heldout_eval_summary.v1",
+  "serving_profile": "../../serving/managed_mock_lifecycle/preflight/serving_profile.json",
+  "suite_summary": "suite_summary.json",
+  "total": 1
+}

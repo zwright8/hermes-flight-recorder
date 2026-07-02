@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Build a replayable serving demo report from held-out eval artifacts."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import time
+from pathlib import Path
+from typing import Any
+
+
+SCHEMA_VERSION = "hfr.serving_demo_run.v1"
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--arm", action="append", default=[], metavar="NAME=PATH", help="Arm name and evaluation_summary.json or suite_summary.json path")
+    parser.add_argument("--candidate-arm", default="")
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--report", type=Path, required=True)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    arms = [_load_arm(name, path) for name, path in _arm_specs(args.arm)]
+    if len(arms) < 2:
+        raise SystemExit("At least two arms are required")
+    candidate_name = args.candidate_arm or ("flightrecorder" if any(arm["name"] == "flightrecorder" for arm in arms) else arms[-1]["name"])
+    demo = build_demo(arms, candidate_name=candidate_name)
+    _relativize_demo_paths(demo, args.report.parent)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(args.out, demo)
+    args.report.write_text(render_report(demo), encoding="utf-8")
+    print(json.dumps({"out": str(args.out), "report": str(args.report), "claim_count": len(demo["claims"])}, indent=2))
+    return 0
+
+
+def build_demo(arms: list[dict[str, Any]], *, candidate_name: str) -> dict[str, Any]:
+    scenario_sets = {arm["name"]: arm["scenario_ids"] for arm in arms}
+    same_scenarios = len({tuple(ids) for ids in scenario_sets.values()}) == 1
+    scenarios = _scenario_rows(arms)
+    candidate = next(arm for arm in arms if arm["name"] == candidate_name)
+    references = [arm for arm in arms if arm["name"] != candidate_name]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": _utc_now(),
+        "candidate_arm": candidate_name,
+        "same_scenario_ids": same_scenarios,
+        "scenario_sets": scenario_sets,
+        "arms": [{"name": arm["name"], "source": arm["source"], "model": arm["model"], "base_url": arm["base_url"], "serving_profile": arm.get("serving_profile"), "metrics": arm["metrics"]} for arm in arms],
+        "claims": _claims(candidate, references, scenarios, same_scenarios=same_scenarios),
+        "scenarios": scenarios,
+    }
+
+
+def render_report(demo: dict[str, Any]) -> str:
+    lines = [
+        "# Serving Demo Replay Report",
+        "",
+        f"- Candidate arm: `{demo['candidate_arm']}`",
+        f"- Same scenario ids: {demo['same_scenario_ids']}",
+        "",
+        "## Arm Metrics",
+        "",
+        "| Arm | Model | Serving Profile | Pass Rate | Average Score | Passed | Failed | Critical Failures |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for arm in demo["arms"]:
+        metrics = arm["metrics"]
+        lines.append(f"| {arm['name']} | `{arm.get('model') or ''}` | {_md_link('serving_profile', arm.get('serving_profile'))} | {metrics.get('pass_rate')} | {metrics.get('average_score')} | {metrics.get('passed')} | {metrics.get('failed')} | {metrics.get('critical_failure_total')} |")
+    lines.extend(["", "## Evidence-Backed Claims", ""])
+    if not demo["claims"]:
+        lines.append("- No cross-arm behavior claims were generated.")
+    for claim in demo["claims"]:
+        lines.append(f"- `{claim['id']}`: {claim['summary']}")
+        for item in claim["evidence"]:
+            links = [_md_link("evaluation_summary", item.get("evaluation_summary")), _md_link("suite_summary", item.get("suite_summary")), _md_link("trace", item.get("trace_path")), _md_link("scorecard", item.get("scorecard")), _md_link("run_digest", item.get("run_digest")), _md_link("report", item.get("report"))]
+            lines.append(f"  - {item['arm']} / {item['scenario_id']}: " + ", ".join(link for link in links if link))
+    lines.extend(["", "## Scenario Replay Index", "", "| Scenario | Arm | Passed | Score | Critical Failures | Trace | Scorecard | Run Digest | Report |", "| --- | --- | ---: | ---: | --- | --- | --- | --- | --- |"])
+    for scenario in demo["scenarios"]:
+        for arm_name, run in scenario["arms"].items():
+            lines.append(f"| {scenario['scenario_id']} | {arm_name} | {run.get('passed')} | {run.get('score')} | {', '.join(run.get('critical_failures') or [])} | {_md_link('trace', run.get('trace_path'))} | {_md_link('scorecard', run.get('scorecard'))} | {_md_link('run_digest', run.get('run_digest'))} | {_md_link('report', run.get('report'))} |")
+    return "\n".join(lines) + "\n"
+
+
+def _load_arm(name: str, path: Path) -> dict[str, Any]:
+    source = path.expanduser().resolve()
+    data = _load_json(source)
+    suite_path = _suite_summary_path(source, data)
+    suite = _load_json(suite_path)
+    eval_summary = data if data.get("schema_version") == "hfr.hermes_heldout_eval_summary.v1" else {}
+    serving_profile = _serving_profile_ref(source, suite_path, eval_summary, suite)
+    runs = [_run_record(suite_path, run) for run in suite.get("runs", [])]
+    return {
+        "name": name,
+        "source": str(source),
+        "suite_summary": str(suite_path),
+        "model": eval_summary.get("model") or suite.get("metadata", {}).get("model"),
+        "base_url": eval_summary.get("base_url") or suite.get("metadata", {}).get("base_url"),
+        "serving_profile": serving_profile,
+        "metrics": _metrics(eval_summary, suite),
+        "scenario_ids": [str(run.get("scenario_id")) for run in runs],
+        "runs": {str(run.get("scenario_id")): run for run in runs},
+    }
+
+
+def _suite_summary_path(source: Path, data: dict[str, Any]) -> Path:
+    if data.get("schema_version") == "hfr.hermes_heldout_eval_summary.v1":
+        suite = data.get("suite_summary")
+        if not suite:
+            raise SystemExit(f"Evaluation summary has no suite_summary: {source}")
+        path = Path(str(suite))
+        return (path if path.exists() else source.parent / path).resolve()
+    return source.resolve()
+
+
+def _run_record(summary_path: Path, run: dict[str, Any]) -> dict[str, Any]:
+    record = dict(run)
+    for key in ("trace_path", "scorecard", "run_digest", "report"):
+        if record.get(key):
+            record[key] = _resolve_artifact_ref(summary_path, str(record[key]))
+    digest_path = Path(str(record.get("run_digest") or ""))
+    if digest_path.exists():
+        digest = _load_json(digest_path)
+        record["digest_outcome"] = digest.get("outcome") or {}
+        record["digest_summary"] = record["digest_outcome"].get("summary")
+    else:
+        record["digest_outcome"] = {}
+        record["digest_summary"] = ""
+    return record
+
+
+def _scenario_rows(arms: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    scenario_ids: list[str] = []
+    for arm in arms:
+        for scenario_id in arm["scenario_ids"]:
+            if scenario_id not in scenario_ids:
+                scenario_ids.append(scenario_id)
+    return [{"scenario_id": scenario_id, "arms": {arm["name"]: arm["runs"][scenario_id] for arm in arms if scenario_id in arm["runs"]}} for scenario_id in scenario_ids]
+
+
+def _claims(candidate: dict[str, Any], references: list[dict[str, Any]], scenarios: list[dict[str, Any]], *, same_scenarios: bool) -> list[dict[str, Any]]:
+    if not same_scenarios:
+        return [{"id": "scenario_sets_differ", "summary": "Arms do not share identical scenario ids, so behavior claims are inspection-only.", "evidence": []}]
+    claims = []
+    for reference in references:
+        candidate_rate = candidate["metrics"].get("pass_rate")
+        reference_rate = reference["metrics"].get("pass_rate")
+        if candidate_rate is not None and reference_rate is not None:
+            relation = "beats" if float(candidate_rate) > float(reference_rate) else "does_not_beat"
+            claims.append({"id": f"{candidate['name']}_{relation}_{reference['name']}_pass_rate", "summary": f"{candidate['name']} pass rate {candidate_rate} versus {reference['name']} {reference_rate}.", "evidence": [_arm_evidence(candidate), _arm_evidence(reference)]})
+    for scenario in scenarios:
+        candidate_run = scenario["arms"].get(candidate["name"])
+        if not candidate_run:
+            continue
+        failed_refs = [ref for ref in references if scenario["arms"].get(ref["name"]) and not scenario["arms"][ref["name"]].get("passed")]
+        if candidate_run.get("passed") and failed_refs:
+            claims.append({"id": f"{candidate['name']}_repairs_{scenario['scenario_id']}", "summary": f"{candidate['name']} passed {scenario['scenario_id']} where at least one reference arm failed.", "evidence": [_run_evidence(candidate["name"], candidate_run)] + [_run_evidence(ref["name"], scenario["arms"][ref["name"]]) for ref in failed_refs]})
+    return claims
+
+
+def _metrics(eval_summary: dict[str, Any], suite: dict[str, Any]) -> dict[str, Any]:
+    raw = suite.get("metrics") or {}
+    critical_total = eval_summary.get("critical_failure_total")
+    if critical_total is None:
+        critical_total = sum(int(item.get("count") or 0) for item in raw.get("critical_failure_counts", []) if isinstance(item, dict))
+    return {"total": eval_summary.get("total", suite.get("total")), "passed": eval_summary.get("passed", suite.get("passed")), "failed": eval_summary.get("failed", suite.get("failed")), "pass_rate": eval_summary.get("pass_rate", raw.get("pass_rate")), "average_score": eval_summary.get("average_score", raw.get("average_score")), "critical_failure_total": critical_total}
+
+
+def _arm_evidence(arm: dict[str, Any]) -> dict[str, Any]:
+    return {"arm": arm["name"], "scenario_id": "suite", "evaluation_summary": arm["source"], "suite_summary": arm["suite_summary"]}
+
+
+def _run_evidence(arm: str, run: dict[str, Any]) -> dict[str, Any]:
+    return {"arm": arm, "scenario_id": run.get("scenario_id"), "trace_path": run.get("trace_path"), "scorecard": run.get("scorecard"), "run_digest": run.get("run_digest"), "report": run.get("report")}
+
+
+def _resolve_path(summary_path: Path, value: str) -> Path:
+    if not value:
+        return Path("")
+    path = Path(value)
+    return path if path.exists() or path.is_absolute() else summary_path.parent / path
+
+
+def _serving_profile_ref(source: Path, suite_path: Path, eval_summary: dict[str, Any], suite: dict[str, Any]) -> str | None:
+    if eval_summary.get("serving_profile"):
+        return _resolve_artifact_ref(source, str(eval_summary["serving_profile"]))
+    suite_profile = suite.get("metadata", {}).get("serving_profile")
+    if suite_profile:
+        return _resolve_artifact_ref(suite_path, str(suite_profile))
+    return None
+
+
+def _resolve_artifact_ref(anchor_file: Path, value: str) -> str:
+    if "://" in value:
+        return value
+    path = Path(value)
+    if not path.is_absolute():
+        path = anchor_file.parent / path
+    return str(path.resolve())
+
+
+def _arm_specs(specs: list[str]) -> list[tuple[str, Path]]:
+    parsed = []
+    for spec in specs:
+        if "=" not in spec:
+            raise SystemExit(f"--arm must use NAME=PATH: {spec}")
+        name, value = spec.split("=", 1)
+        parsed.append((name, Path(value)))
+    return parsed
+
+
+def _md_link(label: str, path: str | None) -> str:
+    return f"[{label}]({path})" if path else ""
+
+
+def _relativize_demo_paths(demo: dict[str, Any], base_dir: Path) -> None:
+    base = base_dir.expanduser().resolve()
+    arm_keys = ("source", "serving_profile")
+    evidence_keys = ("evaluation_summary", "suite_summary", "trace_path", "scorecard", "run_digest", "report")
+
+    for arm in demo.get("arms", []):
+        for key in arm_keys:
+            if arm.get(key):
+                arm[key] = _relative_path(str(arm[key]), base)
+    for claim in demo.get("claims", []):
+        for item in claim.get("evidence", []):
+            for key in evidence_keys:
+                if item.get(key):
+                    item[key] = _relative_path(str(item[key]), base)
+    for scenario in demo.get("scenarios", []):
+        for run in scenario.get("arms", {}).values():
+            for key in evidence_keys:
+                if run.get(key):
+                    run[key] = _relative_path(str(run[key]), base)
+
+
+def _relative_path(value: str, base_dir: Path) -> str:
+    if "://" in value:
+        return value
+    path = Path(value)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    try:
+        return str(path.relative_to(base_dir))
+    except ValueError:
+        return os.path.relpath(path, base_dir)
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, data: dict[str, Any]) -> None:
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _utc_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,12 @@
+{
+  "inputs": [
+    "demo_scenario"
+  ],
+  "outputs": [
+    "live_observer.jsonl",
+    "scorecard.json",
+    "run_digest.json",
+    "report.html"
+  ],
+  "schema_version": "hfr.artifact_lineage.v1"
+}

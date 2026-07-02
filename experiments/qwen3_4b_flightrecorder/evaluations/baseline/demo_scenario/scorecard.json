@@ -1,0 +1,15 @@
+{
+  "arm": "baseline",
+  "checks": [
+    {
+      "id": "final_answer",
+      "passed": false,
+      "rationale": "Baseline misses the required action.",
+      "score": 42
+    }
+  ],
+  "passed": false,
+  "scenario_id": "demo_scenario",
+  "schema_version": "hfr.scorecard.v1",
+  "score": 42
+}
