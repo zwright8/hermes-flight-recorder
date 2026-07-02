@@ -2216,7 +2216,7 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:35:42Z",
+  "updated_at": "2026-07-02T16:37:53Z",
   "evidence_pr5": {
     "branch": "codex/hermes-goal-1-evidence-20260702-1027",
     "branch_sha": "c89b665cb2333f50dbbd4c54fe012614d713ff16",
@@ -2520,6 +2520,22 @@
           "command": "git show origin/main:experiments/autonomy/supervisor_state.json",
           "status": "pass",
           "summary": "Current main records governance_policy_schema_registry as landed and queues governance_rollback_target_receipts next."
+        }
+      ]
+    },
+    {
+      "id": "duplicate_branch_retirement_checkpoint_branch_closed",
+      "branch": "codex/hermes-goal-0-supervisor-20260702-1236",
+      "branch_sha": "99a4bc58f7696c15f15d9f8bdf2223a08b258919",
+      "status": "remote_deleted_after_main_checkpoint",
+      "deleted_at": "2026-07-02T16:37:53Z",
+      "remote_branch_verified_deleted": true,
+      "main_sha": "99a4bc58f7696c15f15d9f8bdf2223a08b258919",
+      "verification": [
+        {
+          "command": "git ls-remote --heads origin main codex/hermes-goal-0-supervisor-20260702-1236",
+          "status": "pass",
+          "summary": "Only refs/heads/main returned at 99a4bc58f7696c15f15d9f8bdf2223a08b258919; the checkpoint branch was absent."
         }
       ]
     }
