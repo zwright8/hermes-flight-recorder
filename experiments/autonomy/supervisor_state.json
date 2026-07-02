@@ -1,8 +1,8 @@
 {
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T14:54:03Z",
+  "updated_at": "2026-07-02T15:12:33Z",
   "active_layer": "governance",
-  "current_packet": "governance promotion-cards artifact",
+  "current_packet": "governance guarded registry alias application",
   "completed_packets": [
     {
       "id": "governance_promotion_decision_artifact",
@@ -11,7 +11,8 @@
       "title": "Top-level promotion decision artifact",
       "summary": "Added a side-effect-free promotion-decision command that blocks alias movement on missing or stale evidence, unknown license, redaction or safety failure, missing cards, missing rollback, eval mismatch, task-completion regression, new critical failures, secret exposure, forbidden actions, or unsupported card claims.",
       "branch": "codex/hermes-goal-8-governance-20260702-1027",
-      "commit_sha": "eb2b97cfe046b909b04e3ae114a96f5355ea13a5",
+      "commit_sha": "e26864de0fa3dfd3e02a37eedf41bbdcc3e26593",
+      "implementation_commit_sha": "99440298b3e18ca2186708c5f1a44a974624ce49",
       "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9"
     },
     {
@@ -21,19 +22,24 @@
       "title": "Promotion model and dataset card generation",
       "summary": "Added a side-effect-free promotion-cards command that writes MODEL_CARD.md, DATASET_CARD.md, and promotion_cards.json while blocking readiness on missing inputs, unknown license, failed redaction/safety/evidence/eval gates, stale hashes, task-completion regression, or new critical failures.",
       "branch": "codex/hermes-goal-8-governance-20260702-1027",
-      "commit_sha": "d5e2539cdf075983c9b17724408cc0b17270357a",
+      "commit_sha": "ae6c8c78e662ba4ff1432977e999d5b8fb935a2e",
+      "implementation_commit_sha": "60e8bf5a82fbcb64860bdad27f9a9a8bbd77c0c1",
+      "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9"
+    },
+    {
+      "id": "governance_alias_apply_guard",
+      "layer": "governance",
+      "status": "complete",
+      "title": "Guarded registry alias application",
+      "summary": "Added promotion-alias-apply to mutate candidate, champion, and rollback aliases only after validating a passing promotion decision, confirming registered alias targets, matching the live champion alias to the decision previous target, and appending alias-history rollback evidence.",
+      "branch": "codex/hermes-goal-8-governance-20260702-1027",
+      "implementation_commit_sha": "6f8a045411752f8c930eb266fc6577fda0828fd1",
+      "metadata_commit_sha": "pending",
       "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9"
     }
   ],
   "blocked_packets": [],
   "next_packets": [
-    {
-      "id": "governance_alias_apply_guard",
-      "layer": "governance",
-      "status": "ready",
-      "title": "Guarded registry alias application",
-      "summary": "Add a follow-up command that applies candidate/champion/rollback alias movement only from a validated passing promotion decision and fresh rollback metadata."
-    },
     {
       "id": "governance_release_record",
       "layer": "governance",
@@ -45,48 +51,48 @@
   "latest_artifacts": [
     {
       "path": "flightrecorder/governance.py",
-      "sha256": "13d59c8f23e885e79748850f3cf40296054ec96abcb254d02315e9df5f9d5d83"
+      "sha256": "632c43645e490f63a890fcb6a39188f9f43f14442499c75395757b6de7f71aba"
     },
     {
       "path": "flightrecorder/cli.py",
-      "sha256": "ee742bb581dbbcdd4970bd98c632a87e8d62967c2e235ed842eb7ce25d365644"
+      "sha256": "925ee70e728d68b863f86f3ae86853adc6340fa53250c63825d228c03c894786"
     },
     {
       "path": "flightrecorder/validation.py",
-      "sha256": "5ed99d9a5d4fa41e8251468fb342a0e564db56a42f0b6b09b847269234ca2e9b"
+      "sha256": "a8aba65364c24a29e4f5198fa64b011c21fc5233b4f3fc083395678f44ba5696"
     },
     {
       "path": "tests/test_promotion_decision.py",
-      "sha256": "e597a34947f51ec0c7b41268a54ab79356346be0d80c03c4b51b7430a90014cf"
+      "sha256": "88b8dfa9cf5a56490f0f034e3d24e414009be153112115ca12180b4f6789b15c"
     },
     {
       "path": "README.md",
-      "sha256": "d73fa78193f6c90c71a4a844b4e479be30aca386ad5560575f0f3e9d98ec4f20"
+      "sha256": "4e6fc9105af5e4a72852be79efccbfdd4a11d791b99853e94e1bcfcefcea258d"
     },
     {
       "path": "TRAINING_PIPELINE.md",
-      "sha256": "fc33198ee8fa38457fa8b1ac8e9744e11ae976452ca40a39f09e6792d7391231"
+      "sha256": "32e695533b84f0a4260e17b6b2edaa36c1cdc6b9e7e54cbce75062497d56dbde"
     }
   ],
   "latest_verification": [
+    {
+      "command": "git merge-base --is-ancestor origin/main HEAD",
+      "status": "passed",
+      "summary": "Dedicated branch contains origin/main b671b9671fff7e891fa0ee58a69f64e818694b11 before the alias-apply packet commit."
+    },
     {
       "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
       "status": "passed"
     },
     {
-      "command": "python3 -m unittest tests.test_promotion_decision",
-      "status": "passed",
-      "summary": "8 tests passed"
-    },
-    {
       "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
       "status": "passed",
-      "summary": "48 tests passed"
+      "summary": "53 tests passed"
     },
     {
-      "command": "python3 -m flightrecorder promotion-cards --help && python3 -m flightrecorder validate --help",
+      "command": "python3 -m flightrecorder promotion-alias-apply --help && python3 -m flightrecorder validate --help",
       "status": "passed",
-      "summary": "promotion-cards and validate --promotion-cards are advertised"
+      "summary": "promotion-alias-apply and validate --promotion-alias-apply are advertised"
     },
     {
       "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
@@ -96,17 +102,21 @@
     {
       "command": "python3 -m flightrecorder schemas --check experiments/autonomy/supervisor_state.json",
       "status": "failed",
-      "summary": "schema registry does not include hfr.autonomy.supervisor_state.v1 in this branch"
-    },
-    {
-      "command": "python3 -m unittest discover",
-      "status": "failed",
-      "summary": "Python 3.9 environment lacks tomllib required by existing tests/test_deployment_hardening.py"
+      "summary": "schema registry does not include hfr.autonomy.supervisor_state.v1"
     },
     {
       "command": "python3.11 -m unittest discover",
       "status": "passed",
-      "summary": "308 tests passed"
+      "summary": "317 tests passed"
+    },
+    {
+      "command": "python3 -m unittest discover",
+      "status": "failed",
+      "summary": "System python3 is Python 3.9 and cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
     }
   ],
   "promotion_readiness": {
@@ -120,22 +130,28 @@
     "governance": "in_progress"
   },
   "layer_status": {
-    "governance": "Promotion-decision and promotion-cards artifacts are implemented and verified; release records and guarded registry alias application remain."
+    "governance": "Promotion decisions, model/dataset cards, and guarded registry alias application are implemented and verified; release records remain."
   },
   "safety_guardrails": [
-    "Never push directly to main.",
-    "Promotion remains side-effect free until a separate guarded alias-application step validates a passing decision.",
-    "Block promotion on missing evidence, unknown license, redaction failure, missing cards, missing rollback, eval mismatch, new critical failures, secret exposure, forbidden actions, unsupported claims, or task-completion regression."
+    "Never push unverified changes to main.",
+    "Acquire /tmp/hermes-flight-recorder-main-push.lock before pushing integrated Goal 8 work to main.",
+    "Promotion-decision remains side-effect free; registry mutation belongs in promotion-alias-apply with receipt validation.",
+    "Block promotion on missing evidence, unknown license, redaction failure, missing cards, missing rollback, eval mismatch, new critical failures, secret exposure, forbidden actions, unsupported claims, task-completion regression, stale champion alias, or malformed alias history."
   ],
   "github_persistence": {
     "branch": "codex/hermes-goal-8-governance-20260702-1027",
-    "commit_sha": "d5e2539cdf075983c9b17724408cc0b17270357a",
-    "remote_branch": "verified",
+    "base_main_sha": "b671b9671fff7e891fa0ee58a69f64e818694b11",
+    "implementation_commit_sha": "6f8a045411752f8c930eb266fc6577fda0828fd1",
+    "metadata_commit_sha": "pending",
+    "remote_branch": "pending",
     "pull_request": "https://github.com/zwright8/hermes-flight-recorder/pull/9",
+    "main_integration": "pending lock, reverify, and push",
+    "remote_branch_deleted": false,
     "risks": [
-      "Dedicated worktree does not contain the source docs/ tree; README.md and TRAINING_PIPELINE.md were updated instead.",
+      "The exact metadata commit SHA and final main SHA are verified after this state file is committed and pushed; they cannot be self-referenced inside the same commit.",
+      "System python3 is Python 3.9 and cannot run the full suite because tests/test_deployment_hardening.py imports tomllib; python3.11 -m unittest discover passed.",
       "flightrecorder schemas --check cannot validate supervisor_state.json because hfr.autonomy.supervisor_state.v1 is not bundled in this branch.",
-      "This packet authorizes alias movement by receipt only; registry mutation is intentionally deferred."
+      "Release-record binding remains the next Goal 8 packet."
     ]
   }
 }
