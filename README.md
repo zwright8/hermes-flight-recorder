@@ -850,17 +850,22 @@ flightrecorder schemas --check runs/promotion_release_record.json
 
 `promotion-decision` is side-effect free. It emits an alias-update receipt only
 when every required artifact is present and fingerprinted, every gate passes,
-the rollback target is declared by a valid rollback receipt, license status is
-known, cards have no TODO/TBD/unsupported-claim markers, and eval movement shows
-no task-completion regressions, new critical failures, forbidden actions, secret
-exposure, contract drift, or unverified contracts.
+the compare gate exposes complete movement metrics, the rollback target is
+declared by a valid rollback receipt, license status is known with
+`accepted_terms: true`, cards have no TODO/TBD/unsupported-claim markers, and
+eval movement shows no task-completion regressions, new critical failures,
+forbidden actions, final-answer-only unsupported claims, secret exposure,
+contract drift, or unverified contracts.
 `promotion-rollback-receipt` is also side-effect free: it fingerprints the
 model registry, proves the rollback target is registered, and blocks when the
 target no longer matches the current champion before promotion.
 `--promotion-policy` makes the required artifact contract and zero-tolerance
 limits explicit. A policy may document or tighten governance expectations, but
 it cannot relax the default blockers for missing artifacts, unknown license,
-unsafe eval movement, unsupported claims, rollback, cards, or validation.
+unaccepted terms, unsafe eval movement, unsupported claims, rollback, cards, or
+validation. Standalone policy validation rejects incomplete required-artifact
+contracts, relaxed limits, missing zero-tolerance rules, or disabled safety
+requirements before the policy is used by a promotion decision.
 `promotion-alias-apply` performs the guarded registry write after validating
 that receipt. The model registry must use `hfr.model_registry.v1`, register all
 alias targets, expose aliases as an object, and have a missing or list-valued

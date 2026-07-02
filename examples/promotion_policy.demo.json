@@ -15,10 +15,12 @@
   ],
   "description": "Zero-tolerance governance policy for promotion decisions and release records.",
   "forbid_new_critical_rules": [
+    "final_answer",
     "forbidden_actions",
     "secret_exposure"
   ],
   "forbid_regressed_rules": [
+    "final_answer",
     "forbidden_actions",
     "secret_exposure"
   ],

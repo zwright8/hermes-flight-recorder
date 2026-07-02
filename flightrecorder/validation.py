@@ -48,12 +48,13 @@ from .model_registry import (
 )
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
 from .governance import (
-    MODEL_REGISTRY_SCHEMA_VERSION,
     PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
     PROMOTION_CARDS_REQUIRED_INPUTS,
     PROMOTION_CARDS_SCHEMA_VERSION,
     PROMOTION_DECISION_REQUIRED_ARTIFACTS,
     PROMOTION_DECISION_SCHEMA_VERSION,
+    PROMOTION_POLICY_DEFAULT_LIMITS,
+    PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES,
     PROMOTION_POLICY_SCHEMA_VERSION,
     PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION,
     PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
@@ -106,7 +107,6 @@ from .training import (
     RL_REWARD_MODEL_SCHEMA_VERSION,
     RL_SFT_SCHEMA_VERSION,
     RL_STEP_REWARD_SCHEMA_VERSION,
-    RL_REDACTION_STATUS_SCHEMA_VERSION,
     REWARD_SCALES,
     build_label_provenance_summary,
     build_redaction_status,
@@ -119,8 +119,6 @@ VALIDATION_SCHEMA_VERSION = "hfr.validation.v1"
 RUN_SUITE_SCHEMA_VERSION = "hfr.run_suite.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
-HARNESS_RUN_MANIFEST_SCHEMA_VERSION = "hfr.harness_run_manifest.v1"
-HARNESS_RUN_RESULT_SCHEMA_VERSION = "hfr.harness_run_result.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
 _COMPANION_NOT_PROVIDED = object()
 
@@ -8364,13 +8362,40 @@ def _validate_raw_promotion_policy(policy: dict[str, Any], target: ValidationTar
     for field_name in ("id", "description"):
         if not isinstance(policy.get(field_name), str) or not policy.get(field_name):
             target.errors.append(f"promotion_policy.{field_name} must be a non-empty string.")
-    _validate_policy_role_list(policy.get("required_artifacts"), target, "promotion_policy.required_artifacts")
-    _validate_policy_role_list(policy.get("release_required_artifacts"), target, "promotion_policy.release_required_artifacts")
+    required_artifacts = _validate_policy_role_list(policy.get("required_artifacts"), target, "promotion_policy.required_artifacts")
+    release_required_artifacts = _validate_policy_role_list(
+        policy.get("release_required_artifacts"),
+        target,
+        "promotion_policy.release_required_artifacts",
+    )
+    _validate_policy_exact_roles(
+        required_artifacts,
+        PROMOTION_DECISION_REQUIRED_ARTIFACTS,
+        target,
+        "promotion_policy.required_artifacts",
+    )
+    _validate_policy_exact_roles(
+        release_required_artifacts,
+        PROMOTION_RELEASE_RECORD_REQUIRED_ARTIFACTS,
+        target,
+        "promotion_policy.release_required_artifacts",
+    )
     _validate_policy_class_list(policy.get("allowed_candidate_classes"), target, "promotion_policy.allowed_candidate_classes")
     _validate_policy_class_list(policy.get("allowed_champion_classes"), target, "promotion_policy.allowed_champion_classes")
     _validate_policy_limits(policy.get("limits"), target, "promotion_policy.limits")
-    _validate_policy_forbidden_rules(policy.get("forbid_new_critical_rules"), target, "promotion_policy.forbid_new_critical_rules")
-    _validate_policy_forbidden_rules(policy.get("forbid_regressed_rules"), target, "promotion_policy.forbid_regressed_rules")
+    _validate_policy_conservative_limits(policy.get("limits"), target, "promotion_policy.limits")
+    new_critical_rules = _validate_policy_forbidden_rules(
+        policy.get("forbid_new_critical_rules"),
+        target,
+        "promotion_policy.forbid_new_critical_rules",
+    )
+    regressed_rules = _validate_policy_forbidden_rules(
+        policy.get("forbid_regressed_rules"),
+        target,
+        "promotion_policy.forbid_regressed_rules",
+    )
+    _validate_policy_required_forbidden_rules(new_critical_rules, target, "promotion_policy.forbid_new_critical_rules")
+    _validate_policy_required_forbidden_rules(regressed_rules, target, "promotion_policy.forbid_regressed_rules")
     for field_name in (
         "require_known_license",
         "require_accepted_terms",
@@ -8380,6 +8405,8 @@ def _validate_raw_promotion_policy(policy: dict[str, Any], target: ValidationTar
     ):
         if not isinstance(policy.get(field_name), bool):
             target.errors.append(f"promotion_policy.{field_name} must be a boolean.")
+        elif policy.get(field_name) is not True:
+            target.errors.append(f"promotion_policy.{field_name} must be true; promotion policy cannot relax default safety requirements.")
     target.details.update({"policy_id": policy.get("id"), "schema_version": policy.get("schema_version")})
 
 
@@ -8450,9 +8477,41 @@ def _validate_policy_limits(value: Any, target: ValidationTarget, label: str) ->
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
 
 
-def _validate_policy_forbidden_rules(value: Any, target: ValidationTarget, label: str) -> None:
+def _validate_policy_conservative_limits(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        return
+    for field_name, maximum in PROMOTION_POLICY_DEFAULT_LIMITS.items():
+        field_value = value.get(field_name)
+        if _is_non_negative_int(field_value) and field_value > maximum:
+            target.errors.append(f"{label}.{field_name} cannot exceed default maximum {maximum}.")
+
+
+def _validate_policy_forbidden_rules(value: Any, target: ValidationTarget, label: str) -> list[str]:
     if not _is_string_list(value):
         target.errors.append(f"{label} must be a list of strings.")
+        return []
+    return list(value)
+
+
+def _validate_policy_required_forbidden_rules(value: list[str], target: ValidationTarget, label: str) -> None:
+    if not value:
+        return
+    missing = sorted(set(PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES) - set(value))
+    if missing:
+        target.errors.append(f"{label} must include required zero-tolerance rules: {missing!r}.")
+
+
+def _validate_policy_exact_roles(value: list[str], required: tuple[str, ...], target: ValidationTarget, label: str) -> None:
+    if not value:
+        return
+    actual = set(value)
+    expected = set(required)
+    missing = sorted(expected - actual)
+    unknown = sorted(actual - expected)
+    if missing:
+        target.errors.append(f"{label} is missing required role(s): {missing!r}.")
+    if unknown:
+        target.errors.append(f"{label} contains unknown role(s): {unknown!r}.")
 
 
 def _validate_policy_requirements(value: Any, target: ValidationTarget, label: str) -> None:

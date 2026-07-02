@@ -72,7 +72,15 @@ PROMOTION_POLICY_DEFAULT_LIMITS = {
     "max_new_critical_failures": 0,
     "max_rule_regressions": 0,
 }
-PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES = ("forbidden_actions", "secret_exposure")
+PROMOTION_POLICY_REQUIRED_FORBIDDEN_RULES = ("final_answer", "forbidden_actions", "secret_exposure")
+PROMOTION_COMPARE_METRIC_FIELDS = (
+    "baseline_win_count",
+    "contract_drift_count",
+    "new_critical_failure_counts",
+    "regressed_rule_counts",
+    "task_completion_regression_count",
+    "unverified_contract_count",
+)
 _JSON_ARTIFACT_ROLES = {
     "evidence_bundle": EVIDENCE_BUNDLE_SCHEMA_VERSION,
     "promotion_ledger_gate": PROMOTION_LEDGER_GATE_SCHEMA_VERSION,
@@ -206,6 +214,7 @@ def build_promotion_decision(
         _add_passed_json_check(checks, role, json_artifacts.get(role))
 
     compare_metrics = _metrics_object(json_artifacts.get("compare_gate"))
+    _add_compare_metrics_check(checks, compare_metrics)
     limits = policy["limits"]
     _add_max_count_check(
         checks,
@@ -705,8 +714,6 @@ def build_promotion_release_record(
     decision_obj = decision if isinstance(decision, dict) else {}
     cards_obj = cards if isinstance(cards, dict) else {}
     alias_obj = alias_receipt if isinstance(alias_receipt, dict) else {}
-    rollback_obj = rollback if isinstance(rollback, dict) else {}
-    compare_obj = compare_gate if isinstance(compare_gate, dict) else {}
     policy_path = Path(promotion_policy_path) if promotion_policy_path else None
     policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths) if policy_path else None
     policy = _load_promotion_policy(policy_path, preserve_paths) if policy_path else None
@@ -1024,6 +1031,7 @@ def build_promotion_cards(
         _add_passed_json_check(checks, role, json_artifacts.get(role))
 
     compare_metrics = _metrics_object(json_artifacts.get("compare_gate"))
+    _add_compare_metrics_check(checks, compare_metrics)
     _add_max_count_check(checks, "task_completion_regressions_absent", compare_metrics.get("task_completion_regression_count"), 0)
     _add_count_map_absence_check(
         checks,
@@ -1522,15 +1530,23 @@ def _add_passed_json_check(checks: list[dict[str, Any]], role: str, payload: dic
 def _add_license_check(checks: list[dict[str, Any]], payload: dict[str, Any] | None) -> None:
     status = _license_status(payload)
     accepted_terms = payload.get("accepted_terms") if isinstance(payload, dict) else None
-    passed = status not in {"", "unknown", "unreviewed", "missing"} and accepted_terms is not False
     _add_check(
         checks,
         "license_status_known",
-        passed,
+        status not in {"", "unknown", "unreviewed", "missing"},
         actual={"license_status": status or "missing", "accepted_terms": accepted_terms},
-        expected={"license_status": "known", "accepted_terms": "not false"},
+        expected={"license_status": "known"},
         scope={"artifact_role": "license_review"},
-        summary="license review has a known status and does not reject terms",
+        summary="license review has a known status",
+    )
+    _add_check(
+        checks,
+        "license_terms_accepted",
+        accepted_terms is True,
+        actual={"accepted_terms": accepted_terms},
+        expected={"accepted_terms": True},
+        scope={"artifact_role": "license_review"},
+        summary="license review explicitly accepts required terms",
     )
 
 
@@ -1571,6 +1587,30 @@ def _add_rollback_metadata_check(checks: list[dict[str, Any]], payload: dict[str
             scope={"artifact_role": "rollback_metadata"},
             summary="rollback metadata is a passing rollback receipt",
         )
+
+
+def _add_compare_metrics_check(checks: list[dict[str, Any]], compare_metrics: dict[str, Any]) -> None:
+    missing = [field for field in PROMOTION_COMPARE_METRIC_FIELDS if field not in compare_metrics]
+    count_fields = (
+        "baseline_win_count",
+        "contract_drift_count",
+        "task_completion_regression_count",
+        "unverified_contract_count",
+    )
+    map_fields = ("new_critical_failure_counts", "regressed_rule_counts")
+    invalid_counts = [
+        field for field in count_fields if field in compare_metrics and not _is_non_negative_int(compare_metrics.get(field))
+    ]
+    invalid_maps = [field for field in map_fields if field in compare_metrics and not _is_count_map(compare_metrics.get(field))]
+    _add_check(
+        checks,
+        "compare_metrics_complete",
+        not missing and not invalid_counts and not invalid_maps,
+        actual={"missing": missing, "invalid_counts": invalid_counts, "invalid_maps": invalid_maps},
+        expected={"fields": list(PROMOTION_COMPARE_METRIC_FIELDS)},
+        scope={"artifact_role": "compare_gate"},
+        summary="compare gate exposes complete promotion movement metrics",
+    )
 
 
 def _add_card_claims_check(checks: list[dict[str, Any]], role: str, path: Path | None) -> None:
@@ -1770,6 +1810,14 @@ def _count_map(value: Any) -> dict[str, int]:
     if not isinstance(value, dict):
         return {}
     return {str(key): _int_value(count) for key, count in value.items() if isinstance(key, str) and key}
+
+
+def _is_count_map(value: Any) -> bool:
+    return isinstance(value, dict) and all(isinstance(key, str) and key and _is_non_negative_int(count) for key, count in value.items())
+
+
+def _is_non_negative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _int_value(value: Any) -> int:

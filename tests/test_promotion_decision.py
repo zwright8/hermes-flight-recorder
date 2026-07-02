@@ -357,6 +357,38 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertIn("license_status_known", failed_check_ids(decision))
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
 
+    def test_promotion_decision_blocks_missing_accepted_terms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root, accepted_terms=None)
+            decision_path = root / "promotion_decision.json"
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertIn("license_terms_accepted", failed_check_ids(decision))
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_promotion_decision_blocks_incomplete_compare_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            artifacts["compare_gate"].write_text(
+                json.dumps({"schema_version": "hfr.compare_gate.v1", "passed": True, "metrics": {}}),
+                encoding="utf-8",
+            )
+            decision_path = root / "promotion_decision.json"
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertIn("compare_metrics_complete", failed_check_ids(decision))
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
     def test_promotion_decision_blocks_incomplete_policy_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -378,6 +410,31 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertIn("promotion_policy_required_artifacts_complete", failed_check_ids(decision))
             self.assertFalse(decision["alias_update"]["authorized"])
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_validate_promotion_policy_rejects_relaxed_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy_path = write_promotion_policy(
+                root,
+                required_artifacts=[
+                    role for role in promotion_decision_required_artifacts() if role != "serving_report"
+                ],
+                forbid_new_critical_rules=["forbidden_actions", "secret_exposure"],
+                forbid_regressed_rules=["forbidden_actions", "secret_exposure"],
+                limits={"max_task_completion_regressions": 1},
+                require_accepted_terms=False,
+            )
+            summary_path = root / "policy_validation.json"
+
+            code = run_cli(["validate", "--promotion-policy", str(policy_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("missing required role", errors)
+            self.assertIn("cannot exceed default maximum", errors)
+            self.assertIn("zero-tolerance rules", errors)
+            self.assertIn("require_accepted_terms must be true", errors)
 
     def test_promotion_decision_blocks_eval_regressions_and_secret_exposure(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -419,7 +476,13 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 1)
 
 
-def write_governance_artifacts(root: Path, *, license_status: str = "known", compare_metrics=None) -> dict[str, Path | None]:
+def write_governance_artifacts(
+    root: Path,
+    *,
+    license_status: str = "known",
+    accepted_terms: bool | None = True,
+    compare_metrics=None,
+) -> dict[str, Path | None]:
     evidence_bundle = root / "evidence_bundle.json"
     evidence_bundle.write_text(json.dumps({"schema_version": "hfr.evidence_bundle.v1", "passed": True}), encoding="utf-8")
     promotion_ledger_gate = root / "promotion_ledger_gate.json"
@@ -436,7 +499,7 @@ def write_governance_artifacts(root: Path, *, license_status: str = "known", com
         "task_completion_regression_count": 0,
         "unverified_contract_count": 0,
     }
-    if compare_metrics:
+    if compare_metrics is not None:
         metrics.update(compare_metrics)
     compare_gate.write_text(
         json.dumps({"schema_version": "hfr.compare_gate.v1", "passed": True, "metrics": metrics}),
@@ -454,10 +517,10 @@ def write_governance_artifacts(root: Path, *, license_status: str = "known", com
     rollback_metadata = root / "rollback.json"
     rollback_metadata.write_text(json.dumps({"available": True, "rollback_id": "champion-v1"}), encoding="utf-8")
     license_review = root / "license_review.json"
-    license_review.write_text(
-        json.dumps({"accepted_terms": True, "license_status": license_status, "passed": True}),
-        encoding="utf-8",
-    )
+    license_payload = {"license_status": license_status, "passed": True}
+    if accepted_terms is not None:
+        license_payload["accepted_terms"] = accepted_terms
+    license_review.write_text(json.dumps(license_payload), encoding="utf-8")
     redaction_check = root / "redaction_check.json"
     redaction_check.write_text(json.dumps({"passed": True}), encoding="utf-8")
     safety_gate = root / "safety_gate.json"
@@ -529,7 +592,21 @@ def write_promotion_policy(
     policy_id: str = "strict-local-policy",
     required_artifacts: list[str] | None = None,
     release_required_artifacts: list[str] | None = None,
+    forbid_new_critical_rules: list[str] | None = None,
+    forbid_regressed_rules: list[str] | None = None,
+    limits: dict[str, int] | None = None,
+    require_accepted_terms: bool = True,
 ) -> Path:
+    default_limits = {
+        "max_task_completion_regressions": 0,
+        "max_baseline_wins": 0,
+        "max_contract_drifts": 0,
+        "max_unverified_contracts": 0,
+        "max_new_critical_failures": 0,
+        "max_rule_regressions": 0,
+    }
+    if limits:
+        default_limits.update(limits)
     policy_path = root / filename
     policy_path.write_text(
         json.dumps(
@@ -541,18 +618,11 @@ def write_promotion_policy(
                 "release_required_artifacts": release_required_artifacts or promotion_release_required_artifacts(),
                 "allowed_candidate_classes": ["base", "candidate", "champion", "frontier", "trace-only"],
                 "allowed_champion_classes": ["base", "candidate", "champion", "frontier", "trace-only"],
-                "limits": {
-                    "max_task_completion_regressions": 0,
-                    "max_baseline_wins": 0,
-                    "max_contract_drifts": 0,
-                    "max_unverified_contracts": 0,
-                    "max_new_critical_failures": 0,
-                    "max_rule_regressions": 0,
-                },
-                "forbid_new_critical_rules": ["forbidden_actions", "secret_exposure"],
-                "forbid_regressed_rules": ["forbidden_actions", "secret_exposure"],
+                "limits": default_limits,
+                "forbid_new_critical_rules": forbid_new_critical_rules or promotion_policy_required_forbidden_rules(),
+                "forbid_regressed_rules": forbid_regressed_rules or promotion_policy_required_forbidden_rules(),
                 "require_known_license": True,
-                "require_accepted_terms": True,
+                "require_accepted_terms": require_accepted_terms,
                 "require_rollback_metadata": True,
                 "require_supported_cards": True,
                 "require_artifact_validation": True,
@@ -591,6 +661,10 @@ def promotion_release_required_artifacts() -> list[str]:
         "compare_gate",
         "release_notes",
     ]
+
+
+def promotion_policy_required_forbidden_rules() -> list[str]:
+    return ["final_answer", "forbidden_actions", "secret_exposure"]
 
 
 def promotion_alias_apply_args(registry_path: Path, decision_path: Path, receipt_path: Path) -> list[str]:
