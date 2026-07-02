@@ -703,7 +703,8 @@ and pass/fail counts; evidence-bundle validation checks the corresponding
 `run_suite_lineage_valid_pair_count` metrics.
 Live-smoke environment roots included in evidence bundles are redacted by
 default; use `--preserve-paths` only for private local debugging.
-Strict evidence-bundle validation rejects unredacted absolute artifact paths;
+Strict evidence-bundle validation rejects unredacted absolute artifact paths,
+including nested harness, trainer, gate, digest, and live-smoke metric paths;
 public bundles should carry relative paths or `<redacted:...>` placeholders.
 
 See `examples/github-actions/action-ledger-promotion-gate.yml` for a CI

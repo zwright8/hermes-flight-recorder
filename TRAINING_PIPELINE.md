@@ -87,7 +87,8 @@ referenced harness trace, scorecard, digest, report, and replay-lineage files
 exist before counting a harness pair as artifact-valid. Live-smoke environment
 root paths are redacted in bundle metrics by default; use `--preserve-paths`
 only for private local debugging. Strict evidence-bundle validation rejects
-unredacted absolute artifact paths, so public bundles should carry relative
+unredacted absolute artifact paths, including nested harness, trainer, gate,
+digest, and live-smoke metric paths, so public bundles should carry relative
 paths or `<redacted:...>` placeholders.
 `flightrecorder compare-suite` carries this metadata into its JSON and HTML
 outputs so baseline/candidate comparisons remain tied to the evaluated configs.

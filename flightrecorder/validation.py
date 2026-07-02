@@ -12757,6 +12757,7 @@ def _validate_evidence_bundle_decision(
             for field_name in ("id", "path"):
                 if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
                     target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+            _warn_absolute_public_path(target, f"{label}.path", gate.get("path"))
     next_actions = decision.get("next_actions")
     if not isinstance(next_actions, list):
         target.errors.append("evidence_bundle.decision.next_actions must be a list.")
@@ -12815,8 +12816,8 @@ def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: Va
     path_value = record.get("path")
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string.")
-    elif _looks_absolute(path_value):
-        target.warnings.append(f"{label}.path is absolute; use a relative path or redacted placeholder for public bundles.")
+    else:
+        _warn_absolute_public_path(target, f"{label}.path", path_value)
     if not isinstance(record.get("exists"), bool):
         target.errors.append(f"{label}.exists must be a boolean.")
     if record.get("kind") not in {"file", "directory"}:
@@ -12916,6 +12917,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     harness_handoff = metrics.get("harness_handoff")
     if isinstance(harness_handoff, dict):
         _validate_bundle_harness_handoff(harness_handoff, target)
+    live_smoke_summary = metrics.get("live_smoke_summary")
+    if isinstance(live_smoke_summary, dict):
+        _validate_bundle_live_smoke_summary_paths(live_smoke_summary, target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -12928,6 +12932,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
             for field_name in ("id", "path"):
                 if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
                     target.errors.append(f"evidence_bundle.metrics.gates[{index}].{field_name} must be a non-empty string.")
+            _warn_absolute_public_path(target, f"evidence_bundle.metrics.gates[{index}].path", gate.get("path"))
             if "schema_version" in gate and not isinstance(gate.get("schema_version"), str):
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].schema_version must be a string when present.")
             if not isinstance(gate.get("passed"), bool):
@@ -12952,6 +12957,8 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
     label = "evidence_bundle.metrics.run_digest_coverage"
     if not isinstance(value.get("runs_dir"), str) or not value.get("runs_dir"):
         target.errors.append(f"{label}.runs_dir must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, f"{label}.runs_dir", value.get("runs_dir"))
     for field_name in (
         "run_count",
         "digest_count",
@@ -12985,6 +12992,12 @@ def _validate_bundle_run_digest_coverage(value: dict[str, Any], target: Validati
     for field_name in ("missing_digest_scenarios", "invalid_digest_scenarios"):
         if not _is_string_list(value.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a list of strings.")
+
+
+def _validate_bundle_live_smoke_summary_paths(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "evidence_bundle.metrics.live_smoke_summary"
+    for field_name in ("hermes_root", "flight_recorder_root"):
+        _warn_absolute_public_path(target, f"{label}.{field_name}", value.get(field_name))
 
 
 def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTarget) -> None:
@@ -13044,6 +13057,8 @@ def _validate_bundle_harness_handoff(value: dict[str, Any], target: ValidationTa
         for field_name in ("suite_summary_path", "suite_selected_scenario_id"):
             if row.get(field_name) is not None and not isinstance(row.get(field_name), str):
                 target.errors.append(f"{row_label}.{field_name} must be a string when present.")
+        for field_name in ("manifest_path", "result_path", "trace_path", "suite_summary_path", "replay_lineage"):
+            _warn_absolute_public_path(target, f"{row_label}.{field_name}", row.get(field_name))
         for field_name in ("suite_total", "suite_passed", "suite_failed"):
             if row.get(field_name) is not None and not _is_non_negative_int(row.get(field_name)):
                 target.errors.append(f"{row_label}.{field_name} must be a non-negative integer or null.")
@@ -13146,6 +13161,7 @@ def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTa
         for field_name in ("path", "schema_version", "expected_schema_version", "readiness", "recommendation", "expected_recommendation"):
             if not isinstance(stage.get(field_name), str) or not stage.get(field_name):
                 target.errors.append(f"{stage_label}.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{stage_label}.path", stage.get("path"))
         for field_name in ("schema_supported", "passed", "handoff_ready"):
             if not isinstance(stage.get(field_name), bool):
                 target.errors.append(f"{stage_label}.{field_name} must be a boolean.")
@@ -14212,6 +14228,11 @@ def _is_dataset_version(value: Any) -> bool:
 
 def _looks_absolute(value: str) -> bool:
     return value.startswith("/") or _is_windows_absolute(value)
+
+
+def _warn_absolute_public_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if isinstance(value, str) and value and _looks_absolute(value):
+        target.warnings.append(f"{label} is absolute; use a relative path or redacted placeholder for public bundles.")
 
 
 def _sha256(path: Path) -> str:

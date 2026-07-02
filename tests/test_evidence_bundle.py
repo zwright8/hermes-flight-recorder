@@ -921,6 +921,85 @@ class EvidenceBundleTests(unittest.TestCase):
             strict_warnings = "\n".join(warning for target in strict_summary["targets"] for warning in target["warnings"])
             self.assertIn("evidence_bundle.artifacts.runs_dir.path is absolute", strict_warnings)
 
+    def test_strict_validate_rejects_nested_absolute_bundle_metric_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            harness = _write_harness_handoff_artifacts(root)
+            trainer = _write_trainer_handoff_artifacts(root)
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            strict_summary_path = root / "strict_validation.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "evidence-bundle",
+                        "--runs",
+                        str(runs),
+                        "--harness-manifest",
+                        str(harness["manifest"]),
+                        "--harness-result",
+                        str(harness["result"]),
+                        "--trainer-preflight",
+                        str(trainer["trainer_preflight"]),
+                        "--trainer-launch-check",
+                        str(trainer["trainer_launch_check"]),
+                        "--trainer-archive",
+                        str(trainer["trainer_archive"]),
+                        "--trainer-archive-check",
+                        str(trainer["trainer_archive_check"]),
+                        "--trainer-consumer-plan",
+                        str(trainer["trainer_consumer_plan"]),
+                        "--trainer-wrapper-dry-run",
+                        str(trainer["trainer_wrapper_dry_run"]),
+                        "--agentic-training-result",
+                        str(trainer["agentic_training_result"]),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                ),
+                0,
+            )
+            absolute_root = "/" + "Users/example"
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["metrics"]["run_digest_coverage"]["runs_dir"] = f"{absolute_root}/runs"
+            bundle["metrics"]["harness_handoff"]["runs"][0]["manifest_path"] = f"{absolute_root}/harness_manifest.json"
+            bundle["metrics"]["harness_handoff"]["runs"][0]["result_path"] = f"{absolute_root}/harness_result.json"
+            bundle["metrics"]["harness_handoff"]["runs"][0]["suite_summary_path"] = f"{absolute_root}/suite_summary.json"
+            bundle["metrics"]["harness_handoff"]["runs"][0]["replay_lineage"] = f"{absolute_root}/artifact_lineage.json"
+            bundle["metrics"]["trainer_handoff"]["stages"][0]["path"] = f"{absolute_root}/trainer_preflight.json"
+            bundle["metrics"]["live_smoke_summary"] = {
+                "hermes_root": f"{absolute_root}/hermes-agent",
+                "flight_recorder_root": f"{absolute_root}/hermes-flight-recorder",
+            }
+            bundle["metrics"]["gates"] = [{"id": "forged_gate", "path": f"{absolute_root}/gate.json", "passed": True}]
+            bundle["decision"]["gate_count"] = 1
+            bundle["decision"]["passed_gate_count"] = 1
+            bundle["decision"]["blocking_gates"] = [{"id": "forged_gate", "path": f"{absolute_root}/gate.json"}]
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+            strict_code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(strict_summary_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("evidence_bundle.metrics.run_digest_coverage.runs_dir is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.harness_handoff.runs[0].manifest_path is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.harness_handoff.runs[0].result_path is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.harness_handoff.runs[0].suite_summary_path is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.harness_handoff.runs[0].replay_lineage is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.trainer_handoff.stages[0].path is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.live_smoke_summary.hermes_root is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.live_smoke_summary.flight_recorder_root is absolute", warnings)
+            self.assertIn("evidence_bundle.metrics.gates[0].path is absolute", warnings)
+            self.assertIn("evidence_bundle.decision.blocking_gates[0].path is absolute", warnings)
+            strict_summary = json.loads(strict_summary_path.read_text(encoding="utf-8"))
+            strict_warnings = "\n".join(warning for target in strict_summary["targets"] for warning in target["warnings"])
+            self.assertIn("evidence_bundle.metrics.harness_handoff.runs[0].manifest_path is absolute", strict_warnings)
+
 
 def _write_harness_handoff_artifacts(
     root: Path,
