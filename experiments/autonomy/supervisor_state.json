@@ -1,5 +1,5 @@
 {
-  "active_layer": "model",
+  "active_layer": "governance",
   "blocked_packets": [
     {
       "blocked_at": "2026-07-02T14:32:48Z",
@@ -1162,15 +1162,112 @@
           "summary": "System Python 3.9 ran 321 tests but cannot import tomllib in tests/test_deployment_hardening.py; Python 3.11 discovery passed."
         }
       ]
+    },
+    {
+      "id": "governance_policy_schema_registry",
+      "layer": "governance",
+      "priority": "medium",
+      "status": "verified_pending_main_delivery",
+      "title": "Register promotion policy schema",
+      "summary": "Registered hfr.promotion_policy.v1 in the public schema catalog, added a schema-registry regression test for the demo policy, and documented schema validation next to strict promotion-policy checks.",
+      "completed_at": "2026-07-02T16:25:35Z",
+      "commit_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
+      "artifacts": [
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/promotion_policy.v1.schema.json",
+          "sha256": "3ea8e913e723cd6af3682b8d697a1de00adf25daccbb394e57044f7ae87d9363"
+        },
+        {
+          "kind": "schema",
+          "layer": "governance",
+          "path": "flightrecorder/schemas/manifest.json",
+          "sha256": "7432e8591fe8a7fceffe18ca3a04a46b14ea5c856793457bf6c76b6c46659145"
+        },
+        {
+          "kind": "test",
+          "layer": "governance",
+          "path": "tests/test_schema_registry.py",
+          "sha256": "ff4644baa3615b4021835656f592a9735cf343ce293e9ba999beaeb1dc3c3209"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "README.md",
+          "sha256": "e9416ac0b3736f6b5dd46e1055347e85679fc4e27bb871292823b2aa3ca8ea9a"
+        },
+        {
+          "kind": "doc",
+          "layer": "governance",
+          "path": "TRAINING_PIPELINE.md",
+          "sha256": "d41f450e2a9cd3cc9a82d37256d67e5211da8537db36c37a142b9a256d92a53a"
+        }
+      ],
+      "verification": [
+        {
+          "command": "python3 -m json.tool flightrecorder/schemas/promotion_policy.v1.schema.json >/tmp/hfr_promotion_policy_schema.json && python3 -m json.tool flightrecorder/schemas/manifest.json >/tmp/hfr_schema_manifest.json",
+          "status": "pass",
+          "summary": "Promotion policy schema and schema manifest parse as JSON."
+        },
+        {
+          "command": "python3 -m flightrecorder schemas --check examples/promotion_policy.demo.json",
+          "status": "pass",
+          "summary": "The demo promotion policy is auto-detected as promotion_policy and passes the registered schema."
+        },
+        {
+          "command": "python3 -m unittest tests.test_schema_registry tests.test_promotion_decision tests.test_validation",
+          "status": "pass",
+          "summary": "62 schema registry, promotion decision, and validation tests passed."
+        },
+        {
+          "command": "git diff --check",
+          "status": "pass",
+          "summary": "No whitespace errors in the branch diff."
+        },
+        {
+          "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
+          "status": "pass",
+          "summary": "338 tests passed under Python 3.11."
+        },
+        {
+          "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+          "status": "pass",
+          "summary": "Strict promotion-policy validation passed with zero warnings or errors."
+        },
+        {
+          "command": "python3 -m unittest discover",
+          "status": "blocked",
+          "summary": "System Python 3.9 ran 326 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
+        }
+      ],
+      "risks": [
+        "The schema is intentionally permissive for additionalProperties to preserve forward-compatible policy extension; governance code remains the safety floor for unknown fields.",
+        "System python3 is Python 3.9.6 and cannot run the full discovery suite because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11."
+      ],
+      "github_persistence": {
+        "branch": "codex/hermes-goal-8-governance-policy-schema-20260702-1620",
+        "branch_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
+        "pushed": false,
+        "remote_branch_verified": false,
+        "main_sha": null,
+        "remote_main_verified": false,
+        "remote_branch_deleted": false,
+        "pr_url": null,
+        "pr_state": "not_created_yet"
+      }
     }
   ],
   "current_packet": {
-    "id": "governance_policy_schema_registry",
+    "id": "governance_rollback_target_receipts",
     "layer": "governance",
-    "priority": "medium",
+    "priority": "high",
     "status": "ready",
-    "summary": "Goal 8 promotion policy packet landed on main; next governance packet should expose hfr.promotion_policy.v1 through the schema catalog.",
-    "title": "Register promotion policy schema"
+    "summary": "Add explicit rollback target receipts and validation hooks so alias movement and release records cannot proceed without reversible rollback evidence.",
+    "title": "Require rollback target receipts",
+    "depends_on": [
+      "governance_policy_schema_registry"
+    ]
   },
   "git": {
     "base_commit": "272b6fe09a230f2036f50dbff0e95961ce1f4cde",
@@ -1623,88 +1720,71 @@
   },
   "latest_artifacts": [
     {
-      "kind": "module",
+      "kind": "schema",
       "layer": "governance",
-      "path": "flightrecorder/governance.py",
-      "sha256": "63675467779a4f59d6055188ef3644e5a39424439775fd1bceb72bd5abc45e13"
+      "path": "flightrecorder/schemas/promotion_policy.v1.schema.json",
+      "sha256": "3ea8e913e723cd6af3682b8d697a1de00adf25daccbb394e57044f7ae87d9363"
     },
     {
-      "kind": "module",
+      "kind": "schema",
       "layer": "governance",
-      "path": "flightrecorder/cli.py",
-      "sha256": "a8d26f7a3f08a037e53aa6da192538e8e782e1c499c62daf7d309b2922d9a9c0"
-    },
-    {
-      "kind": "module",
-      "layer": "governance",
-      "path": "flightrecorder/validation.py",
-      "sha256": "211c1821e811f2e07c3ed9e9eb2bbd1f3e51a2563b25bdd184b9010f962e1490"
+      "path": "flightrecorder/schemas/manifest.json",
+      "sha256": "7432e8591fe8a7fceffe18ca3a04a46b14ea5c856793457bf6c76b6c46659145"
     },
     {
       "kind": "test",
       "layer": "governance",
-      "path": "tests/test_promotion_decision.py",
-      "sha256": "8db338fa00541c87985a3be2c482db7101cfd030984a8715e1bc5ac9eec4fd0b"
-    },
-    {
-      "kind": "policy",
-      "layer": "governance",
-      "path": "examples/promotion_policy.demo.json",
-      "sha256": "715e8ff9e045de78b2bf02c29a7281e934b65219d19fe0e686c72a18fd2cbcfe"
+      "path": "tests/test_schema_registry.py",
+      "sha256": "ff4644baa3615b4021835656f592a9735cf343ce293e9ba999beaeb1dc3c3209"
     },
     {
       "kind": "doc",
       "layer": "governance",
       "path": "README.md",
-      "sha256": "5bd845648346f01dd83dea0835b9dbdd8a9688f3f35c5f56e3793a1e06639afb"
+      "sha256": "e9416ac0b3736f6b5dd46e1055347e85679fc4e27bb871292823b2aa3ca8ea9a"
     },
     {
       "kind": "doc",
       "layer": "governance",
       "path": "TRAINING_PIPELINE.md",
-      "sha256": "a4b0ce44b378ac1103c56b8507ce2cee48dd569fb68743c27a799c8dbb52f4e0"
+      "sha256": "d41f450e2a9cd3cc9a82d37256d67e5211da8537db36c37a142b9a256d92a53a"
     }
   ],
   "latest_verification": [
     {
-      "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+      "command": "python3 -m json.tool flightrecorder/schemas/promotion_policy.v1.schema.json >/tmp/hfr_promotion_policy_schema.json && python3 -m json.tool flightrecorder/schemas/manifest.json >/tmp/hfr_schema_manifest.json",
       "status": "pass",
-      "summary": "Touched governance policy modules compile after merging current origin/main."
+      "summary": "Promotion policy schema and schema manifest parse as JSON."
     },
     {
-      "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+      "command": "python3 -m flightrecorder schemas --check examples/promotion_policy.demo.json",
       "status": "pass",
-      "summary": "57 focused governance, ledger, and validation tests passed after merging current origin/main."
+      "summary": "The demo promotion policy is auto-detected as promotion_policy and passes the registered schema."
     },
     {
-      "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+      "command": "python3 -m unittest tests.test_schema_registry tests.test_promotion_decision tests.test_validation",
       "status": "pass",
-      "summary": "Standalone promotion policy validation passed with zero warnings or errors."
+      "summary": "62 schema registry, promotion decision, and validation tests passed."
     },
     {
-      "command": "python3 -m flightrecorder validate --help | rg -- --promotion-policy",
+      "command": "git diff --check",
       "status": "pass",
-      "summary": "validate --promotion-policy is advertised."
-    },
-    {
-      "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
-      "status": "pass",
-      "summary": "Supervisor state JSON parses after semantic merge."
-    },
-    {
-      "command": "python3 -m json.tool examples/promotion_policy.demo.json && git diff --check",
-      "status": "pass",
-      "summary": "Policy demo JSON parses and the integrated diff has no whitespace errors."
+      "summary": "No whitespace errors in the branch diff."
     },
     {
       "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
       "status": "pass",
-      "summary": "337 tests passed under Python 3.11 after merging current origin/main."
+      "summary": "338 tests passed under Python 3.11."
+    },
+    {
+      "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+      "status": "pass",
+      "summary": "Strict promotion-policy validation passed with zero warnings or errors."
     },
     {
       "command": "python3 -m unittest discover",
       "status": "blocked",
-      "summary": "System Python 3.9 ran 325 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
+      "summary": "System Python 3.9 ran 326 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
     }
   ],
   "layer_status": {
@@ -1724,9 +1804,9 @@
       "summary": "Evidence bundles require gate decision contracts; PR #5 remains the next dependency-ordered landing target now that Harness PR #3 is on main."
     },
     "governance": {
-      "next_packet": "governance_policy_schema_registry",
+      "next_packet": "governance_rollback_target_receipts",
       "status": "in_progress",
-      "summary": "Promotion decisions, model/dataset cards, guarded registry alias application, release-record binding, and explicit promotion-policy evidence are implemented; schema-catalog exposure remains."
+      "summary": "Promotion policy schema is implemented and verified on the Goal 8 branch; branch/main delivery is pending, with rollback target receipts queued next."
     },
     "harness": {
       "next_packet": null,
@@ -1830,9 +1910,22 @@
       "id": "governance_policy_schema_registry",
       "layer": "governance",
       "priority": "medium",
+      "status": "verified_pending_main_delivery",
+      "summary": "Registered hfr.promotion_policy.v1 in the public schema catalog, added a schema-registry regression test for the demo policy, and documented schema validation next to strict promotion-policy checks.",
+      "title": "Register promotion policy schema",
+      "source_branch": "codex/hermes-goal-8-governance-policy-schema-20260702-1620",
+      "source_branch_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08"
+    },
+    {
+      "id": "governance_rollback_target_receipts",
+      "layer": "governance",
+      "priority": "high",
       "status": "ready",
-      "summary": "Expose hfr.promotion_policy.v1 through the public schema catalog and add schema checks for policy artifacts.",
-      "title": "Register promotion policy schema"
+      "summary": "Add explicit rollback target receipts and validation hooks so alias movement and release records cannot proceed without reversible rollback evidence.",
+      "title": "Require rollback target receipts",
+      "depends_on": [
+        "governance_policy_schema_registry"
+      ]
     }
   ],
   "promotion_readiness": {
@@ -1846,72 +1939,63 @@
     "training": "not_started"
   },
   "schema_version": "hfr.autonomy.supervisor_state.v1",
-  "updated_at": "2026-07-02T16:18:24Z",
+  "updated_at": "2026-07-02T16:25:35Z",
   "github_delivery": {
-    "base_main_sha": "dc8148062108998e9a8d8988aa830e4b66069a21",
-    "branch": "codex/hermes-goal-8-governance-policy-20260702-1549",
-    "branch_head_before_locked_merge_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
-    "branch_remote_status": "deleted",
-    "branch_remote_verified_sha": "95b49286ed75a831452e5c645a650daf2f97e833",
-    "implementation_commit_sha": "3a1f4cc58693fa2393c58b2a98eebe20b0cb8b23",
+    "branch": "codex/hermes-goal-8-governance-policy-schema-20260702-1620",
+    "remote_ref": "refs/heads/codex/hermes-goal-8-governance-policy-schema-20260702-1620",
+    "implementation_commit_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
+    "branch_head_before_locked_merge_sha": "b07dbd9779c3d12bdcb85664f11c9f13b63efa08",
+    "branch_remote_status": "pending_push",
+    "branch_remote_verified_sha": null,
+    "pr_url": null,
+    "pr_status": "not_created_yet",
     "lock_path": "/tmp/hermes-flight-recorder-main-push.lock",
-    "lock_status": "held_until_post_delivery_checkpoint_push",
-    "main_integration_status": "pushed_and_verified",
-    "pr_status": "MERGED",
-    "pr_url": "https://github.com/zwright8/hermes-flight-recorder/pull/13",
-    "remote_ref": "refs/heads/codex/hermes-goal-8-governance-policy-20260702-1549",
-    "verified_at": "2026-07-02T16:16:33Z",
+    "lock_status": "not_acquired_yet",
+    "main_integration_status": "pending_locked_delivery",
+    "main_sha": null,
+    "remote_main_verified_sha": null,
     "verification": [
       {
-        "command": "python3 -m py_compile flightrecorder/governance.py flightrecorder/cli.py flightrecorder/validation.py tests/test_promotion_decision.py",
+        "command": "python3 -m json.tool flightrecorder/schemas/promotion_policy.v1.schema.json >/tmp/hfr_promotion_policy_schema.json && python3 -m json.tool flightrecorder/schemas/manifest.json >/tmp/hfr_schema_manifest.json",
         "status": "pass",
-        "summary": "Touched governance policy modules compile after merging current origin/main."
+        "summary": "Promotion policy schema and schema manifest parse as JSON."
       },
       {
-        "command": "python3 -m unittest tests.test_promotion_decision tests.test_promotion_ledger tests.test_validation",
+        "command": "python3 -m flightrecorder schemas --check examples/promotion_policy.demo.json",
         "status": "pass",
-        "summary": "57 focused governance, ledger, and validation tests passed after merging current origin/main."
+        "summary": "The demo promotion policy is auto-detected as promotion_policy and passes the registered schema."
       },
       {
-        "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+        "command": "python3 -m unittest tests.test_schema_registry tests.test_promotion_decision tests.test_validation",
         "status": "pass",
-        "summary": "Standalone promotion policy validation passed with zero warnings or errors."
+        "summary": "62 schema registry, promotion decision, and validation tests passed."
       },
       {
-        "command": "python3 -m flightrecorder validate --help | rg -- --promotion-policy",
+        "command": "git diff --check",
         "status": "pass",
-        "summary": "validate --promotion-policy is advertised."
-      },
-      {
-        "command": "python3 -m json.tool experiments/autonomy/supervisor_state.json",
-        "status": "pass",
-        "summary": "Supervisor state JSON parses after semantic merge."
-      },
-      {
-        "command": "python3 -m json.tool examples/promotion_policy.demo.json && git diff --check",
-        "status": "pass",
-        "summary": "Policy demo JSON parses and the integrated diff has no whitespace errors."
+        "summary": "No whitespace errors in the branch diff."
       },
       {
         "command": "/opt/homebrew/bin/python3.11 -m unittest discover",
         "status": "pass",
-        "summary": "337 tests passed under Python 3.11 after merging current origin/main."
+        "summary": "338 tests passed under Python 3.11."
+      },
+      {
+        "command": "python3 -m flightrecorder validate --promotion-policy examples/promotion_policy.demo.json --strict",
+        "status": "pass",
+        "summary": "Strict promotion-policy validation passed with zero warnings or errors."
       },
       {
         "command": "python3 -m unittest discover",
         "status": "blocked",
-        "summary": "System Python 3.9 ran 325 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
+        "summary": "System Python 3.9 ran 326 tests but cannot import tomllib or datetime.UTC in harness/deployment tests; Python 3.11 discovery passed."
       }
     ],
-    "branch_remote_deleted_at": "2026-07-02T16:18:24Z",
-    "integrated_main_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
-    "main_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
-    "main_sha_status": "verified_before_post_delivery_checkpoint",
-    "merge_commit_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1",
-    "post_delivery_checkpoint_main_sha_status": "verify after pushing this checkpoint because a commit cannot self-record its final SHA",
-    "remote_branch_verified_deleted": true,
-    "remote_main_verified_at": "2026-07-02T16:18:24Z",
-    "remote_main_verified_sha": "d8387c1af5e1aa850f830d016ef91b6b2274d9d1"
+    "verified_at": "2026-07-02T16:25:35Z",
+    "risks": [
+      "The schema is intentionally permissive for additionalProperties to preserve forward-compatible policy extension; governance code remains the safety floor for unknown fields.",
+      "System python3 is Python 3.9.6 and cannot run the full discovery suite because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11."
+    ]
   },
   "risks": [
     "Release records are structural governance artifacts; real release publication still requires production promotion decision, cards, alias receipt, rollback metadata, compare gate, and release notes evidence.",
@@ -1920,7 +2004,9 @@
     "Qwen compatibility is metadata-only; tokenizer, serving, tool-call, structured-output, quantization, and memory behavior still need runtime receipts.",
     "Remote CI is failing on a pre-existing non-model schema export duplication in release_check.sh after unit tests pass; Goal 4 did not modify harness schema registration.",
     "The sample dataset manifest is a local dry-run stub and not a production dataset registry entry.",
-    "Adapter, eval, and promotion link slots are present but await real downstream artifacts."
+    "Adapter, eval, and promotion link slots are present but await real downstream artifacts.",
+    "The schema is intentionally permissive for additionalProperties to preserve forward-compatible policy extension; governance code remains the safety floor for unknown fields.",
+    "System python3 is Python 3.9.6 and cannot run the full discovery suite because existing harness/deployment tests require tomllib and datetime.UTC; full discovery passed under Python 3.11."
   ],
   "safety_guardrails": {
     "gpu_work_launched": false,
