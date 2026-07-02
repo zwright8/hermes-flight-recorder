@@ -5,14 +5,89 @@
   "description": "Base-model scouting candidate with source, license review, terms, and compatibility metadata.",
   "properties": {
     "candidate_id": {"minLength": 1, "type": "string"},
-    "compatibility": {"type": "object"},
-    "license": {"type": "object"},
+    "compatibility": {"$ref": "#/$defs/compatibility"},
+    "license": {"$ref": "#/$defs/licenseReview"},
+    "metadata_evidence": {"type": "object"},
     "model_id": {"minLength": 1, "type": "string"},
     "notes": {"items": {"type": "string"}, "type": "array"},
     "schema_version": {"const": "hfr.model_candidate.v1"},
-    "source": {"type": "object"}
+    "source": {"$ref": "#/$defs/source"}
   },
   "required": ["schema_version", "candidate_id", "model_id", "source", "license", "compatibility"],
   "title": "Hermes Flight Recorder Model Candidate",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "compatibility": {
+      "additionalProperties": true,
+      "properties": {
+        "chat_template": {"$ref": "#/$defs/compatibilityProbe"},
+        "context_length": {"minimum": 1, "type": "integer"},
+        "memory": {"$ref": "#/$defs/compatibilityProbe"},
+        "quantization": {"$ref": "#/$defs/compatibilityProbe"},
+        "serving": {"$ref": "#/$defs/compatibilityProbe"},
+        "structured_outputs": {"$ref": "#/$defs/compatibilityProbe"},
+        "tokenizer": {"$ref": "#/$defs/compatibilityProbe"},
+        "tool_calls": {"$ref": "#/$defs/compatibilityProbe"}
+      },
+      "required": [
+        "context_length",
+        "tokenizer",
+        "chat_template",
+        "serving",
+        "tool_calls",
+        "structured_outputs",
+        "quantization",
+        "memory"
+      ],
+      "type": "object"
+    },
+    "compatibilityProbe": {
+      "additionalProperties": true,
+      "properties": {
+        "notes": {"minLength": 1, "type": "string"},
+        "source": {"minLength": 1, "type": "string"},
+        "status": {"minLength": 1, "type": "string"},
+        "supported": {"type": "boolean"},
+        "verified": {"type": "boolean"}
+      },
+      "required": ["status", "verified", "notes"],
+      "type": "object"
+    },
+    "licenseReview": {
+      "additionalProperties": true,
+      "properties": {
+        "accepted_terms": {"type": "boolean"},
+        "license_id": {"minLength": 1, "type": "string"},
+        "notes": {"items": {"type": "string"}, "type": "array"},
+        "review_status": {"minLength": 1, "type": "string"},
+        "reviewed_at": {"minLength": 1, "type": "string"},
+        "reviewer": {"minLength": 1, "type": "string"},
+        "source_url": {"minLength": 1, "type": "string"},
+        "status": {"minLength": 1, "type": "string"},
+        "terms_url": {"minLength": 1, "type": "string"},
+        "training_allowed": {"type": "boolean"}
+      },
+      "required": [
+        "status",
+        "license_id",
+        "source_url",
+        "review_status",
+        "terms_url",
+        "accepted_terms",
+        "training_allowed"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": true,
+      "properties": {
+        "revision": {"minLength": 1, "type": "string"},
+        "type": {"minLength": 1, "type": "string"},
+        "url": {"minLength": 1, "type": "string"},
+        "weight_download_allowed": {"type": "boolean"}
+      },
+      "required": ["type", "url"],
+      "type": "object"
+    }
+  }
 }

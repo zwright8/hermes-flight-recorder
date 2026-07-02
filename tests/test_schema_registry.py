@@ -83,6 +83,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("model_scout_manifest", names)
         self.assertIn("model_compatibility_report", names)
         self.assertIn("model_serving_probe_receipt", names)
+        self.assertIn("model_adapter_manifest", names)
         self.assertIn("model_registry_entry", names)
         self.assertIn("model_registry", names)
         self.assertIn("promotion_alias_apply", names)
@@ -184,6 +185,25 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "task_completion")
+
+    def test_model_candidate_schema_enforces_license_and_compatibility_shape(self):
+        candidate_path = ROOT / "experiments" / "registry" / "model_candidates" / "local_mock_tiny_chat.json"
+        valid = check_schema_file(candidate_path, "model_candidate")
+        self.assertTrue(valid["passed"], valid["errors"])
+
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        del candidate["source"]["url"]
+        del candidate["license"]["training_allowed"]
+        candidate["compatibility"]["context_length"] = 0
+        candidate["compatibility"]["tool_calls"]["verified"] = "false"
+
+        invalid = check_schema_contract(candidate)
+        self.assertFalse(invalid["passed"])
+        errors = "\n".join(invalid["errors"])
+        self.assertIn("$.source: missing required property 'url'", errors)
+        self.assertIn("$.license: missing required property 'training_allowed'", errors)
+        self.assertIn("$.compatibility.context_length: expected value >= 1", errors)
+        self.assertIn("$.compatibility.tool_calls.verified: expected type boolean", errors)
 
     def test_supervisor_state_schema_accepts_minimal_checkpoint(self):
         result = check_schema_contract(
