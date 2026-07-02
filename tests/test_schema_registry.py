@@ -32,6 +32,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("verifier_config", names)
         self.assertIn("state_validator_config", names)
         self.assertIn("state_validator_assertions", names)
+        self.assertIn("supervisor_state", names)
         self.assertIn("run_digest", names)
         self.assertIn("harness_run_manifest", names)
         self.assertIn("harness_run_result", names)
@@ -178,6 +179,87 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "task_completion")
+
+    def test_supervisor_state_schema_accepts_minimal_checkpoint(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.autonomy.supervisor_state.v1",
+                "updated_at": "2026-07-02T00:00:00Z",
+                "active_layer": "evidence",
+                "current_packet": "publish supervisor-state schema",
+                "completed_packets": [
+                    {
+                        "id": "goal-0-supervisor-state-schema",
+                        "layer": "evidence",
+                        "title": "Publish supervisor-state schema",
+                        "status": "complete",
+                    }
+                ],
+                "blocked_packets": [],
+                "next_packets": [
+                    {
+                        "id": "goal-1-evidence-handoff",
+                        "layer": "evidence",
+                        "title": "Refresh evidence handoff fixture",
+                        "status": "pending",
+                    }
+                ],
+                "latest_artifacts": [
+                    {
+                        "path": "flightrecorder/schemas/supervisor_state.v1.schema.json",
+                        "type": "schema",
+                        "sha256": "0" * 64,
+                    }
+                ],
+                "latest_verification": [
+                    {
+                        "command": "python -m unittest tests.test_schema_registry.SchemaRegistryTests.test_supervisor_state_schema_accepts_minimal_checkpoint",
+                        "passed": True,
+                        "exit_code": 0,
+                    }
+                ],
+                "privacy_guardrails": {
+                    "public_repo": True,
+                    "local_state_untracked": True,
+                    "daily_email_suppressed": True,
+                    "private_fields_forbidden": ["home_directory", "daily_report_recipient"],
+                },
+                "promotion_readiness": {
+                    "evidence": "in_progress",
+                    "harness": "not_started",
+                    "data": "not_started",
+                    "model": "not_started",
+                    "training": "not_started",
+                    "serving_demo": "not_started",
+                    "eval": "not_started",
+                    "governance": "not_started",
+                },
+            }
+        )
+
+        self.assertTrue(result["passed"], result["errors"])
+        self.assertEqual(result["schema"]["name"], "supervisor_state")
+
+    def test_supervisor_state_schema_requires_all_layer_readiness(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.autonomy.supervisor_state.v1",
+                "updated_at": "2026-07-02T00:00:00Z",
+                "active_layer": "evidence",
+                "current_packet": "publish supervisor-state schema",
+                "completed_packets": [],
+                "blocked_packets": [],
+                "next_packets": [],
+                "latest_artifacts": [],
+                "latest_verification": [],
+                "promotion_readiness": {"evidence": "in_progress"},
+            }
+        )
+
+        self.assertFalse(result["passed"])
+        errors = "\n".join(result["errors"])
+        self.assertIn("$.promotion_readiness: missing required property 'harness'", errors)
+        self.assertIn("$.promotion_readiness: missing required property 'governance'", errors)
 
     def test_state_diff_schema_accepts_minimal_diff(self):
         result = check_schema_contract(

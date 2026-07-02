@@ -66,6 +66,14 @@
       "name": "state_validator_assertions"
     },
     {
+      "artifact": "supervisor_state",
+      "artifact_schema_version": "hfr.autonomy.supervisor_state.v1",
+      "description": "Local autonomous supervisor checkpoint state for resumable layer-goal packets.",
+      "filename": "supervisor_state.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/supervisor_state.v1.schema.json",
+      "name": "supervisor_state"
+    },
+    {
       "artifact": "run_digest",
       "artifact_schema_version": "hfr.run_digest.v1",
       "description": "Compact per-run evidence digest emitted as run_digest.json.",

@@ -113,6 +113,11 @@ Validate it with the bundled schema before treating a checkpoint as resumable:
 flightrecorder schemas --check experiments/autonomy/supervisor_state.json
 ```
 
+The bundled schema name is `supervisor_state`, with schema version
+`hfr.autonomy.supervisor_state.v1`. It requires explicit readiness entries for
+Evidence, Harness, Data, Model, Training, Serving/demo, Eval, and Governance so
+the supervisor cannot silently drop a layer while resuming work.
+
 The state contract is intentionally the coordination layer, not a workflow
 engine. It should record the active layer, current/completed/blocked/next
 packets, recent artifacts, verification evidence, promotion readiness, layer
