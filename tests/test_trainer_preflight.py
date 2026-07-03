@@ -901,6 +901,52 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(failed_input_schema["passed"], failed_input_schema["errors"])
             self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check), "--strict"]), 0)
 
+            missing_external_path_check = Path(tmp) / "trainer_archive_check_missing_external_path.json"
+            missing_external_path_summary = Path(tmp) / "trainer_archive_check_missing_external_path_summary.json"
+            forged = json.loads(json.dumps(check))
+            next(item for item in forged["external_code_checks"] if item["passed"])["resolved_path"] = str(
+                Path(tmp) / "missing_train.py"
+            )
+            missing_external_path_check.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive-check",
+                    str(missing_external_path_check),
+                    "--strict",
+                    "--out",
+                    str(missing_external_path_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(missing_external_path_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_archive_check.external_code_checks", errors)
+            self.assertIn("resolved_path must resolve to an existing file on disk", errors)
+
+            missing_input_path_check = Path(tmp) / "trainer_archive_check_missing_input_path.json"
+            missing_input_path_summary = Path(tmp) / "trainer_archive_check_missing_input_path_summary.json"
+            forged = json.loads(json.dumps(check))
+            next(item for item in forged["trainer_input_checks"] if item["passed"] and item["kind"] == "file")[
+                "resolved_path"
+            ] = str(Path(tmp) / "missing_input.json")
+            missing_input_path_check.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-archive-check",
+                    str(missing_input_path_check),
+                    "--strict",
+                    "--out",
+                    str(missing_input_path_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(missing_input_path_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_archive_check.trainer_input_checks", errors)
+            self.assertIn("resolved_path must resolve to an existing file on disk", errors)
+
             forged_check = Path(tmp) / "trainer_archive_check_forged_input_size.json"
             forged_summary = Path(tmp) / "trainer_archive_check_forged_input_size_summary.json"
             forged = json.loads(json.dumps(check))
@@ -1019,6 +1065,75 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertFalse(malformed_failed_input_schema["passed"])
             self.assertTrue(any("expected_sha256" in error for error in malformed_failed_input_schema["errors"]))
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
+
+            missing_consumer_external_path_plan = Path(tmp) / "trainer_consumer_plan_missing_external_path.json"
+            missing_consumer_external_path_summary = Path(tmp) / "trainer_consumer_plan_missing_external_path_summary.json"
+            forged = json.loads(json.dumps(plan))
+            next(item for item in forged["execution"]["external_code_files"] if item["passed"])["resolved_path"] = str(
+                Path(tmp) / "missing_consumer_train.py"
+            )
+            missing_consumer_external_path_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(missing_consumer_external_path_plan),
+                    "--strict",
+                    "--out",
+                    str(missing_consumer_external_path_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(missing_consumer_external_path_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan.execution.external_code_files", errors)
+            self.assertIn("resolved_path must resolve to an existing file on disk", errors)
+
+            redacted_consumer_external_path_plan = Path(tmp) / "trainer_consumer_plan_redacted_external_path.json"
+            forged = json.loads(json.dumps(plan))
+            redacted_external = next(item for item in forged["execution"]["external_code_files"] if item["passed"])
+            redacted_external["resolved_path"] = "<redacted:external-code>"
+            redacted_external["size_bytes"] += 1
+            redacted_consumer_external_path_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(
+                run_cli(["validate", "--trainer-consumer-plan", str(redacted_consumer_external_path_plan), "--strict"]),
+                0,
+            )
+
+            missing_consumer_input_path_plan = Path(tmp) / "trainer_consumer_plan_missing_input_path.json"
+            missing_consumer_input_path_summary = Path(tmp) / "trainer_consumer_plan_missing_input_path_summary.json"
+            forged = json.loads(json.dumps(plan))
+            next(item for item in forged["execution"]["trainer_inputs"] if item["passed"] and item["kind"] == "file")[
+                "resolved_path"
+            ] = str(Path(tmp) / "missing_consumer_input.json")
+            missing_consumer_input_path_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(missing_consumer_input_path_plan),
+                    "--strict",
+                    "--out",
+                    str(missing_consumer_input_path_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(missing_consumer_input_path_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan.execution.trainer_inputs", errors)
+            self.assertIn("resolved_path must resolve to an existing file on disk", errors)
+
+            redacted_consumer_input_path_plan = Path(tmp) / "trainer_consumer_plan_redacted_input_path.json"
+            forged = json.loads(json.dumps(plan))
+            redacted_input = next(item for item in forged["execution"]["trainer_inputs"] if item["passed"] and item["kind"] == "file")
+            redacted_input["resolved_path"] = "<redacted:trainer-input>"
+            redacted_input["size_bytes"] += 1
+            redacted_input["expected_size_bytes"] += 1
+            redacted_consumer_input_path_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(
+                run_cli(["validate", "--trainer-consumer-plan", str(redacted_consumer_input_path_plan), "--strict"]),
+                0,
+            )
 
             missing_source_plan = Path(tmp) / "trainer_consumer_plan_missing_source.json"
             missing_source_summary = Path(tmp) / "trainer_consumer_plan_missing_source_summary.json"

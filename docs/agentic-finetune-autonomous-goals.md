@@ -706,6 +706,9 @@ card, and dataset card decisions.
 - Trainer consumer plans reopen visible trainer archive-check source refs and
   reject missing, non-regular, stale SHA-256, or stale byte-size handoff
   evidence before an external trainer wrapper can trust command inputs.
+- Trainer archive checks and consumer-plan execution refs reject missing visible
+  resolved paths before accepting external trainer code or trainer inputs as
+  ready for wrapper handoff.
 - Improvement plans reject stale source-artifact SHA-256 and byte-size
   records when present file artifacts resolve during validation.
 - Action-ledger gate validation reopens the referenced action ledger from the

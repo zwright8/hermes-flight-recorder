@@ -15761,7 +15761,10 @@ def _validate_trainer_archive_check_metrics(
 
 def _validate_visible_file_hash(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
     path = _visible_local_path(item.get("resolved_path"))
-    if path is None or not path.exists():
+    if path is None:
+        return
+    if not path.exists():
+        target.errors.append(f"{label}.resolved_path must resolve to an existing file on disk.")
         return
     if path.is_symlink() or not path.is_file():
         target.errors.append(f"{label}.resolved_path is not a regular file on disk.")
@@ -15774,7 +15777,10 @@ def _validate_visible_file_hash(item: dict[str, Any], target: ValidationTarget, 
 
 def _validate_visible_directory_hash(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
     path = _visible_local_path(item.get("resolved_path"))
-    if path is None or not path.exists():
+    if path is None:
+        return
+    if not path.exists():
+        target.errors.append(f"{label}.resolved_path must resolve to an existing directory on disk.")
         return
     if path.is_symlink() or not path.is_dir():
         target.errors.append(f"{label}.resolved_path is not a regular directory on disk.")
