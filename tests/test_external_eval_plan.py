@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from flightrecorder.cli import main
-from flightrecorder.external_eval import build_external_eval_plan, write_external_eval_plan
+from flightrecorder.external_eval import EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES, build_external_eval_plan, write_external_eval_plan
 from flightrecorder.schema_registry import check_schema_file
 
 
@@ -42,6 +42,11 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertEqual(plan["inputs"]["scenario_manifest"]["path"], manifest.name)
             self.assertEqual(plan["inputs"]["scenario_manifest"]["size_bytes"], manifest.stat().st_size)
             self.assertFalse(plan["governance_handoff"]["external_eval_claims_allowed"])
+            contract = plan["adapters"][0]["adapter_contract"]
+            self.assertEqual(contract["dry_run_transport"], "plan_and_receipt_only")
+            self.assertFalse(contract["live_benchmark_supported"])
+            self.assertFalse(contract["provider_api_called_by_flight_recorder"])
+            self.assertTrue(set(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES).issubset(set(contract["receipt_types"])))
 
     def test_external_eval_plan_ready_path_with_mocked_dependency(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -237,6 +242,24 @@ class ExternalEvalPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("external_eval_plan.inputs.scenario_manifest.ready must match the current file.", errors)
             self.assertIn("external_eval_plan.inputs.scenario_manifest.scenario_count must match the current file.", errors)
+
+    def test_validate_rejects_forged_adapter_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            plan = build_external_eval_plan(adapters=["bfcl"], scenario_manifest=manifest)
+            plan["adapters"][0]["adapter_contract"]["live_benchmark_supported"] = True
+            plan["adapters"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"] = True
+            write_external_eval_plan(plan, out)
+
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("adapter_contract.live_benchmark_supported must be false", errors)
+            self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 
 
 def _scenario_manifest(path: Path) -> Path:

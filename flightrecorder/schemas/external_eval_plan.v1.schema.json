@@ -65,6 +65,7 @@
       "additionalProperties": true,
       "properties": {
         "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "adapter_contract": { "$ref": "#/$defs/adapterContract" },
         "dependency_status": { "type": "object" },
         "domain": { "minLength": 1, "type": "string" },
         "execution_contract": { "type": "object" },
@@ -76,7 +77,60 @@
         "required_inputs": { "items": { "type": "string" }, "type": "array" },
         "suite_tags": { "items": { "type": "string" }, "type": "array" }
       },
-      "required": ["id", "name", "full_name", "domain", "suite_tags", "required_inputs", "provided_inputs", "dependency_status", "execution_contract", "ready", "blocking_reasons"],
+      "required": [
+        "id",
+        "name",
+        "full_name",
+        "domain",
+        "suite_tags",
+        "required_inputs",
+        "provided_inputs",
+        "dependency_status",
+        "execution_contract",
+        "adapter_contract",
+        "ready",
+        "blocking_reasons"
+      ],
+      "type": "object"
+    },
+    "adapterContract": {
+      "additionalProperties": true,
+      "properties": {
+        "adapter_id": { "minLength": 1, "type": "string" },
+        "cost_incurred_usd": { "const": 0 },
+        "credential_values_recorded": { "const": false },
+        "dry_run_transport": { "const": "plan_and_receipt_only" },
+        "external_adapter_id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+        "live_benchmark_supported": { "const": false },
+        "model_downloads_started_by_flight_recorder": { "const": false },
+        "provider_api_called_by_flight_recorder": { "const": false },
+        "receipt_types": {
+          "items": { "type": "string" },
+          "minItems": 2,
+          "type": "array"
+        },
+        "requires_dependency_probe_before_live": { "const": true },
+        "requires_explicit_live_opt_in": { "const": true },
+        "requires_external_runner_receipt_for_live": { "const": true },
+        "requires_identical_heldout_scenarios": { "const": true },
+        "schema_version": { "const": "hfr.external_eval_adapter_contract.v1" }
+      },
+      "required": [
+        "schema_version",
+        "adapter_id",
+        "external_adapter_id",
+        "receipt_types",
+        "dry_run_transport",
+        "live_benchmark_supported",
+        "provider_api_called_by_flight_recorder",
+        "model_downloads_started_by_flight_recorder",
+        "credential_values_recorded",
+        "cost_incurred_usd",
+        "requires_identical_heldout_scenarios",
+        "requires_external_runner_receipt_for_live",
+        "requires_dependency_probe_before_live",
+        "requires_explicit_live_opt_in"
+      ],
       "type": "object"
     },
     "scenario_manifest_ref": {

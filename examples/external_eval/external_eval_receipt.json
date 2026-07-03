@@ -2,6 +2,25 @@
   "adapter_count": 4,
   "adapter_receipts": [
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.bfcl.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "bfcl",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
@@ -9,6 +28,7 @@
         "missing_tool_schema_set"
       ],
       "cost_incurred_usd": 0,
+      "credential_values_recorded": false,
       "dependency_status": {
         "available": false,
         "commands": {
@@ -21,6 +41,7 @@
       "domain": "tool_calling",
       "id": "bfcl",
       "live_benchmark_started": false,
+      "model_downloads_started": false,
       "name": "BFCL",
       "planned_ready": false,
       "provided_inputs": [
@@ -35,6 +56,25 @@
       ]
     },
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.inspect_ai.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "inspect_ai",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
@@ -43,6 +83,7 @@
         "missing_sandbox_policy"
       ],
       "cost_incurred_usd": 0,
+      "credential_values_recorded": false,
       "dependency_status": {
         "available": false,
         "commands": {
@@ -55,6 +96,7 @@
       "domain": "agentic_tasks",
       "id": "inspect_ai",
       "live_benchmark_started": false,
+      "model_downloads_started": false,
       "name": "Inspect AI",
       "planned_ready": false,
       "provided_inputs": [
@@ -70,6 +112,25 @@
       ]
     },
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.lm_eval_harness.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "lm_eval_harness",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
@@ -77,6 +138,7 @@
         "missing_model_endpoint"
       ],
       "cost_incurred_usd": 0,
+      "credential_values_recorded": false,
       "dependency_status": {
         "available": false,
         "commands": {
@@ -89,6 +151,7 @@
       "domain": "language_model_capability",
       "id": "lm_eval_harness",
       "live_benchmark_started": false,
+      "model_downloads_started": false,
       "name": "lm-evaluation-harness",
       "planned_ready": false,
       "provided_inputs": [
@@ -103,6 +166,25 @@
       ]
     },
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.swe_bench.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "swe_bench",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "adapter_disabled_until_allow_installed",
         "dependencies_missing",
@@ -111,6 +193,7 @@
         "missing_swe_bench_task_set"
       ],
       "cost_incurred_usd": 0,
+      "credential_values_recorded": false,
       "dependency_status": {
         "available": false,
         "commands": {
@@ -123,6 +206,7 @@
       "domain": "software_engineering",
       "id": "swe_bench",
       "live_benchmark_started": false,
+      "model_downloads_started": false,
       "name": "SWE-bench",
       "planned_ready": false,
       "provided_inputs": [
@@ -225,7 +309,7 @@
     "path": "external_eval_plan.json",
     "ready": false,
     "schema_version": "hfr.external_eval_adapters.v1",
-    "sha256": "89a891c1742f0a45507e20dfff6402e45aa09347ae7b5ac4bb7081b81ee3f443",
-    "size_bytes": 6043
+    "sha256": "9fa5ccf4b5722cdd2bec019494fc8ef90587f86e33f089669ec82676cb01ff1c",
+    "size_bytes": 9407
   }
 }

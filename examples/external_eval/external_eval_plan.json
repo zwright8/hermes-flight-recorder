@@ -2,6 +2,25 @@
   "adapter_count": 4,
   "adapters": [
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.bfcl.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "bfcl",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
@@ -41,6 +60,25 @@
       ]
     },
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.inspect_ai.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "inspect_ai",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
@@ -83,6 +121,25 @@
       ]
     },
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.lm_eval_harness.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "lm_eval_harness",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
@@ -122,6 +179,25 @@
       ]
     },
     {
+      "adapter_contract": {
+        "adapter_id": "external_eval.swe_bench.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "swe_bench",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
       "blocking_reasons": [
         "dependencies_missing",
         "adapter_disabled_until_allow_installed",
@@ -175,7 +251,7 @@
     "missing_swe_bench_task_set",
     "missing_tool_schema_set"
   ],
-  "generated_at": "2026-07-03T17:48:21.629729+00:00",
+  "generated_at": "2026-07-03T20:33:19.851071+00:00",
   "governance_handoff": {
     "external_eval_claims_allowed": false,
     "recommendation": "Keep external eval claims disabled until every selected adapter is ready.",

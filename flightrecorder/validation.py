@@ -53,7 +53,13 @@ from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
-from .external_eval import ADAPTERS, EXTERNAL_EVAL_PLAN_SCHEMA_VERSION, EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION
+from .external_eval import (
+    ADAPTERS,
+    EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION,
+    EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES,
+    EXTERNAL_EVAL_PLAN_SCHEMA_VERSION,
+    EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION,
+)
 from .heldout_manifest import HELDOUT_MANIFEST_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
@@ -10224,8 +10230,13 @@ def _validate_external_eval_adapter_receipt(row: Any, index: int, target: Valida
         target.errors.append(f"{label}.live_benchmark_started must be false.")
     if row.get("provider_api_called") is not False:
         target.errors.append(f"{label}.provider_api_called must be false.")
+    if row.get("model_downloads_started") is not False:
+        target.errors.append(f"{label}.model_downloads_started must be false.")
+    if row.get("credential_values_recorded") is not False:
+        target.errors.append(f"{label}.credential_values_recorded must be false.")
     if row.get("cost_incurred_usd") != 0:
         target.errors.append(f"{label}.cost_incurred_usd must be 0.")
+    _validate_external_eval_adapter_contract(row.get("adapter_contract"), target, f"{label}.adapter_contract", adapter_id)
     if spec is not None:
         if row.get("required_inputs") != spec["required_inputs"]:
             target.errors.append(f"{label}.required_inputs must match adapter contract.")
@@ -10356,6 +10367,13 @@ def _validate_external_eval_adapter_plan(
         if not isinstance(contract.get("boundary"), str) or not contract.get("boundary"):
             target.errors.append(f"external_eval_plan.adapters[{index}].execution_contract.boundary must be a non-empty string.")
 
+    _validate_external_eval_adapter_contract(
+        adapter.get("adapter_contract"),
+        target,
+        f"external_eval_plan.adapters[{index}].adapter_contract",
+        adapter_id,
+    )
+
     if spec is not None:
         if adapter.get("required_inputs") != spec["required_inputs"]:
             target.errors.append(f"external_eval_plan.adapters[{index}].required_inputs must match adapter contract.")
@@ -10374,6 +10392,47 @@ def _validate_external_eval_adapter_plan(
             target.errors.append(f"external_eval_plan.adapters[{index}].ready cannot be true while blockers remain.")
         if adapter.get("ready") is False and not adapter_blockers:
             target.errors.append(f"external_eval_plan.adapters[{index}].blocking_reasons must explain why ready is false.")
+
+
+def _validate_external_eval_adapter_contract(contract: Any, target: ValidationTarget, label: str, adapter_id: Any) -> None:
+    if not isinstance(contract, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if contract.get("schema_version") != EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION:
+        target.errors.append(f"{label}.schema_version must be {EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION!r}.")
+    if contract.get("external_adapter_id") != adapter_id:
+        target.errors.append(f"{label}.external_adapter_id must match adapter id.")
+    if not isinstance(contract.get("adapter_id"), str) or not contract.get("adapter_id"):
+        target.errors.append(f"{label}.adapter_id must be a non-empty string.")
+    receipt_types = contract.get("receipt_types")
+    if not _is_string_list(receipt_types):
+        target.errors.append(f"{label}.receipt_types must be a list of strings.")
+        receipt_types = []
+    missing_receipts = sorted(set(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES) - set(receipt_types))
+    if missing_receipts:
+        target.errors.append(f"{label}.receipt_types missing required receipt types: {', '.join(missing_receipts)}.")
+    if len(set(receipt_types)) != len(receipt_types):
+        target.errors.append(f"{label}.receipt_types must not contain duplicates.")
+    if contract.get("dry_run_transport") != "plan_and_receipt_only":
+        target.errors.append(f"{label}.dry_run_transport must be plan_and_receipt_only.")
+    for field_name in (
+        "requires_identical_heldout_scenarios",
+        "requires_external_runner_receipt_for_live",
+        "requires_dependency_probe_before_live",
+        "requires_explicit_live_opt_in",
+    ):
+        if contract.get(field_name) is not True:
+            target.errors.append(f"{label}.{field_name} must be true.")
+    for field_name in (
+        "live_benchmark_supported",
+        "provider_api_called_by_flight_recorder",
+        "model_downloads_started_by_flight_recorder",
+        "credential_values_recorded",
+    ):
+        if contract.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
+    if contract.get("cost_incurred_usd") != 0:
+        target.errors.append(f"{label}.cost_incurred_usd must be 0.")
 
 
 def _external_eval_input_blockers(inputs: dict[str, Any], name: str) -> list[str]:

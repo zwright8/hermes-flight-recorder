@@ -9,15 +9,29 @@
       "items": {
         "additionalProperties": true,
         "properties": {
+          "adapter_contract": { "$ref": "#/$defs/adapterContract" },
           "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
           "cost_incurred_usd": { "const": 0 },
+          "credential_values_recorded": { "const": false },
           "id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
           "live_benchmark_started": { "const": false },
+          "model_downloads_started": { "const": false },
           "planned_ready": { "type": "boolean" },
           "provider_api_called": { "const": false },
           "ready": { "type": "boolean" }
         },
-        "required": ["id", "ready", "planned_ready", "blocking_reasons", "live_benchmark_started", "provider_api_called", "cost_incurred_usd"],
+        "required": [
+          "id",
+          "ready",
+          "planned_ready",
+          "blocking_reasons",
+          "adapter_contract",
+          "live_benchmark_started",
+          "provider_api_called",
+          "model_downloads_started",
+          "credential_values_recorded",
+          "cost_incurred_usd"
+        ],
         "type": "object"
       },
       "type": "array"
@@ -90,6 +104,46 @@
   "title": "Hermes Flight Recorder External Eval Receipt",
   "type": "object",
   "$defs": {
+    "adapterContract": {
+      "additionalProperties": true,
+      "properties": {
+        "adapter_id": { "minLength": 1, "type": "string" },
+        "cost_incurred_usd": { "const": 0 },
+        "credential_values_recorded": { "const": false },
+        "dry_run_transport": { "const": "plan_and_receipt_only" },
+        "external_adapter_id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+        "live_benchmark_supported": { "const": false },
+        "model_downloads_started_by_flight_recorder": { "const": false },
+        "provider_api_called_by_flight_recorder": { "const": false },
+        "receipt_types": {
+          "items": { "type": "string" },
+          "minItems": 2,
+          "type": "array"
+        },
+        "requires_dependency_probe_before_live": { "const": true },
+        "requires_explicit_live_opt_in": { "const": true },
+        "requires_external_runner_receipt_for_live": { "const": true },
+        "requires_identical_heldout_scenarios": { "const": true },
+        "schema_version": { "const": "hfr.external_eval_adapter_contract.v1" }
+      },
+      "required": [
+        "schema_version",
+        "adapter_id",
+        "external_adapter_id",
+        "receipt_types",
+        "dry_run_transport",
+        "live_benchmark_supported",
+        "provider_api_called_by_flight_recorder",
+        "model_downloads_started_by_flight_recorder",
+        "credential_values_recorded",
+        "cost_incurred_usd",
+        "requires_identical_heldout_scenarios",
+        "requires_external_runner_receipt_for_live",
+        "requires_dependency_probe_before_live",
+        "requires_explicit_live_opt_in"
+      ],
+      "type": "object"
+    },
     "check": {
       "additionalProperties": true,
       "properties": {

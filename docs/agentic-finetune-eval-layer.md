@@ -107,6 +107,10 @@ required inputs for that adapter are supplied. The plan records dependency
 status, held-out scenario manifest SHA-256 and byte size, required inputs, and
 blocking reasons. Validation resolves the manifest reference from the plan file
 location before trusting those fingerprints.
+Each adapter row also includes an `adapter_contract` that attests to
+plan-and-receipt-only dry-run transport, disabled live benchmark support, no
+provider API calls, no model downloads, no credential values, and the need for a
+separate external runner receipt before any live benchmark claim.
 
 Receipts are separate from plans. They archive dry-run readiness, or a blocked
 live request, without starting BFCL, Inspect AI, lm-eval, SWE-bench, provider

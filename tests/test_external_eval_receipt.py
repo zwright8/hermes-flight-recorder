@@ -95,6 +95,10 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertEqual(receipt["ready_adapter_count"], 1)
             self.assertTrue(receipt["adapter_receipts"][0]["ready"])
             self.assertFalse(receipt["adapter_receipts"][0]["live_benchmark_started"])
+            self.assertFalse(receipt["adapter_receipts"][0]["model_downloads_started"])
+            self.assertFalse(receipt["adapter_receipts"][0]["credential_values_recorded"])
+            self.assertFalse(receipt["adapter_receipts"][0]["adapter_contract"]["live_benchmark_supported"])
+            self.assertFalse(receipt["adapter_receipts"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"])
             self.assertFalse(receipt["execution_boundary"]["provider_api_called"])
             self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
 
@@ -127,6 +131,27 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertFalse(receipt["launch"]["live_benchmarks_started"])
             self.assertIn("live_benchmark_not_requested: failed", receipt["blocked_reasons"])
             self.assertIn("live_external_eval_blocked_by_default", receipt["adapter_receipts"][0]["blocking_reasons"])
+
+    def test_validate_rejects_forged_adapter_receipt_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
+            run_cli(["external-eval-receipt", "--plan", str(plan_path), "--out", str(receipt_path)])
+            receipt = _read_json(receipt_path)
+            receipt["adapter_receipts"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"] = True
+            receipt["adapter_receipts"][0]["model_downloads_started"] = True
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
+            self.assertIn("model_downloads_started must be false", errors)
 
 
 def _scenario_manifest(path: Path) -> Path:

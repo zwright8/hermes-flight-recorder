@@ -14,6 +14,12 @@ from typing import Any
 
 EXTERNAL_EVAL_PLAN_SCHEMA_VERSION = "hfr.external_eval_adapters.v1"
 EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION = "hfr.external_eval_receipt.v1"
+EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION = "hfr.external_eval_adapter_contract.v1"
+
+EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES: tuple[str, ...] = (
+    EXTERNAL_EVAL_PLAN_SCHEMA_VERSION,
+    EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION,
+)
 
 ADAPTERS: dict[str, dict[str, Any]] = {
     "bfcl": {
@@ -289,6 +295,7 @@ def _adapter_plan(adapter_id: str, inputs: dict[str, Any], allow_installed: bool
             "scenario_manifest_sha256": inputs["scenario_manifest"]["sha256"],
             "boundary": spec["execution_boundary"],
         },
+        "adapter_contract": _adapter_contract(adapter_id),
         "ready": ready,
         "blocking_reasons": blocking_reasons,
     }
@@ -378,9 +385,31 @@ def _adapter_receipt(adapter_id: str, adapter: dict[str, Any] | None, live: bool
         "dependency_status": adapter.get("dependency_status") if isinstance(adapter, dict) else {},
         "required_inputs": list(ADAPTERS[adapter_id]["required_inputs"]),
         "provided_inputs": adapter.get("provided_inputs") if isinstance(adapter, dict) and isinstance(adapter.get("provided_inputs"), list) else [],
+        "adapter_contract": _adapter_contract(adapter_id),
         "live_benchmark_started": False,
         "provider_api_called": False,
+        "model_downloads_started": False,
+        "credential_values_recorded": False,
         "cost_incurred_usd": 0,
+    }
+
+
+def _adapter_contract(adapter_id: str) -> dict[str, Any]:
+    return {
+        "schema_version": EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION,
+        "adapter_id": f"external_eval.{adapter_id}.fail_closed.v1",
+        "external_adapter_id": adapter_id,
+        "receipt_types": list(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES),
+        "dry_run_transport": "plan_and_receipt_only",
+        "live_benchmark_supported": False,
+        "provider_api_called_by_flight_recorder": False,
+        "model_downloads_started_by_flight_recorder": False,
+        "credential_values_recorded": False,
+        "cost_incurred_usd": 0,
+        "requires_identical_heldout_scenarios": True,
+        "requires_external_runner_receipt_for_live": True,
+        "requires_dependency_probe_before_live": True,
+        "requires_explicit_live_opt_in": True,
     }
 
 
