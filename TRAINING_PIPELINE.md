@@ -624,8 +624,9 @@ flightrecorder validate --agentic-training-flow runs/agentic_training_flow.json 
 
 When an external runner finishes or fails, archive that outcome with
 `scripts/archive_agentic_training_result.py`. It emits
-`hfr.agentic_training_result.v1`, verifies the plan and runtime-preflight
-lineage, requires a ready runtime preflight plus an adapter or checkpoint for
+`hfr.agentic_training_result.v1`, verifies the plan, runtime-preflight, and
+delegated-flow lineage, requires a ready runtime preflight plus a ready
+`hfr.agentic_training_flow.v1` receipt and an adapter or checkpoint for
 `--status completed`, and requires a classified failure for `failed`, `blocked`,
 or `aborted` outcomes. The result receipt fingerprints supplied configs,
 metrics, adapters, checkpoints, logs, and failure reports without launching a

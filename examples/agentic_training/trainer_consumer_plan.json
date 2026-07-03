@@ -1,0 +1,213 @@
+{
+  "archive_check_path": "<redacted:trainer_archive_check.json>",
+  "blocked_reasons": [],
+  "check_count": 7,
+  "checks": [
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "archive_check_validation_passed",
+      "passed": true,
+      "scope": {
+        "archive_check": "<redacted:trainer_archive_check.json>"
+      },
+      "summary": "archive_check_validation_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "archive_check_passed",
+      "passed": true,
+      "scope": {
+        "archive_check": "<redacted:trainer_archive_check.json>"
+      },
+      "summary": "archive_check_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "archive_check_consumer_ready",
+      "passed": true,
+      "scope": {
+        "recommendation": "consumer_ready"
+      },
+      "summary": "archive_check_consumer_ready: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "portable_command_ready",
+      "passed": true,
+      "scope": {
+        "archive_check": "<redacted:trainer_archive_check.json>"
+      },
+      "summary": "portable_command_ready: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "external_code_ready",
+      "passed": true,
+      "scope": {
+        "external_code_file_count": "1"
+      },
+      "summary": "external_code_ready: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "trainer_inputs_ready",
+      "passed": true,
+      "scope": {
+        "trainer_input_count": "1"
+      },
+      "summary": "trainer_inputs_ready: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "no_execution_performed",
+      "passed": true,
+      "scope": {
+        "boundary": "flightrecorder"
+      },
+      "summary": "no_execution_performed: passed=True"
+    }
+  ],
+  "execution": {
+    "archive_root": "examples/agentic_training/trainer_archive",
+    "command_approved": true,
+    "command_argv": [
+      "python",
+      "../trainer-wrapper/consume_trainer_plan.py",
+      "--plan",
+      "plans/sft_then_dpo_plan.json"
+    ],
+    "command_available": true,
+    "command_shell": "python ../trainer-wrapper/consume_trainer_plan.py --plan plans/sft_then_dpo_plan.json",
+    "execution_cwd": "archive_root",
+    "external_code_files": [
+      {
+        "argv_index": 1,
+        "exists": true,
+        "index": 0,
+        "passed": true,
+        "path": "examples/trainer-wrapper/consume_trainer_plan.py",
+        "reason": "ready",
+        "regular_file": true,
+        "resolved_path": "examples/trainer-wrapper/consume_trainer_plan.py",
+        "sha256": "558bcb219fb300c8bdcbd85a0d83e256e7548de32de57d67524e4e757e0a732e",
+        "size_bytes": 11104,
+        "symlink": false,
+        "token": "../trainer-wrapper/consume_trainer_plan.py"
+      }
+    ],
+    "external_code_root": "examples/trainer-wrapper",
+    "trainer_inputs": [
+      {
+        "archive_path": "plans/sft_then_dpo_plan.json",
+        "artifact_index": 0,
+        "artifact_name": "agentic_training_plan",
+        "exists": true,
+        "expected_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+        "expected_size_bytes": 15787,
+        "index": 0,
+        "kind": "file",
+        "passed": true,
+        "reason": "ready",
+        "regular_directory": false,
+        "regular_file": true,
+        "resolved_path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+        "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+        "size_bytes": 15787,
+        "symlink": false
+      }
+    ]
+  },
+  "failed_check_count": 0,
+  "handoff_contract": {
+    "allowed_input_sets": [
+      "execution.trainer_inputs",
+      "execution.external_code_files"
+    ],
+    "external_code_file_count": 1,
+    "flight_recorder_executed_command": false,
+    "notes": [
+      "This plan is a launch contract for an external trainer wrapper; Flight Recorder does not execute it.",
+      "command_argv is canonical; command_shell is a derived display rendering.",
+      "The wrapper should verify this plan and then resolve command_argv relative to archive_root plus external_code_root."
+    ],
+    "runner_must_require_recommendation": "ready_for_external_trainer",
+    "runner_must_run_from": "archive_root",
+    "runner_owns_execution": true,
+    "trainer_input_count": 1
+  },
+  "metrics": {
+    "archive_check_error_count": 0,
+    "archive_check_warning_count": 0,
+    "check_count": 7,
+    "command_arg_count": 4,
+    "external_code_file_count": 1,
+    "external_code_ready_count": 1,
+    "failed_check_count": 0,
+    "trainer_input_count": 1,
+    "trainer_input_ready_count": 1
+  },
+  "notes": [
+    "Trainer consumer plans are deterministic handoff manifests, not trainer launchers.",
+    "They make the exact command, archive inputs, external code files, and non-execution boundary machine-readable.",
+    "Local path integrity is rechecked when resolved paths are visible; redacted paths retain recorded fingerprint evidence."
+  ],
+  "passed": true,
+  "plan_path": "examples/agentic_training/trainer_consumer_plan.json",
+  "readiness": "ready",
+  "recommendation": "ready_for_external_trainer",
+  "schema_version": "hfr.trainer_consumer_plan.v1",
+  "source_archive_check": {
+    "passed": true,
+    "path": "<redacted:trainer_archive_check.json>",
+    "readiness": "ready",
+    "recommendation": "consumer_ready",
+    "schema_version": "hfr.trainer_archive_check.v1",
+    "sha256": "9fe1a9040c4da14c5bbe77e69d56a29dd363d7a40d22af0fa7ea4a92454268b7",
+    "size_bytes": 1704
+  },
+  "validation": {
+    "available": true,
+    "error_count": 0,
+    "errors": [],
+    "passed": true,
+    "strict": true,
+    "target_count": 1,
+    "warning_count": 0,
+    "warnings": []
+  }
+}

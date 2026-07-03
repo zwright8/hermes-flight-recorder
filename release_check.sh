@@ -1324,9 +1324,16 @@ printf '{"loss":0.0}\n' > runs/agentic_training_result_artifacts/metrics.json
   --out runs/agentic_training_runtime_preflight.json >/dev/null
 test -f runs/agentic_training_runtime_preflight.json
 "$PYTHON" -m flightrecorder schemas --check runs/agentic_training_runtime_preflight.json >/dev/null
+"$PYTHON" -m flightrecorder agentic-training-flow \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --out runs/agentic_training_flow.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/agentic_training_flow.json >/dev/null
 "$PYTHON" scripts/archive_agentic_training_result.py \
   --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --agentic-training-flow runs/agentic_training_flow.json \
   --status completed \
   --adapter runs/agentic_training_result_artifacts/adapter.safetensors \
   --metrics runs/agentic_training_result_artifacts/metrics.json \
@@ -1334,12 +1341,6 @@ test -f runs/agentic_training_runtime_preflight.json
   --out runs/agentic_training_result.json >/dev/null
 test -f runs/agentic_training_result.json
 "$PYTHON" -m flightrecorder schemas --check runs/agentic_training_result.json >/dev/null
-"$PYTHON" -m flightrecorder agentic-training-flow \
-  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
-  --runtime-preflight runs/agentic_training_runtime_preflight.json \
-  --trainer-consumer-plan runs/trainer_consumer_plan.json \
-  --out runs/agentic_training_flow.json >/dev/null
-"$PYTHON" -m flightrecorder schemas --check runs/agentic_training_flow.json >/dev/null
 "$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \

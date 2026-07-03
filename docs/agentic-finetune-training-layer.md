@@ -161,14 +161,16 @@ use `scripts/archive_agentic_training_result.py` to emit
 python3 scripts/archive_agentic_training_result.py \
   --plan runs/agentic_training_plan.json \
   --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --agentic-training-flow runs/agentic_training_flow.json \
   --status completed \
   --adapter runs/adapters/candidate/adapter.safetensors \
   --metrics runs/adapters/candidate/metrics.json \
   --out runs/agentic_training_result.json
 ```
 
-Completed receipts require a ready runtime preflight plus at least one adapter
-or checkpoint artifact. Failed, blocked, and aborted receipts require a
+Completed receipts require a ready runtime preflight, a ready delegated flow
+receipt for the same plan/runtime pair, and at least one adapter or checkpoint
+artifact. Failed, blocked, and aborted receipts require a
 classified failure such as `dependency_missing`, `view_validation_failed`,
 `trainer_crash`, `out_of_memory`, `timeout`, or `interrupted`. The receipt only
 fingerprints supplied files and records lineage back to the plan, runtime

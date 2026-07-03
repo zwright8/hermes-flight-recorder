@@ -35,7 +35,7 @@
     }
   ],
   "blocked_reasons": [],
-  "check_count": 13,
+  "check_count": 15,
   "checks": [
     {
       "actual": {
@@ -140,6 +140,37 @@
     },
     {
       "actual": {
+        "passed": true,
+        "provided": true,
+        "read_errors": [],
+        "recommendation": "ready_for_delegated_trainer_execution",
+        "schema_error_count": 0,
+        "status": "completed"
+      },
+      "expected": {
+        "completed_requires": "ready_for_delegated_trainer_execution"
+      },
+      "id": "agentic_training_flow_ready_for_completed_result",
+      "passed": true,
+      "summary": "agentic_training_flow_ready_for_completed_result: passed=True"
+    },
+    {
+      "actual": {
+        "flow_plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+        "flow_runtime_preflight_sha256": "a170ded0f3dce2658e093b9534483bd6211248075092c54f7023bfe33def2ff4",
+        "plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+        "runtime_preflight_sha256": "a170ded0f3dce2658e093b9534483bd6211248075092c54f7023bfe33def2ff4",
+        "status": "completed"
+      },
+      "expected": {
+        "flow_source_artifacts_match_current_plan_and_runtime": true
+      },
+      "id": "agentic_training_flow_matches_plan_and_runtime",
+      "passed": true,
+      "summary": "agentic_training_flow_matches_plan_and_runtime: passed=True"
+    },
+    {
+      "actual": {
         "failure_class": "none",
         "failure_message_present": false,
         "status": "completed"
@@ -221,8 +252,10 @@
   "handoff_contract": {
     "flight_recorder_launched_training": false,
     "model_downloads_started_by_flight_recorder": false,
+    "requires_agentic_training_flow_for_completed": true,
     "requires_agentic_training_plan": true,
     "requires_classified_failure_for_non_completed": true,
+    "requires_flow_ready_for_completed": true,
     "requires_output_artifact_for_completed": true,
     "requires_redacted_dataset": true,
     "requires_registered_dataset": true,
@@ -232,6 +265,14 @@
     "runner_owns_execution": true
   },
   "lineage": {
+    "agentic_training_flow": {
+      "exists": true,
+      "path": "agentic_training_flow.json",
+      "regular_file": true,
+      "schema_name": "agentic_training_flow",
+      "sha256": "d4c863daec5ad0871043484a9fd5c6b7c2b6f9e5a79157eed758cf5f5d47dd3c",
+      "size_bytes": 12997
+    },
     "dataset": {
       "id": "synthetic-agentic-redacted-dataset",
       "license_allows_training": true,
@@ -277,7 +318,8 @@
   "notes": [
     "This receipt archives externally reported training status and supplied artifact hashes.",
     "Flight Recorder did not execute a trainer, import trainer stacks, download models, or mutate weights.",
-    "Completed results must reference at least one adapter or checkpoint artifact; non-completed results must include a classified failure."
+    "Completed results must reference at least one adapter or checkpoint artifact; non-completed results must include a classified failure.",
+    "Completed results must also reference a ready delegated flow receipt for the same plan and runtime preflight."
   ],
   "passed": true,
   "readiness": "ready",

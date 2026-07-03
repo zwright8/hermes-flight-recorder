@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -8,6 +9,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+from flightrecorder.agentic_training_flow import build_agentic_training_flow, write_agentic_training_flow
 from flightrecorder.agentic_training_result import build_agentic_training_result, write_agentic_training_result
 from flightrecorder.agentic_training_runtime import (
     build_agentic_training_runtime_preflight,
@@ -15,6 +17,7 @@ from flightrecorder.agentic_training_runtime import (
 )
 from flightrecorder.cli import main
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
+from flightrecorder.trainer_consumer_plan import build_trainer_consumer_plan
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,15 +30,101 @@ def run_cli(args):
 
 
 class AgenticTrainingResultTests(unittest.TestCase):
-    def write_runtime_preflight(self, path: Path, *, ready: bool) -> None:
+    def write_runtime_preflight(self, path: Path, *, ready: bool, create_flow: bool = True, plan_path: Path = EXAMPLE_PLAN) -> None:
         preflight = build_agentic_training_runtime_preflight(
-            plan_path=EXAMPLE_PLAN,
+            plan_path=plan_path,
             out_path=path,
             require_modules=["json"] if ready else ["hfr_missing_dependency_for_test"],
             skip_default_modules=True,
             created_at="2026-07-02T00:00:00+00:00",
         )
         write_agentic_training_runtime_preflight(path, preflight)
+        if create_flow:
+            self.write_agentic_training_flow(path.parent, path, plan_path=plan_path)
+
+    def write_agentic_training_flow(self, root: Path, runtime: Path, *, plan_path: Path = EXAMPLE_PLAN) -> Path:
+        trainer_file = root / "train.py"
+        trainer_file.write_text("print('dry run')\n", encoding="utf-8")
+        trainer_sha = sha256(trainer_file)
+        input_file = root / "agentic_training_plan.json"
+        input_file.write_text(plan_path.read_text(encoding="utf-8"), encoding="utf-8")
+        input_sha = sha256(input_file)
+        archive_check_path = root / "trainer_archive_check.json"
+        archive_check = {
+            "schema_version": "hfr.trainer_archive_check.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "consumer_ready",
+            "portable_command": {
+                "approved": True,
+                "available": True,
+                "argv": ["python", "train.py", "--plan", "agentic_training_plan.json"],
+            },
+            "archive": {"path": "trainer_archive"},
+            "external_code_root": {"path": "trainer-code"},
+            "external_code_checks": [
+                {
+                    "index": 0,
+                    "argv_index": 1,
+                    "token": "train.py",
+                    "path": "train.py",
+                    "resolved_path": str(trainer_file),
+                    "exists": True,
+                    "regular_file": True,
+                    "symlink": False,
+                    "passed": True,
+                    "reason": "ready",
+                    "sha256": trainer_sha,
+                    "size_bytes": trainer_file.stat().st_size,
+                }
+            ],
+            "trainer_input_checks": [
+                {
+                    "index": 0,
+                    "artifact_index": 0,
+                    "artifact_name": "agentic_training_plan",
+                    "archive_path": "agentic_training_plan.json",
+                    "resolved_path": str(input_file),
+                    "kind": "file",
+                    "exists": True,
+                    "regular_file": True,
+                    "regular_directory": False,
+                    "symlink": False,
+                    "expected_sha256": input_sha,
+                    "expected_size_bytes": input_file.stat().st_size,
+                    "passed": True,
+                    "reason": "ready",
+                    "sha256": input_sha,
+                    "size_bytes": input_file.stat().st_size,
+                }
+            ],
+        }
+        archive_check_path.write_text(json.dumps(archive_check, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        consumer = build_trainer_consumer_plan(
+            out_path=root / "trainer_consumer_plan.json",
+            archive_check_path=archive_check_path,
+            archive_check=archive_check,
+            validation_summary={
+                "passed": True,
+                "strict": True,
+                "target_count": 1,
+                "error_count": 0,
+                "warning_count": 0,
+                "targets": [],
+            },
+        )
+        consumer_path = root / "trainer_consumer_plan.json"
+        consumer_path.write_text(json.dumps(consumer, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        flow_path = root / "agentic_training_flow.json"
+        flow = build_agentic_training_flow(
+            plan_path=plan_path,
+            runtime_preflight_path=runtime,
+            trainer_consumer_plan_path=consumer_path,
+            out_path=flow_path,
+            created_at="2026-07-02T00:00:00+00:00",
+        )
+        write_agentic_training_flow(flow_path, flow)
+        return flow_path
 
     def test_completed_result_requires_ready_runtime_and_output_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -74,11 +163,206 @@ class AgenticTrainingResultTests(unittest.TestCase):
             self.assertFalse(result["execution_boundary"]["flight_recorder_launched_training"])
             self.assertEqual(result["lineage"]["plan"]["size_bytes"], EXAMPLE_PLAN.stat().st_size)
             self.assertEqual(result["lineage"]["runtime_preflight"]["size_bytes"], runtime.stat().st_size)
+            self.assertEqual(result["lineage"]["agentic_training_flow"]["schema_name"], "agentic_training_flow")
+            self.assertTrue(result["lineage"]["agentic_training_flow"]["exists"])
             plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
             self.assertEqual(result["lineage"]["model"]["size_bytes"], plan["input_manifests"]["model"]["size_bytes"])
             self.assertEqual(result["lineage"]["dataset"]["size_bytes"], plan["input_manifests"]["dataset"]["size_bytes"])
             schema = check_schema_contract(result)
             self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_completed_result_requires_ready_agentic_training_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            self.write_runtime_preflight(runtime, ready=True, create_flow=False)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=root / "result.json",
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+
+            self.assertFalse(result["passed"])
+            self.assertEqual(result["recommendation"], "block_training_result_registration")
+            failed_ids = {check["id"] for check in result["checks"] if not check["passed"]}
+            self.assertIn("agentic_training_flow_ready_for_completed_result", failed_ids)
+            self.assertNotIn("agentic_training_flow", result["lineage"])
+            schema = check_schema_contract(result)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_validation_rejects_ready_completed_result_without_flow_lineage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"].pop("agentic_training_flow")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.agentic_training_flow is required for completed receipts", errors)
+
+    def test_validation_rejects_ready_completed_result_with_blocked_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            flow = root / "agentic_training_flow.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            flow_payload = json.loads(flow.read_text(encoding="utf-8"))
+            flow_payload["passed"] = False
+            flow_payload["recommendation"] = "block_delegated_trainer_execution"
+            flow.write_text(json.dumps(flow_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.agentic_training_flow.size_bytes does not match the current file", errors)
+            self.assertIn("agentic_training_result.lineage.agentic_training_flow.passed must be true", errors)
+            self.assertIn(
+                "agentic_training_result.lineage.agentic_training_flow.recommendation must be ready_for_delegated_trainer_execution",
+                errors,
+            )
+
+    def test_validation_rejects_missing_flow_handoff_contract_booleans(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["handoff_contract"].pop("requires_agentic_training_flow_for_completed")
+            result["handoff_contract"]["requires_flow_ready_for_completed"] = False
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.handoff_contract.requires_agentic_training_flow_for_completed expected True",
+                errors,
+            )
+            self.assertIn("agentic_training_result.handoff_contract.requires_flow_ready_for_completed expected True", errors)
+
+    def test_validation_rejects_ready_completed_result_with_invalid_flow_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            flow = root / "agentic_training_flow.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            flow_payload = json.loads(flow.read_text(encoding="utf-8"))
+            flow_payload["check_count"] = flow_payload["check_count"] + 1
+            flow_payload["handoff_contract"]["requires_runtime_preflight"] = False
+            flow.write_text(json.dumps(flow_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            result["lineage"]["agentic_training_flow"]["size_bytes"] = flow.stat().st_size
+            result["lineage"]["agentic_training_flow"]["sha256"] = sha256(flow)
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.agentic_training_flow invalid: agentic_training_flow.check_count", errors)
+            self.assertIn(
+                "agentic_training_result.lineage.agentic_training_flow invalid: agentic_training_flow.handoff_contract.requires_runtime_preflight must be true",
+                errors,
+            )
 
     def test_classified_failure_receipt_can_register_blocked_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1201,6 +1485,14 @@ class AgenticTrainingResultTests(unittest.TestCase):
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_training_result", names)
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 if __name__ == "__main__":

@@ -313,14 +313,16 @@ After an external trainer finishes or fails, archive a receipt:
 python3.11 scripts/archive_agentic_training_result.py \
   --plan runs/agentic_training_plan.json \
   --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --agentic-training-flow runs/agentic_training_flow.json \
   --status completed \
   --adapter runs/adapters/candidate/adapter.safetensors \
   --metrics runs/adapters/candidate/metrics.json \
   --out runs/agentic_training_result.json
 ```
 
-The receipt fingerprints supplied artifacts and proposes a registry update. It
-does not apply that update until governance accepts it.
+Completed receipts require a ready delegated flow for the same plan and runtime
+preflight. The receipt fingerprints supplied artifacts and proposes a registry
+update. It does not apply that update until governance accepts it.
 
 Bind the receipts into a closed-loop contract before live execution or
 promotion claims:

@@ -30,6 +30,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="hfr.agentic_training_runtime_preflight.v1 JSON runtime preflight",
     )
+    parser.add_argument(
+        "--agentic-training-flow",
+        type=Path,
+        help="Optional hfr.agentic_training_flow.v1 JSON flow receipt; required for completed result registration",
+    )
     parser.add_argument("--status", required=True, choices=RESULT_STATUSES, help="External runner training status")
     parser.add_argument("--failure-class", default="none", choices=FAILURE_CLASSES, help="Classified failure for non-completed runs")
     parser.add_argument("--failure-message", default="", help="Human-readable failure summary for non-completed runs")
@@ -61,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         result = build_agentic_training_result(
             plan_path=args.plan,
             runtime_preflight_path=args.runtime_preflight,
+            agentic_training_flow_path=args.agentic_training_flow,
             out_path=args.out,
             status=args.status,
             failure_class=args.failure_class,

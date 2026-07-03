@@ -44,6 +44,7 @@ trainer-output fixture:
 python3 scripts/archive_agentic_training_result.py \
   --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
+  --agentic-training-flow examples/agentic_training/agentic_training_flow.json \
   --status completed \
   --runner-id synthetic-example-runner \
   --run-id synthetic-completed-001 \

@@ -303,7 +303,13 @@
         "requires_agentic_training_plan": {
           "const": true
         },
+        "requires_agentic_training_flow_for_completed": {
+          "const": true
+        },
         "requires_classified_failure_for_non_completed": {
+          "const": true
+        },
+        "requires_flow_ready_for_completed": {
           "const": true
         },
         "requires_output_artifact_for_completed": {
@@ -332,7 +338,9 @@
         "runner_owns_execution",
         "requires_agentic_training_plan",
         "requires_runtime_preflight",
+        "requires_agentic_training_flow_for_completed",
         "requires_runtime_ready_for_completed",
+        "requires_flow_ready_for_completed",
         "requires_classified_failure_for_non_completed",
         "requires_output_artifact_for_completed",
         "requires_registered_model",
@@ -346,6 +354,9 @@
     "lineage": {
       "additionalProperties": true,
       "properties": {
+        "agentic_training_flow": {
+          "$ref": "#/$defs/lineageRef"
+        },
         "dataset": {
           "$ref": "#/$defs/manifestRef"
         },

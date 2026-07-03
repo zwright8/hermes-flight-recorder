@@ -1,0 +1,442 @@
+{
+  "blocked_reasons": [],
+  "check_count": 16,
+  "checks": [
+    {
+      "actual": {
+        "errors": []
+      },
+      "expected": {
+        "errors": []
+      },
+      "id": "plan_json_readable",
+      "passed": true,
+      "summary": "plan_json_readable: passed=True"
+    },
+    {
+      "actual": {
+        "error_count": 0,
+        "errors": []
+      },
+      "expected": {
+        "error_count": 0,
+        "schema_name": "agentic_training_plan"
+      },
+      "id": "plan_schema_passed",
+      "passed": true,
+      "summary": "plan_schema_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true,
+        "recommendation": "ready_for_external_trainer_plan"
+      },
+      "expected": {
+        "passed": true,
+        "recommendation": "ready_for_external_trainer_plan"
+      },
+      "id": "plan_ready_for_external_trainer",
+      "passed": true,
+      "summary": "plan_ready_for_external_trainer: passed=True"
+    },
+    {
+      "actual": {
+        "errors": []
+      },
+      "expected": {
+        "errors": []
+      },
+      "id": "runtime_preflight_json_readable",
+      "passed": true,
+      "summary": "runtime_preflight_json_readable: passed=True"
+    },
+    {
+      "actual": {
+        "error_count": 0,
+        "errors": []
+      },
+      "expected": {
+        "error_count": 0,
+        "schema_name": "agentic_training_runtime_preflight"
+      },
+      "id": "runtime_preflight_schema_passed",
+      "passed": true,
+      "summary": "runtime_preflight_schema_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true,
+        "recommendation": "ready_for_tiny_smoke_launch"
+      },
+      "expected": {
+        "passed": true,
+        "recommendation": "ready_for_tiny_smoke_launch"
+      },
+      "id": "runtime_preflight_ready",
+      "passed": true,
+      "summary": "runtime_preflight_ready: passed=True"
+    },
+    {
+      "actual": {
+        "plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+        "runtime_plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b"
+      },
+      "expected": {
+        "runtime_plan_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b"
+      },
+      "id": "runtime_preflight_matches_plan",
+      "passed": true,
+      "summary": "runtime_preflight_matches_plan: passed=True"
+    },
+    {
+      "actual": {
+        "category": "default_executable",
+        "error_count": 0,
+        "errors": [],
+        "mode": "sft_then_dpo",
+        "mode_matches_plan": true,
+        "passed": true,
+        "present": true
+      },
+      "expected": {
+        "error_count": 0,
+        "mode_matches_plan": true,
+        "passed": true,
+        "present": true
+      },
+      "id": "mode_contract_ready_for_flow",
+      "passed": true,
+      "summary": "mode_contract_ready_for_flow: mode=sft_then_dpo category=default_executable passed=True"
+    },
+    {
+      "actual": {
+        "errors": []
+      },
+      "expected": {
+        "errors": []
+      },
+      "id": "trainer_consumer_plan_json_readable",
+      "passed": true,
+      "summary": "trainer_consumer_plan_json_readable: passed=True"
+    },
+    {
+      "actual": {
+        "error_count": 0,
+        "errors": []
+      },
+      "expected": {
+        "error_count": 0,
+        "schema_name": "trainer_consumer_plan"
+      },
+      "id": "trainer_consumer_plan_schema_passed",
+      "passed": true,
+      "summary": "trainer_consumer_plan_schema_passed: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true,
+        "recommendation": "ready_for_external_trainer"
+      },
+      "expected": {
+        "passed": true,
+        "recommendation": "ready_for_external_trainer"
+      },
+      "id": "trainer_consumer_plan_ready",
+      "passed": true,
+      "summary": "trainer_consumer_plan_ready: passed=True"
+    },
+    {
+      "actual": {
+        "blocked_by_default": false,
+        "category": "default_executable",
+        "executable_by_default": true,
+        "external_runner_must_supply_reward": false,
+        "external_runner_must_validate_reward": true,
+        "mode": "sft_then_dpo",
+        "mode_contract_ready": true,
+        "promotion_required": false,
+        "promotion_status": "default_executable",
+        "reason": "",
+        "required_plan_opt_in_flag": null,
+        "reward_contract_kind": "preference_pairs"
+      },
+      "expected": {
+        "blocked_modes": [
+          "grpo",
+          "process_rewards",
+          "reward_model",
+          "rl"
+        ],
+        "executable_modes": [
+          "action_sft",
+          "dpo",
+          "sft",
+          "sft_then_dpo"
+        ]
+      },
+      "id": "default_executable_flow_mode",
+      "passed": true,
+      "summary": "default_executable_flow_mode: mode=sft_then_dpo passed=True"
+    },
+    {
+      "actual": {
+        "stage_sequence": [
+          "sft",
+          "dpo"
+        ]
+      },
+      "expected": {
+        "allowed_stages": [
+          "action_sft",
+          "dpo",
+          "sft"
+        ]
+      },
+      "id": "stage_sequence_executable",
+      "passed": true,
+      "summary": "stage_sequence_executable: stage_sequence=['sft', 'dpo'] passed=True"
+    },
+    {
+      "actual": {
+        "stages_without_views": []
+      },
+      "expected": {
+        "all_stages_have_selected_views": true
+      },
+      "id": "selected_views_available_for_stages",
+      "passed": true,
+      "summary": "selected_views_available_for_stages: passed=True"
+    },
+    {
+      "actual": {
+        "command_approved": true,
+        "command_arg_count": 4,
+        "command_available": true
+      },
+      "expected": {
+        "command_approved": true,
+        "command_arg_count": ">0",
+        "command_available": true
+      },
+      "id": "delegated_command_available",
+      "passed": true,
+      "summary": "delegated_command_available: passed=True"
+    },
+    {
+      "actual": {
+        "model_downloads_started": false,
+        "subprocess_started": false,
+        "trainer_command_executed": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "expected": {
+        "model_downloads_started": false,
+        "subprocess_started": false,
+        "trainer_command_executed": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "id": "flight_recorder_did_not_execute_trainer_flow",
+      "passed": true,
+      "summary": "flight_recorder_did_not_execute_trainer_flow: passed=True"
+    }
+  ],
+  "created_at": "2026-07-02T00:00:00+00:00",
+  "delegated_flow": {
+    "backend": "axolotl",
+    "command": {
+      "archive_root": "examples/agentic_training/trainer_archive",
+      "command_argv": [
+        "python",
+        "../trainer-wrapper/consume_trainer_plan.py",
+        "--plan",
+        "plans/sft_then_dpo_plan.json"
+      ],
+      "command_shell": "python ../trainer-wrapper/consume_trainer_plan.py --plan plans/sft_then_dpo_plan.json",
+      "execution_cwd": "archive_root",
+      "external_code_file_count": 1,
+      "external_code_root": "examples/trainer-wrapper",
+      "trainer_input_count": 1
+    },
+    "mode": "sft_then_dpo",
+    "stage_sequence": [
+      "sft",
+      "dpo"
+    ],
+    "stages": [
+      {
+        "row_count": 2,
+        "stage_id": "sft",
+        "stage_index": 0,
+        "view_name": "sft",
+        "view_path": "examples/agentic_training/data/sft.jsonl",
+        "view_ready": true,
+        "view_schema_version": "hfr.rl.sft.v1"
+      },
+      {
+        "row_count": 2,
+        "stage_id": "dpo",
+        "stage_index": 1,
+        "view_name": "dpo",
+        "view_path": "examples/agentic_training/data/dpo.jsonl",
+        "view_ready": true,
+        "view_schema_version": "hfr.rl.dpo.v1"
+      }
+    ]
+  },
+  "execution_boundary": {
+    "cloud_jobs_started": false,
+    "credential_values_recorded": false,
+    "flow_plan_only": true,
+    "model_downloads_started": false,
+    "subprocess_started": false,
+    "trainer_command_executed": false,
+    "trainer_modules_imported": false,
+    "training_started": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "flow_id": "example-sft-then-dpo-flow",
+  "flow_mode_gate": {
+    "blocked_by_default": false,
+    "category": "default_executable",
+    "executable_by_default": true,
+    "external_runner_must_supply_reward": false,
+    "external_runner_must_validate_reward": true,
+    "mode": "sft_then_dpo",
+    "mode_contract_ready": true,
+    "promotion_required": false,
+    "promotion_status": "default_executable",
+    "reason": "",
+    "required_plan_opt_in_flag": null,
+    "reward_contract_kind": "preference_pairs"
+  },
+  "flow_path": "agentic_training_flow.json",
+  "handoff_contract": {
+    "blocked_mode_categories": [
+      "advanced_reward",
+      "future_rl"
+    ],
+    "blocked_mode_stages": [
+      "future_grpo",
+      "future_rl",
+      "process_rewards",
+      "reward_model"
+    ],
+    "blocked_modes": [
+      "grpo",
+      "process_rewards",
+      "reward_model",
+      "rl"
+    ],
+    "executable_modes": [
+      "action_sft",
+      "dpo",
+      "sft",
+      "sft_then_dpo"
+    ],
+    "flight_recorder_executed_trainer": false,
+    "requires_mode_contract": true,
+    "requires_mode_contract_ready": true,
+    "requires_redacted_dataset": true,
+    "requires_registered_model_and_dataset": true,
+    "requires_runtime_preflight": true,
+    "requires_trainer_consumer_plan": true,
+    "runner_must_emit_result_schema": "hfr.agentic_training_result.v1",
+    "runner_must_require_recommendation": "ready_for_delegated_trainer_execution",
+    "runner_owns_execution": true
+  },
+  "metrics": {
+    "check_count": 16,
+    "command_arg_count": 4,
+    "executable_stage_count": 2,
+    "external_code_file_count": 1,
+    "failed_check_count": 0,
+    "selected_view_count": 2,
+    "stage_count": 2,
+    "trainer_input_count": 1
+  },
+  "mode_contract_check": {
+    "category": "default_executable",
+    "data_requirement_count": 2,
+    "error_count": 0,
+    "errors": [],
+    "external_runner_contract": {
+      "runner_must_block_unredacted_traces": true,
+      "runner_must_require_recommendation": "ready_for_external_trainer_plan",
+      "runner_must_revalidate_inputs": true,
+      "runner_must_validate_reward_contract": true,
+      "runner_owns_execution": true
+    },
+    "mode": "sft_then_dpo",
+    "mode_matches_plan": true,
+    "passed": true,
+    "planning_gate_open": true,
+    "planning_required_flag": null,
+    "present": true,
+    "reward_contract": {
+      "callable_signature": "",
+      "external_runner_must_supply": false,
+      "external_runner_must_validate": true,
+      "flight_recorder_supplies_callable": false,
+      "kind": "preference_pairs",
+      "may_call_paid_services_by_default": false,
+      "may_require_secrets_by_default": false,
+      "must_not_use_unredacted_traces": true,
+      "required": true
+    },
+    "side_effect_boundary": {
+      "cloud_jobs_started": false,
+      "dry_run_only": true,
+      "model_downloads_started": false,
+      "paid_model_grader_calls_started": false,
+      "provider_credentials_required_by_flight_recorder": false,
+      "training_started": false,
+      "weights_updated": false
+    },
+    "unsatisfied_data_requirement_ids": []
+  },
+  "notes": [
+    "This receipt delegates an executable trainer flow; Flight Recorder did not run the command.",
+    "Only SFT, action-SFT, DPO, and SFT-then-DPO flows are executable by default.",
+    "Reward-model, process-reward, GRPO, and RL modes remain blocked until their contracts are promoted."
+  ],
+  "passed": true,
+  "readiness": "ready",
+  "recommendation": "ready_for_delegated_trainer_execution",
+  "schema_version": "hfr.agentic_training_flow.v1",
+  "source_artifacts": {
+    "agentic_training_plan": {
+      "exists": true,
+      "passed": true,
+      "path": "plans/sft_then_dpo_plan.json",
+      "recommendation": "ready_for_external_trainer_plan",
+      "regular_file": true,
+      "role": "agentic_training_plan",
+      "schema_version": "hfr.agentic_training_plan.v1",
+      "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+      "size_bytes": 15787
+    },
+    "agentic_training_runtime_preflight": {
+      "exists": true,
+      "passed": true,
+      "path": "runtime_preflight/ready.json",
+      "recommendation": "ready_for_tiny_smoke_launch",
+      "regular_file": true,
+      "role": "agentic_training_runtime_preflight",
+      "schema_version": "hfr.agentic_training_runtime_preflight.v1",
+      "sha256": "a170ded0f3dce2658e093b9534483bd6211248075092c54f7023bfe33def2ff4",
+      "size_bytes": 8094
+    },
+    "trainer_consumer_plan": {
+      "exists": true,
+      "passed": true,
+      "path": "trainer_consumer_plan.json",
+      "recommendation": "ready_for_external_trainer",
+      "regular_file": true,
+      "role": "trainer_consumer_plan",
+      "schema_version": "hfr.trainer_consumer_plan.v1",
+      "sha256": "50d6ccf2963f40676a7d5368f1f5fc5722809481ccd68b878b733523d8d98d30",
+      "size_bytes": 6222
+    }
+  }
+}

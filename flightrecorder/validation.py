@@ -3056,7 +3056,7 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     elif not expected_passed and len(blocked_reasons) != failed_checks:
         target.errors.append("agentic_training_result.blocked_reasons must match failed_check_count.")
 
-    _validate_agentic_training_result_lineage(result.get("lineage"), target, source_path)
+    _validate_agentic_training_result_lineage(result.get("lineage"), target, source_path, status, expected_passed)
     _validate_agentic_training_result_boundary(result.get("execution_boundary"), target, "execution_boundary")
     _validate_agentic_training_result_contract(result.get("handoff_contract"), target)
     if "registry_update" in result:
@@ -5081,7 +5081,13 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
     return counts
 
 
-def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarget, source_path: Path) -> None:
+def _validate_agentic_training_result_lineage(
+    value: Any,
+    target: ValidationTarget,
+    source_path: Path,
+    status: Any,
+    expected_passed: bool,
+) -> None:
     if not isinstance(value, dict):
         target.errors.append("agentic_training_result.lineage must be an object.")
         return
@@ -5125,6 +5131,88 @@ def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarg
         expected_ref = plan_inputs.get(field_name)
         if isinstance(expected_ref, dict):
             _validate_agentic_training_result_manifest_matches_plan(ref, expected_ref, target, label, field_name)
+    flow_ref = value.get("agentic_training_flow")
+    if status == "completed" and expected_passed and not isinstance(flow_ref, dict):
+        target.errors.append("agentic_training_result.lineage.agentic_training_flow is required for completed receipts.")
+    if isinstance(flow_ref, dict):
+        label = "agentic_training_result.lineage.agentic_training_flow"
+        for string_field in ("path", "schema_name"):
+            if not isinstance(flow_ref.get(string_field), str) or not flow_ref.get(string_field):
+                target.errors.append(f"{label}.{string_field} must be a non-empty string.")
+        if flow_ref.get("schema_name") != "agentic_training_flow":
+            target.errors.append(f"{label}.schema_name must be 'agentic_training_flow'.")
+        if isinstance(flow_ref.get("path"), str) and flow_ref.get("path") and not _is_safe_agentic_training_result_path(flow_ref["path"]):
+            target.errors.append(f"{label}.path must be a safe relative path without traversal.")
+        for bool_field in ("exists", "regular_file"):
+            if not isinstance(flow_ref.get(bool_field), bool):
+                target.errors.append(f"{label}.{bool_field} must be a boolean.")
+        if not _is_sha256(flow_ref.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+        if not _is_non_negative_int(flow_ref.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+        _validate_agentic_training_result_lineage_file(flow_ref, target, label, source_path)
+        _validate_agentic_training_result_flow_lineage(flow_ref, value, target, source_path, status, expected_passed)
+
+
+def _validate_agentic_training_result_flow_lineage(
+    flow_ref: dict[str, Any],
+    lineage: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+    status: Any,
+    expected_passed: bool,
+) -> None:
+    path_value = flow_ref.get("path")
+    if not isinstance(path_value, str) or not _is_safe_agentic_training_result_path(path_value):
+        return
+    flow_path = _agentic_training_result_reference_path(path_value, source_path)
+    if not flow_path.is_file() or flow_path.is_symlink():
+        return
+    try:
+        flow = json.loads(flow_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        if status == "completed" and expected_passed:
+            target.errors.append("agentic_training_result.lineage.agentic_training_flow.path must contain readable JSON.")
+        return
+    if not isinstance(flow, dict):
+        if status == "completed" and expected_passed:
+            target.errors.append("agentic_training_result.lineage.agentic_training_flow.path must contain a JSON object.")
+        return
+    if status != "completed" or not expected_passed:
+        return
+    flow_target = ValidationTarget("agentic_training_flow", str(flow_path))
+    _validate_agentic_training_flow(flow, flow_target, flow_path)
+    if flow_target.errors:
+        for error in flow_target.errors:
+            target.errors.append(f"agentic_training_result.lineage.agentic_training_flow invalid: {error}")
+    if flow.get("schema_version") != AGENTIC_TRAINING_FLOW_SCHEMA_VERSION:
+        target.errors.append(
+            f"agentic_training_result.lineage.agentic_training_flow.schema_version must be {AGENTIC_TRAINING_FLOW_SCHEMA_VERSION!r}."
+        )
+    if flow.get("passed") is not True:
+        target.errors.append("agentic_training_result.lineage.agentic_training_flow.passed must be true for completed receipts.")
+    if flow.get("recommendation") != FLOW_READY_RECOMMENDATION:
+        target.errors.append(
+            "agentic_training_result.lineage.agentic_training_flow.recommendation must be ready_for_delegated_trainer_execution."
+        )
+    flow_mode_gate = flow.get("flow_mode_gate") if isinstance(flow.get("flow_mode_gate"), dict) else {}
+    if flow_mode_gate.get("executable_by_default") is not True:
+        target.errors.append("agentic_training_result.lineage.agentic_training_flow.flow_mode_gate.executable_by_default must be true.")
+    if flow_mode_gate.get("blocked_by_default") is not False:
+        target.errors.append("agentic_training_result.lineage.agentic_training_flow.flow_mode_gate.blocked_by_default must be false.")
+    source_artifacts = flow.get("source_artifacts") if isinstance(flow.get("source_artifacts"), dict) else {}
+    expected = {
+        "agentic_training_plan": ("plan", "plan"),
+        "agentic_training_runtime_preflight": ("runtime_preflight", "runtime_preflight"),
+    }
+    for flow_role, (lineage_role, label_role) in expected.items():
+        flow_source = source_artifacts.get(flow_role) if isinstance(source_artifacts.get(flow_role), dict) else {}
+        lineage_source = lineage.get(lineage_role) if isinstance(lineage.get(lineage_role), dict) else {}
+        if flow_source.get("sha256") != lineage_source.get("sha256"):
+            target.errors.append(
+                "agentic_training_result.lineage.agentic_training_flow.source_artifacts."
+                f"{flow_role}.sha256 must match lineage.{label_role}.sha256."
+            )
 
 
 def _agentic_training_result_plan_input_manifests(lineage: dict[str, Any], source_path: Path) -> dict[str, Any]:
@@ -5236,7 +5324,9 @@ def _validate_agentic_training_result_contract(value: Any, target: ValidationTar
         "runner_owns_execution": True,
         "requires_agentic_training_plan": True,
         "requires_runtime_preflight": True,
+        "requires_agentic_training_flow_for_completed": True,
         "requires_runtime_ready_for_completed": True,
+        "requires_flow_ready_for_completed": True,
         "requires_classified_failure_for_non_completed": True,
         "requires_output_artifact_for_completed": True,
         "requires_registered_model": True,

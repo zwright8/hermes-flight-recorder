@@ -11,6 +11,10 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .agentic_training_plan import AGENTIC_TRAINING_PLAN_SCHEMA_VERSION
+from .agentic_training_flow import (
+    AGENTIC_TRAINING_FLOW_SCHEMA_VERSION,
+    FLOW_READY_RECOMMENDATION,
+)
 from .agentic_training_runtime import (
     AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION,
     PLAN_READY_RECOMMENDATION,
@@ -59,6 +63,7 @@ def build_agentic_training_result(
     *,
     plan_path: str | Path,
     runtime_preflight_path: str | Path,
+    agentic_training_flow_path: str | Path | None = None,
     out_path: str | Path | None = None,
     status: str,
     failure_class: str = "none",
@@ -86,14 +91,19 @@ def build_agentic_training_result(
 
     plan_file = Path(plan_path)
     runtime_file = Path(runtime_preflight_path)
+    flow_file = _resolve_flow_path(agentic_training_flow_path, runtime_file)
     plan_payload, plan_read_errors = _read_json_object(plan_file)
     runtime_payload, runtime_read_errors = _read_json_object(runtime_file)
+    flow_payload, flow_read_errors = _read_json_object(flow_file) if flow_file is not None else ({}, ["agentic_training_flow path not provided"])
     plan_schema_check = _json_schema_record(plan_file, "agentic_training_plan")
     runtime_schema_check = _json_schema_record(runtime_file, "agentic_training_runtime_preflight")
+    flow_schema_check = _json_schema_record(flow_file, "agentic_training_flow") if flow_file is not None else _missing_schema_record("agentic_training_flow")
     receipt_base = Path(out_path).parent if out_path is not None else None
     artifact_refs = _artifact_refs(artifacts or {}, receipt_base)
 
     plan_sha = _sha256_or_none(plan_file)
+    runtime_sha = _sha256_or_none(runtime_file)
+    flow_sha = _sha256_or_none(flow_file) if flow_file is not None else None
     runtime_plan_sha = runtime_payload.get("plan_sha256") if isinstance(runtime_payload.get("plan_sha256"), str) else ""
     plan_ready = (
         not plan_read_errors
@@ -112,6 +122,17 @@ def build_agentic_training_result(
         and runtime_payload.get("passed") is True
         and runtime_payload.get("recommendation") == RUNTIME_READY_RECOMMENDATION
     )
+    flow_schema_valid = (
+        not flow_read_errors
+        and flow_schema_check["passed"]
+        and flow_payload.get("schema_version") == AGENTIC_TRAINING_FLOW_SCHEMA_VERSION
+    )
+    flow_ready = (
+        flow_schema_valid
+        and flow_payload.get("passed") is True
+        and flow_payload.get("recommendation") == FLOW_READY_RECOMMENDATION
+    )
+    flow_matches_plan_and_runtime = _flow_matches_plan_and_runtime(flow_payload, plan_sha, runtime_sha)
     runtime_matches_plan = bool(plan_sha) and runtime_plan_sha == plan_sha
     output_artifacts = [artifact for artifact in artifact_refs if artifact["role"] in OUTPUT_ARTIFACT_ROLES]
     artifacts_regular = all(artifact["regular_file"] for artifact in artifact_refs)
@@ -122,6 +143,8 @@ def build_agentic_training_result(
     completed_has_no_failure = normalized_status != "completed" or normalized_failure_class == "none"
     completed_has_output = normalized_status != "completed" or bool(output_artifacts)
     runtime_ready_for_completed = normalized_status != "completed" or runtime_ready
+    flow_ready_for_completed = normalized_status != "completed" or flow_ready
+    flow_matches_for_completed = normalized_status != "completed" or flow_matches_plan_and_runtime
 
     checks: list[dict[str, Any]] = []
     _add_check(checks, "status_supported", normalized_status in RESULT_STATUSES, {"status": normalized_status}, {"statuses": list(RESULT_STATUSES)})
@@ -161,6 +184,33 @@ def build_agentic_training_result(
         runtime_ready_for_completed,
         {"status": normalized_status, "runtime_recommendation": runtime_payload.get("recommendation")},
         {"completed_requires": RUNTIME_READY_RECOMMENDATION},
+    )
+    _add_check(
+        checks,
+        "agentic_training_flow_ready_for_completed_result",
+        flow_ready_for_completed,
+        {
+            "status": normalized_status,
+            "provided": flow_file is not None,
+            "schema_error_count": flow_schema_check["error_count"],
+            "read_errors": flow_read_errors,
+            "passed": flow_payload.get("passed"),
+            "recommendation": flow_payload.get("recommendation"),
+        },
+        {"completed_requires": FLOW_READY_RECOMMENDATION},
+    )
+    _add_check(
+        checks,
+        "agentic_training_flow_matches_plan_and_runtime",
+        flow_matches_for_completed,
+        {
+            "status": normalized_status,
+            "flow_plan_sha256": _flow_source_sha(flow_payload, "agentic_training_plan"),
+            "plan_sha256": plan_sha or "",
+            "flow_runtime_preflight_sha256": _flow_source_sha(flow_payload, "agentic_training_runtime_preflight"),
+            "runtime_preflight_sha256": runtime_sha or "",
+        },
+        {"flow_source_artifacts_match_current_plan_and_runtime": True},
     )
     _add_check(
         checks,
@@ -209,6 +259,19 @@ def build_agentic_training_result(
 
     trainer_plan = plan_payload.get("trainer_plan") if isinstance(plan_payload.get("trainer_plan"), dict) else {}
     output_dir_path = output_dir if output_dir is not None else trainer_plan.get("output_dir")
+    lineage = {
+        "plan": _lineage_ref(plan_file, plan_sha, "agentic_training_plan", receipt_base),
+        "runtime_preflight": _lineage_ref(
+            runtime_file,
+            runtime_sha,
+            "agentic_training_runtime_preflight",
+            receipt_base,
+        ),
+        "model": _manifest_summary(plan_payload, "model"),
+        "dataset": _manifest_summary(plan_payload, "dataset"),
+    }
+    if flow_file is not None:
+        lineage["agentic_training_flow"] = _lineage_ref(flow_file, flow_sha, "agentic_training_flow", receipt_base)
     result = {
         "schema_version": AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
@@ -231,17 +294,7 @@ def build_agentic_training_result(
             "flight_recorder_executed_training": False,
             "model_downloads_started_by_flight_recorder": False,
         },
-        "lineage": {
-            "plan": _lineage_ref(plan_file, plan_sha, "agentic_training_plan", receipt_base),
-            "runtime_preflight": _lineage_ref(
-                runtime_file,
-                _sha256_or_none(runtime_file),
-                "agentic_training_runtime_preflight",
-                receipt_base,
-            ),
-            "model": _manifest_summary(plan_payload, "model"),
-            "dataset": _manifest_summary(plan_payload, "dataset"),
-        },
+        "lineage": lineage,
         "failure": {
             "class": normalized_failure_class,
             "message": failure_message,
@@ -280,7 +333,9 @@ def build_agentic_training_result(
             "runner_owns_execution": True,
             "requires_agentic_training_plan": True,
             "requires_runtime_preflight": True,
+            "requires_agentic_training_flow_for_completed": True,
             "requires_runtime_ready_for_completed": True,
+            "requires_flow_ready_for_completed": True,
             "requires_classified_failure_for_non_completed": True,
             "requires_output_artifact_for_completed": True,
             "requires_registered_model": True,
@@ -293,6 +348,7 @@ def build_agentic_training_result(
             "This receipt archives externally reported training status and supplied artifact hashes.",
             "Flight Recorder did not execute a trainer, import trainer stacks, download models, or mutate weights.",
             "Completed results must reference at least one adapter or checkpoint artifact; non-completed results must include a classified failure.",
+            "Completed results must also reference a ready delegated flow receipt for the same plan and runtime preflight.",
         ],
     }
     return result
@@ -337,6 +393,35 @@ def _json_schema_record(path: Path, schema_name: str) -> dict[str, Any]:
     record["error_count"] = _int_value(result.get("error_count"))
     record["errors"] = [str(error) for error in result.get("errors", []) if isinstance(error, str)][:20]
     return record
+
+
+def _missing_schema_record(schema_name: str) -> dict[str, Any]:
+    return {
+        "path": "",
+        "schema_name": schema_name,
+        "passed": False,
+        "error_count": 1,
+        "errors": ["artifact path not provided"],
+    }
+
+
+def _resolve_flow_path(path: str | Path | None, runtime_file: Path) -> Path | None:
+    if path is not None and str(path):
+        return Path(path)
+    sibling = runtime_file.with_name("agentic_training_flow.json")
+    return sibling if sibling.exists() else None
+
+
+def _flow_matches_plan_and_runtime(flow: dict[str, Any], plan_sha: str | None, runtime_sha: str | None) -> bool:
+    return bool(plan_sha) and bool(runtime_sha) and _flow_source_sha(flow, "agentic_training_plan") == plan_sha and _flow_source_sha(
+        flow, "agentic_training_runtime_preflight"
+    ) == runtime_sha
+
+
+def _flow_source_sha(flow: dict[str, Any], role: str) -> str:
+    sources = flow.get("source_artifacts") if isinstance(flow.get("source_artifacts"), dict) else {}
+    ref = sources.get(role) if isinstance(sources.get(role), dict) else {}
+    return str(ref.get("sha256") or "")
 
 
 def _artifact_refs(artifacts: dict[str, Iterable[str | Path]], reference_base: Path | None) -> list[dict[str, Any]]:
