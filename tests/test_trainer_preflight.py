@@ -1066,6 +1066,13 @@ class TrainerPreflightTests(unittest.TestCase):
                 forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
                 self.assertFalse(forged_schema["passed"])
                 self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            forged = json.loads(json.dumps(receipt))
+            next(item for item in forged["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "file")[
+                "expected_sha256"
+            ] = "not-a-hash"
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
+            self.assertFalse(forged_schema["passed"])
+            self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
             wrapper_directory = next(item for item in receipt["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "directory")
             self.assertEqual(len(wrapper_directory["sha256"]), 64)
             self.assertIn("size_bytes", wrapper_directory)
@@ -1077,12 +1084,29 @@ class TrainerPreflightTests(unittest.TestCase):
                 forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
                 self.assertFalse(forged_schema["passed"])
                 self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            forged = json.loads(json.dumps(receipt))
+            next(
+                item for item in forged["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "directory"
+            )["expected_sha256"] = "not-a-hash"
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
+            self.assertFalse(forged_schema["passed"])
+            self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
             failed_input = json.loads(json.dumps(receipt))
             failed_input["inputs"]["trainer_inputs"][0]["passed"] = False
             failed_input["inputs"]["trainer_inputs"][0].pop("size_bytes")
             failed_input["inputs"]["trainer_inputs"][0].pop("expected_size_bytes")
+            failed_input["inputs"]["trainer_inputs"][0]["expected_sha256"] = ""
             failed_input_schema = check_schema_contract(failed_input, name_or_id="trainer_wrapper_dry_run")
             self.assertTrue(failed_input_schema["passed"], failed_input_schema["errors"])
+            malformed_failed_input = json.loads(json.dumps(receipt))
+            malformed_failed_input["inputs"]["trainer_inputs"][0]["passed"] = False
+            malformed_failed_input["inputs"]["trainer_inputs"][0]["expected_sha256"] = "not-a-hash"
+            malformed_failed_input_schema = check_schema_contract(
+                malformed_failed_input,
+                name_or_id="trainer_wrapper_dry_run",
+            )
+            self.assertFalse(malformed_failed_input_schema["passed"])
+            self.assertTrue(any("expected_sha256" in error for error in malformed_failed_input_schema["errors"]))
             self.assertEqual(run_cli(["validate", "--trainer-wrapper-dry-run", str(wrapper_receipt), "--strict"]), 0)
 
             missing_check = Path(tmp) / "trainer_archive_check_missing.json"
