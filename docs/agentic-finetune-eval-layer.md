@@ -203,3 +203,6 @@ from that source summary.
 Action-ledger validation reopens referenced evidence bundles and verifies every
 source `decision.next_actions` occurrence is represented, including eval-summary
 bundle actions such as `resolve_eval_summary_blockers`.
+Action-ledger gate validation reopens the referenced `action_ledger.json`,
+recomputes source metrics and check actuals, and verifies persisted policy
+requirements still have corresponding gate checks.

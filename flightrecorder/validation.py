@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .action_gate import ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, ACTION_LEDGER_GATE_SCHEMA_VERSION
+from .action_gate import ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, ACTION_LEDGER_GATE_SCHEMA_VERSION, evaluate_action_ledger_gate
 from .action_ledger import ACTION_LEDGER_SCHEMA_VERSION
 from .adapters import TRACE_SCHEMA_VERSION
 from .agentic_training_result import (
@@ -940,7 +940,7 @@ def validate_action_ledger_gate(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("action_ledger_gate", str(gate_path))
     gate = _read_object(gate_path, target, "action_ledger_gate.json")
     if gate is not None:
-        _validate_action_ledger_gate(gate, target)
+        _validate_action_ledger_gate(gate, target, gate_path)
     return target
 
 
@@ -8608,7 +8608,7 @@ def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget, so
     )
 
 
-def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(gate, "schema_version", ACTION_LEDGER_GATE_SCHEMA_VERSION, target)
     if not isinstance(gate.get("action_ledger"), str) or not gate.get("action_ledger"):
         target.errors.append("action_ledger_gate.action_ledger must be a non-empty string.")
@@ -8624,6 +8624,7 @@ def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget)
         metrics = {}
     if "policy" in gate:
         _validate_action_ledger_gate_policy_summary(gate.get("policy"), target)
+        _validate_action_ledger_gate_policy_check_coverage(gate.get("policy"), checks, target)
 
     failed_checks = _validate_gate_like_checks(checks, target, "action_ledger_gate.checks")
     if gate.get("check_count") != len(checks):
@@ -8636,6 +8637,7 @@ def _validate_action_ledger_gate(gate: dict[str, Any], target: ValidationTarget)
     if isinstance(gate.get("passed"), bool) and gate.get("passed") != expected_passed:
         target.errors.append("action_ledger_gate.passed must match failed_check_count.")
     _validate_action_ledger_gate_metrics(metrics, target)
+    _validate_action_ledger_gate_source_linkage(gate, checks, metrics, target, source_path)
     _validate_action_ledger_gate_decision(gate.get("decision"), expected_passed, failed_checks, metrics, target)
     target.details.update(
         {
@@ -8737,6 +8739,159 @@ def _validate_action_ledger_gate_metrics(metrics: dict[str, Any], target: Valida
             target.errors.append(f"action_ledger_gate.metrics.open_priority_counts has invalid priority value(s): {', '.join(unknown)}.")
         if _is_non_negative_int(metrics.get("open_action_count")) and sum(priority_counts.values()) > metrics["open_action_count"]:
             target.errors.append("action_ledger_gate.metrics.open_priority_counts total must not exceed open_action_count.")
+
+
+def _validate_action_ledger_gate_source_linkage(
+    gate: dict[str, Any],
+    checks: list[Any],
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    ledger_path = _resolve_redacted_or_relative_path(gate.get("action_ledger"), source_path)
+    if ledger_path is None or not ledger_path.exists() or not ledger_path.is_file():
+        target.errors.append("action_ledger_gate.action_ledger must resolve to an existing action ledger.")
+        return
+    try:
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"action_ledger_gate.action_ledger contains invalid JSON: {exc}")
+        return
+    if not isinstance(ledger, dict):
+        target.errors.append("action_ledger_gate.action_ledger must contain a JSON object.")
+        return
+    _validate_action_ledger(ledger, target, ledger_path)
+    try:
+        expected = evaluate_action_ledger_gate(
+            ledger,
+            action_ledger_path=gate.get("action_ledger"),
+            **_action_ledger_gate_replay_options(gate, checks),
+        )
+    except ValueError as exc:
+        target.errors.append(f"action_ledger_gate.action_ledger could not be replayed: {exc}")
+        return
+    if metrics != expected.get("metrics"):
+        target.errors.append("action_ledger_gate.metrics must match replayed source ledger metrics.")
+    if checks != expected.get("checks"):
+        target.errors.append("action_ledger_gate.checks must match replayed source ledger checks.")
+    if gate.get("decision") != expected.get("decision"):
+        target.errors.append("action_ledger_gate.decision must match replayed source ledger decision.")
+
+
+def _validate_action_ledger_gate_policy_check_coverage(value: Any, checks: list[Any], target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        return
+    effective = value.get("effective")
+    if not isinstance(effective, dict):
+        return
+    expected: Counter[tuple[Any, ...]] = Counter()
+    for field_name in (
+        "min_bundles",
+        "max_open_actions",
+        "max_new_actions",
+        "max_recurring_actions",
+        "min_resolved_actions",
+    ):
+        if field_name in effective:
+            expected[(field_name, None)] += 1
+    priorities = effective.get("forbid_open_priorities")
+    if isinstance(priorities, list):
+        for priority in priorities:
+            if isinstance(priority, str):
+                expected[("forbid_open_priority", priority)] += 1
+    forbidden_actions = effective.get("forbid_open_actions")
+    if isinstance(forbidden_actions, list):
+        for action in forbidden_actions:
+            if isinstance(action, str):
+                expected[("forbid_open_action", action)] += 1
+    required_actions = effective.get("require_resolved_actions")
+    if isinstance(required_actions, list):
+        for action in required_actions:
+            if isinstance(action, str):
+                expected[("require_resolved_action", action)] += 1
+    actual = Counter(_action_ledger_gate_check_policy_key(check) for check in checks if isinstance(check, dict))
+    actual.pop(None, None)
+    if expected != actual:
+        target.errors.append("action_ledger_gate.checks must cover action_ledger_gate.policy.effective requirements.")
+
+
+def _action_ledger_gate_check_policy_key(check: dict[str, Any]) -> tuple[Any, ...] | None:
+    check_id = check.get("id")
+    if check_id in {
+        "min_bundles",
+        "max_open_actions",
+        "max_new_actions",
+        "max_recurring_actions",
+        "min_resolved_actions",
+    }:
+        return (check_id, None)
+    scope = check.get("scope") if isinstance(check.get("scope"), dict) else {}
+    if check_id == "forbid_open_priority":
+        return (check_id, scope.get("priority"))
+    if check_id in {"forbid_open_action", "require_resolved_action"}:
+        return (check_id, scope.get("action"))
+    return None
+
+
+def _action_ledger_gate_replay_options(gate: dict[str, Any], checks: list[Any]) -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "min_bundles": None,
+        "max_open_actions": None,
+        "max_new_actions": None,
+        "max_recurring_actions": None,
+        "min_resolved_actions": None,
+        "forbid_open_priorities": [],
+        "forbid_open_actions": [],
+        "require_resolved_actions": [],
+    }
+    policy = gate.get("policy") if isinstance(gate.get("policy"), dict) else {}
+    effective = policy.get("effective") if isinstance(policy.get("effective"), dict) else None
+    if effective is not None:
+        for field_name in (
+            "min_bundles",
+            "max_open_actions",
+            "max_new_actions",
+            "max_recurring_actions",
+            "min_resolved_actions",
+        ):
+            if _is_non_negative_int(effective.get(field_name)):
+                options[field_name] = effective[field_name]
+        if _is_string_list(effective.get("forbid_open_priorities")):
+            options["forbid_open_priorities"] = effective["forbid_open_priorities"]
+        if _is_string_list(effective.get("forbid_open_actions")):
+            options["forbid_open_actions"] = effective["forbid_open_actions"]
+        if _is_string_list(effective.get("require_resolved_actions")):
+            options["require_resolved_actions"] = effective["require_resolved_actions"]
+        return options
+
+    for check in checks:
+        if isinstance(check, dict):
+            _merge_action_ledger_gate_check_option(options, check)
+    return options
+
+
+def _merge_action_ledger_gate_check_option(options: dict[str, Any], check: dict[str, Any]) -> None:
+    expected = check.get("expected") if isinstance(check.get("expected"), dict) else {}
+    check_id = check.get("id")
+    if check_id in {"min_bundles", "min_resolved_actions"} and _is_non_negative_int(expected.get("min")):
+        options[check_id] = expected["min"]
+    elif check_id in {"max_open_actions", "max_new_actions", "max_recurring_actions"} and _is_non_negative_int(expected.get("max")):
+        options[check_id] = expected["max"]
+    elif check_id == "forbid_open_priority":
+        scope = check.get("scope") if isinstance(check.get("scope"), dict) else {}
+        priority = scope.get("priority")
+        if isinstance(priority, str) and priority:
+            options["forbid_open_priorities"].append(priority)
+    elif check_id == "forbid_open_action":
+        scope = check.get("scope") if isinstance(check.get("scope"), dict) else {}
+        action = scope.get("action")
+        if isinstance(action, str) and action:
+            options["forbid_open_actions"].append(action)
+    elif check_id == "require_resolved_action":
+        scope = check.get("scope") if isinstance(check.get("scope"), dict) else {}
+        action = scope.get("action")
+        if isinstance(action, str) and action:
+            options["require_resolved_actions"].append(action)
 
 
 def _validate_action_ledger_gate_policy_summary(value: Any, target: ValidationTarget) -> None:
@@ -12629,6 +12784,10 @@ def _action_ledger_evidence_record(value: Any) -> str:
 
 
 def _resolve_action_ledger_bundle_path(value: Any, source_path: Path) -> Path | None:
+    return _resolve_redacted_or_relative_path(value, source_path)
+
+
+def _resolve_redacted_or_relative_path(value: Any, source_path: Path) -> Path | None:
     if not isinstance(value, str) or not value:
         return None
     if value.startswith("<redacted:") and value.endswith(">"):
