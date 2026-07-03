@@ -33,12 +33,26 @@
         "additionalProperties": true,
         "properties": {
           "manifest": { "minLength": 1, "type": "string" },
+          "manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "manifest_size_bytes": { "minimum": 0, "type": "integer" },
           "passed": { "type": "boolean" },
           "result": { "minLength": 1, "type": "string" },
+          "result_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "result_size_bytes": { "minimum": 0, "type": "integer" },
           "run_dir": { "minLength": 1, "type": "string" },
           "scenario_id": { "minLength": 1, "type": "string" }
         },
-        "required": ["scenario_id", "run_dir", "manifest", "result", "passed"],
+        "required": [
+          "scenario_id",
+          "run_dir",
+          "manifest",
+          "manifest_sha256",
+          "manifest_size_bytes",
+          "result",
+          "result_sha256",
+          "result_size_bytes",
+          "passed"
+        ],
         "type": "object"
       },
       "type": "array"

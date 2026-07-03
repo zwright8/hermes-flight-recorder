@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -8,7 +9,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main as flightrecorder_main
-from flightrecorder.schema_registry import check_schema_file
+from flightrecorder.schema_registry import check_schema_contract, check_schema_file
 from scripts.hermes_harness import (
     DEFAULT_FAKE_SECRET_CANARIES,
     HARNESS_REPLAY_RESULT_SCHEMA_VERSION,
@@ -87,8 +88,14 @@ class HarnessManifestCliTests(unittest.TestCase):
                 check_schema_file(root / "suite" / "harness_suite_result.json", "harness_suite_result")["passed"]
             )
             for run in suite["runs"]:
-                self.assertTrue(Path(run["manifest"]).exists())
-                self.assertTrue(Path(run["result"]).exists())
+                manifest_path = Path(run["manifest"])
+                result_path = Path(run["result"])
+                self.assertTrue(manifest_path.exists())
+                self.assertTrue(result_path.exists())
+                self.assertEqual(run["manifest_sha256"], _sha256_file(manifest_path))
+                self.assertEqual(run["manifest_size_bytes"], manifest_path.stat().st_size)
+                self.assertEqual(run["result_sha256"], _sha256_file(result_path))
+                self.assertEqual(run["result_size_bytes"], result_path.stat().st_size)
                 self._assert_flightrecorder_ok(
                     [
                         "validate",
@@ -99,6 +106,11 @@ class HarnessManifestCliTests(unittest.TestCase):
                         "--strict",
                     ]
                 )
+            forged = json.loads(json.dumps(suite))
+            forged["runs"][0].pop("manifest_sha256")
+            forged_schema = check_schema_contract(forged, name_or_id="harness_suite_result")
+            self.assertFalse(forged_schema["passed"])
+            self.assertIn("$.runs[0]: missing required property 'manifest_sha256'", "\n".join(forged_schema["errors"]))
 
             self.assertEqual(probe["schema_version"], HARNESS_MODEL_PROBE_SCHEMA_VERSION)
             self.assertTrue(probe["passed"])
@@ -494,6 +506,14 @@ def _json_from_stdout(stdout: str) -> dict:
     if start < 0:
         raise AssertionError(f"stdout did not contain JSON: {stdout!r}")
     return json.loads(stdout[start:])
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 if __name__ == "__main__":

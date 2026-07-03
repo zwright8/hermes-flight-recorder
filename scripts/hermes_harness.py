@@ -625,14 +625,20 @@ def _discover_scenario_paths(scenarios_dir: str | Path, *, pattern: str, recursi
 
 
 def _suite_run_record(result: dict[str, Any], run_dir: Path, suite_dir: Path, preserve_paths: bool) -> dict[str, Any]:
+    manifest_path = run_dir / "harness_manifest.json"
+    result_path = run_dir / "harness_result.json"
     return {
         "scenario_id": result["scenario_id"],
         "runner": result["runner"],
         "provider": result["provider"],
         "model": result["model"],
         "run_dir": _display_path(run_dir, suite_dir, preserve_paths),
-        "manifest": _display_path(run_dir / "harness_manifest.json", suite_dir, preserve_paths),
-        "result": _display_path(run_dir / "harness_result.json", suite_dir, preserve_paths),
+        "manifest": _display_path(manifest_path, suite_dir, preserve_paths),
+        "manifest_sha256": _sha256_file(manifest_path),
+        "manifest_size_bytes": manifest_path.stat().st_size,
+        "result": _display_path(result_path, suite_dir, preserve_paths),
+        "result_sha256": _sha256_file(result_path),
+        "result_size_bytes": result_path.stat().st_size,
         "trace": result["trace"],
         "scorecard": result["scorecard"],
         "replay": result["replay"],
