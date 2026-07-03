@@ -662,6 +662,8 @@ card, and dataset card decisions.
   metadata that no longer matches the verified manifest file.
 - Evidence bundles reject stale file-artifact SHA-256 and byte-size records
   when the referenced files are available during validation.
+- Improvement plans reject stale source-artifact SHA-256 and byte-size
+  records when present file artifacts resolve during validation.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

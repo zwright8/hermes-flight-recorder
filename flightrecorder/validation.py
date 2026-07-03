@@ -8214,7 +8214,7 @@ def _validate_improvement_plan(plan: dict[str, Any], target: ValidationTarget, s
     if "evidence_bundle" not in source_artifacts:
         target.errors.append("improvement_plan.source_artifacts.evidence_bundle is required.")
     for name, record in source_artifacts.items():
-        _validate_improvement_source_artifact(name, record, target)
+        _validate_improvement_source_artifact(name, record, target, source_path)
 
     work_items = plan.get("work_items")
     if not isinstance(work_items, list):
@@ -8269,7 +8269,7 @@ def _validate_improvement_plan(plan: dict[str, Any], target: ValidationTarget, s
     )
 
 
-def _validate_improvement_source_artifact(name: Any, record: Any, target: ValidationTarget) -> None:
+def _validate_improvement_source_artifact(name: Any, record: Any, target: ValidationTarget, source_path: Path) -> None:
     if not isinstance(name, str) or not name:
         target.errors.append("improvement_plan.source_artifacts keys must be non-empty strings.")
     label = f"improvement_plan.source_artifacts.{name}"
@@ -8291,12 +8291,30 @@ def _validate_improvement_source_artifact(name: Any, record: Any, target: Valida
             target.errors.append(f"{label}.sha256 must be a lowercase 64-character hex digest for existing files.")
         if not _is_non_negative_int(record.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+    if record.get("kind") == "file":
+        _validate_improvement_source_artifact_file_fingerprint(record, target, label, source_path)
     if record.get("kind") == "directory" and record.get("exists") is True and not _is_non_negative_int(record.get("entry_count")):
         target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
     if "schema_version" in record and record.get("schema_version") is not None and not isinstance(record.get("schema_version"), str):
         target.errors.append(f"{label}.schema_version must be a string or null.")
     if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
         target.errors.append(f"{label}.passed must be a boolean or null.")
+
+
+def _validate_improvement_source_artifact_file_fingerprint(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    current_path = _resolve_evidence_bundle_artifact_path(record.get("path"), source_path)
+    if current_path is None or not current_path.is_file():
+        return
+    if _is_non_negative_int(record.get("size_bytes")) and current_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    sha = record.get("sha256")
+    if isinstance(sha, str) and len(sha) == 64 and _sha256(current_path) != sha:
+        target.errors.append(f"{label}.sha256 does not match the current file.")
 
 
 def _validate_improvement_work_item(
