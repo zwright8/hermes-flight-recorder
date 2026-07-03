@@ -657,8 +657,8 @@ card, and dataset card decisions.
 - Harness run manifests reject fake-secret canary declarations whose stored
   SHA-256 fingerprints are missing or malformed.
 - Harness suite receipts bind each run's manifest and result references to
-  SHA-256 and byte-size evidence so suite-level handoffs cannot silently point
-  at stale per-scenario artifacts.
+  SHA-256 and byte-size evidence, and validation rejects stale suite-level
+  references before evidence handoff.
 - Harness run results reject fake-secret canary checked-artifact records whose
   existing files omit, forge, go missing, or stale out SHA-256 and byte-size
   evidence, and reject canary summaries whose counts, leak records, or pass

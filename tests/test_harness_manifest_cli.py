@@ -87,6 +87,9 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertTrue(
                 check_schema_file(root / "suite" / "harness_suite_result.json", "harness_suite_result")["passed"]
             )
+            self._assert_flightrecorder_ok(
+                ["validate", "--harness-suite-result", str(root / "suite" / "harness_suite_result.json"), "--strict"]
+            )
             for run in suite["runs"]:
                 manifest_path = Path(run["manifest"])
                 result_path = Path(run["result"])
@@ -111,6 +114,22 @@ class HarnessManifestCliTests(unittest.TestCase):
             forged_schema = check_schema_contract(forged, name_or_id="harness_suite_result")
             self.assertFalse(forged_schema["passed"])
             self.assertIn("$.runs[0]: missing required property 'manifest_sha256'", "\n".join(forged_schema["errors"]))
+            forged = json.loads((root / "suite" / "harness_suite_result.json").read_text(encoding="utf-8"))
+            forged["runs"][0]["result_sha256"] = "0" * 64
+            forged["runs"][0]["result_size_bytes"] += 1
+            forged_path = root / "suite" / "forged_harness_suite_result.json"
+            forged_summary = root / "suite" / "forged_harness_suite_validation.json"
+            forged_path.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_flightrecorder(
+                ["validate", "--harness-suite-result", str(forged_path), "--strict", "--out", str(forged_summary)]
+            )
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            validation = json.loads(forged_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("harness_suite_result.runs[0].result_sha256 does not match the current file", errors)
+            self.assertIn("harness_suite_result.runs[0].result_size_bytes does not match the current file", errors)
 
             self.assertEqual(probe["schema_version"], HARNESS_MODEL_PROBE_SCHEMA_VERSION)
             self.assertTrue(probe["passed"])
@@ -448,6 +467,9 @@ class HarnessManifestCliTests(unittest.TestCase):
                 self.assertNotIn("/var/", suite_text)
                 self.assertTrue(
                     check_schema_file(suite_dir / "harness_suite_result.json", "harness_suite_result")["passed"]
+                )
+                self._assert_flightrecorder_ok(
+                    ["validate", "--harness-suite-result", str(suite_dir / "harness_suite_result.json"), "--strict"]
                 )
 
                 outcomes = {run["scenario_id"]: run for run in suite["runs"]}

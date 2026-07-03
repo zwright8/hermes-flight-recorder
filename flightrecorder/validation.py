@@ -143,6 +143,7 @@ EVAL_SUITE_MANIFEST_SCHEMA_VERSION = "hfr.eval_suite_manifest.v1"
 LEGACY_LIVE_SMOKE_SUMMARY_SCHEMA_VERSIONS = {"hfr.live_smoke.summary.v1"}
 TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION = "hfr.example_trainer_wrapper_dry_run.v1"
 HARNESS_REPLAY_RESULT_SCHEMA_VERSION = "hfr.harness_replay_result.v1"
+HARNESS_SUITE_RESULT_SCHEMA_VERSION = "hfr.harness_suite_result.v1"
 RUN_SUITE_HARNESS_SOURCE = "flightrecorder run-suite --evidence-handoff"
 SERVING_PROFILE_SCHEMA_VERSION = "hfr.serving_profile.v1"
 SERVING_COMPATIBILITY_REPORT_SCHEMA_VERSION = "hfr.serving_compatibility_report.v1"
@@ -227,6 +228,7 @@ def validate_artifacts(
     harness_manifest_paths: list[str | Path] | None = None,
     harness_result_paths: list[str | Path] | None = None,
     harness_replay_result_paths: list[str | Path] | None = None,
+    harness_suite_result_paths: list[str | Path] | None = None,
     live_smoke_summary_paths: list[str | Path] | None = None,
     eval_summary_paths: list[str | Path] | None = None,
     external_eval_plan_paths: list[str | Path] | None = None,
@@ -344,6 +346,8 @@ def validate_artifacts(
         targets.append(validate_harness_run_result(harness_result_path))
     for harness_replay_result_path in harness_replay_result_paths or []:
         targets.append(validate_harness_replay_result(harness_replay_result_path))
+    for harness_suite_result_path in harness_suite_result_paths or []:
+        targets.append(validate_harness_suite_result(harness_suite_result_path))
     for live_smoke_summary_path in live_smoke_summary_paths or []:
         targets.append(validate_live_smoke_summary(live_smoke_summary_path))
     for eval_summary_path in eval_summary_paths or []:
@@ -1308,6 +1312,16 @@ def validate_harness_replay_result(path: str | Path) -> ValidationTarget:
     return target
 
 
+def validate_harness_suite_result(path: str | Path) -> ValidationTarget:
+    """Validate a harness_suite_result.json artifact."""
+    result_path = Path(path)
+    target = ValidationTarget("harness_suite_result", str(result_path))
+    result = _read_object(result_path, target, "harness_suite_result.json")
+    if result is not None:
+        _validate_harness_suite_result(result, target, source_dir=result_path.parent)
+    return target
+
+
 def validate_review_calibration(path: str | Path) -> ValidationTarget:
     """Validate a review-calibration report."""
     calibration_path = Path(path)
@@ -1646,6 +1660,82 @@ def _validate_harness_replay_result(
             _validate_scorecard(scorecard, target)
             if isinstance(result.get("passed"), bool) and isinstance(scorecard.get("passed"), bool) and result["passed"] != scorecard["passed"]:
                 target.errors.append("harness_replay_result.passed must match referenced scorecard.passed.")
+
+
+def _validate_harness_suite_result(result: dict[str, Any], target: ValidationTarget, source_dir: Path | None) -> None:
+    if result.get("schema_version") != HARNESS_SUITE_RESULT_SCHEMA_VERSION:
+        target.errors.append(
+            f"harness_suite_result.schema_version must be {HARNESS_SUITE_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
+        )
+    for field_name in ("runner_interface", "scenarios_dir", "out_dir", "pattern", "runner", "provider"):
+        if not isinstance(result.get(field_name), str) or not result.get(field_name):
+            target.errors.append(f"harness_suite_result.{field_name} must be a non-empty string.")
+    if not isinstance(result.get("recursive"), bool):
+        target.errors.append("harness_suite_result.recursive must be a boolean.")
+    runs = result.get("runs")
+    if not isinstance(runs, list):
+        target.errors.append("harness_suite_result.runs must be a list.")
+        runs = []
+    errors = result.get("errors")
+    if not isinstance(errors, list):
+        target.errors.append("harness_suite_result.errors must be a list.")
+        errors = []
+    passed_count = 0
+    for index, run in enumerate(runs):
+        label = f"harness_suite_result.runs[{index}]"
+        if not isinstance(run, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(run.get("scenario_id"), str) or not run.get("scenario_id"):
+            target.errors.append(f"{label}.scenario_id must be a non-empty string.")
+        if not isinstance(run.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean.")
+        elif run["passed"]:
+            passed_count += 1
+        _validate_harness_suite_artifact_ref(run, "manifest", target, label, source_dir)
+        _validate_harness_suite_artifact_ref(run, "result", target, label, source_dir)
+    _require_equal(result, "total", len(runs), target, prefix="harness_suite_result.")
+    _require_equal(result, "passed", passed_count, target, prefix="harness_suite_result.")
+    _require_equal(result, "failed", len(runs) - passed_count, target, prefix="harness_suite_result.")
+    _require_equal(result, "error_count", len(errors), target, prefix="harness_suite_result.")
+
+
+def _validate_harness_suite_artifact_ref(
+    run: dict[str, Any],
+    field_name: str,
+    target: ValidationTarget,
+    label: str,
+    source_dir: Path | None,
+) -> None:
+    path_label = f"{label}.{field_name}"
+    path = _resolve_harness_suite_artifact_path(run.get(field_name), source_dir)
+    if path is None:
+        target.errors.append(f"{path_label} must be a non-empty path.")
+        return
+    sha_field = f"{field_name}_sha256"
+    size_field = f"{field_name}_size_bytes"
+    expected_sha = run.get(sha_field)
+    expected_size = run.get(size_field)
+    if not _is_lowercase_sha256(expected_sha):
+        target.errors.append(f"{label}.{sha_field} must be a lowercase SHA-256 hex string.")
+    if not _is_non_negative_int(expected_size):
+        target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+    if not path.is_file():
+        target.errors.append(f"{path_label} must resolve to an existing file.")
+        return
+    if _is_non_negative_int(expected_size) and path.stat().st_size != expected_size:
+        target.errors.append(f"{label}.{size_field} does not match the current file.")
+    if _is_lowercase_sha256(expected_sha) and _sha256(path) != expected_sha:
+        target.errors.append(f"{label}.{sha_field} does not match the current file.")
+
+
+def _resolve_harness_suite_artifact_path(value: Any, source_dir: Path | None) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.is_absolute() or source_dir is None:
+        return path
+    return source_dir / path
 
 
 def _validate_existing_path_field(
