@@ -867,7 +867,7 @@ def validate_eval_summary(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("eval_summary", str(summary_path))
     summary = _read_object(summary_path, target, "eval_summary.json")
     if summary is not None:
-        _validate_eval_summary(summary, target)
+        _validate_eval_summary(summary, target, source_path=summary_path)
     return target
 
 
@@ -8034,8 +8034,9 @@ def _validate_serving_demo_scenario(
                 target.errors.append(f"{run_label}.{field_name} must be a string when present.")
 
 
-def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *, source_path: Path | None = None) -> None:
     _require_equal(summary, "schema_version", EVAL_SUMMARY_SCHEMA_VERSION, target)
+    source_dir = source_path.parent if source_path is not None else None
     for field_name in ("passed", "governance_ready"):
         if not isinstance(summary.get(field_name), bool):
             target.errors.append(f"eval_summary.{field_name} must be a boolean.")
@@ -8092,15 +8093,15 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
     _validate_eval_summary_heldout(heldout, target, bool(comparisons))
 
     for index, arm in enumerate(arms):
-        _validate_eval_summary_arm(arm, index, target, serving_required=serving_required)
+        _validate_eval_summary_arm(arm, index, target, serving_required=serving_required, source_dir=source_dir)
     if serving_preflight is not None:
         _validate_eval_summary_serving_preflight_consistency(serving_preflight, arms, target)
     for index, comparison in enumerate(comparisons):
-        _validate_eval_summary_comparison(comparison, index, target, heldout)
+        _validate_eval_summary_comparison(comparison, index, target, heldout, source_dir=source_dir)
     for index, gate in enumerate(gates):
-        _validate_eval_summary_gate(gate, index, target)
+        _validate_eval_summary_gate(gate, index, target, source_dir=source_dir)
     for index, adapter in enumerate(adapters):
-        _validate_eval_summary_external_adapter(adapter, index, target)
+        _validate_eval_summary_external_adapter(adapter, index, target, source_dir=source_dir)
     _validate_eval_summary_repair_curriculum(repair_curriculum, target)
     for index, risk in enumerate(risks):
         if not isinstance(risk, dict):
@@ -8159,13 +8160,22 @@ def _validate_eval_summary_heldout(heldout: dict[str, Any], target: ValidationTa
         target.errors.append("eval_summary.heldout_scenarios.blocking_reasons must explain disallowed comparisons.")
 
 
-def _validate_eval_summary_arm(arm: Any, index: int, target: ValidationTarget, *, serving_required: bool = False) -> None:
+def _validate_eval_summary_arm(
+    arm: Any,
+    index: int,
+    target: ValidationTarget,
+    *,
+    serving_required: bool = False,
+    source_dir: Path | None = None,
+) -> None:
     if not isinstance(arm, dict):
         target.errors.append(f"eval_summary.arms[{index}] must be an object.")
         return
+    label = f"eval_summary.arms[{index}]"
     for field_name in ("label", "path"):
         if not isinstance(arm.get(field_name), str) or not arm.get(field_name):
             target.errors.append(f"eval_summary.arms[{index}].{field_name} must be a non-empty string.")
+    _validate_eval_summary_source_file_ref(arm, "path", "sha256", "size_bytes", target, label, source_dir)
     for field_name in ("scenario_count", "total", "passed", "failed", "error_count"):
         if not _is_non_negative_int(arm.get(field_name)):
             target.errors.append(f"eval_summary.arms[{index}].{field_name} must be a non-negative integer.")
@@ -8179,7 +8189,52 @@ def _validate_eval_summary_arm(arm: Any, index: int, target: ValidationTarget, *
         if serving_required:
             target.errors.append(f"eval_summary.arms[{index}].serving_preflight is required.")
     else:
-        _validate_eval_summary_arm_serving_preflight(serving, index, target, serving_required=serving_required)
+        _validate_eval_summary_arm_serving_preflight(
+            serving,
+            index,
+            target,
+            serving_required=serving_required,
+            source_dir=source_dir,
+        )
+
+
+def _validate_eval_summary_source_file_ref(
+    record: dict[str, Any],
+    path_field: str,
+    sha_field: str,
+    size_field: str,
+    target: ValidationTarget,
+    label: str,
+    source_dir: Path | None,
+) -> None:
+    raw_path = record.get(path_field)
+    if not isinstance(raw_path, str) or not raw_path:
+        target.errors.append(f"{label}.{path_field} must be a non-empty string.")
+        return
+    expected_sha = record.get(sha_field)
+    expected_size = record.get(size_field)
+    if not _is_lowercase_sha256(expected_sha):
+        target.errors.append(f"{label}.{sha_field} must be a lowercase SHA-256 hex string.")
+    if not _is_non_negative_int(expected_size):
+        target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+
+    source_path = _resolve_eval_summary_source_path(raw_path, source_dir)
+    if source_path is None or not source_path.exists() or not source_path.is_file():
+        target.errors.append(f"{label}.{path_field} must resolve to an existing file.")
+        return
+    if _is_non_negative_int(expected_size) and source_path.stat().st_size != expected_size:
+        target.errors.append(f"{label}.{size_field} does not match the current file.")
+    if _is_lowercase_sha256(expected_sha) and _sha256(source_path) != expected_sha:
+        target.errors.append(f"{label}.{sha_field} does not match the current file.")
+
+
+def _resolve_eval_summary_source_path(value: str, source_dir: Path | None) -> Path | None:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    if source_dir is None:
+        return None
+    return source_dir / path
 
 
 def _validate_eval_summary_serving_preflight_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
@@ -8254,6 +8309,7 @@ def _validate_eval_summary_arm_serving_preflight(
     target: ValidationTarget,
     *,
     serving_required: bool,
+    source_dir: Path | None = None,
 ) -> None:
     label = f"eval_summary.arms[{index}].serving_preflight"
     if not isinstance(serving, dict):
@@ -8276,6 +8332,7 @@ def _validate_eval_summary_arm_serving_preflight(
     if serving.get("provided") is True:
         if serving.get("schema_version") != "hfr.serving_endpoint_check.v1":
             target.errors.append(f"{label}.schema_version must be hfr.serving_endpoint_check.v1 when provided.")
+        _validate_eval_summary_source_file_ref(serving, "path", "sha256", "size_bytes", target, label, source_dir)
         for field_name in ("profile_id", "model", "served_model_id", "base_url"):
             if not isinstance(serving.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
@@ -8348,13 +8405,25 @@ def _validate_eval_summary_comparison(
     index: int,
     target: ValidationTarget,
     heldout: dict[str, Any],
+    *,
+    source_dir: Path | None = None,
 ) -> None:
     if not isinstance(comparison, dict):
         target.errors.append(f"eval_summary.comparisons[{index}] must be an object.")
         return
+    label = f"eval_summary.comparisons[{index}]"
     for field_name in ("label", "path", "manifest"):
         if not isinstance(comparison.get(field_name), str) or not comparison.get(field_name):
             target.errors.append(f"eval_summary.comparisons[{index}].{field_name} must be a non-empty string.")
+    _validate_eval_summary_source_file_ref(
+        comparison,
+        "manifest",
+        "manifest_sha256",
+        "manifest_size_bytes",
+        target,
+        label,
+        source_dir,
+    )
     for field_name in ("claims_allowed", "passed"):
         if not isinstance(comparison.get(field_name), bool):
             target.errors.append(f"eval_summary.comparisons[{index}].{field_name} must be a boolean.")
@@ -8401,10 +8470,12 @@ def _validate_eval_summary_comparison(
         target.errors.append(f"eval_summary.comparisons[{index}].passed cannot be true with blocking_reasons.")
 
 
-def _validate_eval_summary_gate(gate: Any, index: int, target: ValidationTarget) -> None:
+def _validate_eval_summary_gate(gate: Any, index: int, target: ValidationTarget, *, source_dir: Path | None = None) -> None:
     if not isinstance(gate, dict):
         target.errors.append(f"eval_summary.compare_gates[{index}] must be an object.")
         return
+    label = f"eval_summary.compare_gates[{index}]"
+    _validate_eval_summary_source_file_ref(gate, "path", "sha256", "size_bytes", target, label, source_dir)
     if not isinstance(gate.get("passed"), bool):
         target.errors.append(f"eval_summary.compare_gates[{index}].passed must be a boolean.")
     if not _is_string_list(gate.get("blocking_reasons")):
@@ -8413,10 +8484,18 @@ def _validate_eval_summary_gate(gate: Any, index: int, target: ValidationTarget)
         target.errors.append(f"eval_summary.compare_gates[{index}].blocking_reasons must include compare_gate_failed when failed.")
 
 
-def _validate_eval_summary_external_adapter(adapter: Any, index: int, target: ValidationTarget) -> None:
+def _validate_eval_summary_external_adapter(
+    adapter: Any,
+    index: int,
+    target: ValidationTarget,
+    *,
+    source_dir: Path | None = None,
+) -> None:
     if not isinstance(adapter, dict):
         target.errors.append(f"eval_summary.external_adapter_plans[{index}] must be an object.")
         return
+    label = f"eval_summary.external_adapter_plans[{index}]"
+    _validate_eval_summary_source_file_ref(adapter, "path", "sha256", "size_bytes", target, label, source_dir)
     if not isinstance(adapter.get("ready"), bool):
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].ready must be a boolean.")
     for field_name in ("adapter_count", "ready_adapter_count"):
@@ -9826,7 +9905,7 @@ def _validate_improvement_plan_eval_summary_linkage(
     if not isinstance(summary, dict):
         target.errors.append("improvement_plan.source_artifacts.eval_summary must contain a JSON object.")
         return
-    _validate_eval_summary(summary, target)
+    _validate_eval_summary(summary, target, source_path=eval_summary_path)
     expected = _expected_eval_summary_item_records(summary)
     actual = _actual_improvement_eval_summary_item_records(work_items)
     missing = expected - actual
@@ -16145,7 +16224,7 @@ def _validate_evidence_bundle_eval_summary(
     if not isinstance(summary, dict):
         target.errors.append("evidence_bundle.artifacts.eval_summary must contain a JSON object.")
         return
-    _validate_eval_summary(summary, target)
+    _validate_eval_summary(summary, target, source_path=eval_summary_path)
     expected = _eval_summary_bundle_metrics(summary)
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:

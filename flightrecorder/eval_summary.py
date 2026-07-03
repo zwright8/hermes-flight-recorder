@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,7 @@ def build_eval_summary(
     serving_check_specs: list[str | Path] | None = None,
     require_serving_preflight: bool = False,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a single artifact Governance can consume without reinterpreting raw evals."""
     suite_specs = [_labeled_path(spec) for spec in suite_summary_specs or []]
@@ -45,18 +47,21 @@ def build_eval_summary(
     gate_specs = [_labeled_path(spec) for spec in compare_gate_specs or []]
     adapter_specs = [_labeled_path(spec) for spec in external_adapter_plan_specs or []]
     serving_specs = [_labeled_path(spec) for spec in serving_check_specs or []]
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
     if not suite_specs and not compare_specs and not gate_specs and not adapter_specs and not serving_specs:
         raise EvalSummaryError("At least one eval artifact source is required")
 
     serving_by_label, duplicate_serving_labels = _serving_preflight_inputs(
         serving_specs,
         preserve_paths,
+        display_base_dir,
         required=require_serving_preflight,
     )
     arms = [
         _suite_arm(
             spec,
             preserve_paths,
+            display_base_dir,
             serving_preflight=serving_by_label.pop(spec.label, None),
             require_serving_preflight=require_serving_preflight,
         )
@@ -70,9 +75,9 @@ def build_eval_summary(
         duplicate_labels=sorted(set(duplicate_serving_labels)),
     )
     heldout = _heldout_scenario_summary(arms)
-    comparisons = [_compare_export(spec, heldout, preserve_paths) for spec in compare_specs]
-    gates = [_compare_gate(spec, preserve_paths) for spec in gate_specs]
-    external_adapters = [_external_adapter_plan(spec, preserve_paths) for spec in adapter_specs]
+    comparisons = [_compare_export(spec, heldout, preserve_paths, display_base_dir) for spec in compare_specs]
+    gates = [_compare_gate(spec, preserve_paths, display_base_dir) for spec in gate_specs]
+    external_adapters = [_external_adapter_plan(spec, preserve_paths, display_base_dir) for spec in adapter_specs]
     repair_curriculum = _repair_curriculum(arms, comparisons, gates, external_adapters)
     risks = _risks(arms, heldout, comparisons, gates, external_adapters, serving_preflight)
     passed = not risks
@@ -132,6 +137,7 @@ def render_eval_summary_markdown(summary: dict[str, Any]) -> str:
 def _suite_arm(
     spec: LabeledPath,
     preserve_paths: bool,
+    display_base_dir: Path | None,
     *,
     serving_preflight: dict[str, Any] | None,
     require_serving_preflight: bool,
@@ -158,7 +164,8 @@ def _suite_arm(
     operational_metrics = _operational_metrics(summary, runs)
     return {
         "label": spec.label,
-        "path": _display_path(spec.path, preserve_paths),
+        "path": _display_path(spec.path, preserve_paths, display_base_dir),
+        **_file_fingerprint(spec.path),
         "schema_version": summary.get("schema_version"),
         "scenario_count": len(scenario_ids),
         "scenario_ids": scenario_ids,
@@ -180,6 +187,7 @@ def _suite_arm(
 def _serving_preflight_inputs(
     specs: list[LabeledPath],
     preserve_paths: bool,
+    display_base_dir: Path | None,
     *,
     required: bool,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
@@ -188,11 +196,17 @@ def _serving_preflight_inputs(
     for spec in specs:
         if spec.label in by_label:
             duplicate_labels.append(spec.label)
-        by_label[spec.label] = _serving_preflight(spec, preserve_paths, required=required)
+        by_label[spec.label] = _serving_preflight(spec, preserve_paths, display_base_dir, required=required)
     return by_label, duplicate_labels
 
 
-def _serving_preflight(spec: LabeledPath, preserve_paths: bool, *, required: bool) -> dict[str, Any]:
+def _serving_preflight(
+    spec: LabeledPath,
+    preserve_paths: bool,
+    display_base_dir: Path | None,
+    *,
+    required: bool,
+) -> dict[str, Any]:
     check = _read_object(spec.path, "serving endpoint check")
     failed_checks = _string_list(check.get("failed_checks"))
     blocking_reasons = []
@@ -203,7 +217,8 @@ def _serving_preflight(spec: LabeledPath, preserve_paths: bool, *, required: boo
     return {
         "provided": True,
         "required": required,
-        "path": _display_path(spec.path, preserve_paths),
+        "path": _display_path(spec.path, preserve_paths, display_base_dir),
+        **_file_fingerprint(spec.path),
         "schema_version": check.get("schema_version"),
         "passed": check.get("passed") is True,
         "readiness": check.get("readiness") if check.get("readiness") in {"ready", "blocked"} else "blocked",
@@ -310,7 +325,12 @@ def _heldout_scenario_summary(arms: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _compare_export(spec: LabeledPath, heldout: dict[str, Any], preserve_paths: bool) -> dict[str, Any]:
+def _compare_export(
+    spec: LabeledPath,
+    heldout: dict[str, Any],
+    preserve_paths: bool,
+    display_base_dir: Path | None,
+) -> dict[str, Any]:
     manifest_path = spec.path / "manifest.json" if spec.path.is_dir() else spec.path
     manifest = _read_object(manifest_path, "compare export manifest")
     missing_in_candidate = _string_list(manifest.get("missing_in_candidate"))
@@ -363,8 +383,10 @@ def _compare_export(spec: LabeledPath, heldout: dict[str, Any], preserve_paths: 
     claims_allowed = not claim_blockers
     return {
         "label": spec.label,
-        "path": _display_path(spec.path, preserve_paths),
-        "manifest": _display_path(manifest_path, preserve_paths),
+        "path": _display_path(spec.path, preserve_paths, display_base_dir),
+        "manifest": _display_path(manifest_path, preserve_paths, display_base_dir),
+        "manifest_sha256": _sha256(manifest_path),
+        "manifest_size_bytes": manifest_path.stat().st_size,
         "schema_version": manifest.get("schema_version"),
         "claims_allowed": claims_allowed,
         "passed": not readiness_blockers,
@@ -374,7 +396,7 @@ def _compare_export(spec: LabeledPath, heldout: dict[str, Any], preserve_paths: 
     }
 
 
-def _compare_gate(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
+def _compare_gate(spec: LabeledPath, preserve_paths: bool, display_base_dir: Path | None) -> dict[str, Any]:
     gate = _read_object(spec.path, "compare gate")
     failed_checks = [
         check
@@ -388,7 +410,8 @@ def _compare_gate(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
         blocking_reasons.append("compare_gate_failed")
     return {
         "label": spec.label,
-        "path": _display_path(spec.path, preserve_paths),
+        "path": _display_path(spec.path, preserve_paths, display_base_dir),
+        **_file_fingerprint(spec.path),
         "schema_version": gate.get("schema_version"),
         "passed": gate.get("passed") is True,
         "check_count": _int_value(gate.get("check_count")),
@@ -405,12 +428,13 @@ def _compare_gate(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
     }
 
 
-def _external_adapter_plan(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
+def _external_adapter_plan(spec: LabeledPath, preserve_paths: bool, display_base_dir: Path | None) -> dict[str, Any]:
     plan = _read_object(spec.path, "external adapter plan")
     ready = plan.get("ready") is True
     return {
         "label": spec.label,
-        "path": _display_path(spec.path, preserve_paths),
+        "path": _display_path(spec.path, preserve_paths, display_base_dir),
+        **_file_fingerprint(spec.path),
         "schema_version": plan.get("schema_version"),
         "ready": ready,
         "adapter_count": _int_value(plan.get("adapter_count")),
@@ -958,6 +982,18 @@ def _read_object(path: Path, label: str) -> dict[str, Any]:
     return payload
 
 
+def _file_fingerprint(path: Path) -> dict[str, Any]:
+    return {"sha256": _sha256(path), "size_bytes": path.stat().st_size}
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _heldout_blocker(heldout: dict[str, Any]) -> str:
     status = str(heldout.get("status") or "unknown")
     if status == "missing_suite_summaries":
@@ -1228,10 +1264,12 @@ def _int_value(value: Any) -> int:
     return 0
 
 
-def _display_path(path: Path, preserve_paths: bool) -> str:
+def _display_path(path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> str:
     if preserve_paths:
         return str(path)
     try:
+        if display_base_dir is not None:
+            return os.path.relpath(path.resolve(), display_base_dir.resolve())
         return str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
         return str(path)

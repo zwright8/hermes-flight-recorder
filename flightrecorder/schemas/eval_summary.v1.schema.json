@@ -34,7 +34,8 @@
       "items": { "$ref": "#/$defs/risk" },
       "type": "array"
     },
-    "schema_version": { "const": "hfr.eval_summary.v1" }
+    "schema_version": { "const": "hfr.eval_summary.v1" },
+    "serving_preflight": { "$ref": "#/$defs/serving_preflight_summary" }
   },
   "required": [
     "schema_version",
@@ -71,9 +72,12 @@
         "scenario_count": { "minimum": 0, "type": "integer" },
         "scenario_ids": { "items": { "type": "string" }, "type": "array" },
         "schema_version": { "type": ["string", "null"] },
+        "serving_preflight": { "$ref": "#/$defs/serving_preflight" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" },
         "total": { "minimum": 0, "type": "integer" }
       },
-      "required": ["label", "path", "scenario_count", "scenario_ids", "total", "passed", "failed", "error_count", "blocking_reasons"],
+      "required": ["label", "path", "sha256", "size_bytes", "scenario_count", "scenario_ids", "total", "passed", "failed", "error_count", "blocking_reasons"],
       "type": "object"
     },
     "comparison": {
@@ -84,12 +88,14 @@
         "governance_claims": { "type": "object" },
         "label": { "minLength": 1, "type": "string" },
         "manifest": { "minLength": 1, "type": "string" },
+        "manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "manifest_size_bytes": { "minimum": 0, "type": "integer" },
         "passed": { "type": "boolean" },
         "path": { "minLength": 1, "type": "string" },
         "raw_movement": { "type": "object" },
         "schema_version": { "type": ["string", "null"] }
       },
-      "required": ["label", "path", "manifest", "claims_allowed", "passed", "blocking_reasons", "raw_movement", "governance_claims"],
+      "required": ["label", "path", "manifest", "manifest_sha256", "manifest_size_bytes", "claims_allowed", "passed", "blocking_reasons", "raw_movement", "governance_claims"],
       "type": "object"
     },
     "conclusion": {
@@ -111,9 +117,11 @@
         "path": { "minLength": 1, "type": "string" },
         "ready": { "type": "boolean" },
         "ready_adapter_count": { "minimum": 0, "type": "integer" },
-        "schema_version": { "type": ["string", "null"] }
+        "schema_version": { "type": ["string", "null"] },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
       },
-      "required": ["label", "path", "ready", "adapter_count", "ready_adapter_count", "blocking_reasons"],
+      "required": ["label", "path", "sha256", "size_bytes", "ready", "adapter_count", "ready_adapter_count", "blocking_reasons"],
       "type": "object"
     },
     "gate": {
@@ -126,9 +134,11 @@
         "label": { "minLength": 1, "type": "string" },
         "passed": { "type": "boolean" },
         "path": { "minLength": 1, "type": "string" },
-        "schema_version": { "type": ["string", "null"] }
+        "schema_version": { "type": ["string", "null"] },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
       },
-      "required": ["label", "path", "passed", "check_count", "failed_check_count", "failed_checks", "blocking_reasons"],
+      "required": ["label", "path", "sha256", "size_bytes", "passed", "check_count", "failed_check_count", "failed_checks", "blocking_reasons"],
       "type": "object"
     },
     "heldout_scenarios": {
@@ -170,6 +180,52 @@
         "source": { "minLength": 1, "type": "string" }
       },
       "required": ["source", "reason"],
+      "type": "object"
+    },
+    "serving_preflight": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provided": { "const": true } },
+            "required": ["provided"]
+          },
+          "then": {
+            "required": ["path", "sha256", "size_bytes"]
+          }
+        }
+      ],
+      "properties": {
+        "artifacts": { "type": "object" },
+        "base_url": { "type": "string" },
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "failed_checks": { "items": { "type": "string" }, "type": "array" },
+        "model": { "type": "string" },
+        "passed": { "type": "boolean" },
+        "path": { "type": ["string", "null"] },
+        "profile_id": { "type": "string" },
+        "provided": { "type": "boolean" },
+        "readiness": { "enum": ["ready", "blocked", "missing"], "type": "string" },
+        "required": { "type": "boolean" },
+        "schema_version": { "type": ["string", "null"] },
+        "served_model_id": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["provided", "required", "passed", "readiness", "failed_checks", "artifacts", "blocking_reasons"],
+      "type": "object"
+    },
+    "serving_preflight_summary": {
+      "additionalProperties": true,
+      "properties": {
+        "attached_count": { "minimum": 0, "type": "integer" },
+        "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "duplicate_labels": { "items": { "type": "string" }, "type": "array" },
+        "input_count": { "minimum": 0, "type": "integer" },
+        "required": { "type": "boolean" },
+        "unmatched_labels": { "items": { "type": "string" }, "type": "array" }
+      },
+      "required": ["required", "input_count", "attached_count", "unmatched_labels", "duplicate_labels", "blocking_reasons"],
       "type": "object"
     },
     "work_item": {

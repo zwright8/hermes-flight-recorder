@@ -1396,6 +1396,7 @@ def cmd_eval_summary(args: argparse.Namespace) -> int:
         serving_check_specs=args.serving_check,
         require_serving_preflight=args.require_serving_preflight,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
     )
     rendered = json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     if args.out:

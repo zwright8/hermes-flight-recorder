@@ -1,4 +1,6 @@
+import hashlib
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -277,6 +279,115 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertEqual(summary["serving_preflight"]["blocking_reasons"], [])
             self.assertTrue(summary["arms"][0]["serving_preflight"]["passed"])
             self.assertEqual(summary["arms"][0]["serving_preflight"]["model"], "hfr-mock-model")
+
+    def test_eval_summary_fingerprints_source_artifacts_and_rejects_stale_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            compare_export = _compare_export(root / "compare_rl", candidate_wins=["email_reply_completion"])
+            compare_manifest = compare_export / "manifest.json"
+            gate = _compare_gate(root / "compare_gate.json")
+            adapter_plan = _external_adapter_plan(root / "external_eval_plan.json")
+            serving_check = _serving_check(root / "serving_check.json", passed=True)
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+
+            code = run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--compare-gate",
+                    f"candidate={gate}",
+                    "--external-adapter-plan",
+                    f"external={adapter_plan}",
+                    "--serving-check",
+                    f"candidate={serving_check}",
+                    "--preserve-paths",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+            schema_result = check_schema_file(out)
+
+            self.assertEqual(code, 0)
+            self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
+            summary = _read_json(out)
+            self.assertEqual(summary["arms"][0]["sha256"], _sha256(baseline))
+            self.assertEqual(summary["arms"][0]["size_bytes"], baseline.stat().st_size)
+            self.assertEqual(summary["arms"][1]["sha256"], _sha256(candidate))
+            self.assertEqual(summary["comparisons"][0]["manifest_sha256"], _sha256(compare_manifest))
+            self.assertEqual(summary["comparisons"][0]["manifest_size_bytes"], compare_manifest.stat().st_size)
+            self.assertEqual(summary["compare_gates"][0]["sha256"], _sha256(gate))
+            self.assertEqual(summary["external_adapter_plans"][0]["sha256"], _sha256(adapter_plan))
+            serving = summary["arms"][1]["serving_preflight"]
+            self.assertEqual(serving["sha256"], _sha256(serving_check))
+            self.assertEqual(serving["size_bytes"], serving_check.stat().st_size)
+
+            _replace_once(candidate, '"score": 100', '"score": 101')
+            _replace_once(compare_manifest, '"candidate_win_count": 1', '"candidate_win_count": 2')
+            _replace_once(gate, '"passed": true', '"passed": false')
+            _replace_once(adapter_plan, '"ready": true', '"ready": false')
+            _replace_once(serving_check, '"readiness": "ready"', '"readiness": "blocked"')
+            stale_code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
+
+            self.assertEqual(stale_code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("eval_summary.arms[1].sha256 does not match the current file.", errors)
+            self.assertIn("eval_summary.comparisons[0].manifest_sha256 does not match the current file.", errors)
+            self.assertIn("eval_summary.compare_gates[0].sha256 does not match the current file.", errors)
+            self.assertIn("eval_summary.external_adapter_plans[0].sha256 does not match the current file.", errors)
+            self.assertIn("eval_summary.arms[1].serving_preflight.sha256 does not match the current file.", errors)
+
+    def test_eval_summary_writes_source_refs_relative_to_output_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "sources"
+            report_dir = root / "reports"
+            source_dir.mkdir()
+            report_dir.mkdir()
+            suite = _suite_summary(source_dir / "candidate_suite.json", ["email_reply_completion"])
+            out = report_dir / "eval_summary.json"
+
+            code = run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(out)])
+            validate_code = run_cli(["validate", "--eval-summary", str(out), "--strict"])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(validate_code, 0)
+            summary = _read_json(out)
+            self.assertEqual(summary["arms"][0]["path"], "../sources/candidate_suite.json")
+
+    def test_validate_rejects_eval_summary_cwd_relative_source_fallback(self):
+        original_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            copied = root / "copied"
+            copied.mkdir()
+            try:
+                os.chdir(root)
+                suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+                out = root / "eval_summary.json"
+                validation = root / "validation.json"
+                self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite.name}", "--out", str(out)]), 0)
+                summary = _read_json(out)
+                self.assertEqual(summary["arms"][0]["path"], suite.name)
+                copied_summary = copied / "eval_summary.json"
+                copied_summary.write_text(out.read_text(encoding="utf-8"), encoding="utf-8")
+
+                code = run_cli(["validate", "--eval-summary", str(copied_summary), "--out", str(validation)])
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("eval_summary.arms[0].path must resolve to an existing file.", errors)
 
     def test_eval_summary_blocks_missing_required_serving_preflight(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -575,6 +686,45 @@ def _serving_check(path: Path, *, passed: bool) -> Path:
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def _compare_gate(path: Path) -> Path:
+    payload = {
+        "schema_version": "hfr.compare_gate.v1",
+        "passed": True,
+        "check_count": 1,
+        "failed_check_count": 0,
+        "checks": [{"id": "promotion_ready", "passed": True, "summary": "ready"}],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _external_adapter_plan(path: Path) -> Path:
+    payload = {
+        "schema_version": "hfr.external_eval_plan.v1",
+        "ready": True,
+        "adapter_count": 1,
+        "ready_adapter_count": 1,
+        "blocking_reasons": [],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if old not in text:
+        raise AssertionError(f"{old!r} not found in {path.name}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
 def _read_json(path: Path):
