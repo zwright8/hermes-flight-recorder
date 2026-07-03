@@ -283,7 +283,7 @@ def _resolve_recorded_path(value: Any, base_dir: Path, *, allowed_parent_root: P
 
     candidates: list[Path] = []
     unsafe_reasons: list[str] = []
-    for root in _unique_paths([Path.cwd(), base_dir]):
+    for root in _unique_paths([base_dir]):
         candidate = root / raw
         allowed_root = allowed_parent_root if has_parent_traversal and allowed_parent_root is not None else root
         if has_parent_traversal and allowed_parent_root is None:

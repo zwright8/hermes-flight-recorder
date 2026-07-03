@@ -608,6 +608,9 @@ card, and dataset card decisions.
   release records write referenced artifacts relative to their own output files;
   validation reopens those references from the source file location and rejects
   cwd-substituted governance artifacts.
+- Promotion archives reopen ledger-recorded decision gates from the ledger file
+  location and decision source artifacts from the decision file location; archive
+  builds reject cwd-substituted members instead of copying lookalike evidence.
 - Trainer-preflight validation reopens gates, validation summaries, schema
   contracts, and trainer artifacts from the preflight file location and rejects
   missing, moved, stale, or cwd-substituted records.

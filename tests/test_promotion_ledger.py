@@ -1102,6 +1102,66 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertEqual(archive["metrics"]["source_artifact_count"], 1)
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
+    def test_promotion_archive_rejects_cwd_relative_ledger_record_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd_root = root / "cwd"
+            evidence_dir = root / "evidence"
+            cwd_root.mkdir()
+            evidence_dir.mkdir()
+            source = cwd_root / "action_ledger_gate.json"
+            decision_gate = cwd_root / "decision_gate.json"
+            ledger_path = evidence_dir / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            _write_ready_action_ledger_gate(source)
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_root)
+                self.assertEqual(
+                    run_cli(
+                        [
+                            "gate-decision",
+                            "--artifact",
+                            str(source.relative_to(cwd_root)),
+                            "--expect-recommendation",
+                            "promote_iteration",
+                            "--expect-readiness",
+                            "ready",
+                            "--require-passed",
+                            "--out",
+                            str(decision_gate),
+                        ]
+                    ),
+                    0,
+                )
+                ledger_path.write_text(
+                    json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": [{"path": "decision_gate.json"}]}) + "\n",
+                    encoding="utf-8",
+                )
+                code = run_cli(
+                    [
+                        "promotion-archive",
+                        "--promotion-ledger",
+                        str(ledger_path),
+                        "--out",
+                        str(archive_dir),
+                        "--require-self-contained",
+                    ]
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["decision_gate_count"], 0)
+            self.assertEqual(archive["missing"][0]["role"], "decision_gate")
+            self.assertIn("file not found", archive["missing"][0]["reason"])
+            archived_text = "\n".join(path.read_text(encoding="utf-8") for path in (archive_dir / "artifacts").glob("*.json"))
+            self.assertNotIn("hfr.decision_gate.v1", archived_text)
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
     def test_promotion_archive_force_refuses_non_archive_directories(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
