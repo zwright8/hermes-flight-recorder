@@ -1,7 +1,9 @@
 # Hermes Flight Recorder
 
 <p align="center">
-  <img src="docs/assets/flight-recorder-logo.png" alt="Hermes Flight Recorder logo" width="220">
+  <img src="docs/assets/flight-recorder-logo.png" alt="Hermes Flight Recorder project mascot" width="220">
+  <br>
+  <strong>Project Mascot</strong>
 </p>
 
 [![CI](https://github.com/zwright8/hermes-flight-recorder/actions/workflows/ci.yml/badge.svg)](https://github.com/zwright8/hermes-flight-recorder/actions)
