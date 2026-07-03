@@ -691,8 +691,8 @@ card, and dataset card decisions.
   and status receipts reopen path-backed upload/source refs from their own file
   location and reject stale SHA-256 or byte-size evidence before handoff.
 - Agentic training loop plans reopen existing file source refs from the plan
-  location and reject missing, moved, stale, or cwd-substituted loop inputs
-  before orchestration trusts phase readiness.
+  location and reject missing, moved, stale, symlinked, or cwd-substituted loop
+  inputs before orchestration trusts phase readiness.
 - Repair queue items include source artifact fingerprints for normalized
   traces, scorecards, and reports; validation reopens those refs from the queue
   location and rejects stale or moved repair evidence before work dispatch.

@@ -202,6 +202,65 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertIn("agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].size_bytes does not match the current file.", stale_errors)
             self.assertIn("agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].sha256 does not match the current file.", stale_errors)
 
+    def test_validate_rejects_symlink_loop_plan_source_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agentic_plan = self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-symlink-source",
+                artifact_paths={"agentic_training_plan": [agentic_plan]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            link_path = root / "agentic_training_plan_link.json"
+            try:
+                link_path.symlink_to(agentic_plan)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            plan["source_artifacts"]["agentic_training_plan"][0]["path"] = "agentic_training_plan_link.json"
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].path must resolve to a regular non-symlink file.",
+                errors,
+            )
+
+    def test_validate_rejects_symlink_parent_loop_plan_source_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agentic_plan = self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-symlink-parent-source",
+                artifact_paths={"agentic_training_plan": [agentic_plan]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "agentic_training_plan.json").write_text(agentic_plan.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            plan["source_artifacts"]["agentic_training_plan"][0]["path"] = "linked_artifacts/agentic_training_plan.json"
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].path must resolve to a regular non-symlink file.",
+                errors,
+            )
+
     def test_loop_plan_refs_are_relative_to_output_directory_for_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

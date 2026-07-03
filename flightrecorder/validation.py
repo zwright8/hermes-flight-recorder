@@ -3253,6 +3253,9 @@ def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget,
         if not isinstance(ref.get("size_bytes"), int) or ref.get("size_bytes") < 0:
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
         file_path = _resolve_agentic_training_loop_plan_ref_path(path_value, source_path)
+        if file_path is not None and _path_has_symlink_component(file_path, include_leaf=True):
+            target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+            return
         if file_path is None or not file_path.exists() or not file_path.is_file():
             target.errors.append(f"{label}.path does not resolve to an existing file.")
             return
