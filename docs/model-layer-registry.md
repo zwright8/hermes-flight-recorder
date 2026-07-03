@@ -28,6 +28,7 @@ or launch GPU work.
 - Embedded compatibility-report refs in training plans and serving receipts,
   plus training-plan refs in adapter manifests, must carry SHA-256 and
   byte-size evidence for the same stale-reference checks.
+- Schema contracts reject embedded refs that omit required byte-size evidence.
 
 ## Command Sequence
 

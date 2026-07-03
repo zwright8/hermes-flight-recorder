@@ -419,6 +419,42 @@ class ModelRegistryTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("training_plan.compatibility_report.size_bytes does not match the current file.", errors)
 
+    def test_training_plan_schema_rejects_compatibility_report_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            report_path = root / "compatibility_report.json"
+            plan_path = root / "training_plan.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            plan["compatibility_report"].pop("size_bytes")
+
+            schema = check_schema_contract(plan)
+            errors = training_plan_errors(plan)
+
+            self.assertFalse(schema["passed"])
+            self.assertIn("$.compatibility_report: missing required property 'size_bytes'", "\n".join(schema["errors"]))
+            self.assertIn(
+                "training_plan.compatibility_report.size_bytes must be a non-negative integer when sha256 is present.",
+                errors,
+            )
+
     def test_validate_rejects_training_plan_compatibility_report_symlink(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -487,6 +523,39 @@ class ModelRegistryTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn(
                 "model_serving_probe_receipt.compatibility_report.size_bytes does not match the current file.",
+                errors,
+            )
+
+    def test_serving_probe_schema_rejects_compatibility_report_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            report_path = root / "compatibility_report.json"
+            receipt_path = root / "serving_probe_receipt.json"
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            receipt = build_model_serving_probe_receipt(
+                registry,
+                model_ref="candidate",
+                out_path=receipt_path,
+                profile_id="local_mock_tiny_chat_metadata",
+                provider="metadata_only",
+                serving_engine="not_launched",
+                base_url="metadata://not-launched",
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            receipt["compatibility_report"].pop("size_bytes")
+
+            schema = check_schema_contract(receipt)
+            errors = model_serving_probe_receipt_errors(receipt)
+
+            self.assertFalse(schema["passed"])
+            self.assertIn("$.compatibility_report: missing required property 'size_bytes'", "\n".join(schema["errors"]))
+            self.assertIn(
+                "model_serving_probe_receipt.compatibility_report.size_bytes must be a non-negative integer when sha256 is present.",
                 errors,
             )
 
