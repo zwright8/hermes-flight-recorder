@@ -1044,6 +1044,48 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.artifacts.eval_summary.sha256 does not match the current file.", errors)
 
+    def test_validate_evidence_bundle_rejects_missing_existing_file_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = root / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]), 0)
+            self.assertEqual(run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]), 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["eval_summary"]["path"] = "missing_eval_summary.json"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.eval_summary.path must resolve to an existing file when exists is true.", errors)
+
+    def test_validate_evidence_bundle_rejects_symlink_existing_file_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = root / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]), 0)
+            self.assertEqual(run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]), 0)
+            symlink_path = root / "eval_summary_link.json"
+            symlink_path.symlink_to(eval_summary)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["eval_summary"]["path"] = symlink_path.name
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.eval_summary.path must resolve to a regular file when exists is true.", errors)
+
     def test_validate_evidence_bundle_rejects_present_artifact_marked_missing_with_stale_fingerprint(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

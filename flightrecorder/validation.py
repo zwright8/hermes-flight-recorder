@@ -17866,7 +17866,16 @@ def _validate_evidence_bundle_artifact_file_fingerprint(
     if record.get("kind") != "file":
         return
     current_path = _resolve_evidence_bundle_artifact_path(record.get("path"), source_path)
-    if current_path is None or not current_path.is_file():
+    if current_path is None:
+        return
+    if record.get("exists") is True:
+        if not current_path.exists():
+            target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
+            return
+        if current_path.is_symlink() or not current_path.is_file():
+            target.errors.append(f"{label}.path must resolve to a regular file when exists is true.")
+            return
+    elif not current_path.is_file():
         return
     if _is_non_negative_int(record.get("size_bytes")) and current_path.stat().st_size != record.get("size_bytes"):
         target.errors.append(f"{label}.size_bytes does not match the current file.")

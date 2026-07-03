@@ -680,8 +680,9 @@ card, and dataset card decisions.
   is not a held-out scenario manifest.
 - External-eval plans reject scenario-manifest readiness and scenario-count
   metadata that no longer matches the verified manifest file.
-- Evidence bundles reject stale file-artifact SHA-256 and byte-size records
-  when the referenced files are available during validation.
+- Evidence bundles reject missing or stale existing file-artifact SHA-256 and
+  byte-size records when referenced files are expected to exist during
+  validation.
 - Eval summaries bind suite, compare-manifest, compare-gate,
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance
