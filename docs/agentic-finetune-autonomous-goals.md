@@ -710,8 +710,8 @@ card, and dataset card decisions.
 - Trainer archive checks, consumer-plan execution refs, and wrapper dry-run
   refs reject missing visible resolved paths before accepting external trainer
   code or trainer inputs as ready for wrapper handoff.
-- Improvement plans reject stale source-artifact SHA-256 and byte-size
-  records when present file artifacts resolve during validation.
+- Improvement plans reject missing, non-regular, stale SHA-256, or stale
+  byte-size file source-artifact records during validation.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

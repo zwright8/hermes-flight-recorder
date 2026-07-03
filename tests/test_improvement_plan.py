@@ -74,6 +74,7 @@ class ImprovementPlanTests(unittest.TestCase):
             self.assertIn("bundle_action", {row["id"] for row in plan["metrics"]["category_counts"]})
             self.assertEqual(plan["work_item_count"], len(plan["work_items"]))
             self.assertTrue(all(len(item["fingerprint"]) == 64 for item in plan["work_items"]))
+            self.assertEqual(plan["source_artifacts"]["evidence_bundle"]["path"], "evidence_bundle.json")
             self.assertEqual(len(plan["source_artifacts"]["evidence_bundle"]["sha256"]), 64)
             schema = check_schema_contract(plan, name_or_id="improvement_plan")
             self.assertTrue(schema["passed"], schema["errors"])
@@ -167,6 +168,8 @@ class ImprovementPlanTests(unittest.TestCase):
             reasons = {item["sources"]["eval_summary_items"][0]["reason"] for item in eval_items}
             categories = {item["category"] for item in eval_items}
             self.assertIn("eval_summary", plan["source_artifacts"])
+            self.assertEqual(plan["source_artifacts"]["evidence_bundle"]["path"], "runs/evidence_bundle.json")
+            self.assertEqual(plan["source_artifacts"]["eval_summary"]["path"], "eval_summary.json")
             self.assertIn("baseline_win", reasons)
             self.assertIn("task_completion_regression", reasons)
             self.assertIn("regressed_rule", reasons)
@@ -355,6 +358,90 @@ class ImprovementPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("improvement_plan.source_artifacts.evidence_bundle.sha256 does not match the current file.", errors)
             self.assertIn("improvement_plan.source_artifacts.evidence_bundle.size_bytes does not match the current file.", errors)
+
+    def test_validate_rejects_missing_existing_improvement_plan_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            plan_path = runs / "improvement_plan.json"
+            summary_path = runs / "validation.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run-suite",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--out",
+                        str(runs),
+                        "--evidence-handoff",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "improvement-plan",
+                        "--evidence-bundle",
+                        str(runs / "evidence_bundle.json"),
+                        "--out",
+                        str(plan_path),
+                    ]
+                ),
+                0,
+            )
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            plan["source_artifacts"]["evidence_bundle"]["path"] = "missing-evidence-bundle.json"
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-plan", str(plan_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("improvement_plan.source_artifacts.evidence_bundle.path must resolve to an existing file when exists is true.", errors)
+
+    def test_validate_rejects_symlink_existing_improvement_plan_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            plan_path = runs / "improvement_plan.json"
+            summary_path = runs / "validation.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run-suite",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--out",
+                        str(runs),
+                        "--evidence-handoff",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "improvement-plan",
+                        "--evidence-bundle",
+                        str(runs / "evidence_bundle.json"),
+                        "--out",
+                        str(plan_path),
+                    ]
+                ),
+                0,
+            )
+            symlink_path = runs / "evidence_bundle_link.json"
+            symlink_path.symlink_to(runs / "evidence_bundle.json")
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            plan["source_artifacts"]["evidence_bundle"]["path"] = symlink_path.name
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-plan", str(plan_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("improvement_plan.source_artifacts.evidence_bundle.path must resolve to a regular file when exists is true.", errors)
 
     def test_validate_rejects_present_improvement_plan_source_artifact_marked_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

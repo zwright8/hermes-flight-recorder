@@ -194,6 +194,10 @@ class ImprovementLedgerTests(unittest.TestCase):
             )
             clean = json.loads(plan.read_text(encoding="utf-8"))
             clean["plan_path"] = "clean_improvement_plan.json"
+            for record in clean["source_artifacts"].values():
+                path = record.get("path")
+                if isinstance(path, str) and path and not Path(path).is_absolute():
+                    record["path"] = str(Path("runs") / path)
             clean["work_items"] = []
             clean["work_item_count"] = 0
             clean["metrics"] = {

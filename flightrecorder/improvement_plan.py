@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -73,19 +74,20 @@ def build_improvement_plan(
     work_items = _finalize_work_items(raw_items)
     metrics = _metrics(work_items)
     readiness = "blocked" if bundle.get("readiness") == "blocked" else "ready"
+    output_path = Path(out_path)
     source_artifacts = {
-        "evidence_bundle": _file_record(bundle_path, preserve_paths),
+        "evidence_bundle": _file_record(bundle_path, preserve_paths, output_path),
     }
     if repair_queue_path is not None:
-        source_artifacts["repair_queue"] = _file_record(Path(repair_queue_path), preserve_paths)
+        source_artifacts["repair_queue"] = _file_record(Path(repair_queue_path), preserve_paths, output_path)
     if training_export_dir is not None:
-        source_artifacts["training_export"] = _dir_record(Path(training_export_dir), preserve_paths)
+        source_artifacts["training_export"] = _dir_record(Path(training_export_dir), preserve_paths, output_path)
         if curriculum_path is not None:
-            source_artifacts["training_export_curriculum"] = _file_record(curriculum_path, preserve_paths)
+            source_artifacts["training_export_curriculum"] = _file_record(curriculum_path, preserve_paths, output_path)
     if runs_dir is not None:
-        source_artifacts["runs_dir"] = _dir_record(Path(runs_dir), preserve_paths)
+        source_artifacts["runs_dir"] = _dir_record(Path(runs_dir), preserve_paths, output_path)
     if eval_summary_path is not None:
-        source_artifacts["eval_summary"] = _file_record(Path(eval_summary_path), preserve_paths)
+        source_artifacts["eval_summary"] = _file_record(Path(eval_summary_path), preserve_paths, output_path)
 
     return {
         "schema_version": IMPROVEMENT_PLAN_SCHEMA_VERSION,
@@ -550,11 +552,11 @@ def _source_digest(item: dict[str, Any]) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _file_record(path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
     exists = path.exists() and path.is_file()
     record: dict[str, Any] = {
         "kind": "file",
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, output_path, preserve_paths),
         "exists": exists,
     }
     if exists:
@@ -571,11 +573,11 @@ def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
     return record
 
 
-def _dir_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _dir_record(path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
     exists = path.exists() and path.is_dir()
     record: dict[str, Any] = {
         "kind": "directory",
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, output_path, preserve_paths),
         "exists": exists,
     }
     if exists:
@@ -605,6 +607,12 @@ def _sha256(path: Path) -> str:
 
 def _display_path(path: Path, preserve_paths: bool = False) -> str:
     return str(path if preserve_paths else Path(path.name))
+
+
+def _display_path_for_output_source(path: Path, output_path: Path, preserve_paths: bool = False) -> str:
+    if preserve_paths:
+        return str(path)
+    return os.path.relpath(path, start=output_path.parent)
 
 
 def _count_rows(values: Any) -> list[dict[str, int | str]]:
