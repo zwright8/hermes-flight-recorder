@@ -2,7 +2,7 @@
   "artifact_path": "examples/agentic_training/runtime_preflight/ready.json",
   "backend": "axolotl",
   "blocked_reasons": [],
-  "check_count": 7,
+  "check_count": 8,
   "checks": [
     {
       "actual": {
@@ -55,6 +55,27 @@
     },
     {
       "actual": {
+        "category": "default_executable",
+        "errors": [],
+        "mode": "sft_then_dpo",
+        "planning_gate_open": true,
+        "unsatisfied_data_requirement_ids": []
+      },
+      "expected": {
+        "data_requirements_satisfied": true,
+        "external_runner_contract_ready": true,
+        "mode_matches_plan": true,
+        "planning_gate_open": true,
+        "present": true,
+        "reward_contract_fail_closed": true,
+        "side_effect_boundary_fail_closed": true
+      },
+      "id": "mode_contract_ready",
+      "passed": true,
+      "summary": "mode_contract_ready: passed=True"
+    },
+    {
+      "actual": {
         "backend": "axolotl",
         "missing_modules": []
       },
@@ -102,25 +123,73 @@
     }
   ],
   "execution_boundary": {
+    "cloud_jobs_started": false,
     "dependency_resolution_method": "importlib.util.find_spec",
     "dry_run_preflight_only": true,
     "flight_recorder_launched_training": false,
     "model_downloads_started": false,
+    "paid_model_grader_calls_started": false,
     "trainer_modules_imported": false,
-    "training_started": false
+    "training_started": false,
+    "weights_updated": false
   },
   "failed_check_count": 0,
   "handoff_contract": {
     "disallow_unredacted_traces": true,
     "flight_recorder_launched_training": false,
+    "flight_recorder_started_cloud_provider": false,
     "model_downloads_started": false,
+    "paid_model_grader_calls_started": false,
     "requires_known_license_status": true,
+    "requires_mode_contract": true,
+    "requires_mode_contract_ready": true,
     "requires_redacted_dataset": true,
     "requires_registered_dataset": true,
     "requires_registered_inputs": true,
     "requires_registered_model": true,
     "runner_must_require_recommendation": "ready_for_tiny_smoke_launch",
-    "runner_owns_execution": true
+    "runner_owns_execution": true,
+    "weights_updated_by_flight_recorder": false
+  },
+  "mode_contract_check": {
+    "category": "default_executable",
+    "data_requirement_count": 2,
+    "error_count": 0,
+    "errors": [],
+    "external_runner_contract": {
+      "runner_must_block_unredacted_traces": true,
+      "runner_must_require_recommendation": "ready_for_external_trainer_plan",
+      "runner_must_revalidate_inputs": true,
+      "runner_must_validate_reward_contract": true,
+      "runner_owns_execution": true
+    },
+    "mode": "sft_then_dpo",
+    "mode_matches_plan": true,
+    "passed": true,
+    "planning_gate_open": true,
+    "planning_required_flag": null,
+    "present": true,
+    "reward_contract": {
+      "callable_signature": "",
+      "external_runner_must_supply": false,
+      "external_runner_must_validate": true,
+      "flight_recorder_supplies_callable": false,
+      "kind": "preference_pairs",
+      "may_call_paid_services_by_default": false,
+      "may_require_secrets_by_default": false,
+      "must_not_use_unredacted_traces": true,
+      "required": true
+    },
+    "side_effect_boundary": {
+      "cloud_jobs_started": false,
+      "dry_run_only": true,
+      "model_downloads_started": false,
+      "paid_model_grader_calls_started": false,
+      "provider_credentials_required_by_flight_recorder": false,
+      "training_started": false,
+      "weights_updated": false
+    },
+    "unsatisfied_data_requirement_ids": []
   },
   "notes": [
     "This artifact checks local readiness for a bounded tiny smoke launch only.",

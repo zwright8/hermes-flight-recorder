@@ -117,6 +117,9 @@ Runtime preflight emits `hfr.agentic_training_runtime_preflight.v1` and checks:
 
 - the plan is schema-valid and still recommends
   `ready_for_external_trainer_plan`
+- the plan `mode_contract` is present, matches the mode, has an open planning
+  gate, satisfies its data requirements, keeps the reward contract external,
+  and preserves fail-closed side-effect claims
 - selected trainer-view JSONL files exist, pass their bundled row schemas, and
   match the manifest row counts
 - required Python modules are discoverable with `importlib.util.find_spec`

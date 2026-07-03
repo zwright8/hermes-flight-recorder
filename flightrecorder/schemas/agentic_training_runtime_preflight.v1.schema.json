@@ -52,6 +52,9 @@
       },
       "type": "array"
     },
+    "mode_contract_check": {
+      "$ref": "#/$defs/modeContractCheck"
+    },
     "passed": {
       "type": "boolean"
     },
@@ -110,6 +113,7 @@
     "blocked_reasons",
     "plan_check",
     "dependency_checks",
+    "mode_contract_check",
     "view_checks",
     "execution_boundary",
     "handoff_contract",
@@ -197,13 +201,22 @@
         "flight_recorder_launched_training": {
           "const": false
         },
+        "cloud_jobs_started": {
+          "const": false
+        },
         "model_downloads_started": {
+          "const": false
+        },
+        "paid_model_grader_calls_started": {
           "const": false
         },
         "trainer_modules_imported": {
           "const": false
         },
         "training_started": {
+          "const": false
+        },
+        "weights_updated": {
           "const": false
         }
       },
@@ -212,6 +225,9 @@
         "flight_recorder_launched_training",
         "training_started",
         "model_downloads_started",
+        "cloud_jobs_started",
+        "paid_model_grader_calls_started",
+        "weights_updated",
         "trainer_modules_imported",
         "dependency_resolution_method"
       ],
@@ -226,10 +242,22 @@
         "flight_recorder_launched_training": {
           "const": false
         },
+        "flight_recorder_started_cloud_provider": {
+          "const": false
+        },
         "model_downloads_started": {
           "const": false
         },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
         "requires_known_license_status": {
+          "const": true
+        },
+        "requires_mode_contract": {
+          "const": true
+        },
+        "requires_mode_contract_ready": {
           "const": true
         },
         "requires_redacted_dataset": {
@@ -249,6 +277,9 @@
         },
         "runner_owns_execution": {
           "const": true
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
         }
       },
       "required": [
@@ -257,11 +288,199 @@
         "requires_registered_inputs",
         "requires_registered_model",
         "requires_registered_dataset",
+        "requires_mode_contract",
+        "requires_mode_contract_ready",
         "requires_known_license_status",
         "requires_redacted_dataset",
         "disallow_unredacted_traces",
         "flight_recorder_launched_training",
-        "model_downloads_started"
+        "model_downloads_started",
+        "flight_recorder_started_cloud_provider",
+        "paid_model_grader_calls_started",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "modeContractCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "data_requirement_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "external_runner_contract": {
+          "$ref": "#/$defs/modeExternalRunnerContract"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "mode_matches_plan": {
+          "type": "boolean"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "planning_gate_open": {
+          "type": "boolean"
+        },
+        "planning_required_flag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/modeRewardContract"
+        },
+        "side_effect_boundary": {
+          "$ref": "#/$defs/modeSideEffectBoundary"
+        },
+        "unsatisfied_data_requirement_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "category",
+        "present",
+        "mode_matches_plan",
+        "planning_gate_open",
+        "planning_required_flag",
+        "data_requirement_count",
+        "unsatisfied_data_requirement_ids",
+        "reward_contract",
+        "side_effect_boundary",
+        "external_runner_contract",
+        "passed",
+        "error_count",
+        "errors"
+      ],
+      "type": "object"
+    },
+    "modeRewardContract": {
+      "additionalProperties": true,
+      "properties": {
+        "callable_signature": {
+          "type": "string"
+        },
+        "external_runner_must_supply": {
+          "type": "boolean"
+        },
+        "external_runner_must_validate": {
+          "type": "boolean"
+        },
+        "flight_recorder_supplies_callable": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "may_call_paid_services_by_default": {
+          "type": "boolean"
+        },
+        "may_require_secrets_by_default": {
+          "type": "boolean"
+        },
+        "must_not_use_unredacted_traces": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "required",
+        "external_runner_must_supply",
+        "external_runner_must_validate",
+        "flight_recorder_supplies_callable",
+        "may_call_paid_services_by_default",
+        "may_require_secrets_by_default",
+        "must_not_use_unredacted_traces",
+        "callable_signature"
+      ],
+      "type": "object"
+    },
+    "modeSideEffectBoundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": {
+          "type": "boolean"
+        },
+        "dry_run_only": {
+          "type": "boolean"
+        },
+        "model_downloads_started": {
+          "type": "boolean"
+        },
+        "paid_model_grader_calls_started": {
+          "type": "boolean"
+        },
+        "provider_credentials_required_by_flight_recorder": {
+          "type": "boolean"
+        },
+        "training_started": {
+          "type": "boolean"
+        },
+        "weights_updated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "training_started",
+        "cloud_jobs_started",
+        "model_downloads_started",
+        "paid_model_grader_calls_started",
+        "weights_updated",
+        "provider_credentials_required_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "modeExternalRunnerContract": {
+      "additionalProperties": true,
+      "properties": {
+        "runner_must_block_unredacted_traces": {
+          "type": "boolean"
+        },
+        "runner_must_require_recommendation": {
+          "type": "string"
+        },
+        "runner_must_revalidate_inputs": {
+          "type": "boolean"
+        },
+        "runner_must_validate_reward_contract": {
+          "type": "boolean"
+        },
+        "runner_owns_execution": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "runner_owns_execution",
+        "runner_must_revalidate_inputs",
+        "runner_must_require_recommendation",
+        "runner_must_validate_reward_contract",
+        "runner_must_block_unredacted_traces"
       ],
       "type": "object"
     },

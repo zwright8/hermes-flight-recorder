@@ -219,7 +219,7 @@
         ],
         "roles_present": []
       },
-      "sha256": "7f2e958d80c0584dbb76c1c5c12ea1d54fee0901fe1cbf2e7610aa1121a7bf3f",
+      "sha256": "51e3175dc508a2431c84b0f9d3ddd027945c4ad944d0a00f28551bbd496f95c6",
       "size_bytes": 22792,
       "training_outputs": {
         "artifact_count": 3,

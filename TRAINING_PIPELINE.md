@@ -591,8 +591,10 @@ runner.
 Before a bounded tiny-smoke launch, run
 `scripts/preflight_agentic_training_runtime.py` against that plan. It emits
 `hfr.agentic_training_runtime_preflight.v1`, validates the selected trainer
-views, probes required Python modules with `importlib.util.find_spec`, and
-records `training_started: false`, `model_downloads_started: false`, and
+views, checks the plan `mode_contract`, probes required Python modules with
+`importlib.util.find_spec`, and records `training_started: false`,
+`model_downloads_started: false`, `cloud_jobs_started: false`,
+`paid_model_grader_calls_started: false`, `weights_updated: false`, and
 `trainer_modules_imported: false`. Treat
 `recommendation: ready_for_tiny_smoke_launch` as the next handoff condition;
 blocked runtime-preflight artifacts are still schema-checkable failure

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from flightrecorder.agentic_training_plan import build_agentic_training_plan
 from flightrecorder.agentic_training_runtime import build_agentic_training_runtime_preflight
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
 
@@ -30,12 +31,19 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             self.assertEqual(preflight["recommendation"], "ready_for_tiny_smoke_launch")
             self.assertEqual(preflight["plan_mode"], "sft_then_dpo")
             self.assertEqual(preflight["backend"], "axolotl")
+            self.assertTrue(preflight["mode_contract_check"]["passed"], preflight["mode_contract_check"]["errors"])
+            self.assertEqual(preflight["mode_contract_check"]["category"], "default_executable")
+            self.assertEqual(preflight["mode_contract_check"]["reward_contract"]["kind"], "preference_pairs")
+            self.assertEqual(preflight["mode_contract_check"]["data_requirement_count"], 2)
             self.assertEqual({view["name"] for view in preflight["view_checks"]}, {"sft", "dpo"})
             self.assertTrue(all(view["passed"] for view in preflight["view_checks"]))
             self.assertTrue(all(not Path(view["resolved_path"]).is_absolute() for view in preflight["view_checks"]))
             for view in preflight["view_checks"]:
                 self.assertIsInstance(view["size_bytes"], int)
             self.assertFalse(preflight["execution_boundary"]["flight_recorder_launched_training"])
+            self.assertFalse(preflight["execution_boundary"]["cloud_jobs_started"])
+            self.assertFalse(preflight["execution_boundary"]["paid_model_grader_calls_started"])
+            self.assertFalse(preflight["execution_boundary"]["weights_updated"])
             self.assertFalse(preflight["execution_boundary"]["trainer_modules_imported"])
             schema = check_schema_contract(preflight)
             self.assertTrue(schema["passed"], schema["errors"])
@@ -76,6 +84,91 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             failed_views = [view for view in preflight["view_checks"] if not view["passed"]]
             self.assertEqual(failed_views[0]["name"], "sft")
             self.assertIn("view path is not a regular file", failed_views[0]["errors"])
+            schema = check_schema_contract(preflight)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_unsatisfied_mode_contract_requirement_blocks_tiny_smoke_launch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
+            plan["mode_contract"]["data_requirements"][0]["satisfied"] = False
+            plan_path = root / "plan-with-unsatisfied-mode-contract.json"
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            preflight = build_agentic_training_runtime_preflight(
+                plan_path=plan_path,
+                require_modules=["json"],
+                skip_default_modules=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+
+            self.assertFalse(preflight["passed"])
+            self.assertEqual(preflight["recommendation"], "block_tiny_smoke_launch")
+            self.assertFalse(preflight["mode_contract_check"]["passed"])
+            self.assertEqual(preflight["mode_contract_check"]["unsatisfied_data_requirement_ids"], ["supervised_response_rows"])
+            self.assertIn("mode_contract_ready", {check["id"] for check in preflight["checks"] if not check["passed"]})
+            self.assertTrue(any("mode contract blocked" in reason for reason in preflight["blocked_reasons"]))
+            schema = check_schema_contract(preflight)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_tampered_external_runner_reward_contract_blocks_tiny_smoke_launch(self):
+        tamper_paths = [
+            ("reward_contract", "external_runner_must_validate", False),
+            ("reward_contract", "external_runner_must_supply", True),
+            ("external_runner_contract", "runner_must_validate_reward_contract", False),
+        ]
+        for section, field, value in tamper_paths:
+            with self.subTest(field=f"{section}.{field}"), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
+                plan["mode_contract"][section][field] = value
+                plan_path = root / "tampered-runner-contract.json"
+                plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+                preflight = build_agentic_training_runtime_preflight(
+                    plan_path=plan_path,
+                    require_modules=["json"],
+                    skip_default_modules=True,
+                    created_at="2026-07-02T00:00:00+00:00",
+                )
+
+                self.assertFalse(preflight["passed"])
+                self.assertEqual(preflight["recommendation"], "block_tiny_smoke_launch")
+                self.assertFalse(preflight["mode_contract_check"]["passed"])
+                self.assertTrue(any(field in error for error in preflight["mode_contract_check"]["errors"]))
+                self.assertIn("mode_contract_ready", {check["id"] for check in preflight["checks"] if not check["passed"]})
+                schema = check_schema_contract(preflight)
+                self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_grpo_mode_contract_requires_external_reward_callable(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+            root = Path(tmp)
+            plan_path = root / "grpo-plan.json"
+            plan = build_agentic_training_plan(
+                out_path=plan_path,
+                mode="grpo",
+                model_manifest_path=Path("examples/agentic_training/model_manifest.json"),
+                dataset_manifest_path=Path("examples/agentic_training/dataset_manifest.json"),
+                allow_future_rl=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            plan["mode_contract"]["reward_contract"]["external_runner_must_supply"] = False
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            preflight = build_agentic_training_runtime_preflight(
+                plan_path=plan_path,
+                require_modules=["json"],
+                skip_default_modules=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+
+            self.assertFalse(preflight["passed"])
+            self.assertEqual(preflight["recommendation"], "block_tiny_smoke_launch")
+            self.assertFalse(preflight["mode_contract_check"]["passed"])
+            self.assertIn(
+                "mode_contract.reward_contract.external_runner_must_supply must be True",
+                preflight["mode_contract_check"]["errors"],
+            )
             schema = check_schema_contract(preflight)
             self.assertTrue(schema["passed"], schema["errors"])
 
@@ -177,6 +270,20 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
 
         self.assertFalse(schema["passed"])
         self.assertTrue(any("size_bytes" in error for error in schema["errors"]))
+
+    def test_schema_rejects_missing_mode_contract_check(self):
+        preflight = build_agentic_training_runtime_preflight(
+            plan_path=EXAMPLE_PLAN,
+            require_modules=["json"],
+            skip_default_modules=True,
+            created_at="2026-07-02T00:00:00+00:00",
+        )
+        preflight.pop("mode_contract_check")
+
+        schema = check_schema_contract(preflight)
+
+        self.assertFalse(schema["passed"])
+        self.assertTrue(any("mode_contract_check" in error for error in schema["errors"]))
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

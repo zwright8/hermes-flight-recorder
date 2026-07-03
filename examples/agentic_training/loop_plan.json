@@ -640,7 +640,7 @@
         "readiness": "ready",
         "role": "agentic_training_result",
         "schema_version": "hfr.agentic_training_result.v1",
-        "sha256": "f8e385923184f9eba052715d6829e346822ef3f6ab92c21dadc21723bfa3f460",
+        "sha256": "b007df8a1688ebf784f183a4735eb561625b3d2cab1d5aee843cf24f111f65df",
         "size_bytes": 9800
       }
     ],
@@ -653,8 +653,8 @@
         "readiness": "ready",
         "role": "agentic_training_runtime_preflight",
         "schema_version": "hfr.agentic_training_runtime_preflight.v1",
-        "sha256": "17ffa5335648f460aa2a157034dffaa4a80be8a0f9df462267b8521de942a222",
-        "size_bytes": 5741
+        "sha256": "a170ded0f3dce2658e093b9534483bd6211248075092c54f7023bfe33def2ff4",
+        "size_bytes": 8094
       }
     ],
     "cloud_training_artifact_manifest": [

@@ -68,6 +68,7 @@ def build_agentic_training_runtime_preflight(
     )
     dependency_checks = _dependency_checks(backend, require_modules or (), skip_default_modules)
     view_checks = _view_checks(plan_payload, plan_file)
+    mode_contract_check = _mode_contract_check(plan_payload, mode)
 
     checks: list[dict[str, Any]] = []
     _add_check(
@@ -100,6 +101,27 @@ def build_agentic_training_runtime_preflight(
             "failed_views": [view["name"] for view in view_checks if not view["passed"]],
         },
         {"all_selected_views_pass": True},
+    )
+    _add_check(
+        checks,
+        "mode_contract_ready",
+        mode_contract_check["passed"],
+        {
+            "mode": mode_contract_check["mode"],
+            "category": mode_contract_check["category"],
+            "planning_gate_open": mode_contract_check["planning_gate_open"],
+            "unsatisfied_data_requirement_ids": mode_contract_check["unsatisfied_data_requirement_ids"],
+            "errors": mode_contract_check["errors"],
+        },
+        {
+            "present": True,
+            "mode_matches_plan": True,
+            "planning_gate_open": True,
+            "data_requirements_satisfied": True,
+            "side_effect_boundary_fail_closed": True,
+            "reward_contract_fail_closed": True,
+            "external_runner_contract_ready": True,
+        },
     )
     _add_check(
         checks,
@@ -142,7 +164,7 @@ def build_agentic_training_runtime_preflight(
         "check_count": len(checks),
         "failed_check_count": len(failed_checks),
         "checks": checks,
-        "blocked_reasons": _blocked_reasons(failed_checks, dependency_checks, view_checks),
+        "blocked_reasons": _blocked_reasons(failed_checks, dependency_checks, view_checks, mode_contract_check),
         "plan_check": {
             "path": str(plan_file),
             "exists": plan_file.exists(),
@@ -156,12 +178,16 @@ def build_agentic_training_runtime_preflight(
             "observed_passed": plan_payload.get("passed"),
         },
         "dependency_checks": dependency_checks,
+        "mode_contract_check": mode_contract_check,
         "view_checks": view_checks,
         "execution_boundary": {
             "dry_run_preflight_only": True,
             "flight_recorder_launched_training": False,
             "training_started": False,
             "model_downloads_started": False,
+            "cloud_jobs_started": False,
+            "paid_model_grader_calls_started": False,
+            "weights_updated": False,
             "trainer_modules_imported": False,
             "dependency_resolution_method": "importlib.util.find_spec",
         },
@@ -171,11 +197,16 @@ def build_agentic_training_runtime_preflight(
             "requires_registered_inputs": True,
             "requires_registered_model": True,
             "requires_registered_dataset": True,
+            "requires_mode_contract": True,
+            "requires_mode_contract_ready": True,
             "requires_known_license_status": True,
             "requires_redacted_dataset": True,
             "disallow_unredacted_traces": True,
             "flight_recorder_launched_training": False,
             "model_downloads_started": False,
+            "flight_recorder_started_cloud_provider": False,
+            "paid_model_grader_calls_started": False,
+            "weights_updated_by_flight_recorder": False,
         },
         "notes": [
             "This artifact checks local readiness for a bounded tiny smoke launch only.",
@@ -280,6 +311,126 @@ def _dependency_checks(
             }
         )
     return checks
+
+
+def _mode_contract_check(plan: dict[str, Any], mode: str) -> dict[str, Any]:
+    contract = plan.get("mode_contract") if isinstance(plan.get("mode_contract"), dict) else {}
+    planning_gate = contract.get("planning_gate") if isinstance(contract.get("planning_gate"), dict) else {}
+    data_requirements = contract.get("data_requirements") if isinstance(contract.get("data_requirements"), list) else []
+    reward_contract = contract.get("reward_contract") if isinstance(contract.get("reward_contract"), dict) else {}
+    side_effect_boundary = contract.get("side_effect_boundary") if isinstance(contract.get("side_effect_boundary"), dict) else {}
+    runner_contract = contract.get("external_runner_contract") if isinstance(contract.get("external_runner_contract"), dict) else {}
+
+    data_requirement_records = [requirement for requirement in data_requirements if isinstance(requirement, dict)]
+    unsatisfied = [
+        str(requirement.get("id") or f"requirement_{index}")
+        for index, requirement in enumerate(data_requirement_records)
+        if requirement.get("satisfied") is not True
+    ]
+    errors: list[str] = []
+    if not contract:
+        errors.append("mode_contract is missing or not an object")
+    if contract.get("mode") != mode:
+        errors.append("mode_contract.mode must match plan mode")
+    if planning_gate.get("open") is not True:
+        errors.append("mode_contract.planning_gate.open must be true")
+    if not data_requirement_records:
+        errors.append("mode_contract.data_requirements must be non-empty")
+    if unsatisfied:
+        errors.append("mode_contract.data_requirements must all be satisfied")
+
+    side_effect_expected = {
+        "dry_run_only": True,
+        "training_started": False,
+        "cloud_jobs_started": False,
+        "model_downloads_started": False,
+        "paid_model_grader_calls_started": False,
+        "weights_updated": False,
+        "provider_credentials_required_by_flight_recorder": False,
+    }
+    for key, expected in side_effect_expected.items():
+        if side_effect_boundary.get(key) != expected:
+            errors.append(f"mode_contract.side_effect_boundary.{key} must be {expected!r}")
+
+    reward_expected = {
+        "flight_recorder_supplies_callable": False,
+        "may_call_paid_services_by_default": False,
+        "may_require_secrets_by_default": False,
+        "must_not_use_unredacted_traces": True,
+    }
+    for key, expected in reward_expected.items():
+        if reward_contract.get(key) != expected:
+            errors.append(f"mode_contract.reward_contract.{key} must be {expected!r}")
+    reward_contract_required = mode not in {"sft", "action_sft"}
+    external_reward_callable_required = mode in {"grpo", "rl"}
+    external_reward_validation_required = mode in {"dpo", "sft_then_dpo", "reward_model", "process_rewards", "grpo", "rl"}
+    if reward_contract.get("required") is not reward_contract_required:
+        errors.append(f"mode_contract.reward_contract.required must be {reward_contract_required!r}")
+    if reward_contract.get("external_runner_must_supply") is not external_reward_callable_required:
+        errors.append(
+            "mode_contract.reward_contract.external_runner_must_supply "
+            f"must be {external_reward_callable_required!r}"
+        )
+    if reward_contract.get("external_runner_must_validate") is not external_reward_validation_required:
+        errors.append(
+            "mode_contract.reward_contract.external_runner_must_validate "
+            f"must be {external_reward_validation_required!r}"
+        )
+
+    runner_expected = {
+        "runner_owns_execution": True,
+        "runner_must_revalidate_inputs": True,
+        "runner_must_require_recommendation": PLAN_READY_RECOMMENDATION,
+        "runner_must_block_unredacted_traces": True,
+        "runner_must_validate_reward_contract": external_reward_validation_required,
+    }
+    for key, expected in runner_expected.items():
+        if runner_contract.get(key) != expected:
+            errors.append(f"mode_contract.external_runner_contract.{key} must be {expected!r}")
+
+    return {
+        "mode": str(contract.get("mode") or ""),
+        "category": str(contract.get("category") or ""),
+        "present": bool(contract),
+        "mode_matches_plan": contract.get("mode") == mode,
+        "planning_gate_open": planning_gate.get("open") is True,
+        "planning_required_flag": planning_gate.get("required_flag"),
+        "data_requirement_count": len(data_requirement_records),
+        "unsatisfied_data_requirement_ids": unsatisfied,
+        "reward_contract": {
+            "kind": str(reward_contract.get("kind") or ""),
+            "required": reward_contract.get("required") is True,
+            "external_runner_must_supply": reward_contract.get("external_runner_must_supply") is True,
+            "external_runner_must_validate": reward_contract.get("external_runner_must_validate") is True,
+            "flight_recorder_supplies_callable": reward_contract.get("flight_recorder_supplies_callable") is True,
+            "may_call_paid_services_by_default": reward_contract.get("may_call_paid_services_by_default") is True,
+            "may_require_secrets_by_default": reward_contract.get("may_require_secrets_by_default") is True,
+            "must_not_use_unredacted_traces": reward_contract.get("must_not_use_unredacted_traces") is True,
+            "callable_signature": str(reward_contract.get("callable_signature") or ""),
+        },
+        "side_effect_boundary": {
+            "dry_run_only": side_effect_boundary.get("dry_run_only") is True,
+            "training_started": side_effect_boundary.get("training_started") is True,
+            "cloud_jobs_started": side_effect_boundary.get("cloud_jobs_started") is True,
+            "model_downloads_started": side_effect_boundary.get("model_downloads_started") is True,
+            "paid_model_grader_calls_started": side_effect_boundary.get("paid_model_grader_calls_started") is True,
+            "weights_updated": side_effect_boundary.get("weights_updated") is True,
+            "provider_credentials_required_by_flight_recorder": side_effect_boundary.get(
+                "provider_credentials_required_by_flight_recorder"
+            )
+            is True,
+        },
+        "external_runner_contract": {
+            "runner_owns_execution": runner_contract.get("runner_owns_execution") is True,
+            "runner_must_revalidate_inputs": runner_contract.get("runner_must_revalidate_inputs") is True,
+            "runner_must_require_recommendation": str(runner_contract.get("runner_must_require_recommendation") or ""),
+            "runner_must_validate_reward_contract": runner_contract.get("runner_must_validate_reward_contract") is True,
+            "runner_must_block_unredacted_traces": runner_contract.get("runner_must_block_unredacted_traces") is True,
+        },
+        "passed": not errors,
+        "error_count": len(errors),
+        "errors": errors[:20],
+    }
 
 
 def _view_checks(plan: dict[str, Any], plan_path: Path) -> list[dict[str, Any]]:
@@ -391,9 +542,12 @@ def _blocked_reasons(
     failed_checks: list[dict[str, Any]],
     dependency_checks: list[dict[str, Any]],
     view_checks: list[dict[str, Any]],
+    mode_contract_check: dict[str, Any],
 ) -> list[str]:
     reasons = [str(check["summary"]) for check in failed_checks]
     reasons.extend(f"missing dependency module: {check['module']}" for check in dependency_checks if not check["passed"])
+    if mode_contract_check.get("passed") is not True:
+        reasons.extend(f"mode contract blocked: {error}" for error in mode_contract_check.get("errors", []) if isinstance(error, str))
     for view in view_checks:
         if not view["passed"]:
             detail = "; ".join(view["errors"]) if view["errors"] else "view did not pass"
