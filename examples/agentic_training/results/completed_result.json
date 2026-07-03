@@ -249,16 +249,16 @@
       "path": "../plans/sft_then_dpo_plan.json",
       "regular_file": true,
       "schema_name": "agentic_training_plan",
-      "sha256": "038d1bf482debea820b410ce600b7750a21e39634b2ee0e01d4c043c8cbbf34b",
-      "size_bytes": 9053
+      "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
+      "size_bytes": 9104
     },
     "runtime_preflight": {
       "exists": true,
       "path": "../runtime_preflight/ready.json",
       "regular_file": true,
       "schema_name": "agentic_training_runtime_preflight",
-      "sha256": "a937379e337c6762512c96c22648712e026c57dcd6588d0c93c99bb7603ecf34",
-      "size_bytes": 5689
+      "sha256": "68f1b625d85b924f03ee0ce2002643d2806d6f759f915e407ec1f492c6f878c0",
+      "size_bytes": 5741
     }
   },
   "metrics": {

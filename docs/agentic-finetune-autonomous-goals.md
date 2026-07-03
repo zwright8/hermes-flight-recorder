@@ -610,6 +610,8 @@ card, and dataset card decisions.
 - Agentic training-result lineage refs include input sizes; validation rejects
   regular plan or runtime-preflight lineage refs without matching SHA-256 and
   byte-size evidence resolved from the receipt location.
+- Agentic training plans and runtime preflights also bind registered manifests
+  and selected trainer views to SHA-256 plus byte-size evidence.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

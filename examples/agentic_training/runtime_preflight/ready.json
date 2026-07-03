@@ -142,7 +142,7 @@
   },
   "plan_mode": "sft_then_dpo",
   "plan_path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
-  "plan_sha256": "038d1bf482debea820b410ce600b7750a21e39634b2ee0e01d4c043c8cbbf34b",
+  "plan_sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
   "readiness": "ready",
   "recommendation": "ready_for_tiny_smoke_launch",
   "schema_version": "hfr.agentic_training_runtime_preflight.v1",
@@ -167,7 +167,8 @@
       ],
       "schema_name": "hfr.rl.sft.v1",
       "schema_version_declared": "hfr.rl.sft.v1",
-      "sha256": "a18ca653473ae0b0bbc635178937a351c3846149a5fcd74a1624dc8e83dd7997"
+      "sha256": "a18ca653473ae0b0bbc635178937a351c3846149a5fcd74a1624dc8e83dd7997",
+      "size_bytes": 1383
     },
     {
       "error_count": 0,
@@ -189,7 +190,8 @@
       ],
       "schema_name": "hfr.rl.dpo.v1",
       "schema_version_declared": "hfr.rl.dpo.v1",
-      "sha256": "a2ea1bade186c022ea178ca51b7d01cac8e864467d0128715423d6c5bd34ae49"
+      "sha256": "a2ea1bade186c022ea178ca51b7d01cac8e864467d0128715423d6c5bd34ae49",
+      "size_bytes": 1987
     }
   ]
 }

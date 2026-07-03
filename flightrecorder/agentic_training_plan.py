@@ -212,6 +212,7 @@ def _model_record(path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": str(path),
         "sha256": _sha256(path),
+        "size_bytes": path.stat().st_size,
         "schema_version": str(manifest.get("schema_version") or ""),
         "id": model_id,
         "candidate_id": candidate_id,
@@ -234,6 +235,7 @@ def _dataset_record(path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": str(path),
         "sha256": _sha256(path),
+        "size_bytes": path.stat().st_size,
         "schema_version": str(manifest.get("schema_version") or ""),
         "id": _first_string(manifest, "dataset_id", "id", "name"),
         "version": _first_string(manifest, "dataset_version", "version"),

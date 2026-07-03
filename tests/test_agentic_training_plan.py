@@ -91,6 +91,8 @@ class AgenticTrainingPlanTests(unittest.TestCase):
             self.assertEqual(plan["recommendation"], "ready_for_external_trainer_plan")
             self.assertEqual(plan["trainer_plan"]["stage_sequence"], ["sft", "dpo"])
             self.assertEqual({view["name"] for view in plan["selected_views"]}, {"sft", "dpo"})
+            self.assertEqual(plan["input_manifests"]["model"]["size_bytes"], model.stat().st_size)
+            self.assertEqual(plan["input_manifests"]["dataset"]["size_bytes"], dataset.stat().st_size)
             self.assertFalse(plan["execution"]["training_started"])
             self.assertFalse(plan["handoff_contract"]["flight_recorder_executed_training"])
             schema = check_schema_contract(plan)
@@ -185,6 +187,26 @@ class AgenticTrainingPlanTests(unittest.TestCase):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_training_plan", names)
 
+    def test_schema_rejects_manifest_ref_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "model.json"
+            dataset = root / "dataset.json"
+            self.write_model_manifest(model)
+            self.write_dataset_manifest(dataset)
+            plan = build_agentic_training_plan(
+                out_path=root / "plan.json",
+                mode="sft",
+                model_manifest_path=model,
+                dataset_manifest_path=dataset,
+            )
+            plan["input_manifests"]["model"].pop("size_bytes")
+
+            schema = check_schema_contract(plan)
+
+            self.assertFalse(schema["passed"])
+            self.assertTrue(any("size_bytes" in error for error in schema["errors"]))
+
     def test_committed_example_plan_matches_registered_manifests(self):
         plan_path = ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_plan.json"
         model_path = ROOT / "examples" / "agentic_training" / "model_manifest.json"
@@ -196,6 +218,8 @@ class AgenticTrainingPlanTests(unittest.TestCase):
         self.assertEqual(plan["trainer_plan"]["stage_sequence"], ["sft", "dpo"])
         self.assertEqual(plan["input_manifests"]["model"]["sha256"], sha256(model_path))
         self.assertEqual(plan["input_manifests"]["dataset"]["sha256"], sha256(dataset_path))
+        self.assertEqual(plan["input_manifests"]["model"]["size_bytes"], model_path.stat().st_size)
+        self.assertEqual(plan["input_manifests"]["dataset"]["size_bytes"], dataset_path.stat().st_size)
         self.assertEqual({view["name"] for view in plan["selected_views"]}, {"sft", "dpo"})
         schema = check_schema_file(plan_path)
         self.assertTrue(schema["passed"], schema["errors"])

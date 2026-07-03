@@ -182,7 +182,9 @@ The preflight records the plan as a hashed trainer artifact and validates it
 against `hfr.agentic_training_plan.v1`. `trainer-archive`,
 `trainer-archive-check`, and `trainer-consumer-plan` then copy the plan into
 the portable archive and expose it as a runner input. None of these commands
-execute the trainer command.
+execute the trainer command. Agentic training plans bind model and dataset
+manifest refs to SHA-256 plus byte-size evidence, and runtime preflight view
+checks carry the same byte-size evidence for selected trainer views.
 
 ## Verification
 

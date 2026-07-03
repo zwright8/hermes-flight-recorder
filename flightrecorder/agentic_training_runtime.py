@@ -323,6 +323,7 @@ def _view_checks(plan: dict[str, Any], plan_path: Path) -> list[dict[str, Any]]:
                 "observed_row_count": observed_rows,
                 "row_count_matches_manifest": row_count_matches,
                 "sha256": _sha256_or_none(resolved_path),
+                "size_bytes": _size_or_none(resolved_path),
                 "passed": passed,
                 "error_count": len(errors),
                 "errors": errors[:20],
@@ -430,3 +431,7 @@ def _sha256_or_none(path: Path) -> str | None:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _size_or_none(path: Path) -> int | None:
+    return path.stat().st_size if path.is_file() else None

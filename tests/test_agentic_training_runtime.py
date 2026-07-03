@@ -33,6 +33,8 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             self.assertEqual({view["name"] for view in preflight["view_checks"]}, {"sft", "dpo"})
             self.assertTrue(all(view["passed"] for view in preflight["view_checks"]))
             self.assertTrue(all(not Path(view["resolved_path"]).is_absolute() for view in preflight["view_checks"]))
+            for view in preflight["view_checks"]:
+                self.assertIsInstance(view["size_bytes"], int)
             self.assertFalse(preflight["execution_boundary"]["flight_recorder_launched_training"])
             self.assertFalse(preflight["execution_boundary"]["trainer_modules_imported"])
             schema = check_schema_contract(preflight)
@@ -156,8 +158,25 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
         self.assertTrue(preflight["passed"], preflight["blocked_reasons"])
         self.assertEqual(preflight["recommendation"], "ready_for_tiny_smoke_launch")
         self.assertTrue(all(not Path(view["resolved_path"]).is_absolute() for view in preflight["view_checks"]))
+        for view in preflight["view_checks"]:
+            view_path = ROOT / view["resolved_path"]
+            self.assertEqual(view["size_bytes"], view_path.stat().st_size)
         schema = check_schema_file(preflight_path)
         self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_schema_rejects_passed_view_without_size(self):
+        preflight = build_agentic_training_runtime_preflight(
+            plan_path=EXAMPLE_PLAN,
+            require_modules=["json"],
+            skip_default_modules=True,
+            created_at="2026-07-02T00:00:00+00:00",
+        )
+        preflight["view_checks"][0].pop("size_bytes")
+
+        schema = check_schema_contract(preflight)
+
+        self.assertFalse(schema["passed"])
+        self.assertTrue(any("size_bytes" in error for error in schema["errors"]))
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

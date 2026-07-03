@@ -222,6 +222,7 @@
       "redaction_status": "redacted",
       "schema_version": "hfr.dataset_manifest.example.v1",
       "sha256": "911aee47ba2c586e72a112120fdfb8fbc443f493d9d8371fdebf293d8756b1c8",
+      "size_bytes": 1379,
       "version": "v1",
       "view_count": 6,
       "views": {
@@ -279,7 +280,8 @@
       "license_status": "approved",
       "path": "examples/agentic_training/model_manifest.json",
       "schema_version": "hfr.model_candidate.example.v1",
-      "sha256": "ffd580ed90edb518911767f8f5190ad59db1b6d6594e3b12ec6e35b123d46db8"
+      "sha256": "ffd580ed90edb518911767f8f5190ad59db1b6d6594e3b12ec6e35b123d46db8",
+      "size_bytes": 523
     }
   },
   "mode": "sft_then_dpo",

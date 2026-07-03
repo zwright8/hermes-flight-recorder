@@ -385,6 +385,13 @@
             "string",
             "null"
           ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -399,6 +406,7 @@
         "observed_row_count",
         "row_count_matches_manifest",
         "sha256",
+        "size_bytes",
         "passed",
         "error_count",
         "errors",
