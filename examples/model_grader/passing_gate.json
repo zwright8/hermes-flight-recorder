@@ -166,7 +166,10 @@
     "calibration_disagreement_count": 0,
     "dry_run_disagreement_queue_count": 0,
     "dry_run_labels_requiring_human_review_count": 0,
-    "graded_item_count": 2
+    "graded_item_count": 2,
+    "human_override_receipt_present": false,
+    "human_override_resolved_count": 0,
+    "human_override_unresolved_count": 0
   },
   "notes": [
     "The gate is the only artifact that can make model-grader labels eligible for downstream curation.",

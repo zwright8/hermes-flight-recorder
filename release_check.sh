@@ -1054,6 +1054,9 @@ gate = json.loads(Path("runs/model_grader_gate.json").read_text(encoding="utf-8"
 assert gate["passed"] is True
 assert gate["metrics"]["dry_run_disagreement_queue_count"] == 0
 assert gate["metrics"]["dry_run_labels_requiring_human_review_count"] == 0
+assert gate["metrics"]["human_override_receipt_present"] is False
+assert gate["metrics"]["human_override_resolved_count"] == 0
+assert gate["metrics"]["human_override_unresolved_count"] == 0
 assert gate["admission"]["uncalibrated_labels_admitted"] == 0
 assert any(check["id"] == "dry_run_human_review_queue_resolved" for check in gate["checks"])
 PY

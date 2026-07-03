@@ -13,6 +13,7 @@ from .schema_registry import SchemaRegistryError, check_schema_file
 
 RUBRIC_SPEC_SCHEMA_VERSION = "hfr.rubric_spec.v1"
 MODEL_GRADER_DRY_RUN_SCHEMA_VERSION = "hfr.model_grader_dry_run.v1"
+MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION = "hfr.model_grader_override_receipt.v1"
 MODEL_GRADER_GATE_SCHEMA_VERSION = "hfr.model_grader_gate.v1"
 
 
@@ -131,6 +132,7 @@ def build_model_grader_gate(
     dry_run_path: str | Path,
     rubric_path: str | Path,
     calibration_path: str | Path | None = None,
+    override_receipt_path: str | Path | None = None,
     min_calibration_agreement_rate: float = 0.8,
     max_disagreements: int | None = None,
     created_at: str | None = None,
@@ -139,15 +141,30 @@ def build_model_grader_gate(
     """Gate model-grader labels before trainer-facing data admission."""
     dry_ref = _json_artifact_ref("model_grader_dry_run", Path(dry_run_path), "model_grader_dry_run", preserve_paths)
     rubric_ref = _json_artifact_ref("rubric_spec", Path(rubric_path), "rubric_spec", preserve_paths)
+    override_ref = (
+        _json_artifact_ref("model_grader_override_receipt", Path(override_receipt_path), "model_grader_override_receipt", preserve_paths)
+        if override_receipt_path
+        else _missing_ref("model_grader_override_receipt")
+    )
     calibration_ref = (
         _json_artifact_ref("review_calibration", Path(calibration_path), "review_calibration", preserve_paths)
         if calibration_path
         else _missing_ref("review_calibration")
     )
     dry_run = _read_json(Path(dry_run_path))
+    override_receipt = _read_json(Path(override_receipt_path)) if override_receipt_path else {}
     calibration = _read_json(Path(calibration_path)) if calibration_path else {}
     labels_requiring_human_review = _labels_requiring_human_review_count(dry_run)
     dry_run_disagreement_queue_count = _dry_run_disagreement_queue_count(dry_run)
+    overrides_required = labels_requiring_human_review > 0 or dry_run_disagreement_queue_count > 0
+    override_ready = (not overrides_required) or (_artifact_ready(override_ref) and override_receipt.get("passed") is True)
+    override_resolved_count = _override_resolved_queue_count(override_receipt)
+    override_unresolved_count = _override_unresolved_queue_count(override_receipt)
+    human_review_queue_resolved = (not overrides_required) or (
+        override_ready
+        and override_unresolved_count == 0
+        and override_resolved_count >= max(labels_requiring_human_review, dry_run_disagreement_queue_count)
+    )
     checks: list[dict[str, Any]] = []
     _add_check(checks, "dry_run_receipt_valid", _artifact_ready(dry_ref), {"artifact": dry_ref}, {"schema": "model_grader_dry_run", "passed": True})
     _add_check(checks, "rubric_spec_valid", _artifact_ready(rubric_ref), {"artifact": rubric_ref}, {"schema": "rubric_spec", "passed": True})
@@ -192,12 +209,16 @@ def build_model_grader_gate(
     _add_check(
         checks,
         "dry_run_human_review_queue_resolved",
-        labels_requiring_human_review == 0 and dry_run_disagreement_queue_count == 0,
+        human_review_queue_resolved,
         {
             "labels_requiring_human_review_count": labels_requiring_human_review,
             "disagreement_queue_count": dry_run_disagreement_queue_count,
+            "override_receipt_required": overrides_required,
+            "override_receipt_passed": override_receipt.get("passed") if isinstance(override_receipt, dict) else None,
+            "override_resolved_count": override_resolved_count,
+            "override_unresolved_count": override_unresolved_count,
         },
-        {"labels_requiring_human_review_count": 0, "disagreement_queue_count": 0},
+        {"override_receipt_required": overrides_required, "unresolved_count": 0},
     )
     _add_check(
         checks,
@@ -222,10 +243,11 @@ def build_model_grader_gate(
             "dry_run_receipt": dry_ref,
             "rubric_spec": rubric_ref,
             "review_calibration": calibration_ref,
+            "model_grader_override_receipt": override_ref,
         },
         "admission": {
             "labels_allowed_for_training": passed,
-            "labels_admitted_count": _eligible_grader_label_count(dry_run) if passed else 0,
+            "labels_admitted_count": dry_run.get("graded_item_count", 0) if passed else 0,
             "uncalibrated_labels_admitted": 0,
             "human_override_required_for_disagreements": True,
         },
@@ -235,6 +257,9 @@ def build_model_grader_gate(
             "calibration_disagreement_count": _calibration_disagreement_count(calibration),
             "dry_run_disagreement_queue_count": dry_run_disagreement_queue_count,
             "dry_run_labels_requiring_human_review_count": labels_requiring_human_review,
+            "human_override_receipt_present": override_receipt_path is not None,
+            "human_override_resolved_count": override_resolved_count,
+            "human_override_unresolved_count": override_unresolved_count,
         },
         "execution_boundary": _boundary(),
         "notes": [
@@ -242,6 +267,107 @@ def build_model_grader_gate(
             "Missing or failing calibration blocks by default.",
             "Dry-run disagreement queues or labels requiring human review block until resolved by a future override contract.",
             "The gate records no provider calls and admits zero uncalibrated labels.",
+        ],
+    }
+
+
+def build_model_grader_override_receipt(
+    *,
+    dry_run_path: str | Path,
+    overrides_path: str | Path,
+    created_at: str | None = None,
+    preserve_paths: bool = False,
+) -> dict[str, Any]:
+    """Build a human override receipt resolving model-grader dry-run queue items."""
+    dry_file = Path(dry_run_path)
+    override_file = Path(overrides_path)
+    dry_ref = _json_artifact_ref("model_grader_dry_run", dry_file, "model_grader_dry_run", preserve_paths)
+    dry_run = _read_json(dry_file)
+    queue = [item for item in dry_run.get("disagreement_queue", []) if isinstance(item, dict)] if isinstance(dry_run, dict) else []
+    queue_ids = {str(item.get("review_item_id") or "") for item in queue if item.get("review_item_id")}
+    rows, row_errors = _read_override_rows(override_file)
+    overrides = [_override_record(index, row, queue_ids) for index, row in enumerate(rows)]
+    resolved_ids = {row["review_item_id"] for row in overrides if row.get("accepted") and row.get("resolves_queue_item")}
+    unresolved_ids = sorted(queue_ids - resolved_ids)
+    unmatched_count = sum(1 for row in overrides if not row.get("resolves_queue_item"))
+    invalid_count = sum(1 for row in overrides if not row.get("accepted"))
+    checks: list[dict[str, Any]] = []
+    _add_check(checks, "dry_run_receipt_valid", _artifact_ready(dry_ref), {"artifact": dry_ref}, {"schema": "model_grader_dry_run", "passed": True})
+    _add_check(checks, "override_rows_readable", not row_errors, {"errors": row_errors}, {"errors": []})
+    _add_check(
+        checks,
+        "override_rows_present_when_queue_non_empty",
+        bool(rows) or not queue_ids,
+        {"override_row_count": len(rows), "queue_count": len(queue_ids)},
+        {"override_row_count": ">0 when queue_count > 0"},
+    )
+    _add_check(
+        checks,
+        "all_overrides_match_queue",
+        unmatched_count == 0,
+        {"unmatched_override_count": unmatched_count},
+        {"unmatched_override_count": 0},
+    )
+    _add_check(
+        checks,
+        "override_labels_finalized",
+        invalid_count == 0,
+        {"invalid_override_count": invalid_count},
+        {"invalid_override_count": 0},
+    )
+    _add_check(
+        checks,
+        "all_queue_items_resolved",
+        not unresolved_ids,
+        {"unresolved_review_item_ids": unresolved_ids},
+        {"unresolved_review_item_ids": []},
+    )
+    _add_check(
+        checks,
+        "flight_recorder_did_not_admit_labels",
+        True,
+        {"labels_admitted_to_training": False, "weights_updated_by_flight_recorder": False},
+        {"labels_admitted_to_training": False, "weights_updated_by_flight_recorder": False},
+    )
+    failed = [check for check in checks if not check["passed"]]
+    passed = not failed
+    return {
+        "schema_version": MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION,
+        "created_at": created_at or _now(),
+        "passed": passed,
+        "readiness": "ready_for_model_grader_gate" if passed else "blocked",
+        "recommendation": "use_overrides_for_grader_gate" if passed else "complete_human_override_review",
+        "check_count": len(checks),
+        "failed_check_count": len(failed),
+        "checks": checks,
+        "blocked_reasons": [check["summary"] for check in failed],
+        "source_artifacts": {
+            "dry_run_receipt": dry_ref,
+            "override_rows": _file_ref("model_grader_override_rows", override_file, preserve_paths),
+        },
+        "queue": {
+            "dry_run_disagreement_queue_count": len(queue_ids),
+            "required_review_item_ids": sorted(queue_ids),
+            "resolved_review_item_ids": sorted(resolved_ids),
+            "unresolved_review_item_ids": unresolved_ids,
+        },
+        "overrides": overrides,
+        "metrics": {
+            "override_row_count": len(rows),
+            "resolved_queue_count": len(resolved_ids),
+            "unresolved_queue_count": len(unresolved_ids),
+            "unmatched_override_count": unmatched_count,
+            "invalid_override_count": invalid_count,
+        },
+        "training_admission": {
+            "labels_allowed_for_training": False,
+            "labels_admitted_count": 0,
+            "requires_model_grader_gate": True,
+        },
+        "execution_boundary": _boundary(),
+        "notes": [
+            "Override receipts record human resolution of model-grader dry-run queue items only.",
+            "Flight Recorder does not admit labels to training from this receipt; model-grader gate must consume it.",
         ],
     }
 
@@ -329,6 +455,7 @@ def _disagreement_candidate(item: dict[str, Any], label: dict[str, Any]) -> dict
         "episode_id": label["episode_id"],
         "scenario_id": label["scenario_id"],
         "task_family": label["task_family"],
+        "review_item_sha256": label["review_item_sha256"],
         "mock_model_label": label["mock_model_label"],
         "reason": "human_review_required_by_rubric_or_low_confidence",
         "source_report": (item.get("source_artifacts") or {}).get("report") if isinstance(item.get("source_artifacts"), dict) else None,
@@ -443,11 +570,6 @@ def _labels_admitted_count(dry_run: dict[str, Any]) -> int:
     return int(value) if isinstance(value, int) and value >= 0 else 0
 
 
-def _eligible_grader_label_count(dry_run: dict[str, Any]) -> int:
-    labels = dry_run.get("grader_labels") if isinstance(dry_run.get("grader_labels"), list) else []
-    return sum(1 for row in labels if isinstance(row, dict) and row.get("requires_human_review") is False)
-
-
 def _labels_requiring_human_review_count(dry_run: dict[str, Any]) -> int:
     labels = dry_run.get("grader_labels") if isinstance(dry_run.get("grader_labels"), list) else []
     return sum(1 for row in labels if isinstance(row, dict) and row.get("requires_human_review") is True)
@@ -483,6 +605,81 @@ def _read_json(path: Path | None) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _read_override_rows(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return [], [f"file not found: {path}"]
+    except OSError as exc:
+        return [], [str(exc)]
+    rows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            errors.append(f"line {line_number}: invalid JSON: {exc.msg}")
+            continue
+        if not isinstance(row, dict):
+            errors.append(f"line {line_number}: row must be an object")
+            continue
+        rows.append(row)
+    return rows, errors
+
+
+def _override_record(index: int, row: dict[str, Any], queue_ids: set[str]) -> dict[str, Any]:
+    review_item_id = str(row.get("review_item_id") or "")
+    human_label = str(row.get("human_label") or "")
+    reviewer_confidence = str(row.get("reviewer_confidence") or "")
+    reviewer = str(row.get("reviewer") or "")
+    reviewed_at = str(row.get("reviewed_at") or "")
+    notes = str(row.get("notes") or "")
+    errors: list[str] = []
+    if not review_item_id:
+        errors.append("review_item_id is required")
+    if human_label not in REVIEW_LABELS or human_label == "needs_review":
+        errors.append("human_label must be a finalized review label")
+    if reviewer_confidence not in {"high", "medium"}:
+        errors.append("reviewer_confidence must be high or medium")
+    if not reviewer:
+        errors.append("reviewer is required")
+    if not reviewed_at:
+        errors.append("reviewed_at is required")
+    resolves_queue_item = review_item_id in queue_ids
+    if not resolves_queue_item:
+        errors.append("review_item_id does not match a dry-run queue item")
+    record = {
+        "index": index,
+        "review_item_id": review_item_id,
+        "review_item_sha256": str(row.get("review_item_sha256") or ""),
+        "human_label": human_label,
+        "reviewer_confidence": reviewer_confidence,
+        "reviewer": reviewer,
+        "reviewed_at": reviewed_at,
+        "notes": notes,
+        "resolves_queue_item": resolves_queue_item,
+        "accepted": not errors,
+        "errors": errors,
+        "override_sha256": "",
+    }
+    record["override_sha256"] = _stable_sha(record)
+    return record
+
+
+def _override_resolved_queue_count(receipt: dict[str, Any]) -> int:
+    metrics = receipt.get("metrics") if isinstance(receipt.get("metrics"), dict) else {}
+    value = metrics.get("resolved_queue_count")
+    return int(value) if isinstance(value, int) and value >= 0 else 0
+
+
+def _override_unresolved_queue_count(receipt: dict[str, Any]) -> int:
+    metrics = receipt.get("metrics") if isinstance(receipt.get("metrics"), dict) else {}
+    value = metrics.get("unresolved_queue_count")
+    return int(value) if isinstance(value, int) and value >= 0 else 0
 
 
 def _sha256(path: Path) -> str:

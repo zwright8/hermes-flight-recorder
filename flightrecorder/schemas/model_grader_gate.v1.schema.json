@@ -39,14 +39,20 @@
         "calibration_disagreement_count": { "minimum": 0, "type": "integer" },
         "dry_run_disagreement_queue_count": { "minimum": 0, "type": "integer" },
         "dry_run_labels_requiring_human_review_count": { "minimum": 0, "type": "integer" },
-        "graded_item_count": { "minimum": 0, "type": "integer" }
+        "graded_item_count": { "minimum": 0, "type": "integer" },
+        "human_override_receipt_present": { "type": "boolean" },
+        "human_override_resolved_count": { "minimum": 0, "type": "integer" },
+        "human_override_unresolved_count": { "minimum": 0, "type": "integer" }
       },
       "required": [
         "graded_item_count",
         "agreement_rate",
         "calibration_disagreement_count",
         "dry_run_disagreement_queue_count",
-        "dry_run_labels_requiring_human_review_count"
+        "dry_run_labels_requiring_human_review_count",
+        "human_override_receipt_present",
+        "human_override_resolved_count",
+        "human_override_unresolved_count"
       ],
       "type": "object"
     },

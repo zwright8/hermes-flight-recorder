@@ -30,6 +30,7 @@ flightrecorder schemas --check runs/agentic_loop_ledger.json
 flightrecorder schemas --check runs/next_iteration_schedule.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
+flightrecorder schemas --check runs/model_grader_override_receipt.json
 flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/harness_prompt_injection_good/harness_result.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
@@ -985,15 +986,24 @@ The dry-run receipt records `provider_api_called: false`,
 `review-calibration` artifact it stays blocked and routes labels to human
 review or calibration. With a passing calibration artifact it can mark labels
 eligible for curated handoff only when the dry-run disagreement queue is empty
-and no mock label still requires human review. It still records zero
+and no mock label still requires human review. If the queue is non-empty,
+write a `model-grader override-receipt` from JSONL rows containing
+`review_item_id`, finalized `human_label`, `reviewer_confidence`, `reviewer`,
+`reviewed_at`, and `notes`, then pass it to the gate. It still records zero
 uncalibrated labels, zero credential values, zero provider calls, and zero
 weight updates.
 
 ```bash
+flightrecorder model-grader override-receipt \
+  --dry-run runs/model_grader/dry_run.json \
+  --overrides runs/model_grader/human_overrides.jsonl \
+  --out runs/model_grader/override_receipt.json
+
 flightrecorder model-grader gate \
   --dry-run runs/model_grader/dry_run.json \
   --rubric runs/model_grader/rubric.json \
   --review-calibration runs/review_calibration.json \
+  --override-receipt runs/model_grader/override_receipt.json \
   --min-calibration-agreement-rate 0.9 \
   --max-disagreements 0 \
   --out runs/model_grader/gate.json
@@ -1001,6 +1011,7 @@ flightrecorder model-grader gate \
 flightrecorder validate \
   --rubric-spec runs/model_grader/rubric.json \
   --model-grader-dry-run runs/model_grader/dry_run.json \
+  --model-grader-override-receipt runs/model_grader/override_receipt.json \
   --model-grader-gate runs/model_grader/gate.json \
   --strict
 ```

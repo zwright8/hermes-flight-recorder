@@ -115,6 +115,7 @@ from .model_grader import (
     ModelGraderError,
     build_model_grader_dry_run,
     build_model_grader_gate,
+    build_model_grader_override_receipt,
     build_rubric_spec,
     write_model_grader_artifact,
 )
@@ -1127,6 +1128,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         dataset_curation_receipt_paths=args.dataset_curation_receipt,
         rubric_spec_paths=args.rubric_spec,
         model_grader_dry_run_paths=args.model_grader_dry_run,
+        model_grader_override_receipt_paths=args.model_grader_override_receipt,
         model_grader_gate_paths=args.model_grader_gate,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
@@ -1741,11 +1743,27 @@ def cmd_model_grader_dry_run(args: argparse.Namespace) -> int:
     return 0 if receipt["passed"] else 1
 
 
+def cmd_model_grader_override_receipt(args: argparse.Namespace) -> int:
+    receipt = build_model_grader_override_receipt(
+        dry_run_path=args.dry_run,
+        overrides_path=args.overrides,
+        created_at=args.created_at,
+        preserve_paths=args.preserve_paths,
+    )
+    write_model_grader_artifact(args.out, receipt)
+    print(
+        f"wrote {args.out} readiness={receipt['readiness']} "
+        f"resolved={receipt['metrics']['resolved_queue_count']}/{receipt['queue']['dry_run_disagreement_queue_count']}"
+    )
+    return 0 if receipt["passed"] else 1
+
+
 def cmd_model_grader_gate(args: argparse.Namespace) -> int:
     gate = build_model_grader_gate(
         dry_run_path=args.dry_run,
         rubric_path=args.rubric,
         calibration_path=args.review_calibration,
+        override_receipt_path=args.override_receipt,
         min_calibration_agreement_rate=args.min_calibration_agreement_rate,
         max_disagreements=args.max_disagreements,
         created_at=args.created_at,
@@ -3111,6 +3129,12 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--dataset-curation-receipt", action="append", default=[], help="Validate one dataset curation receipt")
     validate.add_argument("--rubric-spec", action="append", default=[], help="Validate one rubric_spec artifact")
     validate.add_argument("--model-grader-dry-run", action="append", default=[], help="Validate one model_grader_dry_run receipt")
+    validate.add_argument(
+        "--model-grader-override-receipt",
+        action="append",
+        default=[],
+        help="Validate one model_grader_override_receipt artifact",
+    )
     validate.add_argument("--model-grader-gate", action="append", default=[], help="Validate one model_grader_gate artifact")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
@@ -3562,10 +3586,22 @@ def _parser() -> argparse.ArgumentParser:
     model_grader_dry_run.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in dry-run refs")
     model_grader_dry_run.set_defaults(func=cmd_model_grader_dry_run)
 
+    model_grader_override = model_grader_subparsers.add_parser(
+        "override-receipt",
+        help="Resolve model-grader dry-run disagreement queue items with human overrides",
+    )
+    model_grader_override.add_argument("--dry-run", required=True, help="model_grader_dry_run artifact")
+    model_grader_override.add_argument("--overrides", required=True, help="JSONL human override rows")
+    model_grader_override.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    model_grader_override.add_argument("--out", required=True, help="Write hfr.model_grader_override_receipt.v1 JSON to this path")
+    model_grader_override.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in override refs")
+    model_grader_override.set_defaults(func=cmd_model_grader_override_receipt)
+
     model_grader_gate = model_grader_subparsers.add_parser("gate", help="Gate model-grader labels before training admission")
     model_grader_gate.add_argument("--dry-run", required=True, help="model_grader_dry_run artifact")
     model_grader_gate.add_argument("--rubric", required=True, help="rubric_spec artifact")
     model_grader_gate.add_argument("--review-calibration", help="review_calibration artifact required for a passing gate")
+    model_grader_gate.add_argument("--override-receipt", help="model_grader_override_receipt required when dry-run labels need review")
     model_grader_gate.add_argument("--min-calibration-agreement-rate", type=_rate_arg, default=0.8)
     model_grader_gate.add_argument("--max-disagreements", type=_non_negative_int_arg)
     model_grader_gate.add_argument("--created-at", help="Override generated timestamp for deterministic examples")

@@ -387,18 +387,26 @@ flightrecorder model-grader dry-run \
   --provider mock \
   --out runs/model_grader/dry_run.json
 
+flightrecorder model-grader override-receipt \
+  --dry-run runs/model_grader/dry_run.json \
+  --overrides runs/model_grader/human_overrides.jsonl \
+  --out runs/model_grader/override_receipt.json
+
 flightrecorder model-grader gate \
   --dry-run runs/model_grader/dry_run.json \
   --rubric runs/model_grader/rubric.json \
   --review-calibration runs/review_calibration.json \
+  --override-receipt runs/model_grader/override_receipt.json \
   --out runs/model_grader/gate.json
 ```
 
 The dry-run receipt records no provider API call, no paid grader call, no
 credential values, and zero labels admitted to training. The gate admits labels
 only after a passing review-calibration artifact, zero unresolved grader
-disagreements, and zero labels requiring human review. It always records zero
-uncalibrated labels.
+disagreements, and zero labels requiring human review. If the dry-run queue is
+non-empty, a `model-grader override-receipt` must resolve each queued item with
+high- or medium-confidence human labels before the gate can pass. It always
+records zero uncalibrated labels.
 
 ## Comparison And Improvement Loops
 
@@ -622,6 +630,7 @@ flightrecorder schemas --check runs/suite_gate.json
 flightrecorder schemas --check runs/prompt_compare.json
 flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/review_calibration.json
+flightrecorder schemas --check runs/model_grader_override_receipt.json
 flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/reviewed_gate.json
 flightrecorder schemas --check runs/agentic_training_loop_plan.json

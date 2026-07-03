@@ -570,6 +570,14 @@
       "name": "model_grader_dry_run"
     },
     {
+      "artifact": "model_grader_override_receipt",
+      "artifact_schema_version": "hfr.model_grader_override_receipt.v1",
+      "description": "Human override receipt resolving model-grader dry-run disagreement queue items.",
+      "filename": "model_grader_override_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_grader_override_receipt.v1.schema.json",
+      "name": "model_grader_override_receipt"
+    },
+    {
       "artifact": "model_grader_gate",
       "artifact_schema_version": "hfr.model_grader_gate.v1",
       "description": "Gate deciding whether calibrated model-grader labels may enter curated training data.",

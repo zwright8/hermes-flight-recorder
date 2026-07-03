@@ -202,7 +202,10 @@ class ModelGraderTests(unittest.TestCase):
             root = Path(tmp)
             rubric = root / "rubric.json"
             dry_run = root / "dry_run.json"
+            overrides = root / "overrides.jsonl"
+            override_receipt = root / "override_receipt.json"
             gate = root / "gate.json"
+            resolved_gate = root / "resolved_gate.json"
 
             self.assertEqual(
                 run_cli(
@@ -278,10 +281,85 @@ class ModelGraderTests(unittest.TestCase):
             self.assertIn("dry_run_human_review_queue_resolved", failed_ids)
             self.assert_schema_and_validate(gate, "model_grader_gate")
 
+            queued = dry_payload["disagreement_queue"][0]
+            overrides.write_text(
+                json.dumps(
+                    {
+                        "review_item_id": queued["review_item_id"],
+                        "review_item_sha256": queued["review_item_sha256"],
+                        "human_label": "reject",
+                        "reviewer_confidence": "high",
+                        "reviewer": "model-grader-test",
+                        "reviewed_at": "2026-07-03T00:00:00Z",
+                        "notes": "Human override resolves the queued mock grader label.",
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "override-receipt",
+                        "--dry-run",
+                        str(dry_run),
+                        "--overrides",
+                        str(overrides),
+                        "--created-at",
+                        "2026-07-03T00:00:00+00:00",
+                        "--out",
+                        str(override_receipt),
+                    ]
+                ),
+                0,
+            )
+            override_payload = json.loads(override_receipt.read_text(encoding="utf-8"))
+            self.assertTrue(override_payload["passed"], override_payload["blocked_reasons"])
+            self.assertEqual(override_payload["metrics"]["resolved_queue_count"], 1)
+            self.assertEqual(override_payload["metrics"]["unresolved_queue_count"], 0)
+            self.assert_schema_and_validate(override_receipt, "model_grader_override_receipt")
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "gate",
+                        "--dry-run",
+                        str(dry_run),
+                        "--rubric",
+                        str(rubric),
+                        "--review-calibration",
+                        str(calibration),
+                        "--override-receipt",
+                        str(override_receipt),
+                        "--min-calibration-agreement-rate",
+                        "1.0",
+                        "--max-disagreements",
+                        "0",
+                        "--created-at",
+                        "2026-07-03T00:00:00+00:00",
+                        "--out",
+                        str(resolved_gate),
+                    ]
+                ),
+                0,
+            )
+            resolved_payload = json.loads(resolved_gate.read_text(encoding="utf-8"))
+            self.assertTrue(resolved_payload["passed"], resolved_payload["blocked_reasons"])
+            self.assertTrue(resolved_payload["admission"]["labels_allowed_for_training"])
+            self.assertEqual(resolved_payload["admission"]["labels_admitted_count"], 2)
+            self.assertTrue(resolved_payload["metrics"]["human_override_receipt_present"])
+            self.assertEqual(resolved_payload["metrics"]["human_override_resolved_count"], 1)
+            self.assertEqual(resolved_payload["metrics"]["human_override_unresolved_count"], 0)
+            self.assert_schema_and_validate(resolved_gate, "model_grader_gate")
+
     def test_schema_names_are_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("rubric_spec", names)
         self.assertIn("model_grader_dry_run", names)
+        self.assertIn("model_grader_override_receipt", names)
         self.assertIn("model_grader_gate", names)
 
     def assert_schema_and_validate(self, path: Path, schema_name: str) -> None:

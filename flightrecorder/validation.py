@@ -81,6 +81,7 @@ from .model_registry import (
 from .model_grader import (
     MODEL_GRADER_DRY_RUN_SCHEMA_VERSION,
     MODEL_GRADER_GATE_SCHEMA_VERSION,
+    MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION,
     RUBRIC_SPEC_SCHEMA_VERSION,
 )
 from .next_iteration_schedule import NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION
@@ -259,6 +260,7 @@ def validate_artifacts(
     dataset_curation_receipt_paths: list[str | Path] | None = None,
     rubric_spec_paths: list[str | Path] | None = None,
     model_grader_dry_run_paths: list[str | Path] | None = None,
+    model_grader_override_receipt_paths: list[str | Path] | None = None,
     model_grader_gate_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
@@ -397,6 +399,8 @@ def validate_artifacts(
         targets.append(validate_rubric_spec(rubric_spec_path))
     for model_grader_dry_run_path in model_grader_dry_run_paths or []:
         targets.append(validate_model_grader_dry_run(model_grader_dry_run_path))
+    for model_grader_override_receipt_path in model_grader_override_receipt_paths or []:
+        targets.append(validate_model_grader_override_receipt(model_grader_override_receipt_path))
     for model_grader_gate_path in model_grader_gate_paths or []:
         targets.append(validate_model_grader_gate(model_grader_gate_path))
     for repair_queue_path in repair_queue_paths or []:
@@ -1470,6 +1474,16 @@ def validate_model_grader_dry_run(path: str | Path) -> ValidationTarget:
     receipt = _read_object(receipt_path, target, "model_grader_dry_run.json")
     if receipt is not None:
         _validate_model_grader_dry_run(receipt, target)
+    return target
+
+
+def validate_model_grader_override_receipt(path: str | Path) -> ValidationTarget:
+    """Validate a human override receipt for model-grader dry-run queue items."""
+    receipt_path = Path(path)
+    target = ValidationTarget("model_grader_override_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "model_grader_override_receipt.json")
+    if receipt is not None:
+        _validate_model_grader_override_receipt(receipt, target)
     return target
 
 
@@ -4059,6 +4073,105 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
     )
 
 
+def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(
+        receipt,
+        "schema_version",
+        MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION,
+        target,
+        prefix="model_grader_override_receipt.",
+    )
+    failed_checks = _validate_model_grader_checked_artifact(receipt, target, "model_grader_override_receipt")
+    expected_readiness = "ready_for_model_grader_gate" if failed_checks == 0 else "blocked"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"model_grader_override_receipt.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}."
+        )
+    queue = receipt.get("queue") if isinstance(receipt.get("queue"), dict) else {}
+    for field_name in ("required_review_item_ids", "resolved_review_item_ids", "unresolved_review_item_ids"):
+        if not _is_string_list(queue.get(field_name)):
+            target.errors.append(f"model_grader_override_receipt.queue.{field_name} must be a list of strings.")
+    required_ids = set(queue.get("required_review_item_ids", [])) if isinstance(queue.get("required_review_item_ids"), list) else set()
+    resolved_ids = set(queue.get("resolved_review_item_ids", [])) if isinstance(queue.get("resolved_review_item_ids"), list) else set()
+    unresolved_ids = set(queue.get("unresolved_review_item_ids", [])) if isinstance(queue.get("unresolved_review_item_ids"), list) else set()
+    if not _is_non_negative_int(queue.get("dry_run_disagreement_queue_count")):
+        target.errors.append("model_grader_override_receipt.queue.dry_run_disagreement_queue_count must be a non-negative integer.")
+    elif queue.get("dry_run_disagreement_queue_count") != len(required_ids):
+        target.errors.append("model_grader_override_receipt.queue.dry_run_disagreement_queue_count must match required_review_item_ids.")
+    if resolved_ids - required_ids:
+        target.errors.append("model_grader_override_receipt.queue.resolved_review_item_ids must be a subset of required_review_item_ids.")
+    if unresolved_ids != required_ids - resolved_ids:
+        target.errors.append("model_grader_override_receipt.queue.unresolved_review_item_ids must be required minus resolved ids.")
+    overrides = receipt.get("overrides")
+    if not isinstance(overrides, list):
+        target.errors.append("model_grader_override_receipt.overrides must be a list.")
+        overrides = []
+    accepted_count = 0
+    for index, row in enumerate(overrides):
+        label = f"model_grader_override_receipt.overrides[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("review_item_id", "human_label", "reviewer_confidence", "reviewer", "reviewed_at", "notes"):
+            if not isinstance(row.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+        if not row.get("review_item_id"):
+            target.errors.append(f"{label}.review_item_id must be non-empty.")
+        if row.get("human_label") not in set(REVIEW_LABELS) - {"needs_review"}:
+            target.errors.append(f"{label}.human_label must be a finalized review label.")
+        if row.get("reviewer_confidence") not in {"high", "medium"}:
+            target.errors.append(f"{label}.reviewer_confidence must be high or medium.")
+        if not row.get("reviewer"):
+            target.errors.append(f"{label}.reviewer must be non-empty.")
+        if not row.get("reviewed_at"):
+            target.errors.append(f"{label}.reviewed_at must be non-empty.")
+        if not isinstance(row.get("resolves_queue_item"), bool):
+            target.errors.append(f"{label}.resolves_queue_item must be a boolean.")
+        if not isinstance(row.get("accepted"), bool):
+            target.errors.append(f"{label}.accepted must be a boolean.")
+        elif row.get("accepted") is True:
+            accepted_count += 1
+        if not isinstance(row.get("errors"), list) or not all(isinstance(item, str) for item in row.get("errors", [])):
+            target.errors.append(f"{label}.errors must be a list of strings.")
+        if not _is_sha256(row.get("override_sha256")):
+            target.errors.append(f"{label}.override_sha256 must be a sha256 hex digest.")
+    metrics = receipt.get("metrics") if isinstance(receipt.get("metrics"), dict) else {}
+    for field_name in (
+        "override_row_count",
+        "resolved_queue_count",
+        "unresolved_queue_count",
+        "unmatched_override_count",
+        "invalid_override_count",
+    ):
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"model_grader_override_receipt.metrics.{field_name} must be a non-negative integer.")
+    if metrics.get("override_row_count") != len(overrides):
+        target.errors.append("model_grader_override_receipt.metrics.override_row_count must match overrides length.")
+    if metrics.get("resolved_queue_count") != len(resolved_ids):
+        target.errors.append("model_grader_override_receipt.metrics.resolved_queue_count must match resolved ids.")
+    if metrics.get("unresolved_queue_count") != len(unresolved_ids):
+        target.errors.append("model_grader_override_receipt.metrics.unresolved_queue_count must match unresolved ids.")
+    if failed_checks == 0 and metrics.get("unresolved_queue_count") != 0:
+        target.errors.append("model_grader_override_receipt.metrics.unresolved_queue_count must be 0 when passed.")
+    if failed_checks == 0 and accepted_count != len(required_ids):
+        target.errors.append("model_grader_override_receipt accepted overrides must cover all required queue ids when passed.")
+    admission = receipt.get("training_admission") if isinstance(receipt.get("training_admission"), dict) else {}
+    if admission.get("labels_allowed_for_training") is not False:
+        target.errors.append("model_grader_override_receipt.training_admission.labels_allowed_for_training must be false.")
+    if admission.get("labels_admitted_count") != 0:
+        target.errors.append("model_grader_override_receipt.training_admission.labels_admitted_count must be 0.")
+    if admission.get("requires_model_grader_gate") is not True:
+        target.errors.append("model_grader_override_receipt.training_admission.requires_model_grader_gate must be true.")
+    _validate_model_grader_boundary(receipt.get("execution_boundary"), target, "model_grader_override_receipt")
+    target.details.update(
+        {
+            "readiness": receipt.get("readiness"),
+            "resolved_queue_count": metrics.get("resolved_queue_count"),
+            "unresolved_queue_count": metrics.get("unresolved_queue_count"),
+        }
+    )
+
+
 def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
     _require_equal(gate, "schema_version", MODEL_GRADER_GATE_SCHEMA_VERSION, target, prefix="model_grader_gate.")
     failed_checks = _validate_model_grader_checked_artifact(gate, target, "model_grader_gate")
@@ -4079,19 +4192,30 @@ def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget) 
         "calibration_disagreement_count",
         "dry_run_disagreement_queue_count",
         "dry_run_labels_requiring_human_review_count",
+        "human_override_resolved_count",
+        "human_override_unresolved_count",
     ):
         if not _is_non_negative_int(metrics.get(field_name)):
             target.errors.append(f"model_grader_gate.metrics.{field_name} must be a non-negative integer.")
     if not isinstance(metrics.get("agreement_rate"), (int, float)) or not 0 <= metrics.get("agreement_rate") <= 1:
         target.errors.append("model_grader_gate.metrics.agreement_rate must be a number from 0 to 1.")
+    if not isinstance(metrics.get("human_override_receipt_present"), bool):
+        target.errors.append("model_grader_gate.metrics.human_override_receipt_present must be a boolean.")
     if failed_checks == 0:
         admitted_count = admission.get("labels_admitted_count")
         if admitted_count != metrics.get("graded_item_count"):
             target.errors.append("model_grader_gate.admission.labels_admitted_count must equal graded_item_count when passed.")
-        if metrics.get("dry_run_disagreement_queue_count") != 0:
-            target.errors.append("model_grader_gate.metrics.dry_run_disagreement_queue_count must be 0 when passed.")
-        if metrics.get("dry_run_labels_requiring_human_review_count") != 0:
-            target.errors.append("model_grader_gate.metrics.dry_run_labels_requiring_human_review_count must be 0 when passed.")
+        unresolved_source_count = max(
+            metrics.get("dry_run_disagreement_queue_count", 0),
+            metrics.get("dry_run_labels_requiring_human_review_count", 0),
+        )
+        if unresolved_source_count:
+            if metrics.get("human_override_receipt_present") is not True:
+                target.errors.append("model_grader_gate.metrics.human_override_receipt_present must be true when queued labels pass.")
+            if metrics.get("human_override_unresolved_count") != 0:
+                target.errors.append("model_grader_gate.metrics.human_override_unresolved_count must be 0 when passed.")
+            if metrics.get("human_override_resolved_count", 0) < unresolved_source_count:
+                target.errors.append("model_grader_gate.metrics.human_override_resolved_count must cover queued labels when passed.")
     _validate_model_grader_boundary(gate.get("execution_boundary"), target, "model_grader_gate")
     target.details.update(
         {

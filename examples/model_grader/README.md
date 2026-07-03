@@ -31,6 +31,11 @@ passing `review_calibration.json` and an empty dry-run disagreement queue; even
 then Flight Recorder records no provider call, no credential values, and no
 weight updates.
 
+When `dry_run.json` contains queued items, write
+`model-grader override-receipt` from human override JSONL and pass that receipt
+to `model-grader gate`; these fixtures do not need one because the queue is
+empty.
+
 Validate the examples:
 
 ```bash
