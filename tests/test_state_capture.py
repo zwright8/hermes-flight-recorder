@@ -35,6 +35,10 @@ class StateCaptureTests(unittest.TestCase):
             self.assertIn("[REDACTED]", snapshot["filesystem"]["files"]["reply"]["text"])
             self.assertEqual(snapshot["json"]["mail"]["status"], "sent")
             self.assertEqual(snapshot["filesystem"]["directories"]["workspace"]["entry_count"], 2)
+            workspace_entries = snapshot["filesystem"]["directories"]["workspace"]["entries"]
+            file_entry = next(entry for entry in workspace_entries if entry["name"] == "reply.txt")
+            self.assertEqual(file_entry["kind"], "file")
+            self.assertEqual(len(file_entry["sha256"]), 64)
             self.assertEqual(
                 snapshot["observations"]["gmail"]["threads"]["email-123"]["sent_replies"][0]["status"],
                 "sent",
@@ -52,6 +56,45 @@ class StateCaptureTests(unittest.TestCase):
             bad_hash_schema = check_schema_contract(bad_hash_snapshot)
             self.assertFalse(bad_hash_schema["passed"])
             self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_hash_schema["errors"]))
+            bad_entry_snapshot = json.loads(json.dumps(snapshot))
+            bad_entry = next(
+                entry
+                for entry in bad_entry_snapshot["filesystem"]["directories"]["workspace"]["entries"]
+                if entry["name"] == "reply.txt"
+            )
+            bad_entry.pop("sha256")
+            bad_entry_schema = check_schema_contract(bad_entry_snapshot)
+            self.assertFalse(bad_entry_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_entry_schema["errors"]))
+
+            nested = root / "nested"
+            nested.mkdir()
+            directory_entry_snapshot = capture_state_snapshot(directories=[("workspace", root)])
+            directory_entry_schema = check_schema_contract(directory_entry_snapshot)
+            self.assertTrue(directory_entry_schema["passed"], directory_entry_schema["errors"])
+            nested_entry = next(
+                entry
+                for entry in directory_entry_snapshot["filesystem"]["directories"]["workspace"]["entries"]
+                if entry["name"] == "nested"
+            )
+            self.assertEqual(nested_entry["kind"], "directory")
+            self.assertNotIn("sha256", nested_entry)
+            for non_file_kind in ("directory", "other", "missing"):
+                bad_non_file_entry_snapshot = json.loads(json.dumps(directory_entry_snapshot))
+                bad_non_file_entry_snapshot["filesystem"]["directories"]["workspace"]["entries"] = [
+                    {
+                        "name": f"{non_file_kind}-entry",
+                        "kind": non_file_kind,
+                        "sha256": "0" * 64,
+                        "size_bytes": 1,
+                    }
+                ]
+                bad_non_file_entry_schema = check_schema_contract(bad_non_file_entry_snapshot)
+                self.assertFalse(bad_non_file_entry_schema["passed"])
+                self.assertIn(
+                    "expected exactly one matching schema from oneOf, got 0",
+                    "\n".join(bad_non_file_entry_schema["errors"]),
+                )
 
             diagnostic_snapshot = capture_state_snapshot(
                 files=[

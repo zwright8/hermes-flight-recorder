@@ -25,6 +25,46 @@
   "$defs": {
     "directory_entry": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "kind": { "const": "file" }
+              },
+              "required": ["name", "kind", "sha256", "size_bytes"],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "const": "directory" },
+                "name": { "minLength": 1, "type": "string" }
+              },
+              "required": ["name", "kind"],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "const": "other" },
+                "name": { "minLength": 1, "type": "string" }
+              },
+              "required": ["name", "kind"],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "const": "missing" },
+                "name": { "minLength": 1, "type": "string" }
+              },
+              "required": ["name", "kind"],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "kind": { "enum": ["file", "directory", "other", "missing"], "type": "string" },
         "name": { "minLength": 1, "type": "string" },

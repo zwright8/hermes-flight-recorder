@@ -612,8 +612,9 @@ card, and dataset card decisions.
 - Scenario-authored trace and state snapshot paths resolve from the scenario
   file location; only explicit CLI overrides resolve from the process working
   directory.
-- State-snapshot schemas reject existing file records that omit SHA-256 or
-  byte-size evidence while preserving missing-file and directory diagnostics.
+- State-snapshot schemas reject existing file records and directory-listing
+  file entries that omit SHA-256 or byte-size evidence while preserving
+  missing-file and directory diagnostics.
 - Lineage replay fingerprints include input sizes; replay and replay-bundle
   validation reject size drift between recorded inputs and replay metadata.
 - Training-export and suite-comparison source fingerprints include input sizes;
