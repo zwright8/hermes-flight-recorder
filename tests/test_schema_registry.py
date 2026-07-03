@@ -89,6 +89,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("external_eval_receipt", names)
         self.assertIn("eval_summary", names)
         self.assertIn("rejection_sampling_gate", names)
+        self.assertIn("dataset_curation_receipt", names)
         self.assertIn("review_manifest", names)
         self.assertIn("reviewed_manifest", names)
         self.assertIn("trainer_preflight", names)

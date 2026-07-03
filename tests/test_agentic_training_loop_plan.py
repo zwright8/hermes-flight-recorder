@@ -59,6 +59,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(plan["readiness"], "planned_fail_closed")
             self.assertIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
             self.assertIn("rejection_sampling_gate", plan["missing_phase_inputs"])
+            self.assertIn("dataset_curation_receipt", plan["missing_phase_inputs"])
             self.assertIn("trainer_preflight", plan["missing_phase_inputs"])
             self.assertIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
             self.assertIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
@@ -107,6 +108,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 ("--review-calibration", "review_calibration"),
                 ("--reviewed-gate", "reviewed_gate"),
                 ("--rejection-sampling-gate", "rejection_sampling_gate"),
+                ("--dataset-curation-receipt", "dataset_curation_receipt"),
                 ("--training-export", "training_export"),
                 ("--agentic-training-plan", "agentic_training_plan"),
                 ("--trainer-preflight", "trainer_preflight"),
@@ -166,6 +168,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "review_calibration": [self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")],
             "reviewed_gate": [self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")],
             "rejection_sampling_gate": [self.write_json(root / "rejection_sampling_gate.json", "hfr.rejection_sampling_gate.v1")],
+            "dataset_curation_receipt": [self.write_json(root / "dataset_curation_receipt.json", "hfr.dataset_curation_receipt.v1")],
             "training_export": [training_export],
             "agentic_training_plan": [self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")],
             "trainer_preflight": [self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")],

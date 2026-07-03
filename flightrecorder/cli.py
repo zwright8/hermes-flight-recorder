@@ -64,6 +64,7 @@ from .compare_gate import (
     load_compare_gate_policy,
 )
 from .decision_gate import DecisionGateError, evaluate_decision_gate
+from .dataset_curation import DatasetCurationReceiptError, build_dataset_curation_receipt, write_dataset_curation_receipt
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
 from .governance import (
@@ -261,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
         AgenticLoopLedgerError,
         ModelGraderError,
         RejectionSamplingGateError,
+        DatasetCurationReceiptError,
         ReplayError,
         SchemaRegistryError,
         ModelRegistryError,
@@ -1116,6 +1118,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         agentic_rollout_plan_paths=args.agentic_rollout_plan,
         agentic_rollout_receipt_paths=args.agentic_rollout_receipt,
         rejection_sampling_gate_paths=args.rejection_sampling_gate,
+        dataset_curation_receipt_paths=args.dataset_curation_receipt,
         rubric_spec_paths=args.rubric_spec,
         model_grader_dry_run_paths=args.model_grader_dry_run,
         model_grader_gate_paths=args.model_grader_gate,
@@ -1468,6 +1471,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "agentic_training_plan": args.agentic_training_plan,
         "agentic_training_result": args.agentic_training_result,
         "agentic_training_runtime_preflight": args.agentic_training_runtime_preflight,
+        "dataset_curation_receipt": args.dataset_curation_receipt,
         "evidence_bundle": args.evidence_bundle,
         "eval_summary": args.eval_summary,
         "external_eval_plan": args.external_eval_plan,
@@ -1656,6 +1660,22 @@ def cmd_rejection_sampling_gate(args: argparse.Namespace) -> int:
         f"mock_rollouts={gate['rollout_summary']['mock_rollout_count']}"
     )
     return 0 if gate["passed"] else 1
+
+
+def cmd_dataset_curation_receipt(args: argparse.Namespace) -> int:
+    receipt = build_dataset_curation_receipt(
+        rejection_sampling_gate_paths=args.rejection_sampling_gate,
+        training_export_paths=args.training_export,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    write_dataset_curation_receipt(args.out, receipt)
+    print(
+        f"wrote {args.out} readiness={receipt['readiness']} "
+        f"training_exports={receipt['curation_summary']['training_export_count']}"
+    )
+    return 0 if receipt["passed"] else 1
 
 
 def cmd_model_grader_rubric(args: argparse.Namespace) -> int:
@@ -3027,6 +3047,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--agentic-rollout-plan", action="append", default=[], help="Validate one agentic rollout generation plan")
     validate.add_argument("--agentic-rollout-receipt", action="append", default=[], help="Validate one agentic mock rollout receipt")
     validate.add_argument("--rejection-sampling-gate", action="append", default=[], help="Validate one rejection sampling admission gate")
+    validate.add_argument("--dataset-curation-receipt", action="append", default=[], help="Validate one dataset curation receipt")
     validate.add_argument("--rubric-spec", action="append", default=[], help="Validate one rubric_spec artifact")
     validate.add_argument("--model-grader-dry-run", action="append", default=[], help="Validate one model_grader_dry_run receipt")
     validate.add_argument("--model-grader-gate", action="append", default=[], help="Validate one model_grader_gate artifact")
@@ -3300,6 +3321,7 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--review-calibration", action="append", default=[], help="review_calibration artifact; may be repeated")
     agentic_loop_plan.add_argument("--reviewed-gate", action="append", default=[], help="reviewed_gate artifact; may be repeated")
     agentic_loop_plan.add_argument("--rejection-sampling-gate", action="append", default=[], help="rejection_sampling_gate artifact; may be repeated")
+    agentic_loop_plan.add_argument("--dataset-curation-receipt", action="append", default=[], help="dataset_curation_receipt artifact; may be repeated")
     agentic_loop_plan.add_argument("--training-export", action="append", default=[], help="export-rl directory; may be repeated")
     agentic_loop_plan.add_argument("--agentic-training-plan", action="append", default=[], help="agentic_training_plan artifact; may be repeated")
     agentic_loop_plan.add_argument(
@@ -3425,6 +3447,14 @@ def _parser() -> argparse.ArgumentParser:
     rejection_sampling_gate.add_argument("--out", required=True, help="Write hfr.rejection_sampling_gate.v1 JSON to this path")
     rejection_sampling_gate.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in gate refs")
     rejection_sampling_gate.set_defaults(func=cmd_rejection_sampling_gate)
+
+    dataset_curation_receipt = subparsers.add_parser("dataset-curation-receipt", help="Write a side-effect-free dataset curation receipt")
+    dataset_curation_receipt.add_argument("--rejection-sampling-gate", action="append", required=True, help="rejection_sampling_gate artifact; may be repeated")
+    dataset_curation_receipt.add_argument("--training-export", action="append", required=True, help="training export directory or manifest; may be repeated")
+    dataset_curation_receipt.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    dataset_curation_receipt.add_argument("--out", required=True, help="Write hfr.dataset_curation_receipt.v1 JSON to this path")
+    dataset_curation_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in receipt refs")
+    dataset_curation_receipt.set_defaults(func=cmd_dataset_curation_receipt)
 
     model_grader = subparsers.add_parser("model-grader", help="Build fail-closed rubric/model-grader review contracts")
     model_grader_subparsers = model_grader.add_subparsers(dest="model_grader_command", required=True)

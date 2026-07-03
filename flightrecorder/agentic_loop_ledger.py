@@ -16,7 +16,7 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "rollouts": ("agentic_rollout_plan", "agentic_rollout_receipt", "harness_manifest", "harness_result"),
     "evidence": ("evidence_bundle", "evidence_coverage", "trace_observability"),
     "review": ("rubric_spec", "model_grader_dry_run", "model_grader_gate", "review_calibration", "reviewed_gate"),
-    "datasets": ("rejection_sampling_gate", "training_export", "dataset_registry", "dataset_splits"),
+    "datasets": ("rejection_sampling_gate", "dataset_curation_receipt", "training_export", "dataset_registry", "dataset_splits"),
     "training": (
         "agentic_training_plan",
         "agentic_training_runtime_preflight",

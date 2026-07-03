@@ -594,6 +594,14 @@
       "name": "rejection_sampling_gate"
     },
     {
+      "artifact": "dataset_curation_receipt",
+      "artifact_schema_version": "hfr.dataset_curation_receipt.v1",
+      "description": "Side-effect-free dataset curation readiness receipt for trainer handoff.",
+      "filename": "dataset_curation_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/dataset_curation_receipt.v1.schema.json",
+      "name": "dataset_curation_receipt"
+    },
+    {
       "artifact": "trainer_preflight",
       "artifact_schema_version": "hfr.trainer_preflight.v1",
       "description": "Trainer preflight launch guard over passed gates and trainer-facing artifacts.",

@@ -50,7 +50,7 @@ PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "dataset_curation",
         "name": "Dataset curation",
-        "required": ("training_export",),
+        "required": ("rejection_sampling_gate", "dataset_curation_receipt", "training_export"),
         "produces": ("training_manifest", "dataset_registry"),
         "gate": "datasets must be redacted, licensed, hashed, and split before trainer handoff.",
     },
@@ -115,6 +115,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "compare_gate": "compare_gate",
     "dataset_registry": "dataset_registry",
     "dataset_splits": "dataset_splits",
+    "dataset_curation_receipt": "dataset_curation_receipt",
     "decision_gate": "decision_gate",
     "evidence_bundle": "evidence_bundle",
     "evidence_coverage": "evidence_coverage",
@@ -227,6 +228,17 @@ def build_agentic_training_loop_plan(
             "reviewed_gate_present": True,
             "rejection_sampling_gate_present": True,
         },
+    )
+    _add_check(
+        checks,
+        "dataset_curation_receipt_required_for_trainer_handoff",
+        "rejection_sampling_gate" in refs and "dataset_curation_receipt" in refs and "training_export" in refs,
+        {
+            "rejection_sampling_gate_present": "rejection_sampling_gate" in refs,
+            "dataset_curation_receipt_present": "dataset_curation_receipt" in refs,
+            "training_export_present": "training_export" in refs,
+        },
+        {"rejection_sampling_gate_present": True, "dataset_curation_receipt_present": True, "training_export_present": True},
     )
     _add_check(
         checks,

@@ -37,6 +37,7 @@ from .cloud_training import (
     CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
 )
 from .compare_gate import compare_movement_summary
+from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
@@ -242,6 +243,7 @@ def validate_artifacts(
     agentic_rollout_plan_paths: list[str | Path] | None = None,
     agentic_rollout_receipt_paths: list[str | Path] | None = None,
     rejection_sampling_gate_paths: list[str | Path] | None = None,
+    dataset_curation_receipt_paths: list[str | Path] | None = None,
     rubric_spec_paths: list[str | Path] | None = None,
     model_grader_dry_run_paths: list[str | Path] | None = None,
     model_grader_gate_paths: list[str | Path] | None = None,
@@ -372,6 +374,8 @@ def validate_artifacts(
         targets.append(validate_agentic_rollout_receipt(agentic_rollout_receipt_path))
     for rejection_sampling_gate_path in rejection_sampling_gate_paths or []:
         targets.append(validate_rejection_sampling_gate(rejection_sampling_gate_path))
+    for dataset_curation_receipt_path in dataset_curation_receipt_paths or []:
+        targets.append(validate_dataset_curation_receipt(dataset_curation_receipt_path))
     for rubric_spec_path in rubric_spec_paths or []:
         targets.append(validate_rubric_spec(rubric_spec_path))
     for model_grader_dry_run_path in model_grader_dry_run_paths or []:
@@ -915,6 +919,16 @@ def validate_rejection_sampling_gate(path: str | Path) -> ValidationTarget:
     gate = _read_object(gate_path, target, "rejection_sampling_gate.json")
     if gate is not None:
         _validate_rejection_sampling_gate(gate, target)
+    return target
+
+
+def validate_dataset_curation_receipt(path: str | Path) -> ValidationTarget:
+    """Validate one dataset curation readiness receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("dataset_curation_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "dataset_curation_receipt.json")
+    if receipt is not None:
+        _validate_dataset_curation_receipt(receipt, target)
     return target
 
 
@@ -3187,6 +3201,129 @@ def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, la
             target.errors.append(f"{label}.live_rollouts_started must be false.")
         if row.get("dataset_rows_written") is not False:
             target.errors.append(f"{label}.dataset_rows_written must be false.")
+
+
+def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(receipt, "schema_version", DATASET_CURATION_RECEIPT_SCHEMA_VERSION, target, prefix="dataset_curation_receipt.")
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("dataset_curation_receipt.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "dataset_curation_receipt.checks")
+    if receipt.get("check_count") != len(checks):
+        target.errors.append(f"dataset_curation_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
+    if receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(f"dataset_curation_receipt.failed_check_count expected {failed_checks}, got {receipt.get('failed_check_count')!r}.")
+    if receipt.get("passed") != (failed_checks == 0):
+        target.errors.append("dataset_curation_receipt.passed must match failed_check_count.")
+    expected_readiness = "ready_for_external_trainer_handoff" if failed_checks == 0 else "blocked"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(f"dataset_curation_receipt.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}.")
+    expected_recommendation = "run_training_gate_and_trainer_preflight" if failed_checks == 0 else "fix_rejection_sampling_or_training_exports"
+    if receipt.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"dataset_curation_receipt.recommendation expected {expected_recommendation!r}, got {receipt.get('recommendation')!r}."
+        )
+    if not _is_string_list(receipt.get("blocked_reasons")):
+        target.errors.append("dataset_curation_receipt.blocked_reasons must be a list of strings.")
+
+    artifacts = receipt.get("input_artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("dataset_curation_receipt.input_artifacts must be an object.")
+        artifacts = {}
+    gate_rows = artifacts.get("rejection_sampling_gate")
+    if not isinstance(gate_rows, list) or not gate_rows:
+        target.errors.append("dataset_curation_receipt.input_artifacts.rejection_sampling_gate must contain at least one ref.")
+    else:
+        for index, row in enumerate(gate_rows):
+            _validate_dataset_curation_ref(
+                row,
+                target,
+                f"dataset_curation_receipt.input_artifacts.rejection_sampling_gate[{index}]",
+                "hfr.rejection_sampling_gate.v1",
+                "ready_for_dataset_curation",
+            )
+    export_rows = artifacts.get("training_export")
+    if not isinstance(export_rows, list) or not export_rows:
+        target.errors.append("dataset_curation_receipt.input_artifacts.training_export must contain at least one ref.")
+    else:
+        for index, row in enumerate(export_rows):
+            _validate_dataset_curation_ref(row, target, f"dataset_curation_receipt.input_artifacts.training_export[{index}]", "", "")
+
+    summary = receipt.get("curation_summary")
+    if not isinstance(summary, dict):
+        target.errors.append("dataset_curation_receipt.curation_summary must be an object.")
+    else:
+        for field_name in ("rejection_sampling_gate_count", "training_export_count"):
+            if not _is_non_negative_int(summary.get(field_name)):
+                target.errors.append(f"dataset_curation_receipt.curation_summary.{field_name} must be a non-negative integer.")
+        for field_name in ("curated_rows_written", "accepted_rows_written", "rejected_rows_written"):
+            if summary.get(field_name) != 0:
+                target.errors.append(f"dataset_curation_receipt.curation_summary.{field_name} must be 0.")
+        if summary.get("dataset_registry_updated") is not False:
+            target.errors.append("dataset_curation_receipt.curation_summary.dataset_registry_updated must be false.")
+
+    handoff = receipt.get("trainer_handoff")
+    if not isinstance(handoff, dict):
+        target.errors.append("dataset_curation_receipt.trainer_handoff must be an object.")
+    else:
+        if handoff.get("dataset_rows_source") != "existing_training_exports":
+            target.errors.append("dataset_curation_receipt.trainer_handoff.dataset_rows_source must be existing_training_exports.")
+        if not _is_string_list(handoff.get("allowed_dataset_roles")):
+            target.errors.append("dataset_curation_receipt.trainer_handoff.allowed_dataset_roles must be a list of strings.")
+        for field_name in ("requires_rejection_sampling_gate", "requires_training_gate_before_live_training", "requires_trainer_preflight"):
+            if handoff.get(field_name) is not True:
+                target.errors.append(f"dataset_curation_receipt.trainer_handoff.{field_name} must be true.")
+
+    boundary = receipt.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append("dataset_curation_receipt.execution_boundary must be an object.")
+    else:
+        if boundary.get("receipt_only") is not True:
+            target.errors.append("dataset_curation_receipt.execution_boundary.receipt_only must be true.")
+        for field_name in ("dataset_rows_written", "dataset_registry_updated", "cloud_jobs_started", "weights_updated_by_flight_recorder"):
+            if boundary.get(field_name) is not False:
+                target.errors.append(f"dataset_curation_receipt.execution_boundary.{field_name} must be false.")
+
+    target.details.update(
+        {
+            "passed": receipt.get("passed"),
+            "readiness": receipt.get("readiness"),
+            "training_export_count": summary.get("training_export_count") if isinstance(summary, dict) else None,
+        }
+    )
+
+
+def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: str, schema_version: str, readiness: str) -> None:
+    if not isinstance(row, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("role", "path", "kind"):
+        if not isinstance(row.get(field_name), str) or not row.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if row.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be 'file' or 'directory'.")
+    if row.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if schema_version:
+        if row.get("schema_version") != schema_version:
+            target.errors.append(f"{label}.schema_version must be {schema_version!r}.")
+        if row.get("passed") is not True:
+            target.errors.append(f"{label}.passed must be true.")
+    if readiness and row.get("readiness") != readiness:
+        target.errors.append(f"{label}.readiness must be {readiness!r}.")
+    if row.get("kind") == "file":
+        if not _is_sha256(row.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for file refs.")
+        if not _is_non_negative_int(row.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for file refs.")
+    if row.get("kind") == "directory":
+        if row.get("manifest_exists") is not True:
+            target.errors.append(f"{label}.manifest_exists must be true for directory refs.")
+        if not _is_sha256(row.get("manifest_sha256")):
+            target.errors.append(f"{label}.manifest_sha256 must be a SHA-256 hex string for directory refs.")
+        if not _is_non_negative_int(row.get("manifest_size_bytes")):
+            target.errors.append(f"{label}.manifest_size_bytes must be a non-negative integer for directory refs.")
 
 
 def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget) -> None:

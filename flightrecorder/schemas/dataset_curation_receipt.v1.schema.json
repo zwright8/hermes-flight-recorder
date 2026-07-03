@@ -1,0 +1,95 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/dataset_curation_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free dataset curation readiness receipt for trainer handoff.",
+  "properties": {
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "type": "object" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "curation_summary": {
+      "additionalProperties": true,
+      "properties": {
+        "accepted_rows_written": { "const": 0 },
+        "curated_rows_written": { "const": 0 },
+        "dataset_registry_updated": { "const": false },
+        "rejected_rows_written": { "const": 0 },
+        "rejection_sampling_gate_count": { "minimum": 0, "type": "integer" },
+        "training_export_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "rejection_sampling_gate_count",
+        "training_export_count",
+        "curated_rows_written",
+        "accepted_rows_written",
+        "rejected_rows_written",
+        "dataset_registry_updated"
+      ],
+      "type": "object"
+    },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": { "const": false },
+        "dataset_registry_updated": { "const": false },
+        "dataset_rows_written": { "const": false },
+        "receipt_only": { "const": true },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "receipt_only",
+        "dataset_rows_written",
+        "dataset_registry_updated",
+        "cloud_jobs_started",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "input_artifacts": { "type": "object" },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["ready_for_external_trainer_handoff", "blocked"] },
+    "receipt_path": { "type": "string" },
+    "recommendation": { "enum": ["run_training_gate_and_trainer_preflight", "fix_rejection_sampling_or_training_exports"] },
+    "schema_version": { "const": "hfr.dataset_curation_receipt.v1" },
+    "trainer_handoff": {
+      "additionalProperties": true,
+      "properties": {
+        "allowed_dataset_roles": { "items": { "type": "string" }, "type": "array" },
+        "dataset_rows_source": { "const": "existing_training_exports" },
+        "requires_rejection_sampling_gate": { "const": true },
+        "requires_trainer_preflight": { "const": true },
+        "requires_training_gate_before_live_training": { "const": true }
+      },
+      "required": [
+        "dataset_rows_source",
+        "allowed_dataset_roles",
+        "requires_rejection_sampling_gate",
+        "requires_training_gate_before_live_training",
+        "requires_trainer_preflight"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "receipt_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "input_artifacts",
+    "curation_summary",
+    "trainer_handoff",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Dataset Curation Receipt",
+  "type": "object"
+}

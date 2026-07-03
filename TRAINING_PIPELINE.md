@@ -24,6 +24,7 @@ flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
 flightrecorder schemas --check runs/agentic_rollout_plan.json
 flightrecorder schemas --check runs/agentic_rollout_receipt.json
 flightrecorder schemas --check runs/rejection_sampling_gate.json
+flightrecorder schemas --check runs/dataset_curation_receipt.json
 flightrecorder schemas --check runs/agentic_loop_ledger.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
@@ -658,6 +659,22 @@ flightrecorder validate \
   --strict
 ```
 
+Archive a curation receipt after rejection-sampling admission and before
+trainer preflight. It binds existing training exports to the admission gate and
+records that Flight Recorder did not write new curated rows or update dataset
+registries:
+
+```bash
+flightrecorder dataset-curation-receipt \
+  --rejection-sampling-gate runs/rejection_sampling_gate.json \
+  --training-export runs/training_export \
+  --out runs/dataset_curation_receipt.json
+
+flightrecorder validate \
+  --dataset-curation-receipt runs/dataset_curation_receipt.json \
+  --strict
+```
+
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, serving, held-out eval, improvement, governance, promotion, and
 next-iteration receipts into one iteration contract:
@@ -671,6 +688,7 @@ flightrecorder agentic-loop plan \
   --harness-result runs/harness_prompt_injection_good/harness_result.json \
   --evidence-bundle runs/evidence_bundle_trainer.json \
   --rejection-sampling-gate runs/rejection_sampling_gate.json \
+  --dataset-curation-receipt runs/dataset_curation_receipt.json \
   --agentic-training-plan runs/agentic_training_plan.json \
   --agentic-training-result runs/agentic_training_result.json \
   --heldout-manifest runs/heldout_manifest.json \
