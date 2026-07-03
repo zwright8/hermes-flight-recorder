@@ -648,6 +648,8 @@ next-iteration receipts into one iteration contract:
 flightrecorder agentic-loop plan \
   --iteration-id loop-001 \
   --objective "Close held-out tool-use regressions" \
+  --agentic-rollout-plan runs/agentic_rollout_plan.json \
+  --agentic-rollout-receipt runs/agentic_rollout_receipt.json \
   --harness-result runs/harness_prompt_injection_good/harness_result.json \
   --evidence-bundle runs/evidence_bundle_trainer.json \
   --agentic-training-plan runs/agentic_training_plan.json \

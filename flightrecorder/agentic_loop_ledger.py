@@ -13,7 +13,7 @@ from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSIO
 AGENTIC_LOOP_LEDGER_SCHEMA_VERSION = "hfr.agentic_loop_ledger.v1"
 
 ROLE_GROUPS: dict[str, tuple[str, ...]] = {
-    "rollouts": ("harness_manifest", "harness_result"),
+    "rollouts": ("agentic_rollout_plan", "agentic_rollout_receipt", "harness_manifest", "harness_result"),
     "evidence": ("evidence_bundle", "evidence_coverage", "trace_observability"),
     "review": ("rubric_spec", "model_grader_dry_run", "model_grader_gate", "review_calibration", "reviewed_gate"),
     "datasets": ("training_export", "dataset_registry", "dataset_splits"),

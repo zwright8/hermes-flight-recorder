@@ -1460,6 +1460,8 @@ def cmd_external_eval_receipt(args: argparse.Namespace) -> int:
 def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
     artifact_paths = {
         "action_ledger": args.action_ledger,
+        "agentic_rollout_plan": args.agentic_rollout_plan,
+        "agentic_rollout_receipt": args.agentic_rollout_receipt,
         "agentic_training_plan": args.agentic_training_plan,
         "agentic_training_result": args.agentic_training_result,
         "agentic_training_runtime_preflight": args.agentic_training_runtime_preflight,
@@ -3267,6 +3269,8 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--gpu-class", action="append", default=[], help="Allowed GPU class; may be repeated")
     agentic_loop_plan.add_argument("--budget", action="append", default=[], type=_state_set_arg, help="Attach budget KEY=JSON_VALUE; may be repeated")
     agentic_loop_plan.add_argument("--schedule", action="append", default=[], type=_state_set_arg, help="Attach next-iteration schedule KEY=JSON_VALUE; may be repeated")
+    agentic_loop_plan.add_argument("--agentic-rollout-plan", action="append", default=[], help="agentic_rollout_plan artifact; may be repeated")
+    agentic_loop_plan.add_argument("--agentic-rollout-receipt", action="append", default=[], help="agentic_rollout_receipt artifact; may be repeated")
     agentic_loop_plan.add_argument("--harness-manifest", action="append", default=[], help="harness_run_manifest artifact; may be repeated")
     agentic_loop_plan.add_argument("--harness-result", action="append", default=[], help="harness_run_result artifact; may be repeated")
     agentic_loop_plan.add_argument("--evidence-bundle", action="append", default=[], help="evidence_bundle artifact; may be repeated")

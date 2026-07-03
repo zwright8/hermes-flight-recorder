@@ -57,8 +57,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
 
             self.assertFalse(plan["passed"])
             self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
             self.assertIn("trainer_preflight", plan["missing_phase_inputs"])
             self.assertIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
+            self.assertIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
             schema = check_schema_contract(plan)
             self.assertTrue(schema["passed"], schema["errors"])
 
@@ -94,6 +96,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 str(out),
             ]
             for option, role in (
+                ("--agentic-rollout-plan", "agentic_rollout_plan"),
+                ("--agentic-rollout-receipt", "agentic_rollout_receipt"),
                 ("--harness-result", "harness_result"),
                 ("--evidence-bundle", "evidence_bundle"),
                 ("--rubric-spec", "rubric_spec"),
@@ -150,6 +154,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         training_export = root / "training_export"
         training_export.mkdir()
         return {
+            "agentic_rollout_plan": [self.write_json(root / "agentic_rollout_plan.json", "hfr.agentic_rollout_plan.v1")],
+            "agentic_rollout_receipt": [self.write_json(root / "agentic_rollout_receipt.json", "hfr.agentic_rollout_receipt.v1")],
             "harness_result": [self.write_json(root / "harness_result.json", "hfr.harness_run_result.v1")],
             "evidence_bundle": [self.write_json(root / "evidence_bundle.json", "hfr.evidence_bundle.v1")],
             "rubric_spec": [self.write_json(root / "rubric_spec.json", "hfr.rubric_spec.v1")],

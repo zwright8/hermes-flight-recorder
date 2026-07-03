@@ -87,6 +87,8 @@ class AgenticLoopLedgerTests(unittest.TestCase):
         training_export = root / "training_export"
         training_export.mkdir()
         return {
+            "agentic_rollout_plan": [self.write_json(root / "agentic_rollout_plan.json", "hfr.agentic_rollout_plan.v1")],
+            "agentic_rollout_receipt": [self.write_json(root / "agentic_rollout_receipt.json", "hfr.agentic_rollout_receipt.v1")],
             "harness_result": [self.write_json(root / "harness_result.json", "hfr.harness_run_result.v1")],
             "evidence_bundle": [self.write_json(root / "evidence_bundle.json", "hfr.evidence_bundle.v1")],
             "rubric_spec": [self.write_json(root / "rubric_spec.json", "hfr.rubric_spec.v1")],

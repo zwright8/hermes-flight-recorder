@@ -22,7 +22,7 @@ PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "rollout_collection",
         "name": "Rollout collection",
-        "required": ("harness_result",),
+        "required": ("agentic_rollout_plan", "agentic_rollout_receipt", "harness_result"),
         "produces": ("trace", "scorecard", "run_digest"),
         "gate": "rollouts must stay inside declared budget and environment descriptors.",
     },
@@ -107,6 +107,8 @@ PHASES: tuple[dict[str, Any], ...] = (
 
 ARTIFACT_ROLES: dict[str, str] = {
     "action_ledger": "action_ledger",
+    "agentic_rollout_plan": "agentic_rollout_plan",
+    "agentic_rollout_receipt": "agentic_rollout_receipt",
     "agentic_training_plan": "agentic_training_plan",
     "agentic_training_result": "agentic_training_result",
     "agentic_training_runtime_preflight": "agentic_training_runtime_preflight",
@@ -191,6 +193,16 @@ def build_agentic_training_loop_plan(
         True,
         {"live_launch_opt_in": False, "environment_credentials_checked": False},
         {"live_launch_opt_in": True, "environment_credentials_checked": True},
+    )
+    _add_check(
+        checks,
+        "rollout_receipt_required_before_review",
+        "agentic_rollout_plan" in refs and "agentic_rollout_receipt" in refs,
+        {
+            "agentic_rollout_plan_present": "agentic_rollout_plan" in refs,
+            "agentic_rollout_receipt_present": "agentic_rollout_receipt" in refs,
+        },
+        {"agentic_rollout_plan_present": True, "agentic_rollout_receipt_present": True},
     )
     _add_check(
         checks,
