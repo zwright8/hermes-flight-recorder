@@ -4219,6 +4219,9 @@ def _validate_cloud_training_artifact_ref(record: Any, target: ValidationTarget,
     if not _is_non_negative_int(record.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
     artifact_path = _resolve_cloud_training_artifact_path(record.get("path"), source_path)
+    if artifact_path is not None and _path_has_symlink_component(artifact_path, include_leaf=True):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink file when exists is true.")
+        return
     if artifact_path is None or not artifact_path.exists() or not artifact_path.is_file():
         target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
         return

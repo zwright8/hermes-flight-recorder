@@ -337,6 +337,92 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("cloud_training_launch_receipt.source_artifacts.launch_plan.sha256 does not match the current file.", errors)
             self.assertIn("cloud_training_status_receipt.source_artifacts.launch_receipt.sha256 does not match the current file.", errors)
 
+    def test_validate_rejects_cloud_training_symlink_source_and_upload_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sources = root / "sources"
+            reports = root / "reports"
+            sources.mkdir()
+            reports.mkdir()
+            plan_source = sources / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+            artifact_manifest = reports / "artifacts.json"
+            preflight = reports / "preflight.json"
+
+            self.assertEqual(
+                run_cli(["cloud-training", "artifacts", "--provider", "modal", "--upload", str(plan_source), "--out", str(artifact_manifest)]),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "preflight",
+                        "--provider",
+                        "modal",
+                        "--agentic-training-plan",
+                        str(plan_source),
+                        "--region",
+                        "provider_default",
+                        "--gpu-class",
+                        "a100",
+                        "--max-cost-usd",
+                        "0",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+
+            direct_link = reports / "agentic_training_plan_link.json"
+            try:
+                direct_link.symlink_to(plan_source)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            _set_cloud_training_ref_path(artifact_manifest, ("upload_artifacts", 0), direct_link.name)
+            _set_cloud_training_ref_path(preflight, ("source_artifacts", "agentic_training_plan"), direct_link.name)
+            validation = validate_artifacts(
+                cloud_training_artifact_manifest_paths=[artifact_manifest],
+                cloud_training_preflight_paths=[preflight],
+                strict=True,
+            )
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_artifact_manifest.upload_artifacts[0].path must resolve to a regular non-symlink file when exists is true.",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.source_artifacts.agentic_training_plan.path must resolve to a regular non-symlink file when exists is true.",
+                errors,
+            )
+
+            broken_link = reports / "broken_agentic_training_plan_link.json"
+            broken_link.symlink_to(reports / "missing_agentic_training_plan.json")
+            _set_cloud_training_ref_path(preflight, ("source_artifacts", "agentic_training_plan"), broken_link.name)
+            validation = validate_artifacts(cloud_training_preflight_paths=[preflight], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_preflight.source_artifacts.agentic_training_plan.path must resolve to a regular non-symlink file when exists is true.",
+                errors,
+            )
+
+            linked_target = reports / "linked_target"
+            linked_target.mkdir()
+            (linked_target / plan_source.name).write_text(plan_source.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = reports / "linked_artifacts"
+            linked_parent.symlink_to(linked_target, target_is_directory=True)
+            _set_cloud_training_ref_path(artifact_manifest, ("upload_artifacts", 0), str(Path(linked_parent.name) / plan_source.name))
+            validation = validate_artifacts(cloud_training_artifact_manifest_paths=[artifact_manifest], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_artifact_manifest.upload_artifacts[0].path must resolve to a regular non-symlink file when exists is true.",
+                errors,
+            )
+
     def test_validate_rejects_cloud_training_artifacts_missing_required_source_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -588,6 +674,13 @@ def _mutate_json(path: Path, marker: str) -> None:
 def _remove_source_artifact(path: Path, name: str) -> None:
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["source_artifacts"].pop(name)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _set_cloud_training_ref_path(path: Path, ref_path: tuple[str, int] | tuple[str, str], value: str) -> None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    container = payload[ref_path[0]]
+    container[ref_path[1]]["path"] = value
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

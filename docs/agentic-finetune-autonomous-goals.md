@@ -689,7 +689,8 @@ card, and dataset card decisions.
   consumes summarized claims.
 - Cloud-training artifact manifests, preflights, launch plans, launch receipts,
   and status receipts reopen path-backed upload/source refs from their own file
-  location and reject stale SHA-256 or byte-size evidence before handoff.
+  location and reject symlinked, stale SHA-256, or byte-size evidence before
+  handoff.
 - Agentic training loop plans reopen existing file source refs from the plan
   location and reject missing, moved, stale, symlinked, or cwd-substituted loop
   inputs before orchestration trusts phase readiness.
