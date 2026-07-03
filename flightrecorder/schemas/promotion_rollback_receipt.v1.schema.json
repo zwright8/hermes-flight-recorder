@@ -28,9 +28,10 @@
       "properties": {
         "aliases": {"type": "object"},
         "path": {"type": "string"},
-        "sha256": {"type": ["string", "null"]}
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
       },
-      "required": ["path", "sha256", "aliases"],
+      "required": ["path", "sha256", "size_bytes", "aliases"],
       "type": "object"
     },
     "rollback": {

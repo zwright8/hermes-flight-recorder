@@ -349,6 +349,9 @@ training plans, and model/adapter registry entries.
   promotion decisions with path-backed SHA-256 and byte-size evidence.
 - Model-layer training plans, serving receipts, and adapter manifests also
   reject stale embedded compatibility-report and training-plan refs.
+- Promotion alias and rollback receipts bind shortcut decision, applied
+  registry, and rollback registry refs to the same SHA-256 and byte-size
+  evidence as their artifact records.
 - Rollback and champion aliases are explicit.
 
 ### 24/7 Prompt

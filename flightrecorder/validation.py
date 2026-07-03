@@ -9835,20 +9835,42 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
             target.errors.append(f"promotion_alias_apply.promotion_decision.{field_name} must be a string.")
     if decision_ref.get("sha256") is not None and not _is_sha256(decision_ref.get("sha256")):
         target.errors.append("promotion_alias_apply.promotion_decision.sha256 must be a SHA-256 hex string or null.")
+    if not _is_non_negative_int(decision_ref.get("size_bytes")):
+        target.errors.append("promotion_alias_apply.promotion_decision.size_bytes must be a non-negative integer.")
     decision_artifact = artifacts.get("promotion_decision") if isinstance(artifacts.get("promotion_decision"), dict) else {}
     if decision_ref.get("sha256") != decision_artifact.get("sha256"):
         target.errors.append("promotion_alias_apply.promotion_decision.sha256 must match artifacts.promotion_decision.sha256.")
+    _validate_ref_matches_fingerprinted_artifact(
+        decision_ref,
+        decision_artifact,
+        target,
+        "promotion_alias_apply.promotion_decision",
+        "artifacts.promotion_decision",
+        fields=("path", "sha256", "size_bytes"),
+    )
     _validate_promotion_alias_apply_decision_validation(
         receipt.get("promotion_decision_validation"),
         expected_passed,
         target,
     )
 
-    before = _validate_alias_snapshot(receipt.get("registry_before"), target, "promotion_alias_apply.registry_before")
-    after = _validate_alias_snapshot(receipt.get("registry_after"), target, "promotion_alias_apply.registry_after")
+    before = _validate_alias_snapshot(
+        receipt.get("registry_before"), target, "promotion_alias_apply.registry_before", allow_fingerprint=False
+    )
+    after = _validate_alias_snapshot(
+        receipt.get("registry_after"), target, "promotion_alias_apply.registry_after", require_fingerprint=True
+    )
     registry_artifact = artifacts.get("registry") if isinstance(artifacts.get("registry"), dict) else {}
     if after.get("sha256") != registry_artifact.get("sha256"):
         target.errors.append("promotion_alias_apply.registry_after.sha256 must match artifacts.registry.sha256.")
+    _validate_ref_matches_fingerprinted_artifact(
+        receipt.get("registry_after") if isinstance(receipt.get("registry_after"), dict) else {},
+        registry_artifact,
+        target,
+        "promotion_alias_apply.registry_after",
+        "artifacts.registry",
+        fields=("path", "sha256", "size_bytes"),
+    )
     if expected_passed:
         expected_aliases = {
             "candidate": str(decision_ref.get("candidate_id") or ""),
@@ -9953,10 +9975,20 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
         source_path,
         "promotion_rollback_receipt.artifacts",
     )
-    registry_snapshot = _validate_alias_snapshot(receipt.get("registry"), target, "promotion_rollback_receipt.registry")
+    registry_snapshot = _validate_alias_snapshot(
+        receipt.get("registry"), target, "promotion_rollback_receipt.registry", require_fingerprint=True
+    )
     registry_artifact = artifacts.get("registry") if isinstance(artifacts.get("registry"), dict) else {}
     if registry_snapshot.get("sha256") != registry_artifact.get("sha256"):
         target.errors.append("promotion_rollback_receipt.registry.sha256 must match artifacts.registry.sha256.")
+    _validate_ref_matches_fingerprinted_artifact(
+        receipt.get("registry") if isinstance(receipt.get("registry"), dict) else {},
+        registry_artifact,
+        target,
+        "promotion_rollback_receipt.registry",
+        "artifacts.registry",
+        fields=("path", "sha256", "size_bytes"),
+    )
     _validate_registry_artifact_matches_alias_snapshot(
         registry_artifact,
         registry_snapshot["aliases"],
@@ -10258,22 +10290,53 @@ def _validate_promotion_release_record_policy(value: Any, target: ValidationTarg
         _validate_promotion_policy_section(release_policy, target, source_path, "promotion_release_record.policy.release_policy")
 
 
-def _validate_alias_snapshot(value: Any, target: ValidationTarget, label: str) -> dict[str, Any]:
-    snapshot = {"aliases": {}, "sha256": None}
+def _validate_alias_snapshot(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    *,
+    require_fingerprint: bool = False,
+    allow_fingerprint: bool = True,
+) -> dict[str, Any]:
+    snapshot = {"aliases": {}, "sha256": None, "size_bytes": None}
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return snapshot
-    if not isinstance(value.get("path"), str):
-        target.errors.append(f"{label}.path must be a string.")
-    if value.get("sha256") is not None and not _is_sha256(value.get("sha256")):
-        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+    if not allow_fingerprint:
+        for field_name in ("path", "sha256", "size_bytes"):
+            if field_name in value:
+                target.errors.append(f"{label}.{field_name} must be absent for snapshot-only refs.")
+    else:
+        if not isinstance(value.get("path"), str):
+            target.errors.append(f"{label}.path must be a string.")
+        if value.get("sha256") is not None and not _is_sha256(value.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+        if "size_bytes" in value and not _is_non_negative_int(value.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+        elif "size_bytes" not in value and require_fingerprint:
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
     aliases = value.get("aliases")
     if not isinstance(aliases, dict) or not all(isinstance(alias, str) and isinstance(target_id, str) for alias, target_id in aliases.items()):
         target.errors.append(f"{label}.aliases must be an object of string values.")
         aliases = {}
     snapshot["aliases"] = dict(aliases)
     snapshot["sha256"] = value.get("sha256")
+    snapshot["size_bytes"] = value.get("size_bytes")
     return snapshot
+
+
+def _validate_ref_matches_fingerprinted_artifact(
+    ref: dict[str, Any],
+    artifact: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    artifact_label: str,
+    *,
+    fields: tuple[str, ...],
+) -> None:
+    for field_name in fields:
+        if ref.get(field_name) != artifact.get(field_name):
+            target.errors.append(f"{label}.{field_name} must match {artifact_label}.{field_name}.")
 
 
 def _validate_alias_history_entry(

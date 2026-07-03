@@ -114,6 +114,12 @@ class PromotionDecisionTests(unittest.TestCase):
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             self.assertTrue(receipt["passed"])
             self.assertEqual(receipt["recommendation"], "alias_update_applied")
+            self.assertEqual(receipt["promotion_decision"]["size_bytes"], decision_path.stat().st_size)
+            self.assertNotIn("path", receipt["registry_before"])
+            self.assertNotIn("sha256", receipt["registry_before"])
+            self.assertNotIn("size_bytes", receipt["registry_before"])
+            self.assertEqual(receipt["registry_after"]["size_bytes"], registry_path.stat().st_size)
+            self.assertEqual(receipt["registry_after"]["size_bytes"], receipt["artifacts"]["registry"]["size_bytes"])
             self.assertEqual(receipt["promotion_decision_validation"]["passed"], True)
             self.assertEqual(receipt["alias_history_entry"]["promotion_decision_sha256"], receipt["promotion_decision"]["sha256"])
             self.assertEqual(receipt["alias_history_entry"]["updated_aliases"]["champion"], "candidate-v2")
@@ -143,6 +149,76 @@ class PromotionDecisionTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("promotion_decision_validation.passed", errors)
             self.assertIn("promotion_decision_validation.targets[0].passed", errors)
+
+    def test_validate_promotion_alias_apply_rejects_forged_decision_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path)), 0)
+
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["promotion_decision"]["size_bytes"] += 1
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "promotion_alias_apply.promotion_decision.size_bytes must match artifacts.promotion_decision.size_bytes.",
+                errors,
+            )
+
+    def test_validate_promotion_alias_apply_rejects_forged_registry_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path)), 0)
+
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["registry_after"]["size_bytes"] += 1
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_alias_apply.registry_after.size_bytes must match artifacts.registry.size_bytes.", errors)
+
+    def test_validate_promotion_alias_apply_rejects_registry_before_size_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path)), 0)
+
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["registry_before"]["size_bytes"] = receipt["registry_after"]["size_bytes"]
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 1)
+            code = run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_alias_apply.registry_before.size_bytes must be absent for snapshot-only refs.", errors)
 
     def test_promotion_alias_apply_blocks_stale_champion_alias_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -200,8 +276,29 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertTrue(receipt["available"])
             self.assertEqual(receipt["rollback_id"], "champion-v1")
             self.assertEqual(receipt["registry"]["aliases"]["champion"], "champion-v1")
+            self.assertEqual(receipt["registry"]["size_bytes"], registry_path.stat().st_size)
+            self.assertEqual(receipt["registry"]["size_bytes"], receipt["artifacts"]["registry"]["size_bytes"])
             self.assertEqual(run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
+
+    def test_validate_promotion_rollback_receipt_rejects_forged_registry_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = write_model_registry(root)
+            receipt_path = root / "rollback.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_rollback_receipt_args(registry_path, receipt_path)), 0)
+
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["registry"]["size_bytes"] += 1
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_rollback_receipt.registry.size_bytes must match artifacts.registry.size_bytes.", errors)
 
     def test_validate_promotion_rollback_receipt_rejects_stale_registry_alias_snapshot(self):
         with tempfile.TemporaryDirectory() as tmp:

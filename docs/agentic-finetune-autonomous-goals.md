@@ -630,6 +630,10 @@ card, and dataset card decisions.
   release records write referenced artifacts relative to their own output files;
   validation reopens those references from the source file location and rejects
   cwd-substituted governance artifacts.
+- Promotion alias receipts and rollback receipts bind human-facing
+  promotion-decision, applied-registry, and rollback-registry refs to the same
+  SHA-256 and byte-size evidence carried by their fingerprinted artifact
+  records.
 - Promotion archives reopen ledger-recorded decision gates from the ledger file
   location and decision source artifacts from the decision file location; archive
   builds reject cwd-substituted members instead of copying lookalike evidence.

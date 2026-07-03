@@ -575,19 +575,19 @@ def apply_promotion_aliases(
         "promotion_decision": {
             "path": decision_record.get("path", ""),
             "sha256": decision_record.get("sha256"),
+            "size_bytes": _int_value(decision_record.get("size_bytes")),
             "candidate_id": candidate_id,
             "champion_previous_target": champion_id,
             "rollback_id": rollback_id,
         },
         "promotion_decision_validation": _validation_summary(promotion_decision_validation),
         "registry_before": {
-            "path": registry_before_record.get("path", ""),
-            "sha256": registry_before_record.get("sha256"),
             "aliases": aliases_before,
         },
         "registry_after": {
             "path": registry_after_record.get("path", ""),
             "sha256": registry_after_record.get("sha256"),
+            "size_bytes": _int_value(registry_after_record.get("size_bytes")),
             "aliases": aliases_after,
         },
         "alias_history_entry": alias_history_entry,
@@ -732,6 +732,7 @@ def build_promotion_rollback_receipt(
         "registry": {
             "path": registry_record.get("path", ""),
             "sha256": registry_record.get("sha256"),
+            "size_bytes": _int_value(registry_record.get("size_bytes")),
             "aliases": aliases,
         },
         "artifacts": {"registry": registry_record},

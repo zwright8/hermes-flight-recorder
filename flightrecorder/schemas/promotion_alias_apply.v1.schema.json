@@ -20,17 +20,18 @@
         "champion_previous_target": {"type": "string"},
         "path": {"type": "string"},
         "rollback_id": {"type": "string"},
-        "sha256": {"type": ["string", "null"]}
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
       },
-      "required": ["path", "sha256", "candidate_id", "champion_previous_target", "rollback_id"],
+      "required": ["path", "sha256", "size_bytes", "candidate_id", "champion_previous_target", "rollback_id"],
       "type": "object"
     },
     "promotion_decision_validation": {"type": "object"},
     "readiness": {"enum": ["applied", "blocked"], "type": "string"},
     "receipt_path": {"type": "string"},
     "recommendation": {"enum": ["alias_update_applied", "hold_aliases"], "type": "string"},
-    "registry_after": {"type": "object"},
-    "registry_before": {"type": "object"},
+    "registry_after": {"$ref": "#/$defs/fingerprintedAliasSnapshot"},
+    "registry_before": {"$ref": "#/$defs/aliasSnapshot"},
     "schema_version": {"const": "hfr.promotion_alias_apply.v1"}
   },
   "required": [
@@ -51,6 +52,27 @@
     "metrics",
     "notes"
   ],
+  "$defs": {
+    "aliasSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {"type": "object"}
+      },
+      "required": ["aliases"],
+      "type": "object"
+    },
+    "fingerprintedAliasSnapshot": {
+      "additionalProperties": true,
+      "properties": {
+        "aliases": {"type": "object"},
+        "path": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "sha256", "size_bytes", "aliases"],
+      "type": "object"
+    }
+  },
   "title": "Hermes Flight Recorder Promotion Alias Apply Receipt",
   "type": "object"
 }
