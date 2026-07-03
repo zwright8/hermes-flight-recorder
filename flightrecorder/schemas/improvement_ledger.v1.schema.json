@@ -254,7 +254,7 @@
       "additionalProperties": true,
       "properties": {
         "exists": {
-          "type": "boolean"
+          "const": true
         },
         "index": {
           "minimum": 0,
@@ -279,6 +279,10 @@
           "pattern": "^[0-9a-f]{64}$",
           "type": "string"
         },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "work_item_count": {
           "minimum": 0,
           "type": "integer"
@@ -291,7 +295,9 @@
         "schema_version",
         "readiness",
         "recommendation",
-        "work_item_count"
+        "work_item_count",
+        "sha256",
+        "size_bytes"
       ],
       "type": "object"
     }

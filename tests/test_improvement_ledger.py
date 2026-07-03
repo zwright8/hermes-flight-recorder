@@ -16,7 +16,88 @@ def run_cli(args):
         return main(args)
 
 
+def write_minimal_improvement_plan(path):
+    payload = {
+        "schema_version": "hfr.improvement_plan.v1",
+        "passed": True,
+        "readiness": "ready",
+        "work_item_count": 0,
+        "decision": {
+            "recommendation": "promote_or_monitor",
+            "critical_or_high_count": 0,
+        },
+        "work_items": [],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 class ImprovementLedgerTests(unittest.TestCase):
+    def test_improvement_ledger_plan_records_include_current_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = root / "improvement_plan.json"
+            ledger = root / "improvement_ledger.json"
+            write_minimal_improvement_plan(plan)
+
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["validate", "--improvement-ledger", str(ledger), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 0)
+
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            self.assertEqual(payload["plans"][0]["size_bytes"], plan.stat().st_size)
+
+    def test_validate_rejects_unbound_plan_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = root / "improvement_plan.json"
+            ledger = root / "improvement_ledger.json"
+            summary = root / "validation.json"
+            write_minimal_improvement_plan(plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["plans"][0].pop("size_bytes")
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--improvement-ledger", str(ledger), "--out", str(summary)]), 1)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("improvement_ledger.plans[0].size_bytes must be a non-negative integer", errors)
+
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["plans"][0]["size_bytes"] = plan.stat().st_size
+            payload["plans"][0]["exists"] = False
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--improvement-ledger", str(ledger), "--out", str(summary)]), 1)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("improvement_ledger.plans[0].exists must be true", errors)
+
+            plan.unlink()
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["plans"][0]["exists"] = True
+            payload["plans"][0]["size_bytes"] = payload["plans"][0].get("size_bytes", 0) or 1
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--improvement-ledger", str(ledger), "--out", str(summary)]), 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("improvement_ledger.plans[0].path must resolve to an existing source improvement plan", errors)
+
+            write_minimal_improvement_plan(plan)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["plans"][0]["exists"] = True
+            payload["plans"][0]["size_bytes"] = plan.stat().st_size + 1
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["validate", "--improvement-ledger", str(ledger), "--out", str(summary)]), 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("improvement_ledger.plans[0].size_bytes does not match the current file", errors)
+
     def test_improvement_ledger_tracks_recurring_concrete_work(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

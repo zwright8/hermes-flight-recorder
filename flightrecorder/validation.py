@@ -918,7 +918,7 @@ def validate_improvement_ledger(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("improvement_ledger", str(ledger_path))
     ledger = _read_object(ledger_path, target, "improvement_ledger.json")
     if ledger is not None:
-        _validate_improvement_ledger(ledger, target)
+        _validate_improvement_ledger(ledger, target, ledger_path)
     return target
 
 
@@ -8544,7 +8544,7 @@ def _validate_improvement_decision(
         target.errors.append("improvement_plan.decision.top_work_items must contain at most five items.")
 
 
-def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(ledger, "schema_version", IMPROVEMENT_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
         target.errors.append("improvement_ledger.ledger_path must be a string.")
@@ -8567,7 +8567,7 @@ def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarge
         target.errors.append("improvement_ledger.notes must be a list of strings when present.")
 
     for index, plan in enumerate(plans):
-        _validate_improvement_ledger_plan(plan, target, f"improvement_ledger.plans[{index}]", index)
+        _validate_improvement_ledger_plan(plan, target, f"improvement_ledger.plans[{index}]", index, source_path)
     latest_index = len(plans) - 1
     totals: dict[str, Any] = {
         "work_item_count": 0,
@@ -8628,7 +8628,13 @@ def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarge
     )
 
 
-def _validate_improvement_ledger_plan(value: Any, target: ValidationTarget, label: str, expected_index: int) -> None:
+def _validate_improvement_ledger_plan(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    expected_index: int,
+    source_path: Path,
+) -> None:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -8641,8 +8647,8 @@ def _validate_improvement_ledger_plan(value: Any, target: ValidationTarget, labe
         target.errors.append(f"{label}.schema_version must be {IMPROVEMENT_PLAN_SCHEMA_VERSION}.")
     if value.get("readiness") not in {"ready", "blocked"}:
         target.errors.append(f"{label}.readiness must be ready or blocked.")
-    if not isinstance(value.get("exists"), bool):
-        target.errors.append(f"{label}.exists must be a boolean.")
+    if value.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true for source improvement plans.")
     if not isinstance(value.get("passed"), bool):
         target.errors.append(f"{label}.passed must be a boolean.")
     for field_name in ("work_item_count", "critical_or_high_count"):
@@ -8652,6 +8658,20 @@ def _validate_improvement_ledger_plan(value: Any, target: ValidationTarget, labe
         sha = value.get("sha256")
         if not isinstance(sha, str) or len(sha) != 64 or sha != sha.lower() or any(char not in "0123456789abcdef" for char in sha):
             target.errors.append(f"{label}.sha256 must be a lowercase 64-character hex digest for existing files.")
+        size_bytes = value.get("size_bytes")
+        if not _is_non_negative_int(size_bytes):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        plan_path = _resolve_gate_source_path(value.get("path"), source_path)
+        if plan_path is None or not plan_path.exists():
+            target.errors.append(f"{label}.path must resolve to an existing source improvement plan.")
+            return
+        if not plan_path.is_file():
+            target.errors.append(f"{label}.path must resolve to a file.")
+            return
+        if _is_non_negative_int(size_bytes) and plan_path.stat().st_size != size_bytes:
+            target.errors.append(f"{label}.size_bytes does not match the current file.")
+        if _is_sha256(sha) and _sha256(plan_path) != sha:
+            target.errors.append(f"{label}.sha256 does not match the current file.")
 
 
 def _validate_improvement_ledger_entry(

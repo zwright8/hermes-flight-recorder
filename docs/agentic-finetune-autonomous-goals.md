@@ -101,7 +101,10 @@ evidence.
   failures, and malformed bundles.
 - Every gate result includes machine-readable recommendation, readiness,
   failed checks, and next actions.
-- Later layers can consume artifact paths and hashes without guessing.
+- Later layers can consume artifact paths, hashes, and byte sizes without
+  guessing.
+- Improvement ledgers bind each source improvement plan to SHA-256 plus byte
+  size evidence before downstream gates trust recurring-work metrics.
 
 ### Verification
 

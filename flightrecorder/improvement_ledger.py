@@ -29,10 +29,11 @@ def build_improvement_ledger(
     plan_records: list[dict[str, Any]] = []
     grouped: dict[str, dict[str, Any]] = {}
     latest_index = len(plan_paths) - 1
+    output_root = Path(out_path).parent if out_path is not None else None
     for index, raw_path in enumerate(plan_paths):
         path = Path(raw_path)
         plan = _read_plan(path)
-        record = _plan_record(path, plan, index, preserve_paths)
+        record = _plan_record(path, plan, index, preserve_paths, output_root)
         plan_records.append(record)
         for item in _plan_work_items(plan, index, record["path"]):
             entry = grouped.setdefault(item["work_key"], _ledger_entry(item))
@@ -92,11 +93,11 @@ def _read_plan(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _plan_record(path: Path, plan: dict[str, Any], index: int, preserve_paths: bool) -> dict[str, Any]:
+def _plan_record(path: Path, plan: dict[str, Any], index: int, preserve_paths: bool, output_root: Path | None) -> dict[str, Any]:
     decision = plan.get("decision") if isinstance(plan.get("decision"), dict) else {}
     record: dict[str, Any] = {
         "index": index,
-        "path": _display_path(path, preserve_paths),
+        "path": _display_plan_path(path, output_root, preserve_paths),
         "exists": path.exists(),
         "schema_version": plan.get("schema_version"),
         "passed": plan.get("passed") is True,
@@ -334,6 +335,19 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _display_plan_path(path: Path, output_root: Path | None, preserve_paths: bool = False) -> str:
+    if preserve_paths or output_root is None:
+        return _display_path(path, preserve_paths)
+    raw = str(path)
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(output_root.resolve()))
+    except ValueError:
+        return _display_path(path, preserve_paths)
 
 
 def _is_windows_absolute(value: str) -> bool:
