@@ -374,6 +374,24 @@ class ActionLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_ledger.bundles[0].sha256 does not match current file contents", errors)
 
+    def test_action_ledger_schema_rejects_missing_source_bundle_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = _build_action_ledger(root)
+            summary_path = root / "validation.json"
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["bundles"][0].pop("size_bytes")
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validate_code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+            schema_code = run_cli(["schemas", "--check", str(ledger_path)])
+
+            self.assertEqual(validate_code, 1)
+            self.assertEqual(schema_code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger.bundles[0].size_bytes must be a non-negative integer", errors)
+
     def test_validate_rejects_action_ledger_missing_source_bundle_even_if_exists_flag_is_false(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

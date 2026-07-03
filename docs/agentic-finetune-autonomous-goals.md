@@ -600,8 +600,8 @@ card, and dataset card decisions.
 - Evidence-bundle validation reopens recorded eval-summary and serving-lifecycle
   artifacts from the bundle file location before trusting derived metrics.
 - Action-ledger validation reopens recorded evidence bundles from the ledger
-  file location and rejects missing, moved, stale, malformed, or
-  cwd-substituted bundle records.
+  file location, requires SHA-256 plus byte-size evidence, and rejects missing,
+  moved, stale, malformed, or cwd-substituted bundle records.
 - Scenario-authored trace and state snapshot paths resolve from the scenario
   file location; only explicit CLI overrides resolve from the process working
   directory.

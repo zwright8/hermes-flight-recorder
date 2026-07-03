@@ -61,7 +61,9 @@
         "passed",
         "readiness",
         "recommendation",
-        "action_count"
+        "action_count",
+        "sha256",
+        "size_bytes"
       ],
       "type": "object"
     },
