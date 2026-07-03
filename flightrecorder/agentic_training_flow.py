@@ -23,11 +23,22 @@ FLOW_BLOCK_RECOMMENDATION = "block_delegated_trainer_execution"
 EXECUTABLE_FLOW_MODES = tuple(sorted(DEFAULT_EXECUTABLE_MODES))
 EXECUTABLE_STAGES = ("action_sft", "dpo", "sft")
 BLOCKED_TRAINER_FLOW_MODES = ("grpo", "process_rewards", "reward_model", "rl")
+BLOCKED_TRAINER_FLOW_STAGES = ("future_grpo", "future_rl", "process_rewards", "reward_model")
+BLOCKED_FLOW_MODE_CATEGORIES = {
+    "reward_model": "advanced_reward",
+    "process_rewards": "advanced_reward",
+    "grpo": "future_rl",
+    "rl": "future_rl",
+}
 
 STAGE_VIEW_CANDIDATES: dict[str, tuple[str, ...]] = {
     "sft": ("sft",),
     "action_sft": ("action_sft", "sft"),
     "dpo": ("dpo", "preferences"),
+    "reward_model": ("reward_model", "preferences"),
+    "process_rewards": ("process_rewards", "step_rewards"),
+    "future_grpo": ("episodes", "rollouts"),
+    "future_rl": ("episodes", "rollouts"),
 }
 
 
@@ -63,6 +74,8 @@ def build_agentic_training_flow(
     stage_sequence = _stage_sequence(trainer_plan)
     stages = _stage_records(stage_sequence, plan_payload)
     runtime_plan_sha = runtime_payload.get("plan_sha256") if isinstance(runtime_payload.get("plan_sha256"), str) else ""
+    mode_contract_check = _mode_contract_check(runtime_payload, plan_payload, mode)
+    flow_mode_gate = _flow_mode_gate(mode, mode_contract_check)
     plan_sha = _sha256_or_none(plan_file)
     consumer_execution = consumer_payload.get("execution") if isinstance(consumer_payload.get("execution"), dict) else {}
     command_argv = _string_list(consumer_execution.get("command_argv"))
@@ -111,6 +124,24 @@ def build_agentic_training_flow(
     )
     _add_check(
         checks,
+        "mode_contract_ready_for_flow",
+        mode_contract_check["present"] is True
+        and mode_contract_check["mode_matches_plan"] is True
+        and mode_contract_check["passed"] is True,
+        {
+            "mode": mode_contract_check["mode"],
+            "category": mode_contract_check["category"],
+            "present": mode_contract_check["present"],
+            "mode_matches_plan": mode_contract_check["mode_matches_plan"],
+            "passed": mode_contract_check["passed"],
+            "error_count": mode_contract_check["error_count"],
+            "errors": mode_contract_check["errors"],
+        },
+        {"present": True, "mode_matches_plan": True, "passed": True, "error_count": 0},
+        summary=_mode_contract_summary(mode_contract_check),
+    )
+    _add_check(
+        checks,
         "trainer_consumer_plan_json_readable",
         not consumer_read_errors,
         {"errors": consumer_read_errors},
@@ -136,8 +167,9 @@ def build_agentic_training_flow(
         checks,
         "default_executable_flow_mode",
         mode in EXECUTABLE_FLOW_MODES,
-        {"mode": mode},
+        flow_mode_gate,
         {"executable_modes": list(EXECUTABLE_FLOW_MODES), "blocked_modes": list(BLOCKED_TRAINER_FLOW_MODES)},
+        summary=_flow_mode_summary(flow_mode_gate),
     )
     _add_check(
         checks,
@@ -145,6 +177,7 @@ def build_agentic_training_flow(
         bool(stage_sequence) and all(stage in EXECUTABLE_STAGES for stage in stage_sequence),
         {"stage_sequence": stage_sequence},
         {"allowed_stages": list(EXECUTABLE_STAGES)},
+        summary=_stage_sequence_summary(stage_sequence),
     )
     _add_check(
         checks,
@@ -208,6 +241,8 @@ def build_agentic_training_flow(
         "failed_check_count": len(failed_checks),
         "checks": checks,
         "blocked_reasons": [check["summary"] for check in failed_checks],
+        "mode_contract_check": mode_contract_check,
+        "flow_mode_gate": flow_mode_gate,
         "source_artifacts": {
             "agentic_training_plan": _source_ref(plan_file, plan_payload, "agentic_training_plan", receipt_base, preserve_paths),
             "agentic_training_runtime_preflight": _source_ref(
@@ -252,10 +287,14 @@ def build_agentic_training_flow(
             "runner_must_emit_result_schema": "hfr.agentic_training_result.v1",
             "requires_runtime_preflight": True,
             "requires_trainer_consumer_plan": True,
+            "requires_mode_contract": True,
+            "requires_mode_contract_ready": True,
             "requires_registered_model_and_dataset": True,
             "requires_redacted_dataset": True,
             "executable_modes": list(EXECUTABLE_FLOW_MODES),
             "blocked_modes": list(BLOCKED_TRAINER_FLOW_MODES),
+            "blocked_mode_categories": sorted(set(BLOCKED_FLOW_MODE_CATEGORIES.values())),
+            "blocked_mode_stages": list(BLOCKED_TRAINER_FLOW_STAGES),
             "flight_recorder_executed_trainer": False,
         },
         "notes": [
@@ -353,6 +392,134 @@ def _stage_records(stage_sequence: list[str], plan_payload: dict[str, Any]) -> l
     return records
 
 
+def _mode_contract_check(
+    runtime_payload: dict[str, Any],
+    plan_payload: dict[str, Any],
+    mode: str,
+) -> dict[str, Any]:
+    runtime_check = runtime_payload.get("mode_contract_check")
+    if isinstance(runtime_check, dict):
+        return _normalized_mode_contract_check(runtime_check, mode)
+    contract = plan_payload.get("mode_contract") if isinstance(plan_payload.get("mode_contract"), dict) else {}
+    planning_gate = contract.get("planning_gate") if isinstance(contract.get("planning_gate"), dict) else {}
+    data_requirements = contract.get("data_requirements") if isinstance(contract.get("data_requirements"), list) else []
+    reward_contract = contract.get("reward_contract") if isinstance(contract.get("reward_contract"), dict) else {}
+    side_effect_boundary = contract.get("side_effect_boundary") if isinstance(contract.get("side_effect_boundary"), dict) else {}
+    runner_contract = contract.get("external_runner_contract") if isinstance(contract.get("external_runner_contract"), dict) else {}
+    errors = ["runtime preflight mode_contract_check is missing"]
+    if not contract:
+        errors.append("plan mode_contract is missing")
+    return {
+        "mode": str(contract.get("mode") or mode),
+        "category": str(contract.get("category") or BLOCKED_FLOW_MODE_CATEGORIES.get(mode, "")),
+        "present": bool(contract),
+        "mode_matches_plan": contract.get("mode") == mode,
+        "planning_gate_open": planning_gate.get("open") is True,
+        "planning_required_flag": planning_gate.get("required_flag") if isinstance(planning_gate.get("required_flag"), str) else None,
+        "data_requirement_count": len([item for item in data_requirements if isinstance(item, dict)]),
+        "unsatisfied_data_requirement_ids": [
+            str(item.get("id") or f"requirement_{index}")
+            for index, item in enumerate(data_requirements)
+            if isinstance(item, dict) and item.get("satisfied") is not True
+        ],
+        "reward_contract": _normalized_reward_contract(reward_contract),
+        "side_effect_boundary": _normalized_side_effect_boundary(side_effect_boundary),
+        "external_runner_contract": _normalized_external_runner_contract(runner_contract),
+        "passed": False,
+        "error_count": len(errors),
+        "errors": errors,
+    }
+
+
+def _normalized_mode_contract_check(value: dict[str, Any], mode: str) -> dict[str, Any]:
+    errors = [str(error) for error in value.get("errors", []) if isinstance(error, str)][:20]
+    return {
+        "mode": str(value.get("mode") or mode),
+        "category": str(value.get("category") or BLOCKED_FLOW_MODE_CATEGORIES.get(mode, "")),
+        "present": value.get("present") is True,
+        "mode_matches_plan": value.get("mode_matches_plan") is True,
+        "planning_gate_open": value.get("planning_gate_open") is True,
+        "planning_required_flag": value.get("planning_required_flag") if isinstance(value.get("planning_required_flag"), str) else None,
+        "data_requirement_count": _non_negative_int(value.get("data_requirement_count")),
+        "unsatisfied_data_requirement_ids": _string_list(value.get("unsatisfied_data_requirement_ids")),
+        "reward_contract": _normalized_reward_contract(value.get("reward_contract") if isinstance(value.get("reward_contract"), dict) else {}),
+        "side_effect_boundary": _normalized_side_effect_boundary(
+            value.get("side_effect_boundary") if isinstance(value.get("side_effect_boundary"), dict) else {}
+        ),
+        "external_runner_contract": _normalized_external_runner_contract(
+            value.get("external_runner_contract") if isinstance(value.get("external_runner_contract"), dict) else {}
+        ),
+        "passed": value.get("passed") is True,
+        "error_count": len(errors),
+        "errors": errors,
+    }
+
+
+def _normalized_reward_contract(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": str(value.get("kind") or ""),
+        "required": value.get("required") is True,
+        "external_runner_must_supply": value.get("external_runner_must_supply") is True,
+        "external_runner_must_validate": value.get("external_runner_must_validate") is True,
+        "flight_recorder_supplies_callable": value.get("flight_recorder_supplies_callable") is True,
+        "may_call_paid_services_by_default": value.get("may_call_paid_services_by_default") is True,
+        "may_require_secrets_by_default": value.get("may_require_secrets_by_default") is True,
+        "must_not_use_unredacted_traces": value.get("must_not_use_unredacted_traces") is True,
+        "callable_signature": str(value.get("callable_signature") or ""),
+    }
+
+
+def _normalized_side_effect_boundary(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dry_run_only": value.get("dry_run_only") is True,
+        "training_started": value.get("training_started") is True,
+        "cloud_jobs_started": value.get("cloud_jobs_started") is True,
+        "model_downloads_started": value.get("model_downloads_started") is True,
+        "paid_model_grader_calls_started": value.get("paid_model_grader_calls_started") is True,
+        "weights_updated": value.get("weights_updated") is True,
+        "provider_credentials_required_by_flight_recorder": value.get("provider_credentials_required_by_flight_recorder") is True,
+    }
+
+
+def _normalized_external_runner_contract(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "runner_owns_execution": value.get("runner_owns_execution") is True,
+        "runner_must_revalidate_inputs": value.get("runner_must_revalidate_inputs") is True,
+        "runner_must_require_recommendation": str(value.get("runner_must_require_recommendation") or ""),
+        "runner_must_validate_reward_contract": value.get("runner_must_validate_reward_contract") is True,
+        "runner_must_block_unredacted_traces": value.get("runner_must_block_unredacted_traces") is True,
+    }
+
+
+def _flow_mode_gate(mode: str, mode_contract_check: dict[str, Any]) -> dict[str, Any]:
+    blocked_by_default = mode in BLOCKED_TRAINER_FLOW_MODES
+    executable_by_default = mode in EXECUTABLE_FLOW_MODES
+    category = str(mode_contract_check.get("category") or BLOCKED_FLOW_MODE_CATEGORIES.get(mode, ""))
+    promotion_required = blocked_by_default or not executable_by_default
+    reason = ""
+    if blocked_by_default:
+        reason = (
+            f"{mode} is a {category or 'blocked'} mode; Flight Recorder records the contract but does not delegate "
+            "trainer execution until this flow boundary is explicitly promoted"
+        )
+    elif not executable_by_default:
+        reason = f"{mode or 'unknown'} is not a supported delegated trainer flow mode"
+    return {
+        "mode": mode,
+        "category": category,
+        "executable_by_default": executable_by_default,
+        "blocked_by_default": blocked_by_default,
+        "promotion_required": promotion_required,
+        "promotion_status": "default_executable" if executable_by_default else "blocked_until_flow_promotion",
+        "required_plan_opt_in_flag": mode_contract_check.get("planning_required_flag"),
+        "mode_contract_ready": mode_contract_check.get("passed") is True,
+        "reward_contract_kind": mode_contract_check.get("reward_contract", {}).get("kind", ""),
+        "external_runner_must_supply_reward": mode_contract_check.get("reward_contract", {}).get("external_runner_must_supply") is True,
+        "external_runner_must_validate_reward": mode_contract_check.get("reward_contract", {}).get("external_runner_must_validate") is True,
+        "reason": reason,
+    }
+
+
 def _stage_view(stage_id: str, views: list[dict[str, Any]]) -> dict[str, Any] | None:
     candidates = STAGE_VIEW_CANDIDATES.get(stage_id, ())
     for name in candidates:
@@ -418,12 +585,43 @@ def _non_negative_int(value: Any) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
+def _mode_contract_summary(mode_contract_check: dict[str, Any]) -> str:
+    if mode_contract_check.get("passed") is True:
+        return (
+            "mode_contract_ready_for_flow: "
+            f"mode={mode_contract_check.get('mode')} category={mode_contract_check.get('category')} passed=True"
+        )
+    errors = "; ".join(str(error) for error in mode_contract_check.get("errors", []) if isinstance(error, str))
+    return f"mode_contract_ready_for_flow: passed=False errors={errors or 'mode contract not ready'}"
+
+
+def _flow_mode_summary(flow_mode_gate: dict[str, Any]) -> str:
+    if flow_mode_gate.get("executable_by_default") is True:
+        return f"default_executable_flow_mode: mode={flow_mode_gate.get('mode')} passed=True"
+    return (
+        "default_executable_flow_mode: passed=False "
+        f"mode={flow_mode_gate.get('mode')} category={flow_mode_gate.get('category')} "
+        f"promotion_status={flow_mode_gate.get('promotion_status')} reason={flow_mode_gate.get('reason')}"
+    )
+
+
+def _stage_sequence_summary(stage_sequence: list[str]) -> str:
+    if stage_sequence and all(stage in EXECUTABLE_STAGES for stage in stage_sequence):
+        return f"stage_sequence_executable: stage_sequence={stage_sequence} passed=True"
+    blocked = [stage for stage in stage_sequence if stage not in EXECUTABLE_STAGES]
+    return (
+        "stage_sequence_executable: passed=False "
+        f"blocked_stages={blocked} allowed_stages={list(EXECUTABLE_STAGES)}"
+    )
+
+
 def _add_check(
     checks: list[dict[str, Any]],
     check_id: str,
     passed: bool,
     actual: dict[str, Any],
     expected: dict[str, Any],
+    summary: str | None = None,
 ) -> None:
     checks.append(
         {
@@ -431,6 +629,6 @@ def _add_check(
             "passed": bool(passed),
             "actual": actual,
             "expected": expected,
-            "summary": f"{check_id}: passed={bool(passed)}",
+            "summary": summary or f"{check_id}: passed={bool(passed)}",
         }
     )

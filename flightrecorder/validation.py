@@ -25,7 +25,9 @@ from .agentic_training_result import (
 )
 from .agentic_training_flow import (
     AGENTIC_TRAINING_FLOW_SCHEMA_VERSION,
+    BLOCKED_FLOW_MODE_CATEGORIES,
     BLOCKED_TRAINER_FLOW_MODES,
+    BLOCKED_TRAINER_FLOW_STAGES,
     EXECUTABLE_FLOW_MODES,
     EXECUTABLE_STAGES,
     FLOW_BLOCK_RECOMMENDATION,
@@ -2494,7 +2496,20 @@ def _validate_agentic_training_flow(flow: dict[str, Any], target: ValidationTarg
         target.errors.append("agentic_training_flow.blocked_reasons must match failed_check_count.")
 
     _validate_agentic_training_flow_sources(flow.get("source_artifacts"), target, source_path)
-    flow_counts = _validate_agentic_training_flow_delegated_flow(flow.get("delegated_flow"), target)
+    flow_counts = _validate_agentic_training_flow_delegated_flow(flow.get("delegated_flow"), target, expected_passed)
+    mode_contract_check = _validate_agentic_training_flow_mode_contract_check(
+        flow.get("mode_contract_check"),
+        target,
+        flow_counts.get("mode", ""),
+        expected_passed,
+    )
+    _validate_agentic_training_flow_mode_gate(
+        flow.get("flow_mode_gate"),
+        target,
+        flow_counts.get("mode", ""),
+        mode_contract_check,
+        expected_passed,
+    )
     _validate_agentic_training_flow_metrics(flow.get("metrics"), target, flow_counts, len(checks), failed_checks)
     _validate_agentic_training_flow_boundary(flow.get("execution_boundary"), target)
     _validate_agentic_training_flow_contract(flow.get("handoff_contract"), target)
@@ -2587,7 +2602,11 @@ def _repo_root_for_artifact(source_path: Path) -> Path | None:
     return None
 
 
-def _validate_agentic_training_flow_delegated_flow(value: Any, target: ValidationTarget) -> dict[str, Any]:
+def _validate_agentic_training_flow_delegated_flow(
+    value: Any,
+    target: ValidationTarget,
+    expected_passed: bool,
+) -> dict[str, Any]:
     counts: dict[str, Any] = {
         "mode": "",
         "stage_count": 0,
@@ -2602,9 +2621,14 @@ def _validate_agentic_training_flow_delegated_flow(value: Any, target: Validatio
         return counts
     mode = value.get("mode")
     counts["mode"] = mode if isinstance(mode, str) else ""
-    if mode not in EXECUTABLE_FLOW_MODES:
+    blocked_advanced_mode = mode in BLOCKED_TRAINER_FLOW_MODES and not expected_passed
+    if expected_passed and mode not in EXECUTABLE_FLOW_MODES:
         target.errors.append(f"agentic_training_flow.delegated_flow.mode must be one of {list(EXECUTABLE_FLOW_MODES)!r}.")
-    if mode in BLOCKED_TRAINER_FLOW_MODES:
+    elif mode not in EXECUTABLE_FLOW_MODES and not blocked_advanced_mode:
+        target.errors.append(
+            f"agentic_training_flow.delegated_flow.mode must be executable or an explicitly blocked mode, got {mode!r}."
+        )
+    if expected_passed and mode in BLOCKED_TRAINER_FLOW_MODES:
         target.errors.append("agentic_training_flow.delegated_flow.mode must not be an advanced reward or RL mode.")
     if not isinstance(value.get("backend"), str) or not value.get("backend"):
         target.errors.append("agentic_training_flow.delegated_flow.backend must be a non-empty string.")
@@ -2626,10 +2650,12 @@ def _validate_agentic_training_flow_delegated_flow(value: Any, target: Validatio
             target.errors.append(f"{label} must be an object.")
             continue
         stage_id = stage.get("stage_id")
-        if stage_id not in EXECUTABLE_STAGES:
-            target.errors.append(f"{label}.stage_id must be one of {list(EXECUTABLE_STAGES)!r}.")
+        allowed_stages = (*EXECUTABLE_STAGES, *BLOCKED_TRAINER_FLOW_STAGES) if blocked_advanced_mode else EXECUTABLE_STAGES
+        if stage_id not in allowed_stages:
+            target.errors.append(f"{label}.stage_id must be one of {list(allowed_stages)!r}.")
         else:
-            counts["executable_stage_count"] += 1
+            if stage_id in EXECUTABLE_STAGES:
+                counts["executable_stage_count"] += 1
         if stage.get("stage_index") != index:
             target.errors.append(f"{label}.stage_index expected {index}, got {stage.get('stage_index')!r}.")
         if index < len(stage_sequence) and stage_id != stage_sequence[index]:
@@ -2650,6 +2676,156 @@ def _validate_agentic_training_flow_delegated_flow(value: Any, target: Validatio
     command_counts = _validate_agentic_training_flow_command(value.get("command"), target)
     counts.update(command_counts)
     return counts
+
+
+def _validate_agentic_training_flow_mode_contract_check(
+    value: Any,
+    target: ValidationTarget,
+    mode: str,
+    expected_passed: bool,
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.mode_contract_check must be an object.")
+        return {}
+    for field_name in ("mode", "category"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"agentic_training_flow.mode_contract_check.{field_name} must be a string.")
+    if mode and value.get("mode") != mode:
+        target.errors.append("agentic_training_flow.mode_contract_check.mode must match delegated_flow.mode.")
+    for field_name in ("present", "mode_matches_plan", "planning_gate_open", "passed"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"agentic_training_flow.mode_contract_check.{field_name} must be a boolean.")
+    if not isinstance(value.get("planning_required_flag"), (str, type(None))):
+        target.errors.append("agentic_training_flow.mode_contract_check.planning_required_flag must be a string or null.")
+    if not _is_non_negative_int(value.get("data_requirement_count")):
+        target.errors.append("agentic_training_flow.mode_contract_check.data_requirement_count must be a non-negative integer.")
+    if not _is_string_list(value.get("unsatisfied_data_requirement_ids")):
+        target.errors.append("agentic_training_flow.mode_contract_check.unsatisfied_data_requirement_ids must be a list of strings.")
+    errors = value.get("errors")
+    if not _is_string_list(errors):
+        target.errors.append("agentic_training_flow.mode_contract_check.errors must be a list of strings.")
+        errors = []
+    if not _is_non_negative_int(value.get("error_count")):
+        target.errors.append("agentic_training_flow.mode_contract_check.error_count must be a non-negative integer.")
+    elif value.get("error_count") != len(errors):
+        target.errors.append("agentic_training_flow.mode_contract_check.error_count must match errors length.")
+    _validate_agentic_training_flow_reward_contract(value.get("reward_contract"), target)
+    _validate_agentic_training_flow_side_effect_boundary(value.get("side_effect_boundary"), target)
+    _validate_agentic_training_flow_external_runner_contract(value.get("external_runner_contract"), target)
+    if expected_passed and value.get("passed") is not True:
+        target.errors.append("agentic_training_flow.mode_contract_check.passed must be true for ready delegated flow receipts.")
+    if mode in BLOCKED_TRAINER_FLOW_MODES:
+        if value.get("present") is not True:
+            target.errors.append("agentic_training_flow.mode_contract_check.present must be true for blocked advanced-mode receipts.")
+        if value.get("mode_matches_plan") is not True:
+            target.errors.append("agentic_training_flow.mode_contract_check.mode_matches_plan must be true for blocked advanced-mode receipts.")
+    return value
+
+
+def _validate_agentic_training_flow_reward_contract(value: Any, target: ValidationTarget) -> None:
+    label = "agentic_training_flow.mode_contract_check.reward_contract"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(value.get("kind"), str):
+        target.errors.append(f"{label}.kind must be a string.")
+    if not isinstance(value.get("callable_signature"), str):
+        target.errors.append(f"{label}.callable_signature must be a string.")
+    for field_name in (
+        "required",
+        "external_runner_must_supply",
+        "external_runner_must_validate",
+        "flight_recorder_supplies_callable",
+        "may_call_paid_services_by_default",
+        "may_require_secrets_by_default",
+        "must_not_use_unredacted_traces",
+    ):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+
+
+def _validate_agentic_training_flow_side_effect_boundary(value: Any, target: ValidationTarget) -> None:
+    label = "agentic_training_flow.mode_contract_check.side_effect_boundary"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in (
+        "dry_run_only",
+        "training_started",
+        "cloud_jobs_started",
+        "model_downloads_started",
+        "paid_model_grader_calls_started",
+        "weights_updated",
+        "provider_credentials_required_by_flight_recorder",
+    ):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+
+
+def _validate_agentic_training_flow_external_runner_contract(value: Any, target: ValidationTarget) -> None:
+    label = "agentic_training_flow.mode_contract_check.external_runner_contract"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(value.get("runner_must_require_recommendation"), str):
+        target.errors.append(f"{label}.runner_must_require_recommendation must be a string.")
+    for field_name in (
+        "runner_owns_execution",
+        "runner_must_revalidate_inputs",
+        "runner_must_validate_reward_contract",
+        "runner_must_block_unredacted_traces",
+    ):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+
+
+def _validate_agentic_training_flow_mode_gate(
+    value: Any,
+    target: ValidationTarget,
+    mode: str,
+    mode_contract_check: dict[str, Any],
+    expected_passed: bool,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.flow_mode_gate must be an object.")
+        return
+    if value.get("mode") != mode:
+        target.errors.append("agentic_training_flow.flow_mode_gate.mode must match delegated_flow.mode.")
+    category = value.get("category")
+    if not isinstance(category, str):
+        target.errors.append("agentic_training_flow.flow_mode_gate.category must be a string.")
+    elif mode_contract_check.get("category") and category != mode_contract_check.get("category"):
+        target.errors.append("agentic_training_flow.flow_mode_gate.category must match mode_contract_check.category.")
+    expected_executable = mode in EXECUTABLE_FLOW_MODES
+    expected_blocked = mode in BLOCKED_TRAINER_FLOW_MODES
+    expected_promotion_required = not expected_executable
+    expected_status = "default_executable" if expected_executable else "blocked_until_flow_promotion"
+    expected_values = {
+        "executable_by_default": expected_executable,
+        "blocked_by_default": expected_blocked,
+        "promotion_required": expected_promotion_required,
+        "mode_contract_ready": mode_contract_check.get("passed") is True,
+        "external_runner_must_supply_reward": mode_contract_check.get("reward_contract", {}).get("external_runner_must_supply") is True,
+        "external_runner_must_validate_reward": mode_contract_check.get("reward_contract", {}).get("external_runner_must_validate") is True,
+    }
+    for field_name, expected_value in expected_values.items():
+        if value.get(field_name) is not expected_value:
+            target.errors.append(f"agentic_training_flow.flow_mode_gate.{field_name} must be {expected_value!r}.")
+    if value.get("promotion_status") != expected_status:
+        target.errors.append(f"agentic_training_flow.flow_mode_gate.promotion_status must be {expected_status!r}.")
+    if value.get("required_plan_opt_in_flag") != mode_contract_check.get("planning_required_flag"):
+        target.errors.append("agentic_training_flow.flow_mode_gate.required_plan_opt_in_flag must match mode_contract_check.")
+    if value.get("reward_contract_kind") != mode_contract_check.get("reward_contract", {}).get("kind", ""):
+        target.errors.append("agentic_training_flow.flow_mode_gate.reward_contract_kind must match mode_contract_check.")
+    if not isinstance(value.get("reason"), str):
+        target.errors.append("agentic_training_flow.flow_mode_gate.reason must be a string.")
+    elif expected_blocked and not value.get("reason"):
+        target.errors.append("agentic_training_flow.flow_mode_gate.reason must explain blocked advanced-mode receipts.")
+    if expected_passed and expected_blocked:
+        target.errors.append("agentic_training_flow.flow_mode_gate must not allow a ready advanced-mode flow.")
+    expected_category = BLOCKED_FLOW_MODE_CATEGORIES.get(mode)
+    if expected_category and category != expected_category:
+        target.errors.append(f"agentic_training_flow.flow_mode_gate.category must be {expected_category!r}.")
 
 
 def _validate_agentic_training_flow_command(value: Any, target: ValidationTarget) -> dict[str, int]:
@@ -2739,6 +2915,8 @@ def _validate_agentic_training_flow_contract(value: Any, target: ValidationTarge
     for field_name in (
         "requires_runtime_preflight",
         "requires_trainer_consumer_plan",
+        "requires_mode_contract",
+        "requires_mode_contract_ready",
         "requires_registered_model_and_dataset",
         "requires_redacted_dataset",
     ):
@@ -2750,6 +2928,10 @@ def _validate_agentic_training_flow_contract(value: Any, target: ValidationTarge
         target.errors.append("agentic_training_flow.handoff_contract.executable_modes must match executable trainer flow modes.")
     if sorted(value.get("blocked_modes", [])) != sorted(BLOCKED_TRAINER_FLOW_MODES):
         target.errors.append("agentic_training_flow.handoff_contract.blocked_modes must match blocked trainer flow modes.")
+    if sorted(value.get("blocked_mode_categories", [])) != sorted(set(BLOCKED_FLOW_MODE_CATEGORIES.values())):
+        target.errors.append("agentic_training_flow.handoff_contract.blocked_mode_categories must match blocked trainer flow categories.")
+    if sorted(value.get("blocked_mode_stages", [])) != sorted(BLOCKED_TRAINER_FLOW_STAGES):
+        target.errors.append("agentic_training_flow.handoff_contract.blocked_mode_stages must match blocked trainer flow stages.")
 
 
 def _is_safe_or_redacted_training_flow_path(value: str) -> bool:

@@ -7,15 +7,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from flightrecorder.agentic_training_plan import build_agentic_training_plan
 from flightrecorder.agentic_training_flow import build_agentic_training_flow, write_agentic_training_flow
 from flightrecorder.agentic_training_runtime import build_agentic_training_runtime_preflight, write_agentic_training_runtime_preflight
-from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
+from flightrecorder.schema_registry import check_schema_file, list_schema_records
 from flightrecorder.trainer_consumer_plan import build_trainer_consumer_plan
 from flightrecorder.validation import validate_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_PLAN = ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_plan.json"
+EXAMPLE_MODEL_MANIFEST = ROOT / "examples" / "agentic_training" / "model_manifest.json"
+EXAMPLE_DATASET_MANIFEST = ROOT / "examples" / "agentic_training" / "dataset_manifest.json"
 
 
 class AgenticTrainingFlowTests(unittest.TestCase):
@@ -41,6 +44,11 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             self.assertEqual(receipt["delegated_flow"]["mode"], "sft_then_dpo")
             self.assertEqual(receipt["delegated_flow"]["stage_sequence"], ["sft", "dpo"])
             self.assertEqual({stage["stage_id"] for stage in receipt["delegated_flow"]["stages"]}, {"sft", "dpo"})
+            self.assertEqual(receipt["mode_contract_check"]["category"], "default_executable")
+            self.assertTrue(receipt["mode_contract_check"]["passed"])
+            self.assertFalse(receipt["flow_mode_gate"]["blocked_by_default"])
+            self.assertEqual(receipt["flow_mode_gate"]["promotion_status"], "default_executable")
+            self.assertTrue(receipt["handoff_contract"]["requires_mode_contract_ready"])
             self.assertFalse(receipt["execution_boundary"]["trainer_command_executed"])
             self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
             schema = check_schema_file(out)
@@ -121,37 +129,106 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             )
 
             self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(payload["mode_contract_check"]["mode"], "sft_then_dpo")
+            self.assertEqual(payload["flow_mode_gate"]["promotion_status"], "default_executable")
             validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
 
     def test_reward_mode_plan_is_blocked_at_flow_boundary(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
-            plan["mode"] = "reward_model"
-            plan["trainer_plan"]["stage_sequence"] = ["reward_model"]
-            plan["trainer_plan"]["backend"] = "process_reward_wrapper"
-            plan["recommendation"] = "ready_for_external_trainer_plan"
-            plan_path = root / "reward_plan.json"
-            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            plan_path = self.write_agentic_plan(root, "reward_model", allow_advanced_training=True)
             runtime = self.write_runtime_preflight(root, plan_path=plan_path)
-            consumer = self.write_trainer_consumer_plan(root)
+            consumer = self.write_trainer_consumer_plan(root, plan_path=plan_path)
+            out = root / "blocked_flow.json"
 
             receipt = build_agentic_training_flow(
                 plan_path=plan_path,
                 runtime_preflight_path=runtime,
                 trainer_consumer_plan_path=consumer,
-                out_path=root / "blocked_flow.json",
+                out_path=out,
                 created_at="2026-07-03T00:00:00+00:00",
             )
+            write_agentic_training_flow(out, receipt)
 
             self.assertFalse(receipt["passed"])
             self.assertEqual(receipt["recommendation"], "block_delegated_trainer_execution")
             failed_ids = {check["id"] for check in receipt["checks"] if not check["passed"]}
             self.assertIn("default_executable_flow_mode", failed_ids)
             self.assertIn("stage_sequence_executable", failed_ids)
-            schema = check_schema_contract(receipt)
+            self.assertNotIn("mode_contract_ready_for_flow", failed_ids)
+            self.assertEqual(receipt["mode_contract_check"]["mode"], "reward_model")
+            self.assertEqual(receipt["mode_contract_check"]["category"], "advanced_reward")
+            self.assertEqual(receipt["mode_contract_check"]["reward_contract"]["kind"], "scalar_or_preference_rewards")
+            self.assertTrue(receipt["mode_contract_check"]["reward_contract"]["external_runner_must_validate"])
+            self.assertEqual(receipt["flow_mode_gate"]["required_plan_opt_in_flag"], "--allow-advanced-training")
+            self.assertEqual(receipt["flow_mode_gate"]["promotion_status"], "blocked_until_flow_promotion")
+            self.assertTrue(receipt["flow_mode_gate"]["blocked_by_default"])
+            self.assertEqual(receipt["delegated_flow"]["stages"][0]["view_name"], "reward_model")
+            self.assertTrue(any("advanced_reward" in reason for reason in receipt["blocked_reasons"]))
+            schema = check_schema_file(out)
             self.assertTrue(schema["passed"], schema["errors"])
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
+    def test_grpo_flow_block_reports_external_reward_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_path = self.write_agentic_plan(root, "grpo", allow_future_rl=True)
+            runtime = self.write_runtime_preflight(root, plan_path=plan_path)
+            consumer = self.write_trainer_consumer_plan(root, plan_path=plan_path)
+            out = root / "grpo_blocked_flow.json"
+
+            receipt = build_agentic_training_flow(
+                plan_path=plan_path,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_training_flow(out, receipt)
+
+            self.assertFalse(receipt["passed"])
+            self.assertEqual(receipt["mode_contract_check"]["category"], "future_rl")
+            self.assertEqual(receipt["mode_contract_check"]["reward_contract"]["kind"], "trl_grpo_reward_function")
+            self.assertTrue(receipt["mode_contract_check"]["reward_contract"]["external_runner_must_supply"])
+            self.assertTrue(receipt["flow_mode_gate"]["external_runner_must_supply_reward"])
+            self.assertEqual(receipt["flow_mode_gate"]["required_plan_opt_in_flag"], "--allow-future-rl")
+            self.assertEqual(receipt["delegated_flow"]["stage_sequence"], ["future_grpo"])
+            self.assertEqual(receipt["delegated_flow"]["stages"][0]["view_name"], "episodes")
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
+    def test_validation_rejects_blocked_flow_with_stripped_stage_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_path = self.write_agentic_plan(root, "reward_model", allow_advanced_training=True)
+            runtime = self.write_runtime_preflight(root, plan_path=plan_path)
+            consumer = self.write_trainer_consumer_plan(root, plan_path=plan_path)
+            out = root / "tampered_blocked_flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=plan_path,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            stage = receipt["delegated_flow"]["stages"][0]
+            stage["view_name"] = ""
+            stage["view_path"] = ""
+            stage["view_schema_version"] = ""
+            stage["row_count"] = 0
+            stage["view_ready"] = False
+            receipt["metrics"]["selected_view_count"] = 0
+            write_agentic_training_flow(out, receipt)
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_flow.delegated_flow.stages[0].view_ready must be true", errors)
+            self.assertIn("agentic_training_flow.delegated_flow.stages[0].view_name must be a non-empty string", errors)
+            self.assertIn("agentic_training_flow.delegated_flow.stages[0].row_count must be a positive integer", errors)
 
     def test_validation_rejects_execution_boundary_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -275,12 +352,30 @@ class AgenticTrainingFlowTests(unittest.TestCase):
         write_agentic_training_runtime_preflight(out, runtime)
         return out
 
-    def write_trainer_consumer_plan(self, root: Path) -> Path:
+    def write_agentic_plan(self, root: Path, mode: str, **kwargs: object) -> Path:
+        dataset = root / "dataset_manifest.json"
+        dataset_payload = json.loads(EXAMPLE_DATASET_MANIFEST.read_text(encoding="utf-8"))
+        for view in dataset_payload["views"].values():
+            view["path"] = str(ROOT / view["path"])
+        dataset.write_text(json.dumps(dataset_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        out = root / f"{mode}_plan.json"
+        plan = build_agentic_training_plan(
+            out_path=out,
+            mode=mode,
+            model_manifest_path=EXAMPLE_MODEL_MANIFEST,
+            dataset_manifest_path=dataset,
+            trainer_backend="process-reward-wrapper",
+            **kwargs,
+        )
+        out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return out
+
+    def write_trainer_consumer_plan(self, root: Path, *, plan_path: Path = EXAMPLE_PLAN) -> Path:
         trainer_file = root / "train.py"
         trainer_file.write_text("print('dry run')\n", encoding="utf-8")
         trainer_sha = sha256(trainer_file)
         input_file = root / "agentic_training_plan.json"
-        input_file.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+        input_file.write_text(plan_path.read_text(encoding="utf-8"), encoding="utf-8")
         input_sha = sha256(input_file)
         archive_check_path = root / "trainer_archive_check.json"
         archive_check = {

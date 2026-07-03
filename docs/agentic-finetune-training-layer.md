@@ -141,6 +141,16 @@ The command exits `0` for `ready_for_tiny_smoke_launch` and `1` for
 `block_tiny_smoke_launch`; blocked artifacts are still schema-checkable so they
 can be archived as failure evidence.
 
+`flightrecorder agentic-training-flow` then binds a ready plan, runtime
+preflight, and trainer consumer plan into `hfr.agentic_training_flow.v1`.
+Default executable modes can reach `ready_for_delegated_trainer_execution`.
+Advanced reward-model, process-reward, GRPO, and RL modes instead produce
+`block_delegated_trainer_execution` receipts with a mirrored
+`mode_contract_check` and `flow_mode_gate`. Those receipts are schema-checkable
+evidence of why Flight Recorder did not delegate the trainer flow, including the
+mode category, required opt-in flag, reward-contract obligations, and flow
+promotion requirement.
+
 ## Result Receipts
 
 After an external runner finishes, fails, or blocks before tiny smoke launch,

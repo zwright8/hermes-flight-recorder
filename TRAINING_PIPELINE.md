@@ -603,10 +603,14 @@ After a trainer consumer plan exists, use `flightrecorder agentic-training-flow`
 to bind the ready plan, runtime preflight, and consumer command into
 `hfr.agentic_training_flow.v1`. It delegates only SFT, action-SFT, DPO, and
 SFT-then-DPO flows by default; reward-model, process-reward, GRPO, and RL flows
-remain blocked at this boundary. The receipt records the exact external command,
-stage sequence, selected trainer views, and a fail-closed execution boundary
-without starting a subprocess, importing trainer modules, creating cloud jobs,
-downloading models, or updating weights.
+remain blocked at this boundary. Blocked advanced-mode receipts remain valid
+evidence: they mirror the runtime `mode_contract_check`, add a `flow_mode_gate`
+with the mode category, opt-in flag, reward-contract obligations, and
+promotion-required reason, and keep the readiness recommendation at
+`block_delegated_trainer_execution`. The receipt records the exact external
+command, stage sequence, selected trainer views, and a fail-closed execution
+boundary without starting a subprocess, importing trainer modules, creating
+cloud jobs, downloading models, or updating weights.
 
 ```bash
 flightrecorder agentic-training-flow \

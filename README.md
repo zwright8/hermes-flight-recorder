@@ -297,12 +297,15 @@ flightrecorder agentic-training-flow \
 ```
 
 The delegated flow receipt records the exact external trainer command and
-SFT/action-SFT/DPO stage sequence without running it.
+SFT/action-SFT/DPO stage sequence without running it. It also mirrors the
+runtime `mode_contract_check` and adds a `flow_mode_gate`, so advanced
+reward-model, process-reward, GRPO, and RL plans produce schema-checkable
+blocked receipts that explain the contract and promotion requirement.
 Advanced reward-model, process-reward, GRPO, and RL modes remain planning-only
-unless their explicit opt-in flags are passed. The emitted plan includes a
-`mode_contract` with the required trainer views, reward-signal or reward-function
-contract, and hard-false side-effect flags for training, cloud jobs, paid grader
-calls, downloads, and weight updates.
+at the flow boundary even when plan/runtime opt-in flags are passed. The emitted
+plan includes a `mode_contract` with the required trainer views, reward-signal
+or reward-function contract, and hard-false side-effect flags for training,
+cloud jobs, paid grader calls, downloads, and weight updates.
 
 After an external trainer finishes or fails, archive a receipt:
 

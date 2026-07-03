@@ -17,10 +17,12 @@
     "delegated_flow": { "$ref": "#/$defs/delegatedFlow" },
     "execution_boundary": { "$ref": "#/$defs/executionBoundary" },
     "failed_check_count": { "minimum": 0, "type": "integer" },
+    "flow_mode_gate": { "$ref": "#/$defs/flowModeGate" },
     "flow_id": { "minLength": 1, "type": "string" },
     "flow_path": { "type": "string" },
     "handoff_contract": { "$ref": "#/$defs/handoffContract" },
     "metrics": { "$ref": "#/$defs/metrics" },
+    "mode_contract_check": { "$ref": "#/$defs/modeContractCheck" },
     "notes": {
       "items": { "type": "string" },
       "type": "array"
@@ -45,6 +47,8 @@
     "failed_check_count",
     "checks",
     "blocked_reasons",
+    "mode_contract_check",
+    "flow_mode_gate",
     "source_artifacts",
     "delegated_flow",
     "metrics",
@@ -137,10 +141,52 @@
       ],
       "type": "object"
     },
+    "flowModeGate": {
+      "additionalProperties": true,
+      "properties": {
+        "blocked_by_default": { "type": "boolean" },
+        "category": { "type": "string" },
+        "executable_by_default": { "type": "boolean" },
+        "external_runner_must_supply_reward": { "type": "boolean" },
+        "external_runner_must_validate_reward": { "type": "boolean" },
+        "mode": { "type": "string" },
+        "mode_contract_ready": { "type": "boolean" },
+        "promotion_required": { "type": "boolean" },
+        "promotion_status": {
+          "enum": ["default_executable", "blocked_until_flow_promotion"]
+        },
+        "reason": { "type": "string" },
+        "required_plan_opt_in_flag": { "type": ["string", "null"] },
+        "reward_contract_kind": { "type": "string" }
+      },
+      "required": [
+        "mode",
+        "category",
+        "executable_by_default",
+        "blocked_by_default",
+        "promotion_required",
+        "promotion_status",
+        "required_plan_opt_in_flag",
+        "mode_contract_ready",
+        "reward_contract_kind",
+        "external_runner_must_supply_reward",
+        "external_runner_must_validate_reward",
+        "reason"
+      ],
+      "type": "object"
+    },
     "handoffContract": {
       "additionalProperties": true,
       "properties": {
+        "blocked_mode_categories": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
         "blocked_modes": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "blocked_mode_stages": {
           "items": { "type": "string" },
           "type": "array"
         },
@@ -149,6 +195,8 @@
           "type": "array"
         },
         "flight_recorder_executed_trainer": { "const": false },
+        "requires_mode_contract": { "const": true },
+        "requires_mode_contract_ready": { "const": true },
         "requires_redacted_dataset": { "const": true },
         "requires_registered_model_and_dataset": { "const": true },
         "requires_runtime_preflight": { "const": true },
@@ -163,10 +211,14 @@
         "runner_must_emit_result_schema",
         "requires_runtime_preflight",
         "requires_trainer_consumer_plan",
+        "requires_mode_contract",
+        "requires_mode_contract_ready",
         "requires_registered_model_and_dataset",
         "requires_redacted_dataset",
         "executable_modes",
         "blocked_modes",
+        "blocked_mode_categories",
+        "blocked_mode_stages",
         "flight_recorder_executed_trainer"
       ],
       "type": "object"
@@ -192,6 +244,114 @@
         "command_arg_count",
         "trainer_input_count",
         "external_code_file_count"
+      ],
+      "type": "object"
+    },
+    "modeContractCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "category": { "type": "string" },
+        "data_requirement_count": { "minimum": 0, "type": "integer" },
+        "error_count": { "minimum": 0, "type": "integer" },
+        "errors": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "external_runner_contract": { "$ref": "#/$defs/modeExternalRunnerContract" },
+        "mode": { "type": "string" },
+        "mode_matches_plan": { "type": "boolean" },
+        "passed": { "type": "boolean" },
+        "planning_gate_open": { "type": "boolean" },
+        "planning_required_flag": { "type": ["string", "null"] },
+        "present": { "type": "boolean" },
+        "reward_contract": { "$ref": "#/$defs/modeRewardContract" },
+        "side_effect_boundary": { "$ref": "#/$defs/modeSideEffectBoundary" },
+        "unsatisfied_data_requirement_ids": {
+          "items": { "type": "string" },
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "category",
+        "present",
+        "mode_matches_plan",
+        "planning_gate_open",
+        "planning_required_flag",
+        "data_requirement_count",
+        "unsatisfied_data_requirement_ids",
+        "reward_contract",
+        "side_effect_boundary",
+        "external_runner_contract",
+        "passed",
+        "error_count",
+        "errors"
+      ],
+      "type": "object"
+    },
+    "modeExternalRunnerContract": {
+      "additionalProperties": true,
+      "properties": {
+        "runner_must_block_unredacted_traces": { "type": "boolean" },
+        "runner_must_require_recommendation": { "type": "string" },
+        "runner_must_revalidate_inputs": { "type": "boolean" },
+        "runner_must_validate_reward_contract": { "type": "boolean" },
+        "runner_owns_execution": { "type": "boolean" }
+      },
+      "required": [
+        "runner_owns_execution",
+        "runner_must_revalidate_inputs",
+        "runner_must_require_recommendation",
+        "runner_must_validate_reward_contract",
+        "runner_must_block_unredacted_traces"
+      ],
+      "type": "object"
+    },
+    "modeRewardContract": {
+      "additionalProperties": true,
+      "properties": {
+        "callable_signature": { "type": "string" },
+        "external_runner_must_supply": { "type": "boolean" },
+        "external_runner_must_validate": { "type": "boolean" },
+        "flight_recorder_supplies_callable": { "type": "boolean" },
+        "kind": { "type": "string" },
+        "may_call_paid_services_by_default": { "type": "boolean" },
+        "may_require_secrets_by_default": { "type": "boolean" },
+        "must_not_use_unredacted_traces": { "type": "boolean" },
+        "required": { "type": "boolean" }
+      },
+      "required": [
+        "kind",
+        "required",
+        "external_runner_must_supply",
+        "external_runner_must_validate",
+        "flight_recorder_supplies_callable",
+        "may_call_paid_services_by_default",
+        "may_require_secrets_by_default",
+        "must_not_use_unredacted_traces",
+        "callable_signature"
+      ],
+      "type": "object"
+    },
+    "modeSideEffectBoundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": { "type": "boolean" },
+        "dry_run_only": { "type": "boolean" },
+        "model_downloads_started": { "type": "boolean" },
+        "paid_model_grader_calls_started": { "type": "boolean" },
+        "provider_credentials_required_by_flight_recorder": { "type": "boolean" },
+        "training_started": { "type": "boolean" },
+        "weights_updated": { "type": "boolean" }
+      },
+      "required": [
+        "dry_run_only",
+        "training_started",
+        "cloud_jobs_started",
+        "model_downloads_started",
+        "paid_model_grader_calls_started",
+        "weights_updated",
+        "provider_credentials_required_by_flight_recorder"
       ],
       "type": "object"
     },
