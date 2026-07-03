@@ -1,0 +1,107 @@
+{
+  "artifact_protocols": [
+    "archive",
+    "volume",
+    "object_store"
+  ],
+  "blocked_reasons": [],
+  "check_count": 2,
+  "checks": [
+    {
+      "actual": {
+        "uploads": [
+          {
+            "exists": true,
+            "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+            "role": "upload",
+            "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
+            "size_bytes": 9104
+          }
+        ]
+      },
+      "expected": {
+        "all_uploads_exist": true
+      },
+      "id": "upload_artifacts_exist",
+      "passed": true,
+      "summary": "upload_artifacts_exist: passed=True"
+    },
+    {
+      "actual": {
+        "downloads_exist": false
+      },
+      "expected": {
+        "downloads_exist": false
+      },
+      "id": "download_artifacts_not_assumed",
+      "passed": true,
+      "summary": "download_artifacts_not_assumed: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "allow_live": false,
+    "cloud_cost_incurred_usd": 0,
+    "cloud_job_started": false,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_requested": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "expected_download_artifacts": [
+    {
+      "exists": false,
+      "path": "adapters/candidate/adapter_model.safetensors",
+      "role": "download",
+      "sha256": null,
+      "size_bytes": null
+    }
+  ],
+  "failed_check_count": 0,
+  "passed": true,
+  "provider": {
+    "artifact_protocols": [
+      "archive",
+      "volume",
+      "object_store"
+    ],
+    "credential_env_vars": [
+      "MODAL_TOKEN_ID",
+      "MODAL_TOKEN_SECRET"
+    ],
+    "default_live_execution_allowed": false,
+    "display_name": "Modal",
+    "gpu_classes": [
+      "t4",
+      "l4",
+      "a10g",
+      "a100",
+      "h100"
+    ],
+    "id": "modal",
+    "job_modes": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "reward_model",
+      "process_rewards"
+    ],
+    "live_status": "preflight_only",
+    "regions": [
+      "provider_default"
+    ]
+  },
+  "readiness": "ready",
+  "schema_version": "hfr.cloud_training_artifact_manifest.v1",
+  "upload_artifacts": [
+    {
+      "exists": true,
+      "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+      "role": "upload",
+      "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
+      "size_bytes": 9104
+    }
+  ]
+}

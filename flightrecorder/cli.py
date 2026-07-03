@@ -46,6 +46,17 @@ from .bundle import (
     build_evidence_bundle,
 )
 from .calibration import ReviewCalibrationError, build_review_calibration
+from .cloud_training import (
+    CloudTrainingError,
+    build_cloud_training_artifact_manifest,
+    build_cloud_training_launch_plan,
+    build_cloud_training_launch_receipt,
+    build_cloud_training_preflight,
+    build_cloud_training_provider_registry,
+    build_cloud_training_status_receipt,
+    provider_choices as cloud_training_provider_choices,
+    write_cloud_training_artifact,
+)
 from .compare_gate import (
     COMPARE_GATE_POLICY_SCHEMA_VERSION,
     CompareGatePolicyError,
@@ -210,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         HeldoutManifestError,
 
         ReviewCalibrationError,
+        CloudTrainingError,
         TraceObservabilityError,
         ActionLedgerError,
         ActionLedgerGateError,
@@ -1064,6 +1076,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
         training_plan_paths=args.training_plan,
         agentic_training_result_paths=args.agentic_training_result,
         agentic_training_loop_plan_paths=args.agentic_loop_plan,
+        cloud_training_provider_registry_paths=args.cloud_training_provider_registry,
+        cloud_training_preflight_paths=args.cloud_training_preflight,
+        cloud_training_artifact_manifest_paths=args.cloud_training_artifact_manifest,
+        cloud_training_launch_plan_paths=args.cloud_training_launch_plan,
+        cloud_training_launch_receipt_paths=args.cloud_training_launch_receipt,
+        cloud_training_status_receipt_paths=args.cloud_training_status_receipt,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -1435,6 +1453,75 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         f"checks={plan['check_count'] - plan['failed_check_count']}/{plan['check_count']}"
     )
     return 0
+
+
+def cmd_cloud_training_providers(args: argparse.Namespace) -> int:
+    registry = build_cloud_training_provider_registry(provider_ids=args.provider, created_at=args.created_at)
+    _emit_json_payload(registry, args.out)
+    return 0
+
+
+def cmd_cloud_training_artifacts(args: argparse.Namespace) -> int:
+    manifest = build_cloud_training_artifact_manifest(
+        provider_id=args.provider,
+        upload_paths=args.upload,
+        expected_downloads=args.download,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    _emit_json_payload(manifest, args.out)
+    return 0 if manifest["passed"] else 1
+
+
+def cmd_cloud_training_preflight(args: argparse.Namespace) -> int:
+    preflight = build_cloud_training_preflight(
+        provider_id=args.provider,
+        agentic_training_plan_path=args.agentic_training_plan,
+        trainer_preflight_path=args.trainer_preflight,
+        trainer_launch_check_path=args.trainer_launch_check,
+        region=args.region,
+        gpu_class=args.gpu_class,
+        max_cost_usd=args.max_cost_usd,
+        live_requested=args.live_requested,
+        allow_live=args.allow_live,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    _emit_json_payload(preflight, args.out)
+    return 0 if preflight["passed"] else 1
+
+
+def cmd_cloud_training_plan(args: argparse.Namespace) -> int:
+    plan = build_cloud_training_launch_plan(
+        preflight_path=args.preflight,
+        artifact_manifest_path=args.artifact_manifest,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    _emit_json_payload(plan, args.out)
+    return 0 if plan["passed"] else 1
+
+
+def cmd_cloud_training_launch(args: argparse.Namespace) -> int:
+    receipt = build_cloud_training_launch_receipt(
+        launch_plan_path=args.launch_plan,
+        live=args.live,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    _emit_json_payload(receipt, args.out)
+    return 0 if receipt["passed"] else 1
+
+
+def cmd_cloud_training_status(args: argparse.Namespace) -> int:
+    receipt = build_cloud_training_status_receipt(
+        launch_receipt_path=args.launch_receipt,
+        cancel_requested=args.cancel,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    _emit_json_payload(receipt, args.out)
+    return 0 if receipt["passed"] else 1
 
 
 def cmd_heldout_manifest(args: argparse.Namespace) -> int:
@@ -2748,6 +2835,12 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one agentic_training_loop_plan.json contract; may be repeated",
     )
+    validate.add_argument("--cloud-training-provider-registry", action="append", default=[], help="Validate one cloud training provider registry")
+    validate.add_argument("--cloud-training-preflight", action="append", default=[], help="Validate one cloud training preflight")
+    validate.add_argument("--cloud-training-artifact-manifest", action="append", default=[], help="Validate one cloud training artifact manifest")
+    validate.add_argument("--cloud-training-launch-plan", action="append", default=[], help="Validate one cloud training launch plan")
+    validate.add_argument("--cloud-training-launch-receipt", action="append", default=[], help="Validate one cloud training launch receipt")
+    validate.add_argument("--cloud-training-status-receipt", action="append", default=[], help="Validate one cloud training status receipt")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -3013,6 +3106,62 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--promotion-ledger", action="append", default=[], help="promotion_ledger artifact; may be repeated")
     agentic_loop_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
     agentic_loop_plan.set_defaults(func=cmd_agentic_loop_plan)
+
+    cloud_training = subparsers.add_parser("cloud-training", help="Build fail-closed cloud training provider contracts")
+    cloud_training_subparsers = cloud_training.add_subparsers(dest="cloud_training_command", required=True)
+    cloud_training_providers = cloud_training_subparsers.add_parser("providers", help="Write cloud training provider registry")
+    cloud_training_providers.add_argument("--provider", action="append", default=[], choices=cloud_training_provider_choices(), help="Provider id; may be repeated")
+    cloud_training_providers.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    cloud_training_providers.add_argument("--out", help="Write provider registry JSON to this path")
+    cloud_training_providers.set_defaults(func=cmd_cloud_training_providers)
+
+    cloud_training_artifacts = cloud_training_subparsers.add_parser("artifacts", help="Write upload/download artifact manifest")
+    cloud_training_artifacts.add_argument("--provider", required=True, choices=cloud_training_provider_choices(), help="Provider id")
+    cloud_training_artifacts.add_argument("--upload", action="append", default=[], help="Upload artifact file path; may be repeated")
+    cloud_training_artifacts.add_argument("--download", action="append", default=[], help="Expected provider output path; may be repeated")
+    cloud_training_artifacts.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    cloud_training_artifacts.add_argument("--out", help="Write artifact manifest JSON to this path")
+    cloud_training_artifacts.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_artifacts.set_defaults(func=cmd_cloud_training_artifacts)
+
+    cloud_training_preflight = cloud_training_subparsers.add_parser("preflight", help="Write fail-closed provider preflight")
+    cloud_training_preflight.add_argument("--provider", required=True, choices=cloud_training_provider_choices(), help="Provider id")
+    cloud_training_preflight.add_argument("--agentic-training-plan", required=True, help="agentic_training_plan artifact")
+    cloud_training_preflight.add_argument("--trainer-preflight", help="trainer_preflight artifact")
+    cloud_training_preflight.add_argument("--trainer-launch-check", help="trainer_launch_check artifact")
+    cloud_training_preflight.add_argument("--region", help="Requested provider region")
+    cloud_training_preflight.add_argument("--gpu-class", help="Requested GPU class")
+    cloud_training_preflight.add_argument("--max-cost-usd", type=float, help="Maximum allowed cloud cost for this launch")
+    cloud_training_preflight.add_argument("--live-requested", action="store_true", help="Record that a live launch was requested")
+    cloud_training_preflight.add_argument("--allow-live", action="store_true", help="Explicit live opt-in for preflight only; no launch is performed")
+    cloud_training_preflight.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    cloud_training_preflight.add_argument("--out", help="Write cloud training preflight JSON to this path")
+    cloud_training_preflight.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_preflight.set_defaults(func=cmd_cloud_training_preflight)
+
+    cloud_training_plan = cloud_training_subparsers.add_parser("plan", help="Write dry-run cloud launch plan")
+    cloud_training_plan.add_argument("--preflight", required=True, help="cloud_training_preflight artifact")
+    cloud_training_plan.add_argument("--artifact-manifest", help="cloud_training_artifact_manifest artifact")
+    cloud_training_plan.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    cloud_training_plan.add_argument("--out", help="Write cloud training launch plan JSON to this path")
+    cloud_training_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_plan.set_defaults(func=cmd_cloud_training_plan)
+
+    cloud_training_launch = cloud_training_subparsers.add_parser("launch", help="Write dry-run launch receipt or blocked live receipt")
+    cloud_training_launch.add_argument("--launch-plan", required=True, help="cloud_training_launch_plan artifact")
+    cloud_training_launch.add_argument("--live", action="store_true", help="Request a live launch receipt; remains blocked in this implementation")
+    cloud_training_launch.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    cloud_training_launch.add_argument("--out", help="Write cloud training launch receipt JSON to this path")
+    cloud_training_launch.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_launch.set_defaults(func=cmd_cloud_training_launch)
+
+    cloud_training_status = cloud_training_subparsers.add_parser("status", help="Write dry-run status/cancel receipt")
+    cloud_training_status.add_argument("--launch-receipt", required=True, help="cloud_training_launch_receipt artifact")
+    cloud_training_status.add_argument("--cancel", action="store_true", help="Record a dry-run cancellation request")
+    cloud_training_status.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    cloud_training_status.add_argument("--out", help="Write cloud training status receipt JSON to this path")
+    cloud_training_status.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_status.set_defaults(func=cmd_cloud_training_status)
 
     eval_summary = subparsers.add_parser("eval-summary", help="Build a governance-ready held-out eval summary")
     eval_summary.add_argument(

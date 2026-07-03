@@ -62,6 +62,7 @@ and handoff receipts that make those systems auditable.
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs. | `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `archive_agentic_training_result.py` |
+| Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
 | Loop | Bind rollouts, review, trainer, serving, eval, improvement, and promotion receipts into one fail-closed iteration contract. | `agentic-loop plan`, `validate --agentic-loop-plan` |
 | Eval | Require identical held-out scenarios and separate raw movement from governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `compare-suite` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
@@ -323,6 +324,33 @@ did not launch cloud jobs, paid graders, live benchmarks, model downloads, or
 weight updates. Missing phase receipts produce a schema-checkable
 `planned_fail_closed` contract rather than a live launch.
 
+## Cloud Training Contracts
+
+Cloud provider integration is provider-neutral and fail-closed. The current
+`cloud-training` commands emit registry, preflight, artifact-manifest,
+launch-plan, launch-receipt, and status/cancel receipts for providers such as
+Hugging Face Jobs, Modal, RunPod, Lambda Labs, CoreWeave, Together, Fireworks,
+Replicate, SageMaker, Vertex AI, Azure ML, Databricks/Mosaic, and NVIDIA DGX
+Cloud/Brev. They do not import provider SDKs, call provider APIs, create jobs,
+spend money, download models, or update weights.
+
+```bash
+flightrecorder cloud-training providers --out runs/cloud_provider_registry.json
+flightrecorder cloud-training preflight \
+  --provider modal \
+  --agentic-training-plan runs/agentic_training_plan.json \
+  --trainer-preflight runs/trainer_preflight.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --region provider_default \
+  --gpu-class a100 \
+  --max-cost-usd 0 \
+  --out runs/cloud_preflight.json
+```
+
+Live launch receipts remain blocked in this implementation. Future provider
+transports must keep the same receipt boundary and require explicit opt-in plus
+environment-variable credentials.
+
 ## Comparison And Improvement Loops
 
 Comparison artifacts turn baseline/candidate runs into reviewable improvement
@@ -547,6 +575,7 @@ flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/review_calibration.json
 flightrecorder schemas --check runs/reviewed_gate.json
 flightrecorder schemas --check runs/agentic_training_loop_plan.json
+flightrecorder schemas --check runs/cloud_preflight.json
 flightrecorder schemas --check runs/suite_compare.json
 flightrecorder schemas --check runs/suite_trend.json
 flightrecorder schemas --check runs/repair_queue.json

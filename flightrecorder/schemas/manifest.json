@@ -634,6 +634,54 @@
       "name": "agentic_training_loop_plan"
     },
     {
+      "artifact": "cloud_training_provider_registry",
+      "artifact_schema_version": "hfr.cloud_training_provider_registry.v1",
+      "description": "Provider-neutral cloud training capability registry.",
+      "filename": "cloud_training_provider_registry.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/cloud_training_provider_registry.v1.schema.json",
+      "name": "cloud_training_provider_registry"
+    },
+    {
+      "artifact": "cloud_training_preflight",
+      "artifact_schema_version": "hfr.cloud_training_preflight.v1",
+      "description": "Fail-closed cloud training provider preflight.",
+      "filename": "cloud_training_preflight.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/cloud_training_preflight.v1.schema.json",
+      "name": "cloud_training_preflight"
+    },
+    {
+      "artifact": "cloud_training_artifact_manifest",
+      "artifact_schema_version": "hfr.cloud_training_artifact_manifest.v1",
+      "description": "Upload and expected-download manifest for cloud training handoffs.",
+      "filename": "cloud_training_artifact_manifest.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/cloud_training_artifact_manifest.v1.schema.json",
+      "name": "cloud_training_artifact_manifest"
+    },
+    {
+      "artifact": "cloud_training_launch_plan",
+      "artifact_schema_version": "hfr.cloud_training_launch_plan.v1",
+      "description": "Dry-run cloud training launch plan.",
+      "filename": "cloud_training_launch_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/cloud_training_launch_plan.v1.schema.json",
+      "name": "cloud_training_launch_plan"
+    },
+    {
+      "artifact": "cloud_training_launch_receipt",
+      "artifact_schema_version": "hfr.cloud_training_launch_receipt.v1",
+      "description": "Dry-run or blocked live cloud training launch receipt.",
+      "filename": "cloud_training_launch_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/cloud_training_launch_receipt.v1.schema.json",
+      "name": "cloud_training_launch_receipt"
+    },
+    {
+      "artifact": "cloud_training_status_receipt",
+      "artifact_schema_version": "hfr.cloud_training_status_receipt.v1",
+      "description": "Dry-run cloud training status and cancellation receipt.",
+      "filename": "cloud_training_status_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/cloud_training_status_receipt.v1.schema.json",
+      "name": "cloud_training_status_receipt"
+    },
+    {
       "artifact": "model_candidate",
       "artifact_schema_version": "hfr.model_candidate.v1",
       "description": "Base-model scouting candidate with source, license review, terms, and compatibility metadata.",

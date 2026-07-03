@@ -1,0 +1,97 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_launch_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run cloud training launch plan.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "execution_boundary": {
+      "type": "object"
+    },
+    "failed_check_count": {
+      "type": "integer"
+    },
+    "handoff_contract": {
+      "type": "object"
+    },
+    "launch": {
+      "additionalProperties": true,
+      "properties": {
+        "live_launch_supported": {
+          "const": false
+        },
+        "mode": {
+          "const": "dry_run"
+        },
+        "provider_api_call_planned": {
+          "const": false
+        }
+      },
+      "required": [
+        "mode",
+        "live_launch_supported",
+        "provider_api_call_planned"
+      ],
+      "type": "object"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "provider": {
+      "type": "object"
+    },
+    "readiness": {
+      "enum": [
+        "ready_for_dry_run_launch",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "emit_dry_run_launch_receipt",
+        "block_launch_receipt"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.cloud_training_launch_plan.v1"
+    },
+    "source_artifacts": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "provider",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "launch",
+    "execution_boundary",
+    "handoff_contract"
+  ],
+  "title": "Hermes Flight Recorder Cloud Training Launch Plan",
+  "type": "object"
+}

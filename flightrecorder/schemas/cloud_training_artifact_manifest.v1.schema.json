@@ -1,0 +1,118 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_artifact_manifest.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Upload and expected-download manifest for cloud training handoffs.",
+  "properties": {
+    "artifact_protocols": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "execution_boundary": {
+      "type": "object"
+    },
+    "expected_download_artifacts": {
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "type": "array"
+    },
+    "failed_check_count": {
+      "type": "integer"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "provider": {
+      "type": "object"
+    },
+    "readiness": {
+      "enum": [
+        "ready",
+        "blocked"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.cloud_training_artifact_manifest.v1"
+    },
+    "upload_artifacts": {
+      "items": {
+        "$ref": "#/$defs/artifact"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "provider",
+    "passed",
+    "readiness",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "upload_artifacts",
+    "expected_download_artifacts",
+    "artifact_protocols",
+    "execution_boundary"
+  ],
+  "title": "Hermes Flight Recorder Cloud Training Artifact Manifest",
+  "type": "object",
+  "$defs": {
+    "artifact": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    }
+  }
+}

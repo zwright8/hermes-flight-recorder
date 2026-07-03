@@ -1,0 +1,94 @@
+{
+  "blocked_reasons": [
+    "launch_plan_ready: passed=False"
+  ],
+  "check_count": 3,
+  "checks": [
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "examples/cloud_training/launch_plan.json",
+          "role": "cloud_training_launch_plan",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "cloud_training_launch_plan",
+          "schema_passed": true,
+          "sha256": "8fa3e536b29ea8217f3b7d568eaf4f405c42a8ff9aea83e15f77b181ea18c001",
+          "size_bytes": 4757,
+          "source_passed": false,
+          "source_recommendation": "block_launch_receipt"
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "cloud_training_launch_plan"
+      },
+      "id": "launch_plan_ready",
+      "passed": false,
+      "summary": "launch_plan_ready: passed=False"
+    },
+    {
+      "actual": {
+        "live": false
+      },
+      "expected": {
+        "live": false
+      },
+      "id": "live_launch_not_implemented",
+      "passed": true,
+      "summary": "live_launch_not_implemented: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_job_started": false,
+        "provider_api_called": false
+      },
+      "expected": {
+        "cloud_job_started": false
+      },
+      "id": "cloud_job_not_started",
+      "passed": true,
+      "summary": "cloud_job_not_started: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "allow_live": false,
+    "cloud_cost_incurred_usd": 0,
+    "cloud_job_started": false,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_requested": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 1,
+  "launch": {
+    "cloud_job_started": false,
+    "cost_incurred_usd": 0,
+    "mode": "dry_run",
+    "provider_api_called": false,
+    "provider_job_id": null
+  },
+  "passed": false,
+  "readiness": "blocked",
+  "recommendation": "block_live_cloud_launch",
+  "schema_version": "hfr.cloud_training_launch_receipt.v1",
+  "source_artifacts": {
+    "launch_plan": {
+      "exists": true,
+      "path": "examples/cloud_training/launch_plan.json",
+      "role": "cloud_training_launch_plan",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "cloud_training_launch_plan",
+      "schema_passed": true,
+      "sha256": "8fa3e536b29ea8217f3b7d568eaf4f405c42a8ff9aea83e15f77b181ea18c001",
+      "size_bytes": 4757,
+      "source_passed": false,
+      "source_recommendation": "block_launch_receipt"
+    }
+  }
+}

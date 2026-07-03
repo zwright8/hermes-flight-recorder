@@ -1,0 +1,136 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_provider_registry.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Provider-neutral cloud training capability registry.",
+  "properties": {
+    "created_at": {
+      "type": "string"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/boundary"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "provider_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "providers": {
+      "items": {
+        "$ref": "#/$defs/provider"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "hfr.cloud_training_provider_registry.v1"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "provider_count",
+    "providers",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Cloud Training Provider Registry",
+  "type": "object",
+  "$defs": {
+    "boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_job_started": {
+          "const": false
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "provider_api_called",
+        "cloud_job_started",
+        "cloud_cost_incurred_usd",
+        "credential_values_recorded",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "provider": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_protocols": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "credential_env_vars": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "default_live_execution_allowed": {
+          "const": false
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "gpu_classes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "job_modes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "live_status": {
+          "type": "string"
+        },
+        "regions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "display_name",
+        "credential_env_vars",
+        "regions",
+        "gpu_classes",
+        "job_modes",
+        "artifact_protocols",
+        "live_status",
+        "default_live_execution_allowed"
+      ],
+      "type": "object"
+    }
+  }
+}

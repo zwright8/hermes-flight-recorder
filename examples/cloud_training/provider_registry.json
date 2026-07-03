@@ -1,0 +1,84 @@
+{
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "allow_live": false,
+    "cloud_cost_incurred_usd": 0,
+    "cloud_job_started": false,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_requested": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "notes": [
+    "Provider records describe contracts and capability probes only; they do not create cloud jobs.",
+    "Credential values are never recorded, only environment variable names and presence checks in preflight artifacts."
+  ],
+  "provider_count": 2,
+  "providers": [
+    {
+      "artifact_protocols": [
+        "hub",
+        "http",
+        "archive"
+      ],
+      "credential_env_vars": [
+        "HF_TOKEN"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Hugging Face Jobs / AutoTrain",
+      "gpu_classes": [
+        "cpu",
+        "t4",
+        "l4",
+        "a10g",
+        "a100"
+      ],
+      "id": "huggingface_jobs",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "sft_then_dpo"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    },
+    {
+      "artifact_protocols": [
+        "archive",
+        "volume",
+        "object_store"
+      ],
+      "credential_env_vars": [
+        "MODAL_TOKEN_ID",
+        "MODAL_TOKEN_SECRET"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Modal",
+      "gpu_classes": [
+        "t4",
+        "l4",
+        "a10g",
+        "a100",
+        "h100"
+      ],
+      "id": "modal",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "reward_model",
+        "process_rewards"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    }
+  ],
+  "schema_version": "hfr.cloud_training_provider_registry.v1"
+}

@@ -1,0 +1,97 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_status_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run cloud training status and cancellation receipt.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "execution_boundary": {
+      "type": "object"
+    },
+    "failed_check_count": {
+      "type": "integer"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "status_recorded",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "archive_status_receipt",
+        "inspect_launch_receipt"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.cloud_training_status_receipt.v1"
+    },
+    "source_artifacts": {
+      "type": "object"
+    },
+    "status": {
+      "additionalProperties": true,
+      "properties": {
+        "cost_incurred_usd": {
+          "const": 0
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "provider_cancel_called": {
+          "const": false
+        },
+        "provider_status": {
+          "const": "not_started"
+        },
+        "terminal": {
+          "const": true
+        }
+      },
+      "required": [
+        "provider_status",
+        "terminal",
+        "provider_cancel_called",
+        "provider_api_called",
+        "cost_incurred_usd"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "status",
+    "execution_boundary"
+  ],
+  "title": "Hermes Flight Recorder Cloud Training Status Receipt",
+  "type": "object"
+}

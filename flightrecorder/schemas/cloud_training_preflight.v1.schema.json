@@ -1,0 +1,185 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_preflight.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Fail-closed cloud training provider preflight.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "constraints": {
+      "type": "object"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "credential_checks": {
+      "items": {
+        "$ref": "#/$defs/credentialCheck"
+      },
+      "type": "array"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/boundary"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "handoff_contract": {
+      "$ref": "#/$defs/handoffContract"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "provider": {
+      "$ref": "#/$defs/provider"
+    },
+    "readiness": {
+      "enum": [
+        "ready_for_dry_run_launch_plan",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "build_dry_run_launch_plan",
+        "block_cloud_training_launch"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.cloud_training_preflight.v1"
+    },
+    "source_artifacts": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "provider",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "constraints",
+    "credential_checks",
+    "source_artifacts",
+    "execution_boundary",
+    "handoff_contract"
+  ],
+  "title": "Hermes Flight Recorder Cloud Training Preflight",
+  "type": "object",
+  "$defs": {
+    "boundary": {
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "credentialCheck": {
+      "additionalProperties": true,
+      "properties": {
+        "env_var": {
+          "type": "string"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "value_recorded": {
+          "const": false
+        }
+      },
+      "required": [
+        "env_var",
+        "present",
+        "value_recorded"
+      ],
+      "type": "object"
+    },
+    "handoffContract": {
+      "additionalProperties": true,
+      "properties": {
+        "default_live_execution_allowed": {
+          "const": false
+        },
+        "external_provider_owns_execution": {
+          "const": true
+        },
+        "flight_recorder_controls_preflight_only": {
+          "const": true
+        },
+        "requires_cost_limit": {
+          "const": true
+        },
+        "requires_environment_credentials_for_live": {
+          "const": true
+        },
+        "requires_explicit_live_opt_in": {
+          "const": true
+        },
+        "requires_region_and_gpu_constraints": {
+          "const": true
+        },
+        "requires_status_and_cancel_receipts": {
+          "const": true
+        }
+      },
+      "required": [
+        "default_live_execution_allowed",
+        "requires_explicit_live_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_cost_limit",
+        "requires_region_and_gpu_constraints",
+        "requires_status_and_cancel_receipts",
+        "flight_recorder_controls_preflight_only",
+        "external_provider_owns_execution"
+      ],
+      "type": "object"
+    },
+    "provider": {
+      "type": "object"
+    }
+  }
+}

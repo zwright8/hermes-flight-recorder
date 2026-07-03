@@ -27,6 +27,14 @@ from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSIO
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
+from .cloud_training import (
+    CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
+    CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
+    CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
+    CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION,
+    CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
+)
 from .compare_gate import compare_movement_summary
 from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
@@ -216,6 +224,12 @@ def validate_artifacts(
     training_plan_paths: list[str | Path] | None = None,
     agentic_training_result_paths: list[str | Path] | None = None,
     agentic_training_loop_plan_paths: list[str | Path] | None = None,
+    cloud_training_provider_registry_paths: list[str | Path] | None = None,
+    cloud_training_preflight_paths: list[str | Path] | None = None,
+    cloud_training_artifact_manifest_paths: list[str | Path] | None = None,
+    cloud_training_launch_plan_paths: list[str | Path] | None = None,
+    cloud_training_launch_receipt_paths: list[str | Path] | None = None,
+    cloud_training_status_receipt_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -322,6 +336,18 @@ def validate_artifacts(
         targets.append(validate_agentic_training_result(agentic_training_result_path))
     for agentic_training_loop_plan_path in agentic_training_loop_plan_paths or []:
         targets.append(validate_agentic_training_loop_plan(agentic_training_loop_plan_path))
+    for cloud_training_provider_registry_path in cloud_training_provider_registry_paths or []:
+        targets.append(validate_cloud_training_provider_registry(cloud_training_provider_registry_path))
+    for cloud_training_preflight_path in cloud_training_preflight_paths or []:
+        targets.append(validate_cloud_training_preflight(cloud_training_preflight_path))
+    for cloud_training_artifact_manifest_path in cloud_training_artifact_manifest_paths or []:
+        targets.append(validate_cloud_training_artifact_manifest(cloud_training_artifact_manifest_path))
+    for cloud_training_launch_plan_path in cloud_training_launch_plan_paths or []:
+        targets.append(validate_cloud_training_launch_plan(cloud_training_launch_plan_path))
+    for cloud_training_launch_receipt_path in cloud_training_launch_receipt_paths or []:
+        targets.append(validate_cloud_training_launch_receipt(cloud_training_launch_receipt_path))
+    for cloud_training_status_receipt_path in cloud_training_status_receipt_paths or []:
+        targets.append(validate_cloud_training_status_receipt(cloud_training_status_receipt_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -1222,6 +1248,74 @@ def validate_agentic_training_loop_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "agentic_training_loop_plan.json")
     if plan is not None:
         _validate_agentic_training_loop_plan(plan, target)
+    return target
+
+
+def validate_cloud_training_provider_registry(path: str | Path) -> ValidationTarget:
+    """Validate a cloud-training provider registry artifact."""
+    registry_path = Path(path)
+    target = ValidationTarget("cloud_training_provider_registry", str(registry_path))
+    registry = _read_object(registry_path, target, "cloud_training_provider_registry.json")
+    if registry is not None:
+        _validate_cloud_training_contract(registry, target, CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION)
+        providers = registry.get("providers")
+        if not isinstance(providers, list):
+            target.errors.append("cloud_training_provider_registry.providers must be a list.")
+        elif registry.get("provider_count") != len(providers):
+            target.errors.append(
+                f"cloud_training_provider_registry.provider_count expected {len(providers)}, got {registry.get('provider_count')!r}."
+            )
+    return target
+
+
+def validate_cloud_training_preflight(path: str | Path) -> ValidationTarget:
+    """Validate a cloud-training preflight artifact."""
+    preflight_path = Path(path)
+    target = ValidationTarget("cloud_training_preflight", str(preflight_path))
+    preflight = _read_object(preflight_path, target, "cloud_training_preflight.json")
+    if preflight is not None:
+        _validate_cloud_training_contract(preflight, target, CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION)
+        _validate_cloud_training_credentials(preflight.get("credential_checks"), target)
+    return target
+
+
+def validate_cloud_training_artifact_manifest(path: str | Path) -> ValidationTarget:
+    """Validate a cloud-training upload/download artifact manifest."""
+    manifest_path = Path(path)
+    target = ValidationTarget("cloud_training_artifact_manifest", str(manifest_path))
+    manifest = _read_object(manifest_path, target, "cloud_training_artifact_manifest.json")
+    if manifest is not None:
+        _validate_cloud_training_contract(manifest, target, CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION)
+    return target
+
+
+def validate_cloud_training_launch_plan(path: str | Path) -> ValidationTarget:
+    """Validate a cloud-training launch plan."""
+    plan_path = Path(path)
+    target = ValidationTarget("cloud_training_launch_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "cloud_training_launch_plan.json")
+    if plan is not None:
+        _validate_cloud_training_contract(plan, target, CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION)
+    return target
+
+
+def validate_cloud_training_launch_receipt(path: str | Path) -> ValidationTarget:
+    """Validate a cloud-training launch receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("cloud_training_launch_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "cloud_training_launch_receipt.json")
+    if receipt is not None:
+        _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION)
+    return target
+
+
+def validate_cloud_training_status_receipt(path: str | Path) -> ValidationTarget:
+    """Validate a cloud-training status/cancel receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("cloud_training_status_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "cloud_training_status_receipt.json")
+    if receipt is not None:
+        _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION)
     return target
 
 
@@ -2347,6 +2441,63 @@ def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTar
         target.errors.append(f"{label}.status cannot be ready while required artifacts are missing.")
     if phase.get("status") == "blocked" and not missing:
         target.errors.append(f"{label}.status cannot be blocked without missing required artifacts.")
+
+
+def _validate_cloud_training_contract(payload: dict[str, Any], target: ValidationTarget, expected_schema_version: str) -> None:
+    _require_equal(payload, "schema_version", expected_schema_version, target, prefix=f"{target.target_type}.")
+    checks = payload.get("checks")
+    if checks is not None:
+        if not isinstance(checks, list):
+            target.errors.append(f"{target.target_type}.checks must be a list.")
+            checks = []
+        failed_checks = _validate_gate_like_checks(checks, target, f"{target.target_type}.checks")
+        if payload.get("check_count") != len(checks):
+            target.errors.append(f"{target.target_type}.check_count expected {len(checks)}, got {payload.get('check_count')!r}.")
+        if payload.get("failed_check_count") != failed_checks:
+            target.errors.append(
+                f"{target.target_type}.failed_check_count expected {failed_checks}, got {payload.get('failed_check_count')!r}."
+            )
+        if isinstance(payload.get("passed"), bool) and payload.get("passed") != (failed_checks == 0):
+            target.errors.append(f"{target.target_type}.passed must match failed_check_count.")
+    boundary = payload.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append(f"{target.target_type}.execution_boundary must be an object.")
+    else:
+        if boundary.get("provider_api_called") is not False:
+            target.errors.append(f"{target.target_type}.execution_boundary.provider_api_called must be false.")
+        if boundary.get("cloud_job_started") is not False:
+            target.errors.append(f"{target.target_type}.execution_boundary.cloud_job_started must be false.")
+        if boundary.get("credential_values_recorded") is not False:
+            target.errors.append(f"{target.target_type}.execution_boundary.credential_values_recorded must be false.")
+        if boundary.get("weights_updated_by_flight_recorder") is not False:
+            target.errors.append(f"{target.target_type}.execution_boundary.weights_updated_by_flight_recorder must be false.")
+        if boundary.get("cloud_cost_incurred_usd") != 0:
+            target.errors.append(f"{target.target_type}.execution_boundary.cloud_cost_incurred_usd must be 0.")
+    target.details.update(
+        {
+            "schema_version": payload.get("schema_version"),
+            "readiness": payload.get("readiness"),
+            "recommendation": payload.get("recommendation"),
+            "check_count": payload.get("check_count"),
+        }
+    )
+
+
+def _validate_cloud_training_credentials(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, list):
+        target.errors.append("cloud_training_preflight.credential_checks must be a list.")
+        return
+    for index, row in enumerate(value):
+        label = f"cloud_training_preflight.credential_checks[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(row.get("env_var"), str) or not row.get("env_var"):
+            target.errors.append(f"{label}.env_var must be a non-empty string.")
+        if not isinstance(row.get("present"), bool):
+            target.errors.append(f"{label}.present must be a boolean.")
+        if row.get("value_recorded") is not False:
+            target.errors.append(f"{label}.value_recorded must be false.")
 
 
 def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, int]:

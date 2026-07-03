@@ -622,6 +622,54 @@ schema-checkable control-plane contract, not an executor: it records
 the plan remains `planned_fail_closed` and recommends collecting those receipts
 before any live launch or promotion claim.
 
+Cloud trainer integrations use the same fail-closed receipt pattern. The
+`flightrecorder cloud-training` namespace currently emits provider registry,
+preflight, artifact upload/download, launch-plan, launch-receipt, and
+status/cancel receipts for partner families such as Hugging Face Jobs/AutoTrain,
+Modal, RunPod, Lambda Labs, CoreWeave, Together, Fireworks, Replicate, AWS
+SageMaker, GCP Vertex AI, Azure ML, Databricks/Mosaic, and NVIDIA DGX Cloud/Brev:
+
+```bash
+flightrecorder cloud-training providers \
+  --out runs/cloud_provider_registry.json
+
+flightrecorder cloud-training artifacts \
+  --provider modal \
+  --upload runs/trainer_archive/trainer_archive.json \
+  --download adapters/candidate/adapter_model.safetensors \
+  --out runs/cloud_artifacts.json
+
+flightrecorder cloud-training preflight \
+  --provider modal \
+  --agentic-training-plan runs/agentic_training_plan.json \
+  --trainer-preflight runs/trainer_preflight.json \
+  --trainer-launch-check runs/trainer_launch_check.json \
+  --region provider_default \
+  --gpu-class a100 \
+  --max-cost-usd 0 \
+  --out runs/cloud_preflight.json
+
+flightrecorder cloud-training plan \
+  --preflight runs/cloud_preflight.json \
+  --artifact-manifest runs/cloud_artifacts.json \
+  --out runs/cloud_launch_plan.json
+
+flightrecorder cloud-training launch \
+  --launch-plan runs/cloud_launch_plan.json \
+  --out runs/cloud_launch_receipt.json
+
+flightrecorder cloud-training status \
+  --launch-receipt runs/cloud_launch_receipt.json \
+  --cancel \
+  --out runs/cloud_status_receipt.json
+```
+
+These commands are executable offline and keyless. They do not import provider
+SDKs, call provider APIs, create jobs, incur cost, download models, or update
+weights. `--live` launch receipts are intentionally blocked until a future
+provider transport proves explicit opt-in, credentials, cost limits,
+region/GPU constraints, artifact manifests, and status/cancel receipts.
+
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle
 runs/evidence_bundle_trainer.json --strict` before handing the package to an

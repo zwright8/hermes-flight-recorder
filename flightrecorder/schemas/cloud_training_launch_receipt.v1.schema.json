@@ -1,0 +1,96 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_launch_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run or blocked live cloud training launch receipt.",
+  "properties": {
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "check_count": {
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "execution_boundary": {
+      "type": "object"
+    },
+    "failed_check_count": {
+      "type": "integer"
+    },
+    "launch": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_job_started": {
+          "const": false
+        },
+        "cost_incurred_usd": {
+          "const": 0
+        },
+        "mode": {
+          "enum": [
+            "dry_run",
+            "live"
+          ]
+        },
+        "provider_api_called": {
+          "const": false
+        }
+      },
+      "required": [
+        "mode",
+        "cloud_job_started",
+        "provider_api_called",
+        "cost_incurred_usd"
+      ],
+      "type": "object"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "dry_run_recorded",
+        "blocked"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "safe_to_archive_dry_run_receipt",
+        "block_live_cloud_launch"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.cloud_training_launch_receipt.v1"
+    },
+    "source_artifacts": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "launch",
+    "execution_boundary"
+  ],
+  "title": "Hermes Flight Recorder Cloud Training Launch Receipt",
+  "type": "object"
+}
