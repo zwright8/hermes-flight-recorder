@@ -1235,6 +1235,21 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["validation_summaries"][0]["path"], str(validation))
             self.assertEqual(result["validation_summaries"][0]["targets"][0]["type"], "improvement_ledger_gate")
             self.assertEqual(len(result["validation_summaries"][0]["sha256"]), 64)
+            self.assertIn("size_bytes", result["validation_summaries"][0])
+            schema = check_schema_contract(result, name_or_id="trainer_preflight")
+            self.assertTrue(schema["passed"], schema["errors"])
+            for field_name in ("sha256", "size_bytes"):
+                forged = json.loads(json.dumps(result))
+                forged["validation_summaries"][0].pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_preflight")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            non_regular = json.loads(json.dumps(result))
+            non_regular["validation_summaries"][0]["regular_file"] = False
+            non_regular["validation_summaries"][0].pop("sha256")
+            non_regular["validation_summaries"][0].pop("size_bytes")
+            non_regular_schema = check_schema_contract(non_regular, name_or_id="trainer_preflight")
+            self.assertTrue(non_regular_schema["passed"], non_regular_schema["errors"])
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
     def test_trainer_preflight_rejects_failed_external_validation_summary(self):

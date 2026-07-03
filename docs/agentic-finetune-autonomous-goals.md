@@ -638,6 +638,9 @@ card, and dataset card decisions.
 - Trainer preflight schema-contract records reject regular files that omit
   SHA-256 or byte-size evidence while preserving non-regular contract
   diagnostics.
+- Trainer preflight validation-summary records reject regular files that omit
+  SHA-256 or byte-size evidence while preserving non-regular summary
+  diagnostics.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

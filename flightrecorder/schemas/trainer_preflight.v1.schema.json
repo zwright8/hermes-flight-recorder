@@ -524,6 +524,40 @@
     },
     "validationSummary": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "exists": {
+                  "const": true
+                },
+                "regular_file": {
+                  "const": true
+                }
+              },
+              "required": [
+                "exists",
+                "regular_file",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "regular_file": {
+                  "const": false
+                }
+              },
+              "required": [
+                "regular_file"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "error_count": {
           "minimum": 0,
