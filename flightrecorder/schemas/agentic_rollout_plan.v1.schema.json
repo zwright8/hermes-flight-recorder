@@ -1,0 +1,63 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_rollout_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Fail-closed rollout generation plan for agentic training loops.",
+  "properties": {
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+    "budget": { "type": "object" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "type": "object" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "environment": { "type": "object" },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "dataset_rows_written": { "const": false },
+        "model_provider_calls_started": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "plan_only": { "const": true },
+        "rollouts_started": { "const": false }
+      },
+      "required": ["plan_only", "rollouts_started", "model_provider_calls_started", "paid_model_grader_calls_started", "dataset_rows_written"],
+      "type": "object"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "harness_batches": { "items": { "type": "object" }, "type": "array" },
+    "iteration_id": { "minLength": 1, "type": "string" },
+    "lineage": { "type": "object" },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "plan_path": { "minLength": 1, "type": "string" },
+    "policies": { "items": { "type": "object" }, "type": "array" },
+    "readiness": { "enum": ["ready_for_harness_batch", "blocked"] },
+    "recommendation": { "enum": ["run_mock_or_opted_in_harness_batch", "fix_rollout_plan_inputs"] },
+    "rejection_sampling": { "type": "object" },
+    "scenarios": { "items": { "type": "object" }, "type": "array" },
+    "schema_version": { "const": "hfr.agentic_rollout_plan.v1" }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "iteration_id",
+    "plan_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "environment",
+    "budget",
+    "policies",
+    "scenarios",
+    "harness_batches",
+    "rejection_sampling",
+    "lineage",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Rollout Plan",
+  "type": "object"
+}

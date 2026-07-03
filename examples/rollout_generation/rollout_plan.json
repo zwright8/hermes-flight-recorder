@@ -1,0 +1,226 @@
+{
+  "blocked_reasons": [],
+  "budget": {
+    "live_provider_calls_allowed": false,
+    "max_rollouts": 6,
+    "planned_rollouts": 6
+  },
+  "check_count": 5,
+  "checks": [
+    {
+      "actual": {
+        "scenarios": [
+          {
+            "exists": true,
+            "id": "prompt_injection_good",
+            "path": "scenarios/prompt_injection_good.json",
+            "schema_version": "",
+            "sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad"
+          },
+          {
+            "exists": true,
+            "id": "email_reply_completion_good",
+            "path": "scenarios/email_reply_completion_good.json",
+            "schema_version": "",
+            "sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5"
+          }
+        ]
+      },
+      "expected": {
+        "all_scenarios_exist": true
+      },
+      "id": "scenario_inputs_exist",
+      "passed": true,
+      "summary": "scenario_inputs_exist: passed=True"
+    },
+    {
+      "actual": {
+        "max_rollouts": 6
+      },
+      "expected": {
+        "max_rollouts": ">0"
+      },
+      "id": "rollout_budget_positive",
+      "passed": true,
+      "summary": "rollout_budget_positive: passed=True"
+    },
+    {
+      "actual": {
+        "planned_rollouts": 6
+      },
+      "expected": {
+        "max_rollouts": 6
+      },
+      "id": "rollout_budget_not_exceeded",
+      "passed": true,
+      "summary": "rollout_budget_not_exceeded: passed=True"
+    },
+    {
+      "actual": {
+        "policy_count": 3
+      },
+      "expected": {
+        "policy_count": ">=1"
+      },
+      "id": "at_least_one_policy_configured",
+      "passed": true,
+      "summary": "at_least_one_policy_configured: passed=True"
+    },
+    {
+      "actual": {
+        "rollouts_started": false
+      },
+      "expected": {
+        "rollouts_started": false
+      },
+      "id": "flight_recorder_did_not_run_rollouts",
+      "passed": true,
+      "summary": "flight_recorder_did_not_run_rollouts: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "environment": {
+    "external_state_verifiers": [
+      {
+        "exists": true,
+        "path": "examples/external_verification/sqlite_task_state.verifier.json",
+        "role": "verifier_config",
+        "sha256": "227b94fe9110506542142dcc577982ee598a766923a38681ce8b7b98718c223e",
+        "size_bytes": 399
+      }
+    ],
+    "id": "offline_mock",
+    "network_default": "disabled",
+    "replayable": true
+  },
+  "execution_boundary": {
+    "dataset_rows_written": false,
+    "model_provider_calls_started": false,
+    "paid_model_grader_calls_started": false,
+    "plan_only": true,
+    "rollouts_started": false
+  },
+  "failed_check_count": 0,
+  "harness_batches": [
+    {
+      "batch_id": "prompt_injection_good::baseline",
+      "harness_mode": "offline_mock",
+      "policy_id": "local/mock-baseline",
+      "policy_role": "baseline",
+      "scenario_id": "prompt_injection_good",
+      "scenario_sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+      "status": "planned"
+    },
+    {
+      "batch_id": "prompt_injection_good::candidate",
+      "harness_mode": "offline_mock",
+      "policy_id": "local/mock-candidate",
+      "policy_role": "candidate",
+      "scenario_id": "prompt_injection_good",
+      "scenario_sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+      "status": "planned"
+    },
+    {
+      "batch_id": "prompt_injection_good::teacher",
+      "harness_mode": "offline_mock",
+      "policy_id": "local/mock-teacher",
+      "policy_role": "teacher",
+      "scenario_id": "prompt_injection_good",
+      "scenario_sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+      "status": "planned"
+    },
+    {
+      "batch_id": "email_reply_completion_good::baseline",
+      "harness_mode": "offline_mock",
+      "policy_id": "local/mock-baseline",
+      "policy_role": "baseline",
+      "scenario_id": "email_reply_completion_good",
+      "scenario_sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5",
+      "status": "planned"
+    },
+    {
+      "batch_id": "email_reply_completion_good::candidate",
+      "harness_mode": "offline_mock",
+      "policy_id": "local/mock-candidate",
+      "policy_role": "candidate",
+      "scenario_id": "email_reply_completion_good",
+      "scenario_sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5",
+      "status": "planned"
+    },
+    {
+      "batch_id": "email_reply_completion_good::teacher",
+      "harness_mode": "offline_mock",
+      "policy_id": "local/mock-teacher",
+      "policy_role": "teacher",
+      "scenario_id": "email_reply_completion_good",
+      "scenario_sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5",
+      "status": "planned"
+    }
+  ],
+  "iteration_id": "rollout-demo-001",
+  "lineage": {
+    "dataset_rows_created": false,
+    "expected_trace_artifacts": [
+      "normalized_trace",
+      "scorecard",
+      "task_completion",
+      "run_digest",
+      "artifact_lineage"
+    ],
+    "preserve_source_hashes": true
+  },
+  "notes": [
+    "This plan schedules rollout batches only; it does not call model providers or run harnesses.",
+    "External-state verifier configs are referenced by hash so rollout receipts can prove which checks were expected."
+  ],
+  "passed": true,
+  "plan_path": "examples/rollout_generation/rollout_plan.json",
+  "policies": [
+    {
+      "id": "local/mock-baseline",
+      "live_calls_allowed": false,
+      "role": "baseline"
+    },
+    {
+      "id": "local/mock-candidate",
+      "live_calls_allowed": false,
+      "role": "candidate"
+    },
+    {
+      "id": "local/mock-teacher",
+      "live_calls_allowed": false,
+      "role": "teacher"
+    }
+  ],
+  "readiness": "ready_for_harness_batch",
+  "recommendation": "run_mock_or_opted_in_harness_batch",
+  "rejection_sampling": {
+    "accepted_dataset_roles": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "reward_model"
+    ],
+    "enabled": true,
+    "requires_review_calibration_before_training": true,
+    "requires_scorecard": true,
+    "requires_task_completion": true
+  },
+  "scenarios": [
+    {
+      "exists": true,
+      "id": "prompt_injection_good",
+      "path": "scenarios/prompt_injection_good.json",
+      "schema_version": "",
+      "sha256": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad"
+    },
+    {
+      "exists": true,
+      "id": "email_reply_completion_good",
+      "path": "scenarios/email_reply_completion_good.json",
+      "schema_version": "",
+      "sha256": "9a4fd5d37b9aeb66c8adf40118e766682d0b2488011d5a024781d5e53d9878e5"
+    }
+  ],
+  "schema_version": "hfr.agentic_rollout_plan.v1"
+}

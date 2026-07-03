@@ -59,6 +59,7 @@ and handoff receipts that make those systems auditable.
 | --- | --- | --- |
 | Evidence | Normalize traces, score scenarios, build evidence bundles, gate readiness. | `flightrecorder run`, `run-suite`, `evidence-bundle`, `gate-suite`, `validate` |
 | Harness | Run or replay tasks through mock, Hermes, OpenClaw, Coven, or Codex-style runners. | `scripts/hermes_harness.py run-scenario`, `run-suite`, `probe-model`, `replay-trace` |
+| Rollouts | Plan baseline/candidate/teacher harness batches, replayable environments, verifier refs, budgets, and rejection-sampling gates. | `agentic-rollout-plan`, `validate --agentic-rollout-plan` |
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs. | `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `archive_agentic_training_result.py` |

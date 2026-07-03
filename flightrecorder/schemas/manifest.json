@@ -682,6 +682,14 @@
       "name": "cloud_training_status_receipt"
     },
     {
+      "artifact": "agentic_rollout_plan",
+      "artifact_schema_version": "hfr.agentic_rollout_plan.v1",
+      "description": "Fail-closed rollout generation plan for agentic training loops.",
+      "filename": "agentic_rollout_plan.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_rollout_plan.v1.schema.json",
+      "name": "agentic_rollout_plan"
+    },
+    {
       "artifact": "model_candidate",
       "artifact_schema_version": "hfr.model_candidate.v1",
       "description": "Base-model scouting candidate with source, license review, terms, and compatibility metadata.",

@@ -123,6 +123,7 @@ from .reviewed_gate import (
     evaluate_reviewed_gate,
     load_reviewed_gate_policy,
 )
+from .rollout_generation import RolloutGenerationError, build_agentic_rollout_plan, write_agentic_rollout_plan
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .schema_registry import (
     SchemaRegistryError,
@@ -202,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         SuiteGatePolicyError,
         ReviewExportError,
         ReviewedGatePolicyError,
+        RolloutGenerationError,
         RepairQueueError,
         TrainerPreflightError,
         TrainerArchiveError,
@@ -1082,6 +1084,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         cloud_training_launch_plan_paths=args.cloud_training_launch_plan,
         cloud_training_launch_receipt_paths=args.cloud_training_launch_receipt,
         cloud_training_status_receipt_paths=args.cloud_training_status_receipt,
+        agentic_rollout_plan_paths=args.agentic_rollout_plan,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -1522,6 +1525,27 @@ def cmd_cloud_training_status(args: argparse.Namespace) -> int:
     )
     _emit_json_payload(receipt, args.out)
     return 0 if receipt["passed"] else 1
+
+
+def cmd_agentic_rollout_plan(args: argparse.Namespace) -> int:
+    policies = dict(args.policy or [])
+    plan = build_agentic_rollout_plan(
+        out_path=args.out,
+        iteration_id=args.iteration_id,
+        scenario_paths=args.scenario,
+        policies=policies,
+        max_rollouts=args.max_rollouts,
+        verifier_paths=args.verifier,
+        environment_id=args.environment_id,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    write_agentic_rollout_plan(args.out, plan)
+    print(
+        f"wrote {args.out} readiness={plan['readiness']} "
+        f"planned_rollouts={plan['budget']['planned_rollouts']}/{plan['budget']['max_rollouts']}"
+    )
+    return 0 if plan["passed"] else 1
 
 
 def cmd_heldout_manifest(args: argparse.Namespace) -> int:
@@ -2841,6 +2865,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--cloud-training-launch-plan", action="append", default=[], help="Validate one cloud training launch plan")
     validate.add_argument("--cloud-training-launch-receipt", action="append", default=[], help="Validate one cloud training launch receipt")
     validate.add_argument("--cloud-training-status-receipt", action="append", default=[], help="Validate one cloud training status receipt")
+    validate.add_argument("--agentic-rollout-plan", action="append", default=[], help="Validate one agentic rollout generation plan")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -3162,6 +3187,25 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_status.add_argument("--out", help="Write cloud training status receipt JSON to this path")
     cloud_training_status.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
     cloud_training_status.set_defaults(func=cmd_cloud_training_status)
+
+    agentic_rollout_plan = subparsers.add_parser("agentic-rollout-plan", help="Write a fail-closed rollout generation plan")
+    agentic_rollout_plan.add_argument("--iteration-id", required=True, help="Stable iteration id")
+    agentic_rollout_plan.add_argument("--scenario", action="append", required=True, help="Scenario JSON path; may be repeated")
+    agentic_rollout_plan.add_argument(
+        "--policy",
+        action="append",
+        required=True,
+        type=_state_set_arg,
+        metavar="ROLE=ID",
+        help="Policy role mapping such as baseline=local/base; may be repeated",
+    )
+    agentic_rollout_plan.add_argument("--max-rollouts", type=_positive_int_arg, required=True, help="Maximum planned rollout count")
+    agentic_rollout_plan.add_argument("--verifier", action="append", default=[], help="External-state verifier config path; may be repeated")
+    agentic_rollout_plan.add_argument("--environment-id", default="offline_mock", help="Replayable environment descriptor id")
+    agentic_rollout_plan.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    agentic_rollout_plan.add_argument("--out", required=True, help="Write hfr.agentic_rollout_plan.v1 JSON to this path")
+    agentic_rollout_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rollout plan")
+    agentic_rollout_plan.set_defaults(func=cmd_agentic_rollout_plan)
 
     eval_summary = subparsers.add_parser("eval-summary", help="Build a governance-ready held-out eval summary")
     eval_summary.add_argument(
@@ -4207,6 +4251,13 @@ def _non_negative_int_arg(value: str) -> int:
         raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
+def _positive_int_arg(value: str) -> int:
+    parsed = _non_negative_int_arg(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
 
 

@@ -21,6 +21,7 @@ flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
+flightrecorder schemas --check runs/agentic_rollout_plan.json
 flightrecorder schemas --check runs/harness_prompt_injection_good/harness_result.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
@@ -589,6 +590,28 @@ Validate result receipts directly before bundling them:
 ```bash
 flightrecorder validate \
   --agentic-training-result runs/agentic_training_result.json \
+  --strict
+```
+
+Use `flightrecorder agentic-rollout-plan` before collecting new rollouts. It
+binds scenarios, baseline/candidate/teacher policy ids, replayable environment
+metadata, external-state verifier refs, rollout budgets, rejection-sampling
+requirements, and expected trace/dataset lineage without calling model
+providers or writing dataset rows:
+
+```bash
+flightrecorder agentic-rollout-plan \
+  --iteration-id rollout-001 \
+  --scenario scenarios/prompt_injection_good.json \
+  --policy baseline=local/base \
+  --policy candidate=local/candidate \
+  --policy teacher=local/teacher \
+  --max-rollouts 3 \
+  --verifier examples/external_verification/sqlite_task_state.verifier.json \
+  --out runs/agentic_rollout_plan.json
+
+flightrecorder validate \
+  --agentic-rollout-plan runs/agentic_rollout_plan.json \
   --strict
 ```
 

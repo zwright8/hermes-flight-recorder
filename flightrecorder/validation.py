@@ -109,6 +109,7 @@ from .review import (
     REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
     REVIEWED_SFT_SCHEMA_VERSION,
 )
+from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
@@ -230,6 +231,7 @@ def validate_artifacts(
     cloud_training_launch_plan_paths: list[str | Path] | None = None,
     cloud_training_launch_receipt_paths: list[str | Path] | None = None,
     cloud_training_status_receipt_paths: list[str | Path] | None = None,
+    agentic_rollout_plan_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -348,6 +350,8 @@ def validate_artifacts(
         targets.append(validate_cloud_training_launch_receipt(cloud_training_launch_receipt_path))
     for cloud_training_status_receipt_path in cloud_training_status_receipt_paths or []:
         targets.append(validate_cloud_training_status_receipt(cloud_training_status_receipt_path))
+    for agentic_rollout_plan_path in agentic_rollout_plan_paths or []:
+        targets.append(validate_agentic_rollout_plan(agentic_rollout_plan_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -1316,6 +1320,16 @@ def validate_cloud_training_status_receipt(path: str | Path) -> ValidationTarget
     receipt = _read_object(receipt_path, target, "cloud_training_status_receipt.json")
     if receipt is not None:
         _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION)
+    return target
+
+
+def validate_agentic_rollout_plan(path: str | Path) -> ValidationTarget:
+    """Validate an agentic rollout generation plan."""
+    plan_path = Path(path)
+    target = ValidationTarget("agentic_rollout_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "agentic_rollout_plan.json")
+    if plan is not None:
+        _validate_agentic_rollout_plan(plan, target)
     return target
 
 
@@ -2498,6 +2512,47 @@ def _validate_cloud_training_credentials(value: Any, target: ValidationTarget) -
             target.errors.append(f"{label}.present must be a boolean.")
         if row.get("value_recorded") is not False:
             target.errors.append(f"{label}.value_recorded must be false.")
+
+
+def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(plan, "schema_version", AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, target, prefix="agentic_rollout_plan.")
+    checks = plan.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("agentic_rollout_plan.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "agentic_rollout_plan.checks")
+    if plan.get("check_count") != len(checks):
+        target.errors.append(f"agentic_rollout_plan.check_count expected {len(checks)}, got {plan.get('check_count')!r}.")
+    if plan.get("failed_check_count") != failed_checks:
+        target.errors.append(f"agentic_rollout_plan.failed_check_count expected {failed_checks}, got {plan.get('failed_check_count')!r}.")
+    if plan.get("passed") != (failed_checks == 0):
+        target.errors.append("agentic_rollout_plan.passed must match failed_check_count.")
+    expected_readiness = "ready_for_harness_batch" if failed_checks == 0 else "blocked"
+    if plan.get("readiness") != expected_readiness:
+        target.errors.append(f"agentic_rollout_plan.readiness expected {expected_readiness!r}, got {plan.get('readiness')!r}.")
+    budget = plan.get("budget") if isinstance(plan.get("budget"), dict) else {}
+    batches = plan.get("harness_batches") if isinstance(plan.get("harness_batches"), list) else []
+    if budget.get("planned_rollouts") != len(batches):
+        target.errors.append(f"agentic_rollout_plan.budget.planned_rollouts expected {len(batches)}, got {budget.get('planned_rollouts')!r}.")
+    if budget.get("live_provider_calls_allowed") is not False:
+        target.errors.append("agentic_rollout_plan.budget.live_provider_calls_allowed must be false.")
+    boundary = plan.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append("agentic_rollout_plan.execution_boundary must be an object.")
+    else:
+        for field_name in ("plan_only",):
+            if boundary.get(field_name) is not True:
+                target.errors.append(f"agentic_rollout_plan.execution_boundary.{field_name} must be true.")
+        for field_name in ("rollouts_started", "model_provider_calls_started", "paid_model_grader_calls_started", "dataset_rows_written"):
+            if boundary.get(field_name) is not False:
+                target.errors.append(f"agentic_rollout_plan.execution_boundary.{field_name} must be false.")
+    target.details.update(
+        {
+            "iteration_id": plan.get("iteration_id"),
+            "planned_rollouts": budget.get("planned_rollouts"),
+            "readiness": plan.get("readiness"),
+        }
+    )
 
 
 def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, int]:
