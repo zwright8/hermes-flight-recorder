@@ -23,6 +23,11 @@ from .action_gate import (
     load_action_ledger_gate_policy,
 )
 from .adapters import AdapterError, normalize_trace
+from .agentic_training_loop_plan import (
+    AgenticTrainingLoopPlanError,
+    build_agentic_training_loop_plan,
+    write_agentic_training_loop_plan,
+)
 from .artifacts import (
     ArtifactError,
     build_suite_trend,
@@ -217,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionLedgerGatePolicyError,
         PromotionLedgerError,
         PromotionArchiveError,
+        AgenticTrainingLoopPlanError,
         ReplayError,
         SchemaRegistryError,
         ModelRegistryError,
@@ -1057,6 +1063,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         model_registry_paths=args.model_registry,
         training_plan_paths=args.training_plan,
         agentic_training_result_paths=args.agentic_training_result,
+        agentic_training_loop_plan_paths=args.agentic_loop_plan,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -1378,6 +1385,56 @@ def cmd_external_eval_plan(args: argparse.Namespace) -> int:
     else:
         print(json.dumps(plan, indent=2, sort_keys=True, ensure_ascii=False))
     return 0 if plan["ready"] else 1
+
+
+def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
+    artifact_paths = {
+        "action_ledger": args.action_ledger,
+        "agentic_training_plan": args.agentic_training_plan,
+        "agentic_training_result": args.agentic_training_result,
+        "agentic_training_runtime_preflight": args.agentic_training_runtime_preflight,
+        "evidence_bundle": args.evidence_bundle,
+        "eval_summary": args.eval_summary,
+        "external_eval_plan": args.external_eval_plan,
+        "harness_manifest": args.harness_manifest,
+        "harness_result": args.harness_result,
+        "heldout_manifest": args.heldout_manifest,
+        "improvement_ledger": args.improvement_ledger,
+        "improvement_plan": args.improvement_plan,
+        "promotion_decision": args.promotion_decision,
+        "promotion_ledger": args.promotion_ledger,
+        "review_calibration": args.review_calibration,
+        "reviewed_gate": args.reviewed_gate,
+        "serving_lifecycle": args.serving_lifecycle,
+        "trainer_launch_check": args.trainer_launch_check,
+        "trainer_preflight": args.trainer_preflight,
+        "training_export": args.training_export,
+    }
+    provider_constraints = {
+        "providers": args.provider,
+        "regions": args.region,
+        "gpu_classes": args.gpu_class,
+    }
+    plan = build_agentic_training_loop_plan(
+        out_path=args.out,
+        iteration_id=args.iteration_id,
+        objective=args.objective,
+        candidate=args.candidate,
+        baseline=args.baseline,
+        teacher=args.teacher,
+        artifact_paths=artifact_paths,
+        budget=dict(args.budget or []),
+        provider_constraints=provider_constraints,
+        schedule=dict(args.schedule or []),
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    write_agentic_training_loop_plan(args.out, plan)
+    print(
+        f"wrote {args.out} readiness={plan['readiness']} "
+        f"checks={plan['check_count'] - plan['failed_check_count']}/{plan['check_count']}"
+    )
+    return 0
 
 
 def cmd_heldout_manifest(args: argparse.Namespace) -> int:
@@ -2685,6 +2742,12 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one agentic_training_result.json receipt; may be repeated",
     )
+    validate.add_argument(
+        "--agentic-loop-plan",
+        action="append",
+        default=[],
+        help="Validate one agentic_training_loop_plan.json contract; may be repeated",
+    )
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -2907,6 +2970,49 @@ def _parser() -> argparse.ArgumentParser:
     external_eval_plan.add_argument("--out", help="Write external eval adapter plan JSON to this path")
     external_eval_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
     external_eval_plan.set_defaults(func=cmd_external_eval_plan)
+
+    agentic_loop = subparsers.add_parser("agentic-loop", help="Plan closed-loop agentic training iterations")
+    agentic_loop_subparsers = agentic_loop.add_subparsers(dest="agentic_loop_command", required=True)
+    agentic_loop_plan = agentic_loop_subparsers.add_parser("plan", help="Write a fail-closed agentic training loop plan")
+    agentic_loop_plan.add_argument("--iteration-id", required=True, help="Stable iteration id for this loop contract")
+    agentic_loop_plan.add_argument("--out", required=True, help="Write hfr.agentic_training_loop_plan.v1 JSON to this path")
+    agentic_loop_plan.add_argument("--objective", help="Human-readable iteration objective")
+    agentic_loop_plan.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    agentic_loop_plan.add_argument("--baseline", help="Baseline policy/model id")
+    agentic_loop_plan.add_argument("--candidate", help="Candidate policy/model id")
+    agentic_loop_plan.add_argument("--teacher", help="Teacher policy/model id")
+    agentic_loop_plan.add_argument("--provider", action="append", default=[], help="Allowed external trainer/provider id; may be repeated")
+    agentic_loop_plan.add_argument("--region", action="append", default=[], help="Allowed cloud region; may be repeated")
+    agentic_loop_plan.add_argument("--gpu-class", action="append", default=[], help="Allowed GPU class; may be repeated")
+    agentic_loop_plan.add_argument("--budget", action="append", default=[], type=_state_set_arg, help="Attach budget KEY=JSON_VALUE; may be repeated")
+    agentic_loop_plan.add_argument("--schedule", action="append", default=[], type=_state_set_arg, help="Attach next-iteration schedule KEY=JSON_VALUE; may be repeated")
+    agentic_loop_plan.add_argument("--harness-manifest", action="append", default=[], help="harness_run_manifest artifact; may be repeated")
+    agentic_loop_plan.add_argument("--harness-result", action="append", default=[], help="harness_run_result artifact; may be repeated")
+    agentic_loop_plan.add_argument("--evidence-bundle", action="append", default=[], help="evidence_bundle artifact; may be repeated")
+    agentic_loop_plan.add_argument("--review-calibration", action="append", default=[], help="review_calibration artifact; may be repeated")
+    agentic_loop_plan.add_argument("--reviewed-gate", action="append", default=[], help="reviewed_gate artifact; may be repeated")
+    agentic_loop_plan.add_argument("--training-export", action="append", default=[], help="export-rl directory; may be repeated")
+    agentic_loop_plan.add_argument("--agentic-training-plan", action="append", default=[], help="agentic_training_plan artifact; may be repeated")
+    agentic_loop_plan.add_argument(
+        "--agentic-training-runtime-preflight",
+        action="append",
+        default=[],
+        help="agentic_training_runtime_preflight artifact; may be repeated",
+    )
+    agentic_loop_plan.add_argument("--agentic-training-result", action="append", default=[], help="agentic_training_result artifact; may be repeated")
+    agentic_loop_plan.add_argument("--trainer-preflight", action="append", default=[], help="trainer_preflight artifact; may be repeated")
+    agentic_loop_plan.add_argument("--trainer-launch-check", action="append", default=[], help="trainer_launch_check artifact; may be repeated")
+    agentic_loop_plan.add_argument("--serving-lifecycle", action="append", default=[], help="serving_lifecycle artifact; may be repeated")
+    agentic_loop_plan.add_argument("--heldout-manifest", action="append", default=[], help="heldout manifest artifact; may be repeated")
+    agentic_loop_plan.add_argument("--external-eval-plan", action="append", default=[], help="external_eval_plan artifact; may be repeated")
+    agentic_loop_plan.add_argument("--eval-summary", action="append", default=[], help="eval_summary artifact; may be repeated")
+    agentic_loop_plan.add_argument("--improvement-plan", action="append", default=[], help="improvement_plan artifact; may be repeated")
+    agentic_loop_plan.add_argument("--improvement-ledger", action="append", default=[], help="improvement_ledger artifact; may be repeated")
+    agentic_loop_plan.add_argument("--action-ledger", action="append", default=[], help="action_ledger artifact; may be repeated")
+    agentic_loop_plan.add_argument("--promotion-decision", action="append", default=[], help="promotion_decision artifact; may be repeated")
+    agentic_loop_plan.add_argument("--promotion-ledger", action="append", default=[], help="promotion_ledger artifact; may be repeated")
+    agentic_loop_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
+    agentic_loop_plan.set_defaults(func=cmd_agentic_loop_plan)
 
     eval_summary = subparsers.add_parser("eval-summary", help="Build a governance-ready held-out eval summary")
     eval_summary.add_argument(

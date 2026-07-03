@@ -1,0 +1,490 @@
+{
+  "artifact_count": 3,
+  "artifact_role_counts": [
+    {
+      "count": 1,
+      "role": "agentic_training_plan"
+    },
+    {
+      "count": 1,
+      "role": "agentic_training_result"
+    },
+    {
+      "count": 1,
+      "role": "agentic_training_runtime_preflight"
+    }
+  ],
+  "blocked_reasons": [
+    "uncalibrated_labels_block_training_data: passed=False",
+    "external_trainer_handoff_is_preflighted: passed=False",
+    "heldout_eval_is_fail_closed: passed=False",
+    "governance_required_for_promotion: passed=False"
+  ],
+  "budget": {
+    "live_spend_allowed": false,
+    "max_cloud_cost_usd": 0,
+    "max_gpu_hours": 0,
+    "max_rollouts": null,
+    "max_training_examples": null
+  },
+  "check_count": 8,
+  "checks": [
+    {
+      "actual": {
+        "phase_count": 13
+      },
+      "expected": {
+        "phase_count": 13
+      },
+      "id": "phase_contracts_present",
+      "passed": true,
+      "summary": "phase_contracts_present: passed=True"
+    },
+    {
+      "actual": {
+        "unsafe_refs": []
+      },
+      "expected": {
+        "unsafe_refs": []
+      },
+      "id": "artifact_references_are_public_safe",
+      "passed": true,
+      "summary": "artifact_references_are_public_safe: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_jobs_started": false,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "paid_model_grader_calls_started": false,
+        "weights_updated": false
+      },
+      "expected": {
+        "cloud_jobs_started": false,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "paid_model_grader_calls_started": false,
+        "weights_updated": false
+      },
+      "id": "flight_recorder_did_not_launch_external_work",
+      "passed": true,
+      "summary": "flight_recorder_did_not_launch_external_work: passed=True"
+    },
+    {
+      "actual": {
+        "environment_credentials_checked": false,
+        "live_launch_opt_in": false
+      },
+      "expected": {
+        "environment_credentials_checked": true,
+        "live_launch_opt_in": true
+      },
+      "id": "live_launches_require_explicit_opt_in",
+      "passed": true,
+      "summary": "live_launches_require_explicit_opt_in: passed=True"
+    },
+    {
+      "actual": {
+        "review_calibration_present": false,
+        "reviewed_gate_present": false
+      },
+      "expected": {
+        "review_calibration_present": true,
+        "reviewed_gate_present": true
+      },
+      "id": "uncalibrated_labels_block_training_data",
+      "passed": false,
+      "summary": "uncalibrated_labels_block_training_data: passed=False"
+    },
+    {
+      "actual": {
+        "agentic_training_plan_present": true,
+        "trainer_launch_check_present": false,
+        "trainer_preflight_present": false
+      },
+      "expected": {
+        "agentic_training_plan_present": true,
+        "trainer_launch_check_present": true,
+        "trainer_preflight_present": true
+      },
+      "id": "external_trainer_handoff_is_preflighted",
+      "passed": false,
+      "summary": "external_trainer_handoff_is_preflighted: passed=False"
+    },
+    {
+      "actual": {
+        "external_eval_plan_present": false,
+        "heldout_manifest_present": false
+      },
+      "expected": {
+        "external_eval_plan_present": true,
+        "heldout_manifest_present": true
+      },
+      "id": "heldout_eval_is_fail_closed",
+      "passed": false,
+      "summary": "heldout_eval_is_fail_closed: passed=False"
+    },
+    {
+      "actual": {
+        "promotion_decision_present": false,
+        "promotion_ledger_present": false
+      },
+      "expected": {
+        "promotion_decision_present": true,
+        "promotion_ledger_present": true
+      },
+      "id": "governance_required_for_promotion",
+      "passed": false,
+      "summary": "governance_required_for_promotion: passed=False"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "cloud_jobs_started": false,
+    "credential_values_recorded": false,
+    "dry_run_plan_only": true,
+    "live_benchmarks_started": false,
+    "model_downloads_started": false,
+    "paid_model_grader_calls_started": false,
+    "public_artifact_paths_redacted": true,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 4,
+  "handoff_contract": {
+    "default_live_execution_allowed": false,
+    "external_trainers_own_weight_updates": true,
+    "flight_recorder_controls_preflight_and_receipts": true,
+    "live_launch_requires_explicit_opt_in": true,
+    "requires_calibrated_review_before_training_data": true,
+    "requires_environment_credentials_for_live": true,
+    "requires_governance_decision_before_alias_update": true,
+    "requires_heldout_eval_before_promotion": true,
+    "requires_trainer_launch_check": true,
+    "requires_trainer_preflight": true
+  },
+  "iteration_id": "demo-loop-001",
+  "missing_phase_inputs": [
+    "action_ledger",
+    "eval_summary",
+    "evidence_bundle",
+    "external_eval_plan",
+    "harness_result",
+    "heldout_manifest",
+    "improvement_plan",
+    "promotion_decision",
+    "promotion_ledger",
+    "review_calibration",
+    "reviewed_gate",
+    "serving_lifecycle",
+    "trainer_launch_check",
+    "trainer_preflight",
+    "training_export"
+  ],
+  "next_iteration": {
+    "recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
+    "requires_governance_decision": true,
+    "schedule": {},
+    "scheduled": false
+  },
+  "notes": [
+    "This artifact is a closed-loop iteration contract; it does not call graders, trainers, cloud APIs, or benchmarks.",
+    "Missing phase inputs keep the loop fail-closed while preserving a schema-checkable plan for orchestration.",
+    "Use dry-run/mock provider receipts first; live provider launches must be explicit, credentialed, and separately archived."
+  ],
+  "objective": "Demonstrate a fail-closed closed-loop agentic training iteration contract.",
+  "participants": {
+    "baseline_policy": "local/mock-baseline",
+    "candidate_policy": "local/mock-candidate",
+    "teacher_policy": "local/mock-teacher"
+  },
+  "passed": false,
+  "phases": [
+    {
+      "gate": "generated tasks must be versioned, replayable, and privacy reviewed before rollout.",
+      "id": "scenario_task_generation",
+      "missing_required_artifacts": [],
+      "name": "Scenario and task generation",
+      "present_required_artifacts": [],
+      "produces": [
+        "scenario_quality",
+        "harness_manifest"
+      ],
+      "required_artifacts": [],
+      "status": "planned"
+    },
+    {
+      "gate": "rollouts must stay inside declared budget and environment descriptors.",
+      "id": "rollout_collection",
+      "missing_required_artifacts": [
+        "harness_result"
+      ],
+      "name": "Rollout collection",
+      "present_required_artifacts": [],
+      "produces": [
+        "trace",
+        "scorecard",
+        "run_digest"
+      ],
+      "required_artifacts": [
+        "harness_result"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "evidence must be schema-checkable and traceable before training data selection.",
+      "id": "evidence_scoring",
+      "missing_required_artifacts": [
+        "evidence_bundle"
+      ],
+      "name": "Evidence scoring",
+      "present_required_artifacts": [],
+      "produces": [
+        "evidence_coverage",
+        "trace_observability",
+        "repair_queue"
+      ],
+      "required_artifacts": [
+        "evidence_bundle"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "model-grader labels are blocked until calibration and human override paths exist.",
+      "id": "rubric_model_grader_review",
+      "missing_required_artifacts": [
+        "review_calibration"
+      ],
+      "name": "Rubric and model-grader review",
+      "present_required_artifacts": [],
+      "produces": [
+        "review_manifest",
+        "reviewed_manifest"
+      ],
+      "required_artifacts": [
+        "review_calibration"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "uncalibrated or low-confidence labels must not enter trainer-ready datasets.",
+      "id": "rejection_sampling",
+      "missing_required_artifacts": [
+        "reviewed_gate"
+      ],
+      "name": "Rejection sampling",
+      "present_required_artifacts": [],
+      "produces": [
+        "dataset_registry",
+        "dataset_splits"
+      ],
+      "required_artifacts": [
+        "reviewed_gate"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "datasets must be redacted, licensed, hashed, and split before trainer handoff.",
+      "id": "dataset_curation",
+      "missing_required_artifacts": [
+        "training_export"
+      ],
+      "name": "Dataset curation",
+      "present_required_artifacts": [],
+      "produces": [
+        "training_manifest",
+        "dataset_registry"
+      ],
+      "required_artifacts": [
+        "training_export"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "live trainer launch requires explicit opt-in, credentials, and a passing preflight.",
+      "id": "external_trainer_execution",
+      "missing_required_artifacts": [
+        "trainer_preflight",
+        "trainer_launch_check"
+      ],
+      "name": "External trainer execution",
+      "present_required_artifacts": [
+        "agentic_training_plan"
+      ],
+      "produces": [
+        "agentic_training_runtime_preflight",
+        "agentic_training_result"
+      ],
+      "required_artifacts": [
+        "agentic_training_plan",
+        "trainer_preflight",
+        "trainer_launch_check"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "trained outputs must pass serving compatibility before held-out evals or promotion.",
+      "id": "serving_checks",
+      "missing_required_artifacts": [
+        "serving_lifecycle"
+      ],
+      "name": "Serving checks",
+      "present_required_artifacts": [],
+      "produces": [
+        "serving_endpoint_check",
+        "model_serving_probe_receipt"
+      ],
+      "required_artifacts": [
+        "serving_lifecycle"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "live external benchmarks remain disabled until dependencies and held-out scenario parity pass.",
+      "id": "heldout_eval",
+      "missing_required_artifacts": [
+        "heldout_manifest",
+        "external_eval_plan",
+        "eval_summary"
+      ],
+      "name": "Held-out eval and external benchmarks",
+      "present_required_artifacts": [],
+      "produces": [
+        "eval_summary",
+        "compare_gate",
+        "decision_gate"
+      ],
+      "required_artifacts": [
+        "heldout_manifest",
+        "external_eval_plan",
+        "eval_summary"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "next work must be evidence-backed, deduplicated, and linked to repair/curriculum signals.",
+      "id": "improvement_planning",
+      "missing_required_artifacts": [
+        "improvement_plan"
+      ],
+      "name": "Improvement planning",
+      "present_required_artifacts": [],
+      "produces": [
+        "improvement_ledger",
+        "action_ledger"
+      ],
+      "required_artifacts": [
+        "improvement_plan"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "governance must approve, reject, rollback, or request another iteration before aliases move.",
+      "id": "governance_decision",
+      "missing_required_artifacts": [
+        "promotion_decision"
+      ],
+      "name": "Governance decision",
+      "present_required_artifacts": [],
+      "produces": [
+        "promotion_cards",
+        "promotion_release_record"
+      ],
+      "required_artifacts": [
+        "promotion_decision"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "registry writes are guarded by promotion decisions and rollback receipts.",
+      "id": "promotion_or_rollback",
+      "missing_required_artifacts": [
+        "promotion_ledger"
+      ],
+      "name": "Promotion or rollback",
+      "present_required_artifacts": [],
+      "produces": [
+        "promotion_alias_apply",
+        "promotion_rollback_receipt"
+      ],
+      "required_artifacts": [
+        "promotion_ledger"
+      ],
+      "status": "blocked"
+    },
+    {
+      "gate": "new iterations are scheduled only from ledgered decisions and open repair actions.",
+      "id": "next_iteration",
+      "missing_required_artifacts": [
+        "action_ledger"
+      ],
+      "name": "Next-iteration scheduling",
+      "present_required_artifacts": [],
+      "produces": [
+        "agentic_training_loop_plan"
+      ],
+      "required_artifacts": [
+        "action_ledger"
+      ],
+      "status": "blocked"
+    }
+  ],
+  "plan_path": "examples/agentic_training/loop_plan.json",
+  "provider_constraints": {
+    "gpu_classes": [
+      "none"
+    ],
+    "providers": [
+      "mock"
+    ],
+    "regions": [
+      "local"
+    ],
+    "requires_cost_estimate": true,
+    "requires_region_allowlist": true,
+    "requires_secret_redaction": true
+  },
+  "readiness": "planned_fail_closed",
+  "recommendation": "collect_missing_receipts_before_live_execution",
+  "schema_version": "hfr.agentic_training_loop_plan.v1",
+  "source_artifacts": {
+    "agentic_training_plan": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+        "readiness": "ready",
+        "role": "agentic_training_plan",
+        "schema_version": "hfr.agentic_training_plan.v1",
+        "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
+        "size_bytes": 9104
+      }
+    ],
+    "agentic_training_result": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "examples/agentic_training/completed_result.json",
+        "readiness": "ready",
+        "role": "agentic_training_result",
+        "schema_version": "hfr.agentic_training_result.v1",
+        "sha256": "0f0805938d4d05835310372980ccacae0fe0b7a540452d8ad25b0c62376ac2b0",
+        "size_bytes": 9799
+      }
+    ],
+    "agentic_training_runtime_preflight": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "examples/agentic_training/runtime_preflight/ready.json",
+        "readiness": "ready",
+        "role": "agentic_training_runtime_preflight",
+        "schema_version": "hfr.agentic_training_runtime_preflight.v1",
+        "sha256": "68f1b625d85b924f03ee0ce2002643d2806d6f759f915e407ec1f492c6f878c0",
+        "size_bytes": 5741
+      }
+    ]
+  }
+}

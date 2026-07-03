@@ -23,6 +23,7 @@ from .agentic_training_result import (
     REGISTER_RESULT_RECOMMENDATION,
     RESULT_STATUSES,
 )
+from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
@@ -214,6 +215,7 @@ def validate_artifacts(
     model_registry_paths: list[str | Path] | None = None,
     training_plan_paths: list[str | Path] | None = None,
     agentic_training_result_paths: list[str | Path] | None = None,
+    agentic_training_loop_plan_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -318,6 +320,8 @@ def validate_artifacts(
         targets.append(validate_training_plan(training_plan_path))
     for agentic_training_result_path in agentic_training_result_paths or []:
         targets.append(validate_agentic_training_result(agentic_training_result_path))
+    for agentic_training_loop_plan_path in agentic_training_loop_plan_paths or []:
+        targets.append(validate_agentic_training_loop_plan(agentic_training_loop_plan_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -1208,6 +1212,16 @@ def validate_agentic_training_result(path: str | Path) -> ValidationTarget:
     result = _read_object(result_path, target, "agentic_training_result.json")
     if result is not None:
         _validate_agentic_training_result(result, target, result_path)
+    return target
+
+
+def validate_agentic_training_loop_plan(path: str | Path) -> ValidationTarget:
+    """Validate a closed-loop agentic training iteration plan."""
+    plan_path = Path(path)
+    target = ValidationTarget("agentic_training_loop_plan", str(plan_path))
+    plan = _read_object(plan_path, target, "agentic_training_loop_plan.json")
+    if plan is not None:
+        _validate_agentic_training_loop_plan(plan, target)
     return target
 
 
@@ -2174,6 +2188,165 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
             "output_artifact_count": artifact_counts["output_artifact_count"],
         }
     )
+
+
+def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(plan, "schema_version", AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION, target, prefix="agentic_training_loop_plan.")
+    checks = plan.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("agentic_training_loop_plan.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "agentic_training_loop_plan.checks")
+    if plan.get("check_count") != len(checks):
+        target.errors.append(f"agentic_training_loop_plan.check_count expected {len(checks)}, got {plan.get('check_count')!r}.")
+    if plan.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"agentic_training_loop_plan.failed_check_count expected {failed_checks}, got {plan.get('failed_check_count')!r}."
+        )
+    if plan.get("passed") != (failed_checks == 0):
+        target.errors.append("agentic_training_loop_plan.passed must match failed_check_count.")
+    if plan.get("readiness") not in {"planned_fail_closed", "ready_for_governance_review"}:
+        target.errors.append("agentic_training_loop_plan.readiness has an unsupported value.")
+    expected_recommendation = (
+        "approve_iteration_execution"
+        if plan.get("readiness") == "ready_for_governance_review"
+        else "collect_missing_receipts_before_live_execution"
+    )
+    if plan.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"agentic_training_loop_plan.recommendation expected {expected_recommendation!r}, got {plan.get('recommendation')!r}."
+        )
+    if not isinstance(plan.get("iteration_id"), str) or not plan.get("iteration_id"):
+        target.errors.append("agentic_training_loop_plan.iteration_id must be a non-empty string.")
+    plan_path = plan.get("plan_path")
+    if not isinstance(plan_path, str) or not plan_path:
+        target.errors.append("agentic_training_loop_plan.plan_path must be a non-empty string.")
+    elif not _is_safe_agentic_training_result_path(plan_path):
+        target.errors.append("agentic_training_loop_plan.plan_path must be a safe relative path without traversal.")
+
+    source_artifacts = plan.get("source_artifacts")
+    artifact_count = 0
+    if not isinstance(source_artifacts, dict):
+        target.errors.append("agentic_training_loop_plan.source_artifacts must be an object.")
+    else:
+        for role, refs in source_artifacts.items():
+            if not isinstance(role, str) or not role:
+                target.errors.append("agentic_training_loop_plan.source_artifacts keys must be non-empty strings.")
+            if not isinstance(refs, list):
+                target.errors.append(f"agentic_training_loop_plan.source_artifacts.{role} must be a list.")
+                continue
+            artifact_count += len(refs)
+            for index, ref in enumerate(refs):
+                _validate_agentic_training_loop_plan_ref(ref, target, f"agentic_training_loop_plan.source_artifacts.{role}[{index}]")
+    if plan.get("artifact_count") != artifact_count:
+        target.errors.append(f"agentic_training_loop_plan.artifact_count expected {artifact_count}, got {plan.get('artifact_count')!r}.")
+
+    phases = plan.get("phases")
+    if not isinstance(phases, list) or not phases:
+        target.errors.append("agentic_training_loop_plan.phases must be a non-empty list.")
+    else:
+        for index, phase in enumerate(phases):
+            _validate_agentic_training_loop_plan_phase(phase, target, f"agentic_training_loop_plan.phases[{index}]")
+
+    boundary = plan.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append("agentic_training_loop_plan.execution_boundary must be an object.")
+    else:
+        for field_name in ("dry_run_plan_only", "public_artifact_paths_redacted"):
+            if boundary.get(field_name) is not True:
+                target.errors.append(f"agentic_training_loop_plan.execution_boundary.{field_name} must be true.")
+        for field_name in (
+            "cloud_jobs_started",
+            "paid_model_grader_calls_started",
+            "live_benchmarks_started",
+            "model_downloads_started",
+            "weights_updated_by_flight_recorder",
+            "credential_values_recorded",
+        ):
+            if boundary.get(field_name) is not False:
+                target.errors.append(f"agentic_training_loop_plan.execution_boundary.{field_name} must be false.")
+
+    contract = plan.get("handoff_contract")
+    if not isinstance(contract, dict):
+        target.errors.append("agentic_training_loop_plan.handoff_contract must be an object.")
+    else:
+        for field_name in (
+            "flight_recorder_controls_preflight_and_receipts",
+            "external_trainers_own_weight_updates",
+            "live_launch_requires_explicit_opt_in",
+            "requires_environment_credentials_for_live",
+            "requires_trainer_preflight",
+            "requires_trainer_launch_check",
+            "requires_calibrated_review_before_training_data",
+            "requires_heldout_eval_before_promotion",
+            "requires_governance_decision_before_alias_update",
+        ):
+            if contract.get(field_name) is not True:
+                target.errors.append(f"agentic_training_loop_plan.handoff_contract.{field_name} must be true.")
+        if contract.get("default_live_execution_allowed") is not False:
+            target.errors.append("agentic_training_loop_plan.handoff_contract.default_live_execution_allowed must be false.")
+
+    target.details.update(
+        {
+            "iteration_id": plan.get("iteration_id"),
+            "readiness": plan.get("readiness"),
+            "artifact_count": plan.get("artifact_count"),
+            "phase_count": len(phases) if isinstance(phases, list) else 0,
+        }
+    )
+
+
+def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(ref, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("role", "path", "kind"):
+        if not isinstance(ref.get(field_name), str) or not ref.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    path_value = ref.get("path")
+    if isinstance(path_value, str) and path_value and not _is_safe_agentic_training_result_path(path_value):
+        target.errors.append(f"{label}.path must be a safe relative path without traversal.")
+    if ref.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be 'file' or 'directory'.")
+    if not isinstance(ref.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if ref.get("kind") == "file" and ref.get("exists") is True:
+        if not isinstance(ref.get("sha256"), str) or len(ref.get("sha256", "")) != 64:
+            target.errors.append(f"{label}.sha256 must be a SHA-256 string for existing files.")
+        if not isinstance(ref.get("size_bytes"), int) or ref.get("size_bytes") < 0:
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+
+
+def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(phase, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("id", "name", "gate"):
+        if not isinstance(phase.get(field_name), str) or not phase.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if phase.get("status") not in {"planned", "blocked", "ready"}:
+        target.errors.append(f"{label}.status has an unsupported value.")
+    required = phase.get("required_artifacts")
+    present = phase.get("present_required_artifacts")
+    missing = phase.get("missing_required_artifacts")
+    produces = phase.get("produces")
+    if not _is_string_list(required):
+        target.errors.append(f"{label}.required_artifacts must be a list of strings.")
+        required = []
+    if not _is_string_list(present):
+        target.errors.append(f"{label}.present_required_artifacts must be a list of strings.")
+        present = []
+    if not _is_string_list(missing):
+        target.errors.append(f"{label}.missing_required_artifacts must be a list of strings.")
+        missing = []
+    if not _is_string_list(produces):
+        target.errors.append(f"{label}.produces must be a list of strings.")
+    if sorted(set(present) | set(missing)) != sorted(set(required)):
+        target.errors.append(f"{label}.present_required_artifacts plus missing_required_artifacts must match required_artifacts.")
+    if phase.get("status") == "ready" and missing:
+        target.errors.append(f"{label}.status cannot be ready while required artifacts are missing.")
+    if phase.get("status") == "blocked" and not missing:
+        target.errors.append(f"{label}.status cannot be blocked without missing required artifacts.")
 
 
 def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, int]:

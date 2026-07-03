@@ -11,8 +11,8 @@
 Hermes Flight Recorder is an evidence and governance stack for agentic
 fine-tuning work. It turns tool-using agent runs into deterministic artifacts:
 normalized traces, scorecards, evidence bundles, dataset exports, model
-registry entries, training handoff plans, serving preflights, held-out eval
-summaries, and promotion decisions.
+registry entries, training handoff plans, closed-loop iteration contracts,
+serving preflights, held-out eval summaries, and promotion decisions.
 
 The project started as accountability infrastructure for Hermes Agent traces.
 It has expanded into a public, schema-driven control plane for building and
@@ -62,6 +62,7 @@ and handoff receipts that make those systems auditable.
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs. | `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `archive_agentic_training_result.py` |
+| Loop | Bind rollouts, review, trainer, serving, eval, improvement, and promotion receipts into one fail-closed iteration contract. | `agentic-loop plan`, `validate --agentic-loop-plan` |
 | Eval | Require identical held-out scenarios and separate raw movement from governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `compare-suite` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
 | Governance | Decide whether a candidate can move registry aliases and publish release records. | `promotion-decision`, `promotion-cards`, `promotion-release-record`, `promotion-alias-apply` |
@@ -299,6 +300,29 @@ python3.11 scripts/archive_agentic_training_result.py \
 The receipt fingerprints supplied artifacts and proposes a registry update. It
 does not apply that update until governance accepts it.
 
+Bind the receipts into a closed-loop contract before live execution or
+promotion claims:
+
+```bash
+flightrecorder agentic-loop plan \
+  --iteration-id loop-001 \
+  --objective "Close held-out tool-use regressions" \
+  --baseline local/baseline \
+  --candidate local/candidate \
+  --agentic-training-plan runs/agentic_training_plan.json \
+  --agentic-training-result runs/agentic_training_result.json \
+  --out runs/agentic_training_loop_plan.json
+
+flightrecorder validate \
+  --agentic-loop-plan runs/agentic_training_loop_plan.json \
+  --strict
+```
+
+The loop plan remains fail-closed by default: it records that Flight Recorder
+did not launch cloud jobs, paid graders, live benchmarks, model downloads, or
+weight updates. Missing phase receipts produce a schema-checkable
+`planned_fail_closed` contract rather than a live launch.
+
 ## Comparison And Improvement Loops
 
 Comparison artifacts turn baseline/candidate runs into reviewable improvement
@@ -522,6 +546,7 @@ flightrecorder schemas --check runs/prompt_compare.json
 flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/review_calibration.json
 flightrecorder schemas --check runs/reviewed_gate.json
+flightrecorder schemas --check runs/agentic_training_loop_plan.json
 flightrecorder schemas --check runs/suite_compare.json
 flightrecorder schemas --check runs/suite_trend.json
 flightrecorder schemas --check runs/repair_queue.json
@@ -582,6 +607,7 @@ python3.11 -m unittest tests.test_evidence_bundle
 python3.11 -m unittest tests.test_model_registry
 python3.11 -m unittest tests.test_agentic_training_plan
 python3.11 -m unittest tests.test_agentic_training_result
+python3.11 -m unittest tests.test_agentic_training_loop_plan
 python3.11 -m unittest tests.test_serving_demo
 python3.11 -m unittest tests.test_promotion_decision
 ```

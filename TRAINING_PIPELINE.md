@@ -592,6 +592,36 @@ flightrecorder validate \
   --strict
 ```
 
+Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
+trainer, serving, held-out eval, improvement, governance, promotion, and
+next-iteration receipts into one iteration contract:
+
+```bash
+flightrecorder agentic-loop plan \
+  --iteration-id loop-001 \
+  --objective "Close held-out tool-use regressions" \
+  --harness-result runs/harness_prompt_injection_good/harness_result.json \
+  --evidence-bundle runs/evidence_bundle_trainer.json \
+  --agentic-training-plan runs/agentic_training_plan.json \
+  --agentic-training-result runs/agentic_training_result.json \
+  --heldout-manifest runs/heldout_manifest.json \
+  --external-eval-plan runs/external_eval_plan.json \
+  --promotion-decision runs/promotion_decision.json \
+  --out runs/agentic_training_loop_plan.json
+
+flightrecorder validate \
+  --agentic-loop-plan runs/agentic_training_loop_plan.json \
+  --strict
+```
+
+The loop artifact is `hfr.agentic_training_loop_plan.v1`. It is a
+schema-checkable control-plane contract, not an executor: it records
+`cloud_jobs_started: false`, `paid_model_grader_calls_started: false`,
+`live_benchmarks_started: false`, `model_downloads_started: false`, and
+`weights_updated_by_flight_recorder: false`. If required receipts are missing,
+the plan remains `planned_fail_closed` and recommends collecting those receipts
+before any live launch or promotion claim.
+
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle
 runs/evidence_bundle_trainer.json --strict` before handing the package to an

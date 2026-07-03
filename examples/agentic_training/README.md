@@ -59,11 +59,42 @@ python3 scripts/archive_agentic_training_result.py \
 The result receipt proposes size-bound model-registry links but does not mutate
 registry entries, move aliases, download models, or train weights.
 
+Bind the example receipts into a fail-closed loop contract:
+
+```bash
+flightrecorder agentic-loop plan \
+  --iteration-id demo-loop-001 \
+  --objective "Demonstrate a fail-closed closed-loop agentic training iteration contract." \
+  --baseline local/mock-baseline \
+  --candidate local/mock-candidate \
+  --teacher local/mock-teacher \
+  --provider mock \
+  --region local \
+  --gpu-class none \
+  --budget max_cloud_cost_usd=0 \
+  --budget max_gpu_hours=0 \
+  --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
+  --agentic-training-result examples/agentic_training/completed_result.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/loop_plan.json
+```
+
+The committed plan is intentionally `planned_fail_closed` because this example
+does not include rollout, review, trainer-preflight, serving, held-out eval, or
+promotion receipts. It is still schema-checkable and validates as a safe
+control-plane contract.
+
 Validate the committed receipt before including it in a trainer-facing evidence
 bundle:
 
 ```bash
 flightrecorder validate \
   --agentic-training-result examples/agentic_training/completed_result.json \
+  --strict
+
+flightrecorder schemas --check examples/agentic_training/loop_plan.json
+flightrecorder validate \
+  --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 ```

@@ -1,0 +1,525 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_loop_plan.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Fail-closed closed-loop agentic training iteration contract.",
+  "properties": {
+    "artifact_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "artifact_role_counts": {
+      "items": {
+        "$ref": "#/$defs/roleCount"
+      },
+      "type": "array"
+    },
+    "blocked_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "budget": {
+      "$ref": "#/$defs/budget"
+    },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "type": "array"
+    },
+    "created_at": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/executionBoundary"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "handoff_contract": {
+      "$ref": "#/$defs/handoffContract"
+    },
+    "iteration_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "missing_phase_inputs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "next_iteration": {
+      "$ref": "#/$defs/nextIteration"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "participants": {
+      "$ref": "#/$defs/participants"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "phases": {
+      "items": {
+        "$ref": "#/$defs/phase"
+      },
+      "type": "array"
+    },
+    "plan_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "provider_constraints": {
+      "$ref": "#/$defs/providerConstraints"
+    },
+    "readiness": {
+      "enum": [
+        "planned_fail_closed",
+        "ready_for_governance_review"
+      ]
+    },
+    "recommendation": {
+      "enum": [
+        "collect_missing_receipts_before_live_execution",
+        "approve_iteration_execution"
+      ]
+    },
+    "schema_version": {
+      "const": "hfr.agentic_training_loop_plan.v1"
+    },
+    "source_artifacts": {
+      "additionalProperties": {
+        "items": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "type": "array"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "iteration_id",
+    "plan_path",
+    "objective",
+    "participants",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "missing_phase_inputs",
+    "artifact_count",
+    "artifact_role_counts",
+    "source_artifacts",
+    "phases",
+    "budget",
+    "provider_constraints",
+    "execution_boundary",
+    "handoff_contract",
+    "next_iteration",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Training Loop Plan",
+  "type": "object",
+  "$defs": {
+    "artifactRef": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "readiness": {
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "kind",
+        "exists",
+        "sha256",
+        "size_bytes",
+        "schema_version",
+        "passed",
+        "readiness"
+      ],
+      "type": "object"
+    },
+    "budget": {
+      "additionalProperties": true,
+      "properties": {
+        "live_spend_allowed": {
+          "const": false
+        },
+        "max_cloud_cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_gpu_hours": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_rollouts": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_training_examples": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "max_rollouts",
+        "max_training_examples",
+        "max_cloud_cost_usd",
+        "max_gpu_hours",
+        "live_spend_allowed"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": {
+          "const": false
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_plan_only": {
+          "const": true
+        },
+        "live_benchmarks_started": {
+          "const": false
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "public_artifact_paths_redacted": {
+          "const": true
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_plan_only",
+        "cloud_jobs_started",
+        "paid_model_grader_calls_started",
+        "live_benchmarks_started",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded",
+        "public_artifact_paths_redacted"
+      ],
+      "type": "object"
+    },
+    "handoffContract": {
+      "additionalProperties": true,
+      "properties": {
+        "default_live_execution_allowed": {
+          "const": false
+        },
+        "external_trainers_own_weight_updates": {
+          "const": true
+        },
+        "flight_recorder_controls_preflight_and_receipts": {
+          "const": true
+        },
+        "live_launch_requires_explicit_opt_in": {
+          "const": true
+        },
+        "requires_calibrated_review_before_training_data": {
+          "const": true
+        },
+        "requires_environment_credentials_for_live": {
+          "const": true
+        },
+        "requires_governance_decision_before_alias_update": {
+          "const": true
+        },
+        "requires_heldout_eval_before_promotion": {
+          "const": true
+        },
+        "requires_trainer_launch_check": {
+          "const": true
+        },
+        "requires_trainer_preflight": {
+          "const": true
+        }
+      },
+      "required": [
+        "flight_recorder_controls_preflight_and_receipts",
+        "external_trainers_own_weight_updates",
+        "live_launch_requires_explicit_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_trainer_preflight",
+        "requires_trainer_launch_check",
+        "requires_calibrated_review_before_training_data",
+        "requires_heldout_eval_before_promotion",
+        "requires_governance_decision_before_alias_update",
+        "default_live_execution_allowed"
+      ],
+      "type": "object"
+    },
+    "nextIteration": {
+      "additionalProperties": true,
+      "properties": {
+        "recommendation": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "requires_governance_decision": {
+          "const": true
+        },
+        "schedule": {
+          "type": "object"
+        },
+        "scheduled": {
+          "const": false
+        }
+      },
+      "required": [
+        "scheduled",
+        "requires_governance_decision",
+        "schedule",
+        "recommendation"
+      ],
+      "type": "object"
+    },
+    "participants": {
+      "additionalProperties": true,
+      "properties": {
+        "baseline_policy": {
+          "type": "string"
+        },
+        "candidate_policy": {
+          "type": "string"
+        },
+        "teacher_policy": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "baseline_policy",
+        "candidate_policy",
+        "teacher_policy"
+      ],
+      "type": "object"
+    },
+    "phase": {
+      "additionalProperties": true,
+      "properties": {
+        "gate": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "missing_required_artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "present_required_artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "produces": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "required_artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "blocked",
+            "ready"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "status",
+        "required_artifacts",
+        "present_required_artifacts",
+        "missing_required_artifacts",
+        "produces",
+        "gate"
+      ],
+      "type": "object"
+    },
+    "providerConstraints": {
+      "additionalProperties": true,
+      "properties": {
+        "gpu_classes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "providers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "regions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requires_cost_estimate": {
+          "const": true
+        },
+        "requires_region_allowlist": {
+          "type": "boolean"
+        },
+        "requires_secret_redaction": {
+          "const": true
+        }
+      },
+      "required": [
+        "providers",
+        "regions",
+        "gpu_classes",
+        "requires_cost_estimate",
+        "requires_region_allowlist",
+        "requires_secret_redaction"
+      ],
+      "type": "object"
+    },
+    "roleCount": {
+      "additionalProperties": true,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "count"
+      ],
+      "type": "object"
+    }
+  }
+}
