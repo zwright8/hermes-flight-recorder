@@ -7520,6 +7520,13 @@ def _validate_external_eval_scenario_manifest_file(
     if not file_path.is_file():
         target.errors.append(f"{label}.path does not resolve to a manifest file.")
         return
+    current_manifest = _read_object(file_path, target, f"{label}.path")
+    if current_manifest is not None:
+        current_schema = current_manifest.get("schema_version")
+        if current_schema != HELDOUT_MANIFEST_SCHEMA_VERSION:
+            target.errors.append(f"{label}.path must reference a {HELDOUT_MANIFEST_SCHEMA_VERSION!r} manifest.")
+        if manifest.get("schema_version") != current_schema:
+            target.errors.append(f"{label}.schema_version must match the current file.")
     if not _is_non_negative_int(manifest.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
     elif file_path.stat().st_size != manifest.get("size_bytes"):

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import tempfile
@@ -173,6 +174,31 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertEqual(code, 1)
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("external_eval_plan.inputs.scenario_manifest.path does not resolve to a manifest file.", errors)
+
+    def test_validate_rejects_wrong_scenario_manifest_schema(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
+            manifest_payload = _read_json(manifest)
+            manifest_payload["schema_version"] = "hfr.not_heldout_manifest.v1"
+            manifest.write_text(json.dumps(manifest_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            plan = _read_json(out)
+            scenario_manifest = plan["inputs"]["scenario_manifest"]
+            scenario_manifest["schema_version"] = manifest_payload["schema_version"]
+            scenario_manifest["sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            scenario_manifest["size_bytes"] = manifest.stat().st_size
+            for adapter in plan["adapters"]:
+                adapter["execution_contract"]["scenario_manifest_sha256"] = scenario_manifest["sha256"]
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_plan.inputs.scenario_manifest.path must reference", errors)
 
 
 def _scenario_manifest(path: Path) -> Path:
