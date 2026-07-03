@@ -1,0 +1,212 @@
+{
+  "artifact_protocols": [
+    "archive",
+    "volume",
+    "object_store"
+  ],
+  "blocked_reasons": [],
+  "check_count": 5,
+  "checks": [
+    {
+      "actual": {
+        "upload_count": 1
+      },
+      "expected": {
+        "min_upload_count": 1
+      },
+      "id": "upload_artifacts_declared",
+      "passed": true,
+      "summary": "upload_artifacts_declared: passed=True"
+    },
+    {
+      "actual": {
+        "uploads": [
+          {
+            "exists": true,
+            "path": "../plans/sft_then_dpo_plan.json",
+            "role": "upload",
+            "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+            "size_bytes": 10379
+          }
+        ]
+      },
+      "expected": {
+        "all_uploads_exist": true
+      },
+      "id": "upload_artifacts_exist",
+      "passed": true,
+      "summary": "upload_artifacts_exist: passed=True"
+    },
+    {
+      "actual": {
+        "downloads_exist": false
+      },
+      "expected": {
+        "downloads_exist": false
+      },
+      "id": "download_artifacts_not_assumed",
+      "passed": true,
+      "summary": "download_artifacts_not_assumed: passed=True"
+    },
+    {
+      "actual": {
+        "transfer_plan": {
+          "artifact_protocols": [
+            "archive",
+            "volume",
+            "object_store"
+          ],
+          "credential_values_recorded": false,
+          "download_artifacts_expected_to_exist_before_launch": false,
+          "expected_download_count": 1,
+          "flight_recorder_downloaded_artifacts": false,
+          "flight_recorder_uploaded_artifacts": false,
+          "mode": "dry_run_manifest_only",
+          "provider_api_called": false,
+          "requires_external_runner_download": true,
+          "requires_external_runner_upload": true,
+          "upload_count": 1,
+          "upload_size_bytes": 10379
+        }
+      },
+      "expected": {
+        "expected_download_count": 1,
+        "upload_count": 1
+      },
+      "id": "transfer_plan_matches_artifacts",
+      "passed": true,
+      "summary": "transfer_plan_matches_artifacts: passed=True"
+    },
+    {
+      "actual": {
+        "flight_recorder_downloaded_artifacts": false,
+        "flight_recorder_uploaded_artifacts": false,
+        "provider_api_called": false
+      },
+      "expected": {
+        "flight_recorder_downloaded_artifacts": false,
+        "flight_recorder_uploaded_artifacts": false,
+        "provider_api_called": false
+      },
+      "id": "flight_recorder_did_not_transfer_artifacts",
+      "passed": true,
+      "summary": "flight_recorder_did_not_transfer_artifacts: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "allow_live": false,
+    "cloud_cost_incurred_usd": 0,
+    "cloud_job_started": false,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_preflight_requested": false,
+    "live_requested": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "expected_download_artifacts": [
+    {
+      "exists": false,
+      "path": "adapters/candidate/adapter_model.safetensors",
+      "role": "download",
+      "sha256": null,
+      "size_bytes": null
+    }
+  ],
+  "failed_check_count": 0,
+  "passed": true,
+  "provider": {
+    "adapter_contract": {
+      "adapter_id": "cloud_training.modal.fail_closed.v1",
+      "client_modules_imported_by_flight_recorder": false,
+      "cloud_cost_incurred_usd": 0,
+      "credential_values_recorded": false,
+      "dry_run_transport": "mock_receipts",
+      "live_launch_supported": false,
+      "live_preflight_supported": true,
+      "live_preflight_transport": "metadata_only",
+      "model_downloads_started": false,
+      "provider_api_called_by_flight_recorder": false,
+      "provider_id": "modal",
+      "receipt_types": [
+        "hfr.cloud_training_provider_registry.v1",
+        "hfr.cloud_training_preflight.v1",
+        "hfr.cloud_training_artifact_manifest.v1",
+        "hfr.cloud_training_launch_plan.v1",
+        "hfr.cloud_training_launch_receipt.v1",
+        "hfr.cloud_training_status_receipt.v1"
+      ],
+      "requires_cost_limit": true,
+      "requires_environment_credentials_for_live": true,
+      "requires_explicit_live_opt_in": true,
+      "requires_region_and_gpu_constraints": true,
+      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "status_cancel_receipts_supported": true,
+      "weights_updated_by_flight_recorder": false
+    },
+    "artifact_protocols": [
+      "archive",
+      "volume",
+      "object_store"
+    ],
+    "client_import_names": [
+      "modal"
+    ],
+    "credential_env_vars": [
+      "MODAL_TOKEN_ID",
+      "MODAL_TOKEN_SECRET"
+    ],
+    "default_live_execution_allowed": false,
+    "display_name": "Modal",
+    "gpu_classes": [
+      "t4",
+      "l4",
+      "a10g",
+      "a100",
+      "h100"
+    ],
+    "id": "modal",
+    "job_modes": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "reward_model",
+      "process_rewards"
+    ],
+    "live_status": "preflight_only",
+    "regions": [
+      "provider_default"
+    ]
+  },
+  "readiness": "ready",
+  "schema_version": "hfr.cloud_training_artifact_manifest.v1",
+  "transfer_plan": {
+    "artifact_protocols": [
+      "archive",
+      "volume",
+      "object_store"
+    ],
+    "credential_values_recorded": false,
+    "download_artifacts_expected_to_exist_before_launch": false,
+    "expected_download_count": 1,
+    "flight_recorder_downloaded_artifacts": false,
+    "flight_recorder_uploaded_artifacts": false,
+    "mode": "dry_run_manifest_only",
+    "provider_api_called": false,
+    "requires_external_runner_download": true,
+    "requires_external_runner_upload": true,
+    "upload_count": 1,
+    "upload_size_bytes": 10379
+  },
+  "upload_artifacts": [
+    {
+      "exists": true,
+      "path": "../plans/sft_then_dpo_plan.json",
+      "role": "upload",
+      "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+      "size_bytes": 10379
+    }
+  ]
+}

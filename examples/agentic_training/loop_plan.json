@@ -1,5 +1,5 @@
 {
-  "artifact_count": 3,
+  "artifact_count": 9,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -12,10 +12,36 @@
     {
       "count": 1,
       "role": "agentic_training_runtime_preflight"
+    },
+    {
+      "count": 1,
+      "role": "cloud_training_artifact_manifest"
+    },
+    {
+      "count": 1,
+      "role": "cloud_training_launch_plan"
+    },
+    {
+      "count": 1,
+      "role": "cloud_training_launch_receipt"
+    },
+    {
+      "count": 1,
+      "role": "cloud_training_preflight"
+    },
+    {
+      "count": 1,
+      "role": "cloud_training_provider_registry"
+    },
+    {
+      "count": 1,
+      "role": "cloud_training_status_receipt"
     }
   ],
   "blocked_reasons": [
+    "rollout_receipt_required_before_review: passed=False",
     "uncalibrated_labels_block_training_data: passed=False",
+    "dataset_curation_receipt_required_for_trainer_handoff: passed=False",
     "external_trainer_handoff_is_preflighted: passed=False",
     "heldout_eval_is_fail_closed: passed=False",
     "governance_required_for_promotion: passed=False"
@@ -27,7 +53,7 @@
     "max_rollouts": null,
     "max_training_examples": null
   },
-  "check_count": 8,
+  "check_count": 11,
   "checks": [
     {
       "actual": {
@@ -85,13 +111,28 @@
     },
     {
       "actual": {
+        "agentic_rollout_plan_present": false,
+        "agentic_rollout_receipt_present": false
+      },
+      "expected": {
+        "agentic_rollout_plan_present": true,
+        "agentic_rollout_receipt_present": true
+      },
+      "id": "rollout_receipt_required_before_review",
+      "passed": false,
+      "summary": "rollout_receipt_required_before_review: passed=False"
+    },
+    {
+      "actual": {
         "model_grader_gate_present": false,
+        "rejection_sampling_gate_present": false,
         "review_calibration_present": false,
         "reviewed_gate_present": false,
         "rubric_spec_present": false
       },
       "expected": {
         "model_grader_gate_present": true,
+        "rejection_sampling_gate_present": true,
         "review_calibration_present": true,
         "reviewed_gate_present": true,
         "rubric_spec_present": true
@@ -99,6 +140,21 @@
       "id": "uncalibrated_labels_block_training_data",
       "passed": false,
       "summary": "uncalibrated_labels_block_training_data: passed=False"
+    },
+    {
+      "actual": {
+        "dataset_curation_receipt_present": false,
+        "rejection_sampling_gate_present": false,
+        "training_export_present": false
+      },
+      "expected": {
+        "dataset_curation_receipt_present": true,
+        "rejection_sampling_gate_present": true,
+        "training_export_present": true
+      },
+      "id": "dataset_curation_receipt_required_for_trainer_handoff",
+      "passed": false,
+      "summary": "dataset_curation_receipt_required_for_trainer_handoff: passed=False"
     },
     {
       "actual": {
@@ -114,6 +170,46 @@
       "id": "external_trainer_handoff_is_preflighted",
       "passed": false,
       "summary": "external_trainer_handoff_is_preflighted: passed=False"
+    },
+    {
+      "actual": {
+        "cloud_training": {
+          "artifact_count": 6,
+          "artifact_manifest_present": true,
+          "cloud_jobs_started": false,
+          "credential_values_recorded": false,
+          "launch_plan_present": true,
+          "launch_receipt_present": true,
+          "live_spend_allowed": false,
+          "missing_artifacts": [],
+          "preflight_present": true,
+          "present_artifacts": [
+            "cloud_training_provider_registry",
+            "cloud_training_preflight",
+            "cloud_training_artifact_manifest",
+            "cloud_training_launch_plan",
+            "cloud_training_launch_receipt",
+            "cloud_training_status_receipt"
+          ],
+          "provider_api_calls_started": false,
+          "provider_registry_present": true,
+          "required_artifacts": [
+            "cloud_training_provider_registry",
+            "cloud_training_preflight",
+            "cloud_training_artifact_manifest",
+            "cloud_training_launch_plan",
+            "cloud_training_launch_receipt",
+            "cloud_training_status_receipt"
+          ],
+          "status_receipt_present": true
+        }
+      },
+      "expected": {
+        "missing_artifacts": []
+      },
+      "id": "cloud_training_receipts_bound_for_provider_handoff",
+      "passed": true,
+      "summary": "cloud_training_receipts_bound_for_provider_handoff: passed=True"
     },
     {
       "actual": {
@@ -144,6 +240,36 @@
       "summary": "governance_required_for_promotion: passed=False"
     }
   ],
+  "cloud_training": {
+    "artifact_count": 6,
+    "artifact_manifest_present": true,
+    "cloud_jobs_started": false,
+    "credential_values_recorded": false,
+    "launch_plan_present": true,
+    "launch_receipt_present": true,
+    "live_spend_allowed": false,
+    "missing_artifacts": [],
+    "preflight_present": true,
+    "present_artifacts": [
+      "cloud_training_provider_registry",
+      "cloud_training_preflight",
+      "cloud_training_artifact_manifest",
+      "cloud_training_launch_plan",
+      "cloud_training_launch_receipt",
+      "cloud_training_status_receipt"
+    ],
+    "provider_api_calls_started": false,
+    "provider_registry_present": true,
+    "required_artifacts": [
+      "cloud_training_provider_registry",
+      "cloud_training_preflight",
+      "cloud_training_artifact_manifest",
+      "cloud_training_launch_plan",
+      "cloud_training_launch_receipt",
+      "cloud_training_status_receipt"
+    ],
+    "status_receipt_present": true
+  },
   "created_at": "2026-07-03T00:00:00+00:00",
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -155,7 +281,7 @@
     "public_artifact_paths_redacted": true,
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 4,
+  "failed_check_count": 6,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -171,6 +297,9 @@
   "iteration_id": "demo-loop-001",
   "missing_phase_inputs": [
     "action_ledger",
+    "agentic_rollout_plan",
+    "agentic_rollout_receipt",
+    "dataset_curation_receipt",
     "eval_summary",
     "evidence_bundle",
     "external_eval_plan",
@@ -181,6 +310,7 @@
     "model_grader_gate",
     "promotion_decision",
     "promotion_ledger",
+    "rejection_sampling_gate",
     "review_calibration",
     "reviewed_gate",
     "rubric_spec",
@@ -225,6 +355,8 @@
       "gate": "rollouts must stay inside declared budget and environment descriptors.",
       "id": "rollout_collection",
       "missing_required_artifacts": [
+        "agentic_rollout_plan",
+        "agentic_rollout_receipt",
         "harness_result"
       ],
       "name": "Rollout collection",
@@ -235,6 +367,8 @@
         "run_digest"
       ],
       "required_artifacts": [
+        "agentic_rollout_plan",
+        "agentic_rollout_receipt",
         "harness_result"
       ],
       "status": "blocked"
@@ -270,6 +404,7 @@
       "produces": [
         "review_manifest",
         "model_grader_dry_run",
+        "model_grader_override_receipt",
         "reviewed_manifest"
       ],
       "required_artifacts": [
@@ -283,7 +418,8 @@
       "gate": "uncalibrated or low-confidence labels must not enter trainer-ready datasets.",
       "id": "rejection_sampling",
       "missing_required_artifacts": [
-        "reviewed_gate"
+        "reviewed_gate",
+        "rejection_sampling_gate"
       ],
       "name": "Rejection sampling",
       "present_required_artifacts": [],
@@ -292,7 +428,8 @@
         "dataset_splits"
       ],
       "required_artifacts": [
-        "reviewed_gate"
+        "reviewed_gate",
+        "rejection_sampling_gate"
       ],
       "status": "blocked"
     },
@@ -300,6 +437,8 @@
       "gate": "datasets must be redacted, licensed, hashed, and split before trainer handoff.",
       "id": "dataset_curation",
       "missing_required_artifacts": [
+        "rejection_sampling_gate",
+        "dataset_curation_receipt",
         "training_export"
       ],
       "name": "Dataset curation",
@@ -309,12 +448,14 @@
         "dataset_registry"
       ],
       "required_artifacts": [
+        "rejection_sampling_gate",
+        "dataset_curation_receipt",
         "training_export"
       ],
       "status": "blocked"
     },
     {
-      "gate": "live trainer launch requires explicit opt-in, credentials, and a passing preflight.",
+      "gate": "live trainer launch requires explicit opt-in, credentials, cloud-provider receipts, and a passing preflight.",
       "id": "external_trainer_execution",
       "missing_required_artifacts": [
         "trainer_preflight",
@@ -322,16 +463,29 @@
       ],
       "name": "External trainer execution",
       "present_required_artifacts": [
-        "agentic_training_plan"
+        "agentic_training_plan",
+        "cloud_training_provider_registry",
+        "cloud_training_preflight",
+        "cloud_training_artifact_manifest",
+        "cloud_training_launch_plan",
+        "cloud_training_launch_receipt",
+        "cloud_training_status_receipt"
       ],
       "produces": [
         "agentic_training_runtime_preflight",
+        "agentic_training_flow",
         "agentic_training_result"
       ],
       "required_artifacts": [
         "agentic_training_plan",
         "trainer_preflight",
-        "trainer_launch_check"
+        "trainer_launch_check",
+        "cloud_training_provider_registry",
+        "cloud_training_preflight",
+        "cloud_training_artifact_manifest",
+        "cloud_training_launch_plan",
+        "cloud_training_launch_receipt",
+        "cloud_training_status_receipt"
       ],
       "status": "blocked"
     },
@@ -436,7 +590,8 @@
       "name": "Next-iteration scheduling",
       "present_required_artifacts": [],
       "produces": [
-        "agentic_training_loop_plan"
+        "agentic_training_loop_plan",
+        "next_iteration_schedule"
       ],
       "required_artifacts": [
         "action_ledger"
@@ -468,7 +623,7 @@
         "exists": true,
         "kind": "file",
         "passed": true,
-        "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+        "path": "plans/sft_then_dpo_plan.json",
         "readiness": "ready",
         "role": "agentic_training_plan",
         "schema_version": "hfr.agentic_training_plan.v1",
@@ -481,7 +636,7 @@
         "exists": true,
         "kind": "file",
         "passed": true,
-        "path": "examples/agentic_training/completed_result.json",
+        "path": "completed_result.json",
         "readiness": "ready",
         "role": "agentic_training_result",
         "schema_version": "hfr.agentic_training_result.v1",
@@ -494,12 +649,90 @@
         "exists": true,
         "kind": "file",
         "passed": true,
-        "path": "examples/agentic_training/runtime_preflight/ready.json",
+        "path": "runtime_preflight/ready.json",
         "readiness": "ready",
         "role": "agentic_training_runtime_preflight",
         "schema_version": "hfr.agentic_training_runtime_preflight.v1",
         "sha256": "01e90d892489cb0bb7125218f87cecf4559ddc342fab6339889ed3866929f6d9",
         "size_bytes": 5741
+      }
+    ],
+    "cloud_training_artifact_manifest": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "cloud_training/artifact_manifest.json",
+        "readiness": "ready",
+        "role": "cloud_training_artifact_manifest",
+        "schema_version": "hfr.cloud_training_artifact_manifest.v1",
+        "sha256": "a86dd269d07fbc81b12c16353e216caa8795aeb101b485d6cd76e61ead6e21ca",
+        "size_bytes": 6041
+      }
+    ],
+    "cloud_training_launch_plan": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": false,
+        "path": "cloud_training/launch_plan.json",
+        "readiness": "blocked",
+        "role": "cloud_training_launch_plan",
+        "schema_version": "hfr.cloud_training_launch_plan.v1",
+        "sha256": "94627803eec355ed072e88324e0862463c78cb393ffe3d80299394632a5e0803",
+        "size_bytes": 5951
+      }
+    ],
+    "cloud_training_launch_receipt": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": false,
+        "path": "cloud_training/launch_receipt.json",
+        "readiness": "blocked",
+        "role": "cloud_training_launch_receipt",
+        "schema_version": "hfr.cloud_training_launch_receipt.v1",
+        "sha256": "f46198ff9d6cfa39e31833029a47e03b40efbf5968b342f99f0d1329a56deeb1",
+        "size_bytes": 2643
+      }
+    ],
+    "cloud_training_preflight": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": false,
+        "path": "cloud_training/preflight.json",
+        "readiness": "blocked",
+        "role": "cloud_training_preflight",
+        "schema_version": "hfr.cloud_training_preflight.v1",
+        "sha256": "28b6a7db0d4c988b18dd0c8ff68fd55bc229c4bcb044b3f0ca7cb03867756d2c",
+        "size_bytes": 11230
+      }
+    ],
+    "cloud_training_provider_registry": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": null,
+        "path": "cloud_training/provider_registry.json",
+        "readiness": "",
+        "role": "cloud_training_provider_registry",
+        "schema_version": "hfr.cloud_training_provider_registry.v1",
+        "sha256": "a81f9e839efa1999dafce33b0bef2eb66d3aed6b89424d434822dd7b8219072d",
+        "size_bytes": 4662
+      }
+    ],
+    "cloud_training_status_receipt": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "cloud_training/status_receipt.json",
+        "readiness": "status_recorded",
+        "role": "cloud_training_status_receipt",
+        "schema_version": "hfr.cloud_training_status_receipt.v1",
+        "sha256": "f3ad19c5276b33717d16cccefd523ed3765738d717dc01a15cc8e973f0905465",
+        "size_bytes": 2682
       }
     ]
   }

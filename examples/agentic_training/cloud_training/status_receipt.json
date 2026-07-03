@@ -1,0 +1,93 @@
+{
+  "blocked_reasons": [],
+  "check_count": 3,
+  "checks": [
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "launch_receipt.json",
+          "role": "cloud_training_launch_receipt",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "cloud_training_launch_receipt",
+          "schema_passed": true,
+          "sha256": "f46198ff9d6cfa39e31833029a47e03b40efbf5968b342f99f0d1329a56deeb1",
+          "size_bytes": 2643,
+          "source_passed": false,
+          "source_recommendation": "block_live_cloud_launch"
+        }
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "launch_receipt_readable",
+      "passed": true,
+      "summary": "launch_receipt_readable: passed=True"
+    },
+    {
+      "actual": {
+        "provider_api_called": false
+      },
+      "expected": {
+        "provider_api_called": false
+      },
+      "id": "status_check_did_not_call_provider",
+      "passed": true,
+      "summary": "status_check_did_not_call_provider: passed=True"
+    },
+    {
+      "actual": {
+        "cancel_requested": true,
+        "provider_cancel_called": false
+      },
+      "expected": {
+        "provider_cancel_called": false
+      },
+      "id": "cancel_is_dry_run",
+      "passed": true,
+      "summary": "cancel_is_dry_run: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "allow_live": false,
+    "cloud_cost_incurred_usd": 0,
+    "cloud_job_started": false,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_preflight_requested": false,
+    "live_requested": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "passed": true,
+  "readiness": "status_recorded",
+  "recommendation": "archive_status_receipt",
+  "schema_version": "hfr.cloud_training_status_receipt.v1",
+  "source_artifacts": {
+    "launch_receipt": {
+      "exists": true,
+      "path": "launch_receipt.json",
+      "role": "cloud_training_launch_receipt",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "cloud_training_launch_receipt",
+      "schema_passed": true,
+      "sha256": "f46198ff9d6cfa39e31833029a47e03b40efbf5968b342f99f0d1329a56deeb1",
+      "size_bytes": 2643,
+      "source_passed": false,
+      "source_recommendation": "block_live_cloud_launch"
+    }
+  },
+  "status": {
+    "cancel_requested": true,
+    "cost_incurred_usd": 0,
+    "provider_api_called": false,
+    "provider_cancel_called": false,
+    "provider_status": "not_started",
+    "terminal": true
+  }
+}

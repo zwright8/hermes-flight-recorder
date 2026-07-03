@@ -1,0 +1,401 @@
+{
+  "blocked_reasons": [
+    "trainer_preflight_ready: passed=False",
+    "trainer_launch_check_ready: passed=False"
+  ],
+  "check_count": 11,
+  "checks": [
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "../plans/sft_then_dpo_plan.json",
+          "role": "agentic_training_plan",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "agentic_training_plan",
+          "schema_passed": true,
+          "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+          "size_bytes": 10379,
+          "source_passed": true,
+          "source_recommendation": "ready_for_external_trainer_plan"
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "agentic_training_plan"
+      },
+      "id": "agentic_training_plan_ready",
+      "passed": true,
+      "summary": "agentic_training_plan_ready: passed=True"
+    },
+    {
+      "actual": {
+        "artifact": {
+          "exists": false,
+          "path": "",
+          "role": "trainer_preflight",
+          "schema_error_count": 1,
+          "schema_errors": [
+            "artifact not provided"
+          ],
+          "schema_name": "trainer_preflight",
+          "schema_passed": false,
+          "sha256": null,
+          "size_bytes": null,
+          "source_passed": null,
+          "source_recommendation": ""
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "trainer_preflight"
+      },
+      "id": "trainer_preflight_ready",
+      "passed": false,
+      "summary": "trainer_preflight_ready: passed=False"
+    },
+    {
+      "actual": {
+        "artifact": {
+          "exists": false,
+          "path": "",
+          "role": "trainer_launch_check",
+          "schema_error_count": 1,
+          "schema_errors": [
+            "artifact not provided"
+          ],
+          "schema_name": "trainer_launch_check",
+          "schema_passed": false,
+          "sha256": null,
+          "size_bytes": null,
+          "source_passed": null,
+          "source_recommendation": ""
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "trainer_launch_check"
+      },
+      "id": "trainer_launch_check_ready",
+      "passed": false,
+      "summary": "trainer_launch_check_ready: passed=False"
+    },
+    {
+      "actual": {
+        "allowed_regions": [
+          "provider_default"
+        ],
+        "region": "provider_default"
+      },
+      "expected": {
+        "region_in_allowed_regions": true
+      },
+      "id": "region_allowed",
+      "passed": true,
+      "summary": "region_allowed: passed=True"
+    },
+    {
+      "actual": {
+        "allowed_gpu_classes": [
+          "t4",
+          "l4",
+          "a10g",
+          "a100",
+          "h100"
+        ],
+        "gpu_class": "a100"
+      },
+      "expected": {
+        "gpu_class_in_allowed_gpu_classes": true
+      },
+      "id": "gpu_class_allowed",
+      "passed": true,
+      "summary": "gpu_class_allowed: passed=True"
+    },
+    {
+      "actual": {
+        "max_cost_usd": 0.0
+      },
+      "expected": {
+        "max_cost_usd": "non_negative_number"
+      },
+      "id": "cost_limit_declared",
+      "passed": true,
+      "summary": "cost_limit_declared: passed=True"
+    },
+    {
+      "actual": {
+        "allow_live": false,
+        "live_requested": false
+      },
+      "expected": {
+        "allow_live": true
+      },
+      "id": "live_launch_explicitly_enabled",
+      "passed": true,
+      "summary": "live_launch_explicitly_enabled: passed=True"
+    },
+    {
+      "actual": {
+        "credential_checks": [
+          {
+            "env_var": "MODAL_TOKEN_ID",
+            "present": false,
+            "value_recorded": false
+          },
+          {
+            "env_var": "MODAL_TOKEN_SECRET",
+            "present": false,
+            "value_recorded": false
+          }
+        ],
+        "live_requested": false
+      },
+      "expected": {
+        "all_provider_credentials_present": true
+      },
+      "id": "live_credentials_available_when_requested",
+      "passed": true,
+      "summary": "live_credentials_available_when_requested: passed=True"
+    },
+    {
+      "actual": {
+        "credential_checks": [
+          {
+            "env_var": "MODAL_TOKEN_ID",
+            "present": false,
+            "value_recorded": false
+          },
+          {
+            "env_var": "MODAL_TOKEN_SECRET",
+            "present": false,
+            "value_recorded": false
+          }
+        ],
+        "live_preflight": false
+      },
+      "expected": {
+        "all_provider_credentials_present": true
+      },
+      "id": "live_preflight_credentials_available_when_requested",
+      "passed": true,
+      "summary": "live_preflight_credentials_available_when_requested: passed=True"
+    },
+    {
+      "actual": {
+        "client_dependency_checks": [
+          {
+            "available": false,
+            "module": "modal",
+            "module_imported": false
+          }
+        ],
+        "live_preflight": false
+      },
+      "expected": {
+        "all_client_dependencies_available": true
+      },
+      "id": "live_preflight_client_dependencies_available_when_requested",
+      "passed": true,
+      "summary": "live_preflight_client_dependencies_available_when_requested: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_job_started": false,
+        "provider_api_called": false
+      },
+      "expected": {
+        "cloud_job_started": false,
+        "provider_api_called": false
+      },
+      "id": "flight_recorder_did_not_launch_cloud_job",
+      "passed": true,
+      "summary": "flight_recorder_did_not_launch_cloud_job: passed=True"
+    }
+  ],
+  "constraints": {
+    "gpu_class": "a100",
+    "live_spend_allowed": false,
+    "max_cost_usd": 0.0,
+    "region": "provider_default",
+    "requires_cost_estimate": true,
+    "requires_gpu_class_allowlist": true,
+    "requires_region_allowlist": true
+  },
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "credential_checks": [
+    {
+      "env_var": "MODAL_TOKEN_ID",
+      "present": false,
+      "value_recorded": false
+    },
+    {
+      "env_var": "MODAL_TOKEN_SECRET",
+      "present": false,
+      "value_recorded": false
+    }
+  ],
+  "execution_boundary": {
+    "allow_live": false,
+    "cloud_cost_incurred_usd": 0,
+    "cloud_job_started": false,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_preflight_requested": false,
+    "live_requested": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 2,
+  "handoff_contract": {
+    "default_live_execution_allowed": false,
+    "external_provider_owns_execution": true,
+    "flight_recorder_controls_preflight_only": true,
+    "requires_artifact_upload_manifest": true,
+    "requires_cost_limit": true,
+    "requires_environment_credentials_for_live": true,
+    "requires_explicit_live_opt_in": true,
+    "requires_region_and_gpu_constraints": true,
+    "requires_status_and_cancel_receipts": true
+  },
+  "live_preflight": {
+    "client_dependency_available_count": 0,
+    "client_dependency_checks": [
+      {
+        "available": false,
+        "module": "modal",
+        "module_imported": false
+      }
+    ],
+    "client_dependency_required_count": 1,
+    "client_modules_imported": false,
+    "credential_env_vars": [
+      "MODAL_TOKEN_ID",
+      "MODAL_TOKEN_SECRET"
+    ],
+    "credential_present_count": 0,
+    "credential_required_count": 2,
+    "credential_values_recorded": false,
+    "provider_api_called": false,
+    "requested": false,
+    "transport": "metadata_only"
+  },
+  "notes": [
+    "Preflight checks local receipts, constraints, and credential variable presence only.",
+    "Live preflight probes use importlib metadata and environment-variable presence only; no provider SDK is imported and no provider API call is made."
+  ],
+  "passed": false,
+  "provider": {
+    "adapter_contract": {
+      "adapter_id": "cloud_training.modal.fail_closed.v1",
+      "client_modules_imported_by_flight_recorder": false,
+      "cloud_cost_incurred_usd": 0,
+      "credential_values_recorded": false,
+      "dry_run_transport": "mock_receipts",
+      "live_launch_supported": false,
+      "live_preflight_supported": true,
+      "live_preflight_transport": "metadata_only",
+      "model_downloads_started": false,
+      "provider_api_called_by_flight_recorder": false,
+      "provider_id": "modal",
+      "receipt_types": [
+        "hfr.cloud_training_provider_registry.v1",
+        "hfr.cloud_training_preflight.v1",
+        "hfr.cloud_training_artifact_manifest.v1",
+        "hfr.cloud_training_launch_plan.v1",
+        "hfr.cloud_training_launch_receipt.v1",
+        "hfr.cloud_training_status_receipt.v1"
+      ],
+      "requires_cost_limit": true,
+      "requires_environment_credentials_for_live": true,
+      "requires_explicit_live_opt_in": true,
+      "requires_region_and_gpu_constraints": true,
+      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "status_cancel_receipts_supported": true,
+      "weights_updated_by_flight_recorder": false
+    },
+    "artifact_protocols": [
+      "archive",
+      "volume",
+      "object_store"
+    ],
+    "client_import_names": [
+      "modal"
+    ],
+    "credential_env_vars": [
+      "MODAL_TOKEN_ID",
+      "MODAL_TOKEN_SECRET"
+    ],
+    "default_live_execution_allowed": false,
+    "display_name": "Modal",
+    "gpu_classes": [
+      "t4",
+      "l4",
+      "a10g",
+      "a100",
+      "h100"
+    ],
+    "id": "modal",
+    "job_modes": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "reward_model",
+      "process_rewards"
+    ],
+    "live_status": "preflight_only",
+    "regions": [
+      "provider_default"
+    ]
+  },
+  "readiness": "blocked",
+  "recommendation": "block_cloud_training_launch",
+  "schema_version": "hfr.cloud_training_preflight.v1",
+  "source_artifacts": {
+    "agentic_training_plan": {
+      "exists": true,
+      "path": "../plans/sft_then_dpo_plan.json",
+      "role": "agentic_training_plan",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "agentic_training_plan",
+      "schema_passed": true,
+      "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+      "size_bytes": 10379,
+      "source_passed": true,
+      "source_recommendation": "ready_for_external_trainer_plan"
+    },
+    "trainer_launch_check": {
+      "exists": false,
+      "path": "",
+      "role": "trainer_launch_check",
+      "schema_error_count": 1,
+      "schema_errors": [
+        "artifact not provided"
+      ],
+      "schema_name": "trainer_launch_check",
+      "schema_passed": false,
+      "sha256": null,
+      "size_bytes": null,
+      "source_passed": null,
+      "source_recommendation": ""
+    },
+    "trainer_preflight": {
+      "exists": false,
+      "path": "",
+      "role": "trainer_preflight",
+      "schema_error_count": 1,
+      "schema_errors": [
+        "artifact not provided"
+      ],
+      "schema_name": "trainer_preflight",
+      "schema_passed": false,
+      "sha256": null,
+      "size_bytes": null,
+      "source_passed": null,
+      "source_recommendation": ""
+    }
+  }
+}

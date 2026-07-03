@@ -38,6 +38,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(plan["recommendation"], "approve_iteration_execution")
             self.assertFalse(plan["execution_boundary"]["cloud_jobs_started"])
             self.assertFalse(plan["handoff_contract"]["default_live_execution_allowed"])
+            self.assertEqual(plan["cloud_training"]["missing_artifacts"], [])
+            self.assertFalse(plan["cloud_training"]["provider_api_calls_started"])
             self.assertEqual(plan["missing_phase_inputs"], [])
             self.assertTrue(all(phase["status"] != "blocked" for phase in plan["phases"]))
             self.assertEqual(plan["artifact_count"], sum(len(paths) for paths in artifacts.values()))
@@ -62,8 +64,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertIn("rejection_sampling_gate", plan["missing_phase_inputs"])
             self.assertIn("dataset_curation_receipt", plan["missing_phase_inputs"])
             self.assertIn("trainer_preflight", plan["missing_phase_inputs"])
+            self.assertIn("cloud_training_preflight", plan["missing_phase_inputs"])
             self.assertIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
             self.assertIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
+            self.assertIn("cloud_training_receipts_bound_for_provider_handoff", {check["id"] for check in plan["checks"] if not check["passed"]})
             schema = check_schema_contract(plan)
             self.assertTrue(schema["passed"], schema["errors"])
 
@@ -114,6 +118,12 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 ("--training-export", "training_export"),
                 ("--agentic-training-plan", "agentic_training_plan"),
                 ("--agentic-training-flow", "agentic_training_flow"),
+                ("--cloud-training-provider-registry", "cloud_training_provider_registry"),
+                ("--cloud-training-preflight", "cloud_training_preflight"),
+                ("--cloud-training-artifact-manifest", "cloud_training_artifact_manifest"),
+                ("--cloud-training-launch-plan", "cloud_training_launch_plan"),
+                ("--cloud-training-launch-receipt", "cloud_training_launch_receipt"),
+                ("--cloud-training-status-receipt", "cloud_training_status_receipt"),
                 ("--trainer-preflight", "trainer_preflight"),
                 ("--trainer-launch-check", "trainer_launch_check"),
                 ("--serving-lifecycle", "serving_lifecycle"),
@@ -213,6 +223,28 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
             self.assertTrue(validation["passed"], validation)
 
+    def test_validate_rejects_tampered_cloud_training_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-cloud-tamper",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            plan["cloud_training"]["artifact_count"] = 0
+            plan["cloud_training"]["provider_api_calls_started"] = True
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_loop_plan.cloud_training.artifact_count must match cloud training source artifacts.", errors)
+            self.assertIn("agentic_training_loop_plan.cloud_training.provider_api_calls_started must match cloud training source artifacts.", errors)
+
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_training_loop_plan", names)
@@ -238,6 +270,20 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "training_export": [training_export],
             "agentic_training_plan": [self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")],
             "agentic_training_flow": [self.write_json(root / "agentic_training_flow.json", "hfr.agentic_training_flow.v1")],
+            "cloud_training_provider_registry": [
+                self.write_json(root / "cloud_training_provider_registry.json", "hfr.cloud_training_provider_registry.v1")
+            ],
+            "cloud_training_preflight": [self.write_json(root / "cloud_training_preflight.json", "hfr.cloud_training_preflight.v1")],
+            "cloud_training_artifact_manifest": [
+                self.write_json(root / "cloud_training_artifact_manifest.json", "hfr.cloud_training_artifact_manifest.v1")
+            ],
+            "cloud_training_launch_plan": [self.write_json(root / "cloud_training_launch_plan.json", "hfr.cloud_training_launch_plan.v1")],
+            "cloud_training_launch_receipt": [
+                self.write_json(root / "cloud_training_launch_receipt.json", "hfr.cloud_training_launch_receipt.v1")
+            ],
+            "cloud_training_status_receipt": [
+                self.write_json(root / "cloud_training_status_receipt.json", "hfr.cloud_training_status_receipt.v1")
+            ],
             "trainer_preflight": [self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")],
             "trainer_launch_check": [self.write_json(root / "trainer_launch_check.json", "hfr.trainer_launch_check.v1")],
             "serving_lifecycle": [self.write_json(root / "serving_lifecycle.json", "hfr.serving_lifecycle.v1")],

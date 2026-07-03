@@ -38,6 +38,7 @@
             "type": "array"
           },
           "blocked_reason_count": { "minimum": 0, "type": "integer" },
+          "cloud_training": { "$ref": "#/$defs/group_summary" },
           "cost_estimate": { "type": "object" },
           "evals": { "type": "object" },
           "exists": { "const": true },
@@ -78,6 +79,7 @@
           "phase_status_counts",
           "artifact_group_counts",
           "artifact_role_counts",
+          "cloud_training",
           "cost_estimate",
           "serving",
           "evals",
@@ -177,6 +179,48 @@
         "group": { "minLength": 1, "type": "string" }
       },
       "required": ["group", "count"],
+      "type": "object"
+    },
+    "group_summary": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_count": { "minimum": 0, "type": "integer" },
+        "artifact_manifest_present": { "type": "boolean" },
+        "cloud_jobs_started": { "const": false },
+        "credential_values_recorded": { "const": false },
+        "group": { "minLength": 1, "type": "string" },
+        "launch_plan_present": { "type": "boolean" },
+        "launch_receipt_present": { "type": "boolean" },
+        "live_spend_allowed": { "const": false },
+        "preflight_present": { "type": "boolean" },
+        "provider_api_calls_started": { "const": false },
+        "provider_registry_present": { "type": "boolean" },
+        "roles_missing": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "roles_present": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "status_receipt_present": { "type": "boolean" }
+      },
+      "required": [
+        "group",
+        "artifact_count",
+        "roles_present",
+        "roles_missing",
+        "provider_registry_present",
+        "preflight_present",
+        "artifact_manifest_present",
+        "launch_plan_present",
+        "launch_receipt_present",
+        "status_receipt_present",
+        "provider_api_calls_started",
+        "cloud_jobs_started",
+        "credential_values_recorded",
+        "live_spend_allowed"
+      ],
       "type": "object"
     },
     "id_count": {

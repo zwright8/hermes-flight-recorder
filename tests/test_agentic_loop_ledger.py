@@ -46,10 +46,14 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             groups = {row["group"]: row["count"] for row in ready_record["artifact_group_counts"]}
             self.assertGreater(groups["rollouts"], 0)
             self.assertGreater(groups["review"], 0)
+            self.assertGreater(groups["cloud_training"], 0)
             self.assertGreater(groups["training"], 0)
             self.assertGreater(groups["eval"], 0)
             role_names = {row["role"] for row in ready_record["artifact_role_counts"]}
+            self.assertIn("cloud_training_launch_receipt", role_names)
             self.assertIn("model_grader_override_receipt", role_names)
+            self.assertTrue(ready_record["cloud_training"]["status_receipt_present"])
+            self.assertFalse(ready_record["cloud_training"]["provider_api_calls_started"])
             self.assertIn("external_eval_receipt", ready_record["evals"]["roles_present"])
             self.assertTrue(ready_record["governance"]["promotion_decision_present"])
             self.assertFalse(ready_record["governance"]["weights_updated_by_flight_recorder"])
@@ -92,6 +96,26 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
             self.assertIn("readiness_digest.missing_phase_input_count must match missing_phase_inputs", errors)
 
+    def test_validate_rejects_tampered_cloud_training_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["iterations"][0]["cloud_training"]["artifact_count"] = 0
+            payload["iterations"][0]["cloud_training"]["cloud_jobs_started"] = True
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("cloud_training.artifact_count must match ledger cloud training role counts", errors)
+            self.assertIn("cloud_training.cloud_jobs_started must match ledger cloud training role counts", errors)
+
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("agentic_loop_ledger", names)
@@ -131,6 +155,20 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "training_export": [training_export],
             "agentic_training_plan": [self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")],
             "agentic_training_flow": [self.write_json(root / "agentic_training_flow.json", "hfr.agentic_training_flow.v1")],
+            "cloud_training_provider_registry": [
+                self.write_json(root / "cloud_training_provider_registry.json", "hfr.cloud_training_provider_registry.v1")
+            ],
+            "cloud_training_preflight": [self.write_json(root / "cloud_training_preflight.json", "hfr.cloud_training_preflight.v1")],
+            "cloud_training_artifact_manifest": [
+                self.write_json(root / "cloud_training_artifact_manifest.json", "hfr.cloud_training_artifact_manifest.v1")
+            ],
+            "cloud_training_launch_plan": [self.write_json(root / "cloud_training_launch_plan.json", "hfr.cloud_training_launch_plan.v1")],
+            "cloud_training_launch_receipt": [
+                self.write_json(root / "cloud_training_launch_receipt.json", "hfr.cloud_training_launch_receipt.v1")
+            ],
+            "cloud_training_status_receipt": [
+                self.write_json(root / "cloud_training_status_receipt.json", "hfr.cloud_training_status_receipt.v1")
+            ],
             "trainer_preflight": [self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")],
             "trainer_launch_check": [self.write_json(root / "trainer_launch_check.json", "hfr.trainer_launch_check.v1")],
             "serving_lifecycle": [self.write_json(root / "serving_lifecycle.json", "hfr.serving_lifecycle.v1")],

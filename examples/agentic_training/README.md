@@ -76,14 +76,20 @@ flightrecorder agentic-loop plan \
   --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
   --agentic-training-result examples/agentic_training/completed_result.json \
+  --cloud-training-provider-registry examples/agentic_training/cloud_training/provider_registry.json \
+  --cloud-training-preflight examples/agentic_training/cloud_training/preflight.json \
+  --cloud-training-artifact-manifest examples/agentic_training/cloud_training/artifact_manifest.json \
+  --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
+  --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
+  --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/loop_plan.json
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include rollout, review, trainer-preflight, serving, held-out eval, or
-promotion receipts. It is still schema-checkable and validates as a safe
-control-plane contract.
+does not include rollout, review, local trainer-preflight, serving, held-out
+eval, or promotion receipts. It does bind nested cloud-training receipts and
+summarizes them in `cloud_training` without provider side effects.
 
 Validate the committed receipt before including it in a trainer-facing evidence
 bundle:

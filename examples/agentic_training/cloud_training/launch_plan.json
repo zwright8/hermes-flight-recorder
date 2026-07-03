@@ -1,0 +1,199 @@
+{
+  "blocked_reasons": [
+    "preflight_ready: passed=False"
+  ],
+  "check_count": 3,
+  "checks": [
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "preflight.json",
+          "role": "cloud_training_preflight",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "cloud_training_preflight",
+          "schema_passed": true,
+          "sha256": "28b6a7db0d4c988b18dd0c8ff68fd55bc229c4bcb044b3f0ca7cb03867756d2c",
+          "size_bytes": 11230,
+          "source_passed": false,
+          "source_recommendation": "block_cloud_training_launch"
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "cloud_training_preflight"
+      },
+      "id": "preflight_ready",
+      "passed": false,
+      "summary": "preflight_ready: passed=False"
+    },
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "artifact_manifest.json",
+          "role": "cloud_training_artifact_manifest",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "cloud_training_artifact_manifest",
+          "schema_passed": true,
+          "sha256": "a86dd269d07fbc81b12c16353e216caa8795aeb101b485d6cd76e61ead6e21ca",
+          "size_bytes": 6041,
+          "source_passed": true,
+          "source_recommendation": ""
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "cloud_training_artifact_manifest"
+      },
+      "id": "artifact_manifest_ready",
+      "passed": true,
+      "summary": "artifact_manifest_ready: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_job_started": false,
+        "dry_run": true
+      },
+      "expected": {
+        "dry_run": true
+      },
+      "id": "dry_run_launch_only",
+      "passed": true,
+      "summary": "dry_run_launch_only: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "allow_live": false,
+    "cloud_cost_incurred_usd": 0,
+    "cloud_job_started": false,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_preflight_requested": false,
+    "live_requested": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 1,
+  "handoff_contract": {
+    "default_live_execution_allowed": false,
+    "external_provider_owns_execution": true,
+    "flight_recorder_controls_preflight_only": true,
+    "requires_artifact_upload_manifest": true,
+    "requires_cost_limit": true,
+    "requires_environment_credentials_for_live": true,
+    "requires_explicit_live_opt_in": true,
+    "requires_region_and_gpu_constraints": true,
+    "requires_status_and_cancel_receipts": true
+  },
+  "launch": {
+    "command": [
+      "<external-cloud-training-runner>",
+      "--provider",
+      "modal",
+      "--dry-run"
+    ],
+    "live_launch_supported": false,
+    "mode": "dry_run",
+    "provider_api_call_planned": false
+  },
+  "passed": false,
+  "provider": {
+    "adapter_contract": {
+      "adapter_id": "cloud_training.modal.fail_closed.v1",
+      "client_modules_imported_by_flight_recorder": false,
+      "cloud_cost_incurred_usd": 0,
+      "credential_values_recorded": false,
+      "dry_run_transport": "mock_receipts",
+      "live_launch_supported": false,
+      "live_preflight_supported": true,
+      "live_preflight_transport": "metadata_only",
+      "model_downloads_started": false,
+      "provider_api_called_by_flight_recorder": false,
+      "provider_id": "modal",
+      "receipt_types": [
+        "hfr.cloud_training_provider_registry.v1",
+        "hfr.cloud_training_preflight.v1",
+        "hfr.cloud_training_artifact_manifest.v1",
+        "hfr.cloud_training_launch_plan.v1",
+        "hfr.cloud_training_launch_receipt.v1",
+        "hfr.cloud_training_status_receipt.v1"
+      ],
+      "requires_cost_limit": true,
+      "requires_environment_credentials_for_live": true,
+      "requires_explicit_live_opt_in": true,
+      "requires_region_and_gpu_constraints": true,
+      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "status_cancel_receipts_supported": true,
+      "weights_updated_by_flight_recorder": false
+    },
+    "artifact_protocols": [
+      "archive",
+      "volume",
+      "object_store"
+    ],
+    "client_import_names": [
+      "modal"
+    ],
+    "credential_env_vars": [
+      "MODAL_TOKEN_ID",
+      "MODAL_TOKEN_SECRET"
+    ],
+    "default_live_execution_allowed": false,
+    "display_name": "Modal",
+    "gpu_classes": [
+      "t4",
+      "l4",
+      "a10g",
+      "a100",
+      "h100"
+    ],
+    "id": "modal",
+    "job_modes": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "reward_model",
+      "process_rewards"
+    ],
+    "live_status": "preflight_only",
+    "regions": [
+      "provider_default"
+    ]
+  },
+  "readiness": "blocked",
+  "recommendation": "block_launch_receipt",
+  "schema_version": "hfr.cloud_training_launch_plan.v1",
+  "source_artifacts": {
+    "artifact_manifest": {
+      "exists": true,
+      "path": "artifact_manifest.json",
+      "role": "cloud_training_artifact_manifest",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "cloud_training_artifact_manifest",
+      "schema_passed": true,
+      "sha256": "a86dd269d07fbc81b12c16353e216caa8795aeb101b485d6cd76e61ead6e21ca",
+      "size_bytes": 6041,
+      "source_passed": true,
+      "source_recommendation": ""
+    },
+    "preflight": {
+      "exists": true,
+      "path": "preflight.json",
+      "role": "cloud_training_preflight",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "cloud_training_preflight",
+      "schema_passed": true,
+      "sha256": "28b6a7db0d4c988b18dd0c8ff68fd55bc229c4bcb044b3f0ca7cb03867756d2c",
+      "size_bytes": 11230,
+      "source_passed": false,
+      "source_recommendation": "block_cloud_training_launch"
+    }
+  }
+}

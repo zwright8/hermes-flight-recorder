@@ -1480,6 +1480,12 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "agentic_training_flow": args.agentic_training_flow,
         "agentic_training_result": args.agentic_training_result,
         "agentic_training_runtime_preflight": args.agentic_training_runtime_preflight,
+        "cloud_training_artifact_manifest": args.cloud_training_artifact_manifest,
+        "cloud_training_launch_plan": args.cloud_training_launch_plan,
+        "cloud_training_launch_receipt": args.cloud_training_launch_receipt,
+        "cloud_training_preflight": args.cloud_training_preflight,
+        "cloud_training_provider_registry": args.cloud_training_provider_registry,
+        "cloud_training_status_receipt": args.cloud_training_status_receipt,
         "dataset_curation_receipt": args.dataset_curation_receipt,
         "evidence_bundle": args.evidence_bundle,
         "eval_summary": args.eval_summary,
@@ -3422,6 +3428,22 @@ def _parser() -> argparse.ArgumentParser:
     )
     agentic_loop_plan.add_argument("--agentic-training-flow", action="append", default=[], help="agentic_training_flow artifact; may be repeated")
     agentic_loop_plan.add_argument("--agentic-training-result", action="append", default=[], help="agentic_training_result artifact; may be repeated")
+    agentic_loop_plan.add_argument("--cloud-training-provider-registry", action="append", default=[], help="cloud_training_provider_registry artifact; may be repeated")
+    agentic_loop_plan.add_argument("--cloud-training-preflight", action="append", default=[], help="cloud_training_preflight artifact; may be repeated")
+    agentic_loop_plan.add_argument(
+        "--cloud-training-artifact-manifest",
+        action="append",
+        default=[],
+        help="cloud_training_artifact_manifest artifact; may be repeated",
+    )
+    agentic_loop_plan.add_argument("--cloud-training-launch-plan", action="append", default=[], help="cloud_training_launch_plan artifact; may be repeated")
+    agentic_loop_plan.add_argument(
+        "--cloud-training-launch-receipt",
+        action="append",
+        default=[],
+        help="cloud_training_launch_receipt artifact; may be repeated",
+    )
+    agentic_loop_plan.add_argument("--cloud-training-status-receipt", action="append", default=[], help="cloud_training_status_receipt artifact; may be repeated")
     agentic_loop_plan.add_argument("--trainer-preflight", action="append", default=[], help="trainer_preflight artifact; may be repeated")
     agentic_loop_plan.add_argument("--trainer-launch-check", action="append", default=[], help="trainer_launch_check artifact; may be repeated")
     agentic_loop_plan.add_argument("--serving-lifecycle", action="append", default=[], help="serving_lifecycle artifact; may be repeated")

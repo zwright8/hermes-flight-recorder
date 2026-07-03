@@ -5,7 +5,7 @@
     "latest_iteration_index": 0,
     "readiness": "blocked",
     "recommendation": "continue_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 18 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 22 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -19,8 +19,12 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 3,
+      "artifact_count": 9,
       "artifact_group_counts": [
+        {
+          "count": 6,
+          "group": "cloud_training"
+        },
         {
           "count": 0,
           "group": "datasets"
@@ -74,9 +78,56 @@
         {
           "count": 1,
           "role": "agentic_training_runtime_preflight"
+        },
+        {
+          "count": 1,
+          "role": "cloud_training_artifact_manifest"
+        },
+        {
+          "count": 1,
+          "role": "cloud_training_launch_plan"
+        },
+        {
+          "count": 1,
+          "role": "cloud_training_launch_receipt"
+        },
+        {
+          "count": 1,
+          "role": "cloud_training_preflight"
+        },
+        {
+          "count": 1,
+          "role": "cloud_training_provider_registry"
+        },
+        {
+          "count": 1,
+          "role": "cloud_training_status_receipt"
         }
       ],
-      "blocked_reason_count": 4,
+      "blocked_reason_count": 6,
+      "cloud_training": {
+        "artifact_count": 6,
+        "artifact_manifest_present": true,
+        "cloud_jobs_started": false,
+        "credential_values_recorded": false,
+        "group": "cloud_training",
+        "launch_plan_present": true,
+        "launch_receipt_present": true,
+        "live_spend_allowed": false,
+        "preflight_present": true,
+        "provider_api_calls_started": false,
+        "provider_registry_present": true,
+        "roles_missing": [],
+        "roles_present": [
+          "cloud_training_provider_registry",
+          "cloud_training_preflight",
+          "cloud_training_artifact_manifest",
+          "cloud_training_launch_plan",
+          "cloud_training_launch_receipt",
+          "cloud_training_status_receipt"
+        ],
+        "status_receipt_present": true
+      },
       "cost_estimate": {
         "live_spend_allowed": false,
         "max_cloud_cost_usd": 0,
@@ -115,6 +166,9 @@
       "iteration_id": "demo-loop-001",
       "missing_phase_inputs": [
         "action_ledger",
+        "agentic_rollout_plan",
+        "agentic_rollout_receipt",
+        "dataset_curation_receipt",
         "eval_summary",
         "evidence_bundle",
         "external_eval_plan",
@@ -125,6 +179,7 @@
         "model_grader_gate",
         "promotion_decision",
         "promotion_ledger",
+        "rejection_sampling_gate",
         "review_calibration",
         "reviewed_gate",
         "rubric_spec",
@@ -164,8 +219,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "0ed89bc0afb868bdbb62c31ef76409f5b601525ea92149e619bc4f2810f64cf7",
-      "size_bytes": 15068,
+      "sha256": "b66e1e87af8b4784b37c21ff68b940de953ebad0bef51e8dd63fcbdd25f55c50",
+      "size_bytes": 22792,
       "training_outputs": {
         "artifact_count": 3,
         "group": "training",
@@ -185,6 +240,10 @@
   "ledger_path": "examples/agentic_training/loop_ledger.json",
   "metrics": {
     "artifact_group_totals": [
+      {
+        "count": 6,
+        "group": "cloud_training"
+      },
       {
         "count": 0,
         "group": "datasets"
@@ -229,7 +288,7 @@
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 18,
+    "latest_missing_phase_input_count": 22,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
     "promotion_ready_count": 0,
@@ -258,7 +317,7 @@
   ],
   "passed": true,
   "readiness_digest": {
-    "blocked_reason_count": 4,
+    "blocked_reason_count": 6,
     "decision_readiness": "blocked",
     "decision_recommendation": "continue_iteration",
     "latest_iteration_id": "demo-loop-001",
@@ -276,9 +335,12 @@
       "rollouts",
       "serving"
     ],
-    "missing_phase_input_count": 18,
+    "missing_phase_input_count": 22,
     "missing_phase_inputs": [
       "action_ledger",
+      "agentic_rollout_plan",
+      "agentic_rollout_receipt",
+      "dataset_curation_receipt",
       "eval_summary",
       "evidence_bundle",
       "external_eval_plan",
@@ -289,6 +351,7 @@
       "model_grader_gate",
       "promotion_decision",
       "promotion_ledger",
+      "rejection_sampling_gate",
       "review_calibration",
       "reviewed_gate",
       "rubric_spec",
@@ -306,7 +369,7 @@
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 18 missing phase input(s) across 9 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 22 missing phase input(s) across 9 empty artifact group(s)."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }

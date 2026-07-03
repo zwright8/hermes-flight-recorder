@@ -24,6 +24,14 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
         "reviewed_gate",
     ),
     "datasets": ("rejection_sampling_gate", "dataset_curation_receipt", "training_export", "dataset_registry", "dataset_splits"),
+    "cloud_training": (
+        "cloud_training_provider_registry",
+        "cloud_training_preflight",
+        "cloud_training_artifact_manifest",
+        "cloud_training_launch_plan",
+        "cloud_training_launch_receipt",
+        "cloud_training_status_receipt",
+    ),
     "training": (
         "agentic_training_plan",
         "agentic_training_runtime_preflight",
@@ -139,6 +147,7 @@ def _iteration_record(
         },
         "serving": _group_summary(source_artifacts, "serving"),
         "evals": _group_summary(source_artifacts, "eval"),
+        "cloud_training": _cloud_training_summary(source_artifacts, plan),
         "training_outputs": _group_summary(source_artifacts, "training"),
         "governance": _governance_summary(source_artifacts, plan),
         "next_actions": {
@@ -259,6 +268,26 @@ def _group_summary(source_artifacts: dict[str, Any], group: str) -> dict[str, An
         "roles_present": [role for role in roles if _role_count(source_artifacts, role) > 0],
         "roles_missing": [role for role in roles if _role_count(source_artifacts, role) == 0],
     }
+
+
+def _cloud_training_summary(source_artifacts: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+    plan_summary = plan.get("cloud_training") if isinstance(plan.get("cloud_training"), dict) else {}
+    summary = _group_summary(source_artifacts, "cloud_training")
+    summary.update(
+        {
+            "provider_registry_present": _role_count(source_artifacts, "cloud_training_provider_registry") > 0,
+            "preflight_present": _role_count(source_artifacts, "cloud_training_preflight") > 0,
+            "artifact_manifest_present": _role_count(source_artifacts, "cloud_training_artifact_manifest") > 0,
+            "launch_plan_present": _role_count(source_artifacts, "cloud_training_launch_plan") > 0,
+            "launch_receipt_present": _role_count(source_artifacts, "cloud_training_launch_receipt") > 0,
+            "status_receipt_present": _role_count(source_artifacts, "cloud_training_status_receipt") > 0,
+            "provider_api_calls_started": plan_summary.get("provider_api_calls_started") is True,
+            "cloud_jobs_started": plan_summary.get("cloud_jobs_started") is True,
+            "credential_values_recorded": plan_summary.get("credential_values_recorded") is True,
+            "live_spend_allowed": plan_summary.get("live_spend_allowed") is True,
+        }
+    )
+    return summary
 
 
 def _governance_summary(source_artifacts: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:

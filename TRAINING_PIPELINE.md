@@ -702,8 +702,8 @@ flightrecorder validate \
 ```
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
-trainer, serving, held-out eval, improvement, governance, promotion, and
-next-iteration receipts into one iteration contract:
+trainer, cloud-training, serving, held-out eval, improvement, governance,
+promotion, and next-iteration receipts into one iteration contract:
 
 ```bash
 flightrecorder agentic-loop plan \
@@ -717,6 +717,12 @@ flightrecorder agentic-loop plan \
   --dataset-curation-receipt runs/dataset_curation_receipt.json \
   --agentic-training-plan runs/agentic_training_plan.json \
   --agentic-training-result runs/agentic_training_result.json \
+  --cloud-training-provider-registry runs/cloud_provider_registry.json \
+  --cloud-training-preflight runs/cloud_preflight.json \
+  --cloud-training-artifact-manifest runs/cloud_artifacts.json \
+  --cloud-training-launch-plan runs/cloud_launch_plan.json \
+  --cloud-training-launch-receipt runs/cloud_launch_receipt.json \
+  --cloud-training-status-receipt runs/cloud_status_receipt.json \
   --heldout-manifest runs/heldout_manifest.json \
   --external-eval-plan runs/external_eval_plan.json \
   --external-eval-receipt runs/external_eval_receipt.json \

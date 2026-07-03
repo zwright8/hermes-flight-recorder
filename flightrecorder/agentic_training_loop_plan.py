@@ -58,9 +58,19 @@ PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "external_trainer_execution",
         "name": "External trainer execution",
-        "required": ("agentic_training_plan", "trainer_preflight", "trainer_launch_check"),
+        "required": (
+            "agentic_training_plan",
+            "trainer_preflight",
+            "trainer_launch_check",
+            "cloud_training_provider_registry",
+            "cloud_training_preflight",
+            "cloud_training_artifact_manifest",
+            "cloud_training_launch_plan",
+            "cloud_training_launch_receipt",
+            "cloud_training_status_receipt",
+        ),
         "produces": ("agentic_training_runtime_preflight", "agentic_training_flow", "agentic_training_result"),
-        "gate": "live trainer launch requires explicit opt-in, credentials, and a passing preflight.",
+        "gate": "live trainer launch requires explicit opt-in, credentials, cloud-provider receipts, and a passing preflight.",
     },
     {
         "id": "serving_checks",
@@ -114,6 +124,12 @@ ARTIFACT_ROLES: dict[str, str] = {
     "agentic_training_flow": "agentic_training_flow",
     "agentic_training_result": "agentic_training_result",
     "agentic_training_runtime_preflight": "agentic_training_runtime_preflight",
+    "cloud_training_artifact_manifest": "cloud_training_artifact_manifest",
+    "cloud_training_launch_plan": "cloud_training_launch_plan",
+    "cloud_training_launch_receipt": "cloud_training_launch_receipt",
+    "cloud_training_preflight": "cloud_training_preflight",
+    "cloud_training_provider_registry": "cloud_training_provider_registry",
+    "cloud_training_status_receipt": "cloud_training_status_receipt",
     "compare_gate": "compare_gate",
     "dataset_registry": "dataset_registry",
     "dataset_splits": "dataset_splits",
@@ -171,6 +187,7 @@ def build_agentic_training_loop_plan(
         raise AgenticTrainingLoopPlanError("iteration_id is required")
     output_path = Path(out_path)
     refs = _artifact_refs(artifact_paths or {}, preserve_paths, output_path)
+    cloud_training = _cloud_training_summary(refs)
     phases = [_phase_row(spec, refs) for spec in PHASES]
     checks: list[dict[str, Any]] = []
     _add_check(checks, "phase_contracts_present", len(phases) == len(PHASES), {"phase_count": len(phases)}, {"phase_count": len(PHASES)})
@@ -262,6 +279,13 @@ def build_agentic_training_loop_plan(
     )
     _add_check(
         checks,
+        "cloud_training_receipts_bound_for_provider_handoff",
+        not cloud_training["missing_artifacts"],
+        {"cloud_training": cloud_training},
+        {"missing_artifacts": []},
+    )
+    _add_check(
+        checks,
         "heldout_eval_is_fail_closed",
         "heldout_manifest" in refs and "external_eval_plan" in refs and "external_eval_receipt" in refs,
         {
@@ -308,6 +332,7 @@ def build_agentic_training_loop_plan(
         "phases": phases,
         "budget": _budget(budget or {}),
         "provider_constraints": _provider_constraints(provider_constraints or {}),
+        "cloud_training": cloud_training,
         "execution_boundary": {
             "dry_run_plan_only": True,
             "cloud_jobs_started": False,
@@ -431,6 +456,35 @@ def _provider_constraints(value: dict[str, Any]) -> dict[str, Any]:
 def _role_counts(refs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
     counter = Counter({role: len(rows) for role, rows in refs.items()})
     return [{"role": role, "count": counter[role]} for role in sorted(counter)]
+
+
+def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    required = [
+        "cloud_training_provider_registry",
+        "cloud_training_preflight",
+        "cloud_training_artifact_manifest",
+        "cloud_training_launch_plan",
+        "cloud_training_launch_receipt",
+        "cloud_training_status_receipt",
+    ]
+    present = [role for role in required if refs.get(role)]
+    missing = [role for role in required if role not in present]
+    return {
+        "required_artifacts": required,
+        "present_artifacts": present,
+        "missing_artifacts": missing,
+        "artifact_count": sum(len(refs.get(role, [])) for role in required),
+        "provider_registry_present": "cloud_training_provider_registry" in present,
+        "preflight_present": "cloud_training_preflight" in present,
+        "artifact_manifest_present": "cloud_training_artifact_manifest" in present,
+        "launch_plan_present": "cloud_training_launch_plan" in present,
+        "launch_receipt_present": "cloud_training_launch_receipt" in present,
+        "status_receipt_present": "cloud_training_status_receipt" in present,
+        "provider_api_calls_started": False,
+        "cloud_jobs_started": False,
+        "credential_values_recorded": False,
+        "live_spend_allowed": False,
+    }
 
 
 def _refs_are_safe(refs: dict[str, list[dict[str, Any]]]) -> bool:

@@ -67,7 +67,7 @@ and handoff receipts that make those systems auditable.
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, delegated flow receipts, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `agentic-training-flow`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
-| Loop | Bind rollout plan/receipt, review, trainer, serving, eval, improvement, promotion, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `next-iteration-schedule`, `validate --agentic-loop-ledger` |
+| Loop | Bind rollout plan/receipt, review, trainer, cloud-training, serving, eval, improvement, promotion, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `next-iteration-schedule`, `validate --agentic-loop-ledger` |
 | Eval | Require identical held-out scenarios, adapter contracts, and separate raw movement from governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `compare-suite` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
 | Governance | Decide whether a candidate can move registry aliases and publish release records. | `promotion-decision`, `promotion-cards`, `promotion-release-record`, `promotion-alias-apply` |
@@ -324,6 +324,12 @@ flightrecorder agentic-loop plan \
   --candidate local/candidate \
   --agentic-training-plan runs/agentic_training_plan.json \
   --agentic-training-result runs/agentic_training_result.json \
+  --cloud-training-provider-registry runs/cloud_provider_registry.json \
+  --cloud-training-preflight runs/cloud_preflight.json \
+  --cloud-training-artifact-manifest runs/cloud_artifacts.json \
+  --cloud-training-launch-plan runs/cloud_launch_plan.json \
+  --cloud-training-launch-receipt runs/cloud_launch_receipt.json \
+  --cloud-training-status-receipt runs/cloud_status_receipt.json \
   --out runs/agentic_training_loop_plan.json
 
 flightrecorder validate \
@@ -338,6 +344,10 @@ weight updates. Missing phase receipts produce a schema-checkable
 Loop ledgers add a `readiness_digest` over the latest iteration so review can
 spot missing phase inputs, empty artifact groups, next-action posture, and
 side-effect status without walking every receipt.
+The plan and ledger also include a `cloud_training` summary that must match the
+bound provider registry, preflight, artifact manifest, launch plan, launch
+receipt, and status/cancel receipts while proving no provider side effects
+started.
 
 ## Cloud Training Contracts
 

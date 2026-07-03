@@ -2897,6 +2897,16 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     )
 
 
+AGENTIC_LOOP_CLOUD_TRAINING_ROLES: tuple[str, ...] = (
+    "cloud_training_provider_registry",
+    "cloud_training_preflight",
+    "cloud_training_artifact_manifest",
+    "cloud_training_launch_plan",
+    "cloud_training_launch_receipt",
+    "cloud_training_status_receipt",
+)
+
+
 def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION, target, prefix="agentic_training_loop_plan.")
     checks = plan.get("checks")
@@ -2935,6 +2945,7 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
     artifact_count = 0
     if not isinstance(source_artifacts, dict):
         target.errors.append("agentic_training_loop_plan.source_artifacts must be an object.")
+        source_artifacts = {}
     else:
         for role, refs in source_artifacts.items():
             if not isinstance(role, str) or not role:
@@ -2952,6 +2963,12 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
                 )
     if plan.get("artifact_count") != artifact_count:
         target.errors.append(f"agentic_training_loop_plan.artifact_count expected {artifact_count}, got {plan.get('artifact_count')!r}.")
+    _validate_agentic_training_loop_cloud_training(
+        plan.get("cloud_training"),
+        source_artifacts,
+        target,
+        "agentic_training_loop_plan.cloud_training",
+    )
 
     phases = plan.get("phases")
     if not isinstance(phases, list) or not phases:
@@ -3075,6 +3092,38 @@ def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTar
         target.errors.append(f"{label}.status cannot be blocked without missing required artifacts.")
 
 
+def _validate_agentic_training_loop_cloud_training(
+    value: Any,
+    source_artifacts: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    present = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if _agentic_loop_role_count(source_artifacts, role) > 0]
+    missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role not in present]
+    expected = {
+        "required_artifacts": list(AGENTIC_LOOP_CLOUD_TRAINING_ROLES),
+        "present_artifacts": present,
+        "missing_artifacts": missing,
+        "artifact_count": sum(_agentic_loop_role_count(source_artifacts, role) for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES),
+        "provider_registry_present": "cloud_training_provider_registry" in present,
+        "preflight_present": "cloud_training_preflight" in present,
+        "artifact_manifest_present": "cloud_training_artifact_manifest" in present,
+        "launch_plan_present": "cloud_training_launch_plan" in present,
+        "launch_receipt_present": "cloud_training_launch_receipt" in present,
+        "status_receipt_present": "cloud_training_status_receipt" in present,
+        "provider_api_calls_started": False,
+        "cloud_jobs_started": False,
+        "credential_values_recorded": False,
+        "live_spend_allowed": False,
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match cloud training source artifacts.")
+
+
 def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarget, ledger_path: Path) -> None:
     _require_equal(ledger, "schema_version", AGENTIC_LOOP_LEDGER_SCHEMA_VERSION, target, prefix="agentic_loop_ledger.")
     if ledger.get("passed") is not True:
@@ -3116,6 +3165,7 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
         for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder"):
             if governance.get(field_name) is not False:
                 target.errors.append(f"{label}.governance.{field_name} must be false.")
+        _validate_agentic_loop_ledger_cloud_training(row.get("cloud_training"), row, target, f"{label}.cloud_training")
     metrics = ledger.get("metrics")
     if not isinstance(metrics, dict):
         target.errors.append("agentic_loop_ledger.metrics must be an object.")
@@ -3205,6 +3255,49 @@ def _validate_agentic_loop_ledger_digest(
             target.errors.append("agentic_loop_ledger.readiness_digest.ready_for_governance_review must match latest iteration readiness.")
     if digest.get("latest_iteration_id") != metrics.get("latest_iteration_id"):
         target.errors.append("agentic_loop_ledger.readiness_digest.latest_iteration_id must match metrics.latest_iteration_id.")
+
+
+def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    role_counts = _agentic_loop_count_map(row.get("artifact_role_counts"), "role")
+    present = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role_counts.get(role, 0) > 0]
+    missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role not in present]
+    expected = {
+        "group": "cloud_training",
+        "artifact_count": sum(role_counts.get(role, 0) for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES),
+        "roles_present": present,
+        "roles_missing": missing,
+        "provider_registry_present": "cloud_training_provider_registry" in present,
+        "preflight_present": "cloud_training_preflight" in present,
+        "artifact_manifest_present": "cloud_training_artifact_manifest" in present,
+        "launch_plan_present": "cloud_training_launch_plan" in present,
+        "launch_receipt_present": "cloud_training_launch_receipt" in present,
+        "status_receipt_present": "cloud_training_status_receipt" in present,
+        "provider_api_calls_started": False,
+        "cloud_jobs_started": False,
+        "credential_values_recorded": False,
+        "live_spend_allowed": False,
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match ledger cloud training role counts.")
+
+
+def _agentic_loop_role_count(source_artifacts: dict[str, Any], role: str) -> int:
+    rows = source_artifacts.get(role)
+    return len(rows) if isinstance(rows, list) else 0
+
+
+def _agentic_loop_count_map(value: Any, key_name: str) -> dict[str, int]:
+    if not isinstance(value, list):
+        return {}
+    counts: dict[str, int] = {}
+    for row in value:
+        if isinstance(row, dict) and isinstance(row.get(key_name), str):
+            counts[row[key_name]] = _safe_non_negative_int(row.get("count"))
+    return counts
 
 
 def _validate_agentic_loop_ledger_counts(value: Any, target: ValidationTarget, label: str, key_name: str) -> None:
