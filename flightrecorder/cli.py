@@ -55,7 +55,6 @@ from .cloud_training import (
     build_cloud_training_provider_registry,
     build_cloud_training_status_receipt,
     provider_choices as cloud_training_provider_choices,
-    write_cloud_training_artifact,
 )
 from .compare_gate import (
     COMPARE_GATE_POLICY_SCHEMA_VERSION,
@@ -5337,23 +5336,32 @@ def _write_run_suite_harness_handoff(
         "tool_policy": tool_policy,
         "trace": {
             "path": _harness_relative_path(harness_dir, trace_path),
+            "sha256": _sha256_file(trace_path),
+            "size_bytes": trace_path.stat().st_size,
             "format": "normalized_json",
             "source_format": _run_suite_harness_source_format(trace),
         },
         "scorecard": {
             "path": _harness_relative_path(harness_dir, scorecard_path),
+            "sha256": _sha256_file(scorecard_path),
+            "size_bytes": scorecard_path.stat().st_size,
             "passed": scorecard.get("passed") is True,
             "score": scorecard.get("score", 0),
         },
-        "artifacts": {
-            "normalized_trace": _harness_relative_path(harness_dir, trace_path),
-            "scorecard": _harness_relative_path(harness_dir, scorecard_path),
-            "run_digest": _harness_relative_path(harness_dir, run_digest_path),
-            "report": _harness_relative_path(harness_dir, report_path),
-            "lineage": _harness_relative_path(harness_dir, lineage_path),
-        },
+        "artifacts": _run_suite_harness_artifacts(
+            harness_dir,
+            {
+                "normalized_trace": trace_path,
+                "scorecard": scorecard_path,
+                "run_digest": run_digest_path,
+                "report": report_path,
+                "lineage": lineage_path,
+            },
+        ),
         "replay": {
             "lineage": _harness_relative_path(harness_dir, lineage_path),
+            "lineage_sha256": _sha256_file(lineage_path),
+            "lineage_size_bytes": lineage_path.stat().st_size,
             "self_contained": _run_suite_harness_replay_self_contained(lineage),
         },
         "suite": suite,
@@ -5361,6 +5369,15 @@ def _write_run_suite_harness_handoff(
     _write_json(manifest_path, manifest)
     _write_json(result_path, result)
     return {"harness_manifest": manifest_path, "harness_result": result_path}
+
+
+def _run_suite_harness_artifacts(harness_dir: Path, artifacts: dict[str, Path]) -> dict[str, Any]:
+    records: dict[str, Any] = {}
+    for name, path in artifacts.items():
+        records[name] = _harness_relative_path(harness_dir, path)
+        records[f"{name}_sha256"] = _sha256_file(path)
+        records[f"{name}_size_bytes"] = path.stat().st_size
+    return records
 
 
 def _run_suite_harness_suite_context(

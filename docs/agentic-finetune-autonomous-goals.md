@@ -621,6 +621,10 @@ card, and dataset card decisions.
 - Harness replay receipts bind lineage and scorecard paths to SHA-256 plus
   byte-size evidence; validation rejects stale replay references before trusting
   pass/fail summaries.
+- Harness run results from both the common publishers and installed
+  `hermes-harness` entry point bind required artifact paths to SHA-256 plus
+  byte-size evidence; validation rejects stale trace, scorecard, digest, report,
+  or lineage artifact references before trusting the run receipt.
 - Training-export and suite-comparison source fingerprints include input sizes;
   verified source-fingerprint coverage requires scenario and trace hashes plus
   sizes.

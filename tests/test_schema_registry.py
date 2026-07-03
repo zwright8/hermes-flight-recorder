@@ -1600,16 +1600,42 @@ class SchemaRegistryTests(unittest.TestCase):
                         {"type": "secret", "pattern": "HFR_FAKE_SECRET_CANARY", "expected": "absent"}
                     ],
                 },
-                "trace": {"path": "normalized_trace.json", "format": "normalized_json"},
-                "scorecard": {"path": "scorecard.json", "passed": True, "score": 100},
+                "trace": {
+                    "path": "normalized_trace.json",
+                    "sha256": "0" * 64,
+                    "size_bytes": 1,
+                    "format": "normalized_json",
+                },
+                "scorecard": {
+                    "path": "scorecard.json",
+                    "sha256": "0" * 64,
+                    "size_bytes": 1,
+                    "passed": True,
+                    "score": 100,
+                },
                 "artifacts": {
                     "normalized_trace": "normalized_trace.json",
+                    "normalized_trace_sha256": "0" * 64,
+                    "normalized_trace_size_bytes": 1,
                     "scorecard": "scorecard.json",
+                    "scorecard_sha256": "0" * 64,
+                    "scorecard_size_bytes": 1,
                     "run_digest": "run_digest.json",
+                    "run_digest_sha256": "0" * 64,
+                    "run_digest_size_bytes": 1,
                     "report": "report.html",
+                    "report_sha256": "0" * 64,
+                    "report_size_bytes": 1,
                     "lineage": "artifact_lineage.json",
+                    "lineage_sha256": "0" * 64,
+                    "lineage_size_bytes": 1,
                 },
-                "replay": {"lineage": "artifact_lineage.json", "self_contained": True},
+                "replay": {
+                    "lineage": "artifact_lineage.json",
+                    "lineage_sha256": "0" * 64,
+                    "lineage_size_bytes": 1,
+                    "self_contained": True,
+                },
             }
         )
         self.assertTrue(result_result["passed"], result_result["errors"])

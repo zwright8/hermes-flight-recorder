@@ -89,6 +89,19 @@ class HarnessToolPolicyTests(unittest.TestCase):
 
             self.assertTrue(check_schema_file(run_dir / "harness_manifest.json", "harness_run_manifest")["passed"])
             self.assertTrue(check_schema_file(run_dir / "harness_result.json", "harness_run_result")["passed"])
+            for artifact_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
+                artifact_path = run_dir / result["artifacts"][artifact_name]
+                self.assertEqual(result["artifacts"][f"{artifact_name}_sha256"], _sha256_file(artifact_path))
+                self.assertEqual(result["artifacts"][f"{artifact_name}_size_bytes"], artifact_path.stat().st_size)
+            trace_path = Path(result["trace"]["path"])
+            if not trace_path.is_absolute():
+                trace_path = run_dir / trace_path
+            self.assertEqual(result["trace"]["sha256"], _sha256_file(trace_path))
+            self.assertEqual(result["trace"]["size_bytes"], trace_path.stat().st_size)
+            self.assertEqual(result["scorecard"]["sha256"], result["artifacts"]["scorecard_sha256"])
+            self.assertEqual(result["scorecard"]["size_bytes"], result["artifacts"]["scorecard_size_bytes"])
+            self.assertEqual(result["replay"]["lineage_sha256"], result["artifacts"]["lineage_sha256"])
+            self.assertEqual(result["replay"]["lineage_size_bytes"], result["artifacts"]["lineage_size_bytes"])
             self._assert_cli_ok(
                 [
                     "validate",
@@ -236,6 +249,44 @@ class HarnessToolPolicyTests(unittest.TestCase):
             self.assertIn("harness_result.fake_secret_canary_check.checked_artifacts", errors)
             self.assertIn("sha256 does not match the current file", errors)
             self.assertIn("size_bytes does not match the current file", errors)
+
+    def test_validate_rejects_stale_harness_run_artifact_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            payload["artifacts"]["scorecard_sha256"] = "0" * 64
+            payload["artifacts"]["run_digest_size_bytes"] += 1
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.artifacts.scorecard_sha256 does not match the current file", errors)
+            self.assertIn("harness_result.artifacts.run_digest_size_bytes does not match the current file", errors)
+
+    def test_validate_rejects_stale_top_level_harness_run_artifact_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            payload["trace"]["path"] = payload["artifacts"]["scorecard"]
+            payload["scorecard"]["path"] = payload["artifacts"]["run_digest"]
+            payload["replay"]["lineage"] = payload["artifacts"]["scorecard"]
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.trace.sha256 does not match the current file", errors)
+            self.assertIn("harness_result.scorecard.path must match harness_result.artifacts.scorecard", errors)
+            self.assertIn("harness_result.replay.lineage must match harness_result.artifacts.lineage", errors)
 
     def test_validate_rejects_present_harness_canary_artifact_marked_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

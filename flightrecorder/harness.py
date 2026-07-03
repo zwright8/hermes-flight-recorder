@@ -29,6 +29,10 @@ EXPECTED_RUN_ARTIFACTS = [
     "lineage",
 ]
 
+DEFAULT_FAKE_SECRET_CANARIES = {
+    "HFR_OFFLINE_MOCK_CANARY": "hfr-offline-mock-canary",
+}
+
 
 class HarnessError(ValueError):
     """Raised when the offline harness cannot produce a valid run handoff."""
@@ -62,18 +66,21 @@ def run_mock_harness(
     _prepare_output_dir(out_path, force=force)
 
     scenario = load_scenario(scenario_path)
+    scenario_run_path = _publish_scenario_input(scenario_path, out_path, preserve_paths=preserve_paths)
     source_trace_path = out_path / "source_trace.observer.jsonl"
     _write_mock_observer_trace(source_trace_path, scenario=scenario, model=model, mock_response=mock_response)
+    sandbox = _prepare_sandbox(out_path)
 
     manifest_path = out_path / "harness_manifest.json"
     manifest = _build_manifest(
-        scenario_path=scenario_path,
+        scenario_path=scenario_run_path,
         scenario=scenario,
         source_trace_path=source_trace_path,
         out_dir=out_path,
         provider=provider,
         model=model,
         mock_response=mock_response,
+        sandbox=sandbox,
         preserve_paths=preserve_paths,
     )
     _write_json(manifest_path, manifest)
@@ -81,7 +88,7 @@ def run_mock_harness(
     from .cli import _run_scenario_artifacts
 
     run = _run_scenario_artifacts(
-        scenario_path,
+        scenario_run_path,
         out_path,
         trace_override=source_trace_path,
         trace_format="observer_jsonl",
@@ -94,7 +101,6 @@ def run_mock_harness(
         run=run,
         out_dir=out_path,
         provider=provider,
-        model=model,
         preserve_paths=preserve_paths,
     )
     result_path = out_path / "harness_result.json"
@@ -133,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             f"{'PASS' if result['passed'] else 'FAIL'} harness {result['scenario_id']} "
-            f"score={result['score']['score']} result={args.out}/harness_result.json"
+            f"score={result['scorecard']['score']} result={args.out}/harness_result.json"
         )
         return 0 if result["passed"] else 1
     return 2
@@ -147,6 +153,35 @@ def _prepare_output_dir(path: Path, *, force: bool) -> None:
             raise HarnessError(f"harness output directory is not empty: {path}; pass --force to replace it")
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
+
+
+def _publish_scenario_input(scenario_path: Path, out_dir: Path, *, preserve_paths: bool) -> Path:
+    if preserve_paths:
+        return scenario_path
+    inputs_dir = out_dir / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    published = inputs_dir / "scenario.json"
+    shutil.copyfile(scenario_path, published)
+    return published
+
+
+def _prepare_sandbox(out_dir: Path) -> dict[str, Any]:
+    sandbox_root = out_dir / "sandbox"
+    home = sandbox_root / "home"
+    workspace = sandbox_root / "workspace"
+    events = sandbox_root / "events.jsonl"
+    for path in (sandbox_root, home, workspace):
+        path.mkdir(parents=True, exist_ok=True)
+    events.write_text("", encoding="utf-8")
+    return {
+        "root": sandbox_root,
+        "home": home,
+        "workspace": workspace,
+        "events": events,
+        "fake_secret_canaries": _fake_secret_canary_records(),
+        "ephemeral": True,
+        "audit_artifacts_kept": True,
+    }
 
 
 def _write_mock_observer_trace(path: Path, *, scenario: dict[str, Any], model: str, mock_response: str) -> None:
@@ -181,12 +216,24 @@ def _build_manifest(
     provider: str,
     model: str,
     mock_response: str,
+    sandbox: dict[str, Any],
     preserve_paths: bool,
 ) -> dict[str, Any]:
+    tool_policy = _tool_policy(scenario)
     return {
         "schema_version": HARNESS_MANIFEST_SCHEMA_VERSION,
         "manifest_path": _display_path(out_dir / "harness_manifest.json", preserve_paths, base_dir=out_dir),
         "created_at": _utc_now(),
+        "runner": HARNESS_NAME,
+        "provider": provider,
+        "model": {"id": model},
+        "outputs": {
+            "run_dir": ".",
+            "manifest": "harness_manifest.json",
+            "result": "harness_result.json",
+        },
+        "sandbox": _display_sandbox(sandbox, preserve_paths, base_dir=out_dir),
+        "tool_policy": tool_policy,
         "harness": {
             "name": HARNESS_NAME,
             "mode": HARNESS_MODE,
@@ -218,11 +265,6 @@ def _build_manifest(
                 "artifact_lineage.json",
             ],
         },
-        "tool_policy": {
-            "network": "disabled",
-            "allowed_tools": [],
-            "write_scope": _display_path(out_dir, preserve_paths, base_dir=out_dir),
-        },
         "mock_response": {
             "sha256": _hash_text(mock_response),
             "length_chars": len(mock_response),
@@ -238,19 +280,11 @@ def _build_result(
     run: dict[str, Any],
     out_dir: Path,
     provider: str,
-    model: str,
     preserve_paths: bool,
 ) -> dict[str, Any]:
     scorecard = run["scorecard"]
     paths = run["paths"]
-    artifacts = {
-        "harness_manifest": _json_file_record(manifest_path, preserve_paths, base_dir=out_dir),
-        "source_trace": _file_record(source_trace_path, preserve_paths, base_dir=out_dir),
-    }
-    for name in EXPECTED_RUN_ARTIFACTS:
-        path = paths.get(name)
-        if isinstance(path, Path):
-            artifacts[name] = _json_file_record(path, preserve_paths, base_dir=out_dir)
+    artifacts = _artifact_paths(paths, preserve_paths, base_dir=out_dir)
 
     checks = [
         {
@@ -265,22 +299,40 @@ def _build_result(
         },
         {
             "id": "run_artifacts_present",
-            "passed": all(name in artifacts and artifacts[name].get("exists") for name in EXPECTED_RUN_ARTIFACTS),
+            "passed": all(isinstance(paths.get(name), Path) and paths[name].is_file() for name in EXPECTED_RUN_ARTIFACTS),
             "summary": "Normal Flight Recorder run artifacts were written.",
         },
     ]
     failed_checks = [check for check in checks if not check["passed"]]
+    scorecard_path = paths["scorecard"]
+    lineage_path = paths["lineage"]
     return {
         "schema_version": HARNESS_RESULT_SCHEMA_VERSION,
         "created_at": _utc_now(),
-        "passed": not failed_checks,
-        "harness": {
-            "name": HARNESS_NAME,
-            "mode": HARNESS_MODE,
-            "provider": provider,
-            "model": model,
-        },
+        "runner": HARNESS_NAME,
+        "provider": provider,
+        "model": manifest["model"],
         "scenario_id": str(scorecard.get("scenario_id") or manifest.get("scenario", {}).get("id") or ""),
+        "sandbox": manifest["sandbox"],
+        "tool_policy": manifest["tool_policy"],
+        "trace": {
+            "format": "observer_jsonl",
+            "path": _display_path(source_trace_path, preserve_paths, base_dir=out_dir),
+            "sha256": _sha256(source_trace_path),
+            "size_bytes": source_trace_path.stat().st_size,
+        },
+        "scorecard": {
+            "path": _display_path(scorecard_path, preserve_paths, base_dir=out_dir),
+            "sha256": _sha256(scorecard_path),
+            "size_bytes": scorecard_path.stat().st_size,
+            "passed": bool(scorecard.get("passed")),
+            "score": int(scorecard.get("score") or 0),
+            "pass_threshold": int(scorecard.get("pass_threshold") or 0),
+            "critical_failures": scorecard.get("critical_failures", []),
+        },
+        "artifacts": artifacts,
+        "replay": _replay_reference(lineage_path, run["lineage"], preserve_paths, base_dir=out_dir),
+        "passed": not failed_checks,
         "score": {
             "score": int(scorecard.get("score") or 0),
             "passed": bool(scorecard.get("passed")),
@@ -293,28 +345,14 @@ def _build_result(
             "path": _display_path(manifest_path, preserve_paths, base_dir=out_dir),
             "schema_version": manifest.get("schema_version"),
             "sha256": _sha256(manifest_path),
+            "size_bytes": manifest_path.stat().st_size,
         },
-        "artifacts": artifacts,
         "summary": (
             "Offline harness run is ready for downstream evidence handoff."
             if not failed_checks
             else "Offline harness run is blocked by failed checks."
         ),
     }
-
-
-def _json_file_record(path: Path, preserve_paths: bool, *, base_dir: Path) -> dict[str, Any]:
-    record = _file_record(path, preserve_paths, base_dir=base_dir)
-    if path.exists() and path.is_file() and path.suffix == ".json":
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            payload = None
-        if isinstance(payload, dict):
-            record["schema_version"] = payload.get("schema_version")
-            if isinstance(payload.get("passed"), bool):
-                record["passed"] = payload["passed"]
-    return record
 
 
 def _file_record(path: Path, preserve_paths: bool, *, base_dir: Path) -> dict[str, Any]:
@@ -327,6 +365,79 @@ def _file_record(path: Path, preserve_paths: bool, *, base_dir: Path) -> dict[st
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
     return record
+
+
+def _artifact_paths(paths: dict[str, Any], preserve_paths: bool, *, base_dir: Path) -> dict[str, Any]:
+    artifacts: dict[str, Any] = {}
+    for key, value in paths.items():
+        if value is None:
+            continue
+        path = Path(value)
+        artifacts[key] = _display_path(path, preserve_paths, base_dir=base_dir)
+        if path.is_file():
+            artifacts[f"{key}_sha256"] = _sha256(path)
+            artifacts[f"{key}_size_bytes"] = path.stat().st_size
+    return artifacts
+
+
+def _replay_reference(lineage_path: Path, lineage: dict[str, Any], preserve_paths: bool, *, base_dir: Path) -> dict[str, Any]:
+    replay = lineage.get("replay") if isinstance(lineage.get("replay"), dict) else {}
+    command = replay.get("command") if isinstance(replay.get("command"), str) else ""
+    return {
+        "lineage": _display_path(lineage_path, preserve_paths, base_dir=base_dir),
+        "lineage_sha256": _sha256(lineage_path),
+        "lineage_size_bytes": lineage_path.stat().st_size,
+        "command": command,
+        "self_contained": replay.get("self_contained") is True,
+    }
+
+
+def _display_sandbox(sandbox: dict[str, Any], preserve_paths: bool, *, base_dir: Path) -> dict[str, Any]:
+    rendered = dict(sandbox)
+    for field_name in ("root", "home", "workspace", "events"):
+        if isinstance(rendered.get(field_name), Path):
+            rendered[field_name] = _display_path(rendered[field_name], preserve_paths, base_dir=base_dir)
+    return rendered
+
+
+def _tool_policy(scenario: dict[str, Any]) -> dict[str, Any]:
+    scenario_policy = scenario.get("policy") if isinstance(scenario.get("policy"), dict) else {}
+    allowed_tools = _string_list(scenario_policy.get("allowed_tools"))
+    denied_tools = _string_list(scenario_policy.get("forbidden_tool_names"))
+    return {
+        "source": "scenario.policy+offline_mock_defaults",
+        "scenario_policy": scenario_policy,
+        "runtime_policy": {
+            "mode": HARNESS_MODE,
+            "allowed_tools": allowed_tools,
+            "denied_tools": denied_tools,
+            "network": {"mode": "disabled", "allowed_hosts": []},
+        },
+        "blocked_action_canaries": _blocked_action_canaries(scenario_policy),
+    }
+
+
+def _blocked_action_canaries(policy: dict[str, Any]) -> list[dict[str, str]]:
+    canaries: list[dict[str, str]] = []
+    for field_name, canary_type in (
+        ("forbidden_tool_names", "tool_name"),
+        ("forbidden_command_patterns", "command"),
+        ("forbidden_url_patterns", "url"),
+        ("secret_patterns", "secret"),
+    ):
+        for pattern in _string_list(policy.get(field_name)):
+            canaries.append({"type": canary_type, "pattern": pattern, "expected": "blocked_or_absent"})
+    return canaries
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item)]
+
+
+def _fake_secret_canary_records() -> list[dict[str, str]]:
+    return [{"name": name, "sha256": _hash_text(value)} for name, value in sorted(DEFAULT_FAKE_SECRET_CANARIES.items())]
 
 
 def _display_path(path: Path, preserve_paths: bool, *, base_dir: Path) -> str:

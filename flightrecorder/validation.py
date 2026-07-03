@@ -1566,9 +1566,9 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
         if not isinstance(result.get(field_name), dict):
             target.errors.append(f"harness_result.{field_name} must be an object.")
     trace = result.get("trace") if isinstance(result.get("trace"), dict) else {}
-    _validate_existing_path_field(trace, "path", target, "harness_result.trace.path", base_dir=source_dir)
+    _validate_harness_named_file_ref(trace, "path", "sha256", "size_bytes", target, "harness_result.trace", source_dir)
     scorecard = result.get("scorecard") if isinstance(result.get("scorecard"), dict) else {}
-    _validate_existing_path_field(scorecard, "path", target, "harness_result.scorecard.path", base_dir=source_dir)
+    _validate_harness_named_file_ref(scorecard, "path", "sha256", "size_bytes", target, "harness_result.scorecard", source_dir)
     if not isinstance(scorecard.get("passed"), bool):
         target.errors.append("harness_result.scorecard.passed must be a boolean.")
     if not isinstance(scorecard.get("score"), (int, float)) or isinstance(scorecard.get("score"), bool):
@@ -1582,12 +1582,118 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
         )
     artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
     for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
-        _validate_existing_path_field(artifacts, field_name, target, f"harness_result.artifacts.{field_name}", base_dir=source_dir)
+        _validate_harness_run_artifact_ref(artifacts, field_name, target, "harness_result.artifacts", source_dir)
+    _validate_harness_matching_ref(
+        scorecard,
+        "path",
+        "sha256",
+        "size_bytes",
+        artifacts,
+        "scorecard",
+        target,
+        "harness_result.scorecard",
+    )
     replay = result.get("replay") if isinstance(result.get("replay"), dict) else {}
-    _validate_existing_path_field(replay, "lineage", target, "harness_result.replay.lineage", base_dir=source_dir)
+    _validate_harness_named_file_ref(
+        replay,
+        "lineage",
+        "lineage_sha256",
+        "lineage_size_bytes",
+        target,
+        "harness_result.replay",
+        source_dir,
+    )
+    _validate_harness_matching_ref(
+        replay,
+        "lineage",
+        "lineage_sha256",
+        "lineage_size_bytes",
+        artifacts,
+        "lineage",
+        target,
+        "harness_result.replay",
+    )
     if not isinstance(replay.get("self_contained"), bool):
         target.errors.append("harness_result.replay.self_contained must be a boolean.")
     _validate_harness_tool_policy(result.get("tool_policy"), target, "harness_result.tool_policy")
+
+
+def _validate_harness_named_file_ref(
+    value: dict[str, Any],
+    path_field: str,
+    sha_field: str,
+    size_field: str,
+    target: ValidationTarget,
+    label: str,
+    source_dir: Path | None,
+) -> Path | None:
+    path_label = f"{label}.{path_field}"
+    path = _resolve_harness_artifact_path(value.get(path_field), source_dir)
+    if path is None:
+        target.errors.append(f"{path_label} must be a non-empty path.")
+        return None
+    expected_sha = value.get(sha_field)
+    expected_size = value.get(size_field)
+    if not _is_lowercase_sha256(expected_sha):
+        target.errors.append(f"{label}.{sha_field} must be a lowercase SHA-256 hex string.")
+    if not _is_non_negative_int(expected_size):
+        target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+    if not path.is_file():
+        target.errors.append(f"{path_label} must resolve to an existing file.")
+        return path
+    if _is_non_negative_int(expected_size) and path.stat().st_size != expected_size:
+        target.errors.append(f"{label}.{size_field} does not match the current file.")
+    if _is_lowercase_sha256(expected_sha) and _sha256(path) != expected_sha:
+        target.errors.append(f"{label}.{sha_field} does not match the current file.")
+    return path
+
+
+def _validate_harness_matching_ref(
+    value: dict[str, Any],
+    path_field: str,
+    sha_field: str,
+    size_field: str,
+    artifacts: dict[str, Any],
+    artifact_field: str,
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    artifact_label = f"harness_result.artifacts.{artifact_field}"
+    expected = {
+        path_field: artifacts.get(artifact_field),
+        sha_field: artifacts.get(f"{artifact_field}_sha256"),
+        size_field: artifacts.get(f"{artifact_field}_size_bytes"),
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match {artifact_label}.")
+
+
+def _validate_harness_run_artifact_ref(
+    artifacts: dict[str, Any],
+    field_name: str,
+    target: ValidationTarget,
+    label: str,
+    source_dir: Path | None,
+) -> None:
+    _validate_harness_named_file_ref(
+        artifacts,
+        field_name,
+        f"{field_name}_sha256",
+        f"{field_name}_size_bytes",
+        target,
+        label,
+        source_dir,
+    )
+
+
+def _resolve_harness_artifact_path(value: Any, source_dir: Path | None) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.is_absolute() or source_dir is None:
+        return path
+    return source_dir / path
 
 
 def _validate_model_scout_manifest(manifest: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:

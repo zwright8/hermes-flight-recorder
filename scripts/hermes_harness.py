@@ -128,6 +128,8 @@ def publish_harness_artifacts(
     _write_json(run_dir / "harness_manifest.json", _display_harness_manifest(manifest, run_dir, preserve_paths))
 
     scorecard = artifact_result["scorecard"]
+    resolved_trace_path = _resolve_output_path(trace_path, run_dir)
+    scorecard_path = Path(artifact_result["paths"]["scorecard"])
     fake_secret_canary_check = _fake_secret_canary_check(
         trace_path=trace_path,
         artifact_paths=artifact_result["paths"],
@@ -149,10 +151,14 @@ def publish_harness_artifacts(
         "tool_policy": manifest["tool_policy"],
         "trace": {
             "format": trace_format,
-            "path": _display_path(_resolve_output_path(trace_path, run_dir), run_dir, preserve_paths),
+            "path": _display_path(resolved_trace_path, run_dir, preserve_paths),
+            "sha256": _sha256_file(resolved_trace_path),
+            "size_bytes": resolved_trace_path.stat().st_size,
         },
         "scorecard": {
-            "path": _display_path(artifact_result["paths"]["scorecard"], run_dir, preserve_paths),
+            "path": _display_path(scorecard_path, run_dir, preserve_paths),
+            "sha256": _sha256_file(scorecard_path),
+            "size_bytes": scorecard_path.stat().st_size,
             "passed": bool(scorecard["passed"]),
             "score": scorecard["score"],
             "critical_failures": scorecard.get("critical_failures", []),
@@ -846,8 +852,18 @@ def _fake_secret_canary_check(
     }
 
 
-def _artifact_paths(paths: dict[str, Any], base_dir: Path, preserve_paths: bool) -> dict[str, str | None]:
-    return {key: _display_path(value, base_dir, preserve_paths) if value is not None else None for key, value in paths.items()}
+def _artifact_paths(paths: dict[str, Any], base_dir: Path, preserve_paths: bool) -> dict[str, Any]:
+    artifacts: dict[str, Any] = {}
+    for key, value in paths.items():
+        if value is None:
+            artifacts[key] = None
+            continue
+        path = Path(value)
+        artifacts[key] = _display_path(path, base_dir, preserve_paths)
+        if path.is_file():
+            artifacts[f"{key}_sha256"] = _sha256_file(path)
+            artifacts[f"{key}_size_bytes"] = path.stat().st_size
+    return artifacts
 
 
 def _replay_reference(lineage_path: Path, lineage: dict[str, Any], base_dir: Path, preserve_paths: bool) -> dict[str, Any]:
@@ -856,6 +872,8 @@ def _replay_reference(lineage_path: Path, lineage: dict[str, Any], base_dir: Pat
     display_argv = _display_argv(argv, base_dir, preserve_paths) if isinstance(argv, list) else []
     return {
         "lineage": _display_path(lineage_path, base_dir, preserve_paths),
+        "lineage_sha256": _sha256_file(lineage_path),
+        "lineage_size_bytes": lineage_path.stat().st_size,
         "argv": display_argv,
         "command": shlex.join(display_argv) if display_argv else "",
         "self_contained": replay.get("self_contained") is True,

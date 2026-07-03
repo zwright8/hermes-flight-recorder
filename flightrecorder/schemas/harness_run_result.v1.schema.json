@@ -8,12 +8,38 @@
       "additionalProperties": true,
       "properties": {
         "lineage": { "minLength": 1, "type": "string" },
+        "lineage_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "lineage_size_bytes": { "minimum": 0, "type": "integer" },
         "normalized_trace": { "minLength": 1, "type": "string" },
+        "normalized_trace_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "normalized_trace_size_bytes": { "minimum": 0, "type": "integer" },
         "report": { "minLength": 1, "type": "string" },
+        "report_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "report_size_bytes": { "minimum": 0, "type": "integer" },
         "run_digest": { "minLength": 1, "type": "string" },
-        "scorecard": { "minLength": 1, "type": "string" }
+        "run_digest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "run_digest_size_bytes": { "minimum": 0, "type": "integer" },
+        "scorecard": { "minLength": 1, "type": "string" },
+        "scorecard_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "scorecard_size_bytes": { "minimum": 0, "type": "integer" }
       },
-      "required": ["normalized_trace", "scorecard", "run_digest", "report", "lineage"],
+      "required": [
+        "normalized_trace",
+        "normalized_trace_sha256",
+        "normalized_trace_size_bytes",
+        "scorecard",
+        "scorecard_sha256",
+        "scorecard_size_bytes",
+        "run_digest",
+        "run_digest_sha256",
+        "run_digest_size_bytes",
+        "report",
+        "report_sha256",
+        "report_size_bytes",
+        "lineage",
+        "lineage_sha256",
+        "lineage_size_bytes"
+      ],
       "type": "object"
     },
     "created_at": { "type": "string" },
@@ -46,9 +72,11 @@
       "properties": {
         "command": { "type": "string" },
         "lineage": { "minLength": 1, "type": "string" },
+        "lineage_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "lineage_size_bytes": { "minimum": 0, "type": "integer" },
         "self_contained": { "type": "boolean" }
       },
-      "required": ["lineage", "self_contained"],
+      "required": ["lineage", "lineage_sha256", "lineage_size_bytes", "self_contained"],
       "type": "object"
     },
     "runner": { "minLength": 1, "type": "string" },
@@ -60,9 +88,11 @@
       "properties": {
         "passed": { "type": "boolean" },
         "path": { "minLength": 1, "type": "string" },
-        "score": { "type": "number" }
+        "score": { "type": "number" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
       },
-      "required": ["path", "passed", "score"],
+      "required": ["path", "sha256", "size_bytes", "passed", "score"],
       "type": "object"
     },
     "tool_policy": {
@@ -119,9 +149,11 @@
       "additionalProperties": true,
       "properties": {
         "format": { "minLength": 1, "type": "string" },
-        "path": { "minLength": 1, "type": "string" }
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
       },
-      "required": ["format", "path"],
+      "required": ["format", "path", "sha256", "size_bytes"],
       "type": "object"
     }
   },

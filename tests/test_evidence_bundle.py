@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import tempfile
@@ -1578,10 +1579,14 @@ def _write_harness_handoff_artifacts(
         "tool_policy": manifest["tool_policy"],
         "trace": {
             "path": "normalized_trace.json",
+            "sha256": None,
+            "size_bytes": None,
             "format": "normalized_json",
         },
         "scorecard": {
             "path": "scorecard.json",
+            "sha256": None,
+            "size_bytes": None,
             "passed": passed,
             "score": 100 if passed else 35,
         },
@@ -1594,6 +1599,8 @@ def _write_harness_handoff_artifacts(
         },
         "replay": {
             "lineage": "artifact_lineage.json",
+            "lineage_sha256": None,
+            "lineage_size_bytes": None,
             "self_contained": True,
         },
     }
@@ -1605,9 +1612,27 @@ def _write_harness_handoff_artifacts(
     }.items():
         (harness_dir / relative_path).write_text(json.dumps(content, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (harness_dir / "report.html").write_text("<!doctype html><title>report</title>\n", encoding="utf-8")
+    for name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
+        path = harness_dir / result["artifacts"][name]
+        result["artifacts"][f"{name}_sha256"] = _sha256_file(path)
+        result["artifacts"][f"{name}_size_bytes"] = path.stat().st_size
+    result["trace"]["sha256"] = result["artifacts"]["normalized_trace_sha256"]
+    result["trace"]["size_bytes"] = result["artifacts"]["normalized_trace_size_bytes"]
+    result["scorecard"]["sha256"] = result["artifacts"]["scorecard_sha256"]
+    result["scorecard"]["size_bytes"] = result["artifacts"]["scorecard_size_bytes"]
+    result["replay"]["lineage_sha256"] = result["artifacts"]["lineage_sha256"]
+    result["replay"]["lineage_size_bytes"] = result["artifacts"]["lineage_size_bytes"]
     artifacts["manifest"].write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     artifacts["result"].write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return artifacts
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:
