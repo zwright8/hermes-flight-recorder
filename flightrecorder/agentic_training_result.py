@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -206,6 +207,7 @@ def build_agentic_training_result(
         recommendation = BLOCK_REGISTRATION_RECOMMENDATION
 
     trainer_plan = plan_payload.get("trainer_plan") if isinstance(plan_payload.get("trainer_plan"), dict) else {}
+    lineage_base = Path(out_path).parent if out_path is not None else None
     result = {
         "schema_version": AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
@@ -229,8 +231,13 @@ def build_agentic_training_result(
             "model_downloads_started_by_flight_recorder": False,
         },
         "lineage": {
-            "plan": _lineage_ref(plan_file, plan_sha, "agentic_training_plan"),
-            "runtime_preflight": _lineage_ref(runtime_file, _sha256_or_none(runtime_file), "agentic_training_runtime_preflight"),
+            "plan": _lineage_ref(plan_file, plan_sha, "agentic_training_plan", lineage_base),
+            "runtime_preflight": _lineage_ref(
+                runtime_file,
+                _sha256_or_none(runtime_file),
+                "agentic_training_runtime_preflight",
+                lineage_base,
+            ),
             "model": _manifest_summary(plan_payload, "model"),
             "dataset": _manifest_summary(plan_payload, "dataset"),
         },
@@ -349,14 +356,21 @@ def _artifact_refs(artifacts: dict[str, Iterable[str | Path]]) -> list[dict[str,
     return refs
 
 
-def _lineage_ref(path: Path, sha256: str | None, schema_name: str) -> dict[str, Any]:
+def _lineage_ref(path: Path, sha256: str | None, schema_name: str, reference_base: Path | None) -> dict[str, Any]:
     return {
-        "path": str(path),
+        "path": _reference_path(path, reference_base),
         "exists": path.exists(),
         "regular_file": path.is_file(),
         "schema_name": schema_name,
         "sha256": sha256,
+        "size_bytes": path.stat().st_size if path.is_file() else 0,
     }
+
+
+def _reference_path(path: Path, reference_base: Path | None) -> str:
+    if reference_base is None:
+        return str(path)
+    return os.path.relpath(path.resolve(), reference_base.resolve())
 
 
 def _manifest_summary(plan: dict[str, Any], key: str) -> dict[str, Any]:

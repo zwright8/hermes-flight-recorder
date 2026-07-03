@@ -1203,7 +1203,7 @@ def validate_agentic_training_result(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("agentic_training_result", str(result_path))
     result = _read_object(result_path, target, "agentic_training_result.json")
     if result is not None:
-        _validate_agentic_training_result(result, target)
+        _validate_agentic_training_result(result, target, result_path)
     return target
 
 
@@ -1759,7 +1759,7 @@ def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget) -> N
     )
 
 
-def _validate_agentic_training_result(result: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_agentic_training_result(result: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(result, "schema_version", AGENTIC_TRAINING_RESULT_SCHEMA_VERSION, target, prefix="agentic_training_result.")
     checks = result.get("checks")
     if not isinstance(checks, list):
@@ -1851,7 +1851,7 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     elif not expected_passed and len(blocked_reasons) != failed_checks:
         target.errors.append("agentic_training_result.blocked_reasons must match failed_check_count.")
 
-    _validate_agentic_training_result_lineage(result.get("lineage"), target)
+    _validate_agentic_training_result_lineage(result.get("lineage"), target, source_path)
     _validate_agentic_training_result_boundary(result.get("execution_boundary"), target, "execution_boundary")
     _validate_agentic_training_result_contract(result.get("handoff_contract"), target)
     if "registry_update" in result:
@@ -1922,7 +1922,7 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
     return counts
 
 
-def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarget) -> None:
+def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarget, source_path: Path) -> None:
     if not isinstance(value, dict):
         target.errors.append("agentic_training_result.lineage must be an object.")
         return
@@ -1938,8 +1938,11 @@ def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarg
         for bool_field in ("exists", "regular_file"):
             if not isinstance(ref.get(bool_field), bool):
                 target.errors.append(f"{label}.{bool_field} must be a boolean.")
-        if ref.get("sha256") is not None and not _is_sha256(ref.get("sha256")):
-            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+        if not _is_sha256(ref.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+        if not _is_non_negative_int(ref.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+        _validate_agentic_training_result_lineage_file(ref, target, label, source_path)
     for field_name in ("model", "dataset"):
         ref = value.get(field_name)
         label = f"agentic_training_result.lineage.{field_name}"
@@ -1953,6 +1956,38 @@ def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarg
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when present.")
         if ref.get("license_allows_training") is not True:
             target.errors.append(f"{label}.license_allows_training must be true.")
+
+
+def _validate_agentic_training_result_lineage_file(
+    ref: dict[str, Any], target: ValidationTarget, label: str, source_path: Path
+) -> None:
+    path_value = ref.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        return
+    current_path = _agentic_training_result_reference_path(path_value, source_path)
+    if ref.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if ref.get("regular_file") is not True:
+        target.errors.append(f"{label}.regular_file must be true.")
+    if ref.get("exists") is True and not current_path.exists():
+        target.errors.append(f"{label}.path does not resolve to the current file.")
+        return
+    if ref.get("regular_file") is True and not current_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to a regular file.")
+        return
+    if not current_path.exists() or not current_path.is_file():
+        return
+    if _is_non_negative_int(ref.get("size_bytes")) and current_path.stat().st_size != ref.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_sha256(ref.get("sha256")) and _sha256(current_path) != ref.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _agentic_training_result_reference_path(value: str, source_path: Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return source_path.parent / path
 
 
 def _validate_agentic_training_result_boundary(value: Any, target: ValidationTarget, field_name: str) -> None:

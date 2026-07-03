@@ -603,6 +603,9 @@ card, and dataset card decisions.
 - Training-export and suite-comparison source fingerprints include input sizes;
   verified source-fingerprint coverage requires scenario and trace hashes plus
   sizes.
+- Agentic training-result lineage refs include input sizes; validation rejects
+  regular plan or runtime-preflight lineage refs without matching SHA-256 and
+  byte-size evidence resolved from the receipt location.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

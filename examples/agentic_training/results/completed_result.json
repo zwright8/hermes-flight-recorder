@@ -246,17 +246,19 @@
     },
     "plan": {
       "exists": true,
-      "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+      "path": "../plans/sft_then_dpo_plan.json",
       "regular_file": true,
       "schema_name": "agentic_training_plan",
-      "sha256": "038d1bf482debea820b410ce600b7750a21e39634b2ee0e01d4c043c8cbbf34b"
+      "sha256": "038d1bf482debea820b410ce600b7750a21e39634b2ee0e01d4c043c8cbbf34b",
+      "size_bytes": 9053
     },
     "runtime_preflight": {
       "exists": true,
-      "path": "examples/agentic_training/runtime_preflight/ready.json",
+      "path": "../runtime_preflight/ready.json",
       "regular_file": true,
       "schema_name": "agentic_training_runtime_preflight",
-      "sha256": "a937379e337c6762512c96c22648712e026c57dcd6588d0c93c99bb7603ecf34"
+      "sha256": "a937379e337c6762512c96c22648712e026c57dcd6588d0c93c99bb7603ecf34",
+      "size_bytes": 5689
     }
   },
   "metrics": {

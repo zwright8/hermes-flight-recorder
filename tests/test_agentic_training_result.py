@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -66,6 +67,8 @@ class AgenticTrainingResultTests(unittest.TestCase):
             self.assertEqual(result["registry_update"]["links"][0]["collection"], "training_runs")
             self.assertIn("adapters", {link["collection"] for link in result["registry_update"]["links"]})
             self.assertFalse(result["execution_boundary"]["flight_recorder_launched_training"])
+            self.assertEqual(result["lineage"]["plan"]["size_bytes"], EXAMPLE_PLAN.stat().st_size)
+            self.assertEqual(result["lineage"]["runtime_preflight"]["size_bytes"], runtime.stat().st_size)
             schema = check_schema_contract(result)
             self.assertTrue(schema["passed"], schema["errors"])
 
@@ -236,6 +239,178 @@ class AgenticTrainingResultTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("agentic_training_result.metrics.adapter_count expected 1", errors)
             self.assertIn("agentic_training_result.registry_update.applied expected False", errors)
+
+    def test_validate_rejects_agentic_training_result_lineage_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"]["plan"].pop("size_bytes")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.plan.size_bytes must be a non-negative integer.", errors)
+
+    def test_validate_rejects_agentic_training_result_lineage_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"]["runtime_preflight"]["size_bytes"] += 1
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.runtime_preflight.size_bytes does not match the current file.", errors)
+
+    def test_validate_rejects_agentic_training_result_lineage_file_claim_bypass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"]["plan"].update(
+                {
+                    "exists": False,
+                    "regular_file": False,
+                    "sha256": None,
+                    "size_bytes": 0,
+                }
+            )
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.plan.exists must be true.", errors)
+            self.assertIn("agentic_training_result.lineage.plan.regular_file must be true.", errors)
+            self.assertIn("agentic_training_result.lineage.plan.sha256 must be a SHA-256 hex string.", errors)
+
+    def test_validate_rejects_agentic_training_result_lineage_cwd_spoof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            receipt_dir = root / "receipt"
+            receipt_dir.mkdir()
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            cwd_only_plan = root / "spoof_plan.json"
+            out = receipt_dir / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+            cwd_only_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"]["plan"].update(
+                {
+                    "path": cwd_only_plan.name,
+                    "sha256": result["lineage"]["plan"]["sha256"],
+                    "size_bytes": cwd_only_plan.stat().st_size,
+                }
+            )
+            write_agentic_training_result(out, result)
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                code = run_cli(
+                    [
+                        "validate",
+                        "--agentic-training-result",
+                        str(out),
+                        "--out",
+                        str(summary_path),
+                        "--strict",
+                    ]
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.plan.path does not resolve to the current file.", errors)
 
     def test_validate_rejects_passed_result_with_irregular_artifact_ref(self):
         with tempfile.TemporaryDirectory() as tmp:
