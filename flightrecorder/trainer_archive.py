@@ -179,6 +179,10 @@ def _copy_preflight_paths(
         if source_path is None:
             missing.append(_missing(role, index, reason or "path is unavailable", name=name))
             continue
+        integrity_error = _record_integrity_error(item, source_path)
+        if integrity_error is not None:
+            missing.append(_missing(role, index, integrity_error, name=name))
+            continue
         try:
             records.append(
                 _copy_path_artifact(
@@ -216,6 +220,10 @@ def _copy_preflight_mapping(
         source_path, reason = _resolve_recorded_path(item.get("path"), base_dir)
         if source_path is None:
             missing.append(_missing(role, index, reason or "path is unavailable", name=clean_name))
+            continue
+        integrity_error = _record_integrity_error(item, source_path)
+        if integrity_error is not None:
+            missing.append(_missing(role, index, integrity_error, name=clean_name))
             continue
         try:
             records.append(
@@ -366,6 +374,24 @@ def _resolve_recorded_path(value: Any, base_dir: Path) -> tuple[Path | None, str
     if candidate.exists() or candidate.is_symlink():
         return None, source_error
     return None, f"path could not be resolved: {value}"
+
+
+def _record_integrity_error(record: dict[str, Any], source_path: Path) -> str | None:
+    if not source_path.is_file() or source_path.is_symlink():
+        return None
+    expected_sha = record.get("sha256")
+    if expected_sha is not None:
+        if not _is_sha256(expected_sha):
+            return "sha256 is invalid in preflight record"
+        if _sha256(source_path) != expected_sha:
+            return "sha256 does not match preflight record"
+    expected_size = record.get("size_bytes")
+    if expected_size is not None:
+        if not _is_non_negative_int(expected_size):
+            return "size_bytes is invalid in preflight record"
+        if source_path.stat().st_size != expected_size:
+            return "size_bytes does not match preflight record"
+    return None
 
 
 def _copyable_path_error(path: Path) -> str | None:
@@ -696,6 +722,14 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
+
+
+def _is_non_negative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _display_path(path: Path, preserve_paths: bool = False) -> str:

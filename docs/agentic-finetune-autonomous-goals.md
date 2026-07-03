@@ -614,6 +614,9 @@ card, and dataset card decisions.
 - Trainer-preflight validation reopens gates, validation summaries, schema
   contracts, and trainer artifacts from the preflight file location and rejects
   missing, moved, stale, or cwd-substituted records.
+- Trainer archives compare preflight-recorded file hashes and sizes before
+  copying handoff inputs, blocking source files that changed after preflight
+  approval.
 
 ### Verification
 

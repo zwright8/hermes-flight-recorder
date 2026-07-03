@@ -479,6 +479,65 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertGreater(manifest["metrics"]["missing_count"], 0)
             self.assertIn("gate", {item["role"] for item in manifest["missing"]})
 
+    def test_trainer_archive_rejects_stale_preflight_source_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            archive = root / "trainer_archive"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            gate = source_dir / "evidence_bundle.json"
+            preflight = output_dir / "trainer_preflight.json"
+            launch_check = output_dir / "trainer_launch_check.json"
+            write_passed_evidence_bundle(gate)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--evidence-bundle",
+                        str(gate),
+                        "--trainer-command",
+                        "python train.py --bundle ../src/evidence_bundle.json",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["trainer-launch-check", "--preflight", str(preflight), "--out", str(launch_check)]), 0)
+            stale_bundle = json.loads(gate.read_text(encoding="utf-8"))
+            stale_bundle["decision"]["summary"] = "Stale mutation after trainer preflight approval."
+            stale_bundle["notes"] = ["stale-after-preflight"]
+            gate.write_text(json.dumps(stale_bundle, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "trainer-archive",
+                    "--preflight",
+                    str(preflight),
+                    "--launch-check",
+                    str(launch_check),
+                    "--out",
+                    str(archive),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            manifest = json.loads((archive / "trainer_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(manifest["passed"])
+            self.assertFalse(manifest["self_contained"])
+            missing_roles = {item["role"] for item in manifest["missing"]}
+            self.assertIn("gate", missing_roles)
+            self.assertIn("trainer_artifact", missing_roles)
+            self.assertTrue(any("sha256 does not match preflight record" in item["reason"] for item in manifest["missing"]))
+            archived_text = "\n".join(path.read_text(encoding="utf-8") for path in (archive / "artifacts").rglob("*.json"))
+            self.assertNotIn("stale-after-preflight", archived_text)
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
+
     def test_trainer_preflight_accepts_passed_training_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
