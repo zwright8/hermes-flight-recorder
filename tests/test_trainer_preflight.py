@@ -1390,8 +1390,14 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["recommendation"], "block_launch")
             self.assertFalse(result["artifacts"]["training_export_sft_jsonl"]["regular_file"])
             self.assertTrue(result["artifacts"]["training_export_sft_jsonl"]["symlink"])
+            contract = result["schema_contracts"]["training_export_sft_jsonl"]
+            self.assertFalse(contract["regular_file"])
+            self.assertTrue(contract["symlink"])
+            self.assertNotIn("sha256", contract)
             failed_checks = {check["id"] for check in result["checks"] if not check["passed"]}
             self.assertIn("artifact_file_regular", failed_checks)
+            schema = check_schema_contract(result, name_or_id="trainer_preflight")
+            self.assertTrue(schema["passed"], schema["errors"])
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
     def test_trainer_preflight_blocks_malformed_training_schema_contract(self):
@@ -1426,6 +1432,16 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertFalse(contract["passed"])
             self.assertEqual(contract["schema_name"], "rl_sft")
             self.assertIn("missing required property 'response'", "\n".join(contract["errors"]))
+            self.assertEqual(len(contract["sha256"]), 64)
+            self.assertIn("size_bytes", contract)
+            schema = check_schema_contract(result, name_or_id="trainer_preflight")
+            self.assertTrue(schema["passed"], schema["errors"])
+            for field_name in ("sha256", "size_bytes"):
+                forged = json.loads(json.dumps(result))
+                forged["schema_contracts"]["training_export_sft_jsonl"].pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_preflight")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
             self.assertIn("schema_contract_passed", {check["id"] for check in result["checks"] if not check["passed"]})
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
