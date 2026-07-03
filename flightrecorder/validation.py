@@ -17855,6 +17855,7 @@ def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: Va
     if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
         target.errors.append(f"{label}.passed must be a boolean or null.")
     _validate_evidence_bundle_artifact_file_fingerprint(record, target, label, source_path)
+    _validate_evidence_bundle_artifact_directory_fingerprint(record, target, label, source_path)
 
 
 def _validate_evidence_bundle_artifact_file_fingerprint(
@@ -17882,6 +17883,29 @@ def _validate_evidence_bundle_artifact_file_fingerprint(
     sha = record.get("sha256")
     if isinstance(sha, str) and len(sha) == 64 and _sha256(current_path) != sha:
         target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _validate_evidence_bundle_artifact_directory_fingerprint(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if record.get("kind") != "directory":
+        return
+    path_value = record.get("path")
+    if isinstance(path_value, str) and _looks_absolute(path_value):
+        return
+    current_path = _resolve_evidence_bundle_artifact_path(record.get("path"), source_path)
+    if current_path is None:
+        return
+    if record.get("exists") is True:
+        if not current_path.exists():
+            target.errors.append(f"{label}.path must resolve to an existing directory when exists is true.")
+            return
+        if current_path.is_symlink() or not current_path.is_dir():
+            target.errors.append(f"{label}.path must resolve to a regular directory when exists is true.")
+            return
 
 
 def _evidence_bundle_action_fingerprint(action: dict[str, Any]) -> str:

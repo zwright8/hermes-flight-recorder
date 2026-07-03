@@ -1086,6 +1086,46 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.artifacts.eval_summary.path must resolve to a regular file when exists is true.", errors)
 
+    def test_validate_evidence_bundle_rejects_missing_existing_directory_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)]), 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["runs_dir"]["path"] = "missing_runs"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.runs_dir.path must resolve to an existing directory when exists is true.", errors)
+
+    def test_validate_evidence_bundle_rejects_symlink_existing_directory_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)]), 0)
+            symlink_path = root / "runs_link"
+            symlink_path.symlink_to(runs, target_is_directory=True)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["runs_dir"]["path"] = symlink_path.name
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.runs_dir.path must resolve to a regular directory when exists is true.", errors)
+
     def test_validate_evidence_bundle_rejects_present_artifact_marked_missing_with_stale_fingerprint(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
