@@ -158,6 +158,41 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertEqual(probe_rc, 0, probe_stdout)
             self.assertTrue(_json_from_stdout(probe_stdout)["passed"])
 
+    def test_validate_rejects_symlink_harness_suite_artifact_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios = root / "scenarios"
+            scenarios.mkdir()
+            (scenarios / "harness_suite_one.json").write_text(
+                json.dumps(_scenario(scenario_id="harness_suite_one", final_text="suite complete"), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            suite = run_suite(
+                scenarios_dir=scenarios,
+                out_dir=root / "suite",
+                mock_response="suite complete with auditable evidence",
+            )
+            suite_path = root / "suite" / "harness_suite_result.json"
+            summary_path = root / "suite" / "validation.json"
+            payload = json.loads(suite_path.read_text(encoding="utf-8"))
+            result_path = Path(suite["runs"][0]["result"])
+            result_link = result_path.parent / "harness_result_link.json"
+            try:
+                result_link.symlink_to(result_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            payload["runs"][0]["result"] = str(result_link)
+            suite_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_flightrecorder(
+                ["validate", "--harness-suite-result", str(suite_path), "--strict", "--out", str(summary_path)]
+            )
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            validation = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("harness_suite_result.runs[0].result must resolve to a regular non-symlink file", errors)
+
     def test_relative_path_mode_scrubs_suite_and_probe_receipts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

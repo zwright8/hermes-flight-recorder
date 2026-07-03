@@ -1770,6 +1770,9 @@ def _validate_harness_named_file_ref(
         target.errors.append(f"{label}.{sha_field} must be a lowercase SHA-256 hex string.")
     if not _is_non_negative_int(expected_size):
         target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+    if _harness_path_uses_symlink(path):
+        target.errors.append(f"{path_label} must resolve to a regular non-symlink file.")
+        return path
     if not path.is_file():
         target.errors.append(f"{path_label} must resolve to an existing file.")
         return path
@@ -1996,6 +1999,9 @@ def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarge
     current_path = _resolve_harness_canary_artifact_path(value.get("path"), source_dir)
     if current_path is None:
         return
+    if _harness_path_uses_symlink(current_path):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+        return
     if value.get("exists") is True:
         if not current_path.exists():
             target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
@@ -2090,6 +2096,9 @@ def _validate_harness_replay_artifact_ref(
         target.errors.append(f"{label}.{sha_field} must be a lowercase SHA-256 hex string.")
     if not _is_non_negative_int(expected_size):
         target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+    if _harness_path_uses_symlink(path):
+        target.errors.append(f"{path_label} must resolve to a regular non-symlink file.")
+        return path
     if not path.is_file():
         target.errors.append(f"{path_label} must resolve to an existing file.")
         return path
@@ -2167,6 +2176,9 @@ def _validate_harness_suite_artifact_ref(
         target.errors.append(f"{label}.{sha_field} must be a lowercase SHA-256 hex string.")
     if not _is_non_negative_int(expected_size):
         target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+    if _harness_path_uses_symlink(path):
+        target.errors.append(f"{path_label} must resolve to a regular non-symlink file.")
+        return
     if not path.is_file():
         target.errors.append(f"{path_label} must resolve to an existing file.")
         return
@@ -2183,6 +2195,10 @@ def _resolve_harness_suite_artifact_path(value: Any, source_dir: Path | None) ->
     if path.is_absolute() or source_dir is None:
         return path
     return source_dir / path
+
+
+def _harness_path_uses_symlink(path: Path) -> bool:
+    return _path_has_symlink_component(path, include_leaf=False) or path.is_symlink()
 
 
 def _validate_existing_path_field(
