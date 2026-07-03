@@ -830,6 +830,93 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.metrics.serving_lifecycle.preflight_artifact_count expected 3", errors)
 
+    def test_evidence_bundle_includes_eval_summary_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = root / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "eval-summary",
+                        "--suite-summary",
+                        f"candidate={suite}",
+                        "--out",
+                        str(eval_summary),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "evidence-bundle",
+                        "--eval-summary",
+                        str(eval_summary),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                ),
+                0,
+            )
+
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertTrue(bundle["passed"])
+            self.assertIn("eval_summary", bundle["decision"]["evidence_artifacts"])
+            self.assertEqual(bundle["metrics"]["eval_summary"]["arm_count"], 1)
+            self.assertEqual(bundle["metrics"]["eval_summary"]["risk_count"], 0)
+            self.assertEqual(bundle["decision"]["key_metrics"]["eval_summary"]["heldout_status"], "single_arm")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_validate_evidence_bundle_rejects_forged_eval_summary_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = root / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "eval-summary",
+                        "--suite-summary",
+                        f"candidate={suite}",
+                        "--require-serving-preflight",
+                        "--out",
+                        str(eval_summary),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "evidence-bundle",
+                        "--eval-summary",
+                        str(eval_summary),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertFalse(bundle["passed"])
+            self.assertEqual(bundle["metrics"]["eval_summary"]["risk_count"], 1)
+            self.assertIn("resolve_eval_summary_blockers", {action["id"] for action in bundle["decision"]["next_actions"]})
+
+            bundle["metrics"]["eval_summary"]["risk_count"] = 0
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.metrics.eval_summary.risk_count expected 1", errors)
+
     def test_evidence_bundle_blocks_failed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1579,6 +1666,35 @@ def _write_serving_lifecycle(root: Path) -> Path:
     lifecycle_path = root / "serving_lifecycle.json"
     lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return lifecycle_path
+
+
+def _write_eval_suite_summary(path: Path) -> Path:
+    payload = {
+        "schema_version": "hfr.run_suite.v1",
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "error_count": 0,
+        "errors": [],
+        "metrics": {
+            "pass_rate": 1.0,
+            "average_score": 100.0,
+            "failed_rule_counts": [],
+            "critical_failure_counts": [],
+        },
+        "runs": [
+            {
+                "scenario_id": "email_reply_completion",
+                "task_family": "email_reply_completion",
+                "passed": True,
+                "score": 100,
+                "failed_rules": [],
+                "critical_failures": [],
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 if __name__ == "__main__":

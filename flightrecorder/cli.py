@@ -1512,6 +1512,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         trace_observability_path=args.trace_observability,
         repair_queue_path=args.repair_queue,
         validation_path=args.validation,
+        eval_summary_path=args.eval_summary,
         training_export_dir=args.training_export,
         compare_export_dir=args.compare_export,
         review_export_dir=args.review_export,
@@ -3021,6 +3022,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--trace-observability", help="trace_observability.json included in the handoff")
     evidence_bundle.add_argument("--repair-queue", help="repair_queue.json included in the handoff")
     evidence_bundle.add_argument("--validation", help="validation.json included in the handoff")
+    evidence_bundle.add_argument("--eval-summary", help="eval_summary.json included in the handoff")
     evidence_bundle.add_argument("--training-export", help="export-rl directory included in the handoff")
     evidence_bundle.add_argument("--compare-export", help="export-compare-rl directory included in the handoff")
     evidence_bundle.add_argument("--review-export", help="export-review directory included in the handoff")

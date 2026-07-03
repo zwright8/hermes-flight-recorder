@@ -7795,6 +7795,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
     _validate_evidence_bundle_metrics(metrics, target)
     _validate_evidence_bundle_harness_checks(metrics, checks, target)
     _validate_evidence_bundle_validation_checks(metrics, checks, target)
+    _validate_evidence_bundle_eval_summary(metrics, artifacts, checks, target, source_path)
     _validate_evidence_bundle_serving_lifecycle(metrics, artifacts, checks, target, source_path)
     target.details.update(
         {
@@ -13569,6 +13570,54 @@ def _validate_evidence_bundle_serving_lifecycle(
             )
 
 
+def _validate_evidence_bundle_eval_summary(
+    metrics: dict[str, Any],
+    artifacts: dict[str, Any],
+    checks: list[Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    value = metrics.get("eval_summary")
+    if not isinstance(value, dict):
+        return
+    failed_check_ids = {
+        check.get("id")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is False and isinstance(check.get("id"), str)
+    }
+    if value.get("schema_version") != EVAL_SUMMARY_SCHEMA_VERSION and "eval_summary_schema_supported" not in failed_check_ids:
+        target.errors.append("evidence_bundle.checks must include a failed eval_summary_schema_supported check when eval-summary schema is unsupported.")
+    if value.get("passed") is not True and "eval_summary_passed" not in failed_check_ids:
+        target.errors.append("evidence_bundle.checks must include a failed eval_summary_passed check when eval-summary metrics are not passed.")
+    if value.get("governance_ready") is not True and "eval_summary_governance_ready" not in failed_check_ids:
+        target.errors.append(
+            "evidence_bundle.checks must include a failed eval_summary_governance_ready check when eval-summary is not governance-ready."
+        )
+
+    artifact = artifacts.get("eval_summary") if isinstance(artifacts.get("eval_summary"), dict) else None
+    if artifact is None:
+        target.errors.append("evidence_bundle.artifacts.eval_summary is required when eval_summary metrics are present.")
+        return
+    eval_summary_path = _resolve_evidence_bundle_artifact_path(artifact.get("path"), source_path)
+    if eval_summary_path is None or not eval_summary_path.exists() or not eval_summary_path.is_file():
+        return
+    try:
+        summary = json.loads(eval_summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"evidence_bundle.artifacts.eval_summary contains invalid JSON: {exc}")
+        return
+    if not isinstance(summary, dict):
+        target.errors.append("evidence_bundle.artifacts.eval_summary must contain a JSON object.")
+        return
+    _validate_eval_summary(summary, target)
+    expected = _eval_summary_bundle_metrics(summary)
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                f"evidence_bundle.metrics.eval_summary.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}."
+            )
+
+
 def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
     expected_sections = (
         "suite_summary",
@@ -13578,6 +13627,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "run_digest_coverage",
         "repair_queue",
         "validation",
+        "eval_summary",
         "training_export",
         "compare_export",
         "review_export",
@@ -13600,6 +13650,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     validation = metrics.get("validation")
     if isinstance(validation, dict):
         _validate_bundle_validation_metrics(validation, target, "evidence_bundle.metrics.validation")
+    eval_summary = metrics.get("eval_summary")
+    if isinstance(eval_summary, dict):
+        _validate_bundle_eval_summary_metrics(eval_summary, target)
     trainer_handoff = metrics.get("trainer_handoff")
     if isinstance(trainer_handoff, dict):
         _validate_bundle_trainer_handoff(trainer_handoff, target)
@@ -13631,6 +13684,42 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
             if "validation" in gate:
                 _validate_bundle_gate_validation(gate.get("validation"), target, f"evidence_bundle.metrics.gates[{index}].validation")
+
+
+def _validate_bundle_eval_summary_metrics(value: dict[str, Any], target: ValidationTarget) -> None:
+    if value.get("schema_version") != EVAL_SUMMARY_SCHEMA_VERSION:
+        target.errors.append(f"evidence_bundle.metrics.eval_summary.schema_version must be {EVAL_SUMMARY_SCHEMA_VERSION}.")
+    for field_name in ("passed", "governance_ready", "cross_arm_claims_allowed", "serving_preflight_required"):
+        if field_name in value and value.get(field_name) is not None and not isinstance(value.get(field_name), bool):
+            target.errors.append(f"evidence_bundle.metrics.eval_summary.{field_name} must be a boolean or null.")
+    for field_name in (
+        "arm_count",
+        "comparison_count",
+        "gate_count",
+        "external_adapter_plan_count",
+        "risk_count",
+        "repair_work_item_count",
+        "repair_critical_work_item_count",
+        "heldout_scenario_count",
+        "serving_preflight_input_count",
+        "serving_preflight_attached_count",
+        "serving_preflight_blocking_reason_count",
+    ):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"evidence_bundle.metrics.eval_summary.{field_name} must be a non-negative integer.")
+    if value.get("heldout_status") is not None and value.get("heldout_status") not in {
+        "missing_suite_summaries",
+        "single_arm",
+        "identical",
+        "mismatched",
+        "empty",
+    }:
+        target.errors.append("evidence_bundle.metrics.eval_summary.heldout_status has an unsupported value.")
+    risk_source_counts = value.get("risk_source_counts")
+    if not isinstance(risk_source_counts, list):
+        target.errors.append("evidence_bundle.metrics.eval_summary.risk_source_counts must be a list.")
+    else:
+        _validate_count_rows(risk_source_counts, target, "evidence_bundle.metrics.eval_summary.risk_source_counts")
 
 
 def _validate_bundle_serving_lifecycle_metrics(value: dict[str, Any], target: ValidationTarget) -> None:
@@ -13670,6 +13759,45 @@ def _serving_lifecycle_bundle_metrics(lifecycle: dict[str, Any]) -> dict[str, An
             1 for role in SERVING_LIFECYCLE_PREFLIGHT_ARTIFACTS if isinstance(artifacts.get(role), str) and artifacts.get(role)
         ),
     }
+
+
+def _eval_summary_bundle_metrics(summary: dict[str, Any]) -> dict[str, Any]:
+    heldout = summary.get("heldout_scenarios") if isinstance(summary.get("heldout_scenarios"), dict) else {}
+    repair = summary.get("repair_curriculum") if isinstance(summary.get("repair_curriculum"), dict) else {}
+    serving = summary.get("serving_preflight") if isinstance(summary.get("serving_preflight"), dict) else {}
+    risks = summary.get("risks") if isinstance(summary.get("risks"), list) else []
+    serving_blockers = serving.get("blocking_reasons") if isinstance(serving.get("blocking_reasons"), list) else []
+    return {
+        "schema_version": summary.get("schema_version"),
+        "passed": summary.get("passed") if isinstance(summary.get("passed"), bool) else None,
+        "governance_ready": summary.get("governance_ready") if isinstance(summary.get("governance_ready"), bool) else None,
+        "arm_count": summary.get("arm_count"),
+        "comparison_count": summary.get("comparison_count"),
+        "gate_count": summary.get("gate_count"),
+        "external_adapter_plan_count": summary.get("external_adapter_plan_count"),
+        "risk_count": len(risks),
+        "risk_source_counts": _eval_summary_risk_source_counts(risks),
+        "repair_work_item_count": repair.get("work_item_count"),
+        "repair_critical_work_item_count": repair.get("critical_work_item_count"),
+        "heldout_status": heldout.get("status"),
+        "heldout_scenario_count": heldout.get("scenario_count"),
+        "cross_arm_claims_allowed": heldout.get("cross_arm_claims_allowed"),
+        "serving_preflight_required": serving.get("required") if isinstance(serving.get("required"), bool) else None,
+        "serving_preflight_input_count": serving.get("input_count"),
+        "serving_preflight_attached_count": serving.get("attached_count"),
+        "serving_preflight_blocking_reason_count": len(serving_blockers),
+    }
+
+
+def _eval_summary_risk_source_counts(risks: list[Any]) -> list[dict[str, int | str]]:
+    counts: dict[str, int] = {}
+    for risk in risks:
+        if not isinstance(risk, dict):
+            continue
+        source = risk.get("source")
+        if isinstance(source, str) and source:
+            counts[source] = counts.get(source, 0) + 1
+    return [{"id": key, "count": counts[key]} for key in sorted(counts)]
 
 
 def _resolve_evidence_bundle_artifact_path(value: Any, source_path: Path) -> Path | None:

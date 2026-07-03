@@ -12,6 +12,7 @@ from .agentic_training_result import (
     REGISTER_FAILURE_RECOMMENDATION,
     REGISTER_RESULT_RECOMMENDATION,
 )
+from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
 from .gate_contract import summarize_gate_contract
 from .schema_registry import SchemaRegistryError, check_schema_file
 
@@ -80,6 +81,7 @@ def build_evidence_bundle(
     trace_observability_path: str | Path | None = None,
     repair_queue_path: str | Path | None = None,
     validation_path: str | Path | None = None,
+    eval_summary_path: str | Path | None = None,
     training_export_dir: str | Path | None = None,
     compare_export_dir: str | Path | None = None,
     review_export_dir: str | Path | None = None,
@@ -195,6 +197,10 @@ def build_evidence_bundle(
     if validation_path is not None:
         validation = _read_json_artifact(Path(validation_path), artifacts, "validation", preserve_paths)
         _summarize_validation_artifact(validation, metrics, checks)
+
+    if eval_summary_path is not None:
+        eval_summary = _read_json_artifact(Path(eval_summary_path), artifacts, "eval_summary", preserve_paths)
+        _summarize_eval_summary(eval_summary, metrics, checks)
 
     if training_export_dir is not None:
         training_dir = Path(training_export_dir)
@@ -509,6 +515,25 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
         ),
         "repair_queue": ("item_count", "critical_item_count", "scenario_count", "task_family_count", "priority_counts", "rule_counts"),
         "validation": ("passed", "strict", "target_count", "error_count", "warning_count"),
+        "eval_summary": (
+            "passed",
+            "governance_ready",
+            "arm_count",
+            "comparison_count",
+            "gate_count",
+            "external_adapter_plan_count",
+            "risk_count",
+            "risk_source_counts",
+            "repair_work_item_count",
+            "repair_critical_work_item_count",
+            "heldout_status",
+            "heldout_scenario_count",
+            "cross_arm_claims_allowed",
+            "serving_preflight_required",
+            "serving_preflight_input_count",
+            "serving_preflight_attached_count",
+            "serving_preflight_blocking_reason_count",
+        ),
         "training_export": (
             "episode_count",
             "preference_count",
@@ -793,6 +818,25 @@ def _next_actions(
                 "validation",
                 f"Resolve validation findings before publishing this handoff: {validation_errors} error(s), {validation_warnings} warning(s).",
                 {"error_count": validation_errors, "warning_count": validation_warnings},
+            )
+        )
+
+    eval_summary = metrics.get("eval_summary") if isinstance(metrics.get("eval_summary"), dict) else {}
+    eval_risks = _non_negative_int(eval_summary.get("risk_count"))
+    if eval_summary and (eval_summary.get("passed") is not True or eval_summary.get("governance_ready") is not True or eval_risks):
+        actions.append(
+            _action(
+                "resolve_eval_summary_blockers",
+                "critical",
+                "eval_summary",
+                "Resolve eval-summary blockers before treating held-out eval movement as governance-ready.",
+                {
+                    "passed": eval_summary.get("passed"),
+                    "governance_ready": eval_summary.get("governance_ready"),
+                    "risk_count": eval_risks,
+                    "risk_source_counts": _count_rows(eval_summary.get("risk_source_counts")),
+                    "heldout_status": eval_summary.get("heldout_status"),
+                },
             )
         )
 
@@ -1161,6 +1205,72 @@ def _summarize_serving_lifecycle(
             "preflight_artifact_count": str(summary["preflight_artifact_count"]),
         },
     )
+
+
+def _summarize_eval_summary(
+    summary: dict[str, Any],
+    metrics: dict[str, Any],
+    checks: list[dict[str, Any]],
+) -> None:
+    bundle_metrics = _eval_summary_metric_summary(summary)
+    metrics["eval_summary"] = bundle_metrics
+    _add_presence_check(
+        checks,
+        "eval_summary_schema_supported",
+        summary.get("schema_version") == EVAL_SUMMARY_SCHEMA_VERSION,
+        {"artifact": "eval_summary", "schema_version": str(summary.get("schema_version") or "")},
+    )
+    _add_presence_check(
+        checks,
+        "eval_summary_passed",
+        summary.get("passed") is True,
+        {"artifact": "eval_summary", "risk_count": str(bundle_metrics["risk_count"])},
+    )
+    _add_presence_check(
+        checks,
+        "eval_summary_governance_ready",
+        summary.get("governance_ready") is True,
+        {"artifact": "eval_summary"},
+    )
+
+
+def _eval_summary_metric_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    heldout = summary.get("heldout_scenarios") if isinstance(summary.get("heldout_scenarios"), dict) else {}
+    repair = summary.get("repair_curriculum") if isinstance(summary.get("repair_curriculum"), dict) else {}
+    serving = summary.get("serving_preflight") if isinstance(summary.get("serving_preflight"), dict) else {}
+    risks = summary.get("risks") if isinstance(summary.get("risks"), list) else []
+    serving_blockers = serving.get("blocking_reasons") if isinstance(serving.get("blocking_reasons"), list) else []
+    return {
+        "schema_version": summary.get("schema_version"),
+        "passed": summary.get("passed") if isinstance(summary.get("passed"), bool) else None,
+        "governance_ready": summary.get("governance_ready") if isinstance(summary.get("governance_ready"), bool) else None,
+        "arm_count": summary.get("arm_count"),
+        "comparison_count": summary.get("comparison_count"),
+        "gate_count": summary.get("gate_count"),
+        "external_adapter_plan_count": summary.get("external_adapter_plan_count"),
+        "risk_count": len(risks),
+        "risk_source_counts": _eval_summary_risk_source_counts(risks),
+        "repair_work_item_count": repair.get("work_item_count"),
+        "repair_critical_work_item_count": repair.get("critical_work_item_count"),
+        "heldout_status": heldout.get("status"),
+        "heldout_scenario_count": heldout.get("scenario_count"),
+        "cross_arm_claims_allowed": heldout.get("cross_arm_claims_allowed"),
+        "serving_preflight_required": serving.get("required") if isinstance(serving.get("required"), bool) else None,
+        "serving_preflight_input_count": serving.get("input_count"),
+        "serving_preflight_attached_count": serving.get("attached_count"),
+        "serving_preflight_blocking_reason_count": len(serving_blockers),
+    }
+
+
+def _eval_summary_risk_source_counts(risks: list[Any]) -> list[dict[str, int | str]]:
+    counts: dict[str, int] = {}
+    for risk in risks:
+        if not isinstance(risk, dict):
+            continue
+        source = risk.get("source")
+        if isinstance(source, str) and source:
+            counts[source] = counts.get(source, 0) + 1
+    return _count_map_rows(counts)
 
 
 def _serving_lifecycle_metric_summary(lifecycle: dict[str, Any]) -> dict[str, Any]:

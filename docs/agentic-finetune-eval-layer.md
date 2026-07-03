@@ -124,6 +124,19 @@ flightrecorder validate --external-eval-plan runs/external_eval_plan.json --stri
 flightrecorder schemas --check runs/external_eval_plan.json
 ```
 
+Include the eval summary in the evidence bundle that Governance or
+improvement planning consumes:
+
+```bash
+flightrecorder evidence-bundle \
+  --eval-summary runs/eval_summary.json \
+  --out runs/evidence_bundle.json
+```
+
+The bundle stores compact eval-summary metrics and validation recomputes them
+from the referenced `eval_summary.json` when that file is available, so stale
+or forged bundle counts cannot hide held-out eval blockers.
+
 ## Blocking Conditions
 
 Governance claims are suppressed when any of these hold:
