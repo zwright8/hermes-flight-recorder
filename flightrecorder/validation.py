@@ -41,7 +41,7 @@ from .decision_gate import DECISION_GATE_SCHEMA_VERSION
 from .digest import RUN_DIGEST_SCHEMA_VERSION
 from .evidence import EVIDENCE_COVERAGE_SCHEMA_VERSION
 from .eval_summary import EVAL_SUMMARY_SCHEMA_VERSION
-from .external_eval import ADAPTERS, EXTERNAL_EVAL_PLAN_SCHEMA_VERSION
+from .external_eval import ADAPTERS, EXTERNAL_EVAL_PLAN_SCHEMA_VERSION, EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION
 from .heldout_manifest import HELDOUT_MANIFEST_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
 from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMPROVEMENT_LEDGER_GATE_SCHEMA_VERSION
@@ -260,6 +260,7 @@ def validate_artifacts(
     live_smoke_summary_paths: list[str | Path] | None = None,
     eval_summary_paths: list[str | Path] | None = None,
     external_eval_plan_paths: list[str | Path] | None = None,
+    external_eval_receipt_paths: list[str | Path] | None = None,
     heldout_manifest_paths: list[str | Path] | None = None,
     serving_profile_paths: list[str | Path] | None = None,
     serving_compatibility_report_paths: list[str | Path] | None = None,
@@ -406,6 +407,8 @@ def validate_artifacts(
         targets.append(validate_eval_summary(eval_summary_path))
     for external_eval_plan_path in external_eval_plan_paths or []:
         targets.append(validate_external_eval_plan(external_eval_plan_path))
+    for external_eval_receipt_path in external_eval_receipt_paths or []:
+        targets.append(validate_external_eval_receipt(external_eval_receipt_path))
     for heldout_manifest_path in heldout_manifest_paths or []:
         targets.append(validate_heldout_manifest(heldout_manifest_path))
     for serving_profile_path in serving_profile_paths or []:
@@ -875,6 +878,16 @@ def validate_external_eval_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "external_eval_plan.json")
     if plan is not None:
         _validate_external_eval_plan(plan, target, plan_path)
+    return target
+
+
+def validate_external_eval_receipt(path: str | Path) -> ValidationTarget:
+    """Validate one external eval dry-run or blocked live receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("external_eval_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "external_eval_receipt.json")
+    if receipt is not None:
+        _validate_external_eval_receipt(receipt, target, receipt_path)
     return target
 
 
@@ -8493,6 +8506,171 @@ def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget,
             "selected_adapters": selected,
         }
     )
+
+
+def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(receipt, "schema_version", EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION, target, prefix="external_eval_receipt.")
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("external_eval_receipt.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "external_eval_receipt.checks")
+    if receipt.get("check_count") != len(checks):
+        target.errors.append(f"external_eval_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
+    if receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"external_eval_receipt.failed_check_count expected {failed_checks}, got {receipt.get('failed_check_count')!r}."
+        )
+    if receipt.get("passed") != (failed_checks == 0):
+        target.errors.append("external_eval_receipt.passed must match failed_check_count.")
+    expected_readiness = "dry_run_recorded" if failed_checks == 0 else "blocked"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(f"external_eval_receipt.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}.")
+    expected_recommendation = "archive_external_eval_dry_run" if failed_checks == 0 else "keep_external_eval_claims_disabled"
+    if receipt.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"external_eval_receipt.recommendation expected {expected_recommendation!r}, got {receipt.get('recommendation')!r}."
+        )
+    if not _is_string_list(receipt.get("blocked_reasons")):
+        target.errors.append("external_eval_receipt.blocked_reasons must be a list of strings.")
+
+    source_plan = receipt.get("source_plan")
+    if not isinstance(source_plan, dict):
+        target.errors.append("external_eval_receipt.source_plan must be an object.")
+    else:
+        _validate_external_eval_receipt_source_plan(source_plan, target, source_path)
+
+    adapter_receipts = receipt.get("adapter_receipts")
+    if not isinstance(adapter_receipts, list):
+        target.errors.append("external_eval_receipt.adapter_receipts must be a list.")
+        adapter_receipts = []
+    if receipt.get("adapter_count") != len(adapter_receipts):
+        target.errors.append(
+            f"external_eval_receipt.adapter_count expected {len(adapter_receipts)}, got {receipt.get('adapter_count')!r}."
+        )
+    ready_count = sum(1 for row in adapter_receipts if isinstance(row, dict) and row.get("ready") is True)
+    if receipt.get("ready_adapter_count") != ready_count:
+        target.errors.append(
+            f"external_eval_receipt.ready_adapter_count expected {ready_count}, got {receipt.get('ready_adapter_count')!r}."
+        )
+    for index, row in enumerate(adapter_receipts):
+        _validate_external_eval_adapter_receipt(row, index, target)
+
+    _validate_external_eval_receipt_launch(receipt.get("launch"), target)
+    _validate_external_eval_receipt_boundary(receipt.get("execution_boundary"), target)
+    target.details.update(
+        {
+            "passed": receipt.get("passed"),
+            "readiness": receipt.get("readiness"),
+            "adapter_count": len(adapter_receipts),
+            "ready_adapter_count": ready_count,
+        }
+    )
+
+
+def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    label = "external_eval_receipt.source_plan"
+    if source_plan.get("schema_version") != EXTERNAL_EVAL_PLAN_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {EXTERNAL_EVAL_PLAN_SCHEMA_VERSION!r}.")
+    if not isinstance(source_plan.get("ready"), bool):
+        target.errors.append(f"{label}.ready must be a boolean.")
+    if not _is_non_negative_int(source_plan.get("adapter_count")):
+        target.errors.append(f"{label}.adapter_count must be a non-negative integer.")
+    if source_plan.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+        return
+    path_value = source_plan.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
+        return
+    plan_path = _external_eval_reference_path(path_value, source_path)
+    if not plan_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to an external eval plan file.")
+        return
+    if not _is_non_negative_int(source_plan.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
+    elif plan_path.stat().st_size != source_plan.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if not _is_sha256(source_plan.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+    elif _sha256(plan_path) != source_plan.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+    plan = _read_object(plan_path, target, f"{label}.path")
+    if plan is not None:
+        if plan.get("schema_version") != source_plan.get("schema_version"):
+            target.errors.append(f"{label}.schema_version must match the current file.")
+        if plan.get("ready") != source_plan.get("ready"):
+            target.errors.append(f"{label}.ready must match the current file.")
+        if plan.get("adapter_count") != source_plan.get("adapter_count"):
+            target.errors.append(f"{label}.adapter_count must match the current file.")
+
+
+def _validate_external_eval_adapter_receipt(row: Any, index: int, target: ValidationTarget) -> None:
+    label = f"external_eval_receipt.adapter_receipts[{index}]"
+    if not isinstance(row, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    adapter_id = row.get("id")
+    if adapter_id not in ADAPTERS:
+        target.errors.append(f"{label}.id must be one of {sorted(ADAPTERS)!r}.")
+        spec = None
+    else:
+        spec = ADAPTERS[adapter_id]
+    if not isinstance(row.get("ready"), bool):
+        target.errors.append(f"{label}.ready must be a boolean.")
+    if not isinstance(row.get("planned_ready"), bool):
+        target.errors.append(f"{label}.planned_ready must be a boolean.")
+    if not _is_string_list(row.get("blocking_reasons")):
+        target.errors.append(f"{label}.blocking_reasons must be a list of strings.")
+    if row.get("live_benchmark_started") is not False:
+        target.errors.append(f"{label}.live_benchmark_started must be false.")
+    if row.get("provider_api_called") is not False:
+        target.errors.append(f"{label}.provider_api_called must be false.")
+    if row.get("cost_incurred_usd") != 0:
+        target.errors.append(f"{label}.cost_incurred_usd must be 0.")
+    if spec is not None:
+        if row.get("required_inputs") != spec["required_inputs"]:
+            target.errors.append(f"{label}.required_inputs must match adapter contract.")
+        if not isinstance(row.get("name"), str) or not row.get("name"):
+            target.errors.append(f"{label}.name must be a non-empty string.")
+        if row.get("domain") != spec["domain"]:
+            target.errors.append(f"{label}.domain must match adapter contract.")
+    if row.get("ready") is True and row.get("blocking_reasons"):
+        target.errors.append(f"{label}.ready cannot be true while blockers remain.")
+
+
+def _validate_external_eval_receipt_launch(launch: Any, target: ValidationTarget) -> None:
+    label = "external_eval_receipt.launch"
+    if not isinstance(launch, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if launch.get("mode") not in {"dry_run", "live"}:
+        target.errors.append(f"{label}.mode must be dry_run or live.")
+    for field_name in ("live_benchmarks_started", "provider_api_called", "model_downloads_started"):
+        if launch.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
+    if launch.get("cost_incurred_usd") != 0:
+        target.errors.append(f"{label}.cost_incurred_usd must be 0.")
+
+
+def _validate_external_eval_receipt_boundary(boundary: Any, target: ValidationTarget) -> None:
+    label = "external_eval_receipt.execution_boundary"
+    if not isinstance(boundary, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if boundary.get("dry_run_only") is not True:
+        target.errors.append(f"{label}.dry_run_only must be true.")
+    for field_name in (
+        "live_benchmarks_started",
+        "provider_api_called",
+        "model_downloads_started",
+        "credential_values_recorded",
+        "weights_updated_by_flight_recorder",
+    ):
+        if boundary.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
+    if boundary.get("cloud_cost_incurred_usd") != 0:
+        target.errors.append(f"{label}.cloud_cost_incurred_usd must be 0.")
 
 
 def _validate_external_eval_inputs(inputs: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:

@@ -506,6 +506,14 @@
       "name": "external_eval_plan"
     },
     {
+      "artifact": "external_eval_receipt",
+      "artifact_schema_version": "hfr.external_eval_receipt.v1",
+      "description": "Dry-run or blocked live external benchmark receipt emitted by external-eval-receipt.",
+      "filename": "external_eval_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/external_eval_receipt.v1.schema.json",
+      "name": "external_eval_receipt"
+    },
+    {
       "artifact": "eval_summary",
       "artifact_schema_version": "hfr.eval_summary.v1",
       "description": "Governance-facing held-out evaluation summary emitted by eval-summary.",

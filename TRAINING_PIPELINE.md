@@ -633,6 +633,7 @@ flightrecorder agentic-loop plan \
   --agentic-training-result runs/agentic_training_result.json \
   --heldout-manifest runs/heldout_manifest.json \
   --external-eval-plan runs/external_eval_plan.json \
+  --external-eval-receipt runs/external_eval_receipt.json \
   --promotion-decision runs/promotion_decision.json \
   --out runs/agentic_training_loop_plan.json
 
@@ -646,6 +647,21 @@ flightrecorder agentic-loop ledger \
 
 flightrecorder validate \
   --agentic-loop-ledger runs/agentic_loop_ledger.json \
+  --strict
+```
+
+External benchmark adapters stay fail-closed until a separate runner executes
+them. Archive an external eval receipt to prove no live BFCL, Inspect AI,
+lm-eval, or SWE-bench job was started by Flight Recorder:
+
+```bash
+flightrecorder external-eval-receipt \
+  --plan runs/external_eval_plan.json \
+  --out runs/external_eval_receipt.json
+
+flightrecorder validate \
+  --external-eval-plan runs/external_eval_plan.json \
+  --external-eval-receipt runs/external_eval_receipt.json \
   --strict
 ```
 

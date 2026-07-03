@@ -84,7 +84,14 @@ from .improvement_gate import (
 from .improvement_ledger import ImprovementLedgerError, build_improvement_ledger
 from .improvement_plan import ImprovementPlanError, build_improvement_plan
 from .eval_summary import EvalSummaryError, build_eval_summary, render_eval_summary_markdown
-from .external_eval import ExternalEvalPlanError, adapter_choices, build_external_eval_plan, write_external_eval_plan
+from .external_eval import (
+    ExternalEvalPlanError,
+    adapter_choices,
+    build_external_eval_plan,
+    build_external_eval_receipt,
+    write_external_eval_plan,
+    write_external_eval_receipt,
+)
 from .heldout_manifest import HeldoutManifestError, build_heldout_manifest, write_heldout_manifest
 from .lineage import REPLAY_BUNDLE_SCHEMA_VERSION, write_run_lineage
 from .model_registry import (
@@ -1120,6 +1127,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         live_smoke_summary_paths=args.live_smoke_summary,
         eval_summary_paths=args.eval_summary,
         external_eval_plan_paths=args.external_eval_plan,
+        external_eval_receipt_paths=args.external_eval_receipt,
         heldout_manifest_paths=args.heldout_manifest,
         serving_profile_paths=args.serving_profile,
         serving_compatibility_report_paths=args.serving_compatibility_report,
@@ -1425,6 +1433,22 @@ def cmd_external_eval_plan(args: argparse.Namespace) -> int:
     return 0 if plan["ready"] else 1
 
 
+def cmd_external_eval_receipt(args: argparse.Namespace) -> int:
+    receipt = build_external_eval_receipt(
+        plan_path=args.plan,
+        adapters=args.adapter,
+        live=args.live,
+        created_at=args.created_at,
+        preserve_paths=args.preserve_paths,
+    )
+    if args.out:
+        write_external_eval_receipt(receipt, args.out, preserve_paths=args.preserve_paths)
+        print(f"wrote {args.out}")
+    else:
+        print(json.dumps(receipt, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if receipt["passed"] else 1
+
+
 def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
     artifact_paths = {
         "action_ledger": args.action_ledger,
@@ -1434,6 +1458,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "evidence_bundle": args.evidence_bundle,
         "eval_summary": args.eval_summary,
         "external_eval_plan": args.external_eval_plan,
+        "external_eval_receipt": args.external_eval_receipt,
         "harness_manifest": args.harness_manifest,
         "harness_result": args.harness_result,
         "heldout_manifest": args.heldout_manifest,
@@ -2979,6 +3004,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one hfr.external_eval_adapters.v1 JSON file; may be repeated",
     )
     validate.add_argument(
+        "--external-eval-receipt",
+        action="append",
+        default=[],
+        help="Validate one hfr.external_eval_receipt.v1 JSON file; may be repeated",
+    )
+    validate.add_argument(
         "--heldout-manifest",
         action="append",
         default=[],
@@ -3178,6 +3209,24 @@ def _parser() -> argparse.ArgumentParser:
     external_eval_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
     external_eval_plan.set_defaults(func=cmd_external_eval_plan)
 
+    external_eval_receipt = subparsers.add_parser(
+        "external-eval-receipt",
+        help="Archive a fail-closed dry-run receipt for an external eval adapter plan",
+    )
+    external_eval_receipt.add_argument("--plan", required=True, help="External eval plan JSON to bind")
+    external_eval_receipt.add_argument(
+        "--adapter",
+        action="append",
+        default=[],
+        choices=adapter_choices(),
+        help="External eval adapter to receipt; defaults to adapters selected by the plan",
+    )
+    external_eval_receipt.add_argument("--live", action="store_true", help="Record that live external eval was requested and blocked")
+    external_eval_receipt.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    external_eval_receipt.add_argument("--out", help="Write external eval receipt JSON to this path")
+    external_eval_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in receipt output")
+    external_eval_receipt.set_defaults(func=cmd_external_eval_receipt)
+
     agentic_loop = subparsers.add_parser("agentic-loop", help="Plan closed-loop agentic training iterations")
     agentic_loop_subparsers = agentic_loop.add_subparsers(dest="agentic_loop_command", required=True)
     agentic_loop_plan = agentic_loop_subparsers.add_parser("plan", help="Write a fail-closed agentic training loop plan")
@@ -3212,6 +3261,7 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--serving-lifecycle", action="append", default=[], help="serving_lifecycle artifact; may be repeated")
     agentic_loop_plan.add_argument("--heldout-manifest", action="append", default=[], help="heldout manifest artifact; may be repeated")
     agentic_loop_plan.add_argument("--external-eval-plan", action="append", default=[], help="external_eval_plan artifact; may be repeated")
+    agentic_loop_plan.add_argument("--external-eval-receipt", action="append", default=[], help="external_eval_receipt artifact; may be repeated")
     agentic_loop_plan.add_argument("--eval-summary", action="append", default=[], help="eval_summary artifact; may be repeated")
     agentic_loop_plan.add_argument("--improvement-plan", action="append", default=[], help="improvement_plan artifact; may be repeated")
     agentic_loop_plan.add_argument("--improvement-ledger", action="append", default=[], help="improvement_ledger artifact; may be repeated")

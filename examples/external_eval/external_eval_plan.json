@@ -1,0 +1,211 @@
+{
+  "adapter_count": 4,
+  "adapters": [
+    {
+      "blocking_reasons": [
+        "dependencies_missing",
+        "adapter_disabled_until_allow_installed",
+        "missing_model_endpoint",
+        "missing_tool_schema_set"
+      ],
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "bfcl": false
+        },
+        "imports": {
+          "bfcl_eval": false
+        }
+      },
+      "domain": "tool_calling",
+      "execution_contract": {
+        "boundary": "Function/tool-calling suites must use the same held-out scenario manifest and declared tool schema set.",
+        "requires_identical_heldout_scenarios": true,
+        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+      },
+      "full_name": "Berkeley Function Calling Leaderboard",
+      "id": "bfcl",
+      "name": "BFCL",
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "tool_schema_set"
+      ],
+      "suite_tags": [
+        "function_calling",
+        "tool_calling"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "dependencies_missing",
+        "adapter_disabled_until_allow_installed",
+        "missing_model_endpoint",
+        "missing_inspect_task_set",
+        "missing_sandbox_policy"
+      ],
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "inspect": false
+        },
+        "imports": {
+          "inspect_ai": false
+        }
+      },
+      "domain": "agentic_tasks",
+      "execution_contract": {
+        "boundary": "Inspect tasks must be mapped to held-out scenario IDs and run under an explicit sandbox policy.",
+        "requires_identical_heldout_scenarios": true,
+        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+      },
+      "full_name": "Inspect AI",
+      "id": "inspect_ai",
+      "name": "Inspect AI",
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "inspect_task_set",
+        "sandbox_policy"
+      ],
+      "suite_tags": [
+        "agentic",
+        "red_team",
+        "inspect"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "dependencies_missing",
+        "adapter_disabled_until_allow_installed",
+        "missing_model_endpoint",
+        "missing_lm_eval_task_list"
+      ],
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "lm_eval": false
+        },
+        "imports": {
+          "lm_eval": false
+        }
+      },
+      "domain": "language_model_capability",
+      "execution_contract": {
+        "boundary": "Language-model harness tasks must be tied back to the held-out scenario manifest before comparison.",
+        "requires_identical_heldout_scenarios": true,
+        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+      },
+      "full_name": "EleutherAI lm-evaluation-harness",
+      "id": "lm_eval_harness",
+      "name": "lm-evaluation-harness",
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "lm_eval_task_list"
+      ],
+      "suite_tags": [
+        "lm_eval",
+        "capability"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "dependencies_missing",
+        "adapter_disabled_until_allow_installed",
+        "missing_model_endpoint",
+        "missing_swe_bench_task_set",
+        "missing_sandbox_policy"
+      ],
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "swebench": false
+        },
+        "imports": {
+          "swebench": false
+        }
+      },
+      "domain": "software_engineering",
+      "execution_contract": {
+        "boundary": "Repository tasks must be selected from a declared held-out task set and run under an explicit sandbox policy.",
+        "requires_identical_heldout_scenarios": true,
+        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+      },
+      "full_name": "SWE-bench",
+      "id": "swe_bench",
+      "name": "SWE-bench",
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "swe_bench_task_set",
+        "sandbox_policy"
+      ],
+      "suite_tags": [
+        "software_engineering",
+        "repository_tasks"
+      ]
+    }
+  ],
+  "allow_installed": false,
+  "blocking_reasons": [
+    "no_ready_external_adapters",
+    "adapter_disabled_until_allow_installed",
+    "dependencies_missing",
+    "missing_inspect_task_set",
+    "missing_lm_eval_task_list",
+    "missing_model_endpoint",
+    "missing_sandbox_policy",
+    "missing_swe_bench_task_set",
+    "missing_tool_schema_set"
+  ],
+  "generated_at": "2026-07-03T17:48:21.629729+00:00",
+  "governance_handoff": {
+    "external_eval_claims_allowed": false,
+    "recommendation": "Keep external eval claims disabled until every selected adapter is ready.",
+    "requires_identical_heldout_scenarios": true
+  },
+  "inputs": {
+    "inspect_task_set": null,
+    "lm_eval_task_list": [],
+    "model": null,
+    "model_endpoint": null,
+    "sandbox_policy": null,
+    "scenario_manifest": {
+      "exists": true,
+      "path": "heldout_scenarios.json",
+      "ready": true,
+      "scenario_count": 1,
+      "schema_version": "hfr.heldout_scenario_manifest.v1",
+      "sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5",
+      "size_bytes": 153
+    },
+    "swe_bench_task_set": null,
+    "tool_schema_set": null
+  },
+  "ready": false,
+  "ready_adapter_count": 0,
+  "schema_version": "hfr.external_eval_adapters.v1",
+  "selected_adapters": [
+    "bfcl",
+    "inspect_ai",
+    "lm_eval_harness",
+    "swe_bench"
+  ]
+}

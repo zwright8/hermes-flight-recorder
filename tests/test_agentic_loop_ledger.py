@@ -101,6 +101,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "serving_lifecycle": [self.write_json(root / "serving_lifecycle.json", "hfr.serving_lifecycle.v1")],
             "heldout_manifest": [self.write_json(root / "heldout_manifest.json", "hfr.heldout_scenario_manifest.v1")],
             "external_eval_plan": [self.write_json(root / "external_eval_plan.json", "hfr.external_eval_adapters.v1")],
+            "external_eval_receipt": [self.write_json(root / "external_eval_receipt.json", "hfr.external_eval_receipt.v1")],
             "eval_summary": [self.write_json(root / "eval_summary.json", "hfr.eval_summary.v1")],
             "improvement_plan": [self.write_json(root / "improvement_plan.json", "hfr.improvement_plan.v1")],
             "promotion_decision": [self.write_json(root / "promotion_decision.json", "hfr.promotion_decision.v1")],

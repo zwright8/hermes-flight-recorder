@@ -1,0 +1,106 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/external_eval_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run or blocked live external benchmark adapter receipt.",
+  "properties": {
+    "adapter_count": { "minimum": 0, "type": "integer" },
+    "adapter_receipts": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+          "cost_incurred_usd": { "const": 0 },
+          "id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+          "live_benchmark_started": { "const": false },
+          "planned_ready": { "type": "boolean" },
+          "provider_api_called": { "const": false },
+          "ready": { "type": "boolean" }
+        },
+        "required": ["id", "ready", "planned_ready", "blocking_reasons", "live_benchmark_started", "provider_api_called", "cost_incurred_usd"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_cost_incurred_usd": { "const": 0 },
+        "credential_values_recorded": { "const": false },
+        "dry_run_only": { "const": true },
+        "live_benchmarks_started": { "const": false },
+        "model_downloads_started": { "const": false },
+        "provider_api_called": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "dry_run_only",
+        "live_benchmarks_started",
+        "provider_api_called",
+        "model_downloads_started",
+        "cloud_cost_incurred_usd",
+        "credential_values_recorded",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "launch": {
+      "additionalProperties": true,
+      "properties": {
+        "cost_incurred_usd": { "const": 0 },
+        "live_benchmarks_started": { "const": false },
+        "mode": { "enum": ["dry_run", "live"], "type": "string" },
+        "model_downloads_started": { "const": false },
+        "provider_api_called": { "const": false }
+      },
+      "required": ["mode", "live_benchmarks_started", "provider_api_called", "model_downloads_started", "cost_incurred_usd"],
+      "type": "object"
+    },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["dry_run_recorded", "blocked"], "type": "string" },
+    "ready_adapter_count": { "minimum": 0, "type": "integer" },
+    "recommendation": { "enum": ["archive_external_eval_dry_run", "keep_external_eval_claims_disabled"], "type": "string" },
+    "schema_version": { "const": "hfr.external_eval_receipt.v1" },
+    "source_plan": { "type": "object" }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_plan",
+    "adapter_count",
+    "ready_adapter_count",
+    "adapter_receipts",
+    "launch",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder External Eval Receipt",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    }
+  }
+}

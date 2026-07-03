@@ -71,7 +71,7 @@ PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "heldout_eval",
         "name": "Held-out eval and external benchmarks",
-        "required": ("heldout_manifest", "external_eval_plan", "eval_summary"),
+        "required": ("heldout_manifest", "external_eval_plan", "external_eval_receipt", "eval_summary"),
         "produces": ("eval_summary", "compare_gate", "decision_gate"),
         "gate": "live external benchmarks remain disabled until dependencies and held-out scenario parity pass.",
     },
@@ -118,6 +118,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "evidence_coverage": "evidence_coverage",
     "eval_summary": "eval_summary",
     "external_eval_plan": "external_eval_plan",
+    "external_eval_receipt": "external_eval_receipt",
     "harness_manifest": "harness_manifest",
     "harness_result": "harness_result",
     "heldout_manifest": "heldout_manifest",
@@ -226,9 +227,13 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "heldout_eval_is_fail_closed",
-        "heldout_manifest" in refs and "external_eval_plan" in refs,
-        {"heldout_manifest_present": "heldout_manifest" in refs, "external_eval_plan_present": "external_eval_plan" in refs},
-        {"heldout_manifest_present": True, "external_eval_plan_present": True},
+        "heldout_manifest" in refs and "external_eval_plan" in refs and "external_eval_receipt" in refs,
+        {
+            "heldout_manifest_present": "heldout_manifest" in refs,
+            "external_eval_plan_present": "external_eval_plan" in refs,
+            "external_eval_receipt_present": "external_eval_receipt" in refs,
+        },
+        {"heldout_manifest_present": True, "external_eval_plan_present": True, "external_eval_receipt_present": True},
     )
     _add_check(
         checks,

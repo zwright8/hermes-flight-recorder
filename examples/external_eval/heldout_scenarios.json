@@ -1,0 +1,8 @@
+{
+  "ready": true,
+  "scenario_count": 1,
+  "scenario_ids": [
+    "email_reply_completion"
+  ],
+  "schema_version": "hfr.heldout_scenario_manifest.v1"
+}

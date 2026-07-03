@@ -1,0 +1,148 @@
+import json
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+from unittest.mock import patch
+
+from flightrecorder.cli import main
+from flightrecorder.external_eval import build_external_eval_plan, write_external_eval_plan
+from flightrecorder.schema_registry import check_schema_file
+
+
+def run_cli(args):
+    with redirect_stdout(StringIO()):
+        return main(args)
+
+
+class ExternalEvalReceiptTests(unittest.TestCase):
+    def test_external_eval_receipt_blocks_unready_plan_but_validates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+
+            plan_code = run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
+            receipt_code = run_cli(
+                [
+                    "external-eval-receipt",
+                    "--plan",
+                    str(plan_path),
+                    "--created-at",
+                    "2026-07-03T00:00:00+00:00",
+                    "--out",
+                    str(receipt_path),
+                ]
+            )
+            validate_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"])
+            schema_result = check_schema_file(receipt_path)
+
+            self.assertEqual(plan_code, 1)
+            self.assertEqual(receipt_code, 1)
+            self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
+            receipt = _read_json(receipt_path)
+            self.assertFalse(receipt["passed"])
+            self.assertEqual(receipt["readiness"], "blocked")
+            self.assertEqual(receipt["launch"]["mode"], "dry_run")
+            self.assertFalse(receipt["launch"]["live_benchmarks_started"])
+            self.assertFalse(receipt["launch"]["provider_api_called"])
+            self.assertEqual(receipt["launch"]["cost_incurred_usd"], 0)
+            self.assertEqual(receipt["source_plan"]["path"], plan_path.name)
+
+    def test_external_eval_receipt_ready_dry_run_uses_mocked_dependency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+
+            with patch(
+                "flightrecorder.external_eval._dependency_status",
+                return_value={"available": True, "imports": {"inspect_ai": True}, "commands": {"inspect": True}},
+            ):
+                plan = build_external_eval_plan(
+                    adapters=["inspect_ai"],
+                    scenario_manifest=manifest,
+                    model_endpoint="http://127.0.0.1:8000/v1",
+                    inspect_task_set="heldout-inspect",
+                    sandbox_policy="locked-network",
+                    allow_installed=True,
+                )
+            write_external_eval_plan(plan, plan_path)
+
+            receipt_code = run_cli(
+                [
+                    "external-eval-receipt",
+                    "--plan",
+                    str(plan_path),
+                    "--created-at",
+                    "2026-07-03T00:00:00+00:00",
+                    "--out",
+                    str(receipt_path),
+                ]
+            )
+            validate_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"])
+
+            self.assertEqual(receipt_code, 0)
+            self.assertEqual(validate_code, 0)
+            receipt = _read_json(receipt_path)
+            self.assertTrue(receipt["passed"])
+            self.assertEqual(receipt["readiness"], "dry_run_recorded")
+            self.assertEqual(receipt["adapter_count"], 1)
+            self.assertEqual(receipt["ready_adapter_count"], 1)
+            self.assertTrue(receipt["adapter_receipts"][0]["ready"])
+            self.assertFalse(receipt["adapter_receipts"][0]["live_benchmark_started"])
+            self.assertFalse(receipt["execution_boundary"]["provider_api_called"])
+            self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
+
+    def test_external_eval_receipt_live_request_is_recorded_and_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
+
+            receipt_code = run_cli(
+                [
+                    "external-eval-receipt",
+                    "--plan",
+                    str(plan_path),
+                    "--live",
+                    "--created-at",
+                    "2026-07-03T00:00:00+00:00",
+                    "--out",
+                    str(receipt_path),
+                ]
+            )
+            validate_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"])
+
+            self.assertEqual(receipt_code, 1)
+            self.assertEqual(validate_code, 0)
+            receipt = _read_json(receipt_path)
+            self.assertEqual(receipt["launch"]["mode"], "live")
+            self.assertFalse(receipt["launch"]["live_benchmarks_started"])
+            self.assertIn("live_benchmark_not_requested: failed", receipt["blocked_reasons"])
+            self.assertIn("live_external_eval_blocked_by_default", receipt["adapter_receipts"][0]["blocking_reasons"])
+
+
+def _scenario_manifest(path: Path) -> Path:
+    payload = {
+        "schema_version": "hfr.heldout_scenario_manifest.v1",
+        "ready": True,
+        "scenario_count": 1,
+        "scenario_ids": ["email_reply_completion"],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _read_json(path: Path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    unittest.main()

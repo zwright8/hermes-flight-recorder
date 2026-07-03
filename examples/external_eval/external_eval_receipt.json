@@ -1,0 +1,231 @@
+{
+  "adapter_count": 4,
+  "adapter_receipts": [
+    {
+      "blocking_reasons": [
+        "adapter_disabled_until_allow_installed",
+        "dependencies_missing",
+        "missing_model_endpoint",
+        "missing_tool_schema_set"
+      ],
+      "cost_incurred_usd": 0,
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "bfcl": false
+        },
+        "imports": {
+          "bfcl_eval": false
+        }
+      },
+      "domain": "tool_calling",
+      "id": "bfcl",
+      "live_benchmark_started": false,
+      "name": "BFCL",
+      "planned_ready": false,
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "provider_api_called": false,
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "tool_schema_set"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "adapter_disabled_until_allow_installed",
+        "dependencies_missing",
+        "missing_inspect_task_set",
+        "missing_model_endpoint",
+        "missing_sandbox_policy"
+      ],
+      "cost_incurred_usd": 0,
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "inspect": false
+        },
+        "imports": {
+          "inspect_ai": false
+        }
+      },
+      "domain": "agentic_tasks",
+      "id": "inspect_ai",
+      "live_benchmark_started": false,
+      "name": "Inspect AI",
+      "planned_ready": false,
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "provider_api_called": false,
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "inspect_task_set",
+        "sandbox_policy"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "adapter_disabled_until_allow_installed",
+        "dependencies_missing",
+        "missing_lm_eval_task_list",
+        "missing_model_endpoint"
+      ],
+      "cost_incurred_usd": 0,
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "lm_eval": false
+        },
+        "imports": {
+          "lm_eval": false
+        }
+      },
+      "domain": "language_model_capability",
+      "id": "lm_eval_harness",
+      "live_benchmark_started": false,
+      "name": "lm-evaluation-harness",
+      "planned_ready": false,
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "provider_api_called": false,
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "lm_eval_task_list"
+      ]
+    },
+    {
+      "blocking_reasons": [
+        "adapter_disabled_until_allow_installed",
+        "dependencies_missing",
+        "missing_model_endpoint",
+        "missing_sandbox_policy",
+        "missing_swe_bench_task_set"
+      ],
+      "cost_incurred_usd": 0,
+      "dependency_status": {
+        "available": false,
+        "commands": {
+          "swebench": false
+        },
+        "imports": {
+          "swebench": false
+        }
+      },
+      "domain": "software_engineering",
+      "id": "swe_bench",
+      "live_benchmark_started": false,
+      "name": "SWE-bench",
+      "planned_ready": false,
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "provider_api_called": false,
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint",
+        "swe_bench_task_set",
+        "sandbox_policy"
+      ]
+    }
+  ],
+  "blocked_reasons": [
+    "plan_ready_for_live_execution: failed"
+  ],
+  "check_count": 4,
+  "checks": [
+    {
+      "actual": {
+        "schema_version": "hfr.external_eval_adapters.v1"
+      },
+      "expected": {
+        "schema_version": "hfr.external_eval_adapters.v1"
+      },
+      "id": "plan_schema_supported",
+      "passed": true,
+      "summary": "plan_schema_supported: passed"
+    },
+    {
+      "actual": {
+        "plan_ready": false,
+        "ready_adapter_count": 0
+      },
+      "expected": {
+        "all_selected_adapters_ready": true,
+        "plan_ready": true
+      },
+      "id": "plan_ready_for_live_execution",
+      "passed": false,
+      "summary": "plan_ready_for_live_execution: failed"
+    },
+    {
+      "actual": {
+        "live": false
+      },
+      "expected": {
+        "live": false
+      },
+      "id": "live_benchmark_not_requested",
+      "passed": true,
+      "summary": "live_benchmark_not_requested: passed"
+    },
+    {
+      "actual": {
+        "live_benchmarks_started": false,
+        "provider_api_called": false
+      },
+      "expected": {
+        "live_benchmarks_started": false,
+        "provider_api_called": false
+      },
+      "id": "external_benchmark_not_started",
+      "passed": true,
+      "summary": "external_benchmark_not_started: passed"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "cloud_cost_incurred_usd": 0,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "live_benchmarks_started": false,
+    "model_downloads_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 1,
+  "launch": {
+    "cost_incurred_usd": 0,
+    "live_benchmarks_started": false,
+    "mode": "dry_run",
+    "model_downloads_started": false,
+    "provider_api_called": false
+  },
+  "notes": [
+    "External eval receipts archive readiness and dry-run intent only; they do not run BFCL, Inspect AI, lm-eval, or SWE-bench.",
+    "Live benchmark execution remains blocked unless an external runner separately opts in and archives its own receipt."
+  ],
+  "passed": false,
+  "readiness": "blocked",
+  "ready_adapter_count": 0,
+  "recommendation": "keep_external_eval_claims_disabled",
+  "schema_version": "hfr.external_eval_receipt.v1",
+  "source_plan": {
+    "adapter_count": 4,
+    "exists": true,
+    "path": "external_eval_plan.json",
+    "ready": false,
+    "schema_version": "hfr.external_eval_adapters.v1",
+    "sha256": "89a891c1742f0a45507e20dfff6402e45aa09347ae7b5ac4bb7081b81ee3f443",
+    "size_bytes": 6043
+  }
+}

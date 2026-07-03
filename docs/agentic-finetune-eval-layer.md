@@ -94,6 +94,10 @@ flightrecorder external-eval-plan \
   --scenario-manifest runs/heldout_scenarios.json \
   --model-endpoint http://127.0.0.1:8000/v1 \
   --out runs/external_eval_plan.json
+
+flightrecorder external-eval-receipt \
+  --plan runs/external_eval_plan.json \
+  --out runs/external_eval_receipt.json
 ```
 
 The supported adapter IDs are `bfcl`, `inspect_ai`, `lm_eval_harness`, and
@@ -103,6 +107,13 @@ required inputs for that adapter are supplied. The plan records dependency
 status, held-out scenario manifest SHA-256 and byte size, required inputs, and
 blocking reasons. Validation resolves the manifest reference from the plan file
 location before trusting those fingerprints.
+
+Receipts are separate from plans. They archive dry-run readiness, or a blocked
+live request, without starting BFCL, Inspect AI, lm-eval, SWE-bench, provider
+APIs, model downloads, cloud spend, or weight updates. A receipt can be
+schema-valid while `passed` is false; that means the fail-closed boundary was
+recorded correctly and governance should keep external benchmark claims
+disabled until an external runner supplies its own live receipt.
 
 Include the plan in the governance summary:
 
@@ -123,6 +134,8 @@ flightrecorder validate --heldout-manifest runs/heldout_scenarios.json --strict
 flightrecorder schemas --check runs/heldout_scenarios.json
 flightrecorder validate --external-eval-plan runs/external_eval_plan.json --strict
 flightrecorder schemas --check runs/external_eval_plan.json
+flightrecorder validate --external-eval-receipt runs/external_eval_receipt.json --strict
+flightrecorder schemas --check runs/external_eval_receipt.json
 ```
 
 Include the eval summary in the evidence bundle that Governance or

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 EXTERNAL_EVAL_PLAN_SCHEMA_VERSION = "hfr.external_eval_adapters.v1"
+EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION = "hfr.external_eval_receipt.v1"
 
 ADAPTERS: dict[str, dict[str, Any]] = {
     "bfcl": {
@@ -118,6 +119,92 @@ def build_external_eval_plan(
 def adapter_choices() -> list[str]:
     """Return supported adapter IDs for argparse choices and docs."""
     return sorted(ADAPTERS)
+
+
+def build_external_eval_receipt(
+    *,
+    plan_path: str | Path,
+    adapters: list[str] | None = None,
+    live: bool = False,
+    created_at: str | None = None,
+    preserve_paths: bool = False,
+) -> dict[str, Any]:
+    """Build a dry-run or blocked live external-eval receipt."""
+    path = Path(plan_path)
+    plan = _read_plan(path)
+    selected = sorted(set(adapters or plan.get("selected_adapters") or ADAPTERS))
+    unknown = sorted(set(selected) - set(ADAPTERS))
+    if unknown:
+        raise ExternalEvalPlanError(f"Unknown external eval adapter(s): {', '.join(unknown)}")
+    plan_adapters = {row.get("id"): row for row in plan.get("adapters", []) if isinstance(row, dict)}
+    adapter_receipts = [_adapter_receipt(adapter_id, plan_adapters.get(adapter_id), live) for adapter_id in selected]
+    checks: list[dict[str, Any]] = []
+    _add_receipt_check(
+        checks,
+        "plan_schema_supported",
+        plan.get("schema_version") == EXTERNAL_EVAL_PLAN_SCHEMA_VERSION,
+        {"schema_version": plan.get("schema_version")},
+        {"schema_version": EXTERNAL_EVAL_PLAN_SCHEMA_VERSION},
+    )
+    _add_receipt_check(
+        checks,
+        "plan_ready_for_live_execution",
+        bool(plan.get("ready")) and all(row["ready"] for row in plan.get("adapters", []) if isinstance(row, dict)),
+        {"plan_ready": plan.get("ready"), "ready_adapter_count": plan.get("ready_adapter_count")},
+        {"plan_ready": True, "all_selected_adapters_ready": True},
+    )
+    _add_receipt_check(checks, "live_benchmark_not_requested", not live, {"live": live}, {"live": False})
+    _add_receipt_check(
+        checks,
+        "external_benchmark_not_started",
+        True,
+        {"live_benchmarks_started": False, "provider_api_called": False},
+        {"live_benchmarks_started": False, "provider_api_called": False},
+    )
+    failed = [check for check in checks if not check["passed"]]
+    return {
+        "schema_version": EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION,
+        "created_at": created_at or datetime.now(timezone.utc).isoformat(),
+        "passed": not failed,
+        "readiness": "dry_run_recorded" if not failed else "blocked",
+        "recommendation": "archive_external_eval_dry_run" if not failed else "keep_external_eval_claims_disabled",
+        "check_count": len(checks),
+        "failed_check_count": len(failed),
+        "checks": checks,
+        "blocked_reasons": [check["summary"] for check in failed],
+        "source_plan": _plan_ref(path, plan, preserve_paths),
+        "adapter_count": len(adapter_receipts),
+        "ready_adapter_count": sum(1 for row in adapter_receipts if row["ready"]),
+        "adapter_receipts": adapter_receipts,
+        "launch": {
+            "mode": "live" if live else "dry_run",
+            "live_benchmarks_started": False,
+            "provider_api_called": False,
+            "model_downloads_started": False,
+            "cost_incurred_usd": 0,
+        },
+        "execution_boundary": {
+            "dry_run_only": True,
+            "live_benchmarks_started": False,
+            "provider_api_called": False,
+            "model_downloads_started": False,
+            "cloud_cost_incurred_usd": 0,
+            "credential_values_recorded": False,
+            "weights_updated_by_flight_recorder": False,
+        },
+        "notes": [
+            "External eval receipts archive readiness and dry-run intent only; they do not run BFCL, Inspect AI, lm-eval, or SWE-bench.",
+            "Live benchmark execution remains blocked unless an external runner separately opts in and archives its own receipt.",
+        ],
+    }
+
+
+def write_external_eval_receipt(receipt: dict[str, Any], out_path: str | Path, *, preserve_paths: bool = False) -> None:
+    """Write an external eval receipt as stable JSON."""
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = _receipt_for_write(receipt, path, preserve_paths)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _selected_adapters(adapters: list[str] | None) -> list[str]:
@@ -265,6 +352,69 @@ def _blocking_reasons(adapter_rows: list[dict[str, Any]]) -> list[str]:
     return reasons
 
 
+def _read_plan(path: Path) -> dict[str, Any]:
+    if not path.exists() or not path.is_file():
+        raise ExternalEvalPlanError(f"External eval plan not found: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ExternalEvalPlanError(f"External eval plan must contain a JSON object: {path}")
+    return payload
+
+
+def _adapter_receipt(adapter_id: str, adapter: dict[str, Any] | None, live: bool) -> dict[str, Any]:
+    ready = bool(adapter and adapter.get("ready") is True and not live)
+    blocking = list(adapter.get("blocking_reasons", [])) if isinstance(adapter, dict) and isinstance(adapter.get("blocking_reasons"), list) else []
+    if adapter is None:
+        blocking.append("adapter_missing_from_plan")
+    if live:
+        blocking.append("live_external_eval_blocked_by_default")
+    return {
+        "id": adapter_id,
+        "name": ADAPTERS[adapter_id]["name"],
+        "domain": ADAPTERS[adapter_id]["domain"],
+        "ready": ready,
+        "planned_ready": bool(adapter and adapter.get("ready") is True),
+        "blocking_reasons": sorted(set(str(reason) for reason in blocking)),
+        "dependency_status": adapter.get("dependency_status") if isinstance(adapter, dict) else {},
+        "required_inputs": list(ADAPTERS[adapter_id]["required_inputs"]),
+        "provided_inputs": adapter.get("provided_inputs") if isinstance(adapter, dict) and isinstance(adapter.get("provided_inputs"), list) else [],
+        "live_benchmark_started": False,
+        "provider_api_called": False,
+        "cost_incurred_usd": 0,
+    }
+
+
+def _plan_ref(path: Path, plan: dict[str, Any], preserve_paths: bool) -> dict[str, Any]:
+    exists = path.exists() and path.is_file()
+    return {
+        "path": _display_path(path, preserve_paths),
+        "exists": exists,
+        "sha256": _sha256(path) if exists else None,
+        "size_bytes": path.stat().st_size if exists else None,
+        "schema_version": plan.get("schema_version"),
+        "ready": plan.get("ready") if isinstance(plan.get("ready"), bool) else None,
+        "adapter_count": plan.get("adapter_count") if isinstance(plan.get("adapter_count"), int) else None,
+    }
+
+
+def _add_receipt_check(
+    checks: list[dict[str, Any]],
+    check_id: str,
+    passed: bool,
+    actual: dict[str, Any],
+    expected: dict[str, Any],
+) -> None:
+    checks.append(
+        {
+            "id": check_id,
+            "passed": bool(passed),
+            "actual": actual,
+            "expected": expected,
+            "summary": f"{check_id}: {'passed' if passed else 'failed'}",
+        }
+    )
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -297,6 +447,16 @@ def _plan_for_write(plan: dict[str, Any], out_path: Path, preserve_paths: bool) 
     manifest = payload.get("inputs", {}).get("scenario_manifest") if isinstance(payload.get("inputs"), dict) else None
     if isinstance(manifest, dict):
         manifest["path"] = _output_relative_path(manifest.get("path"), out_path.parent)
+    return payload
+
+
+def _receipt_for_write(receipt: dict[str, Any], out_path: Path, preserve_paths: bool) -> dict[str, Any]:
+    if preserve_paths:
+        return receipt
+    payload = copy.deepcopy(receipt)
+    source_plan = payload.get("source_plan") if isinstance(payload.get("source_plan"), dict) else None
+    if isinstance(source_plan, dict):
+        source_plan["path"] = _output_relative_path(source_plan.get("path"), out_path.parent)
     return payload
 
 

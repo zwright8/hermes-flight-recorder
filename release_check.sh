@@ -494,6 +494,19 @@ test -f runs/external_eval_plan.json
   --external-eval-plan runs/external_eval_plan.json \
   --strict >/dev/null
 "$PYTHON" -m flightrecorder schemas --check runs/external_eval_plan.json >/dev/null
+external_eval_receipt_status=0
+"$PYTHON" -m flightrecorder external-eval-receipt \
+  --plan runs/external_eval_plan.json \
+  --out runs/external_eval_receipt.json >/dev/null || external_eval_receipt_status=$?
+if [[ "$external_eval_receipt_status" -gt 1 ]]; then
+  echo "external-eval-receipt failed unexpectedly with exit code $external_eval_receipt_status" >&2
+  exit "$external_eval_receipt_status"
+fi
+test -f runs/external_eval_receipt.json
+"$PYTHON" -m flightrecorder validate \
+  --external-eval-receipt runs/external_eval_receipt.json \
+  --strict >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/external_eval_receipt.json >/dev/null
 eval_summary_status=0
 "$PYTHON" -m flightrecorder eval-summary \
   --suite-summary baseline=runs/suite_summary.json \
