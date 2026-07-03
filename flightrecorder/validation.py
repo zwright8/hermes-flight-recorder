@@ -7527,6 +7527,12 @@ def _validate_external_eval_scenario_manifest_file(
             target.errors.append(f"{label}.path must reference a {HELDOUT_MANIFEST_SCHEMA_VERSION!r} manifest.")
         if manifest.get("schema_version") != current_schema:
             target.errors.append(f"{label}.schema_version must match the current file.")
+        current_ready = current_manifest.get("ready")
+        if isinstance(current_ready, bool) and manifest.get("ready") != current_ready:
+            target.errors.append(f"{label}.ready must match the current file.")
+        current_scenario_count = current_manifest.get("scenario_count")
+        if _is_non_negative_int(current_scenario_count) and manifest.get("scenario_count") != current_scenario_count:
+            target.errors.append(f"{label}.scenario_count must match the current file.")
     if not _is_non_negative_int(manifest.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
     elif file_path.stat().st_size != manifest.get("size_bytes"):

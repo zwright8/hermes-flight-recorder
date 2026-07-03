@@ -200,6 +200,44 @@ class ExternalEvalPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("external_eval_plan.inputs.scenario_manifest.path must reference", errors)
 
+    def test_validate_rejects_forged_scenario_manifest_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / "heldout.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.heldout_scenario_manifest.v1",
+                        "ready": False,
+                        "scenario_count": 1,
+                        "scenario_ids": ["email_reply_completion"],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
+            plan = _read_json(out)
+            scenario_manifest = plan["inputs"]["scenario_manifest"]
+            scenario_manifest["ready"] = True
+            scenario_manifest["scenario_count"] = 2
+            scenario_manifest["sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+            scenario_manifest["size_bytes"] = manifest.stat().st_size
+            for adapter in plan["adapters"]:
+                adapter["execution_contract"]["scenario_manifest_sha256"] = scenario_manifest["sha256"]
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_plan.inputs.scenario_manifest.ready must match the current file.", errors)
+            self.assertIn("external_eval_plan.inputs.scenario_manifest.scenario_count must match the current file.", errors)
+
 
 def _scenario_manifest(path: Path) -> Path:
     payload = {"schema_version": "hfr.heldout_scenario_manifest.v1", "scenario_ids": ["email_reply_completion"]}

@@ -658,6 +658,8 @@ card, and dataset card decisions.
   SHA-256 fingerprints are not lowercase hex digests.
 - External-eval plans reject scenario-manifest references whose verified file
   is not a held-out scenario manifest.
+- External-eval plans reject scenario-manifest readiness and scenario-count
+  metadata that no longer matches the verified manifest file.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate
