@@ -702,8 +702,8 @@ card, and dataset card decisions.
   calibration evidence before labels can be trusted.
 - Agentic training flow receipts reopen plan, runtime-preflight, and trainer
   consumer-plan refs from the flow artifact location and reject missing,
-  non-regular, stale SHA-256, or stale byte-size source evidence before
-  delegated trainer execution can be trusted.
+  non-regular, symlinked, stale SHA-256, or stale byte-size source evidence
+  before delegated trainer execution can be trusted.
 - Trainer consumer plans reopen visible trainer archive-check source refs and
   reject missing, non-regular, stale SHA-256, or stale byte-size handoff
   evidence before an external trainer wrapper can trust command inputs.

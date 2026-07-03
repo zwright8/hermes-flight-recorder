@@ -2595,13 +2595,17 @@ def _validate_agentic_training_flow_source_ref(
         target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
     if isinstance(path_value, str) and path_value and not path_value.startswith("<"):
         source_dir = source_path.resolve().parent
-        current_path = (source_dir / path_value).resolve()
+        candidate_path = source_dir / path_value
+        current_path = candidate_path.resolve()
         allowed_roots = [source_dir]
         repo_root = _repo_root_for_artifact(source_path)
         if repo_root is not None:
             allowed_roots.append(repo_root)
         if not any(current_path.is_relative_to(root) for root in allowed_roots):
             target.errors.append(f"{label}.path must resolve under the flow artifact directory or repository root.")
+            return
+        if _path_has_symlink_component(candidate_path, include_leaf=True):
+            target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
             return
         if not current_path.exists():
             target.errors.append(f"{label}.path must resolve to an existing file.")

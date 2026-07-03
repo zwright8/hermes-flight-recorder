@@ -315,6 +315,69 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             self.assertIn("source_artifacts.trainer_consumer_plan.size_bytes does not match path", errors)
             self.assertIn("source_artifacts.trainer_consumer_plan.sha256 does not match path", errors)
 
+    def test_validation_rejects_symlink_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            symlink_path = root / "trainer_consumer_plan_link.json"
+            try:
+                symlink_path.symlink_to(consumer)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            receipt["source_artifacts"]["trainer_consumer_plan"]["path"] = symlink_path.name
+            write_agentic_training_flow(out, receipt)
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_flow.source_artifacts.trainer_consumer_plan.path must resolve to a regular non-symlink file.",
+                errors,
+            )
+
+    def test_validation_rejects_symlink_parent_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / consumer.name).write_text(consumer.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            receipt["source_artifacts"]["trainer_consumer_plan"]["path"] = f"{linked_parent.name}/{consumer.name}"
+            write_agentic_training_flow(out, receipt)
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_flow.source_artifacts.trainer_consumer_plan.path must resolve to a regular non-symlink file.",
+                errors,
+            )
+
     def test_validation_rejects_source_artifact_escape(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
