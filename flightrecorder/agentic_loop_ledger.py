@@ -15,7 +15,14 @@ AGENTIC_LOOP_LEDGER_SCHEMA_VERSION = "hfr.agentic_loop_ledger.v1"
 ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "rollouts": ("agentic_rollout_plan", "agentic_rollout_receipt", "harness_manifest", "harness_result"),
     "evidence": ("evidence_bundle", "evidence_coverage", "trace_observability"),
-    "review": ("rubric_spec", "model_grader_dry_run", "model_grader_gate", "review_calibration", "reviewed_gate"),
+    "review": (
+        "rubric_spec",
+        "model_grader_dry_run",
+        "model_grader_override_receipt",
+        "model_grader_gate",
+        "review_calibration",
+        "reviewed_gate",
+    ),
     "datasets": ("rejection_sampling_gate", "dataset_curation_receipt", "training_export", "dataset_registry", "dataset_splits"),
     "training": (
         "agentic_training_plan",
@@ -26,7 +33,7 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
         "trainer_launch_check",
     ),
     "serving": ("serving_lifecycle", "serving_endpoint_check", "model_serving_probe_receipt"),
-    "eval": ("heldout_manifest", "external_eval_plan", "eval_summary"),
+    "eval": ("heldout_manifest", "external_eval_plan", "external_eval_receipt", "eval_summary"),
     "improvement": ("repair_queue", "improvement_plan", "improvement_ledger", "action_ledger"),
     "governance": ("promotion_decision", "promotion_ledger", "promotion_alias_apply", "promotion_rollback_receipt"),
     "next_iteration": ("action_ledger", "next_iteration_schedule"),

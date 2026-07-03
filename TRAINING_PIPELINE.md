@@ -770,6 +770,10 @@ before any live launch or promotion claim.
 The companion `hfr.agentic_loop_ledger.v1` artifact records chronological
 iteration inputs, rollout/review/training/serving/eval/governance group counts,
 cost ceilings, promotion/rollback posture, and next-action scheduling state.
+Review group counts include `model_grader_override_receipt` when human override
+resolution is needed, and eval group counts include both `external_eval_plan`
+and `external_eval_receipt` so dry-run benchmark receipts are not lost between
+planning and promotion review.
 The loop ledger is ledger-only: it does not launch trainers, graders, cloud
 jobs, live benchmarks, downloads, promotion writes, or weight updates. The
 `hfr.next_iteration_schedule.v1` receipt proposes a next loop iteration from

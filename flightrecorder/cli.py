@@ -1494,6 +1494,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "promotion_ledger": args.promotion_ledger,
         "rubric_spec": args.rubric_spec,
         "model_grader_dry_run": args.model_grader_dry_run,
+        "model_grader_override_receipt": args.model_grader_override_receipt,
         "model_grader_gate": args.model_grader_gate,
         "next_iteration_schedule": args.next_iteration_schedule,
         "review_calibration": args.review_calibration,
@@ -3436,6 +3437,12 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--next-iteration-schedule", action="append", default=[], help="next_iteration_schedule artifact; may be repeated")
     agentic_loop_plan.add_argument("--rubric-spec", action="append", default=[], help="rubric_spec artifact; may be repeated")
     agentic_loop_plan.add_argument("--model-grader-dry-run", action="append", default=[], help="model_grader_dry_run artifact; may be repeated")
+    agentic_loop_plan.add_argument(
+        "--model-grader-override-receipt",
+        action="append",
+        default=[],
+        help="model_grader_override_receipt artifact; may be repeated",
+    )
     agentic_loop_plan.add_argument("--model-grader-gate", action="append", default=[], help="model_grader_gate artifact; may be repeated")
     agentic_loop_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
     agentic_loop_plan.set_defaults(func=cmd_agentic_loop_plan)

@@ -42,6 +42,9 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertGreater(groups["review"], 0)
             self.assertGreater(groups["training"], 0)
             self.assertGreater(groups["eval"], 0)
+            role_names = {row["role"] for row in ready_record["artifact_role_counts"]}
+            self.assertIn("model_grader_override_receipt", role_names)
+            self.assertIn("external_eval_receipt", ready_record["evals"]["roles_present"])
             self.assertTrue(ready_record["governance"]["promotion_decision_present"])
             self.assertFalse(ready_record["governance"]["weights_updated_by_flight_recorder"])
             self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
@@ -93,6 +96,9 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "evidence_bundle": [self.write_json(root / "evidence_bundle.json", "hfr.evidence_bundle.v1")],
             "rubric_spec": [self.write_json(root / "rubric_spec.json", "hfr.rubric_spec.v1")],
             "model_grader_dry_run": [self.write_json(root / "model_grader_dry_run.json", "hfr.model_grader_dry_run.v1")],
+            "model_grader_override_receipt": [
+                self.write_json(root / "model_grader_override_receipt.json", "hfr.model_grader_override_receipt.v1")
+            ],
             "model_grader_gate": [self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")],
             "review_calibration": [self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")],
             "reviewed_gate": [self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")],
