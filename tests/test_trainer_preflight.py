@@ -178,6 +178,33 @@ def write_improvement_ledger_gate(path: Path) -> None:
 
 
 class TrainerPreflightTests(unittest.TestCase):
+    def _assert_trainer_wrapper_validation_rejects(
+        self,
+        root: Path,
+        payload: dict,
+        name: str,
+        expected_scope: str,
+        expected_field: str,
+    ) -> None:
+        forged_receipt = root / f"{name}.json"
+        forged_summary = root / f"{name}_summary.json"
+        forged_receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        code = run_cli(
+            [
+                "validate",
+                "--trainer-wrapper-dry-run",
+                str(forged_receipt),
+                "--strict",
+                "--out",
+                str(forged_summary),
+            ]
+        )
+        self.assertEqual(code, 1)
+        validation = json.loads(forged_summary.read_text(encoding="utf-8"))
+        errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+        self.assertIn(expected_scope, errors)
+        self.assertIn(expected_field, errors)
+
     def test_trainer_preflight_archives_agentic_training_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1052,6 +1079,13 @@ class TrainerPreflightTests(unittest.TestCase):
                 forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
                 self.assertFalse(forged_schema["passed"])
                 self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+                self._assert_trainer_wrapper_validation_rejects(
+                    Path(tmp),
+                    forged,
+                    f"trainer_wrapper_dry_run_missing_external_{field_name}",
+                    "trainer_wrapper_dry_run.inputs.external_code_files",
+                    field_name,
+                )
             failed_external = json.loads(json.dumps(receipt))
             failed_external["inputs"]["external_code_files"][0]["passed"] = False
             failed_external["inputs"]["external_code_files"][0].pop("size_bytes")
@@ -1066,6 +1100,14 @@ class TrainerPreflightTests(unittest.TestCase):
                 forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
                 self.assertFalse(forged_schema["passed"])
                 self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+                if field_name in {"sha256", "size_bytes"}:
+                    self._assert_trainer_wrapper_validation_rejects(
+                        Path(tmp),
+                        forged,
+                        f"trainer_wrapper_dry_run_missing_input_{field_name}",
+                        "trainer_wrapper_dry_run.inputs.trainer_inputs",
+                        field_name,
+                    )
             forged = json.loads(json.dumps(receipt))
             next(item for item in forged["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "file")[
                 "expected_sha256"
@@ -1084,6 +1126,14 @@ class TrainerPreflightTests(unittest.TestCase):
                 forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
                 self.assertFalse(forged_schema["passed"])
                 self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+                if field_name == "file_count":
+                    self._assert_trainer_wrapper_validation_rejects(
+                        Path(tmp),
+                        forged,
+                        "trainer_wrapper_dry_run_missing_input_file_count",
+                        "trainer_wrapper_dry_run.inputs.trainer_inputs",
+                        "file_count",
+                    )
             forged = json.loads(json.dumps(receipt))
             next(
                 item for item in forged["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "directory"

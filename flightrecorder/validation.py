@@ -13104,6 +13104,12 @@ def _validate_trainer_wrapper_input(item: dict[str, Any], target: ValidationTarg
     if "file_count" in item and not _is_non_negative_int(item.get("file_count")):
         target.errors.append(f"{label}.file_count must be a non-negative integer when present.")
     if item.get("passed") is True:
+        if not _is_non_negative_int(item.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
+        if not _is_sha256(item.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
+        if item.get("kind") == "directory" and not _is_non_negative_int(item.get("file_count")):
+            target.errors.append(f"{label}.file_count must be a non-negative integer when passed.")
         _validate_trainer_input_expected_payload(item, target, label)
 
 
@@ -13117,6 +13123,11 @@ def _validate_trainer_wrapper_external_code(item: dict[str, Any], target: Valida
         target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when present.")
     if "size_bytes" in item and not _is_non_negative_int(item.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer when present.")
+    if item.get("passed") is True:
+        if not _is_non_negative_int(item.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer when passed.")
+        if not _is_sha256(item.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when passed.")
     path = _visible_local_path(item.get("resolved_path"))
     if path is None or not path.exists() or item.get("passed") is not True:
         return

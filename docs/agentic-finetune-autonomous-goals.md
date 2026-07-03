@@ -651,8 +651,9 @@ card, and dataset card decisions.
   that omit SHA-256 or byte-size evidence, or carry malformed expected
   SHA-256 values, while preserving blank failed-input diagnostics.
 - Trainer wrapper dry-run receipts reject passed trainer-input and external-code
-  records that omit SHA-256 or byte-size evidence, or carry malformed expected
-  SHA-256 values, while preserving blank failed-input diagnostics.
+  records that omit SHA-256, byte-size, or directory file-count evidence, or
+  carry malformed expected SHA-256 values, while preserving blank failed-input
+  diagnostics.
 - Harness run manifests reject fake-secret canary declarations whose stored
   SHA-256 fingerprints are missing or malformed.
 - Harness run results reject fake-secret canary checked-artifact records whose
