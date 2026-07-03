@@ -4,29 +4,51 @@
   "additionalProperties": true,
   "allOf": [
     {
-      "if": {
-        "properties": {
-          "training_result": {
-            "properties": {
-              "status": {
-                "const": "completed"
-              }
-            },
-            "required": [
-              "status"
-            ],
-            "type": "object"
-          }
+      "oneOf": [
+        {
+          "properties": {
+            "training_result": {
+              "properties": {
+                "status": {
+                  "const": "completed"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "training_result",
+            "registry_update"
+          ],
+          "type": "object"
         },
-        "required": [
-          "training_result"
-        ]
-      },
-      "then": {
-        "required": [
-          "registry_update"
-        ]
-      }
+        {
+          "properties": {
+            "training_result": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "failed",
+                    "blocked",
+                    "aborted"
+                  ]
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "training_result"
+          ],
+          "type": "object"
+        }
+      ]
     }
   ],
   "description": "Side-effect-free result receipt for externally executed agentic training runs.",
@@ -504,32 +526,39 @@
       "additionalProperties": true,
       "allOf": [
         {
-          "if": {
-            "required": [
-              "collection"
-            ],
-            "properties": {
-              "collection": {
-                "not": {
+          "oneOf": [
+            {
+              "properties": {
+                "collection": {
                   "const": "training_runs"
                 }
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "sha256",
-              "size_bytes"
-            ],
-            "properties": {
-              "collection": {
-                "const": "adapters"
               },
-              "sha256": {
-                "type": "string"
-              }
+              "required": [
+                "collection"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "collection": {
+                  "const": "adapters"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "collection",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
             }
-          }
+          ]
         }
       ],
       "properties": {

@@ -379,6 +379,9 @@ datasets, starting with dry-run and smoke training before expensive jobs.
   paths, tracking config, and compute assumptions.
 - Smoke training can be run with a row limit without changing the full plan.
 - Training results register adapters/checkpoints and failure diagnostics.
+- Completed result registry links distinguish the training-run receipt from
+  adapter artifact links; adapter links carry SHA-256 and byte-size evidence at
+  the schema boundary.
 
 ### Verification
 

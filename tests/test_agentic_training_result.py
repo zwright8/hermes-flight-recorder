@@ -729,6 +729,7 @@ class AgenticTrainingResultTests(unittest.TestCase):
             )
             adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
             adapter_link.pop("size_bytes")
+            schema = check_schema_contract(result)
             write_agentic_training_result(out, result)
 
             code = run_cli(
@@ -742,6 +743,8 @@ class AgenticTrainingResultTests(unittest.TestCase):
                 ]
             )
 
+            self.assertFalse(schema["passed"])
+            self.assertIn("$.registry_update.links[1]: expected exactly one matching schema from oneOf, got 0", schema["errors"])
             self.assertEqual(code, 1)
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
@@ -855,6 +858,7 @@ class AgenticTrainingResultTests(unittest.TestCase):
                 created_at="2026-07-02T00:00:00+00:00",
             )
             result.pop("registry_update")
+            schema = check_schema_contract(result)
             write_agentic_training_result(out, result)
 
             code = run_cli(
@@ -868,6 +872,8 @@ class AgenticTrainingResultTests(unittest.TestCase):
                 ]
             )
 
+            self.assertFalse(schema["passed"])
+            self.assertIn("$: expected exactly one matching schema from oneOf, got 0", schema["errors"])
             self.assertEqual(code, 1)
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
