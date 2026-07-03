@@ -1227,6 +1227,8 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(result["gate_count"], 1)
             self.assertEqual(result["passed_gate_count"], 1)
             gate_validation = result["gates"][0]["validation"]
+            self.assertEqual(len(result["gates"][0]["sha256"]), 64)
+            self.assertIn("size_bytes", result["gates"][0])
             self.assertTrue(gate_validation["available"])
             self.assertTrue(gate_validation["passed"])
             self.assertTrue(gate_validation["summary_passed"])
@@ -1250,6 +1252,18 @@ class TrainerPreflightTests(unittest.TestCase):
             non_regular["validation_summaries"][0].pop("size_bytes")
             non_regular_schema = check_schema_contract(non_regular, name_or_id="trainer_preflight")
             self.assertTrue(non_regular_schema["passed"], non_regular_schema["errors"])
+            for field_name in ("sha256", "size_bytes"):
+                forged = json.loads(json.dumps(result))
+                forged["gates"][0].pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_preflight")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            missing_gate = json.loads(json.dumps(result))
+            missing_gate["gates"][0]["exists"] = False
+            missing_gate["gates"][0].pop("sha256")
+            missing_gate["gates"][0].pop("size_bytes")
+            missing_gate_schema = check_schema_contract(missing_gate, name_or_id="trainer_preflight")
+            self.assertTrue(missing_gate_schema["passed"], missing_gate_schema["errors"])
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
     def test_trainer_preflight_rejects_failed_external_validation_summary(self):

@@ -293,6 +293,36 @@
     },
     "preflightGate": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "exists": {
+                  "const": true
+                }
+              },
+              "required": [
+                "exists",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exists": {
+                  "const": false
+                }
+              },
+              "required": [
+                "exists"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "exists": {
           "type": "boolean"
