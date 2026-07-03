@@ -6565,6 +6565,8 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget) ->
 
     for index, arm in enumerate(arms):
         _validate_eval_summary_arm(arm, index, target, serving_required=serving_required)
+    if serving_preflight is not None:
+        _validate_eval_summary_serving_preflight_consistency(serving_preflight, arms, target)
     for index, comparison in enumerate(comparisons):
         _validate_eval_summary_comparison(comparison, index, target, heldout)
     for index, gate in enumerate(gates):
@@ -6668,6 +6670,56 @@ def _validate_eval_summary_serving_preflight_summary(summary: dict[str, Any], ta
         target.errors.append("eval_summary.serving_preflight.blocking_reasons must include duplicate_serving_preflight_labels when labels are duplicated.")
 
 
+def _validate_eval_summary_serving_preflight_consistency(
+    summary: dict[str, Any],
+    arms: list[Any],
+    target: ValidationTarget,
+) -> None:
+    attached_count = 0
+    for index, arm in enumerate(arms):
+        if not isinstance(arm, dict):
+            continue
+        serving = arm.get("serving_preflight")
+        if not isinstance(serving, dict):
+            continue
+        if serving.get("provided") is True:
+            attached_count += 1
+        if (
+            isinstance(summary.get("required"), bool)
+            and isinstance(serving.get("required"), bool)
+            and serving.get("required") != summary.get("required")
+        ):
+            target.errors.append(
+                f"eval_summary.arms[{index}].serving_preflight.required must match eval_summary.serving_preflight.required."
+            )
+
+    if _is_non_negative_int(summary.get("attached_count")) and summary.get("attached_count") != attached_count:
+        target.errors.append(
+            f"eval_summary.serving_preflight.attached_count expected {attached_count}, got {summary.get('attached_count')!r}."
+        )
+
+    unmatched_labels = summary.get("unmatched_labels") if _is_string_list(summary.get("unmatched_labels")) else []
+    duplicate_labels = summary.get("duplicate_labels") if _is_string_list(summary.get("duplicate_labels")) else []
+    expected_min_input_count = attached_count + len(unmatched_labels) + len(duplicate_labels)
+    if _is_non_negative_int(summary.get("input_count")) and summary.get("input_count") < expected_min_input_count:
+        target.errors.append(
+            "eval_summary.serving_preflight.input_count "
+            f"expected at least {expected_min_input_count}, got {summary.get('input_count')!r}."
+        )
+
+    expected_blocking_reasons = []
+    if unmatched_labels:
+        expected_blocking_reasons.append("serving_preflight_unmatched_arm")
+    if duplicate_labels:
+        expected_blocking_reasons.append("duplicate_serving_preflight_labels")
+    blocking_reasons = summary.get("blocking_reasons") if _is_string_list(summary.get("blocking_reasons")) else []
+    if set(blocking_reasons) != set(expected_blocking_reasons):
+        target.errors.append(
+            "eval_summary.serving_preflight.blocking_reasons "
+            f"expected {expected_blocking_reasons!r}, got {blocking_reasons!r}."
+        )
+
+
 def _validate_eval_summary_arm_serving_preflight(
     serving: Any,
     index: int,
@@ -6699,8 +6751,18 @@ def _validate_eval_summary_arm_serving_preflight(
         for field_name in ("profile_id", "model", "served_model_id", "base_url"):
             if not isinstance(serving.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
+        if serving.get("readiness") == "missing":
+            target.errors.append(f"{label}.readiness cannot be missing when provided is true.")
         if serving.get("passed") is True and serving.get("readiness") != "ready":
             target.errors.append(f"{label}.passed requires readiness ready.")
+        failed_checks = serving.get("failed_checks") if _is_string_list(serving.get("failed_checks")) else []
+        blocking_reasons = serving.get("blocking_reasons") if _is_string_list(serving.get("blocking_reasons")) else []
+        if (
+            serving.get("passed") is not True or serving.get("readiness") != "ready" or failed_checks
+        ) and "serving_preflight_blocked" not in blocking_reasons:
+            target.errors.append(
+                f"{label}.blocking_reasons must include serving_preflight_blocked when the preflight is blocked."
+            )
         if serving.get("passed") is False and not serving.get("blocking_reasons"):
             target.errors.append(f"{label}.blocking_reasons must explain failed serving preflight.")
     if serving_required and serving.get("provided") is not True and "serving_preflight_missing" not in serving.get("blocking_reasons", []):

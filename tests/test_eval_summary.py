@@ -332,6 +332,66 @@ class EvalSummaryTests(unittest.TestCase):
             self.assertEqual(serving["failed_checks"], ["chat_completion"])
             self.assertIn("serving_preflight_blocked", serving["blocking_reasons"])
 
+    def test_validate_rejects_eval_summary_with_stale_serving_preflight_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            serving_check = _serving_check(root / "serving_check.json", passed=True)
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--serving-check",
+                    f"candidate={serving_check}",
+                    "--require-serving-preflight",
+                    "--out",
+                    str(out),
+                ]
+            )
+            summary = _read_json(out)
+            summary["serving_preflight"]["attached_count"] = 0
+            summary["serving_preflight"]["input_count"] = 0
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("eval_summary.serving_preflight.attached_count expected 1", errors)
+            self.assertIn("eval_summary.serving_preflight.input_count expected at least 1", errors)
+
+    def test_validate_rejects_eval_summary_with_unexplained_blocked_serving_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            serving_check = _serving_check(root / "serving_check.json", passed=False)
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"candidate={suite}",
+                    "--serving-check",
+                    f"candidate={serving_check}",
+                    "--require-serving-preflight",
+                    "--out",
+                    str(out),
+                ]
+            )
+            summary = _read_json(out)
+            summary["arms"][0]["serving_preflight"]["blocking_reasons"] = []
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("serving_preflight.blocking_reasons must include serving_preflight_blocked", errors)
+
     def test_validate_rejects_eval_summary_with_unsuppressed_disallowed_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

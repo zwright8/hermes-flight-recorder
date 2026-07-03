@@ -131,6 +131,10 @@ flightrecorder eval-summary \
 The `LABEL` before `=` must match a suite-summary label. Missing, unmatched, or
 blocked serving checks make the eval summary a valid blocked artifact instead of
 letting eval or governance loops assume the endpoint was ready.
+Semantic validation recomputes the attached serving-preflight count from the
+arm entries and requires blocked arm preflights to carry
+`serving_preflight_blocked`, so compact summaries cannot hide stale or failed
+serving readiness.
 
 ## Verification
 
