@@ -1242,7 +1242,7 @@ def validate_trainer_consumer_plan(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("trainer_consumer_plan", str(plan_path))
     plan = _read_object(plan_path, target, "trainer_consumer_plan.json")
     if plan is not None:
-        _validate_trainer_consumer_plan(plan, target)
+        _validate_trainer_consumer_plan(plan, target, plan_path)
     return target
 
 
@@ -15655,7 +15655,7 @@ def _visible_local_path(value: Any) -> Path | None:
     return Path(value)
 
 
-def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", TRAINER_CONSUMER_PLAN_SCHEMA_VERSION, target)
     for field_name in ("plan_path", "archive_check_path", "readiness", "recommendation"):
         if not isinstance(plan.get(field_name), str) or not plan.get(field_name):
@@ -15699,7 +15699,7 @@ def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarg
         )
 
     _validate_trainer_consumer_plan_validation(validation, target)
-    _validate_trainer_consumer_plan_source(plan.get("source_archive_check"), target)
+    _validate_trainer_consumer_plan_source(plan.get("source_archive_check"), target, source_path)
     execution_counts = _validate_trainer_consumer_plan_execution(plan.get("execution"), target)
     _validate_trainer_consumer_plan_handoff(plan.get("handoff_contract"), execution_counts, target)
     _validate_trainer_consumer_plan_metrics(metrics, validation, execution_counts, len(checks), failed_checks, target)
@@ -15724,7 +15724,7 @@ def _validate_trainer_consumer_plan_validation(value: dict[str, Any], target: Va
     )
 
 
-def _validate_trainer_consumer_plan_source(value: Any, target: ValidationTarget) -> None:
+def _validate_trainer_consumer_plan_source(value: Any, target: ValidationTarget, source_path: Path) -> None:
     if not isinstance(value, dict):
         target.errors.append("trainer_consumer_plan.source_archive_check must be an object.")
         return
@@ -15739,16 +15739,39 @@ def _validate_trainer_consumer_plan_source(value: Any, target: ValidationTarget)
         target.errors.append("trainer_consumer_plan.source_archive_check.size_bytes must be a non-negative integer when present.")
     if "sha256" in value and not _is_sha256(value.get("sha256")):
         target.errors.append("trainer_consumer_plan.source_archive_check.sha256 must be a SHA-256 hex string when present.")
-    path = _visible_local_path(value.get("path"))
-    if path is None or not path.exists():
+    path = _trainer_consumer_plan_source_path(value.get("path"), source_path)
+    if path is None:
+        return
+    if not path.exists():
+        target.errors.append("trainer_consumer_plan.source_archive_check.path must resolve to an existing file.")
         return
     if path.is_symlink() or not path.is_file():
         target.errors.append("trainer_consumer_plan.source_archive_check.path must resolve to a regular file.")
         return
-    if value.get("size_bytes") != path.stat().st_size:
+    if not _is_non_negative_int(value.get("size_bytes")):
+        target.errors.append("trainer_consumer_plan.source_archive_check.size_bytes must be present for visible path-backed refs.")
+    elif value.get("size_bytes") != path.stat().st_size:
         target.errors.append("trainer_consumer_plan.source_archive_check.size_bytes does not match path.")
-    if value.get("sha256") != _sha256(path):
+    if not _is_sha256(value.get("sha256")):
+        target.errors.append("trainer_consumer_plan.source_archive_check.sha256 must be present for visible path-backed refs.")
+    elif value.get("sha256") != _sha256(path):
         target.errors.append("trainer_consumer_plan.source_archive_check.sha256 does not match path.")
+
+
+def _trainer_consumer_plan_source_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<") or _is_windows_absolute(value):
+        return None
+    raw = Path(value)
+    if raw.is_absolute():
+        return raw
+    source_dir = source_path.resolve().parent
+    source_relative = (source_dir / raw).resolve()
+    if source_relative.exists():
+        return source_relative
+    repo_root = _repo_root_for_artifact(source_path)
+    if repo_root is not None:
+        return (repo_root / raw).resolve()
+    return source_relative
 
 
 def _validate_trainer_consumer_plan_execution(value: Any, target: ValidationTarget) -> dict[str, int]:

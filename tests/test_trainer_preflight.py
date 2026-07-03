@@ -1020,6 +1020,70 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(any("expected_sha256" in error for error in malformed_failed_input_schema["errors"]))
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
 
+            missing_source_plan = Path(tmp) / "trainer_consumer_plan_missing_source.json"
+            missing_source_summary = Path(tmp) / "trainer_consumer_plan_missing_source_summary.json"
+            forged = json.loads(json.dumps(plan))
+            forged["source_archive_check"]["path"] = str(Path(tmp) / "missing_archive_check.json")
+            missing_source_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(missing_source_plan),
+                    "--strict",
+                    "--out",
+                    str(missing_source_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(missing_source_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan.source_archive_check.path must resolve to an existing file", errors)
+
+            missing_fingerprint_plan = Path(tmp) / "trainer_consumer_plan_missing_source_fingerprint.json"
+            missing_fingerprint_summary = Path(tmp) / "trainer_consumer_plan_missing_source_fingerprint_summary.json"
+            forged = json.loads(json.dumps(plan))
+            forged["source_archive_check"].pop("size_bytes")
+            forged["source_archive_check"].pop("sha256")
+            missing_fingerprint_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(missing_fingerprint_plan),
+                    "--strict",
+                    "--out",
+                    str(missing_fingerprint_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(missing_fingerprint_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan.source_archive_check.size_bytes must be present", errors)
+            self.assertIn("trainer_consumer_plan.source_archive_check.sha256 must be present", errors)
+
+            stale_source_plan = Path(tmp) / "trainer_consumer_plan_stale_source.json"
+            stale_source_summary = Path(tmp) / "trainer_consumer_plan_stale_source_summary.json"
+            forged = json.loads(json.dumps(plan))
+            forged["source_archive_check"]["size_bytes"] += 1
+            forged["source_archive_check"]["sha256"] = "0" * 64
+            stale_source_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(stale_source_plan),
+                    "--strict",
+                    "--out",
+                    str(stale_source_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(stale_source_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_consumer_plan.source_archive_check.size_bytes does not match path", errors)
+            self.assertIn("trainer_consumer_plan.source_archive_check.sha256 does not match path", errors)
+
             forged_plan = Path(tmp) / "trainer_consumer_plan_forged_validation.json"
             forged_summary = Path(tmp) / "trainer_consumer_plan_forged_validation_summary.json"
             forged = json.loads(json.dumps(plan))
