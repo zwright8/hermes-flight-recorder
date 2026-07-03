@@ -2967,7 +2967,7 @@ def _validate_snapshot_file_record(
             target.errors.append(f"{label}.text must be a string when present.")
         if "text_truncated" in record and not isinstance(record.get("text_truncated"), bool):
             target.errors.append(f"{label}.text_truncated must be a boolean when present.")
-        _validate_snapshot_record_hash(record, target, label, source_path)
+        _validate_snapshot_record_fingerprint(record, target, label, source_path)
 
 
 def _validate_snapshot_directory_record(record: Any, target: ValidationTarget, label: str) -> None:
@@ -3016,7 +3016,7 @@ def _validate_snapshot_directory_entry(entry: Any, target: ValidationTarget, lab
             target.errors.append(f"{label}.sha256 must be a 64-character hex digest for files.")
 
 
-def _validate_snapshot_record_hash(
+def _validate_snapshot_record_fingerprint(
     record: dict[str, Any],
     target: ValidationTarget,
     label: str,
@@ -3033,6 +3033,9 @@ def _validate_snapshot_record_hash(
         path = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
     if not path.exists() or not path.is_file():
         return
+    expected_size = record.get("size_bytes")
+    if _is_non_negative_int(expected_size) and path.stat().st_size != expected_size:
+        target.errors.append(f"{label}.size_bytes does not match current file size.")
     expected = record.get("sha256")
     if _is_sha256(expected):
         actual = _sha256(path)

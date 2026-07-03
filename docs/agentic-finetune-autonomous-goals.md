@@ -614,7 +614,8 @@ card, and dataset card decisions.
   directory.
 - State-snapshot schemas reject existing file records and directory-listing
   file entries that omit SHA-256 or byte-size evidence while preserving
-  missing-file and directory diagnostics.
+  missing-file and directory diagnostics; validation rejects stale captured
+  file sizes when paths resolve.
 - Lineage replay fingerprints include input sizes; replay and replay-bundle
   validation reject size drift between recorded inputs and replay metadata.
 - Training-export and suite-comparison source fingerprints include input sizes;
