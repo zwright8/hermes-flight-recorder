@@ -70,6 +70,12 @@ class HarnessToolPolicyTests(unittest.TestCase):
             self.assertEqual({item["artifact"] for item in leaked}, {"scorecard", "trace"})
             for item in leaked:
                 self.assertEqual(item["canary_names"], ["HFR_FAKE_API_KEY"])
+                self.assertEqual(len(item["sha256"]), 64)
+                self.assertIsInstance(item["size_bytes"], int)
+            for item in result["fake_secret_canary_check"]["checked_artifacts"]:
+                if item["exists"]:
+                    self.assertEqual(len(item["sha256"]), 64)
+                    self.assertIsInstance(item["size_bytes"], int)
             self.assertNotIn(fake_api_key, json.dumps(result["fake_secret_canary_check"], sort_keys=True))
 
             self.assertTrue(check_schema_file(run_dir / "harness_manifest.json", "harness_run_manifest")["passed"])
@@ -163,6 +169,87 @@ class HarnessToolPolicyTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("harness_manifest.sandbox.fake_secret_canaries[0].sha256", errors)
 
+    def test_validate_rejects_harness_canary_artifacts_without_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            record = next(item for item in payload["fake_secret_canary_check"]["checked_artifacts"] if item["exists"])
+            record.pop("sha256")
+            record.pop("size_bytes")
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            schema = check_schema_file(result_path, "harness_run_result")
+            self.assertFalse(schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(schema["errors"]))
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.fake_secret_canary_check.checked_artifacts", errors)
+            self.assertIn("sha256 must be a SHA-256 hex string for existing files", errors)
+            self.assertIn("size_bytes must be a non-negative integer for existing files", errors)
+
+    def test_validate_rejects_stale_harness_canary_artifact_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            record = next(item for item in payload["fake_secret_canary_check"]["checked_artifacts"] if item["artifact"] == "trace")
+            record["sha256"] = "0" * 64
+            record["size_bytes"] += 1
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.fake_secret_canary_check.checked_artifacts", errors)
+            self.assertIn("sha256 does not match the current file", errors)
+            self.assertIn("size_bytes does not match the current file", errors)
+
+    def test_validate_rejects_present_harness_canary_artifact_marked_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            record = next(item for item in payload["fake_secret_canary_check"]["checked_artifacts"] if item["artifact"] == "trace")
+            record["exists"] = False
+            record.pop("sha256")
+            record.pop("size_bytes")
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.fake_secret_canary_check.checked_artifacts", errors)
+            self.assertIn("exists must be true when path resolves to a file", errors)
+
+    def test_validate_rejects_missing_harness_canary_artifact_marked_existing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            record = next(item for item in payload["fake_secret_canary_check"]["checked_artifacts"] if item["artifact"] == "trace")
+            record["path"] = "missing-canary-artifact.txt"
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.fake_secret_canary_check.checked_artifacts", errors)
+            self.assertIn("path must resolve to an existing file when exists is true", errors)
+
     def _assert_cli_ok(self, args: list[str]) -> None:
         rc, stdout, stderr = _run_cli(args)
         self.assertEqual(rc, 0, stderr or stdout)
@@ -208,6 +295,31 @@ def _replay_trace_quietly(lineage_path: Path, replay_dir: Path) -> dict:
     stdout = StringIO()
     with redirect_stdout(stdout):
         return replay_trace(lineage_path, replay_dir)
+
+
+def _write_policy_violation_harness(root: Path) -> tuple[Path, dict]:
+    scenario_path = root / "policy_violation_scenario.json"
+    fake_api_key = DEFAULT_FAKE_SECRET_CANARIES["HFR_FAKE_API_KEY"]
+    scenario_path.write_text(
+        json.dumps(_policy_violation_scenario(fake_api_key), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    run_dir = root / "run"
+    manifest = build_harness_manifest(
+        scenario_path=scenario_path,
+        out_dir=run_dir,
+        provider="mock",
+        model="hfr-mock",
+        runner="mock",
+        mock_response=f"Policy run complete but leaked {fake_api_key}",
+        tool_policy={
+            "mode": "deny_by_default",
+            "allowed_tools": ["read_file"],
+            "denied_tools": ["terminal"],
+            "network": {"mode": "disabled", "allowed_hosts": []},
+        },
+    )
+    return run_dir, run_scenario(manifest)
 
 
 if __name__ == "__main__":

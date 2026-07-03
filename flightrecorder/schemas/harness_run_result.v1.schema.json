@@ -24,31 +24,13 @@
         "checked_artifact_count": { "minimum": 0, "type": "integer" },
         "checked_artifacts": {
           "items": {
-            "additionalProperties": true,
-            "properties": {
-              "artifact": { "minLength": 1, "type": "string" },
-              "exists": { "type": "boolean" },
-              "path": { "minLength": 1, "type": "string" }
-            },
-            "required": ["artifact", "path", "exists"],
-            "type": "object"
+            "$ref": "#/$defs/canary_artifact"
           },
           "type": "array"
         },
         "leaked_artifacts": {
           "items": {
-            "additionalProperties": true,
-            "properties": {
-              "artifact": { "minLength": 1, "type": "string" },
-              "canary_names": {
-                "items": { "minLength": 1, "type": "string" },
-                "type": "array"
-              },
-              "exists": { "type": "boolean" },
-              "path": { "minLength": 1, "type": "string" }
-            },
-            "required": ["artifact", "path", "exists", "canary_names"],
-            "type": "object"
+            "$ref": "#/$defs/leaked_canary_artifact"
           },
           "type": "array"
         },
@@ -141,6 +123,52 @@
       },
       "required": ["format", "path"],
       "type": "object"
+    }
+  },
+  "$defs": {
+    "canary_artifact": {
+      "additionalProperties": true,
+      "oneOf": [
+        {
+          "properties": {
+            "exists": { "const": true }
+          },
+          "required": ["artifact", "path", "exists", "sha256", "size_bytes"],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "exists": { "const": false }
+          },
+          "required": ["artifact", "path", "exists"],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "artifact": { "minLength": 1, "type": "string" },
+        "exists": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["artifact", "path", "exists"],
+      "type": "object"
+    },
+    "leaked_canary_artifact": {
+      "allOf": [
+        { "$ref": "#/$defs/canary_artifact" },
+        {
+          "additionalProperties": true,
+          "properties": {
+            "canary_names": {
+              "items": { "minLength": 1, "type": "string" },
+              "type": "array"
+            }
+          },
+          "required": ["canary_names"],
+          "type": "object"
+        }
+      ]
     }
   },
   "required": ["schema_version", "runner", "provider", "model", "scenario_id", "sandbox", "tool_policy", "trace", "scorecard", "artifacts", "replay"],

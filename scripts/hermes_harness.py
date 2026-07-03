@@ -811,6 +811,9 @@ def _fake_secret_canary_check(
             "path": _display_path(path, run_dir, preserve_paths),
             "exists": exists,
         }
+        if exists:
+            record["size_bytes"] = path.stat().st_size
+            record["sha256"] = _sha256_file(path)
         checked_artifacts.append(record)
         if not exists:
             continue

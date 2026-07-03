@@ -1398,6 +1398,7 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
             result.get("fake_secret_canary_check"),
             target,
             "harness_result.fake_secret_canary_check",
+            source_dir,
         )
     artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
     for field_name in ("normalized_trace", "scorecard", "run_digest", "report", "lineage"):
@@ -1524,7 +1525,7 @@ def _validate_harness_tool_policy(value: Any, target: ValidationTarget, label: s
                 target.errors.append(f"{label}.blocked_action_canaries[{index}].{field_name} must be a non-empty string.")
 
 
-def _validate_harness_fake_secret_canary_check(value: Any, target: ValidationTarget, label: str) -> None:
+def _validate_harness_fake_secret_canary_check(value: Any, target: ValidationTarget, label: str, source_dir: Path | None) -> None:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -1538,19 +1539,19 @@ def _validate_harness_fake_secret_canary_check(value: Any, target: ValidationTar
         target.errors.append(f"{label}.checked_artifacts must be a list.")
     else:
         for index, artifact in enumerate(checked_artifacts):
-            _validate_harness_canary_artifact_record(artifact, target, f"{label}.checked_artifacts[{index}]")
+            _validate_harness_canary_artifact_record(artifact, target, f"{label}.checked_artifacts[{index}]", source_dir)
     leaked_artifacts = value.get("leaked_artifacts")
     if not isinstance(leaked_artifacts, list):
         target.errors.append(f"{label}.leaked_artifacts must be a list.")
     else:
         for index, artifact in enumerate(leaked_artifacts):
             record_label = f"{label}.leaked_artifacts[{index}]"
-            _validate_harness_canary_artifact_record(artifact, target, record_label)
+            _validate_harness_canary_artifact_record(artifact, target, record_label, source_dir)
             if isinstance(artifact, dict) and not _is_string_list(artifact.get("canary_names")):
                 target.errors.append(f"{record_label}.canary_names must be a list of strings.")
 
 
-def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarget, label: str) -> None:
+def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarget, label: str, source_dir: Path | None) -> None:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -1559,6 +1560,38 @@ def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarge
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
     if not isinstance(value.get("exists"), bool):
         target.errors.append(f"{label}.exists must be a boolean.")
+    if value.get("exists") is True:
+        if not _is_non_negative_int(value.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        if not _is_sha256(value.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing files.")
+    current_path = _resolve_harness_canary_artifact_path(value.get("path"), source_dir)
+    if current_path is None:
+        return
+    if value.get("exists") is True:
+        if not current_path.exists():
+            target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
+            return
+        if not current_path.is_file():
+            target.errors.append(f"{label}.path must resolve to a file when exists is true.")
+            return
+    elif not current_path.is_file():
+        return
+    if value.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true when path resolves to a file.")
+    if _is_non_negative_int(value.get("size_bytes")) and current_path.stat().st_size != value.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_sha256(value.get("sha256")) and _sha256(current_path) != value.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _resolve_harness_canary_artifact_path(value: Any, source_dir: Path | None) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.is_absolute() or source_dir is None:
+        return path
+    return source_dir / path
 
 
 def _validate_harness_replay_result(
