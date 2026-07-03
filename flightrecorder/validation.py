@@ -10628,6 +10628,8 @@ def _validate_promotion_ledger_record(
     for field_name in ("exists", "passed", "require_passed"):
         if not isinstance(record.get(field_name), bool):
             target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if record.get("exists") is False:
+        target.errors.append(f"{label}.exists must be true.")
     for field_name in ("check_count", "failed_check_count"):
         if not _is_non_negative_int(record.get(field_name)):
             target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
@@ -10635,7 +10637,7 @@ def _validate_promotion_ledger_record(
         if record["failed_check_count"] > record["check_count"]:
             target.errors.append(f"{label}.failed_check_count must be less than or equal to check_count.")
     if record.get("exists") is True:
-        _validate_preflight_file_hash(record, target, label, source_path, require_kind=False)
+        _validate_promotion_ledger_record_file_hash(record, target, label, source_path)
     if record.get("recommendation") not in {"allow_promotion", "block_promotion"}:
         target.errors.append(f"{label}.recommendation must be allow_promotion or block_promotion.")
     expected_allowed = record.get("passed") is True and record.get("recommendation") == "allow_promotion"
@@ -10674,11 +10676,14 @@ def _validate_promotion_ledger_record_matches_gate(
     label: str,
     source_path: Path,
 ) -> None:
-    file_path = _resolve_preflight_record_path(record.get("path"), source_path)
+    file_path = _resolve_gate_source_path(record.get("path"), source_path)
     if file_path is None or not file_path.exists() or not file_path.is_file():
         return
     try:
         gate = json.loads(file_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        target.errors.append(f"{label}.path is not valid UTF-8: {exc}")
+        return
     except json.JSONDecodeError as exc:
         target.errors.append(f"{label}.path contains invalid JSON: {exc}")
         return
@@ -10716,6 +10721,38 @@ def _validate_promotion_ledger_record_matches_gate(
     for field_name, expected_value in expected_source.items():
         if source.get(field_name) != expected_value:
             target.errors.append(f"{label}.source.{field_name} must match current decision gate.")
+
+
+def _validate_promotion_ledger_record_file_hash(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if "regular_file" in record and not isinstance(record.get("regular_file"), bool):
+        target.errors.append(f"{label}.regular_file must be a boolean when present.")
+    if "symlink" in record and not isinstance(record.get("symlink"), bool):
+        target.errors.append(f"{label}.symlink must be a boolean when present.")
+    if record.get("regular_file") is False:
+        target.errors.append(f"{label}.regular_file must be true when present.")
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+    if not _is_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing files.")
+        return
+    file_path = _resolve_gate_source_path(record.get("path"), source_path)
+    if file_path is None:
+        return
+    if file_path.is_symlink():
+        target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to an existing file.")
+        return
+    if file_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _sha256(file_path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
 
 
 def _promotion_ledger_expected_metrics(records: list[Any]) -> dict[str, Any]:

@@ -80,6 +80,27 @@ def _build_clean_promotion_ledger_gate(root, *, gate_args=None, policy=False):
     return ledger_path, gate_path, run_cli(command)
 
 
+def _build_ready_decision_gate(root, *, preserve_paths=False):
+    source = root / "action_ledger_gate.json"
+    decision_gate = root / "decision_gate.json"
+    _write_ready_action_ledger_gate(source)
+    command = [
+        "gate-decision",
+        "--artifact",
+        str(source),
+        "--expect-recommendation",
+        "promote_iteration",
+        "--expect-readiness",
+        "ready",
+        "--require-passed",
+        "--out",
+        str(decision_gate),
+    ]
+    if preserve_paths:
+        command.insert(-2, "--preserve-paths")
+    return source, decision_gate, run_cli(command)
+
+
 class PromotionLedgerTests(unittest.TestCase):
     def test_promotion_ledger_tracks_allow_and_block_decisions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -209,6 +230,223 @@ class PromotionLedgerTests(unittest.TestCase):
             ledger["metrics"]["allowed_count"] = 99
             ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--promotion-ledger", str(ledger_path)]), 1)
+
+    def test_promotion_ledger_writes_output_relative_decision_gate_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            summary_path = runs / "validation.json"
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                _, decision_gate, code = _build_ready_decision_gate(runs)
+                self.assertEqual(code, 0)
+                ledger_path = runs / "promotion_ledger.json"
+                code = run_cli(
+                    [
+                        "promotion-ledger",
+                        "--decision-gate",
+                        str(decision_gate.relative_to(root)),
+                        "--out",
+                        str(ledger_path),
+                    ]
+                )
+                self.assertEqual(code, 0)
+                ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+                self.assertEqual(ledger["records"][0]["path"], "decision_gate.json")
+                code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertEqual(errors, "")
+
+    def test_promotion_ledger_writes_output_relative_path_outside_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd_root = root / "cwd"
+            outside_root = root / "outside"
+            cwd_root.mkdir()
+            outside_root.mkdir()
+            summary_path = outside_root / "validation.json"
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_root)
+                _, decision_gate, code = _build_ready_decision_gate(cwd_root)
+                self.assertEqual(code, 0)
+                ledger_path = outside_root / "promotion_ledger.json"
+                code = run_cli(
+                    [
+                        "promotion-ledger",
+                        "--decision-gate",
+                        str(decision_gate.relative_to(cwd_root)),
+                        "--out",
+                        str(ledger_path),
+                    ]
+                )
+                self.assertEqual(code, 0)
+                ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+                self.assertEqual(ledger["records"][0]["path"], "../cwd/decision_gate.json")
+                code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertEqual(errors, "")
+
+    def test_validate_rejects_promotion_ledger_missing_decision_gate_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            summary_path = runs / "validation.json"
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                _, decision_gate, code = _build_ready_decision_gate(runs)
+                self.assertEqual(code, 0)
+                ledger_path = runs / "promotion_ledger.json"
+                self.assertEqual(
+                    run_cli(
+                        [
+                            "promotion-ledger",
+                            "--decision-gate",
+                            str(decision_gate.relative_to(root)),
+                            "--out",
+                            str(ledger_path),
+                        ]
+                    ),
+                    0,
+                )
+                decision_gate.unlink()
+                code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger.records[0].path does not resolve to an existing file", errors)
+
+    def test_validate_rejects_promotion_ledger_cwd_relative_decision_gate_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd_root = root / "cwd"
+            outside_root = root / "outside"
+            nested = cwd_root / "nested"
+            nested.mkdir(parents=True)
+            outside_root.mkdir()
+            summary_path = root / "validation.json"
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_root)
+                _, decision_gate, code = _build_ready_decision_gate(nested)
+                self.assertEqual(code, 0)
+                ledger_path = cwd_root / "promotion_ledger.json"
+                self.assertEqual(
+                    run_cli(
+                        [
+                            "promotion-ledger",
+                            "--decision-gate",
+                            str(decision_gate.relative_to(cwd_root)),
+                            "--out",
+                            str(ledger_path),
+                        ]
+                    ),
+                    0,
+                )
+                outside_ledger = outside_root / "promotion_ledger.json"
+                outside_ledger.write_text(ledger_path.read_text(encoding="utf-8"), encoding="utf-8")
+                code = run_cli(["validate", "--promotion-ledger", str(outside_ledger), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger.records[0].path does not resolve to an existing file", errors)
+
+    def test_validate_rejects_promotion_ledger_regular_file_false_directory_bypass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source_dir"
+            source_dir.mkdir()
+            _, decision_gate, code = _build_ready_decision_gate(root)
+            self.assertEqual(code, 0)
+            ledger_path = root / "promotion_ledger.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(
+                run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]),
+                0,
+            )
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["records"][0]["path"] = "source_dir"
+            ledger["records"][0]["regular_file"] = False
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger.records[0].regular_file must be true when present", errors)
+            self.assertIn("promotion_ledger.records[0].path does not resolve to an existing file", errors)
+
+    def test_validate_rejects_promotion_ledger_regular_file_false_symlink_bypass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate, code = _build_ready_decision_gate(root)
+            self.assertEqual(code, 0)
+            source_link = root / "decision_gate_link.json"
+            try:
+                source_link.symlink_to(decision_gate)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            ledger_path = root / "promotion_ledger.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(
+                run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]),
+                0,
+            )
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["records"][0]["path"] = "decision_gate_link.json"
+            ledger["records"][0]["regular_file"] = False
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger.records[0].regular_file must be true when present", errors)
+            self.assertIn("promotion_ledger.records[0].path must not resolve to a symlink", errors)
+
+    def test_promotion_ledger_rejects_symlink_decision_gate_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, decision_gate, code = _build_ready_decision_gate(root)
+            self.assertEqual(code, 0)
+            source_link = root / "decision_gate_link.json"
+            try:
+                source_link.symlink_to(decision_gate)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            ledger_path = root / "promotion_ledger.json"
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(["promotion-ledger", "--decision-gate", str(source_link), "--out", str(ledger_path)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(ledger_path.exists())
 
     def test_gate_promotion_ledger_allows_clean_history(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -788,7 +1026,7 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertFalse(archive["passed"])
             self.assertFalse(archive["self_contained"])
             self.assertEqual(archive["metrics"]["missing_count"], 1)
-            self.assertEqual(archive["metrics"]["missing_role_counts"], [{"count": 1, "id": "decision_gate"}])
+            self.assertEqual(archive["metrics"]["missing_role_counts"], [{"count": 1, "id": "source_artifact"}])
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
     def test_promotion_archive_force_refuses_non_archive_directories(self):

@@ -209,3 +209,5 @@ requirements still have corresponding gate checks.
 Decision-gate validation reopens the referenced source artifact from the gate
 file's directory, so cwd-relative lookalikes, deleted sources, stale hashes, and
 rewritten source decisions cannot validate as promotion-ready evidence.
+Promotion-ledger validation applies the same file-relative rule to recorded
+decision gates before trusting ledger metrics or longitudinal gate decisions.

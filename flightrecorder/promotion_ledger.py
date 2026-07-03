@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,7 @@ def build_promotion_ledger(
     for index, raw_path in enumerate(decision_gate_paths):
         path = Path(raw_path)
         gate = _read_decision_gate(path)
-        records.append(_decision_record(path, gate, index, preserve_paths))
+        records.append(_decision_record(path, gate, index, preserve_paths, Path(out_path) if out_path is not None else None))
 
     metrics = _metrics(records)
     return {
@@ -48,6 +49,8 @@ def build_promotion_ledger(
 
 
 def _read_decision_gate(path: Path) -> dict[str, Any]:
+    if path.is_symlink():
+        raise PromotionLedgerError(f"Decision gate must not be a symlink: {path}")
     if not path.exists() or not path.is_file():
         raise PromotionLedgerError(f"Decision gate not found: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -58,12 +61,12 @@ def _read_decision_gate(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _decision_record(path: Path, gate: dict[str, Any], index: int, preserve_paths: bool) -> dict[str, Any]:
+def _decision_record(path: Path, gate: dict[str, Any], index: int, preserve_paths: bool, out_path: Path | None) -> dict[str, Any]:
     source = gate.get("source_decision") if isinstance(gate.get("source_decision"), dict) else {}
     source_artifact = gate.get("source_artifact") if isinstance(gate.get("source_artifact"), dict) else {}
     record: dict[str, Any] = {
         "index": index,
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, out_path, preserve_paths),
         "exists": path.exists(),
         "schema_version": str(gate.get("schema_version") or ""),
         "passed": gate.get("passed") is True,
@@ -191,6 +194,17 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _display_path_for_output_source(path: Path, out_path: Path | None, preserve_paths: bool = False) -> str:
+    if preserve_paths or out_path is None:
+        return _display_path(path, preserve_paths)
+    raw = str(path)
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    out_dir = out_path.parent.resolve()
+    return os.path.relpath(resolved, out_dir)
 
 
 def _is_windows_absolute(value: str) -> bool:

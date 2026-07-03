@@ -1452,6 +1452,7 @@ assert promotion_ledger["metrics"]["consecutive_blocked_count"] == 0
 assert promotion_ledger["metrics"]["unique_source_artifact_count"] == 1
 assert promotion_ledger["metrics"]["recommendation_counts"] == [{"count": 2, "id": "allow_promotion"}]
 assert promotion_ledger["metrics"]["source_recommendation_counts"] == [{"count": 2, "id": "promote_iteration"}]
+assert [record["path"] for record in promotion_ledger["records"]] == ["promotion_decision_previous.json", "promotion_decision.json"]
 assert all(len(record["sha256"]) == 64 for record in promotion_ledger["records"])
 assert all(len(record["source"]["artifact_sha256"]) == 64 for record in promotion_ledger["records"])
 assert promotion_ledger_gate["schema_version"] == "hfr.promotion_ledger_gate.v1"
