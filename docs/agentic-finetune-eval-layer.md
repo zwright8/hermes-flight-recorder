@@ -206,3 +206,6 @@ bundle actions such as `resolve_eval_summary_blockers`.
 Action-ledger gate validation reopens the referenced `action_ledger.json`,
 recomputes source metrics and check actuals, and verifies persisted policy
 requirements still have corresponding gate checks.
+Decision-gate validation reopens the referenced source artifact from the gate
+file's directory, so cwd-relative lookalikes, deleted sources, stale hashes, and
+rewritten source decisions cannot validate as promotion-ready evidence.

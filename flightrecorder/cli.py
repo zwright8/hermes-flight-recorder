@@ -2153,9 +2153,15 @@ def cmd_gate_promotion_ledger(args: argparse.Namespace) -> int:
 
 def cmd_gate_decision(args: argparse.Namespace) -> int:
     artifact = _read_json(Path(args.artifact))
+    output_path = Path(args.out) if args.out else None
     result = evaluate_decision_gate(
         artifact,
         artifact_path=Path(args.artifact),
+        artifact_display_path=_display_path_for_output_source(
+            Path(args.artifact),
+            output_path,
+            args.preserve_paths,
+        ),
         expect_recommendation=args.expect_recommendation,
         expect_readiness=args.expect_readiness,
         require_passed=args.require_passed,

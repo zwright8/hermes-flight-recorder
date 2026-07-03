@@ -9260,7 +9260,38 @@ def _validate_decision_gate_source_artifact(record: dict[str, Any], target: Vali
         target.errors.append("decision_gate.source_artifact.kind must be file.")
     if not isinstance(record.get("exists"), bool):
         target.errors.append("decision_gate.source_artifact.exists must be a boolean.")
-    _validate_preflight_file_hash(record, target, "decision_gate.source_artifact", source_path)
+    elif record.get("exists") is not True:
+        target.errors.append("decision_gate.source_artifact.exists must be true.")
+    _validate_decision_gate_source_artifact_hash(record, target, source_path)
+
+
+def _validate_decision_gate_source_artifact_hash(record: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    if record.get("kind") != "file" or record.get("exists") is not True:
+        return
+    if "regular_file" in record and not isinstance(record.get("regular_file"), bool):
+        target.errors.append("decision_gate.source_artifact.regular_file must be a boolean when present.")
+    if "symlink" in record and not isinstance(record.get("symlink"), bool):
+        target.errors.append("decision_gate.source_artifact.symlink must be a boolean when present.")
+    if record.get("regular_file") is False:
+        target.errors.append("decision_gate.source_artifact.regular_file must be true when present.")
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append("decision_gate.source_artifact.size_bytes must be a non-negative integer for existing files.")
+    if not _is_sha256(record.get("sha256")):
+        target.errors.append("decision_gate.source_artifact.sha256 must be a SHA-256 hex string for existing files.")
+        return
+    file_path = _resolve_gate_source_path(record.get("path"), source_path)
+    if file_path is None:
+        return
+    if file_path.is_symlink():
+        target.errors.append("decision_gate.source_artifact.path must not resolve to a symlink.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append("decision_gate.source_artifact.path does not resolve to an existing file.")
+        return
+    if file_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append("decision_gate.source_artifact.size_bytes does not match the current file.")
+    if _sha256(file_path) != record.get("sha256"):
+        target.errors.append("decision_gate.source_artifact.sha256 does not match the current file.")
 
 
 def _validate_decision_gate_source_decision_matches_artifact(
@@ -9269,11 +9300,14 @@ def _validate_decision_gate_source_decision_matches_artifact(
     target: ValidationTarget,
     source_path: Path,
 ) -> None:
-    file_path = _resolve_preflight_record_path(source_artifact.get("path"), source_path)
+    file_path = _resolve_gate_source_path(source_artifact.get("path"), source_path)
     if file_path is None or not file_path.exists() or not file_path.is_file():
         return
     try:
         artifact = json.loads(file_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        target.errors.append(f"decision_gate.source_artifact is not valid UTF-8: {exc}")
+        return
     except json.JSONDecodeError as exc:
         target.errors.append(f"decision_gate.source_artifact contains invalid JSON: {exc}")
         return

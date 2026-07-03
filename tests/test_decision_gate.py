@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -12,6 +13,28 @@ from flightrecorder.schema_registry import check_schema_file
 def run_cli(args):
     with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
         return main(args)
+
+
+def _write_source_decision(path, *, passed=True, recommendation="promote_iteration", readiness="ready"):
+    blocking_check_count = 0 if passed else 1
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.action_ledger_gate.v1",
+                "passed": passed,
+                "decision": {
+                    "readiness": readiness,
+                    "recommendation": recommendation,
+                    "summary": "ok" if passed else "blocked",
+                    "blocking_check_count": blocking_check_count,
+                    "key_metrics": {"recurring_action_count": blocking_check_count},
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 class DecisionGateTests(unittest.TestCase):
@@ -131,6 +154,198 @@ class DecisionGateTests(unittest.TestCase):
             gate["failed_check_count"] = 0
             decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assertEqual(run_cli(["validate", "--decision-gate", str(decision_gate)]), 1)
+
+    def test_gate_decision_writes_output_relative_source_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            source = runs / "action_ledger_gate.json"
+            decision_gate = runs / "decision_gate.json"
+            summary_path = runs / "validation.json"
+            _write_source_decision(source)
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                code = run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source.relative_to(root)),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                )
+                self.assertEqual(code, 0)
+                gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+                self.assertEqual(gate["artifact"], "action_ledger_gate.json")
+                self.assertEqual(gate["source_artifact"]["path"], "action_ledger_gate.json")
+                code = run_cli(["validate", "--decision-gate", str(decision_gate), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertEqual(errors, "")
+
+    def test_validate_rejects_decision_gate_missing_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            summary_path = root / "validation.json"
+            _write_source_decision(source)
+            code = run_cli(
+                [
+                    "gate-decision",
+                    "--artifact",
+                    str(source),
+                    "--expect-recommendation",
+                    "promote_iteration",
+                    "--expect-readiness",
+                    "ready",
+                    "--require-passed",
+                    "--out",
+                    str(decision_gate),
+                ]
+            )
+            self.assertEqual(code, 0)
+            source.unlink()
+
+            code = run_cli(["validate", "--decision-gate", str(decision_gate), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision_gate.source_artifact.path does not resolve to an existing file", errors)
+
+    def test_validate_rejects_decision_gate_cwd_relative_source_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd_root = root / "cwd"
+            outside_root = root / "outside"
+            nested = cwd_root / "nested"
+            nested.mkdir(parents=True)
+            outside_root.mkdir()
+            source = nested / "action_ledger_gate.json"
+            decision_gate = cwd_root / "decision_gate.json"
+            outside_gate = outside_root / "decision_gate.json"
+            summary_path = root / "validation.json"
+            _write_source_decision(source)
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_root)
+                code = run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        "nested/action_ledger_gate.json",
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                )
+                self.assertEqual(code, 0)
+                outside_gate.write_text(decision_gate.read_text(encoding="utf-8"), encoding="utf-8")
+                code = run_cli(["validate", "--decision-gate", str(outside_gate), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision_gate.source_artifact.path does not resolve to an existing file", errors)
+
+    def test_validate_rejects_decision_gate_regular_file_false_directory_bypass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            source_dir = root / "source_dir"
+            decision_gate = root / "decision_gate.json"
+            summary_path = root / "validation.json"
+            _write_source_decision(source)
+            source_dir.mkdir()
+            code = run_cli(
+                [
+                    "gate-decision",
+                    "--artifact",
+                    str(source),
+                    "--expect-recommendation",
+                    "promote_iteration",
+                    "--expect-readiness",
+                    "ready",
+                    "--require-passed",
+                    "--out",
+                    str(decision_gate),
+                ]
+            )
+            self.assertEqual(code, 0)
+            gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+            gate["artifact"] = "source_dir"
+            gate["source_artifact"]["path"] = "source_dir"
+            gate["source_artifact"]["regular_file"] = False
+            decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--decision-gate", str(decision_gate), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision_gate.source_artifact.regular_file must be true when present", errors)
+            self.assertIn("decision_gate.source_artifact.path does not resolve to an existing file", errors)
+
+    def test_validate_rejects_decision_gate_regular_file_false_symlink_bypass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            source_link = root / "source_link.json"
+            decision_gate = root / "decision_gate.json"
+            summary_path = root / "validation.json"
+            _write_source_decision(source)
+            try:
+                source_link.symlink_to(source)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            code = run_cli(
+                [
+                    "gate-decision",
+                    "--artifact",
+                    str(source),
+                    "--expect-recommendation",
+                    "promote_iteration",
+                    "--expect-readiness",
+                    "ready",
+                    "--require-passed",
+                    "--out",
+                    str(decision_gate),
+                ]
+            )
+            self.assertEqual(code, 0)
+            gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+            gate["artifact"] = "source_link.json"
+            gate["source_artifact"]["path"] = "source_link.json"
+            gate["source_artifact"]["regular_file"] = False
+            decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--decision-gate", str(decision_gate), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision_gate.source_artifact.regular_file must be true when present", errors)
+            self.assertIn("decision_gate.source_artifact.path must not resolve to a symlink", errors)
 
 
 if __name__ == "__main__":

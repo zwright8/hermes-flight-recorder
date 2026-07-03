@@ -17,6 +17,7 @@ def evaluate_decision_gate(
     artifact: dict[str, Any],
     *,
     artifact_path: str | Path,
+    artifact_display_path: str | None = None,
     expect_recommendation: str,
     expect_readiness: str | None = None,
     require_passed: bool = False,
@@ -27,7 +28,7 @@ def evaluate_decision_gate(
         raise DecisionGateError("Decision gate input must be a JSON object.")
     if not expect_recommendation:
         raise DecisionGateError("--expect-recommendation must be non-empty.")
-    source_artifact = _source_artifact_record(Path(artifact_path), preserve_paths)
+    source_artifact = _source_artifact_record(Path(artifact_path), preserve_paths, artifact_display_path)
     decision = artifact.get("decision") if isinstance(artifact.get("decision"), dict) else {}
     source_passed = artifact.get("passed") if isinstance(artifact.get("passed"), bool) else None
     source = {
@@ -94,9 +95,9 @@ def evaluate_decision_gate(
     }
 
 
-def _source_artifact_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _source_artifact_record(path: Path, preserve_paths: bool, display_path: str | None = None) -> dict[str, Any]:
     record: dict[str, Any] = {
-        "path": _display_path(path, preserve_paths),
+        "path": display_path if display_path is not None else _display_path(path, preserve_paths),
         "kind": "file",
         "exists": path.exists(),
     }
