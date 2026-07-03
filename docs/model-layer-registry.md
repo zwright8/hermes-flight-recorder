@@ -26,8 +26,8 @@ or launch GPU work.
 - Path-backed registry links record SHA-256 and byte-size evidence; validation
   reopens resolvable link paths and rejects stale size or hash records.
 - Embedded compatibility-report refs in training plans and serving receipts,
-  plus training-plan refs in adapter manifests, use the same SHA-256 and
-  byte-size evidence checks.
+  plus training-plan refs in adapter manifests, must carry SHA-256 and
+  byte-size evidence for the same stale-reference checks.
 
 ## Command Sequence
 

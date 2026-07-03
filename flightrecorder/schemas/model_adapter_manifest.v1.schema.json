@@ -23,13 +23,12 @@
     "status": {"const": "planned"},
     "training_plan": {
       "additionalProperties": true,
-      "if": {"required": ["sha256"]},
       "properties": {
         "path": {"minLength": 1, "type": "string"},
         "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
         "size_bytes": {"minimum": 0, "type": "integer"}
       },
-      "then": {"required": ["size_bytes"]},
+      "required": ["path", "sha256", "size_bytes"],
       "type": "object"
     }
   },

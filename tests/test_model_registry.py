@@ -630,6 +630,47 @@ class ModelRegistryTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("model_adapter_manifest.training_plan.size_bytes does not match the current file.", errors)
 
+    def test_adapter_manifest_schema_rejects_training_plan_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            plan_path = root / "training_plan.json"
+            adapter_path = root / "adapter_manifest.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+            )
+            write_json(plan_path, plan)
+            manifest = build_model_adapter_manifest(
+                registry,
+                model_ref="candidate",
+                adapter_id="local_mock_tiny_chat_sft_adapter",
+                training_plan=plan,
+                training_plan_path=plan_path,
+                out_path=adapter_path,
+            )
+            manifest["training_plan"].pop("size_bytes")
+
+            schema = check_schema_contract(manifest)
+            errors = model_adapter_manifest_errors(manifest)
+
+            self.assertFalse(schema["passed"])
+            self.assertIn("$.training_plan: missing required property 'size_bytes'", "\n".join(schema["errors"]))
+            self.assertIn(
+                "model_adapter_manifest.training_plan.size_bytes must be a non-negative integer when sha256 is present.",
+                errors,
+            )
+
     def test_validate_rejects_adapter_manifest_training_plan_symlink(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
