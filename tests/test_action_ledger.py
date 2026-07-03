@@ -16,6 +16,14 @@ def run_cli(args):
         return main(args)
 
 
+def _count_rows(values):
+    counts = {}
+    for value in values:
+        key = str(value or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    return [{"id": key, "count": counts[key]} for key in sorted(counts)]
+
+
 class ActionLedgerTests(unittest.TestCase):
     def test_action_ledger_marks_recurring_actions(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -199,6 +207,133 @@ class ActionLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_ledger.metrics.unique_action_count", errors)
             self.assertIn("routing_key expected", errors)
+
+    def test_validate_rejects_action_ledger_missing_source_bundle_action(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate = root / "failed_gate.json"
+            bundle = root / "bundle.json"
+            ledger_path = root / "action_ledger.json"
+            summary_path = root / "validation.json"
+            gate.write_text(json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate), "--out", str(bundle)]), 1)
+            self.assertEqual(run_cli(["action-ledger", "--bundle", str(bundle), "--out", str(ledger_path)]), 0)
+            self.assertEqual(run_cli(["validate", "--action-ledger", str(ledger_path), "--strict"]), 0)
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+
+            removed_entry = ledger["entries"].pop()
+            removed_occurrences = removed_entry["occurrence_count"]
+            ledger["unique_action_count"] = len(ledger["entries"])
+            ledger["action_count"] -= removed_occurrences
+            ledger["metrics"]["unique_action_count"] = len(ledger["entries"])
+            ledger["metrics"]["action_count"] -= removed_occurrences
+            if removed_entry["open"]:
+                ledger["metrics"]["open_action_count"] -= 1
+            if removed_entry["status"] == "new":
+                ledger["metrics"]["new_action_count"] -= 1
+            if removed_entry["status"] == "recurring":
+                ledger["metrics"]["recurring_action_count"] -= 1
+            if removed_entry["status"] == "resolved":
+                ledger["metrics"]["resolved_action_count"] -= 1
+            ledger["metrics"]["status_counts"] = _count_rows(entry["status"] for entry in ledger["entries"])
+            ledger["metrics"]["priority_counts"] = _count_rows(entry["priority"] for entry in ledger["entries"])
+            ledger["metrics"]["artifact_counts"] = _count_rows(entry["artifact"] for entry in ledger["entries"])
+            ledger["bundles"][0]["action_count"] -= removed_occurrences
+            ledger["metrics"]["bundle_action_counts"][0]["action_count"] = ledger["bundles"][0]["action_count"]
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger.bundles[0].action_count expected", errors)
+            self.assertIn("action_ledger.entries missing", errors)
+
+    def test_validate_rejects_action_ledger_stale_source_bundle_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate = root / "failed_gate.json"
+            bundle = root / "bundle.json"
+            ledger_path = root / "action_ledger.json"
+            summary_path = root / "validation.json"
+            gate.write_text(json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate), "--out", str(bundle)]), 1)
+            self.assertEqual(run_cli(["action-ledger", "--bundle", str(bundle), "--out", str(ledger_path)]), 0)
+            self.assertEqual(run_cli(["validate", "--action-ledger", str(ledger_path), "--strict"]), 0)
+            payload = json.loads(bundle.read_text(encoding="utf-8"))
+            payload["notes"].append("tampered after ledger generation")
+            bundle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger.bundles[0].sha256 does not match current file contents", errors)
+
+    def test_validate_rejects_action_ledger_missing_source_bundle_even_if_exists_flag_is_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate = root / "failed_gate.json"
+            bundle = root / "bundle.json"
+            ledger_path = root / "action_ledger.json"
+            summary_path = root / "validation.json"
+            gate.write_text(json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate), "--out", str(bundle)]), 1)
+            self.assertEqual(run_cli(["action-ledger", "--bundle", str(bundle), "--out", str(ledger_path)]), 0)
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["bundles"][0]["exists"] = False
+            bundle.unlink()
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger.bundles[0].path must resolve to an existing evidence bundle", errors)
+
+    def test_validate_rejects_action_ledger_rewritten_source_action_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate = root / "failed_gate.json"
+            bundle = root / "bundle.json"
+            ledger_path = root / "action_ledger.json"
+            summary_path = root / "validation.json"
+            gate.write_text(json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate), "--out", str(bundle)]), 1)
+            self.assertEqual(run_cli(["action-ledger", "--bundle", str(bundle), "--out", str(ledger_path)]), 0)
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["entries"][0]["summary"] = "Forged action summary"
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger.entries missing", errors)
+
+            self.assertEqual(run_cli(["action-ledger", "--bundle", str(bundle), "--out", str(ledger_path)]), 0)
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["entries"][0]["evidence"]["forged"] = True
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger.entries missing", errors)
 
 
 if __name__ == "__main__":

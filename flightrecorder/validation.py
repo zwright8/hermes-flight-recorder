@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shlex
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -929,7 +930,7 @@ def validate_action_ledger(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("action_ledger", str(ledger_path))
     ledger = _read_object(ledger_path, target, "action_ledger.json")
     if ledger is not None:
-        _validate_action_ledger(ledger, target)
+        _validate_action_ledger(ledger, target, ledger_path)
     return target
 
 
@@ -8512,7 +8513,7 @@ def _expected_improvement_ledger_status(plan_indexes: list[int], latest_index: i
     return "resolved"
 
 
-def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(ledger, "schema_version", ACTION_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
         target.errors.append("action_ledger.ledger_path must be a string.")
@@ -8596,6 +8597,7 @@ def _validate_action_ledger(ledger: dict[str, Any], target: ValidationTarget) ->
     _validate_action_ledger_count_rows(metrics.get("priority_counts"), priority_counts, target, "action_ledger.metrics.priority_counts")
     _validate_action_ledger_count_rows(metrics.get("artifact_counts"), artifact_counts, target, "action_ledger.metrics.artifact_counts")
     _validate_action_ledger_bundle_action_counts(metrics.get("bundle_action_counts"), bundles, target)
+    _validate_action_ledger_bundle_linkage(bundles, entries, target, source_path)
     target.details.update(
         {
             "bundle_count": len(bundles),
@@ -12507,6 +12509,141 @@ def _validate_action_ledger_bundle_action_counts(value: Any, bundles: list[Any],
     ]
     if value != expected:
         target.errors.append(f"{label} must match action_ledger.bundles action counts.")
+
+
+def _validate_action_ledger_bundle_linkage(
+    bundles: list[Any],
+    entries: list[Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    expected_records: Counter[tuple[Any, ...]] = Counter()
+    for index, bundle_record in enumerate(bundles):
+        if not isinstance(bundle_record, dict):
+            continue
+        bundle_path = _resolve_action_ledger_bundle_path(bundle_record.get("path"), source_path)
+        if bundle_path is None or not bundle_path.exists() or not bundle_path.is_file():
+            target.errors.append(f"action_ledger.bundles[{index}].path must resolve to an existing evidence bundle.")
+            continue
+        expected_size = bundle_record.get("size_bytes")
+        if _is_non_negative_int(expected_size) and bundle_path.stat().st_size != expected_size:
+            target.errors.append(f"action_ledger.bundles[{index}].size_bytes does not match current file size.")
+        expected_sha = bundle_record.get("sha256")
+        if _is_sha256(expected_sha) and _sha256(bundle_path) != expected_sha:
+            target.errors.append(f"action_ledger.bundles[{index}].sha256 does not match current file contents.")
+        try:
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            target.errors.append(f"action_ledger.bundles[{index}].path contains invalid JSON: {exc}")
+            continue
+        if not isinstance(bundle, dict):
+            target.errors.append(f"action_ledger.bundles[{index}].path must contain a JSON object.")
+            continue
+        _validate_evidence_bundle(bundle, target, bundle_path)
+        decision = bundle.get("decision") if isinstance(bundle.get("decision"), dict) else {}
+        actions = decision.get("next_actions") if isinstance(decision.get("next_actions"), list) else []
+        expected_action_count = len([action for action in actions if isinstance(action, dict)])
+        if bundle_record.get("action_count") != expected_action_count:
+            target.errors.append(
+                f"action_ledger.bundles[{index}].action_count expected {expected_action_count} from source bundle, "
+                f"got {bundle_record.get('action_count')!r}."
+            )
+        bundle_index = bundle_record.get("index")
+        if not _is_non_negative_int(bundle_index):
+            continue
+        ledger_bundle_path = bundle_record.get("path") if isinstance(bundle_record.get("path"), str) else ""
+        for action in actions:
+            if isinstance(action, dict):
+                expected_records[_action_ledger_expected_action_record(action, bundle_index, ledger_bundle_path)] += 1
+
+    actual_records = _action_ledger_actual_action_records(entries)
+    missing = expected_records - actual_records
+    extra = actual_records - expected_records
+    if missing:
+        target.errors.append(f"action_ledger.entries missing {sum(missing.values())} next_action occurrence(s) from source bundles.")
+    if extra:
+        target.errors.append(f"action_ledger.entries include {sum(extra.values())} next_action occurrence(s) not present in source bundles.")
+
+
+def _action_ledger_expected_action_record(action: dict[str, Any], bundle_index: int, bundle_path: str) -> tuple[Any, ...]:
+    evidence = action.get("evidence") if isinstance(action.get("evidence"), dict) else {}
+    action_id = str(action.get("id") or "unknown_action")
+    priority = str(action.get("priority") or "medium")
+    artifact = str(action.get("artifact") or "unknown_artifact")
+    summary = str(action.get("summary") or "")
+    fingerprint = action.get("action_fingerprint")
+    if not _is_sha256(fingerprint):
+        fingerprint = _evidence_bundle_action_fingerprint(
+            {"id": action_id, "priority": priority, "artifact": artifact, "evidence": evidence}
+        )
+    routing_key = action.get("routing_key")
+    if not isinstance(routing_key, str) or not routing_key:
+        routing_key = f"{artifact}:{action_id}:{fingerprint[:12]}"
+    return (
+        bundle_index,
+        bundle_path,
+        routing_key,
+        fingerprint,
+        action_id,
+        priority,
+        artifact,
+        summary,
+        _action_ledger_evidence_record(evidence),
+        priority,
+        artifact,
+        summary,
+    )
+
+
+def _action_ledger_actual_action_records(entries: list[Any]) -> Counter[tuple[Any, ...]]:
+    records: Counter[tuple[Any, ...]] = Counter()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        occurrences = entry.get("occurrences") if isinstance(entry.get("occurrences"), list) else []
+        for occurrence in occurrences:
+            if not isinstance(occurrence, dict) or not _is_non_negative_int(occurrence.get("bundle_index")):
+                continue
+            records[
+                (
+                    occurrence.get("bundle_index"),
+                    occurrence.get("bundle_path"),
+                    entry.get("routing_key"),
+                    entry.get("action_fingerprint"),
+                    entry.get("id"),
+                    entry.get("priority"),
+                    entry.get("artifact"),
+                    entry.get("summary"),
+                    _action_ledger_evidence_record(entry.get("evidence")),
+                    occurrence.get("priority"),
+                    occurrence.get("artifact"),
+                    occurrence.get("summary"),
+                )
+            ] += 1
+    return records
+
+
+def _action_ledger_evidence_record(value: Any) -> str:
+    evidence = value if isinstance(value, dict) else {}
+    return json.dumps(evidence, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _resolve_action_ledger_bundle_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if value.startswith("<redacted:") and value.endswith(">"):
+        basename = value.removeprefix("<redacted:").removesuffix(">")
+        return source_path.parent / basename
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    local_path = source_path.parent / path
+    if local_path.exists():
+        return local_path
+    sibling_path = source_path.parent / path.name
+    if sibling_path.exists():
+        return sibling_path
+    return path
 
 
 def _increment(counts: dict[str, int], value: Any) -> None:

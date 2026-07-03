@@ -199,3 +199,7 @@ category family.
 When an improvement plan lists an `eval_summary` source artifact, validation
 checks that the plan still carries every eval-derived repair-curriculum item
 from that source summary.
+
+Action-ledger validation reopens referenced evidence bundles and verifies every
+source `decision.next_actions` occurrence is represented, including eval-summary
+bundle actions such as `resolve_eval_summary_blockers`.
