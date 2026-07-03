@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -30,10 +31,11 @@ def build_action_ledger(
     bundle_records: list[dict[str, Any]] = []
     grouped: dict[str, dict[str, Any]] = {}
     latest_index = len(bundle_paths) - 1
+    output_path = Path(out_path) if out_path is not None else None
     for index, raw_path in enumerate(bundle_paths):
         path = Path(raw_path)
         bundle = _read_bundle(path)
-        record = _bundle_record(path, bundle, index, preserve_paths)
+        record = _bundle_record(path, bundle, index, preserve_paths, output_path)
         bundle_records.append(record)
         for action in _bundle_actions(bundle, index, record["path"]):
             entry = grouped.setdefault(action["routing_key"], _ledger_entry(action))
@@ -68,12 +70,12 @@ def _read_bundle(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _bundle_record(path: Path, bundle: dict[str, Any], index: int, preserve_paths: bool) -> dict[str, Any]:
+def _bundle_record(path: Path, bundle: dict[str, Any], index: int, preserve_paths: bool, output_path: Path | None) -> dict[str, Any]:
     decision = bundle.get("decision") if isinstance(bundle.get("decision"), dict) else {}
     actions = decision.get("next_actions") if isinstance(decision.get("next_actions"), list) else []
     record: dict[str, Any] = {
         "index": index,
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, output_path, preserve_paths),
         "exists": path.exists(),
         "schema_version": bundle.get("schema_version"),
         "passed": bundle.get("passed") is True,
@@ -242,6 +244,17 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _display_path_for_output_source(path: Path, output_path: Path | None, preserve_paths: bool = False) -> str:
+    if preserve_paths or output_path is None:
+        return _display_path(path, preserve_paths)
+    raw = str(path)
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    output_dir = output_path.parent.resolve()
+    return os.path.relpath(resolved, output_dir)
 
 
 def _is_windows_absolute(value: str) -> bool:

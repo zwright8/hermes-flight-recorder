@@ -200,9 +200,11 @@ When an improvement plan lists an `eval_summary` source artifact, validation
 checks that the plan still carries every eval-derived repair-curriculum item
 from that source summary.
 
-Action-ledger validation reopens referenced evidence bundles and verifies every
-source `decision.next_actions` occurrence is represented, including eval-summary
-bundle actions such as `resolve_eval_summary_blockers`.
+Action-ledger validation reopens referenced evidence bundles from the ledger file
+location and verifies every source `decision.next_actions` occurrence is
+represented, including eval-summary bundle actions such as
+`resolve_eval_summary_blockers`; cwd-relative lookalikes and malformed bundles
+cannot validate the ledger.
 Action-ledger gate validation reopens the referenced `action_ledger.json`,
 recomputes source metrics and check actuals, and verifies persisted policy
 requirements still have corresponding gate checks from the gate file location.

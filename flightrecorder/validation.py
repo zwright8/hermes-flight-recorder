@@ -12938,6 +12938,9 @@ def _validate_action_ledger_bundle_linkage(
             target.errors.append(f"action_ledger.bundles[{index}].sha256 does not match current file contents.")
         try:
             bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError as exc:
+            target.errors.append(f"action_ledger.bundles[{index}].path is not valid UTF-8: {exc}")
+            continue
         except json.JSONDecodeError as exc:
             target.errors.append(f"action_ledger.bundles[{index}].path contains invalid JSON: {exc}")
             continue
@@ -13034,7 +13037,7 @@ def _action_ledger_evidence_record(value: Any) -> str:
 
 
 def _resolve_action_ledger_bundle_path(value: Any, source_path: Path) -> Path | None:
-    return _resolve_redacted_or_relative_path(value, source_path)
+    return _resolve_gate_source_path(value, source_path)
 
 
 def _resolve_gate_source_path(value: Any, source_path: Path) -> Path | None:
@@ -13047,24 +13050,6 @@ def _resolve_gate_source_path(value: Any, source_path: Path) -> Path | None:
     if path.is_absolute():
         return path
     return source_path.parent / path
-
-
-def _resolve_redacted_or_relative_path(value: Any, source_path: Path) -> Path | None:
-    if not isinstance(value, str) or not value:
-        return None
-    if value.startswith("<redacted:") and value.endswith(">"):
-        basename = value.removeprefix("<redacted:").removesuffix(">")
-        return source_path.parent / basename
-    path = Path(value)
-    if path.is_absolute():
-        return path
-    local_path = source_path.parent / path
-    if local_path.exists():
-        return local_path
-    sibling_path = source_path.parent / path.name
-    if sibling_path.exists():
-        return sibling_path
-    return path
 
 
 def _increment(counts: dict[str, int], value: Any) -> None:

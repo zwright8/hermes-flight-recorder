@@ -1413,6 +1413,13 @@ assert action_ledger["metrics"]["bundle_count"] == 2
 assert action_ledger["metrics"]["unique_action_count"] == action_ledger["unique_action_count"]
 assert action_ledger["metrics"]["open_action_count"] >= 1
 assert action_ledger["metrics"]["recurring_action_count"] >= 1
+assert [record["path"] for record in action_ledger["bundles"]] == ["evidence_bundle.json", "evidence_bundle_full.json"]
+assert [record["path"] for record in action_ledger["metrics"]["bundle_action_counts"]] == ["evidence_bundle.json", "evidence_bundle_full.json"]
+assert all(
+    occurrence["bundle_path"] in {"evidence_bundle.json", "evidence_bundle_full.json"}
+    for entry in action_ledger["entries"]
+    for occurrence in entry["occurrences"]
+)
 assert all(len(entry["action_fingerprint"]) == 64 for entry in action_ledger["entries"])
 assert all(
     entry["routing_key"] == f"{entry['artifact']}:{entry['id']}:{entry['action_fingerprint'][:12]}"
