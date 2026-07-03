@@ -632,6 +632,9 @@ card, and dataset card decisions.
   and selected trainer views to SHA-256 plus byte-size evidence.
 - Trainer archive checks reject passed external-code file checks that omit
   SHA-256 or byte-size evidence while preserving missing-code diagnostics.
+- Trainer preflight artifact records reject regular file or directory artifacts
+  that omit SHA-256 and byte-size evidence while preserving non-regular artifact
+  diagnostics.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

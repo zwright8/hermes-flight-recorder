@@ -685,6 +685,20 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(result["schema_contracts"]["training_export_sft_jsonl"]["passed"])
             self.assertEqual(result["schema_contracts"]["training_export_sft_jsonl"]["schema_name"], "rl_sft")
             self.assertGreaterEqual(result["schema_contracts"]["training_export_sft_jsonl"]["row_count"], 1)
+            schema = check_schema_contract(result, name_or_id="trainer_preflight")
+            self.assertTrue(schema["passed"], schema["errors"])
+            for field_name in ("sha256", "size_bytes"):
+                forged = json.loads(json.dumps(result))
+                forged["artifacts"]["training_export_sft_jsonl"].pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_preflight")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            for field_name in ("sha256", "size_bytes"):
+                forged = json.loads(json.dumps(result))
+                forged["artifacts"]["training_export"].pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_preflight")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
             launch_check = Path(tmp) / "trainer_launch_check.json"
@@ -1453,6 +1467,8 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(split_record["symlink"])
             failed_checks = {check["id"] for check in result["checks"] if not check["passed"]}
             self.assertIn("artifact_file_regular", failed_checks)
+            schema = check_schema_contract(result, name_or_id="trainer_preflight")
+            self.assertTrue(schema["passed"], schema["errors"])
             self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
 
     def test_validate_rejects_stale_trainer_preflight_gate_hash(self):

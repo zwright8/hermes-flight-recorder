@@ -130,6 +130,87 @@
   "$defs": {
     "artifact": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "exists": {
+                  "const": true
+                },
+                "kind": {
+                  "const": "file"
+                },
+                "regular_file": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "exists",
+                "regular_file",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "file"
+                },
+                "regular_file": {
+                  "const": false
+                }
+              },
+              "required": [
+                "kind",
+                "regular_file"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exists": {
+                  "const": true
+                },
+                "kind": {
+                  "const": "directory"
+                },
+                "regular_directory": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "exists",
+                "regular_directory",
+                "entry_count",
+                "file_count",
+                "sha256",
+                "size_bytes",
+                "tree_hash_algorithm"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "directory"
+                },
+                "regular_directory": {
+                  "const": false
+                }
+              },
+              "required": [
+                "kind",
+                "regular_directory"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "entry_count": {
           "minimum": 0,
