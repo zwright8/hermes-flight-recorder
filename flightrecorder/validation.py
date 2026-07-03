@@ -3440,18 +3440,27 @@ def _validate_cloud_training_contract(
             _cloud_training_required_source_artifacts(expected_schema_version),
         )
     if expected_schema_version == CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION:
+        upload_artifacts = payload.get("upload_artifacts")
+        expected_download_artifacts = payload.get("expected_download_artifacts")
         _validate_cloud_training_artifact_refs(
-            payload.get("upload_artifacts"),
+            upload_artifacts,
             target,
             f"{target.target_type}.upload_artifacts",
             source_path,
             require_non_empty=True,
         )
         _validate_cloud_training_artifact_refs(
-            payload.get("expected_download_artifacts"),
+            expected_download_artifacts,
             target,
             f"{target.target_type}.expected_download_artifacts",
             source_path,
+        )
+        _validate_cloud_training_transfer_plan(
+            payload.get("transfer_plan"),
+            target,
+            upload_artifacts,
+            expected_download_artifacts,
+            payload.get("artifact_protocols"),
         )
     target.details.update(
         {
@@ -3559,6 +3568,47 @@ def _validate_cloud_training_artifact_refs(
         target.errors.append(f"{label} must include at least one artifact.")
     for index, record in enumerate(value):
         _validate_cloud_training_artifact_ref(record, target, f"{label}[{index}]", source_path)
+
+
+def _validate_cloud_training_transfer_plan(
+    value: Any,
+    target: ValidationTarget,
+    upload_artifacts: Any,
+    expected_download_artifacts: Any,
+    artifact_protocols: Any,
+) -> None:
+    label = "cloud_training_artifact_manifest.transfer_plan"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    uploads = upload_artifacts if isinstance(upload_artifacts, list) else []
+    downloads = expected_download_artifacts if isinstance(expected_download_artifacts, list) else []
+    protocols = artifact_protocols if _is_string_list(artifact_protocols) else []
+    upload_size_bytes = 0
+    for artifact in uploads:
+        if isinstance(artifact, dict) and artifact.get("exists") is True and _is_non_negative_int(artifact.get("size_bytes")):
+            upload_size_bytes += artifact["size_bytes"]
+    expected_values = {
+        "mode": "dry_run_manifest_only",
+        "upload_count": len(uploads),
+        "expected_download_count": len(downloads),
+        "upload_size_bytes": upload_size_bytes,
+        "artifact_protocols": protocols,
+        "requires_external_runner_upload": bool(uploads),
+        "requires_external_runner_download": bool(downloads),
+        "download_artifacts_expected_to_exist_before_launch": False,
+    }
+    for field_name, expected in expected_values.items():
+        if value.get(field_name) != expected:
+            target.errors.append(f"{label}.{field_name} must match cloud training artifact rows.")
+    for field_name in (
+        "flight_recorder_uploaded_artifacts",
+        "flight_recorder_downloaded_artifacts",
+        "provider_api_called",
+        "credential_values_recorded",
+    ):
+        if value.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
 
 
 def _cloud_training_required_source_artifacts(schema_version: str) -> tuple[str, ...]:

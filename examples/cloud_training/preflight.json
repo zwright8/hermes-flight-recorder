@@ -3,20 +3,20 @@
     "trainer_preflight_ready: passed=False",
     "trainer_launch_check_ready: passed=False"
   ],
-  "check_count": 9,
+  "check_count": 11,
   "checks": [
     {
       "actual": {
         "artifact": {
           "exists": true,
-          "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+          "path": "../agentic_training/plans/sft_then_dpo_plan.json",
           "role": "agentic_training_plan",
           "schema_error_count": 0,
           "schema_errors": [],
           "schema_name": "agentic_training_plan",
           "schema_passed": true,
-          "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
-          "size_bytes": 9104,
+          "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+          "size_bytes": 10379,
           "source_passed": true,
           "source_recommendation": "ready_for_external_trainer_plan"
         }
@@ -161,6 +161,47 @@
     },
     {
       "actual": {
+        "credential_checks": [
+          {
+            "env_var": "MODAL_TOKEN_ID",
+            "present": false,
+            "value_recorded": false
+          },
+          {
+            "env_var": "MODAL_TOKEN_SECRET",
+            "present": false,
+            "value_recorded": false
+          }
+        ],
+        "live_preflight": false
+      },
+      "expected": {
+        "all_provider_credentials_present": true
+      },
+      "id": "live_preflight_credentials_available_when_requested",
+      "passed": true,
+      "summary": "live_preflight_credentials_available_when_requested: passed=True"
+    },
+    {
+      "actual": {
+        "client_dependency_checks": [
+          {
+            "available": false,
+            "module": "modal",
+            "module_imported": false
+          }
+        ],
+        "live_preflight": false
+      },
+      "expected": {
+        "all_client_dependencies_available": true
+      },
+      "id": "live_preflight_client_dependencies_available_when_requested",
+      "passed": true,
+      "summary": "live_preflight_client_dependencies_available_when_requested: passed=True"
+    },
+    {
+      "actual": {
         "cloud_job_started": false,
         "provider_api_called": false
       },
@@ -201,6 +242,7 @@
     "cloud_job_started": false,
     "credential_values_recorded": false,
     "dry_run_only": true,
+    "live_preflight_requested": false,
     "live_requested": false,
     "model_downloads_started": false,
     "provider_api_called": false,
@@ -218,16 +260,69 @@
     "requires_region_and_gpu_constraints": true,
     "requires_status_and_cancel_receipts": true
   },
+  "live_preflight": {
+    "client_dependency_available_count": 0,
+    "client_dependency_checks": [
+      {
+        "available": false,
+        "module": "modal",
+        "module_imported": false
+      }
+    ],
+    "client_dependency_required_count": 1,
+    "client_modules_imported": false,
+    "credential_env_vars": [
+      "MODAL_TOKEN_ID",
+      "MODAL_TOKEN_SECRET"
+    ],
+    "credential_present_count": 0,
+    "credential_required_count": 2,
+    "credential_values_recorded": false,
+    "provider_api_called": false,
+    "requested": false,
+    "transport": "metadata_only"
+  },
   "notes": [
     "Preflight checks local receipts, constraints, and credential variable presence only.",
-    "No provider SDK is imported and no provider API call is made."
+    "Live preflight probes use importlib metadata and environment-variable presence only; no provider SDK is imported and no provider API call is made."
   ],
   "passed": false,
   "provider": {
+    "adapter_contract": {
+      "adapter_id": "cloud_training.modal.fail_closed.v1",
+      "client_modules_imported_by_flight_recorder": false,
+      "cloud_cost_incurred_usd": 0,
+      "credential_values_recorded": false,
+      "dry_run_transport": "mock_receipts",
+      "live_launch_supported": false,
+      "live_preflight_supported": true,
+      "live_preflight_transport": "metadata_only",
+      "model_downloads_started": false,
+      "provider_api_called_by_flight_recorder": false,
+      "provider_id": "modal",
+      "receipt_types": [
+        "hfr.cloud_training_provider_registry.v1",
+        "hfr.cloud_training_preflight.v1",
+        "hfr.cloud_training_artifact_manifest.v1",
+        "hfr.cloud_training_launch_plan.v1",
+        "hfr.cloud_training_launch_receipt.v1",
+        "hfr.cloud_training_status_receipt.v1"
+      ],
+      "requires_cost_limit": true,
+      "requires_environment_credentials_for_live": true,
+      "requires_explicit_live_opt_in": true,
+      "requires_region_and_gpu_constraints": true,
+      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "status_cancel_receipts_supported": true,
+      "weights_updated_by_flight_recorder": false
+    },
     "artifact_protocols": [
       "archive",
       "volume",
       "object_store"
+    ],
+    "client_import_names": [
+      "modal"
     ],
     "credential_env_vars": [
       "MODAL_TOKEN_ID",
@@ -261,14 +356,14 @@
   "source_artifacts": {
     "agentic_training_plan": {
       "exists": true,
-      "path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+      "path": "../agentic_training/plans/sft_then_dpo_plan.json",
       "role": "agentic_training_plan",
       "schema_error_count": 0,
       "schema_errors": [],
       "schema_name": "agentic_training_plan",
       "schema_passed": true,
-      "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
-      "size_bytes": 9104,
+      "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+      "size_bytes": 10379,
       "source_passed": true,
       "source_recommendation": "ready_for_external_trainer_plan"
     },

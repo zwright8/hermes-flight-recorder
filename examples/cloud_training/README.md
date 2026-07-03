@@ -7,6 +7,9 @@ download models, or update weights.
 Each provider record includes an `adapter_contract` that names the implemented
 receipt surfaces and attests that live launch is unsupported while live
 preflight remains metadata-only.
+The artifact manifest includes a `transfer_plan` for upload/download counts,
+provider protocols, and explicit no-transfer/no-provider-call side-effect
+flags.
 
 Regenerate the fixtures with:
 

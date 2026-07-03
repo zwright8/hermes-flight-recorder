@@ -843,6 +843,10 @@ region/GPU constraints, artifact manifests, and status/cancel receipts.
 Provider registry entries include an `adapter_contract` with the exact receipt
 types implemented, mock dry-run transport, metadata-only live preflight
 transport, disabled live launch support, and zero provider API calls.
+Artifact manifests also carry a derived `transfer_plan` that must match the
+upload/download rows and provider protocols while proving Flight Recorder did
+not upload artifacts, download outputs, record credentials, or call provider
+APIs.
 
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle

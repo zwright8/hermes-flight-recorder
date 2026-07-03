@@ -358,10 +358,35 @@ def build_cloud_training_artifact_manifest(
     display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
     uploads = [_file_ref("upload", Path(path), preserve_paths, display_base_dir) for path in upload_paths or []]
     downloads = [{"role": "download", "path": path, "exists": False, "sha256": None, "size_bytes": None} for path in expected_downloads or []]
+    transfer_plan = _artifact_transfer_plan(provider, uploads, downloads)
     checks: list[dict[str, Any]] = []
     _add_check(checks, "upload_artifacts_declared", bool(uploads), {"upload_count": len(uploads)}, {"min_upload_count": 1})
     _add_check(checks, "upload_artifacts_exist", all(item["exists"] for item in uploads), {"uploads": uploads}, {"all_uploads_exist": True})
     _add_check(checks, "download_artifacts_not_assumed", True, {"downloads_exist": False}, {"downloads_exist": False})
+    _add_check(
+        checks,
+        "transfer_plan_matches_artifacts",
+        transfer_plan["upload_count"] == len(uploads) and transfer_plan["expected_download_count"] == len(downloads),
+        {"transfer_plan": transfer_plan},
+        {"upload_count": len(uploads), "expected_download_count": len(downloads)},
+    )
+    _add_check(
+        checks,
+        "flight_recorder_did_not_transfer_artifacts",
+        not transfer_plan["flight_recorder_uploaded_artifacts"]
+        and not transfer_plan["flight_recorder_downloaded_artifacts"]
+        and not transfer_plan["provider_api_called"],
+        {
+            "flight_recorder_uploaded_artifacts": transfer_plan["flight_recorder_uploaded_artifacts"],
+            "flight_recorder_downloaded_artifacts": transfer_plan["flight_recorder_downloaded_artifacts"],
+            "provider_api_called": transfer_plan["provider_api_called"],
+        },
+        {
+            "flight_recorder_uploaded_artifacts": False,
+            "flight_recorder_downloaded_artifacts": False,
+            "provider_api_called": False,
+        },
+    )
     failed = [check for check in checks if not check["passed"]]
     return {
         "schema_version": CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
@@ -376,6 +401,7 @@ def build_cloud_training_artifact_manifest(
         "upload_artifacts": uploads,
         "expected_download_artifacts": downloads,
         "artifact_protocols": list(provider["artifact_protocols"]),
+        "transfer_plan": transfer_plan,
         "execution_boundary": _boundary(),
     }
 
@@ -624,6 +650,23 @@ def _live_preflight_probe(
         "client_dependency_checks": client_dependency_checks,
         "client_dependency_available_count": sum(1 for check in client_dependency_checks if check["available"]),
         "client_dependency_required_count": len(client_dependency_checks),
+    }
+
+
+def _artifact_transfer_plan(provider: dict[str, Any], uploads: list[dict[str, Any]], downloads: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "mode": "dry_run_manifest_only",
+        "upload_count": len(uploads),
+        "expected_download_count": len(downloads),
+        "upload_size_bytes": sum(_int_value(item.get("size_bytes")) for item in uploads if item.get("exists") is True),
+        "artifact_protocols": list(provider["artifact_protocols"]),
+        "requires_external_runner_upload": bool(uploads),
+        "requires_external_runner_download": bool(downloads),
+        "download_artifacts_expected_to_exist_before_launch": False,
+        "flight_recorder_uploaded_artifacts": False,
+        "flight_recorder_downloaded_artifacts": False,
+        "provider_api_called": False,
+        "credential_values_recorded": False,
     }
 
 

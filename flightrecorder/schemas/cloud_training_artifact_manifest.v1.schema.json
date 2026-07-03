@@ -55,6 +55,9 @@
     "schema_version": {
       "const": "hfr.cloud_training_artifact_manifest.v1"
     },
+    "transfer_plan": {
+      "$ref": "#/$defs/transferPlan"
+    },
     "upload_artifacts": {
       "items": {
         "$ref": "#/$defs/artifact"
@@ -76,6 +79,7 @@
     "upload_artifacts",
     "expected_download_artifacts",
     "artifact_protocols",
+    "transfer_plan",
     "execution_boundary"
   ],
   "title": "Hermes Flight Recorder Cloud Training Artifact Manifest",
@@ -114,6 +118,68 @@
         "exists",
         "sha256",
         "size_bytes"
+      ],
+      "type": "object"
+    },
+    "transferPlan": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_protocols": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "download_artifacts_expected_to_exist_before_launch": {
+          "const": false
+        },
+        "expected_download_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "flight_recorder_downloaded_artifacts": {
+          "const": false
+        },
+        "flight_recorder_uploaded_artifacts": {
+          "const": false
+        },
+        "mode": {
+          "const": "dry_run_manifest_only"
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "requires_external_runner_download": {
+          "type": "boolean"
+        },
+        "requires_external_runner_upload": {
+          "type": "boolean"
+        },
+        "upload_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "upload_size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mode",
+        "upload_count",
+        "expected_download_count",
+        "upload_size_bytes",
+        "artifact_protocols",
+        "requires_external_runner_upload",
+        "requires_external_runner_download",
+        "download_artifacts_expected_to_exist_before_launch",
+        "flight_recorder_uploaded_artifacts",
+        "flight_recorder_downloaded_artifacts",
+        "provider_api_called",
+        "credential_values_recorded"
       ],
       "type": "object"
     }

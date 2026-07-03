@@ -8,14 +8,14 @@
       "actual": {
         "artifact": {
           "exists": true,
-          "path": "examples/cloud_training/preflight.json",
+          "path": "preflight.json",
           "role": "cloud_training_preflight",
           "schema_error_count": 0,
           "schema_errors": [],
           "schema_name": "cloud_training_preflight",
           "schema_passed": true,
-          "sha256": "cdc2d748d5bcd337d81e3c3f690a2c2a5e40430a63a7ac27f84a04c4f6276f11",
-          "size_bytes": 8168,
+          "sha256": "51ad35c5ca448cd47e2f00a38c8e0320b3d1fc2578ffc52209564a5239bff377",
+          "size_bytes": 11264,
           "source_passed": false,
           "source_recommendation": "block_cloud_training_launch"
         }
@@ -32,14 +32,14 @@
       "actual": {
         "artifact": {
           "exists": true,
-          "path": "examples/cloud_training/artifact_manifest.json",
+          "path": "artifact_manifest.json",
           "role": "cloud_training_artifact_manifest",
           "schema_error_count": 0,
           "schema_errors": [],
           "schema_name": "cloud_training_artifact_manifest",
           "schema_passed": true,
-          "sha256": "7586074f7179871f0b1992271bed3b2a16f1a57a1f74ed6a50875864d7898a4c",
-          "size_bytes": 2520,
+          "sha256": "180335c71be1fe85a72b37aa0086c9d09c94263a52ffa359d666e86380e58c68",
+          "size_bytes": 6075,
           "source_passed": true,
           "source_recommendation": ""
         }
@@ -72,6 +72,7 @@
     "cloud_job_started": false,
     "credential_values_recorded": false,
     "dry_run_only": true,
+    "live_preflight_requested": false,
     "live_requested": false,
     "model_downloads_started": false,
     "provider_api_called": false,
@@ -102,10 +103,41 @@
   },
   "passed": false,
   "provider": {
+    "adapter_contract": {
+      "adapter_id": "cloud_training.modal.fail_closed.v1",
+      "client_modules_imported_by_flight_recorder": false,
+      "cloud_cost_incurred_usd": 0,
+      "credential_values_recorded": false,
+      "dry_run_transport": "mock_receipts",
+      "live_launch_supported": false,
+      "live_preflight_supported": true,
+      "live_preflight_transport": "metadata_only",
+      "model_downloads_started": false,
+      "provider_api_called_by_flight_recorder": false,
+      "provider_id": "modal",
+      "receipt_types": [
+        "hfr.cloud_training_provider_registry.v1",
+        "hfr.cloud_training_preflight.v1",
+        "hfr.cloud_training_artifact_manifest.v1",
+        "hfr.cloud_training_launch_plan.v1",
+        "hfr.cloud_training_launch_receipt.v1",
+        "hfr.cloud_training_status_receipt.v1"
+      ],
+      "requires_cost_limit": true,
+      "requires_environment_credentials_for_live": true,
+      "requires_explicit_live_opt_in": true,
+      "requires_region_and_gpu_constraints": true,
+      "schema_version": "hfr.cloud_training_provider_adapter.v1",
+      "status_cancel_receipts_supported": true,
+      "weights_updated_by_flight_recorder": false
+    },
     "artifact_protocols": [
       "archive",
       "volume",
       "object_store"
+    ],
+    "client_import_names": [
+      "modal"
     ],
     "credential_env_vars": [
       "MODAL_TOKEN_ID",
@@ -139,27 +171,27 @@
   "source_artifacts": {
     "artifact_manifest": {
       "exists": true,
-      "path": "examples/cloud_training/artifact_manifest.json",
+      "path": "artifact_manifest.json",
       "role": "cloud_training_artifact_manifest",
       "schema_error_count": 0,
       "schema_errors": [],
       "schema_name": "cloud_training_artifact_manifest",
       "schema_passed": true,
-      "sha256": "7586074f7179871f0b1992271bed3b2a16f1a57a1f74ed6a50875864d7898a4c",
-      "size_bytes": 2520,
+      "sha256": "180335c71be1fe85a72b37aa0086c9d09c94263a52ffa359d666e86380e58c68",
+      "size_bytes": 6075,
       "source_passed": true,
       "source_recommendation": ""
     },
     "preflight": {
       "exists": true,
-      "path": "examples/cloud_training/preflight.json",
+      "path": "preflight.json",
       "role": "cloud_training_preflight",
       "schema_error_count": 0,
       "schema_errors": [],
       "schema_name": "cloud_training_preflight",
       "schema_passed": true,
-      "sha256": "cdc2d748d5bcd337d81e3c3f690a2c2a5e40430a63a7ac27f84a04c4f6276f11",
-      "size_bytes": 8168,
+      "sha256": "51ad35c5ca448cd47e2f00a38c8e0320b3d1fc2578ffc52209564a5239bff377",
+      "size_bytes": 11264,
       "source_passed": false,
       "source_recommendation": "block_cloud_training_launch"
     }

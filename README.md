@@ -353,6 +353,9 @@ discoverability; they still record `provider_api_called: false`.
 Every provider registry record includes an `adapter_contract` attesting that the
 implemented transport is mock receipts plus metadata-only live preflight, with
 live launch support disabled by default.
+Artifact manifests include a `transfer_plan` that counts upload inputs and
+expected downloads, records provider artifact protocols, and keeps actual
+upload/download/API side effects false for the external runner to perform.
 
 ```bash
 flightrecorder cloud-training providers --out runs/cloud_provider_registry.json

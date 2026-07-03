@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flightrecorder.cloud_training import (
     PROVIDER_ADAPTER_RECEIPT_TYPES,
+    build_cloud_training_artifact_manifest,
     build_cloud_training_provider_registry,
     provider_choices,
 )
@@ -112,6 +113,18 @@ class CloudTrainingTests(unittest.TestCase):
                 0,
             )
             self.assert_schema_and_validate(artifact_manifest, "cloud_training_artifact_manifest")
+            artifact_payload = json.loads(artifact_manifest.read_text(encoding="utf-8"))
+            transfer_plan = artifact_payload["transfer_plan"]
+            self.assertEqual(transfer_plan["mode"], "dry_run_manifest_only")
+            self.assertEqual(transfer_plan["upload_count"], 1)
+            self.assertEqual(transfer_plan["expected_download_count"], 1)
+            self.assertEqual(transfer_plan["artifact_protocols"], artifact_payload["artifact_protocols"])
+            self.assertTrue(transfer_plan["requires_external_runner_upload"])
+            self.assertTrue(transfer_plan["requires_external_runner_download"])
+            self.assertFalse(transfer_plan["download_artifacts_expected_to_exist_before_launch"])
+            self.assertFalse(transfer_plan["flight_recorder_uploaded_artifacts"])
+            self.assertFalse(transfer_plan["flight_recorder_downloaded_artifacts"])
+            self.assertFalse(transfer_plan["provider_api_called"])
 
             preflight_code = run_cli(
                 [
@@ -499,6 +512,36 @@ class CloudTrainingTests(unittest.TestCase):
                 "cloud_training_preflight.source_artifacts.agentic_training_plan.path must be relative to the cloud-training artifact.",
                 errors,
             )
+
+    def test_validate_rejects_forged_cloud_training_transfer_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path = root / "artifacts.json"
+            manifest = build_cloud_training_artifact_manifest(
+                provider_id="modal",
+                upload_paths=[EXAMPLE_PLAN],
+                expected_downloads=["adapters/candidate/adapter_model.safetensors"],
+                output_base_dir=root,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            manifest["transfer_plan"]["upload_count"] = 0
+            manifest["transfer_plan"]["expected_download_count"] = 0
+            manifest["transfer_plan"]["artifact_protocols"] = []
+            manifest["transfer_plan"]["flight_recorder_uploaded_artifacts"] = True
+            manifest["transfer_plan"]["flight_recorder_downloaded_artifacts"] = True
+            manifest["transfer_plan"]["provider_api_called"] = True
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(cloud_training_artifact_manifest_paths=[manifest_path], strict=True)
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_artifact_manifest.transfer_plan.upload_count must match cloud training artifact rows.", errors)
+            self.assertIn("cloud_training_artifact_manifest.transfer_plan.expected_download_count must match cloud training artifact rows.", errors)
+            self.assertIn("cloud_training_artifact_manifest.transfer_plan.artifact_protocols must match cloud training artifact rows.", errors)
+            self.assertIn("cloud_training_artifact_manifest.transfer_plan.flight_recorder_uploaded_artifacts must be false.", errors)
+            self.assertIn("cloud_training_artifact_manifest.transfer_plan.flight_recorder_downloaded_artifacts must be false.", errors)
+            self.assertIn("cloud_training_artifact_manifest.transfer_plan.provider_api_called must be false.", errors)
 
     def test_schema_names_are_registered(self):
         names = {record["name"] for record in list_schema_records()}
