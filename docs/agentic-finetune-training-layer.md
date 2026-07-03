@@ -138,16 +138,19 @@ Completed receipts require a ready runtime preflight plus at least one adapter
 or checkpoint artifact. Failed, blocked, and aborted receipts require a
 classified failure such as `dependency_missing`, `view_validation_failed`,
 `trainer_crash`, `out_of_memory`, `timeout`, or `interrupted`. The receipt only
-fingerprints supplied files and records lineage back to the plan and runtime
-preflight; Flight Recorder still does not launch trainers, import trainer
-stacks, download models, or mutate weights. The receipt also includes a
+fingerprints supplied files and records lineage back to the plan, runtime
+preflight, model manifest, and dataset manifest with SHA-256 plus byte-size
+evidence; Flight Recorder still does not launch trainers, import trainer
+stacks, download models, or mutate weights. Supplied artifact refs are recorded
+relative to the receipt when possible, and validation reopens regular files to
+reject hash or byte-size drift. The receipt also includes a byte-size-bound
 `registry_update` proposal for `flightrecorder model-registry link`, leaving
 `applied: false` until governance accepts the result. After the receipt exists,
-validate it with `flightrecorder validate --agentic-training-result
-runs/agentic_training_result.json --strict`, then include it in the
-trainer-facing evidence bundle with `flightrecorder evidence-bundle
---agentic-training-result runs/agentic_training_result.json` so the final
-preflight, wrapper dry-run, and result receipt are summarized under
+validate it with `flightrecorder validate
+--agentic-training-result runs/agentic_training_result.json --strict`, then
+include it in the trainer-facing evidence bundle with `flightrecorder
+evidence-bundle --agentic-training-result runs/agentic_training_result.json` so
+the final preflight, wrapper dry-run, and result receipt are summarized under
 `metrics.trainer_handoff`.
 
 ## Durable Example

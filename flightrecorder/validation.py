@@ -7,7 +7,7 @@ import json
 import shlex
 from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .action_gate import ACTION_LEDGER_GATE_POLICY_SCHEMA_VERSION, ACTION_LEDGER_GATE_SCHEMA_VERSION, evaluate_action_ledger_gate
@@ -1881,6 +1881,11 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
         target.errors.append(
             f"agentic_training_result.readiness expected {expected_readiness!r}, got {result.get('readiness')!r}."
         )
+    artifact_path = result.get("artifact_path")
+    if not isinstance(artifact_path, str) or not artifact_path:
+        target.errors.append("agentic_training_result.artifact_path must be a non-empty string.")
+    elif not _is_safe_agentic_training_result_path(artifact_path):
+        target.errors.append("agentic_training_result.artifact_path must be a safe relative path without traversal.")
 
     training_result = result.get("training_result")
     if not isinstance(training_result, dict):
@@ -1895,6 +1900,11 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
         target.errors.append("agentic_training_result.training_result.flight_recorder_executed_training must be false.")
     if training_result.get("model_downloads_started_by_flight_recorder") is not False:
         target.errors.append("agentic_training_result.training_result.model_downloads_started_by_flight_recorder must be false.")
+    output_dir = training_result.get("output_dir")
+    if not isinstance(output_dir, str):
+        target.errors.append("agentic_training_result.training_result.output_dir must be a string.")
+    elif output_dir and not _is_safe_agentic_training_result_path(output_dir):
+        target.errors.append("agentic_training_result.training_result.output_dir must be a safe relative path without traversal.")
 
     failure = result.get("failure")
     if not isinstance(failure, dict):
@@ -1918,7 +1928,7 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     if status in {"failed", "blocked", "aborted"} and (failure_class in {"none", "unknown"} or not failure_message.strip()):
         target.errors.append("agentic_training_result non-completed receipts require a classified failure and message.")
 
-    artifact_counts = _validate_agentic_training_result_artifacts(result.get("artifacts"), target)
+    artifact_counts = _validate_agentic_training_result_artifacts(result.get("artifacts"), target, source_path)
     metrics = result.get("metrics")
     if not isinstance(metrics, dict):
         target.errors.append("agentic_training_result.metrics must be an object.")
@@ -1953,7 +1963,11 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     _validate_agentic_training_result_boundary(result.get("execution_boundary"), target, "execution_boundary")
     _validate_agentic_training_result_contract(result.get("handoff_contract"), target)
     if "registry_update" in result:
-        _validate_agentic_training_result_registry_update(result.get("registry_update"), expected_passed, target)
+        _validate_agentic_training_result_registry_update(
+            result.get("registry_update"), expected_passed, target, result.get("artifacts"), status, artifact_path
+        )
+    elif status == "completed":
+        target.errors.append("agentic_training_result.registry_update is required for completed receipts.")
     notes = result.get("notes")
     if not isinstance(notes, list) or not all(isinstance(item, str) for item in notes):
         target.errors.append("agentic_training_result.notes must be a list of strings.")
@@ -1968,7 +1982,7 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     )
 
 
-def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget) -> dict[str, int]:
+def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, int]:
     counts = {
         "artifact_count": 0,
         "regular_artifact_count": 0,
@@ -2004,11 +2018,22 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
             counts[role_metric_fields[role]] += 1
         if role in OUTPUT_ARTIFACT_ROLES:
             counts["output_artifact_count"] += 1
-        if not isinstance(artifact.get("path"), str) or not artifact.get("path"):
+        path_value = artifact.get("path")
+        path_is_safe = isinstance(path_value, str) and _is_safe_agentic_training_result_path(path_value)
+        current_path = _agentic_training_result_reference_path(path_value, source_path) if path_is_safe else None
+        if not isinstance(path_value, str) or not path_value:
             target.errors.append(f"{label}.path must be a non-empty string.")
+        elif not path_is_safe:
+            target.errors.append(f"{label}.path must be a safe relative path without traversal.")
         for field_name in ("exists", "regular_file"):
             if not isinstance(artifact.get(field_name), bool):
                 target.errors.append(f"{label}.{field_name} must be a boolean.")
+        if artifact.get("exists") is True and current_path is not None and not current_path.exists():
+            target.errors.append(f"{label}.path does not resolve to the current file.")
+        if artifact.get("regular_file") is True and current_path is not None and current_path.is_symlink():
+            target.errors.append(f"{label}.path must not be a symlink.")
+        if artifact.get("regular_file") is True and current_path is not None and not current_path.is_file():
+            target.errors.append(f"{label}.path does not resolve to a regular file.")
         if artifact.get("regular_file") is True:
             counts["regular_artifact_count"] += 1
             if not _is_sha256(artifact.get("sha256")):
@@ -2017,6 +2042,11 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
         if not _is_non_negative_int(artifact.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+        elif artifact.get("regular_file") is True and current_path is not None and current_path.is_file():
+            if current_path.stat().st_size != artifact.get("size_bytes"):
+                target.errors.append(f"{label}.size_bytes does not match the current file.")
+            if _is_sha256(artifact.get("sha256")) and _sha256(current_path) != artifact.get("sha256"):
+                target.errors.append(f"{label}.sha256 does not match the current file.")
     return counts
 
 
@@ -2024,6 +2054,7 @@ def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarg
     if not isinstance(value, dict):
         target.errors.append("agentic_training_result.lineage must be an object.")
         return
+    plan_inputs = _agentic_training_result_plan_input_manifests(value, source_path)
     for field_name in ("plan", "runtime_preflight"):
         ref = value.get(field_name)
         label = f"agentic_training_result.lineage.{field_name}"
@@ -2033,6 +2064,8 @@ def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarg
         for string_field in ("path", "schema_name"):
             if not isinstance(ref.get(string_field), str) or not ref.get(string_field):
                 target.errors.append(f"{label}.{string_field} must be a non-empty string.")
+        if isinstance(ref.get("path"), str) and ref.get("path") and not _is_safe_agentic_training_result_path(ref["path"]):
+            target.errors.append(f"{label}.path must be a safe relative path without traversal.")
         for bool_field in ("exists", "regular_file"):
             if not isinstance(ref.get(bool_field), bool):
                 target.errors.append(f"{label}.{bool_field} must be a boolean.")
@@ -2050,10 +2083,62 @@ def _validate_agentic_training_result_lineage(value: Any, target: ValidationTarg
         for string_field in ("id", "path", "sha256"):
             if not isinstance(ref.get(string_field), str):
                 target.errors.append(f"{label}.{string_field} must be a string.")
+        if isinstance(ref.get("path"), str) and ref.get("path") and not _is_safe_agentic_training_result_path(ref["path"]):
+            target.errors.append(f"{label}.path must be a safe relative path without traversal.")
         if ref.get("sha256") and not _is_sha256(ref.get("sha256")):
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when present.")
+        if not _is_non_negative_int(ref.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
         if ref.get("license_allows_training") is not True:
             target.errors.append(f"{label}.license_allows_training must be true.")
+        expected_ref = plan_inputs.get(field_name)
+        if isinstance(expected_ref, dict):
+            _validate_agentic_training_result_manifest_matches_plan(ref, expected_ref, target, label, field_name)
+
+
+def _agentic_training_result_plan_input_manifests(lineage: dict[str, Any], source_path: Path) -> dict[str, Any]:
+    plan_ref = lineage.get("plan")
+    if not isinstance(plan_ref, dict):
+        return {}
+    path_value = plan_ref.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        return {}
+    if not _is_safe_agentic_training_result_path(path_value):
+        return {}
+    plan_path = _agentic_training_result_reference_path(path_value, source_path)
+    if not plan_path.is_file():
+        return {}
+    try:
+        payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    manifests = payload.get("input_manifests")
+    return manifests if isinstance(manifests, dict) else {}
+
+
+def _validate_agentic_training_result_manifest_matches_plan(
+    ref: dict[str, Any],
+    expected_ref: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    field_name: str,
+) -> None:
+    expected_label = f"agentic_training_plan.input_manifests.{field_name}"
+    for string_field in ("id", "sha256"):
+        if isinstance(expected_ref.get(string_field), str) and ref.get(string_field) != expected_ref.get(string_field):
+            target.errors.append(f"{label}.{string_field} must match {expected_label}.{string_field}.")
+    if isinstance(expected_ref.get("path"), str):
+        expected_path = _agentic_training_result_redacted_path(expected_ref["path"])
+        if ref.get("path") != expected_path:
+            target.errors.append(f"{label}.path must match the safe {expected_label}.path.")
+    if _is_non_negative_int(expected_ref.get("size_bytes")) and ref.get("size_bytes") != expected_ref.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes must match {expected_label}.size_bytes.")
+    if isinstance(expected_ref.get("license_allows_training"), bool) and ref.get("license_allows_training") != expected_ref.get(
+        "license_allows_training"
+    ):
+        target.errors.append(f"{label}.license_allows_training must match {expected_label}.license_allows_training.")
 
 
 def _validate_agentic_training_result_lineage_file(
@@ -2061,6 +2146,8 @@ def _validate_agentic_training_result_lineage_file(
 ) -> None:
     path_value = ref.get("path")
     if not isinstance(path_value, str) or not path_value:
+        return
+    if not _is_safe_agentic_training_result_path(path_value):
         return
     current_path = _agentic_training_result_reference_path(path_value, source_path)
     if ref.get("exists") is not True:
@@ -2074,6 +2161,9 @@ def _validate_agentic_training_result_lineage_file(
         target.errors.append(f"{label}.path does not resolve to a regular file.")
         return
     if not current_path.exists() or not current_path.is_file():
+        return
+    if current_path.is_symlink():
+        target.errors.append(f"{label}.path must not be a symlink.")
         return
     if _is_non_negative_int(ref.get("size_bytes")) and current_path.stat().st_size != ref.get("size_bytes"):
         target.errors.append(f"{label}.size_bytes does not match the current file.")
@@ -2129,7 +2219,9 @@ def _validate_agentic_training_result_contract(value: Any, target: ValidationTar
             target.errors.append(f"{label}.{key} expected {expected_value!r}, got {value.get(key)!r}.")
 
 
-def _validate_agentic_training_result_registry_update(value: Any, expected_ready: bool, target: ValidationTarget) -> None:
+def _validate_agentic_training_result_registry_update(
+    value: Any, expected_ready: bool, target: ValidationTarget, artifacts: Any, status: Any, receipt_artifact_path: Any
+) -> None:
     label = "agentic_training_result.registry_update"
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object when present.")
@@ -2146,6 +2238,8 @@ def _validate_agentic_training_result_registry_update(value: Any, expected_ready
         return
     if not links:
         target.errors.append(f"{label}.links must not be empty.")
+    output_artifact_counter = _agentic_training_result_output_artifact_counter(artifacts)
+    linked_output_counter: Counter[tuple[Any, Any, Any, Any]] = Counter()
     for index, link in enumerate(links):
         link_label = f"{label}.links[{index}]"
         if not isinstance(link, dict):
@@ -2154,8 +2248,90 @@ def _validate_agentic_training_result_registry_update(value: Any, expected_ready
         for field_name in ("collection", "artifact_id", "kind", "status", "path"):
             if not isinstance(link.get(field_name), str) or not link.get(field_name):
                 target.errors.append(f"{link_label}.{field_name} must be a non-empty string.")
+        path_value = link.get("path")
+        if isinstance(path_value, str) and path_value and not _is_safe_agentic_training_result_path(path_value):
+            target.errors.append(f"{link_label}.path must be a safe relative path without traversal.")
+        if link.get("collection") == "training_runs":
+            if isinstance(receipt_artifact_path, str) and link.get("path") != receipt_artifact_path:
+                target.errors.append(f"{link_label}.path must match agentic_training_result.artifact_path.")
+            if "sha256" in link and link.get("sha256") is not None and not _is_sha256(link.get("sha256")):
+                target.errors.append(f"{link_label}.sha256 must be a SHA-256 hex string or null.")
+            if "size_bytes" in link and not _is_non_negative_int(link.get("size_bytes")):
+                target.errors.append(f"{link_label}.size_bytes must be a non-negative integer.")
+            continue
+        if not _is_sha256(link.get("sha256")):
+            target.errors.append(f"{link_label}.sha256 must be a SHA-256 hex string for artifact registry links.")
+        if not _is_non_negative_int(link.get("size_bytes")):
+            target.errors.append(f"{link_label}.size_bytes must be a non-negative integer for artifact registry links.")
+        key = (link.get("path"), link.get("sha256"), link.get("size_bytes"), link.get("kind"))
+        if output_artifact_counter.get(key, 0) == 0:
+            target.errors.append(f"{link_label} must match a supplied output artifact ref by path, sha256, size_bytes, and kind.")
+            matching_roles = sorted(
+                str(candidate[3])
+                for candidate in output_artifact_counter
+                if candidate[:3] == key[:3] and isinstance(candidate[3], str)
+            )
+            if matching_roles and link.get("kind") not in matching_roles:
+                target.errors.append(f"{link_label}.kind must match the supplied output artifact role.")
+        else:
+            if link.get("collection") != "adapters":
+                target.errors.append(f"{link_label}.collection must be 'adapters' for output artifact registry links.")
+            if link.get("collection") == "adapters":
+                linked_output_counter[key] += 1
     if links and isinstance(links[0], dict) and links[0].get("collection") != "training_runs":
         target.errors.append(f"{label}.links[0].collection must be 'training_runs'.")
+    if status == "completed":
+        missing_links = sorted(
+            key[0]
+            for key, expected_count in output_artifact_counter.items()
+            if linked_output_counter.get(key, 0) < expected_count
+        )
+        if missing_links:
+            target.errors.append(
+                f"{label}.links must include size-bound registry links for completed output artifacts: {missing_links!r}."
+            )
+        extra_links = sorted(
+            key[0]
+            for key, linked_count in linked_output_counter.items()
+            if linked_count > output_artifact_counter.get(key, 0)
+        )
+        if extra_links:
+            target.errors.append(f"{label}.links must not duplicate output artifact registry links: {extra_links!r}.")
+
+
+def _agentic_training_result_output_artifact_counter(artifacts: Any) -> Counter[tuple[Any, Any, Any, Any]]:
+    if not isinstance(artifacts, list):
+        return Counter()
+    counter: Counter[tuple[Any, Any, Any, Any]] = Counter()
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        if artifact.get("role") not in OUTPUT_ARTIFACT_ROLES:
+            continue
+        counter[(artifact.get("path"), artifact.get("sha256"), artifact.get("size_bytes"), artifact.get("role"))] += 1
+    return counter
+
+
+def _agentic_training_result_redacted_path(value: str) -> str:
+    if _is_safe_agentic_training_result_path(value):
+        return value
+    normalized = value.replace("\\", "/")
+    basename = normalized.rstrip("/").rsplit("/", 1)[-1]
+    return basename if _is_safe_agentic_training_result_path(basename) else "artifact"
+
+
+def _is_safe_agentic_training_result_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
 
 
 def _model_scout_reference_path(value: Any, source_path: Path) -> Path | None:

@@ -2,10 +2,37 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_result.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "training_result": {
+            "properties": {
+              "status": {
+                "const": "completed"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "training_result"
+        ]
+      },
+      "then": {
+        "required": [
+          "registry_update"
+        ]
+      }
+    }
+  ],
   "description": "Side-effect-free result receipt for externally executed agentic training runs.",
   "properties": {
     "artifact_path": {
-      "type": "string"
+      "$ref": "#/$defs/safeRelativePath"
     },
     "artifacts": {
       "items": {
@@ -114,8 +141,7 @@
           "type": "boolean"
         },
         "path": {
-          "minLength": 1,
-          "type": "string"
+          "$ref": "#/$defs/safeRelativePath"
         },
         "regular_file": {
           "type": "boolean"
@@ -367,16 +393,21 @@
           "type": "boolean"
         },
         "path": {
-          "type": "string"
+          "$ref": "#/$defs/safeRelativePath"
         },
         "sha256": {
           "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
         "id",
         "path",
         "sha256",
+        "size_bytes",
         "license_allows_training"
       ],
       "type": "object"
@@ -442,7 +473,7 @@
         },
         "links": {
           "items": {
-            "type": "object"
+            "$ref": "#/$defs/registryLink"
           },
           "type": "array"
         },
@@ -469,6 +500,87 @@
       ],
       "type": "object"
     },
+    "registryLink": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "collection"
+            ],
+            "properties": {
+              "collection": {
+                "not": {
+                  "const": "training_runs"
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "sha256",
+              "size_bytes"
+            ],
+            "properties": {
+              "collection": {
+                "const": "adapters"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "artifact_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "collection": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/safeRelativePath"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "collection",
+        "artifact_id",
+        "kind",
+        "status",
+        "path"
+      ],
+      "type": "object"
+    },
+    "safeRelativePath": {
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))(?!.*(^|[\\\\/])~([\\\\/]|$))(?!.*\\\\).+$",
+      "type": "string"
+    },
+    "safeRelativePathOrEmpty": {
+      "pattern": "^(?:$|(?!/)(?![A-Za-z]:[\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))(?!.*(^|[\\\\/])~([\\\\/]|$))(?!.*\\\\).+)$",
+      "type": "string"
+    },
     "trainingResult": {
       "additionalProperties": true,
       "properties": {
@@ -493,7 +605,7 @@
           "const": false
         },
         "output_dir": {
-          "type": "string"
+          "$ref": "#/$defs/safeRelativePathOrEmpty"
         },
         "run_id": {
           "type": "string"

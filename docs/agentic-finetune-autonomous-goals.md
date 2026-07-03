@@ -609,7 +609,12 @@ card, and dataset card decisions.
   sizes.
 - Agentic training-result lineage refs include input sizes; validation rejects
   regular plan or runtime-preflight lineage refs without matching SHA-256 and
-  byte-size evidence resolved from the receipt location.
+  byte-size evidence resolved from the receipt location, and rejects model or
+  dataset manifest summaries that no longer match the verified training plan.
+- Agentic training-result registry proposals include adapter/checkpoint byte
+  sizes; validation rejects hashed registry links that are not backed by a
+  supplied artifact ref with matching size evidence and expected registry
+  target, and detects missing duplicate output-artifact links.
 - Agentic training plans and runtime preflights also bind registered manifests
   and selected trainer views to SHA-256 plus byte-size evidence.
 - Action-ledger gate validation reopens the referenced action ledger from the

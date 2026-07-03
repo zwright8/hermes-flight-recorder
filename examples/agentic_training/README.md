@@ -53,17 +53,17 @@ python3 scripts/archive_agentic_training_result.py \
   --metrics examples/agentic_training/trainer_outputs/metrics.json \
   --log examples/agentic_training/trainer_outputs/trainer.log \
   --created-at 2026-07-02T00:00:00+00:00 \
-  --out examples/agentic_training/results/completed_result.json
+  --out examples/agentic_training/completed_result.json
 ```
 
-The result receipt proposes model-registry links but does not mutate registry
-entries, move aliases, download models, or train weights.
+The result receipt proposes size-bound model-registry links but does not mutate
+registry entries, move aliases, download models, or train weights.
 
 Validate the committed receipt before including it in a trainer-facing evidence
 bundle:
 
 ```bash
 flightrecorder validate \
-  --agentic-training-result examples/agentic_training/results/completed_result.json \
+  --agentic-training-result examples/agentic_training/completed_result.json \
   --strict
 ```

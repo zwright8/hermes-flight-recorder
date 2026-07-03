@@ -57,6 +57,7 @@ class AgenticTrainingResultTests(unittest.TestCase):
             )
 
             self.assertTrue(result["passed"], result["blocked_reasons"])
+            self.assertEqual(result["artifact_path"], "result.json")
             self.assertEqual(result["recommendation"], "register_training_result")
             self.assertEqual(result["training_result"]["status"], "completed")
             self.assertEqual(result["failure"]["class"], "none")
@@ -65,10 +66,17 @@ class AgenticTrainingResultTests(unittest.TestCase):
             self.assertFalse(result["registry_update"]["applied"])
             self.assertTrue(result["registry_update"]["ready_to_apply"])
             self.assertEqual(result["registry_update"]["links"][0]["collection"], "training_runs")
+            self.assertEqual(result["registry_update"]["links"][0]["path"], "result.json")
             self.assertIn("adapters", {link["collection"] for link in result["registry_update"]["links"]})
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            self.assertEqual(adapter_link["path"], "adapter.safetensors")
+            self.assertEqual(adapter_link["size_bytes"], adapter.stat().st_size)
             self.assertFalse(result["execution_boundary"]["flight_recorder_launched_training"])
             self.assertEqual(result["lineage"]["plan"]["size_bytes"], EXAMPLE_PLAN.stat().st_size)
             self.assertEqual(result["lineage"]["runtime_preflight"]["size_bytes"], runtime.stat().st_size)
+            plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
+            self.assertEqual(result["lineage"]["model"]["size_bytes"], plan["input_manifests"]["model"]["size_bytes"])
+            self.assertEqual(result["lineage"]["dataset"]["size_bytes"], plan["input_manifests"]["dataset"]["size_bytes"])
             schema = check_schema_contract(result)
             self.assertTrue(schema["passed"], schema["errors"])
 
@@ -169,11 +177,13 @@ class AgenticTrainingResultTests(unittest.TestCase):
             adapter = root / "adapter.safetensors"
             out = root / "agentic_training_result.json"
             summary_path = root / "validation.json"
+            local_plan = root / EXAMPLE_PLAN.name
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
             self.write_runtime_preflight(runtime, ready=True)
             adapter.write_bytes(b"tiny adapter bytes")
 
             result = build_agentic_training_result(
-                plan_path=EXAMPLE_PLAN,
+                plan_path=local_plan,
                 runtime_preflight_path=runtime,
                 out_path=out,
                 status="completed",
@@ -208,11 +218,13 @@ class AgenticTrainingResultTests(unittest.TestCase):
             adapter = root / "adapter.safetensors"
             out = root / "agentic_training_result.json"
             summary_path = root / "validation.json"
+            local_plan = root / EXAMPLE_PLAN.name
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
             self.write_runtime_preflight(runtime, ready=True)
             adapter.write_bytes(b"tiny adapter bytes")
 
             result = build_agentic_training_result(
-                plan_path=EXAMPLE_PLAN,
+                plan_path=local_plan,
                 runtime_preflight_path=runtime,
                 out_path=out,
                 status="completed",
@@ -247,11 +259,13 @@ class AgenticTrainingResultTests(unittest.TestCase):
             adapter = root / "adapter.safetensors"
             out = root / "agentic_training_result.json"
             summary_path = root / "validation.json"
+            local_plan = root / EXAMPLE_PLAN.name
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
             self.write_runtime_preflight(runtime, ready=True)
             adapter.write_bytes(b"tiny adapter bytes")
 
             result = build_agentic_training_result(
-                plan_path=EXAMPLE_PLAN,
+                plan_path=local_plan,
                 runtime_preflight_path=runtime,
                 out_path=out,
                 status="completed",
@@ -313,6 +327,715 @@ class AgenticTrainingResultTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("agentic_training_result.lineage.runtime_preflight.size_bytes does not match the current file.", errors)
+
+    def test_validate_rejects_agentic_training_result_artifact_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            forged_size = adapter.stat().st_size + 1
+            result["artifacts"][0]["size_bytes"] = forged_size
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            adapter_link["size_bytes"] = forged_size
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.artifacts[0].size_bytes does not match the current file.", errors)
+
+    def test_validate_rejects_agentic_training_result_symlink_artifact_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            external_dir = root / "external"
+            external_dir.mkdir()
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            external_adapter = external_dir / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            local_plan = root / EXAMPLE_PLAN.name
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
+            self.write_runtime_preflight(runtime, ready=True)
+            external_adapter.write_bytes(b"tiny adapter bytes")
+            adapter.symlink_to(external_adapter)
+
+            result = build_agentic_training_result(
+                plan_path=local_plan,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.artifacts[0].path must not be a symlink.", errors)
+
+    def test_validate_rejects_agentic_training_result_absolute_public_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["artifact_path"] = "/example/result.json"
+            result["training_result"]["output_dir"] = "/example/output"
+            result["lineage"]["plan"]["path"] = str(EXAMPLE_PLAN)
+            result["registry_update"]["links"][0]["path"] = "/example/result.json"
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.artifact_path must be a safe relative path without traversal.", errors)
+            self.assertIn(
+                "agentic_training_result.training_result.output_dir must be a safe relative path without traversal.",
+                errors,
+            )
+            self.assertIn("agentic_training_result.lineage.plan.path must be a safe relative path without traversal.", errors)
+            self.assertIn(
+                "agentic_training_result.registry_update.links[0].path must be a safe relative path without traversal.",
+                errors,
+            )
+
+    def test_validate_rejects_agentic_training_result_traversal_artifact_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["artifacts"][0]["path"] = "../external/adapter.safetensors"
+            result["lineage"]["runtime_preflight"]["path"] = "../external/runtime_preflight.json"
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            adapter_link["path"] = "../external/adapter.safetensors"
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.artifacts[0].path must be a safe relative path without traversal.", errors)
+            self.assertIn(
+                "agentic_training_result.lineage.runtime_preflight.path must be a safe relative path without traversal.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_result.registry_update.links[1].path must be a safe relative path without traversal.",
+                errors,
+            )
+
+    def test_builder_redacts_out_of_tree_artifact_paths_to_basename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            receipt_dir = root / "receipt"
+            external_dir = root / "external"
+            receipt_dir.mkdir()
+            external_dir.mkdir()
+            runtime = root / "runtime_preflight.json"
+            adapter = external_dir / "adapter.safetensors"
+            out = receipt_dir / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+
+            self.assertEqual(result["artifact_path"], out.name)
+            self.assertEqual(result["artifacts"][0]["path"], adapter.name)
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            self.assertEqual(adapter_link["path"], adapter.name)
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.artifacts[0].path does not resolve to the current file.", errors)
+
+    def test_validate_rejects_agentic_training_result_manifest_lineage_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"]["model"].pop("size_bytes")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.model.size_bytes must be a non-negative integer.", errors)
+
+    def test_builder_redacts_unsafe_manifest_paths_from_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            plan_path = root / "plan.json"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
+            plan["input_manifests"]["model"]["path"] = "C:\\private\\model_manifest.json"
+            plan["input_manifests"]["dataset"]["path"] = "..\\escape\\dataset_manifest.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=plan_path,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+
+            self.assertEqual(result["lineage"]["model"]["path"], "model_manifest.json")
+            self.assertEqual(result["lineage"]["dataset"]["path"], "dataset_manifest.json")
+            write_agentic_training_result(out, result)
+            schema = check_schema_file(out)
+            self.assertTrue(schema["passed"], schema["errors"])
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+            self.assertEqual(code, 0)
+
+    def test_validate_rejects_agentic_training_result_unsafe_manifest_lineage_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"]["model"]["path"] = "/private/example/model_manifest.json"
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.lineage.model.path must be a safe relative path without traversal.", errors)
+
+    def test_validate_rejects_agentic_training_result_manifest_lineage_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            local_plan = root / EXAMPLE_PLAN.name
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=local_plan,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["lineage"]["dataset"]["size_bytes"] += 1
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.lineage.dataset.size_bytes must match agentic_training_plan.input_manifests.dataset.size_bytes.",
+                errors,
+            )
+
+    def test_validate_rejects_agentic_training_result_registry_link_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            adapter_link.pop("size_bytes")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.registry_update.links[1].size_bytes must be a non-negative integer for artifact registry links.",
+                errors,
+            )
+
+    def test_validate_rejects_completed_result_missing_output_registry_link(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["registry_update"]["links"] = [
+                link for link in result["registry_update"]["links"] if link["collection"] == "training_runs"
+            ]
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.registry_update.links must include size-bound registry links for completed output artifacts",
+                errors,
+            )
+
+    def test_validate_rejects_completed_result_duplicate_output_artifact_without_duplicate_link(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["artifacts"].append(dict(result["artifacts"][0]))
+            result["metrics"]["artifact_count"] += 1
+            result["metrics"]["regular_artifact_count"] += 1
+            result["metrics"]["output_artifact_count"] += 1
+            result["metrics"]["adapter_count"] += 1
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.registry_update.links must include size-bound registry links for completed output artifacts",
+                errors,
+            )
+
+    def test_validate_rejects_completed_result_without_registry_update(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result.pop("registry_update")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result.registry_update is required for completed receipts.", errors)
+
+    def test_validate_rejects_completed_result_registry_link_wrong_collection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            adapter_link["collection"] = "datasets"
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.registry_update.links[1].collection must be 'adapters' for output artifact registry links.",
+                errors,
+            )
+
+    def test_validate_rejects_completed_result_registry_link_wrong_kind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            adapter_link["kind"] = "checkpoint"
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.registry_update.links[1].kind must match the supplied output artifact role.",
+                errors,
+            )
+
+    def test_validate_rejects_completed_result_registry_link_with_null_sha(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            adapter_link["sha256"] = None
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.registry_update.links[1].sha256 must be a SHA-256 hex string for artifact registry links.",
+                errors,
+            )
+
+    def test_validate_rejects_completed_result_registry_link_without_sha(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+            adapter_link.pop("sha256")
+            write_agentic_training_result(out, result)
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_result.registry_update.links[1].sha256 must be a SHA-256 hex string for artifact registry links.",
+                errors,
+            )
 
     def test_validate_rejects_agentic_training_result_lineage_file_claim_bypass(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -452,7 +1175,7 @@ class AgenticTrainingResultTests(unittest.TestCase):
             self.assertIn("agentic_training_result passed receipts require all artifact refs to be regular files", errors)
 
     def test_committed_example_result_receipt_validates(self):
-        result_path = ROOT / "examples" / "agentic_training" / "results" / "completed_result.json"
+        result_path = ROOT / "examples" / "agentic_training" / "completed_result.json"
 
         code = run_cli(["validate", "--agentic-training-result", str(result_path), "--strict"])
 
@@ -460,6 +1183,12 @@ class AgenticTrainingResultTests(unittest.TestCase):
         result = json.loads(result_path.read_text(encoding="utf-8"))
         self.assertEqual(result["recommendation"], "register_training_result")
         self.assertEqual(result["registry_update"]["links"][0]["collection"], "training_runs")
+        plan = json.loads((ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["lineage"]["model"]["size_bytes"], plan["input_manifests"]["model"]["size_bytes"])
+        self.assertEqual(result["lineage"]["dataset"]["size_bytes"], plan["input_manifests"]["dataset"]["size_bytes"])
+        adapter_link = next(link for link in result["registry_update"]["links"] if link["collection"] == "adapters")
+        adapter_path = (result_path.parent / adapter_link["path"]).resolve()
+        self.assertEqual(adapter_link["size_bytes"], adapter_path.stat().st_size)
         schema = check_schema_file(result_path)
         self.assertTrue(schema["passed"], schema["errors"])
 

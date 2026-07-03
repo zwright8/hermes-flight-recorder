@@ -7,7 +7,7 @@ import json
 import os
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .agentic_training_plan import AGENTIC_TRAINING_PLAN_SCHEMA_VERSION
@@ -90,7 +90,8 @@ def build_agentic_training_result(
     runtime_payload, runtime_read_errors = _read_json_object(runtime_file)
     plan_schema_check = _json_schema_record(plan_file, "agentic_training_plan")
     runtime_schema_check = _json_schema_record(runtime_file, "agentic_training_runtime_preflight")
-    artifact_refs = _artifact_refs(artifacts or {})
+    receipt_base = Path(out_path).parent if out_path is not None else None
+    artifact_refs = _artifact_refs(artifacts or {}, receipt_base)
 
     plan_sha = _sha256_or_none(plan_file)
     runtime_plan_sha = runtime_payload.get("plan_sha256") if isinstance(runtime_payload.get("plan_sha256"), str) else ""
@@ -207,11 +208,11 @@ def build_agentic_training_result(
         recommendation = BLOCK_REGISTRATION_RECOMMENDATION
 
     trainer_plan = plan_payload.get("trainer_plan") if isinstance(plan_payload.get("trainer_plan"), dict) else {}
-    lineage_base = Path(out_path).parent if out_path is not None else None
+    output_dir_path = output_dir if output_dir is not None else trainer_plan.get("output_dir")
     result = {
         "schema_version": AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
-        "artifact_path": str(out_path or ""),
+        "artifact_path": _receipt_output_path(out_path),
         "passed": passed,
         "readiness": "ready" if passed else "blocked",
         "recommendation": recommendation,
@@ -225,18 +226,18 @@ def build_agentic_training_result(
             "run_id": run_id,
             "mode": str(plan_payload.get("mode") or ""),
             "backend": str(trainer_plan.get("backend") or runtime_payload.get("backend") or ""),
-            "output_dir": str(output_dir if output_dir is not None else trainer_plan.get("output_dir") or ""),
+            "output_dir": _display_safe_path(output_dir_path, receipt_base),
             "external_runner_reported_status": normalized_status,
             "flight_recorder_executed_training": False,
             "model_downloads_started_by_flight_recorder": False,
         },
         "lineage": {
-            "plan": _lineage_ref(plan_file, plan_sha, "agentic_training_plan", lineage_base),
+            "plan": _lineage_ref(plan_file, plan_sha, "agentic_training_plan", receipt_base),
             "runtime_preflight": _lineage_ref(
                 runtime_file,
                 _sha256_or_none(runtime_file),
                 "agentic_training_runtime_preflight",
-                lineage_base,
+                receipt_base,
             ),
             "model": _manifest_summary(plan_payload, "model"),
             "dataset": _manifest_summary(plan_payload, "dataset"),
@@ -338,7 +339,7 @@ def _json_schema_record(path: Path, schema_name: str) -> dict[str, Any]:
     return record
 
 
-def _artifact_refs(artifacts: dict[str, Iterable[str | Path]]) -> list[dict[str, Any]]:
+def _artifact_refs(artifacts: dict[str, Iterable[str | Path]], reference_base: Path | None) -> list[dict[str, Any]]:
     refs: list[dict[str, Any]] = []
     for role in sorted(artifacts):
         for raw_path in artifacts[role]:
@@ -346,7 +347,7 @@ def _artifact_refs(artifacts: dict[str, Iterable[str | Path]]) -> list[dict[str,
             refs.append(
                 {
                     "role": role,
-                    "path": str(path),
+                    "path": _display_safe_path(path, reference_base),
                     "exists": path.exists(),
                     "regular_file": path.is_file(),
                     "sha256": _sha256_or_none(path),
@@ -358,7 +359,7 @@ def _artifact_refs(artifacts: dict[str, Iterable[str | Path]]) -> list[dict[str,
 
 def _lineage_ref(path: Path, sha256: str | None, schema_name: str, reference_base: Path | None) -> dict[str, Any]:
     return {
-        "path": _reference_path(path, reference_base),
+        "path": _display_safe_path(path, reference_base),
         "exists": path.exists(),
         "regular_file": path.is_file(),
         "schema_name": schema_name,
@@ -367,19 +368,32 @@ def _lineage_ref(path: Path, sha256: str | None, schema_name: str, reference_bas
     }
 
 
-def _reference_path(path: Path, reference_base: Path | None) -> str:
+def _receipt_output_path(path: str | Path | None) -> str:
+    if path is None or not str(path):
+        return ""
+    return _safe_basename(str(path))
+
+
+def _display_safe_path(path: str | Path | Any, reference_base: Path | None) -> str:
+    if path is None or not str(path):
+        return ""
+    path_obj = Path(path)
     if reference_base is None:
-        return str(path)
-    return os.path.relpath(path.resolve(), reference_base.resolve())
+        value = str(path_obj)
+    else:
+        value = os.path.relpath(Path(os.path.abspath(path_obj)), reference_base.resolve())
+    return value if _safe_relative_path(value) else _safe_basename(str(path))
 
 
 def _manifest_summary(plan: dict[str, Any], key: str) -> dict[str, Any]:
     manifests = plan.get("input_manifests") if isinstance(plan.get("input_manifests"), dict) else {}
     record = manifests.get(key) if isinstance(manifests.get(key), dict) else {}
+    manifest_path = str(record.get("path") or "")
     return {
         "id": str(record.get("id") or ""),
-        "path": str(record.get("path") or ""),
+        "path": manifest_path if _safe_relative_path(manifest_path) else _safe_basename(manifest_path),
         "sha256": str(record.get("sha256") or ""),
+        "size_bytes": _int_value(record.get("size_bytes")),
         "license_allows_training": record.get("license_allows_training") is True,
     }
 
@@ -417,7 +431,7 @@ def _registry_update(
             "artifact_id": artifact_id,
             "kind": "agentic_training_result",
             "status": link_status,
-            "path": str(out_path or ""),
+            "path": _receipt_output_path(out_path),
         }
     ]
     if status == "completed":
@@ -432,6 +446,7 @@ def _registry_update(
                         "status": "recorded",
                         "path": str(artifact.get("path") or ""),
                         "sha256": artifact.get("sha256"),
+                        "size_bytes": _int_value(artifact.get("size_bytes")),
                     }
                 )
     return {
@@ -497,3 +512,23 @@ def _sha256_or_none(path: Path) -> str | None:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _safe_relative_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
+
+
+def _safe_basename(value: str) -> str:
+    normalized = value.replace("\\", "/")
+    basename = normalized.rstrip("/").rsplit("/", 1)[-1]
+    return basename if _safe_relative_path(basename) else "artifact"
