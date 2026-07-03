@@ -336,7 +336,7 @@ def _resolve_view_path(raw_path: str, plan: dict[str, Any], plan_path: Path) -> 
     path = Path(raw_path)
     if path.is_absolute():
         return path
-    candidates: list[Path] = [Path.cwd() / path, plan_path.parent / path]
+    candidates: list[Path] = [plan_path.parent / path]
     candidates.extend(parent / path for parent in plan_path.parents)
     dataset_manifest = _manifest_path(plan, "dataset", plan_path)
     if dataset_manifest is not None:
@@ -370,7 +370,7 @@ def _manifest_path(plan: dict[str, Any], key: str, plan_path: Path) -> Path | No
     path = Path(raw_path)
     if path.is_absolute():
         return path
-    candidates = [Path.cwd() / path, plan_path.parent / path]
+    candidates = [plan_path.parent / path]
     candidates.extend(parent / path for parent in plan_path.parents)
     return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
 

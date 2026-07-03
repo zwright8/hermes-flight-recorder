@@ -103,6 +103,11 @@ Runtime preflight emits `hfr.agentic_training_runtime_preflight.v1` and checks:
 - Flight Recorder did not import trainer stacks, download models, mutate
   weights, or launch training
 
+Relative selected-view and input-manifest paths are resolved from the plan file,
+its ancestor directories, and the dataset manifest location. The preflight does
+not search the process CWD, so moved plans cannot pass by accidentally finding a
+same-named local JSONL file.
+
 By default the checker uses backend-specific dependency probes for common
 external runners such as `axolotl`, `llama_factory`, `unsloth`, and process
 reward wrappers. Use `--skip-default-modules` plus one or more

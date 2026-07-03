@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -73,6 +74,48 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             failed_views = [view for view in preflight["view_checks"] if not view["passed"]]
             self.assertEqual(failed_views[0]["name"], "sft")
             self.assertIn("view path is not a regular file", failed_views[0]["errors"])
+            schema = check_schema_contract(preflight)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_runtime_preflight_rejects_cwd_relative_view_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_dir = root / "plans"
+            cwd_dir = root / "cwd"
+            plan_dir.mkdir()
+            cwd_dir.mkdir()
+            (cwd_dir / "sft.jsonl").write_text(
+                (ROOT / "examples" / "agentic_training" / "data" / "sft.jsonl").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
+            plan["selected_views"] = [
+                {
+                    "name": "sft",
+                    "path": "sft.jsonl",
+                    "row_count": 2,
+                    "schema_version": "hfr.rl.sft.v1",
+                }
+            ]
+            plan_path = plan_dir / "plan-with-cwd-lookalike-view.json"
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_dir)
+                preflight = build_agentic_training_runtime_preflight(
+                    plan_path=plan_path,
+                    require_modules=["json"],
+                    skip_default_modules=True,
+                    created_at="2026-07-02T00:00:00+00:00",
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertFalse(preflight["passed"])
+            self.assertEqual(preflight["recommendation"], "block_tiny_smoke_launch")
+            self.assertEqual(preflight["view_checks"][0]["resolved_path"], "sft.jsonl")
+            self.assertIn("view path is not a regular file", preflight["view_checks"][0]["errors"])
             schema = check_schema_contract(preflight)
             self.assertTrue(schema["passed"], schema["errors"])
 
