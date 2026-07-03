@@ -36,8 +36,8 @@ PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "rubric_model_grader_review",
         "name": "Rubric and model-grader review",
-        "required": ("review_calibration",),
-        "produces": ("review_manifest", "reviewed_manifest"),
+        "required": ("rubric_spec", "model_grader_gate", "review_calibration"),
+        "produces": ("review_manifest", "model_grader_dry_run", "reviewed_manifest"),
         "gate": "model-grader labels are blocked until calibration and human override paths exist.",
     },
     {
@@ -125,8 +125,11 @@ ARTIFACT_ROLES: dict[str, str] = {
     "improvement_plan": "improvement_plan",
     "promotion_decision": "promotion_decision",
     "promotion_ledger": "promotion_ledger",
+    "model_grader_dry_run": "model_grader_dry_run",
+    "model_grader_gate": "model_grader_gate",
     "review_calibration": "review_calibration",
     "reviewed_gate": "reviewed_gate",
+    "rubric_spec": "rubric_spec",
     "serving_lifecycle": "serving_lifecycle",
     "trace_observability": "trace_observability",
     "trainer_launch_check": "trainer_launch_check",
@@ -191,9 +194,19 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "uncalibrated_labels_block_training_data",
-        "review_calibration" in refs and "reviewed_gate" in refs,
-        {"review_calibration_present": "review_calibration" in refs, "reviewed_gate_present": "reviewed_gate" in refs},
-        {"review_calibration_present": True, "reviewed_gate_present": True},
+        "rubric_spec" in refs and "model_grader_gate" in refs and "review_calibration" in refs and "reviewed_gate" in refs,
+        {
+            "rubric_spec_present": "rubric_spec" in refs,
+            "model_grader_gate_present": "model_grader_gate" in refs,
+            "review_calibration_present": "review_calibration" in refs,
+            "reviewed_gate_present": "reviewed_gate" in refs,
+        },
+        {
+            "rubric_spec_present": True,
+            "model_grader_gate_present": True,
+            "review_calibration_present": True,
+            "reviewed_gate_present": True,
+        },
     )
     _add_check(
         checks,

@@ -61,6 +61,7 @@ and handoff receipts that make those systems auditable.
 | Harness | Run or replay tasks through mock, Hermes, OpenClaw, Coven, or Codex-style runners. | `scripts/hermes_harness.py run-scenario`, `run-suite`, `probe-model`, `replay-trace` |
 | Rollouts | Plan baseline/candidate/teacher harness batches, replayable environments, verifier refs, budgets, and rejection-sampling gates. | `agentic-rollout-plan`, `validate --agentic-rollout-plan` |
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs. | `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
+| Review/grading | Bind rubrics, mock model-grader dry runs, calibration, human overrides, and training-admission gates. | `model-grader rubric`, `model-grader dry-run`, `model-grader gate` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
@@ -352,6 +353,38 @@ Live launch receipts remain blocked in this implementation. Future provider
 transports must keep the same receipt boundary and require explicit opt-in plus
 environment-variable credentials.
 
+## Model-Grader Review Gates
+
+Model-grader support is currently executable as a deterministic, keyless
+dry-run control plane. `model-grader rubric` binds review items to a rubric,
+`model-grader dry-run` emits mock labels without calling a provider, and
+`model-grader gate` blocks those labels from training until calibration passes.
+
+```bash
+flightrecorder model-grader rubric \
+  --review-export runs/review_queue \
+  --rubric-id prompt-injection-rubric \
+  --out runs/model_grader/rubric.json
+
+flightrecorder model-grader dry-run \
+  --review-export runs/review_queue \
+  --rubric runs/model_grader/rubric.json \
+  --grader-id mock-grader-v1 \
+  --provider mock \
+  --out runs/model_grader/dry_run.json
+
+flightrecorder model-grader gate \
+  --dry-run runs/model_grader/dry_run.json \
+  --rubric runs/model_grader/rubric.json \
+  --review-calibration runs/review_calibration.json \
+  --out runs/model_grader/gate.json
+```
+
+The dry-run receipt records no provider API call, no paid grader call, no
+credential values, and zero labels admitted to training. The gate admits labels
+only after a passing review-calibration artifact and always records zero
+uncalibrated labels.
+
 ## Comparison And Improvement Loops
 
 Comparison artifacts turn baseline/candidate runs into reviewable improvement
@@ -574,6 +607,7 @@ flightrecorder schemas --check runs/suite_gate.json
 flightrecorder schemas --check runs/prompt_compare.json
 flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/review_calibration.json
+flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/reviewed_gate.json
 flightrecorder schemas --check runs/agentic_training_loop_plan.json
 flightrecorder schemas --check runs/cloud_preflight.json

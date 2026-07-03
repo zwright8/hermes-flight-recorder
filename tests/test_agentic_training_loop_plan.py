@@ -96,6 +96,9 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             for option, role in (
                 ("--harness-result", "harness_result"),
                 ("--evidence-bundle", "evidence_bundle"),
+                ("--rubric-spec", "rubric_spec"),
+                ("--model-grader-dry-run", "model_grader_dry_run"),
+                ("--model-grader-gate", "model_grader_gate"),
                 ("--review-calibration", "review_calibration"),
                 ("--reviewed-gate", "reviewed_gate"),
                 ("--training-export", "training_export"),
@@ -148,6 +151,9 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         return {
             "harness_result": [self.write_json(root / "harness_result.json", "hfr.harness_run_result.v1")],
             "evidence_bundle": [self.write_json(root / "evidence_bundle.json", "hfr.evidence_bundle.v1")],
+            "rubric_spec": [self.write_json(root / "rubric_spec.json", "hfr.rubric_spec.v1")],
+            "model_grader_dry_run": [self.write_json(root / "model_grader_dry_run.json", "hfr.model_grader_dry_run.v1")],
+            "model_grader_gate": [self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")],
             "review_calibration": [self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")],
             "reviewed_gate": [self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")],
             "training_export": [training_export],

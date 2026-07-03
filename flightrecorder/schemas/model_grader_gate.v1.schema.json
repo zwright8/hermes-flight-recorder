@@ -1,0 +1,100 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_grader_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Gate deciding whether model-grader labels may enter curated training data.",
+  "properties": {
+    "admission": {
+      "additionalProperties": true,
+      "properties": {
+        "human_override_required_for_disagreements": { "const": true },
+        "labels_admitted_count": { "minimum": 0, "type": "integer" },
+        "labels_allowed_for_training": { "type": "boolean" },
+        "uncalibrated_labels_admitted": { "const": 0 }
+      },
+      "required": [
+        "labels_allowed_for_training",
+        "labels_admitted_count",
+        "uncalibrated_labels_admitted",
+        "human_override_required_for_disagreements"
+      ],
+      "type": "object"
+    },
+    "blocked_reasons": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "created_at": { "type": "string" },
+    "execution_boundary": { "$ref": "#/$defs/boundary" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "metrics": { "type": "object" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["labels_calibrated_for_curated_handoff", "blocked"], "type": "string" },
+    "recommendation": { "enum": ["allow_curated_grader_labels", "route_to_human_review_or_calibration"], "type": "string" },
+    "schema_version": { "const": "hfr.model_grader_gate.v1" },
+    "source_artifacts": { "type": "object" }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "admission",
+    "metrics",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Model Grader Gate",
+  "type": "object",
+  "$defs": {
+    "boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_cost_incurred_usd": { "const": 0 },
+        "credential_values_recorded": { "const": false },
+        "dry_run_only": { "const": true },
+        "labels_admitted_to_training": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "provider_api_called": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "dry_run_only",
+        "provider_api_called",
+        "paid_model_grader_calls_started",
+        "cloud_cost_incurred_usd",
+        "credential_values_recorded",
+        "labels_admitted_to_training",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    }
+  }
+}

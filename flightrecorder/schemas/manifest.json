@@ -546,6 +546,30 @@
       "name": "review_calibration"
     },
     {
+      "artifact": "rubric_spec",
+      "artifact_schema_version": "hfr.rubric_spec.v1",
+      "description": "Rubric spec binding review items to calibrated human/model-grader criteria.",
+      "filename": "rubric_spec.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rubric_spec.v1.schema.json",
+      "name": "rubric_spec"
+    },
+    {
+      "artifact": "model_grader_dry_run",
+      "artifact_schema_version": "hfr.model_grader_dry_run.v1",
+      "description": "Dry-run model-grader receipt with mock transport and no provider calls.",
+      "filename": "model_grader_dry_run.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_grader_dry_run.v1.schema.json",
+      "name": "model_grader_dry_run"
+    },
+    {
+      "artifact": "model_grader_gate",
+      "artifact_schema_version": "hfr.model_grader_gate.v1",
+      "description": "Gate deciding whether calibrated model-grader labels may enter curated training data.",
+      "filename": "model_grader_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_grader_gate.v1.schema.json",
+      "name": "model_grader_gate"
+    },
+    {
       "artifact": "reviewed_gate",
       "artifact_schema_version": "hfr.reviewed_gate.v1",
       "description": "Gate result over an apply-review reviewed trainer handoff and optional reviewed-gate policy.",

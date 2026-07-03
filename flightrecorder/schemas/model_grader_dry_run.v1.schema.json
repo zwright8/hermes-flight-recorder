@@ -1,0 +1,162 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/model_grader_dry_run.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Dry-run model-grader receipt with mock transport and no provider calls.",
+  "properties": {
+    "blocked_reasons": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "created_at": { "type": "string" },
+    "disagreement_queue": {
+      "items": { "type": "object" },
+      "type": "array"
+    },
+    "execution_boundary": { "$ref": "#/$defs/boundary" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "graded_item_count": { "minimum": 0, "type": "integer" },
+    "grader": {
+      "additionalProperties": true,
+      "properties": {
+        "mode": { "const": "dry_run" },
+        "paid_model_grader_calls_started": { "const": false },
+        "provider": { "minLength": 1, "type": "string" },
+        "provider_api_called": { "const": false },
+        "transport": { "const": "mock" }
+      },
+      "required": ["provider", "grader_id", "mode", "transport", "provider_api_called", "paid_model_grader_calls_started"],
+      "type": "object"
+    },
+    "grader_labels": {
+      "items": { "$ref": "#/$defs/grader_label" },
+      "type": "array"
+    },
+    "human_review_overrides": { "type": "object" },
+    "label_counts": {
+      "items": { "$ref": "#/$defs/label_count" },
+      "type": "array"
+    },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["ready_for_calibration_gate", "blocked"], "type": "string" },
+    "recommendation": { "enum": ["gate_before_training_admission", "fix_rubric_or_review_export"], "type": "string" },
+    "schema_version": { "const": "hfr.model_grader_dry_run.v1" },
+    "source_artifacts": { "type": "object" },
+    "training_admission": {
+      "additionalProperties": true,
+      "properties": {
+        "labels_admitted_count": { "const": 0 },
+        "labels_allowed_for_training": { "const": false },
+        "requires_calibrated_gate": { "const": true }
+      },
+      "required": ["labels_allowed_for_training", "labels_admitted_count", "requires_calibrated_gate"],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "grader",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "graded_item_count",
+    "label_counts",
+    "grader_labels",
+    "disagreement_queue",
+    "human_review_overrides",
+    "training_admission",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Model Grader Dry Run",
+  "type": "object",
+  "$defs": {
+    "boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_cost_incurred_usd": { "const": 0 },
+        "credential_values_recorded": { "const": false },
+        "dry_run_only": { "const": true },
+        "labels_admitted_to_training": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "provider_api_called": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "dry_run_only",
+        "provider_api_called",
+        "paid_model_grader_calls_started",
+        "cloud_cost_incurred_usd",
+        "credential_values_recorded",
+        "labels_admitted_to_training",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "grader_label": {
+      "additionalProperties": true,
+      "properties": {
+        "episode_id": { "minLength": 1, "type": "string" },
+        "label_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "mock_confidence": { "enum": ["high", "medium", "low", "unknown"], "type": "string" },
+        "mock_model_label": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" },
+        "requires_human_review": { "type": "boolean" },
+        "review_item_id": { "minLength": 1, "type": "string" },
+        "review_item_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "task_family": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "review_item_id",
+        "episode_id",
+        "scenario_id",
+        "task_family",
+        "review_item_sha256",
+        "mock_model_label",
+        "mock_confidence",
+        "requires_human_review",
+        "rationale",
+        "grader_id",
+        "provider",
+        "label_sha256"
+      ],
+      "type": "object"
+    },
+    "label_count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "label": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" }
+      },
+      "required": ["label", "count"],
+      "type": "object"
+    }
+  }
+}

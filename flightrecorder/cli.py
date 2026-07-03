@@ -103,6 +103,13 @@ from .model_registry import (
     move_model_alias,
     register_model_candidate,
 )
+from .model_grader import (
+    ModelGraderError,
+    build_model_grader_dry_run,
+    build_model_grader_gate,
+    build_rubric_spec,
+    write_model_grader_artifact,
+)
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -237,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionLedgerError,
         PromotionArchiveError,
         AgenticTrainingLoopPlanError,
+        ModelGraderError,
         ReplayError,
         SchemaRegistryError,
         ModelRegistryError,
@@ -1085,6 +1093,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
         cloud_training_launch_receipt_paths=args.cloud_training_launch_receipt,
         cloud_training_status_receipt_paths=args.cloud_training_status_receipt,
         agentic_rollout_plan_paths=args.agentic_rollout_plan,
+        rubric_spec_paths=args.rubric_spec,
+        model_grader_dry_run_paths=args.model_grader_dry_run,
+        model_grader_gate_paths=args.model_grader_gate,
         repair_queue_paths=args.repair_queue,
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
@@ -1424,6 +1435,9 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "improvement_plan": args.improvement_plan,
         "promotion_decision": args.promotion_decision,
         "promotion_ledger": args.promotion_ledger,
+        "rubric_spec": args.rubric_spec,
+        "model_grader_dry_run": args.model_grader_dry_run,
+        "model_grader_gate": args.model_grader_gate,
         "review_calibration": args.review_calibration,
         "reviewed_gate": args.reviewed_gate,
         "serving_lifecycle": args.serving_lifecycle,
@@ -1546,6 +1560,54 @@ def cmd_agentic_rollout_plan(args: argparse.Namespace) -> int:
         f"planned_rollouts={plan['budget']['planned_rollouts']}/{plan['budget']['max_rollouts']}"
     )
     return 0 if plan["passed"] else 1
+
+
+def cmd_model_grader_rubric(args: argparse.Namespace) -> int:
+    rubric = build_rubric_spec(
+        review_export_dir=args.review_export,
+        rubric_id=args.rubric_id,
+        criteria=args.criterion,
+        created_at=args.created_at,
+        preserve_paths=args.preserve_paths,
+    )
+    write_model_grader_artifact(args.out, rubric)
+    print(f"wrote {args.out} review_items={rubric['review_item_count']} criteria={rubric['criterion_count']}")
+    return 0
+
+
+def cmd_model_grader_dry_run(args: argparse.Namespace) -> int:
+    receipt = build_model_grader_dry_run(
+        review_export_dir=args.review_export,
+        rubric_path=args.rubric,
+        grader_id=args.grader_id,
+        provider=args.provider,
+        created_at=args.created_at,
+        preserve_paths=args.preserve_paths,
+    )
+    write_model_grader_artifact(args.out, receipt)
+    print(
+        f"wrote {args.out} readiness={receipt['readiness']} "
+        f"graded_items={receipt['graded_item_count']}"
+    )
+    return 0 if receipt["passed"] else 1
+
+
+def cmd_model_grader_gate(args: argparse.Namespace) -> int:
+    gate = build_model_grader_gate(
+        dry_run_path=args.dry_run,
+        rubric_path=args.rubric,
+        calibration_path=args.review_calibration,
+        min_calibration_agreement_rate=args.min_calibration_agreement_rate,
+        max_disagreements=args.max_disagreements,
+        created_at=args.created_at,
+        preserve_paths=args.preserve_paths,
+    )
+    write_model_grader_artifact(args.out, gate)
+    print(
+        f"wrote {args.out} readiness={gate['readiness']} "
+        f"checks={gate['check_count'] - gate['failed_check_count']}/{gate['check_count']}"
+    )
+    return 0 if gate["passed"] else 1
 
 
 def cmd_heldout_manifest(args: argparse.Namespace) -> int:
@@ -2866,6 +2928,9 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--cloud-training-launch-receipt", action="append", default=[], help="Validate one cloud training launch receipt")
     validate.add_argument("--cloud-training-status-receipt", action="append", default=[], help="Validate one cloud training status receipt")
     validate.add_argument("--agentic-rollout-plan", action="append", default=[], help="Validate one agentic rollout generation plan")
+    validate.add_argument("--rubric-spec", action="append", default=[], help="Validate one rubric_spec artifact")
+    validate.add_argument("--model-grader-dry-run", action="append", default=[], help="Validate one model_grader_dry_run receipt")
+    validate.add_argument("--model-grader-gate", action="append", default=[], help="Validate one model_grader_gate artifact")
     validate.add_argument("--repair-queue", action="append", default=[], help="Validate one repair_queue.json; may be repeated")
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
@@ -3129,6 +3194,9 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--action-ledger", action="append", default=[], help="action_ledger artifact; may be repeated")
     agentic_loop_plan.add_argument("--promotion-decision", action="append", default=[], help="promotion_decision artifact; may be repeated")
     agentic_loop_plan.add_argument("--promotion-ledger", action="append", default=[], help="promotion_ledger artifact; may be repeated")
+    agentic_loop_plan.add_argument("--rubric-spec", action="append", default=[], help="rubric_spec artifact; may be repeated")
+    agentic_loop_plan.add_argument("--model-grader-dry-run", action="append", default=[], help="model_grader_dry_run artifact; may be repeated")
+    agentic_loop_plan.add_argument("--model-grader-gate", action="append", default=[], help="model_grader_gate artifact; may be repeated")
     agentic_loop_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
     agentic_loop_plan.set_defaults(func=cmd_agentic_loop_plan)
 
@@ -3206,6 +3274,38 @@ def _parser() -> argparse.ArgumentParser:
     agentic_rollout_plan.add_argument("--out", required=True, help="Write hfr.agentic_rollout_plan.v1 JSON to this path")
     agentic_rollout_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rollout plan")
     agentic_rollout_plan.set_defaults(func=cmd_agentic_rollout_plan)
+
+    model_grader = subparsers.add_parser("model-grader", help="Build fail-closed rubric/model-grader review contracts")
+    model_grader_subparsers = model_grader.add_subparsers(dest="model_grader_command", required=True)
+    model_grader_rubric = model_grader_subparsers.add_parser("rubric", help="Write a rubric spec bound to a review export")
+    model_grader_rubric.add_argument("--review-export", required=True, help="export-review directory")
+    model_grader_rubric.add_argument("--rubric-id", required=True, help="Stable rubric id")
+    model_grader_rubric.add_argument("--criterion", action="append", default=[], help="Rubric criterion text; may be repeated")
+    model_grader_rubric.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    model_grader_rubric.add_argument("--out", required=True, help="Write hfr.rubric_spec.v1 JSON to this path")
+    model_grader_rubric.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rubric refs")
+    model_grader_rubric.set_defaults(func=cmd_model_grader_rubric)
+
+    model_grader_dry_run = model_grader_subparsers.add_parser("dry-run", help="Write a mock model-grader dry-run receipt")
+    model_grader_dry_run.add_argument("--review-export", required=True, help="export-review directory")
+    model_grader_dry_run.add_argument("--rubric", required=True, help="rubric_spec artifact")
+    model_grader_dry_run.add_argument("--grader-id", default="mock-grader", help="Stable grader id recorded in mock labels")
+    model_grader_dry_run.add_argument("--provider", default="mock", help="Provider id recorded in the dry-run receipt")
+    model_grader_dry_run.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    model_grader_dry_run.add_argument("--out", required=True, help="Write hfr.model_grader_dry_run.v1 JSON to this path")
+    model_grader_dry_run.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in dry-run refs")
+    model_grader_dry_run.set_defaults(func=cmd_model_grader_dry_run)
+
+    model_grader_gate = model_grader_subparsers.add_parser("gate", help="Gate model-grader labels before training admission")
+    model_grader_gate.add_argument("--dry-run", required=True, help="model_grader_dry_run artifact")
+    model_grader_gate.add_argument("--rubric", required=True, help="rubric_spec artifact")
+    model_grader_gate.add_argument("--review-calibration", help="review_calibration artifact required for a passing gate")
+    model_grader_gate.add_argument("--min-calibration-agreement-rate", type=_rate_arg, default=0.8)
+    model_grader_gate.add_argument("--max-disagreements", type=_non_negative_int_arg)
+    model_grader_gate.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    model_grader_gate.add_argument("--out", required=True, help="Write hfr.model_grader_gate.v1 JSON to this path")
+    model_grader_gate.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in gate refs")
+    model_grader_gate.set_defaults(func=cmd_model_grader_gate)
 
     eval_summary = subparsers.add_parser("eval-summary", help="Build a governance-ready held-out eval summary")
     eval_summary.add_argument(

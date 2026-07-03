@@ -66,6 +66,11 @@ from .model_registry import (
     model_serving_probe_receipt_errors,
     training_plan_errors,
 )
+from .model_grader import (
+    MODEL_GRADER_DRY_RUN_SCHEMA_VERSION,
+    MODEL_GRADER_GATE_SCHEMA_VERSION,
+    RUBRIC_SPEC_SCHEMA_VERSION,
+)
 from .preflight import (
     TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
     TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
@@ -232,6 +237,9 @@ def validate_artifacts(
     cloud_training_launch_receipt_paths: list[str | Path] | None = None,
     cloud_training_status_receipt_paths: list[str | Path] | None = None,
     agentic_rollout_plan_paths: list[str | Path] | None = None,
+    rubric_spec_paths: list[str | Path] | None = None,
+    model_grader_dry_run_paths: list[str | Path] | None = None,
+    model_grader_gate_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
@@ -352,6 +360,12 @@ def validate_artifacts(
         targets.append(validate_cloud_training_status_receipt(cloud_training_status_receipt_path))
     for agentic_rollout_plan_path in agentic_rollout_plan_paths or []:
         targets.append(validate_agentic_rollout_plan(agentic_rollout_plan_path))
+    for rubric_spec_path in rubric_spec_paths or []:
+        targets.append(validate_rubric_spec(rubric_spec_path))
+    for model_grader_dry_run_path in model_grader_dry_run_paths or []:
+        targets.append(validate_model_grader_dry_run(model_grader_dry_run_path))
+    for model_grader_gate_path in model_grader_gate_paths or []:
+        targets.append(validate_model_grader_gate(model_grader_gate_path))
     for repair_queue_path in repair_queue_paths or []:
         targets.append(validate_repair_queue(repair_queue_path))
     for replay_bundle_path in replay_bundle_paths or []:
@@ -1330,6 +1344,36 @@ def validate_agentic_rollout_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "agentic_rollout_plan.json")
     if plan is not None:
         _validate_agentic_rollout_plan(plan, target)
+    return target
+
+
+def validate_rubric_spec(path: str | Path) -> ValidationTarget:
+    """Validate a rubric spec artifact."""
+    rubric_path = Path(path)
+    target = ValidationTarget("rubric_spec", str(rubric_path))
+    rubric = _read_object(rubric_path, target, "rubric_spec.json")
+    if rubric is not None:
+        _validate_rubric_spec(rubric, target)
+    return target
+
+
+def validate_model_grader_dry_run(path: str | Path) -> ValidationTarget:
+    """Validate a dry-run model-grader receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("model_grader_dry_run", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "model_grader_dry_run.json")
+    if receipt is not None:
+        _validate_model_grader_dry_run(receipt, target)
+    return target
+
+
+def validate_model_grader_gate(path: str | Path) -> ValidationTarget:
+    """Validate a model-grader training-admission gate."""
+    gate_path = Path(path)
+    target = ValidationTarget("model_grader_gate", str(gate_path))
+    gate = _read_object(gate_path, target, "model_grader_gate.json")
+    if gate is not None:
+        _validate_model_grader_gate(gate, target)
     return target
 
 
@@ -2553,6 +2597,225 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
             "readiness": plan.get("readiness"),
         }
     )
+
+
+def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(rubric, "schema_version", RUBRIC_SPEC_SCHEMA_VERSION, target, prefix="rubric_spec.")
+    if not isinstance(rubric.get("rubric_id"), str) or not rubric.get("rubric_id"):
+        target.errors.append("rubric_spec.rubric_id must be a non-empty string.")
+    criteria = rubric.get("criteria")
+    if not isinstance(criteria, list):
+        target.errors.append("rubric_spec.criteria must be a list.")
+        criteria = []
+    for index, row in enumerate(criteria):
+        label = f"rubric_spec.criteria[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(row.get("criterion_id"), str) or not row.get("criterion_id"):
+            target.errors.append(f"{label}.criterion_id must be a non-empty string.")
+        if not isinstance(row.get("description"), str) or not row.get("description"):
+            target.errors.append(f"{label}.description must be a non-empty string.")
+        if row.get("required") is not True:
+            target.errors.append(f"{label}.required must be true.")
+    if rubric.get("criterion_count") != len(criteria):
+        target.errors.append(f"rubric_spec.criterion_count expected {len(criteria)}, got {rubric.get('criterion_count')!r}.")
+    labels = rubric.get("label_options")
+    if labels != list(REVIEW_LABELS):
+        target.errors.append(f"rubric_spec.label_options must be {list(REVIEW_LABELS)!r}.")
+    fingerprints = rubric.get("review_item_fingerprints")
+    if not isinstance(fingerprints, list):
+        target.errors.append("rubric_spec.review_item_fingerprints must be a list.")
+        fingerprints = []
+    if rubric.get("review_item_count") != len(fingerprints):
+        target.errors.append(
+            f"rubric_spec.review_item_count expected {len(fingerprints)}, got {rubric.get('review_item_count')!r}."
+        )
+    for index, row in enumerate(fingerprints):
+        label = f"rubric_spec.review_item_fingerprints[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("review_item_id", "episode_id", "scenario_id"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not _is_sha256(row.get("review_item_sha256")):
+            target.errors.append(f"{label}.review_item_sha256 must be a sha256 hex digest.")
+    requirements = rubric.get("calibration_requirements") if isinstance(rubric.get("calibration_requirements"), dict) else {}
+    if requirements.get("required_before_training_admission") is not True:
+        target.errors.append("rubric_spec.calibration_requirements.required_before_training_admission must be true.")
+    if requirements.get("max_uncalibrated_labels_admitted") != 0:
+        target.errors.append("rubric_spec.calibration_requirements.max_uncalibrated_labels_admitted must be 0.")
+    _validate_model_grader_boundary(rubric.get("execution_boundary"), target, "rubric_spec")
+    target.details.update(
+        {
+            "rubric_id": rubric.get("rubric_id"),
+            "criterion_count": rubric.get("criterion_count"),
+            "review_item_count": rubric.get("review_item_count"),
+        }
+    )
+
+
+def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(receipt, "schema_version", MODEL_GRADER_DRY_RUN_SCHEMA_VERSION, target, prefix="model_grader_dry_run.")
+    _validate_model_grader_checked_artifact(receipt, target, "model_grader_dry_run")
+    grader = receipt.get("grader") if isinstance(receipt.get("grader"), dict) else {}
+    if grader.get("mode") != "dry_run":
+        target.errors.append("model_grader_dry_run.grader.mode must be dry_run.")
+    if grader.get("transport") != "mock":
+        target.errors.append("model_grader_dry_run.grader.transport must be mock.")
+    if grader.get("provider_api_called") is not False:
+        target.errors.append("model_grader_dry_run.grader.provider_api_called must be false.")
+    if grader.get("paid_model_grader_calls_started") is not False:
+        target.errors.append("model_grader_dry_run.grader.paid_model_grader_calls_started must be false.")
+    labels = receipt.get("grader_labels")
+    if not isinstance(labels, list):
+        target.errors.append("model_grader_dry_run.grader_labels must be a list.")
+        labels = []
+    if receipt.get("graded_item_count") != len(labels):
+        target.errors.append(
+            f"model_grader_dry_run.graded_item_count expected {len(labels)}, got {receipt.get('graded_item_count')!r}."
+        )
+    label_counts = _model_grader_label_counts(receipt.get("label_counts"), target, "model_grader_dry_run.label_counts")
+    expected_counts = {label: 0 for label in REVIEW_LABELS}
+    for index, row in enumerate(labels):
+        label = f"model_grader_dry_run.grader_labels[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("review_item_id", "episode_id", "scenario_id", "task_family", "review_item_sha256", "mock_model_label", "mock_confidence", "rationale", "grader_id", "provider", "label_sha256"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if row.get("mock_model_label") not in REVIEW_LABELS:
+            target.errors.append(f"{label}.mock_model_label must be one of {list(REVIEW_LABELS)!r}.")
+        elif row["mock_model_label"] in expected_counts:
+            expected_counts[row["mock_model_label"]] += 1
+        if row.get("mock_confidence") not in REVIEW_CONFIDENCE_LEVELS:
+            target.errors.append(f"{label}.mock_confidence must be one of {list(REVIEW_CONFIDENCE_LEVELS)!r}.")
+        if not isinstance(row.get("requires_human_review"), bool):
+            target.errors.append(f"{label}.requires_human_review must be a boolean.")
+        if not _is_sha256(row.get("review_item_sha256")):
+            target.errors.append(f"{label}.review_item_sha256 must be a sha256 hex digest.")
+        if not _is_sha256(row.get("label_sha256")):
+            target.errors.append(f"{label}.label_sha256 must be a sha256 hex digest.")
+    for label_name, expected in expected_counts.items():
+        if label_counts.get(label_name) != expected:
+            target.errors.append(
+                f"model_grader_dry_run.label_counts[{label_name}] expected {expected}, got {label_counts.get(label_name)!r}."
+            )
+    admission = receipt.get("training_admission") if isinstance(receipt.get("training_admission"), dict) else {}
+    if admission.get("labels_allowed_for_training") is not False:
+        target.errors.append("model_grader_dry_run.training_admission.labels_allowed_for_training must be false.")
+    if admission.get("labels_admitted_count") != 0:
+        target.errors.append("model_grader_dry_run.training_admission.labels_admitted_count must be 0.")
+    if admission.get("requires_calibrated_gate") is not True:
+        target.errors.append("model_grader_dry_run.training_admission.requires_calibrated_gate must be true.")
+    _validate_model_grader_boundary(receipt.get("execution_boundary"), target, "model_grader_dry_run")
+    target.details.update(
+        {
+            "graded_item_count": receipt.get("graded_item_count"),
+            "readiness": receipt.get("readiness"),
+            "recommendation": receipt.get("recommendation"),
+        }
+    )
+
+
+def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(gate, "schema_version", MODEL_GRADER_GATE_SCHEMA_VERSION, target, prefix="model_grader_gate.")
+    failed_checks = _validate_model_grader_checked_artifact(gate, target, "model_grader_gate")
+    expected_readiness = "labels_calibrated_for_curated_handoff" if failed_checks == 0 else "blocked"
+    if gate.get("readiness") != expected_readiness:
+        target.errors.append(f"model_grader_gate.readiness expected {expected_readiness!r}, got {gate.get('readiness')!r}.")
+    admission = gate.get("admission") if isinstance(gate.get("admission"), dict) else {}
+    labels_allowed = admission.get("labels_allowed_for_training")
+    if labels_allowed != (failed_checks == 0):
+        target.errors.append("model_grader_gate.admission.labels_allowed_for_training must match gate pass/fail.")
+    if admission.get("uncalibrated_labels_admitted") != 0:
+        target.errors.append("model_grader_gate.admission.uncalibrated_labels_admitted must be 0.")
+    if failed_checks and admission.get("labels_admitted_count") != 0:
+        target.errors.append("model_grader_gate.admission.labels_admitted_count must be 0 when the gate is blocked.")
+    metrics = gate.get("metrics") if isinstance(gate.get("metrics"), dict) else {}
+    for field_name in ("graded_item_count", "calibration_disagreement_count", "dry_run_disagreement_queue_count"):
+        if not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"model_grader_gate.metrics.{field_name} must be a non-negative integer.")
+    if not isinstance(metrics.get("agreement_rate"), (int, float)) or not 0 <= metrics.get("agreement_rate") <= 1:
+        target.errors.append("model_grader_gate.metrics.agreement_rate must be a number from 0 to 1.")
+    _validate_model_grader_boundary(gate.get("execution_boundary"), target, "model_grader_gate")
+    target.details.update(
+        {
+            "readiness": gate.get("readiness"),
+            "recommendation": gate.get("recommendation"),
+            "admitted_count": admission.get("labels_admitted_count"),
+        }
+    )
+
+
+def _validate_model_grader_checked_artifact(payload: dict[str, Any], target: ValidationTarget, label: str) -> int:
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append(f"{label}.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, f"{label}.checks")
+    if payload.get("check_count") != len(checks):
+        target.errors.append(f"{label}.check_count expected {len(checks)}, got {payload.get('check_count')!r}.")
+    if payload.get("failed_check_count") != failed_checks:
+        target.errors.append(f"{label}.failed_check_count expected {failed_checks}, got {payload.get('failed_check_count')!r}.")
+    if isinstance(payload.get("passed"), bool) and payload["passed"] != (failed_checks == 0):
+        target.errors.append(f"{label}.passed must match failed_check_count.")
+    if not isinstance(payload.get("blocked_reasons"), list) or not all(isinstance(item, str) for item in payload.get("blocked_reasons", [])):
+        target.errors.append(f"{label}.blocked_reasons must be a list of strings.")
+    return failed_checks
+
+
+def _validate_model_grader_boundary(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label}.execution_boundary must be an object.")
+        return
+    true_fields = ("dry_run_only",)
+    false_fields = (
+        "provider_api_called",
+        "paid_model_grader_calls_started",
+        "credential_values_recorded",
+        "labels_admitted_to_training",
+        "weights_updated_by_flight_recorder",
+    )
+    for field_name in true_fields:
+        if value.get(field_name) is not True:
+            target.errors.append(f"{label}.execution_boundary.{field_name} must be true.")
+    for field_name in false_fields:
+        if value.get(field_name) is not False:
+            target.errors.append(f"{label}.execution_boundary.{field_name} must be false.")
+    if value.get("cloud_cost_incurred_usd") != 0:
+        target.errors.append(f"{label}.execution_boundary.cloud_cost_incurred_usd must be 0.")
+
+
+def _model_grader_label_counts(value: Any, target: ValidationTarget, label: str) -> dict[str, int]:
+    counts = {name: 0 for name in REVIEW_LABELS}
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list.")
+        return counts
+    seen: set[str] = set()
+    for index, row in enumerate(value):
+        row_label = f"{label}[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        name = row.get("label")
+        count = row.get("count")
+        if name not in REVIEW_LABELS:
+            target.errors.append(f"{row_label}.label must be one of {list(REVIEW_LABELS)!r}.")
+            continue
+        if name in seen:
+            target.errors.append(f"{row_label}.label duplicates {name!r}.")
+        seen.add(name)
+        if not _is_non_negative_int(count):
+            target.errors.append(f"{row_label}.count must be a non-negative integer.")
+            continue
+        counts[name] = int(count)
+    missing = sorted(set(REVIEW_LABELS) - seen)
+    if missing:
+        target.errors.append(f"{label} missing label count row(s): {', '.join(missing)}.")
+    return counts
 
 
 def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, int]:

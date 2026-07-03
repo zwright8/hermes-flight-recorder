@@ -22,6 +22,9 @@ flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
 flightrecorder schemas --check runs/agentic_rollout_plan.json
+flightrecorder schemas --check runs/rubric_spec.json
+flightrecorder schemas --check runs/model_grader_dry_run.json
+flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/harness_prompt_injection_good/harness_result.json
 flightrecorder schemas --check runs/email_reply_completion_good/run_digest.json
 ```
@@ -825,6 +828,49 @@ review rather than automatic training. Calibration also validates the reviewed
 export by default and records the result under `metrics.validation`, so stale
 reviewed labels cannot produce a passing calibration report unless validation
 is explicitly skipped.
+
+Model-grader support is a control-plane contract, not a paid grader runner.
+Use `flightrecorder model-grader rubric` to bind a review queue to
+`hfr.rubric_spec.v1`, then `model-grader dry-run` to emit
+`hfr.model_grader_dry_run.v1` with deterministic mock labels:
+
+```bash
+flightrecorder model-grader rubric \
+  --review-export runs/review_queue \
+  --rubric-id prompt-injection-rubric \
+  --out runs/model_grader/rubric.json
+
+flightrecorder model-grader dry-run \
+  --review-export runs/review_queue \
+  --rubric runs/model_grader/rubric.json \
+  --grader-id mock-grader-v1 \
+  --provider mock \
+  --out runs/model_grader/dry_run.json
+```
+
+The dry-run receipt records `provider_api_called: false`,
+`paid_model_grader_calls_started: false`, and `labels_admitted_count: 0`.
+`model-grader gate` is the training-admission boundary: without a passing
+`review-calibration` artifact it stays blocked and routes labels to human
+review or calibration. With a passing calibration artifact it can mark labels
+eligible for curated handoff while still recording zero uncalibrated labels,
+zero credential values, zero provider calls, and zero weight updates.
+
+```bash
+flightrecorder model-grader gate \
+  --dry-run runs/model_grader/dry_run.json \
+  --rubric runs/model_grader/rubric.json \
+  --review-calibration runs/review_calibration.json \
+  --min-calibration-agreement-rate 0.9 \
+  --max-disagreements 0 \
+  --out runs/model_grader/gate.json
+
+flightrecorder validate \
+  --rubric-spec runs/model_grader/rubric.json \
+  --model-grader-dry-run runs/model_grader/dry_run.json \
+  --model-grader-gate runs/model_grader/gate.json \
+  --strict
+```
 
 `demo.sh` already runs the training export for the included scenarios, and
 `release_check.sh` also exercises review export, reviewed-label ingestion, and

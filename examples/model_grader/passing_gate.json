@@ -1,0 +1,220 @@
+{
+  "admission": {
+    "human_override_required_for_disagreements": true,
+    "labels_admitted_count": 2,
+    "labels_allowed_for_training": true,
+    "uncalibrated_labels_admitted": 0
+  },
+  "blocked_reasons": [],
+  "check_count": 8,
+  "checks": [
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "dry_run.json",
+          "role": "model_grader_dry_run",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "model_grader_dry_run",
+          "schema_passed": true,
+          "sha256": "4d6a8a663a634313eb8b9dfb163459fdefd1c7fffe9e10a09572181810d19e2d",
+          "size_bytes": 5587,
+          "source_passed": true,
+          "source_recommendation": "gate_before_training_admission"
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "model_grader_dry_run"
+      },
+      "id": "dry_run_receipt_valid",
+      "passed": true,
+      "summary": "dry_run_receipt_valid: passed"
+    },
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "rubric.json",
+          "role": "rubric_spec",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "rubric_spec",
+          "schema_passed": true,
+          "sha256": "e0454715cc75355b9a703086640a25edc06aa0390178bd7b89cb96a70a132ae1",
+          "size_bytes": 2213,
+          "source_passed": null,
+          "source_recommendation": ""
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "rubric_spec"
+      },
+      "id": "rubric_spec_valid",
+      "passed": true,
+      "summary": "rubric_spec_valid: passed"
+    },
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "review_calibration.json",
+          "role": "review_calibration",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "review_calibration",
+          "schema_passed": true,
+          "sha256": "daa3ce69d10436b1418dfdcd16ebff472d71beca50a5fa8bbadae35747e26ab3",
+          "size_bytes": 2889,
+          "source_passed": true,
+          "source_recommendation": ""
+        }
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "review_calibration_present",
+      "passed": true,
+      "summary": "review_calibration_present: passed"
+    },
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "review_calibration.json",
+          "role": "review_calibration",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "review_calibration",
+          "schema_passed": true,
+          "sha256": "daa3ce69d10436b1418dfdcd16ebff472d71beca50a5fa8bbadae35747e26ab3",
+          "size_bytes": 2889,
+          "source_passed": true,
+          "source_recommendation": ""
+        },
+        "source_passed": true
+      },
+      "expected": {
+        "passed": true,
+        "schema": "review_calibration",
+        "source_passed": true
+      },
+      "id": "review_calibration_passed",
+      "passed": true,
+      "summary": "review_calibration_passed: passed"
+    },
+    {
+      "actual": {
+        "agreement_rate": 1.0
+      },
+      "expected": {
+        "min": 1.0
+      },
+      "id": "min_calibration_agreement_rate",
+      "passed": true,
+      "summary": "min_calibration_agreement_rate: passed"
+    },
+    {
+      "actual": {
+        "disagreement_count": 0
+      },
+      "expected": {
+        "max": 0
+      },
+      "id": "max_calibration_disagreements",
+      "passed": true,
+      "summary": "max_calibration_disagreements: passed"
+    },
+    {
+      "actual": {
+        "labels_admitted_count": 0
+      },
+      "expected": {
+        "labels_admitted_count": 0
+      },
+      "id": "dry_run_labels_not_previously_admitted",
+      "passed": true,
+      "summary": "dry_run_labels_not_previously_admitted: passed"
+    },
+    {
+      "actual": {
+        "paid_model_grader_calls_started": false
+      },
+      "expected": {
+        "paid_model_grader_calls_started": false
+      },
+      "id": "paid_model_grader_not_called",
+      "passed": true,
+      "summary": "paid_model_grader_not_called: passed"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "cloud_cost_incurred_usd": 0,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "labels_admitted_to_training": false,
+    "paid_model_grader_calls_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "metrics": {
+    "agreement_rate": 1.0,
+    "calibration_disagreement_count": 0,
+    "dry_run_disagreement_queue_count": 0,
+    "graded_item_count": 2
+  },
+  "notes": [
+    "The gate is the only artifact that can make model-grader labels eligible for downstream curation.",
+    "Missing or failing calibration blocks by default.",
+    "The gate records no provider calls and admits zero uncalibrated labels."
+  ],
+  "passed": true,
+  "readiness": "labels_calibrated_for_curated_handoff",
+  "recommendation": "allow_curated_grader_labels",
+  "schema_version": "hfr.model_grader_gate.v1",
+  "source_artifacts": {
+    "dry_run_receipt": {
+      "exists": true,
+      "path": "dry_run.json",
+      "role": "model_grader_dry_run",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "model_grader_dry_run",
+      "schema_passed": true,
+      "sha256": "4d6a8a663a634313eb8b9dfb163459fdefd1c7fffe9e10a09572181810d19e2d",
+      "size_bytes": 5587,
+      "source_passed": true,
+      "source_recommendation": "gate_before_training_admission"
+    },
+    "review_calibration": {
+      "exists": true,
+      "path": "review_calibration.json",
+      "role": "review_calibration",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "review_calibration",
+      "schema_passed": true,
+      "sha256": "daa3ce69d10436b1418dfdcd16ebff472d71beca50a5fa8bbadae35747e26ab3",
+      "size_bytes": 2889,
+      "source_passed": true,
+      "source_recommendation": ""
+    },
+    "rubric_spec": {
+      "exists": true,
+      "path": "rubric.json",
+      "role": "rubric_spec",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "rubric_spec",
+      "schema_passed": true,
+      "sha256": "e0454715cc75355b9a703086640a25edc06aa0390178bd7b89cb96a70a132ae1",
+      "size_bytes": 2213,
+      "source_passed": null,
+      "source_recommendation": ""
+    }
+  }
+}

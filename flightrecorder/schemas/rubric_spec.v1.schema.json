@@ -1,0 +1,88 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rubric_spec.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Rubric spec for human/model-grader review calibration.",
+  "properties": {
+    "calibration_requirements": { "type": "object" },
+    "created_at": { "type": "string" },
+    "criteria": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "criterion_id": { "minLength": 1, "type": "string" },
+          "description": { "minLength": 1, "type": "string" },
+          "required": { "const": true }
+        },
+        "required": ["criterion_id", "description", "required"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "criterion_count": { "minimum": 0, "type": "integer" },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_cost_incurred_usd": { "const": 0 },
+        "credential_values_recorded": { "const": false },
+        "dry_run_only": { "const": true },
+        "labels_admitted_to_training": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "provider_api_called": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "dry_run_only",
+        "provider_api_called",
+        "paid_model_grader_calls_started",
+        "cloud_cost_incurred_usd",
+        "credential_values_recorded",
+        "labels_admitted_to_training",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "label_options": {
+      "items": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" },
+      "type": "array"
+    },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "review_export": { "type": "object" },
+    "review_item_count": { "minimum": 0, "type": "integer" },
+    "review_item_fingerprints": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "episode_id": { "minLength": 1, "type": "string" },
+          "review_item_id": { "minLength": 1, "type": "string" },
+          "review_item_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "scenario_id": { "minLength": 1, "type": "string" }
+        },
+        "required": ["review_item_id", "episode_id", "scenario_id", "review_item_sha256"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "rubric_id": { "minLength": 1, "type": "string" },
+    "schema_version": { "const": "hfr.rubric_spec.v1" }
+  },
+  "required": [
+    "schema_version",
+    "rubric_id",
+    "created_at",
+    "review_export",
+    "criterion_count",
+    "criteria",
+    "label_options",
+    "calibration_requirements",
+    "review_item_count",
+    "review_item_fingerprints",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Rubric Spec",
+  "type": "object"
+}
