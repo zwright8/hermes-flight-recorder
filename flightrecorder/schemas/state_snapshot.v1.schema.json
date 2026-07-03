@@ -52,6 +52,44 @@
     },
     "file_record": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "exists": { "const": true },
+                "kind": { "const": "file" }
+              },
+              "required": ["path", "exists", "kind", "sha256", "size_bytes"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exists": { "const": false },
+                "kind": { "const": "missing" }
+              },
+              "required": ["path", "exists", "kind"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exists": { "const": true },
+                "kind": { "const": "directory" }
+              },
+              "required": ["path", "exists", "kind"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exists": { "const": true },
+                "kind": { "const": "other" }
+              },
+              "required": ["path", "exists", "kind"],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "exists": { "type": "boolean" },
         "kind": { "enum": ["missing", "file", "directory", "other"], "type": "string" },

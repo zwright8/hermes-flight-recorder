@@ -42,6 +42,32 @@ class StateCaptureTests(unittest.TestCase):
             schema = check_schema_contract(snapshot)
             self.assertTrue(schema["passed"], schema["errors"])
             self.assertEqual(schema["schema"]["name"], "state_snapshot")
+            bad_snapshot = json.loads(json.dumps(snapshot))
+            bad_snapshot["filesystem"]["files"]["reply"].pop("size_bytes")
+            bad_schema = check_schema_contract(bad_snapshot)
+            self.assertFalse(bad_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_schema["errors"]))
+            bad_hash_snapshot = json.loads(json.dumps(snapshot))
+            bad_hash_snapshot["filesystem"]["files"]["reply"].pop("sha256")
+            bad_hash_schema = check_schema_contract(bad_hash_snapshot)
+            self.assertFalse(bad_hash_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_hash_schema["errors"]))
+
+            diagnostic_snapshot = capture_state_snapshot(
+                files=[
+                    ("missing_reply", root / "missing-reply.txt"),
+                    ("workspace_as_file", root),
+                ]
+            )
+            diagnostic_schema = check_schema_contract(diagnostic_snapshot)
+            self.assertTrue(diagnostic_schema["passed"], diagnostic_schema["errors"])
+            self.assertEqual(diagnostic_snapshot["filesystem"]["files"]["missing_reply"]["kind"], "missing")
+            self.assertEqual(diagnostic_snapshot["filesystem"]["files"]["workspace_as_file"]["kind"], "directory")
+            bad_diagnostic_snapshot = json.loads(json.dumps(diagnostic_snapshot))
+            bad_diagnostic_snapshot["filesystem"]["files"]["workspace_as_file"]["exists"] = False
+            bad_diagnostic_schema = check_schema_contract(bad_diagnostic_snapshot)
+            self.assertFalse(bad_diagnostic_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_diagnostic_schema["errors"]))
 
     def test_capture_rejects_bad_source_key(self):
         with self.assertRaisesRegex(StateCaptureError, "Snapshot source key"):
