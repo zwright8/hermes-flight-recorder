@@ -4,6 +4,9 @@ This directory contains deterministic, keyless cloud-training control-plane
 receipts. They are safe to commit because they record provider capability and
 dry-run launch contracts only. They do not call provider APIs, spend money,
 download models, or update weights.
+Each provider record includes an `adapter_contract` that names the implemented
+receipt surfaces and attests that live launch is unsupported while live
+preflight remains metadata-only.
 
 Regenerate the fixtures with:
 

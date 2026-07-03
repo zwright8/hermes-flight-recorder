@@ -350,6 +350,9 @@ Cloud, and Brev. They do not import provider SDKs, call provider APIs, create jo
 spend money, download models, or update weights. Optional live preflight probes
 only check environment-variable presence and provider client module
 discoverability; they still record `provider_api_called: false`.
+Every provider registry record includes an `adapter_contract` attesting that the
+implemented transport is mock receipts plus metadata-only live preflight, with
+live launch support disabled by default.
 
 ```bash
 flightrecorder cloud-training providers --out runs/cloud_provider_registry.json

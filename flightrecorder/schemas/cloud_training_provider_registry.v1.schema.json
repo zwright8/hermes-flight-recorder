@@ -82,6 +82,9 @@
           },
           "type": "array"
         },
+        "adapter_contract": {
+          "$ref": "#/$defs/adapterContract"
+        },
         "credential_env_vars": {
           "items": {
             "type": "string"
@@ -127,8 +130,99 @@
         "gpu_classes",
         "job_modes",
         "artifact_protocols",
+        "adapter_contract",
         "live_status",
         "default_live_execution_allowed"
+      ],
+      "type": "object"
+    },
+    "adapterContract": {
+      "additionalProperties": true,
+      "properties": {
+        "adapter_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "client_modules_imported_by_flight_recorder": {
+          "const": false
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_transport": {
+          "const": "mock_receipts"
+        },
+        "live_launch_supported": {
+          "const": false
+        },
+        "live_preflight_supported": {
+          "const": true
+        },
+        "live_preflight_transport": {
+          "const": "metadata_only"
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "provider_api_called_by_flight_recorder": {
+          "const": false
+        },
+        "provider_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "receipt_types": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 6,
+          "type": "array"
+        },
+        "requires_cost_limit": {
+          "const": true
+        },
+        "requires_environment_credentials_for_live": {
+          "const": true
+        },
+        "requires_explicit_live_opt_in": {
+          "const": true
+        },
+        "requires_region_and_gpu_constraints": {
+          "const": true
+        },
+        "schema_version": {
+          "const": "hfr.cloud_training_provider_adapter.v1"
+        },
+        "status_cancel_receipts_supported": {
+          "const": true
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "adapter_id",
+        "provider_id",
+        "receipt_types",
+        "dry_run_transport",
+        "live_preflight_transport",
+        "live_preflight_supported",
+        "live_launch_supported",
+        "status_cancel_receipts_supported",
+        "provider_api_called_by_flight_recorder",
+        "client_modules_imported_by_flight_recorder",
+        "credential_values_recorded",
+        "cloud_cost_incurred_usd",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "requires_explicit_live_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_cost_limit",
+        "requires_region_and_gpu_constraints"
       ],
       "type": "object"
     }

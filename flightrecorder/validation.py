@@ -42,8 +42,10 @@ from .cloud_training import (
     CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
     CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
+    CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION,
     CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION,
     CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
+    PROVIDER_ADAPTER_RECEIPT_TYPES,
 )
 from .compare_gate import compare_movement_summary
 from .dataset_curation import DATASET_CURATION_RECEIPT_SCHEMA_VERSION
@@ -1392,6 +1394,8 @@ def validate_cloud_training_provider_registry(path: str | Path) -> ValidationTar
             target.errors.append(
                 f"cloud_training_provider_registry.provider_count expected {len(providers)}, got {registry.get('provider_count')!r}."
             )
+        for index, provider in enumerate(providers if isinstance(providers, list) else []):
+            _validate_cloud_training_provider_record(provider, target, f"cloud_training_provider_registry.providers[{index}]")
     return target
 
 
@@ -3380,6 +3384,9 @@ def _validate_cloud_training_contract(
             target.errors.append(f"{target.target_type}.execution_boundary.weights_updated_by_flight_recorder must be false.")
         if boundary.get("cloud_cost_incurred_usd") != 0:
             target.errors.append(f"{target.target_type}.execution_boundary.cloud_cost_incurred_usd must be 0.")
+    provider = payload.get("provider")
+    if isinstance(provider, dict):
+        _validate_cloud_training_provider_record(provider, target, f"{target.target_type}.provider")
     if expected_schema_version in {
         CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
         CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
@@ -3415,6 +3422,67 @@ def _validate_cloud_training_contract(
             "check_count": payload.get("check_count"),
         }
     )
+
+
+def _validate_cloud_training_provider_record(record: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    provider_id = record.get("id")
+    if not isinstance(provider_id, str) or not provider_id:
+        target.errors.append(f"{label}.id must be a non-empty string.")
+        provider_id = ""
+    if record.get("default_live_execution_allowed") is not False:
+        target.errors.append(f"{label}.default_live_execution_allowed must be false.")
+    contract = record.get("adapter_contract")
+    _validate_cloud_training_adapter_contract(contract, target, f"{label}.adapter_contract", provider_id)
+
+
+def _validate_cloud_training_adapter_contract(contract: Any, target: ValidationTarget, label: str, provider_id: str) -> None:
+    if not isinstance(contract, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if contract.get("schema_version") != CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION:
+        target.errors.append(f"{label}.schema_version must be {CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION!r}.")
+    if contract.get("provider_id") != provider_id:
+        target.errors.append(f"{label}.provider_id must match provider id.")
+    if not isinstance(contract.get("adapter_id"), str) or not contract.get("adapter_id"):
+        target.errors.append(f"{label}.adapter_id must be a non-empty string.")
+    receipt_types = contract.get("receipt_types")
+    if not _is_string_list(receipt_types):
+        target.errors.append(f"{label}.receipt_types must be a list of strings.")
+        receipt_types = []
+    missing_receipts = sorted(set(PROVIDER_ADAPTER_RECEIPT_TYPES) - set(receipt_types))
+    if missing_receipts:
+        target.errors.append(f"{label}.receipt_types missing required receipt types: {', '.join(missing_receipts)}.")
+    if len(set(receipt_types)) != len(receipt_types):
+        target.errors.append(f"{label}.receipt_types must not contain duplicates.")
+    if contract.get("dry_run_transport") != "mock_receipts":
+        target.errors.append(f"{label}.dry_run_transport must be mock_receipts.")
+    if contract.get("live_preflight_transport") != "metadata_only":
+        target.errors.append(f"{label}.live_preflight_transport must be metadata_only.")
+    for field_name in (
+        "live_preflight_supported",
+        "status_cancel_receipts_supported",
+        "requires_explicit_live_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_cost_limit",
+        "requires_region_and_gpu_constraints",
+    ):
+        if contract.get(field_name) is not True:
+            target.errors.append(f"{label}.{field_name} must be true.")
+    for field_name in (
+        "live_launch_supported",
+        "provider_api_called_by_flight_recorder",
+        "client_modules_imported_by_flight_recorder",
+        "credential_values_recorded",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+    ):
+        if contract.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
+    if contract.get("cloud_cost_incurred_usd") != 0:
+        target.errors.append(f"{label}.cloud_cost_incurred_usd must be 0.")
 
 
 def _validate_cloud_training_source_artifacts(

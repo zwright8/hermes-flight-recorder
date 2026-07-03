@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from flightrecorder.cloud_training import (
+    PROVIDER_ADAPTER_RECEIPT_TYPES,
     build_cloud_training_provider_registry,
     provider_choices,
 )
@@ -34,9 +35,34 @@ class CloudTrainingTests(unittest.TestCase):
         self.assertIn("brev", provider_ids)
         self.assertTrue(all(provider["default_live_execution_allowed"] is False for provider in registry["providers"]))
         self.assertTrue(all(isinstance(provider["client_import_names"], list) for provider in registry["providers"]))
+        for provider in registry["providers"]:
+            contract = provider["adapter_contract"]
+            self.assertEqual(contract["provider_id"], provider["id"])
+            self.assertEqual(contract["dry_run_transport"], "mock_receipts")
+            self.assertEqual(contract["live_preflight_transport"], "metadata_only")
+            self.assertFalse(contract["live_launch_supported"])
+            self.assertFalse(contract["provider_api_called_by_flight_recorder"])
+            self.assertFalse(contract["credential_values_recorded"])
+            self.assertTrue(set(PROVIDER_ADAPTER_RECEIPT_TYPES).issubset(set(contract["receipt_types"])))
         self.assertFalse(registry["execution_boundary"]["provider_api_called"])
         schema = check_schema_contract(registry)
         self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_validate_rejects_forged_provider_adapter_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = root / "providers.json"
+            registry = build_cloud_training_provider_registry(["modal"], created_at="2026-07-03T00:00:00+00:00")
+            registry["providers"][0]["adapter_contract"]["live_launch_supported"] = True
+            registry["providers"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"] = True
+            registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(cloud_training_provider_registry_paths=[registry_path], strict=True)
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("adapter_contract.live_launch_supported must be false", errors)
+            self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 
     def test_cli_emits_schema_checkable_fail_closed_provider_flow(self):
         with tempfile.TemporaryDirectory() as tmp:

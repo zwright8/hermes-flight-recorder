@@ -18,6 +18,16 @@ CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION = "hfr.cloud_training_artifact_m
 CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION = "hfr.cloud_training_launch_plan.v1"
 CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION = "hfr.cloud_training_launch_receipt.v1"
 CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION = "hfr.cloud_training_status_receipt.v1"
+CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION = "hfr.cloud_training_provider_adapter.v1"
+
+PROVIDER_ADAPTER_RECEIPT_TYPES: tuple[str, ...] = (
+    CLOUD_TRAINING_PROVIDER_REGISTRY_SCHEMA_VERSION,
+    CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
+    CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
+    CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
+    CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
+)
 
 PROVIDERS: dict[str, dict[str, Any]] = {
     "huggingface_jobs": {
@@ -549,6 +559,31 @@ def _provider_record(provider_id: str) -> dict[str, Any]:
         "client_import_names": list(PROVIDER_CLIENT_MODULES.get(provider_id, ())),
         "live_status": provider["live_status"],
         "default_live_execution_allowed": False,
+        "adapter_contract": _provider_adapter_contract(provider_id),
+    }
+
+
+def _provider_adapter_contract(provider_id: str) -> dict[str, Any]:
+    return {
+        "schema_version": CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION,
+        "adapter_id": f"cloud_training.{provider_id}.fail_closed.v1",
+        "provider_id": provider_id,
+        "receipt_types": list(PROVIDER_ADAPTER_RECEIPT_TYPES),
+        "dry_run_transport": "mock_receipts",
+        "live_preflight_transport": "metadata_only",
+        "live_preflight_supported": True,
+        "live_launch_supported": False,
+        "status_cancel_receipts_supported": True,
+        "provider_api_called_by_flight_recorder": False,
+        "client_modules_imported_by_flight_recorder": False,
+        "credential_values_recorded": False,
+        "cloud_cost_incurred_usd": 0,
+        "model_downloads_started": False,
+        "weights_updated_by_flight_recorder": False,
+        "requires_explicit_live_opt_in": True,
+        "requires_environment_credentials_for_live": True,
+        "requires_cost_limit": True,
+        "requires_region_and_gpu_constraints": True,
     }
 
 

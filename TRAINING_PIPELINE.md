@@ -834,6 +834,9 @@ client module discoverability with metadata-only probes; it still records
 are intentionally blocked until a future provider transport proves explicit
 opt-in, credentials, cost limits,
 region/GPU constraints, artifact manifests, and status/cancel receipts.
+Provider registry entries include an `adapter_contract` with the exact receipt
+types implemented, mock dry-run transport, metadata-only live preflight
+transport, disabled live launch support, and zero provider API calls.
 
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle
