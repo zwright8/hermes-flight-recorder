@@ -586,6 +586,14 @@
       "name": "reviewed_gate"
     },
     {
+      "artifact": "rejection_sampling_gate",
+      "artifact_schema_version": "hfr.rejection_sampling_gate.v1",
+      "description": "Fail-closed admission gate for rejection sampling before dataset curation.",
+      "filename": "rejection_sampling_gate.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/rejection_sampling_gate.v1.schema.json",
+      "name": "rejection_sampling_gate"
+    },
+    {
       "artifact": "trainer_preflight",
       "artifact_schema_version": "hfr.trainer_preflight.v1",
       "description": "Trainer preflight launch guard over passed gates and trainer-facing artifacts.",

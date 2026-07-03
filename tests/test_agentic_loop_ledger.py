@@ -96,6 +96,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "model_grader_gate": [self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")],
             "review_calibration": [self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")],
             "reviewed_gate": [self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")],
+            "rejection_sampling_gate": [self.write_json(root / "rejection_sampling_gate.json", "hfr.rejection_sampling_gate.v1")],
             "training_export": [training_export],
             "agentic_training_plan": [self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")],
             "trainer_preflight": [self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")],

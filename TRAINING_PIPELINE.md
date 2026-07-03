@@ -23,6 +23,7 @@ flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
 flightrecorder schemas --check runs/agentic_rollout_plan.json
 flightrecorder schemas --check runs/agentic_rollout_receipt.json
+flightrecorder schemas --check runs/rejection_sampling_gate.json
 flightrecorder schemas --check runs/agentic_loop_ledger.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
@@ -640,6 +641,23 @@ flightrecorder validate \
   --strict
 ```
 
+Before dataset curation, use `flightrecorder rejection-sampling-gate` to prove
+mock rollout receipts, calibrated grader review, and human-reviewed gates are
+all present. This gate does not write accepted or rejected training rows:
+
+```bash
+flightrecorder rejection-sampling-gate \
+  --rollout-receipt runs/agentic_rollout_receipt.json \
+  --model-grader-gate runs/model_grader_gate.json \
+  --review-calibration runs/review_calibration.json \
+  --reviewed-gate runs/reviewed_gate.json \
+  --out runs/rejection_sampling_gate.json
+
+flightrecorder validate \
+  --rejection-sampling-gate runs/rejection_sampling_gate.json \
+  --strict
+```
+
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, serving, held-out eval, improvement, governance, promotion, and
 next-iteration receipts into one iteration contract:
@@ -652,6 +670,7 @@ flightrecorder agentic-loop plan \
   --agentic-rollout-receipt runs/agentic_rollout_receipt.json \
   --harness-result runs/harness_prompt_injection_good/harness_result.json \
   --evidence-bundle runs/evidence_bundle_trainer.json \
+  --rejection-sampling-gate runs/rejection_sampling_gate.json \
   --agentic-training-plan runs/agentic_training_plan.json \
   --agentic-training-result runs/agentic_training_result.json \
   --heldout-manifest runs/heldout_manifest.json \

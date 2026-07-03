@@ -58,6 +58,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertFalse(plan["passed"])
             self.assertEqual(plan["readiness"], "planned_fail_closed")
             self.assertIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
+            self.assertIn("rejection_sampling_gate", plan["missing_phase_inputs"])
             self.assertIn("trainer_preflight", plan["missing_phase_inputs"])
             self.assertIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
             self.assertIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
@@ -105,6 +106,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 ("--model-grader-gate", "model_grader_gate"),
                 ("--review-calibration", "review_calibration"),
                 ("--reviewed-gate", "reviewed_gate"),
+                ("--rejection-sampling-gate", "rejection_sampling_gate"),
                 ("--training-export", "training_export"),
                 ("--agentic-training-plan", "agentic_training_plan"),
                 ("--trainer-preflight", "trainer_preflight"),
@@ -163,6 +165,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "model_grader_gate": [self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")],
             "review_calibration": [self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")],
             "reviewed_gate": [self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")],
+            "rejection_sampling_gate": [self.write_json(root / "rejection_sampling_gate.json", "hfr.rejection_sampling_gate.v1")],
             "training_export": [training_export],
             "agentic_training_plan": [self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")],
             "trainer_preflight": [self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")],

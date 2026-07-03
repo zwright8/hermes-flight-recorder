@@ -43,7 +43,7 @@ PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "rejection_sampling",
         "name": "Rejection sampling",
-        "required": ("reviewed_gate",),
+        "required": ("reviewed_gate", "rejection_sampling_gate"),
         "produces": ("dataset_registry", "dataset_splits"),
         "gate": "uncalibrated or low-confidence labels must not enter trainer-ready datasets.",
     },
@@ -132,6 +132,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "model_grader_gate": "model_grader_gate",
     "review_calibration": "review_calibration",
     "reviewed_gate": "reviewed_gate",
+    "rejection_sampling_gate": "rejection_sampling_gate",
     "rubric_spec": "rubric_spec",
     "serving_lifecycle": "serving_lifecycle",
     "trace_observability": "trace_observability",
@@ -207,18 +208,24 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "uncalibrated_labels_block_training_data",
-        "rubric_spec" in refs and "model_grader_gate" in refs and "review_calibration" in refs and "reviewed_gate" in refs,
+        "rubric_spec" in refs
+        and "model_grader_gate" in refs
+        and "review_calibration" in refs
+        and "reviewed_gate" in refs
+        and "rejection_sampling_gate" in refs,
         {
             "rubric_spec_present": "rubric_spec" in refs,
             "model_grader_gate_present": "model_grader_gate" in refs,
             "review_calibration_present": "review_calibration" in refs,
             "reviewed_gate_present": "reviewed_gate" in refs,
+            "rejection_sampling_gate_present": "rejection_sampling_gate" in refs,
         },
         {
             "rubric_spec_present": True,
             "model_grader_gate_present": True,
             "review_calibration_present": True,
             "reviewed_gate_present": True,
+            "rejection_sampling_gate_present": True,
         },
     )
     _add_check(

@@ -100,6 +100,7 @@ from .promotion_gate import (
 )
 from .promotion_ledger import PROMOTION_LEDGER_SCHEMA_VERSION
 from .repair import REPAIR_ITEM_SCHEMA_VERSION, REPAIR_QUEUE_SCHEMA_VERSION
+from .rejection_sampling import REJECTION_SAMPLING_GATE_SCHEMA_VERSION
 from .review import (
     REVIEW_CONFIDENCE_LEVELS,
     REVIEW_ITEM_SCHEMA_VERSION,
@@ -240,6 +241,7 @@ def validate_artifacts(
     cloud_training_status_receipt_paths: list[str | Path] | None = None,
     agentic_rollout_plan_paths: list[str | Path] | None = None,
     agentic_rollout_receipt_paths: list[str | Path] | None = None,
+    rejection_sampling_gate_paths: list[str | Path] | None = None,
     rubric_spec_paths: list[str | Path] | None = None,
     model_grader_dry_run_paths: list[str | Path] | None = None,
     model_grader_gate_paths: list[str | Path] | None = None,
@@ -368,6 +370,8 @@ def validate_artifacts(
         targets.append(validate_agentic_rollout_plan(agentic_rollout_plan_path))
     for agentic_rollout_receipt_path in agentic_rollout_receipt_paths or []:
         targets.append(validate_agentic_rollout_receipt(agentic_rollout_receipt_path))
+    for rejection_sampling_gate_path in rejection_sampling_gate_paths or []:
+        targets.append(validate_rejection_sampling_gate(rejection_sampling_gate_path))
     for rubric_spec_path in rubric_spec_paths or []:
         targets.append(validate_rubric_spec(rubric_spec_path))
     for model_grader_dry_run_path in model_grader_dry_run_paths or []:
@@ -901,6 +905,16 @@ def validate_agentic_rollout_receipt(path: str | Path) -> ValidationTarget:
     receipt = _read_object(receipt_path, target, "agentic_rollout_receipt.json")
     if receipt is not None:
         _validate_agentic_rollout_receipt(receipt, target, receipt_path)
+    return target
+
+
+def validate_rejection_sampling_gate(path: str | Path) -> ValidationTarget:
+    """Validate one rejection sampling admission gate."""
+    gate_path = Path(path)
+    target = ValidationTarget("rejection_sampling_gate", str(gate_path))
+    gate = _read_object(gate_path, target, "rejection_sampling_gate.json")
+    if gate is not None:
+        _validate_rejection_sampling_gate(gate, target)
     return target
 
 
@@ -3049,6 +3063,130 @@ def _validate_agentic_mock_rollout(row: Any, index: int, target: ValidationTarge
     for field_name in ("model_provider_called", "trace_written", "scorecard_written", "dataset_row_written"):
         if row.get(field_name) is not False:
             target.errors.append(f"{label}.{field_name} must be false.")
+
+
+def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(gate, "schema_version", REJECTION_SAMPLING_GATE_SCHEMA_VERSION, target, prefix="rejection_sampling_gate.")
+    checks = gate.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("rejection_sampling_gate.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "rejection_sampling_gate.checks")
+    if gate.get("check_count") != len(checks):
+        target.errors.append(f"rejection_sampling_gate.check_count expected {len(checks)}, got {gate.get('check_count')!r}.")
+    if gate.get("failed_check_count") != failed_checks:
+        target.errors.append(f"rejection_sampling_gate.failed_check_count expected {failed_checks}, got {gate.get('failed_check_count')!r}.")
+    if gate.get("passed") != (failed_checks == 0):
+        target.errors.append("rejection_sampling_gate.passed must match failed_check_count.")
+    expected_readiness = "ready_for_dataset_curation" if failed_checks == 0 else "blocked"
+    if gate.get("readiness") != expected_readiness:
+        target.errors.append(f"rejection_sampling_gate.readiness expected {expected_readiness!r}, got {gate.get('readiness')!r}.")
+    expected_recommendation = "curate_accepted_training_rows" if failed_checks == 0 else "collect_calibrated_reviews_before_sampling"
+    if gate.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"rejection_sampling_gate.recommendation expected {expected_recommendation!r}, got {gate.get('recommendation')!r}."
+        )
+    if not _is_string_list(gate.get("blocked_reasons")):
+        target.errors.append("rejection_sampling_gate.blocked_reasons must be a list of strings.")
+
+    artifacts = gate.get("input_artifacts")
+    if not isinstance(artifacts, dict):
+        target.errors.append("rejection_sampling_gate.input_artifacts must be an object.")
+        artifacts = {}
+    required_roles = {
+        "agentic_rollout_receipt": "hfr.agentic_rollout_receipt.v1",
+        "model_grader_gate": "hfr.model_grader_gate.v1",
+        "review_calibration": "hfr.review_calibration.v1",
+        "reviewed_gate": "hfr.reviewed_gate.v1",
+    }
+    for role, schema_version in required_roles.items():
+        rows = artifacts.get(role)
+        if not isinstance(rows, list) or not rows:
+            target.errors.append(f"rejection_sampling_gate.input_artifacts.{role} must contain at least one artifact ref.")
+            continue
+        for index, row in enumerate(rows):
+            _validate_rejection_sampling_gate_ref(row, target, f"rejection_sampling_gate.input_artifacts.{role}[{index}]", schema_version)
+
+    summary = gate.get("rollout_summary")
+    if not isinstance(summary, dict):
+        target.errors.append("rejection_sampling_gate.rollout_summary must be an object.")
+    else:
+        if not _is_non_negative_int(summary.get("receipt_count")):
+            target.errors.append("rejection_sampling_gate.rollout_summary.receipt_count must be a non-negative integer.")
+        if not _is_non_negative_int(summary.get("mock_rollout_count")):
+            target.errors.append("rejection_sampling_gate.rollout_summary.mock_rollout_count must be a non-negative integer.")
+        if summary.get("live_rollouts_started") is not False:
+            target.errors.append("rejection_sampling_gate.rollout_summary.live_rollouts_started must be false.")
+        if summary.get("dataset_rows_created") is not False:
+            target.errors.append("rejection_sampling_gate.rollout_summary.dataset_rows_created must be false.")
+
+    policy = gate.get("admission_policy")
+    if not isinstance(policy, dict):
+        target.errors.append("rejection_sampling_gate.admission_policy must be an object.")
+    else:
+        for field_name in ("requires_mock_rollout_receipt", "requires_calibrated_review", "requires_model_grader_gate", "requires_reviewed_gate"):
+            if policy.get(field_name) is not True:
+                target.errors.append(f"rejection_sampling_gate.admission_policy.{field_name} must be true.")
+        if policy.get("accepts_uncalibrated_labels") is not False:
+            target.errors.append("rejection_sampling_gate.admission_policy.accepts_uncalibrated_labels must be false.")
+        if not _is_string_list(policy.get("accepted_dataset_roles")):
+            target.errors.append("rejection_sampling_gate.admission_policy.accepted_dataset_roles must be a list of strings.")
+
+    boundary = gate.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append("rejection_sampling_gate.execution_boundary must be an object.")
+    else:
+        if boundary.get("gate_only") is not True:
+            target.errors.append("rejection_sampling_gate.execution_boundary.gate_only must be true.")
+        for field_name in (
+            "dataset_rows_written",
+            "model_provider_calls_started",
+            "paid_model_grader_calls_started",
+            "weights_updated_by_flight_recorder",
+        ):
+            if boundary.get(field_name) is not False:
+                target.errors.append(f"rejection_sampling_gate.execution_boundary.{field_name} must be false.")
+
+    target.details.update(
+        {
+            "passed": gate.get("passed"),
+            "readiness": gate.get("readiness"),
+            "mock_rollout_count": summary.get("mock_rollout_count") if isinstance(summary, dict) else None,
+        }
+    )
+
+
+def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, label: str, schema_version: str) -> None:
+    if not isinstance(row, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("role", "path", "kind", "schema_version", "readiness"):
+        if not isinstance(row.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    if row.get("kind") not in {"file", "directory"}:
+        target.errors.append(f"{label}.kind must be 'file' or 'directory'.")
+    if row.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if row.get("schema_version") != schema_version:
+        target.errors.append(f"{label}.schema_version must be {schema_version!r}.")
+    if row.get("passed") is not True:
+        target.errors.append(f"{label}.passed must be true.")
+    if row.get("kind") == "file":
+        if not _is_sha256(row.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for file refs.")
+        if not _is_non_negative_int(row.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for file refs.")
+    if row.get("role") == "agentic_rollout_receipt":
+        if row.get("readiness") != "mock_rollouts_recorded":
+            target.errors.append(f"{label}.readiness must be 'mock_rollouts_recorded'.")
+        if not _is_non_negative_int(row.get("mock_rollout_count")) or row.get("mock_rollout_count") <= 0:
+            target.errors.append(f"{label}.mock_rollout_count must be positive.")
+        if row.get("mock_receipt_only") is not True:
+            target.errors.append(f"{label}.mock_receipt_only must be true.")
+        if row.get("live_rollouts_started") is not False:
+            target.errors.append(f"{label}.live_rollouts_started must be false.")
+        if row.get("dataset_rows_written") is not False:
+            target.errors.append(f"{label}.dataset_rows_written must be false.")
 
 
 def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget) -> None:

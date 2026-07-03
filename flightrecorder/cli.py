@@ -129,6 +129,7 @@ from .promotion_gate import (
 )
 from .promotion_ledger import PromotionLedgerError, build_promotion_ledger
 from .repair import RepairQueueError, build_repair_queue
+from .rejection_sampling import RejectionSamplingGateError, build_rejection_sampling_gate, write_rejection_sampling_gate
 from .report import write_index, write_report
 from .review import REVIEW_LABELS, ReviewExportError, apply_review_labels, export_review_queue
 from .reviewed_gate import (
@@ -259,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         AgenticTrainingLoopPlanError,
         AgenticLoopLedgerError,
         ModelGraderError,
+        RejectionSamplingGateError,
         ReplayError,
         SchemaRegistryError,
         ModelRegistryError,
@@ -1113,6 +1115,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         cloud_training_status_receipt_paths=args.cloud_training_status_receipt,
         agentic_rollout_plan_paths=args.agentic_rollout_plan,
         agentic_rollout_receipt_paths=args.agentic_rollout_receipt,
+        rejection_sampling_gate_paths=args.rejection_sampling_gate,
         rubric_spec_paths=args.rubric_spec,
         model_grader_dry_run_paths=args.model_grader_dry_run,
         model_grader_gate_paths=args.model_grader_gate,
@@ -1481,6 +1484,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "model_grader_gate": args.model_grader_gate,
         "review_calibration": args.review_calibration,
         "reviewed_gate": args.reviewed_gate,
+        "rejection_sampling_gate": args.rejection_sampling_gate,
         "serving_lifecycle": args.serving_lifecycle,
         "trainer_launch_check": args.trainer_launch_check,
         "trainer_preflight": args.trainer_preflight,
@@ -1634,6 +1638,24 @@ def cmd_agentic_rollout_receipt(args: argparse.Namespace) -> int:
         f"mock_rollouts={receipt['mock_rollout_count']}"
     )
     return 0 if receipt["passed"] else 1
+
+
+def cmd_rejection_sampling_gate(args: argparse.Namespace) -> int:
+    gate = build_rejection_sampling_gate(
+        rollout_receipt_paths=args.rollout_receipt,
+        model_grader_gate_paths=args.model_grader_gate,
+        review_calibration_paths=args.review_calibration,
+        reviewed_gate_paths=args.reviewed_gate,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    write_rejection_sampling_gate(args.out, gate)
+    print(
+        f"wrote {args.out} readiness={gate['readiness']} "
+        f"mock_rollouts={gate['rollout_summary']['mock_rollout_count']}"
+    )
+    return 0 if gate["passed"] else 1
 
 
 def cmd_model_grader_rubric(args: argparse.Namespace) -> int:
@@ -3004,6 +3026,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--cloud-training-status-receipt", action="append", default=[], help="Validate one cloud training status receipt")
     validate.add_argument("--agentic-rollout-plan", action="append", default=[], help="Validate one agentic rollout generation plan")
     validate.add_argument("--agentic-rollout-receipt", action="append", default=[], help="Validate one agentic mock rollout receipt")
+    validate.add_argument("--rejection-sampling-gate", action="append", default=[], help="Validate one rejection sampling admission gate")
     validate.add_argument("--rubric-spec", action="append", default=[], help="Validate one rubric_spec artifact")
     validate.add_argument("--model-grader-dry-run", action="append", default=[], help="Validate one model_grader_dry_run receipt")
     validate.add_argument("--model-grader-gate", action="append", default=[], help="Validate one model_grader_gate artifact")
@@ -3276,6 +3299,7 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--evidence-bundle", action="append", default=[], help="evidence_bundle artifact; may be repeated")
     agentic_loop_plan.add_argument("--review-calibration", action="append", default=[], help="review_calibration artifact; may be repeated")
     agentic_loop_plan.add_argument("--reviewed-gate", action="append", default=[], help="reviewed_gate artifact; may be repeated")
+    agentic_loop_plan.add_argument("--rejection-sampling-gate", action="append", default=[], help="rejection_sampling_gate artifact; may be repeated")
     agentic_loop_plan.add_argument("--training-export", action="append", default=[], help="export-rl directory; may be repeated")
     agentic_loop_plan.add_argument("--agentic-training-plan", action="append", default=[], help="agentic_training_plan artifact; may be repeated")
     agentic_loop_plan.add_argument(
@@ -3391,6 +3415,16 @@ def _parser() -> argparse.ArgumentParser:
     agentic_rollout_receipt.add_argument("--out", required=True, help="Write hfr.agentic_rollout_receipt.v1 JSON to this path")
     agentic_rollout_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rollout receipt")
     agentic_rollout_receipt.set_defaults(func=cmd_agentic_rollout_receipt)
+
+    rejection_sampling_gate = subparsers.add_parser("rejection-sampling-gate", help="Write a fail-closed rejection sampling admission gate")
+    rejection_sampling_gate.add_argument("--rollout-receipt", action="append", required=True, help="agentic_rollout_receipt artifact; may be repeated")
+    rejection_sampling_gate.add_argument("--model-grader-gate", action="append", required=True, help="model_grader_gate artifact; may be repeated")
+    rejection_sampling_gate.add_argument("--review-calibration", action="append", required=True, help="review_calibration artifact; may be repeated")
+    rejection_sampling_gate.add_argument("--reviewed-gate", action="append", required=True, help="reviewed_gate artifact; may be repeated")
+    rejection_sampling_gate.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    rejection_sampling_gate.add_argument("--out", required=True, help="Write hfr.rejection_sampling_gate.v1 JSON to this path")
+    rejection_sampling_gate.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in gate refs")
+    rejection_sampling_gate.set_defaults(func=cmd_rejection_sampling_gate)
 
     model_grader = subparsers.add_parser("model-grader", help="Build fail-closed rubric/model-grader review contracts")
     model_grader_subparsers = model_grader.add_subparsers(dest="model_grader_command", required=True)

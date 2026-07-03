@@ -1,0 +1,109 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/rejection_sampling_gate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Fail-closed admission gate for rejection sampling before dataset curation.",
+  "properties": {
+    "admission_policy": {
+      "additionalProperties": true,
+      "properties": {
+        "accepted_dataset_roles": { "items": { "type": "string" }, "type": "array" },
+        "accepts_uncalibrated_labels": { "const": false },
+        "requires_calibrated_review": { "const": true },
+        "requires_mock_rollout_receipt": { "const": true },
+        "requires_model_grader_gate": { "const": true },
+        "requires_reviewed_gate": { "const": true }
+      },
+      "required": [
+        "requires_mock_rollout_receipt",
+        "requires_calibrated_review",
+        "requires_model_grader_gate",
+        "requires_reviewed_gate",
+        "accepts_uncalibrated_labels",
+        "accepted_dataset_roles"
+      ],
+      "type": "object"
+    },
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "type": "object" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "dataset_rows_written": { "const": false },
+        "gate_only": { "const": true },
+        "model_provider_calls_started": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "gate_only",
+        "dataset_rows_written",
+        "model_provider_calls_started",
+        "paid_model_grader_calls_started",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "gate_path": { "type": "string" },
+    "input_artifacts": {
+      "additionalProperties": {
+        "items": {
+          "additionalProperties": true,
+          "properties": {
+            "exists": { "type": "boolean" },
+            "kind": { "enum": ["file", "directory"] },
+            "passed": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+            "path": { "minLength": 1, "type": "string" },
+            "readiness": { "type": "string" },
+            "role": { "minLength": 1, "type": "string" },
+            "schema_version": { "type": "string" },
+            "sha256": { "anyOf": [{ "pattern": "^[0-9a-f]{64}$", "type": "string" }, { "type": "null" }] },
+            "size_bytes": { "anyOf": [{ "minimum": 0, "type": "integer" }, { "type": "null" }] }
+          },
+          "required": ["role", "path", "kind", "exists", "sha256", "size_bytes", "schema_version", "passed", "readiness"],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "type": "object"
+    },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["ready_for_dataset_curation", "blocked"] },
+    "recommendation": { "enum": ["curate_accepted_training_rows", "collect_calibrated_reviews_before_sampling"] },
+    "rollout_summary": {
+      "additionalProperties": true,
+      "properties": {
+        "dataset_rows_created": { "const": false },
+        "live_rollouts_started": { "const": false },
+        "mock_rollout_count": { "minimum": 0, "type": "integer" },
+        "receipt_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["receipt_count", "mock_rollout_count", "live_rollouts_started", "dataset_rows_created"],
+      "type": "object"
+    },
+    "schema_version": { "const": "hfr.rejection_sampling_gate.v1" }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "gate_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "input_artifacts",
+    "rollout_summary",
+    "admission_policy",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Rejection Sampling Gate",
+  "type": "object"
+}
