@@ -657,7 +657,9 @@ card, and dataset card decisions.
   SHA-256 fingerprints are missing or malformed.
 - Harness run results reject fake-secret canary checked-artifact records whose
   existing files omit, forge, go missing, or stale out SHA-256 and byte-size
-  evidence; refresh older harness-result fixtures before validating them.
+  evidence, and reject canary summaries whose counts, leak records, or pass
+  flags disagree with the checked artifacts; refresh older harness-result
+  fixtures before validating them.
 - Model registry entry validation rejects path-backed link records whose
   SHA-256 fingerprints are not lowercase hex digests.
 - External-eval plans reject scenario-manifest references whose verified file

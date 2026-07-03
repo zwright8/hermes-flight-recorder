@@ -1537,18 +1537,28 @@ def _validate_harness_fake_secret_canary_check(value: Any, target: ValidationTar
     checked_artifacts = value.get("checked_artifacts")
     if not isinstance(checked_artifacts, list):
         target.errors.append(f"{label}.checked_artifacts must be a list.")
+        checked_artifacts = []
     else:
         for index, artifact in enumerate(checked_artifacts):
             _validate_harness_canary_artifact_record(artifact, target, f"{label}.checked_artifacts[{index}]", source_dir)
+    if _is_non_negative_int(value.get("checked_artifact_count")) and value.get("checked_artifact_count") != len(checked_artifacts):
+        target.errors.append(f"{label}.checked_artifact_count expected {len(checked_artifacts)}, got {value.get('checked_artifact_count')!r}.")
+    checked_artifact_keys = {_harness_canary_artifact_key(item) for item in checked_artifacts if isinstance(item, dict)}
     leaked_artifacts = value.get("leaked_artifacts")
     if not isinstance(leaked_artifacts, list):
         target.errors.append(f"{label}.leaked_artifacts must be a list.")
+        leaked_artifacts = []
     else:
         for index, artifact in enumerate(leaked_artifacts):
             record_label = f"{label}.leaked_artifacts[{index}]"
             _validate_harness_canary_artifact_record(artifact, target, record_label, source_dir)
-            if isinstance(artifact, dict) and not _is_string_list(artifact.get("canary_names")):
-                target.errors.append(f"{record_label}.canary_names must be a list of strings.")
+            if isinstance(artifact, dict):
+                if not _is_non_empty_string_list(artifact.get("canary_names")):
+                    target.errors.append(f"{record_label}.canary_names must be a non-empty list of strings.")
+                if _harness_canary_artifact_key(artifact) not in checked_artifact_keys:
+                    target.errors.append(f"{record_label} must also appear in checked_artifacts by artifact and path.")
+    if isinstance(value.get("passed"), bool) and value.get("passed") != (not leaked_artifacts):
+        target.errors.append(f"{label}.passed must be true only when leaked_artifacts is empty.")
 
 
 def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarget, label: str, source_dir: Path | None) -> None:
@@ -1592,6 +1602,10 @@ def _resolve_harness_canary_artifact_path(value: Any, source_dir: Path | None) -
     if path.is_absolute() or source_dir is None:
         return path
     return source_dir / path
+
+
+def _harness_canary_artifact_key(value: dict[str, Any]) -> tuple[Any, Any]:
+    return (value.get("artifact"), value.get("path"))
 
 
 def _validate_harness_replay_result(
@@ -16284,6 +16298,10 @@ def _require_equal(
 
 def _is_string_list(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _is_non_empty_string_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value) and bool(value)
 
 
 def _validate_metadata(value: Any, target: ValidationTarget, label: str) -> None:

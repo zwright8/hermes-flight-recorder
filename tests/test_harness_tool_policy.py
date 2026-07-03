@@ -250,6 +250,62 @@ class HarnessToolPolicyTests(unittest.TestCase):
             self.assertIn("harness_result.fake_secret_canary_check.checked_artifacts", errors)
             self.assertIn("path must resolve to an existing file when exists is true", errors)
 
+    def test_validate_rejects_inconsistent_harness_canary_summary_counts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            canary_check = payload["fake_secret_canary_check"]
+            canary_check["checked_artifact_count"] += 1
+            canary_check["passed"] = True
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.fake_secret_canary_check.checked_artifact_count expected", errors)
+            self.assertIn("harness_result.fake_secret_canary_check.passed must be true only when leaked_artifacts is empty", errors)
+
+            canary_check["checked_artifact_count"] = len(canary_check["checked_artifacts"])
+            canary_check["leaked_artifacts"] = []
+            canary_check["passed"] = False
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_result.fake_secret_canary_check.passed must be true only when leaked_artifacts is empty", errors)
+
+    def test_validate_rejects_unchecked_or_empty_harness_canary_leaks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir, _result = _write_policy_violation_harness(Path(tmp))
+            result_path = run_dir / "harness_result.json"
+            summary_path = run_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            leaked_artifacts = payload["fake_secret_canary_check"]["leaked_artifacts"]
+            leaked_artifacts[0]["canary_names"] = [""]
+            leaked_artifacts[1]["canary_names"] = []
+            unchecked = dict(leaked_artifacts[1])
+            unchecked["artifact"] = "untracked_report"
+            unchecked["canary_names"] = ["HFR_FAKE_API_KEY"]
+            leaked_artifacts.append(unchecked)
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(["validate", "--harness-result", str(result_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            schema = check_schema_file(result_path, "harness_run_result")
+            self.assertFalse(schema["passed"])
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("canary_names must be a non-empty list of strings", errors)
+            self.assertIn("must also appear in checked_artifacts by artifact and path", errors)
+
     def _assert_cli_ok(self, args: list[str]) -> None:
         rc, stdout, stderr = _run_cli(args)
         self.assertEqual(rc, 0, stderr or stdout)
