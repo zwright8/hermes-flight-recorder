@@ -1893,6 +1893,11 @@ class SchemaRegistryTests(unittest.TestCase):
             bad_registry_result = check_schema_contract(bad_registry)
             self.assertFalse(bad_registry_result["passed"])
             self.assertIn("mode_to_view", "\n".join(bad_registry_result["errors"]))
+            bad_training_registry = json.loads(json.dumps(dataset_registry))
+            bad_training_registry.pop("source_runs")
+            bad_training_registry_result = check_schema_contract(bad_training_registry)
+            self.assertFalse(bad_training_registry_result["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_training_registry_result["errors"]))
 
     def test_schema_check_passes_trainer_handoff_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:

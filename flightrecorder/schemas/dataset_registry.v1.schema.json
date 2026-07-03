@@ -4,48 +4,42 @@
   "additionalProperties": true,
   "allOf": [
     {
-      "if": {
-        "properties": {
-          "artifact_type": {
-            "const": "training_export"
-          }
+      "oneOf": [
+        {
+          "properties": {
+            "artifact_type": {
+              "const": "training_export"
+            }
+          },
+          "required": [
+            "artifact_type",
+            "source_runs_dir",
+            "output_dir",
+            "counts",
+            "source_runs",
+            "dataset_splits",
+            "leakage_checks",
+            "source_fingerprint_coverage",
+            "quality_flags"
+          ],
+          "type": "object"
         },
-        "required": [
-          "artifact_type"
-        ]
-      },
-      "then": {
-        "required": [
-          "source_runs_dir",
-          "output_dir",
-          "counts",
-          "source_runs",
-          "dataset_splits",
-          "leakage_checks",
-          "source_fingerprint_coverage",
-          "quality_flags"
-        ]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "artifact_type": {
-            "const": "reviewed_export"
-          }
-        },
-        "required": [
-          "artifact_type"
-        ]
-      },
-      "then": {
-        "required": [
-          "source_review_export",
-          "labels_path",
-          "source_review_artifacts",
-          "labels_artifact"
-        ]
-      }
+        {
+          "properties": {
+            "artifact_type": {
+              "const": "reviewed_export"
+            }
+          },
+          "required": [
+            "artifact_type",
+            "source_review_export",
+            "labels_path",
+            "source_review_artifacts",
+            "labels_artifact"
+          ],
+          "type": "object"
+        }
+      ]
     }
   ],
   "description": "Selectable dataset registry entry for trainer handoffs.",

@@ -7,6 +7,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_contract, check_schema_file
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,6 +174,8 @@ class ReviewExportTests(unittest.TestCase):
             preferences = read_jsonl(out / "reviewed_preferences.jsonl")
             dpo = read_jsonl(out / "reviewed_dpo.jsonl")
             dataset_registry = json.loads((out / "dataset_registry.json").read_text(encoding="utf-8"))
+            dataset_registry_schema = check_schema_file(out / "dataset_registry.json")
+            self.assertTrue(dataset_registry_schema["passed"], dataset_registry_schema["errors"])
             self.assertEqual(manifest["schema_version"], "hfr.reviewed.manifest.v1")
             self.assertRegex(manifest["dataset_version"], r"^hfrds-[0-9a-f]+$")
             self.assertEqual(dataset_registry["dataset_version"], manifest["dataset_version"])
@@ -227,6 +230,11 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(dpo[0]["chosen_reviewer_confidence"], "high")
             self.assertEqual(dpo[0]["chosen"], sft[0]["response"])
             self.assertEqual(run_cli(["validate", "--reviewed-export", str(out), "--strict"]), 0)
+            bad_registry = json.loads(json.dumps(dataset_registry))
+            bad_registry.pop("labels_artifact")
+            bad_schema = check_schema_contract(bad_registry)
+            self.assertFalse(bad_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_schema["errors"]))
 
     def test_validate_reviewed_export_rejects_dataset_registry_hash_drift(self):
         with tempfile.TemporaryDirectory() as tmp:

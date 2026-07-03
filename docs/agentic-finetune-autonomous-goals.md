@@ -235,6 +235,8 @@ and future RL.
 
 - No dataset can be registered without source artifact hashes and redaction
   status.
+- Dataset registry schemas distinguish training exports from reviewed exports
+  and reject missing variant-specific source evidence.
 - Held-out task families and scenario ids are excluded from training rows.
 - Dataset quality flags are visible to training and promotion loops.
 - Dataset versions are reproducible from manifests.
