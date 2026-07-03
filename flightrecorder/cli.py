@@ -137,7 +137,13 @@ from .reviewed_gate import (
     evaluate_reviewed_gate,
     load_reviewed_gate_policy,
 )
-from .rollout_generation import RolloutGenerationError, build_agentic_rollout_plan, write_agentic_rollout_plan
+from .rollout_generation import (
+    RolloutGenerationError,
+    build_agentic_rollout_plan,
+    build_agentic_rollout_receipt,
+    write_agentic_rollout_plan,
+    write_agentic_rollout_receipt,
+)
 from .schema import ScenarioError, load_scenario, resolve_trace_path
 from .schema_registry import (
     SchemaRegistryError,
@@ -1106,6 +1112,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         cloud_training_launch_receipt_paths=args.cloud_training_launch_receipt,
         cloud_training_status_receipt_paths=args.cloud_training_status_receipt,
         agentic_rollout_plan_paths=args.agentic_rollout_plan,
+        agentic_rollout_receipt_paths=args.agentic_rollout_receipt,
         rubric_spec_paths=args.rubric_spec,
         model_grader_dry_run_paths=args.model_grader_dry_run,
         model_grader_gate_paths=args.model_grader_gate,
@@ -1610,6 +1617,21 @@ def cmd_agentic_rollout_plan(args: argparse.Namespace) -> int:
         f"planned_rollouts={plan['budget']['planned_rollouts']}/{plan['budget']['max_rollouts']}"
     )
     return 0 if plan["passed"] else 1
+
+
+def cmd_agentic_rollout_receipt(args: argparse.Namespace) -> int:
+    receipt = build_agentic_rollout_receipt(
+        plan_path=args.plan,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    write_agentic_rollout_receipt(args.out, receipt)
+    print(
+        f"wrote {args.out} readiness={receipt['readiness']} "
+        f"mock_rollouts={receipt['mock_rollout_count']}"
+    )
+    return 0 if receipt["passed"] else 1
 
 
 def cmd_model_grader_rubric(args: argparse.Namespace) -> int:
@@ -2979,6 +3001,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--cloud-training-launch-receipt", action="append", default=[], help="Validate one cloud training launch receipt")
     validate.add_argument("--cloud-training-status-receipt", action="append", default=[], help="Validate one cloud training status receipt")
     validate.add_argument("--agentic-rollout-plan", action="append", default=[], help="Validate one agentic rollout generation plan")
+    validate.add_argument("--agentic-rollout-receipt", action="append", default=[], help="Validate one agentic mock rollout receipt")
     validate.add_argument("--rubric-spec", action="append", default=[], help="Validate one rubric_spec artifact")
     validate.add_argument("--model-grader-dry-run", action="append", default=[], help="Validate one model_grader_dry_run receipt")
     validate.add_argument("--model-grader-gate", action="append", default=[], help="Validate one model_grader_gate artifact")
@@ -3357,6 +3380,13 @@ def _parser() -> argparse.ArgumentParser:
     agentic_rollout_plan.add_argument("--out", required=True, help="Write hfr.agentic_rollout_plan.v1 JSON to this path")
     agentic_rollout_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rollout plan")
     agentic_rollout_plan.set_defaults(func=cmd_agentic_rollout_plan)
+
+    agentic_rollout_receipt = subparsers.add_parser("agentic-rollout-receipt", help="Write a fail-closed mock rollout receipt")
+    agentic_rollout_receipt.add_argument("--plan", required=True, help="hfr.agentic_rollout_plan.v1 JSON path")
+    agentic_rollout_receipt.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    agentic_rollout_receipt.add_argument("--out", required=True, help="Write hfr.agentic_rollout_receipt.v1 JSON to this path")
+    agentic_rollout_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rollout receipt")
+    agentic_rollout_receipt.set_defaults(func=cmd_agentic_rollout_receipt)
 
     model_grader = subparsers.add_parser("model-grader", help="Build fail-closed rubric/model-grader review contracts")
     model_grader_subparsers = model_grader.add_subparsers(dest="model_grader_command", required=True)

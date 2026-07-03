@@ -1,0 +1,124 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_rollout_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Fail-closed deterministic mock rollout receipt for agentic training loops.",
+  "properties": {
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "type": "object" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "environment": { "type": "object" },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "dataset_rows_written": { "const": false },
+        "live_rollouts_started": { "const": false },
+        "mock_receipt_only": { "const": true },
+        "mock_rollouts_recorded": { "type": "boolean" },
+        "model_provider_calls_started": { "const": false },
+        "paid_model_grader_calls_started": { "const": false }
+      },
+      "required": [
+        "mock_receipt_only",
+        "mock_rollouts_recorded",
+        "live_rollouts_started",
+        "model_provider_calls_started",
+        "paid_model_grader_calls_started",
+        "dataset_rows_written"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "iteration_id": { "type": "string" },
+    "lineage": {
+      "additionalProperties": true,
+      "properties": {
+        "dataset_rows_created": { "const": false },
+        "ready_for_rejection_sampling": { "type": "boolean" },
+        "scorecards_written": { "const": false },
+        "trace_files_written": { "const": false }
+      },
+      "required": ["dataset_rows_created", "trace_files_written", "scorecards_written", "ready_for_rejection_sampling"],
+      "type": "object"
+    },
+    "mock_rollout_count": { "minimum": 0, "type": "integer" },
+    "mock_rollouts": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "batch_id": { "minLength": 1, "type": "string" },
+          "dataset_row_written": { "const": false },
+          "harness_mode": { "const": "offline_mock" },
+          "model_provider_called": { "const": false },
+          "policy_id": { "minLength": 1, "type": "string" },
+          "policy_role": { "minLength": 1, "type": "string" },
+          "rollout_id": { "minLength": 1, "type": "string" },
+          "scenario_id": { "minLength": 1, "type": "string" },
+          "scenario_sha256": { "anyOf": [{ "pattern": "^[0-9a-f]{64}$", "type": "string" }, { "type": "null" }] },
+          "scorecard_written": { "const": false },
+          "status": { "const": "mock_recorded" },
+          "trace_written": { "const": false }
+        },
+        "required": [
+          "rollout_id",
+          "batch_id",
+          "scenario_id",
+          "scenario_sha256",
+          "policy_role",
+          "policy_id",
+          "harness_mode",
+          "status",
+          "model_provider_called",
+          "trace_written",
+          "scorecard_written",
+          "dataset_row_written"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["mock_rollouts_recorded", "blocked"] },
+    "receipt_path": { "type": "string" },
+    "recommendation": { "enum": ["score_and_review_mock_rollouts", "fix_rollout_plan_before_mock_execution"] },
+    "schema_version": { "const": "hfr.agentic_rollout_receipt.v1" },
+    "source_plan": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "passed": { "anyOf": [{ "type": "boolean" }, { "type": "null" }] },
+        "path": { "type": "string" },
+        "readiness": { "type": "string" },
+        "schema_version": { "const": "hfr.agentic_rollout_plan.v1" },
+        "sha256": { "anyOf": [{ "pattern": "^[0-9a-f]{64}$", "type": "string" }, { "type": "null" }] },
+        "size_bytes": { "anyOf": [{ "minimum": 0, "type": "integer" }, { "type": "null" }] }
+      },
+      "required": ["path", "exists", "sha256", "size_bytes", "schema_version", "passed", "readiness"],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "receipt_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_plan",
+    "iteration_id",
+    "environment",
+    "mock_rollout_count",
+    "mock_rollouts",
+    "lineage",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Rollout Receipt",
+  "type": "object"
+}

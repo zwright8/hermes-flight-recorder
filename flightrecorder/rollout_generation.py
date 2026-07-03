@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION = "hfr.agentic_rollout_plan.v1"
+AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION = "hfr.agentic_rollout_receipt.v1"
 
 POLICY_ROLES = ("baseline", "candidate", "teacher")
 
@@ -107,6 +109,106 @@ def write_agentic_rollout_plan(path: str | Path, plan: dict[str, Any]) -> None:
     out_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def build_agentic_rollout_receipt(
+    *,
+    plan_path: str | Path,
+    out_path: str | Path | None = None,
+    preserve_paths: bool = False,
+    created_at: str | None = None,
+) -> dict[str, Any]:
+    """Build a deterministic mock rollout receipt from a rollout plan."""
+    path = Path(plan_path)
+    plan = _read_required_json(path, "agentic rollout plan")
+    batches = plan.get("harness_batches") if isinstance(plan.get("harness_batches"), list) else []
+    checks: list[dict[str, Any]] = []
+    _add_check(
+        checks,
+        "plan_schema_supported",
+        plan.get("schema_version") == AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
+        {"schema_version": plan.get("schema_version")},
+        {"schema_version": AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION},
+    )
+    _add_check(
+        checks,
+        "plan_ready_for_mock_rollouts",
+        plan.get("passed") is True and plan.get("readiness") == "ready_for_harness_batch",
+        {"passed": plan.get("passed"), "readiness": plan.get("readiness")},
+        {"passed": True, "readiness": "ready_for_harness_batch"},
+    )
+    _add_check(checks, "harness_batches_present", bool(batches), {"batch_count": len(batches)}, {"batch_count": ">=1"})
+    _add_check(
+        checks,
+        "mock_rollout_only",
+        all(isinstance(batch, dict) and batch.get("harness_mode") == "offline_mock" for batch in batches),
+        {"harness_modes": sorted({str(batch.get("harness_mode")) for batch in batches if isinstance(batch, dict)})},
+        {"harness_mode": "offline_mock"},
+    )
+    _add_check(
+        checks,
+        "flight_recorder_did_not_call_model_provider",
+        True,
+        {"model_provider_calls_started": False, "live_rollouts_started": False},
+        {"model_provider_calls_started": False, "live_rollouts_started": False},
+    )
+    failed = [check for check in checks if not check["passed"]]
+    records = [] if failed else [_mock_rollout_record(batch, index) for index, batch in enumerate(batches) if isinstance(batch, dict)]
+    return {
+        "schema_version": AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION,
+        "created_at": created_at or datetime.now(timezone.utc).isoformat(),
+        "receipt_path": _display_path(Path(out_path), preserve_paths) if out_path else "",
+        "passed": not failed,
+        "readiness": "mock_rollouts_recorded" if not failed else "blocked",
+        "recommendation": "score_and_review_mock_rollouts" if not failed else "fix_rollout_plan_before_mock_execution",
+        "check_count": len(checks),
+        "failed_check_count": len(failed),
+        "checks": checks,
+        "blocked_reasons": [check["summary"] for check in failed],
+        "source_plan": {
+            "path": _display_path(path, preserve_paths),
+            "exists": path.exists() and path.is_file(),
+            "sha256": _sha256(path) if path.exists() and path.is_file() else None,
+            "size_bytes": path.stat().st_size if path.exists() and path.is_file() else None,
+            "schema_version": plan.get("schema_version"),
+            "passed": plan.get("passed") if isinstance(plan.get("passed"), bool) else None,
+            "readiness": plan.get("readiness") if isinstance(plan.get("readiness"), str) else "",
+        },
+        "iteration_id": str(plan.get("iteration_id") or ""),
+        "environment": plan.get("environment") if isinstance(plan.get("environment"), dict) else {},
+        "mock_rollout_count": len(records),
+        "mock_rollouts": records,
+        "lineage": {
+            "dataset_rows_created": False,
+            "trace_files_written": False,
+            "scorecards_written": False,
+            "ready_for_rejection_sampling": not failed,
+        },
+        "execution_boundary": {
+            "mock_receipt_only": True,
+            "mock_rollouts_recorded": bool(records),
+            "live_rollouts_started": False,
+            "model_provider_calls_started": False,
+            "paid_model_grader_calls_started": False,
+            "dataset_rows_written": False,
+        },
+        "notes": [
+            "This receipt records deterministic mock rollout rows only.",
+            "It does not call model providers, run paid graders, write traces, or add rows to training datasets.",
+        ],
+    }
+
+
+def write_agentic_rollout_receipt(path: str | Path, receipt: dict[str, Any]) -> None:
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = dict(receipt)
+    source_plan = payload.get("source_plan") if isinstance(payload.get("source_plan"), dict) else None
+    if source_plan:
+        source_plan = dict(source_plan)
+        source_plan["path"] = _output_relative_path(source_plan.get("path"), out_path.parent)
+        payload["source_plan"] = source_plan
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def _batches(scenarios: list[dict[str, Any]], policies: list[dict[str, Any]], max_rollouts: int) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for scenario in scenarios:
@@ -159,6 +261,46 @@ def _read_json(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _read_required_json(path: Path, label: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RolloutGenerationError(f"{label} not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise RolloutGenerationError(f"{label} is not valid JSON: {path}: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise RolloutGenerationError(f"{label} must contain a JSON object: {path}")
+    return payload
+
+
+def _mock_rollout_record(batch: dict[str, Any], index: int) -> dict[str, Any]:
+    return {
+        "rollout_id": f"mock-rollout-{index + 1:04d}",
+        "batch_id": str(batch.get("batch_id") or ""),
+        "scenario_id": str(batch.get("scenario_id") or ""),
+        "scenario_sha256": batch.get("scenario_sha256") if isinstance(batch.get("scenario_sha256"), str) else None,
+        "policy_role": str(batch.get("policy_role") or ""),
+        "policy_id": str(batch.get("policy_id") or ""),
+        "harness_mode": "offline_mock",
+        "status": "mock_recorded",
+        "model_provider_called": False,
+        "trace_written": False,
+        "scorecard_written": False,
+        "dataset_row_written": False,
+    }
+
+
+def _output_relative_path(value: Any, output_dir: Path) -> Any:
+    if not isinstance(value, str) or not value:
+        return value
+    path = Path(value)
+    if not path.is_absolute():
+        if not path.exists():
+            return value
+        path = path.resolve()
+    return os.path.relpath(path.resolve(), output_dir.resolve())
 
 
 def _display_path(path: Path, preserve_paths: bool) -> str:

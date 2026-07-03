@@ -115,7 +115,7 @@ from .review import (
     REVIEWED_REWARD_MODEL_SCHEMA_VERSION,
     REVIEWED_SFT_SCHEMA_VERSION,
 )
-from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION
+from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
@@ -239,6 +239,7 @@ def validate_artifacts(
     cloud_training_launch_receipt_paths: list[str | Path] | None = None,
     cloud_training_status_receipt_paths: list[str | Path] | None = None,
     agentic_rollout_plan_paths: list[str | Path] | None = None,
+    agentic_rollout_receipt_paths: list[str | Path] | None = None,
     rubric_spec_paths: list[str | Path] | None = None,
     model_grader_dry_run_paths: list[str | Path] | None = None,
     model_grader_gate_paths: list[str | Path] | None = None,
@@ -365,6 +366,8 @@ def validate_artifacts(
         targets.append(validate_cloud_training_status_receipt(cloud_training_status_receipt_path))
     for agentic_rollout_plan_path in agentic_rollout_plan_paths or []:
         targets.append(validate_agentic_rollout_plan(agentic_rollout_plan_path))
+    for agentic_rollout_receipt_path in agentic_rollout_receipt_paths or []:
+        targets.append(validate_agentic_rollout_receipt(agentic_rollout_receipt_path))
     for rubric_spec_path in rubric_spec_paths or []:
         targets.append(validate_rubric_spec(rubric_spec_path))
     for model_grader_dry_run_path in model_grader_dry_run_paths or []:
@@ -888,6 +891,16 @@ def validate_external_eval_receipt(path: str | Path) -> ValidationTarget:
     receipt = _read_object(receipt_path, target, "external_eval_receipt.json")
     if receipt is not None:
         _validate_external_eval_receipt(receipt, target, receipt_path)
+    return target
+
+
+def validate_agentic_rollout_receipt(path: str | Path) -> ValidationTarget:
+    """Validate one deterministic mock rollout receipt."""
+    receipt_path = Path(path)
+    target = ValidationTarget("agentic_rollout_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "agentic_rollout_receipt.json")
+    if receipt is not None:
+        _validate_agentic_rollout_receipt(receipt, target, receipt_path)
     return target
 
 
@@ -2905,6 +2918,137 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
             "readiness": plan.get("readiness"),
         }
     )
+
+
+def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(receipt, "schema_version", AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION, target, prefix="agentic_rollout_receipt.")
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("agentic_rollout_receipt.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "agentic_rollout_receipt.checks")
+    if receipt.get("check_count") != len(checks):
+        target.errors.append(f"agentic_rollout_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
+    if receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"agentic_rollout_receipt.failed_check_count expected {failed_checks}, got {receipt.get('failed_check_count')!r}."
+        )
+    if receipt.get("passed") != (failed_checks == 0):
+        target.errors.append("agentic_rollout_receipt.passed must match failed_check_count.")
+    expected_readiness = "mock_rollouts_recorded" if failed_checks == 0 else "blocked"
+    if receipt.get("readiness") != expected_readiness:
+        target.errors.append(f"agentic_rollout_receipt.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}.")
+    expected_recommendation = "score_and_review_mock_rollouts" if failed_checks == 0 else "fix_rollout_plan_before_mock_execution"
+    if receipt.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"agentic_rollout_receipt.recommendation expected {expected_recommendation!r}, got {receipt.get('recommendation')!r}."
+        )
+    if not _is_string_list(receipt.get("blocked_reasons")):
+        target.errors.append("agentic_rollout_receipt.blocked_reasons must be a list of strings.")
+
+    source_plan = receipt.get("source_plan")
+    if not isinstance(source_plan, dict):
+        target.errors.append("agentic_rollout_receipt.source_plan must be an object.")
+    else:
+        _validate_agentic_rollout_receipt_source_plan(source_plan, target, source_path)
+
+    rollouts = receipt.get("mock_rollouts")
+    if not isinstance(rollouts, list):
+        target.errors.append("agentic_rollout_receipt.mock_rollouts must be a list.")
+        rollouts = []
+    if receipt.get("mock_rollout_count") != len(rollouts):
+        target.errors.append(
+            f"agentic_rollout_receipt.mock_rollout_count expected {len(rollouts)}, got {receipt.get('mock_rollout_count')!r}."
+        )
+    for index, row in enumerate(rollouts):
+        _validate_agentic_mock_rollout(row, index, target)
+
+    lineage = receipt.get("lineage")
+    if not isinstance(lineage, dict):
+        target.errors.append("agentic_rollout_receipt.lineage must be an object.")
+    else:
+        for field_name in ("dataset_rows_created", "trace_files_written", "scorecards_written"):
+            if lineage.get(field_name) is not False:
+                target.errors.append(f"agentic_rollout_receipt.lineage.{field_name} must be false.")
+        if lineage.get("ready_for_rejection_sampling") != receipt.get("passed"):
+            target.errors.append("agentic_rollout_receipt.lineage.ready_for_rejection_sampling must match passed.")
+
+    boundary = receipt.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append("agentic_rollout_receipt.execution_boundary must be an object.")
+    else:
+        if boundary.get("mock_receipt_only") is not True:
+            target.errors.append("agentic_rollout_receipt.execution_boundary.mock_receipt_only must be true.")
+        if boundary.get("mock_rollouts_recorded") != bool(rollouts):
+            target.errors.append("agentic_rollout_receipt.execution_boundary.mock_rollouts_recorded must match mock_rollouts presence.")
+        for field_name in (
+            "live_rollouts_started",
+            "model_provider_calls_started",
+            "paid_model_grader_calls_started",
+            "dataset_rows_written",
+        ):
+            if boundary.get(field_name) is not False:
+                target.errors.append(f"agentic_rollout_receipt.execution_boundary.{field_name} must be false.")
+
+    target.details.update(
+        {
+            "passed": receipt.get("passed"),
+            "readiness": receipt.get("readiness"),
+            "mock_rollout_count": len(rollouts),
+        }
+    )
+
+
+def _validate_agentic_rollout_receipt_source_plan(source_plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    label = "agentic_rollout_receipt.source_plan"
+    if source_plan.get("schema_version") != AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION:
+        target.errors.append(f"{label}.schema_version must be {AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION!r}.")
+    if source_plan.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+        return
+    path_value = source_plan.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
+        return
+    plan_path = _external_eval_reference_path(path_value, source_path)
+    if not plan_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to an agentic rollout plan file.")
+        return
+    if not _is_non_negative_int(source_plan.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
+    elif plan_path.stat().st_size != source_plan.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if not _is_sha256(source_plan.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+    elif _sha256(plan_path) != source_plan.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+    plan = _read_object(plan_path, target, f"{label}.path")
+    if plan is not None:
+        if plan.get("schema_version") != source_plan.get("schema_version"):
+            target.errors.append(f"{label}.schema_version must match the current file.")
+        if plan.get("passed") != source_plan.get("passed"):
+            target.errors.append(f"{label}.passed must match the current file.")
+        if plan.get("readiness") != source_plan.get("readiness"):
+            target.errors.append(f"{label}.readiness must match the current file.")
+
+
+def _validate_agentic_mock_rollout(row: Any, index: int, target: ValidationTarget) -> None:
+    label = f"agentic_rollout_receipt.mock_rollouts[{index}]"
+    if not isinstance(row, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for field_name in ("rollout_id", "batch_id", "scenario_id", "policy_role", "policy_id"):
+        if not isinstance(row.get(field_name), str) or not row.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if row.get("scenario_sha256") is not None and not _is_sha256(row.get("scenario_sha256")):
+        target.errors.append(f"{label}.scenario_sha256 must be a SHA-256 hex string or null.")
+    if row.get("harness_mode") != "offline_mock":
+        target.errors.append(f"{label}.harness_mode must be 'offline_mock'.")
+    if row.get("status") != "mock_recorded":
+        target.errors.append(f"{label}.status must be 'mock_recorded'.")
+    for field_name in ("model_provider_called", "trace_written", "scorecard_written", "dataset_row_written"):
+        if row.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
 
 
 def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget) -> None:

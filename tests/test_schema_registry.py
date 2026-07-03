@@ -104,6 +104,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("cloud_training_launch_receipt", names)
         self.assertIn("cloud_training_status_receipt", names)
         self.assertIn("agentic_rollout_plan", names)
+        self.assertIn("agentic_rollout_receipt", names)
         self.assertIn("model_candidate", names)
         self.assertIn("model_scout_manifest", names)
         self.assertIn("model_compatibility_report", names)

@@ -61,7 +61,7 @@ and handoff receipts that make those systems auditable.
 | --- | --- | --- |
 | Evidence | Normalize traces, score scenarios, build evidence bundles, gate readiness. | `flightrecorder run`, `run-suite`, `evidence-bundle`, `gate-suite`, `validate` |
 | Harness | Run or replay tasks through mock, Hermes, OpenClaw, Coven, or Codex-style runners. | `scripts/hermes_harness.py run-scenario`, `run-suite`, `probe-model`, `replay-trace` |
-| Rollouts | Plan baseline/candidate/teacher harness batches, replayable environments, verifier refs, budgets, and rejection-sampling gates. | `agentic-rollout-plan`, `validate --agentic-rollout-plan` |
+| Rollouts | Plan baseline/candidate/teacher harness batches, replayable environments, verifier refs, budgets, rejection-sampling gates, and mock rollout receipts. | `agentic-rollout-plan`, `agentic-rollout-receipt`, `validate --agentic-rollout-receipt` |
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs. | `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
 | Review/grading | Bind rubrics, mock model-grader dry runs, calibration, human overrides, and training-admission gates. | `model-grader rubric`, `model-grader dry-run`, `model-grader gate` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |

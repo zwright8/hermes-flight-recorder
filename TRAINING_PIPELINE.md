@@ -22,6 +22,7 @@ flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
 flightrecorder schemas --check runs/agentic_rollout_plan.json
+flightrecorder schemas --check runs/agentic_rollout_receipt.json
 flightrecorder schemas --check runs/agentic_loop_ledger.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
@@ -620,6 +621,22 @@ flightrecorder agentic-rollout-plan \
 
 flightrecorder validate \
   --agentic-rollout-plan runs/agentic_rollout_plan.json \
+  --strict
+```
+
+Archive a deterministic mock rollout receipt before scoring or review. This
+records one mock row per planned batch and proves Flight Recorder did not start
+live rollouts, call model providers or paid graders, write traces or scorecards,
+or create training dataset rows:
+
+```bash
+flightrecorder agentic-rollout-receipt \
+  --plan runs/agentic_rollout_plan.json \
+  --out runs/agentic_rollout_receipt.json
+
+flightrecorder validate \
+  --agentic-rollout-plan runs/agentic_rollout_plan.json \
+  --agentic-rollout-receipt runs/agentic_rollout_receipt.json \
   --strict
 ```
 
