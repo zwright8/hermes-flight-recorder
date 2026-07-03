@@ -47,6 +47,91 @@ MODE_STAGE_SEQUENCES: dict[str, list[str]] = {
     "rl": ["future_rl"],
 }
 
+MODE_DATA_REQUIREMENTS: dict[str, tuple[dict[str, Any], ...]] = {
+    "sft": (
+        {
+            "id": "supervised_response_rows",
+            "description": "Redacted supervised prompt/response rows for external SFT trainers.",
+            "view_groups": (("sft",),),
+            "required_schema_names": ("rl_sft",),
+        },
+    ),
+    "action_sft": (
+        {
+            "id": "action_supervision_rows",
+            "description": "Redacted action/tool-use supervised rows for action-SFT trainers.",
+            "view_groups": (("action_sft", "sft"),),
+            "required_schema_names": ("rl_sft",),
+        },
+    ),
+    "dpo": (
+        {
+            "id": "preference_pair_rows",
+            "description": "Reviewed chosen/rejected preference pairs for external DPO trainers.",
+            "view_groups": (("dpo", "preferences"),),
+            "required_schema_names": ("rl_dpo", "rl_preference"),
+        },
+    ),
+    "sft_then_dpo": (
+        {
+            "id": "supervised_response_rows",
+            "description": "Redacted supervised prompt/response rows for the SFT warmup stage.",
+            "view_groups": (("sft",),),
+            "required_schema_names": ("rl_sft",),
+        },
+        {
+            "id": "preference_pair_rows",
+            "description": "Reviewed chosen/rejected preference pairs for the DPO stage.",
+            "view_groups": (("dpo", "preferences"),),
+            "required_schema_names": ("rl_dpo", "rl_preference"),
+        },
+    ),
+    "reward_model": (
+        {
+            "id": "reward_label_rows",
+            "description": "Reviewed scalar reward labels or preference-derived reward-model rows.",
+            "view_groups": (("reward_model", "preferences"),),
+            "required_schema_names": ("rl_reward_model", "rl_preference"),
+        },
+    ),
+    "process_rewards": (
+        {
+            "id": "step_reward_rows",
+            "description": "Reviewed step-level process reward labels linked to rollout evidence.",
+            "view_groups": (("process_rewards", "step_rewards"),),
+            "required_schema_names": ("rl_step_reward",),
+        },
+    ),
+    "grpo": (
+        {
+            "id": "rollout_episode_rows",
+            "description": "Replayable rollout episodes for an external GRPO runner.",
+            "view_groups": (("episodes", "rollouts"),),
+            "required_schema_names": ("rl_episode",),
+        },
+        {
+            "id": "external_reward_function_contract",
+            "description": "A deterministic TRL/GRPO-style reward function supplied and validated by the external runner.",
+            "view_groups": (("episodes", "rollouts"),),
+            "required_schema_names": ("rl_episode",),
+        },
+    ),
+    "rl": (
+        {
+            "id": "rollout_episode_rows",
+            "description": "Replayable rollout episodes for an external RL runner.",
+            "view_groups": (("episodes", "rollouts"),),
+            "required_schema_names": ("rl_episode",),
+        },
+        {
+            "id": "external_reward_function_contract",
+            "description": "A deterministic reward function supplied and validated by the external RL runner.",
+            "view_groups": (("episodes", "rollouts"),),
+            "required_schema_names": ("rl_episode",),
+        },
+    ),
+}
+
 TRAINING_LICENSE_STATUSES = {"approved", "allowed", "cleared", "permissive", "open"}
 REDACTED_DATASET_STATUSES = {"redacted", "clean", "passed"}
 
@@ -82,6 +167,7 @@ def build_agentic_training_plan(
     model = _model_record(model_path, model_manifest)
     dataset = _dataset_record(dataset_path, dataset_manifest)
     selected_views = _selected_views(dataset["views"], mode)
+    mode_contract = _mode_contract(mode, selected_views, allow_advanced_training, allow_future_rl)
 
     checks: list[dict[str, Any]] = []
     _add_check(checks, "mode_supported", True, {"mode": mode}, {"supported_modes": list(SUPPORTED_MODES)})
@@ -137,6 +223,18 @@ def build_agentic_training_plan(
     )
     _add_check(
         checks,
+        "mode_contract_data_requirements_satisfied",
+        all(requirement["satisfied"] for requirement in mode_contract["data_requirements"]),
+        {
+            "mode": mode,
+            "unsatisfied_requirement_ids": [
+                requirement["id"] for requirement in mode_contract["data_requirements"] if not requirement["satisfied"]
+            ],
+        },
+        {"all_data_requirements_satisfied": True},
+    )
+    _add_check(
+        checks,
         "advanced_reward_mode_explicitly_enabled",
         mode not in ADVANCED_REWARD_MODES or allow_advanced_training,
         {"mode": mode, "allow_advanced_training": allow_advanced_training},
@@ -149,8 +247,41 @@ def build_agentic_training_plan(
         {"mode": mode, "allow_future_rl": allow_future_rl},
         {"future_rl_modes": sorted(FUTURE_RL_MODES), "allow_future_rl": True},
     )
+    _add_check(
+        checks,
+        "mode_contract_planning_gate_open",
+        mode_contract["planning_gate"]["open"],
+        mode_contract["planning_gate"],
+        {"open": True},
+    )
+    _add_check(
+        checks,
+        "reward_contract_fail_closed",
+        mode_contract["reward_contract"]["flight_recorder_supplies_callable"] is False
+        and mode_contract["reward_contract"]["may_call_paid_services_by_default"] is False
+        and mode_contract["reward_contract"]["may_require_secrets_by_default"] is False,
+        {
+            "flight_recorder_supplies_callable": mode_contract["reward_contract"]["flight_recorder_supplies_callable"],
+            "may_call_paid_services_by_default": mode_contract["reward_contract"]["may_call_paid_services_by_default"],
+            "may_require_secrets_by_default": mode_contract["reward_contract"]["may_require_secrets_by_default"],
+        },
+        {
+            "flight_recorder_supplies_callable": False,
+            "may_call_paid_services_by_default": False,
+            "may_require_secrets_by_default": False,
+        },
+    )
     _add_check(checks, "flight_recorder_did_not_launch_training", True, {"training_started": False}, {"training_started": False})
     _add_check(checks, "model_downloads_not_started", True, {"model_downloads_started": False}, {"model_downloads_started": False})
+    _add_check(checks, "cloud_jobs_not_started", True, {"cloud_jobs_started": False}, {"cloud_jobs_started": False})
+    _add_check(
+        checks,
+        "paid_model_grader_calls_not_started",
+        True,
+        {"paid_model_grader_calls_started": False},
+        {"paid_model_grader_calls_started": False},
+    )
+    _add_check(checks, "weights_not_updated", True, {"weights_updated": False}, {"weights_updated": False})
 
     failed_checks = [check for check in checks if check["passed"] is False]
     passed = not failed_checks
@@ -173,6 +304,7 @@ def build_agentic_training_plan(
             "dataset": dataset,
         },
         "selected_views": selected_views,
+        "mode_contract": mode_contract,
         "trainer_plan": {
             "backend": trainer_backend,
             "output_dir": str(output_dir or ""),
@@ -185,6 +317,9 @@ def build_agentic_training_plan(
             "dry_run_only": True,
             "training_started": False,
             "model_downloads_started": False,
+            "cloud_jobs_started": False,
+            "paid_model_grader_calls_started": False,
+            "weights_updated": False,
             "external_runner_command": _external_runner_command(mode, trainer_backend, output_dir),
         },
         "handoff_contract": {
@@ -196,6 +331,12 @@ def build_agentic_training_plan(
             "requires_known_license_status": True,
             "requires_redacted_dataset": True,
             "disallow_unredacted_traces": True,
+            "advanced_modes_require_explicit_opt_in": True,
+            "future_rl_requires_explicit_opt_in": True,
+            "flight_recorder_started_cloud_provider": False,
+            "paid_model_grader_calls_started": False,
+            "weights_updated_by_flight_recorder": False,
+            "reward_function_owned_by_external_runner": True,
             "allowed_modes": list(SUPPORTED_MODES),
             "default_executable_modes": sorted(DEFAULT_EXECUTABLE_MODES),
             "advanced_reward_modes_blocked_by_default": sorted(ADVANCED_REWARD_MODES),
@@ -311,6 +452,177 @@ def _selected_views(views: dict[str, dict[str, Any]], mode: str) -> list[dict[st
 def _requirements_satisfied(selected_views: list[dict[str, Any]], mode: str) -> bool:
     selected = {str(view.get("name") or "") for view in selected_views if view.get("row_count", 0) > 0}
     return all(any(name in selected for name in group) for group in MODE_VIEW_REQUIREMENTS[mode])
+
+
+def _mode_contract(
+    mode: str,
+    selected_views: list[dict[str, Any]],
+    allow_advanced_training: bool,
+    allow_future_rl: bool,
+) -> dict[str, Any]:
+    planning_gate = _planning_gate(mode, allow_advanced_training, allow_future_rl)
+    return {
+        "mode": mode,
+        "category": _mode_category(mode),
+        "planning_gate": planning_gate,
+        "stage_sequence": MODE_STAGE_SEQUENCES[mode],
+        "required_view_groups": [list(group) for group in MODE_VIEW_REQUIREMENTS[mode]],
+        "selected_view_names": [str(view.get("name") or "") for view in selected_views],
+        "data_requirements": _data_requirements(mode, selected_views),
+        "reward_contract": _reward_contract(mode),
+        "side_effect_boundary": {
+            "dry_run_only": True,
+            "training_started": False,
+            "cloud_jobs_started": False,
+            "model_downloads_started": False,
+            "paid_model_grader_calls_started": False,
+            "weights_updated": False,
+            "provider_credentials_required_by_flight_recorder": False,
+        },
+        "external_runner_contract": {
+            "runner_owns_execution": True,
+            "runner_must_revalidate_inputs": True,
+            "runner_must_require_recommendation": "ready_for_external_trainer_plan",
+            "runner_must_validate_reward_contract": mode in {"dpo", "sft_then_dpo", "reward_model", "process_rewards", "grpo", "rl"},
+            "runner_must_block_unredacted_traces": True,
+        },
+    }
+
+
+def _mode_category(mode: str) -> str:
+    if mode in DEFAULT_EXECUTABLE_MODES:
+        return "default_executable"
+    if mode in ADVANCED_REWARD_MODES:
+        return "advanced_reward"
+    return "future_rl"
+
+
+def _planning_gate(mode: str, allow_advanced_training: bool, allow_future_rl: bool) -> dict[str, Any]:
+    if mode in ADVANCED_REWARD_MODES:
+        return {
+            "open": allow_advanced_training,
+            "required_flag": "--allow-advanced-training",
+            "reason": "reward-model and process-reward planning is blocked by default",
+        }
+    if mode in FUTURE_RL_MODES:
+        return {
+            "open": allow_future_rl,
+            "required_flag": "--allow-future-rl",
+            "reason": "GRPO/RL planning is blocked by default",
+        }
+    return {
+        "open": True,
+        "required_flag": None,
+        "reason": "default executable handoff mode",
+    }
+
+
+def _data_requirements(mode: str, selected_views: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected_by_name = {str(view.get("name") or ""): view for view in selected_views}
+    requirements: list[dict[str, Any]] = []
+    for spec in MODE_DATA_REQUIREMENTS[mode]:
+        evidence = []
+        group_satisfied = []
+        for group in spec["view_groups"]:
+            matched = next(
+                (
+                    selected_by_name[name]
+                    for name in group
+                    if name in selected_by_name and _positive_int(selected_by_name[name].get("row_count"))
+                ),
+                None,
+            )
+            group_satisfied.append(matched is not None)
+            evidence.append(
+                {
+                    "candidate_views": list(group),
+                    "selected_view": str(matched.get("name") or "") if matched else "",
+                    "row_count": int(matched.get("row_count") or 0) if matched else 0,
+                    "schema_version": str(matched.get("schema_version") or "") if matched else "",
+                }
+            )
+        requirements.append(
+            {
+                "id": str(spec["id"]),
+                "description": str(spec["description"]),
+                "view_groups": [list(group) for group in spec["view_groups"]],
+                "required_schema_names": list(spec["required_schema_names"]),
+                "minimum_rows_per_group": 1,
+                "satisfied": all(group_satisfied),
+                "evidence": evidence,
+            }
+        )
+    return requirements
+
+
+def _reward_contract(mode: str) -> dict[str, Any]:
+    base = {
+        "required": mode not in {"sft", "action_sft"},
+        "external_runner_must_supply": mode in {"grpo", "rl"},
+        "external_runner_must_validate": mode in {"dpo", "sft_then_dpo", "reward_model", "process_rewards", "grpo", "rl"},
+        "flight_recorder_supplies_callable": False,
+        "may_call_paid_services_by_default": False,
+        "may_require_secrets_by_default": False,
+        "must_not_use_unredacted_traces": True,
+        "requires_calibration_or_human_review_gate": mode in {"reward_model", "process_rewards", "grpo", "rl"},
+    }
+    if mode in {"sft", "action_sft"}:
+        return {
+            **base,
+            "kind": "not_applicable",
+            "source_views": [],
+            "callable_signature": "",
+            "notes": ["Supervised modes do not require a reward-function contract."],
+        }
+    if mode in {"dpo", "sft_then_dpo"}:
+        return {
+            **base,
+            "kind": "preference_pairs",
+            "source_views": ["dpo", "preferences"],
+            "callable_signature": "",
+            "notes": ["External DPO trainers must validate reviewed chosen/rejected preference pairs."],
+        }
+    if mode == "reward_model":
+        return {
+            **base,
+            "kind": "scalar_or_preference_rewards",
+            "source_views": ["reward_model", "preferences"],
+            "callable_signature": "",
+            "notes": ["External reward-model trainers must validate reviewed reward labels before use."],
+        }
+    if mode == "process_rewards":
+        return {
+            **base,
+            "kind": "step_rewards",
+            "source_views": ["process_rewards", "step_rewards"],
+            "callable_signature": "",
+            "notes": ["External process-reward trainers must validate step-level labels and episode lineage."],
+        }
+    if mode == "grpo":
+        return {
+            **base,
+            "kind": "trl_grpo_reward_function",
+            "source_views": ["episodes", "rollouts"],
+            "callable_signature": "reward_fn(prompts, completions, **kwargs) -> list[float]",
+            "notes": [
+                "Flight Recorder records the required interface only.",
+                "The external GRPO runner owns reward-function implementation, calibration, and execution.",
+            ],
+        }
+    return {
+        **base,
+        "kind": "external_rl_reward_function",
+        "source_views": ["episodes", "rollouts"],
+        "callable_signature": "reward_fn(episodes, actions, **kwargs) -> list[float]",
+        "notes": [
+            "Flight Recorder records the required interface only.",
+            "The external RL runner owns reward-function implementation, calibration, and execution.",
+        ],
+    }
+
+
+def _positive_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _extension_points(mode: str) -> list[dict[str, str]]:

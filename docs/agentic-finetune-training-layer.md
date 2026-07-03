@@ -40,6 +40,11 @@ default:
 `grpo` and `rl` require `--allow-future-rl`. Those flags only allow planning;
 they still do not launch a trainer, import trainer stacks, download models, or
 update weights.
+Every plan includes a `mode_contract` that makes this gate explicit. The
+contract records the mode category, required trainer-view groups, selected data
+evidence, reward-signal or reward-function requirements, and the side-effect
+boundary that keeps Flight Recorder from starting trainers, cloud jobs, paid
+grader calls, downloads, or weight updates.
 
 ## Required Registry Inputs
 
@@ -76,14 +81,24 @@ Plans use `hfr.agentic_training_plan.v1` and record:
 - selected trainer views and stage sequence
 - model and dataset manifest hashes
 - readiness checks and blocked reasons
+- a `mode_contract` with data requirements and reward-contract details
 - trainer backend extension points
 - the external runner command shape
 - `training_started: false`
 - `model_downloads_started: false`
+- `cloud_jobs_started: false`
+- `paid_model_grader_calls_started: false`
+- `weights_updated: false`
 - `flight_recorder_executed_training: false`
 
 External runners must revalidate the plan, manifests, license status, redaction
 status, and current file hashes immediately before launch.
+For `grpo`, the reward contract is an interface record only:
+`reward_fn(prompts, completions, **kwargs) -> list[float]`. For generic `rl`,
+the recorded interface is `reward_fn(episodes, actions, **kwargs) -> list[float]`.
+Flight Recorder does not provide, import, calibrate, or execute either
+function; the external runner must supply and validate it before any live
+training.
 
 ## Runtime Preflight for Tiny Smoke
 

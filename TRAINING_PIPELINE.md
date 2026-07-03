@@ -577,8 +577,15 @@ DPO, and SFT-then-DPO are the default executable handoff modes. Reward-model
 and process-reward modes remain blocked unless `--allow-advanced-training` is
 passed, and GRPO/RL remain blocked unless `--allow-future-rl` is passed. Those
 flags only allow planning; they still do not launch a trainer, import training
-stacks, download models, or update weights. Pass
-`--agentic-training-plan <plan.json>` to `trainer-preflight` to fingerprint a
+stacks, download models, or update weights.
+Each plan now carries a `mode_contract` that states the mode category, required
+trainer-view groups, data-requirement evidence, reward-signal or reward-function
+contract, and hard side-effect boundary. For GRPO, that contract records the
+TRL-style interface `reward_fn(prompts, completions, **kwargs) -> list[float]`
+for an external runner to supply and validate; Flight Recorder does not
+implement, import, or execute it.
+
+Pass `--agentic-training-plan <plan.json>` to `trainer-preflight` to fingerprint a
 ready plan as a trainer input before archiving or handing it to an external
 runner.
 Before a bounded tiny-smoke launch, run

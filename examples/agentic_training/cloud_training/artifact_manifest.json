@@ -25,8 +25,8 @@
             "exists": true,
             "path": "../plans/sft_then_dpo_plan.json",
             "role": "upload",
-            "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
-            "size_bytes": 10379
+            "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+            "size_bytes": 15787
           }
         ]
       },
@@ -66,7 +66,7 @@
           "requires_external_runner_download": true,
           "requires_external_runner_upload": true,
           "upload_count": 1,
-          "upload_size_bytes": 10379
+          "upload_size_bytes": 15787
         }
       },
       "expected": {
@@ -198,15 +198,15 @@
     "requires_external_runner_download": true,
     "requires_external_runner_upload": true,
     "upload_count": 1,
-    "upload_size_bytes": 10379
+    "upload_size_bytes": 15787
   },
   "upload_artifacts": [
     {
       "exists": true,
       "path": "../plans/sft_then_dpo_plan.json",
       "role": "upload",
-      "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
-      "size_bytes": 10379
+      "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+      "size_bytes": 15787
     }
   ]
 }

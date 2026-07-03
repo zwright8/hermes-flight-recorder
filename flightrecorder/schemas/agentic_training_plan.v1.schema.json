@@ -37,6 +37,9 @@
     "input_manifests": {
       "$ref": "#/$defs/inputManifests"
     },
+    "mode_contract": {
+      "$ref": "#/$defs/modeContract"
+    },
     "mode": {
       "enum": [
         "sft",
@@ -101,10 +104,41 @@
     "blocked_reasons",
     "input_manifests",
     "selected_views",
+    "mode_contract",
     "trainer_plan",
     "execution",
     "handoff_contract",
     "notes"
+  ],
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sftModePlan"
+        },
+        {
+          "$ref": "#/$defs/actionSftModePlan"
+        },
+        {
+          "$ref": "#/$defs/dpoModePlan"
+        },
+        {
+          "$ref": "#/$defs/sftThenDpoModePlan"
+        },
+        {
+          "$ref": "#/$defs/rewardModelModePlan"
+        },
+        {
+          "$ref": "#/$defs/processRewardsModePlan"
+        },
+        {
+          "$ref": "#/$defs/grpoModePlan"
+        },
+        {
+          "$ref": "#/$defs/rlModePlan"
+        }
+      ]
+    }
   ],
   "title": "Hermes Flight Recorder Agentic Training Plan",
   "type": "object",
@@ -151,7 +185,16 @@
           },
           "type": "array"
         },
+        "cloud_jobs_started": {
+          "const": false
+        },
         "model_downloads_started": {
+          "const": false
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "weights_updated": {
           "const": false
         },
         "training_started": {
@@ -162,6 +205,9 @@
         "dry_run_only",
         "training_started",
         "model_downloads_started",
+        "cloud_jobs_started",
+        "paid_model_grader_calls_started",
+        "weights_updated",
         "external_runner_command"
       ],
       "type": "object"
@@ -175,11 +221,26 @@
           },
           "type": "array"
         },
+        "advanced_modes_require_explicit_opt_in": {
+          "const": true
+        },
         "disallow_unredacted_traces": {
           "const": true
         },
         "flight_recorder_executed_training": {
           "const": false
+        },
+        "flight_recorder_started_cloud_provider": {
+          "const": false
+        },
+        "future_rl_requires_explicit_opt_in": {
+          "const": true
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "reward_function_owned_by_external_runner": {
+          "const": true
         },
         "requires_known_license_status": {
           "const": true
@@ -198,6 +259,9 @@
         },
         "runner_owns_execution": {
           "const": true
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
         }
       },
       "required": [
@@ -209,6 +273,12 @@
         "requires_known_license_status",
         "requires_redacted_dataset",
         "disallow_unredacted_traces",
+        "advanced_modes_require_explicit_opt_in",
+        "future_rl_requires_explicit_opt_in",
+        "flight_recorder_started_cloud_provider",
+        "paid_model_grader_calls_started",
+        "weights_updated_by_flight_recorder",
+        "reward_function_owned_by_external_runner",
         "allowed_modes"
       ],
       "type": "object"
@@ -258,6 +328,1086 @@
         "id",
         "license_allows_training"
       ],
+      "type": "object"
+    },
+    "modeContract": {
+      "additionalProperties": true,
+      "properties": {
+        "category": {
+          "enum": [
+            "default_executable",
+            "advanced_reward",
+            "future_rl"
+          ]
+        },
+        "data_requirements": {
+          "items": {
+            "$ref": "#/$defs/dataRequirement"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "external_runner_contract": {
+          "$ref": "#/$defs/externalRunnerContract"
+        },
+        "mode": {
+          "enum": [
+            "sft",
+            "action_sft",
+            "dpo",
+            "sft_then_dpo",
+            "reward_model",
+            "process_rewards",
+            "grpo",
+            "rl"
+          ]
+        },
+        "planning_gate": {
+          "$ref": "#/$defs/planningGate"
+        },
+        "required_view_groups": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/rewardContract"
+        },
+        "selected_view_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "side_effect_boundary": {
+          "$ref": "#/$defs/sideEffectBoundary"
+        },
+        "stage_sequence": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "category",
+        "planning_gate",
+        "stage_sequence",
+        "required_view_groups",
+        "selected_view_names",
+        "data_requirements",
+        "reward_contract",
+        "side_effect_boundary",
+        "external_runner_contract"
+      ],
+      "type": "object"
+    },
+    "planningGate": {
+      "additionalProperties": true,
+      "properties": {
+        "open": {
+          "type": "boolean"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "required_flag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "open",
+        "required_flag",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "dataRequirement": {
+      "additionalProperties": true,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/dataRequirementEvidence"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "minimum_rows_per_group": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "required_schema_names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "satisfied": {
+          "type": "boolean"
+        },
+        "view_groups": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "description",
+        "view_groups",
+        "required_schema_names",
+        "minimum_rows_per_group",
+        "satisfied",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "dataRequirementEvidence": {
+      "additionalProperties": true,
+      "properties": {
+        "candidate_views": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "row_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "selected_view": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_views",
+        "selected_view",
+        "row_count",
+        "schema_version"
+      ],
+      "type": "object"
+    },
+    "rewardContract": {
+      "additionalProperties": true,
+      "properties": {
+        "callable_signature": {
+          "type": "string"
+        },
+        "external_runner_must_supply": {
+          "type": "boolean"
+        },
+        "external_runner_must_validate": {
+          "type": "boolean"
+        },
+        "flight_recorder_supplies_callable": {
+          "const": false
+        },
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "may_call_paid_services_by_default": {
+          "const": false
+        },
+        "may_require_secrets_by_default": {
+          "const": false
+        },
+        "must_not_use_unredacted_traces": {
+          "const": true
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "requires_calibration_or_human_review_gate": {
+          "type": "boolean"
+        },
+        "source_views": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "required",
+        "kind",
+        "source_views",
+        "external_runner_must_supply",
+        "external_runner_must_validate",
+        "flight_recorder_supplies_callable",
+        "may_call_paid_services_by_default",
+        "may_require_secrets_by_default",
+        "must_not_use_unredacted_traces",
+        "requires_calibration_or_human_review_gate",
+        "callable_signature",
+        "notes"
+      ],
+      "type": "object"
+    },
+    "sideEffectBoundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "provider_credentials_required_by_flight_recorder": {
+          "const": false
+        },
+        "training_started": {
+          "const": false
+        },
+        "weights_updated": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "training_started",
+        "cloud_jobs_started",
+        "model_downloads_started",
+        "paid_model_grader_calls_started",
+        "weights_updated",
+        "provider_credentials_required_by_flight_recorder"
+      ],
+      "type": "object"
+    },
+    "externalRunnerContract": {
+      "additionalProperties": true,
+      "properties": {
+        "runner_must_block_unredacted_traces": {
+          "const": true
+        },
+        "runner_must_require_recommendation": {
+          "const": "ready_for_external_trainer_plan"
+        },
+        "runner_must_revalidate_inputs": {
+          "const": true
+        },
+        "runner_must_validate_reward_contract": {
+          "type": "boolean"
+        },
+        "runner_owns_execution": {
+          "const": true
+        }
+      },
+      "required": [
+        "runner_owns_execution",
+        "runner_must_revalidate_inputs",
+        "runner_must_require_recommendation",
+        "runner_must_validate_reward_contract",
+        "runner_must_block_unredacted_traces"
+      ],
+      "type": "object"
+    },
+    "sftModePlan": {
+      "properties": {
+        "mode": {
+          "const": "sft"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/sftModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "actionSftModePlan": {
+      "properties": {
+        "mode": {
+          "const": "action_sft"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/actionSftModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "dpoModePlan": {
+      "properties": {
+        "mode": {
+          "const": "dpo"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/dpoModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "sftThenDpoModePlan": {
+      "properties": {
+        "mode": {
+          "const": "sft_then_dpo"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/sftThenDpoModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "rewardModelModePlan": {
+      "properties": {
+        "mode": {
+          "const": "reward_model"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/rewardModelModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "processRewardsModePlan": {
+      "properties": {
+        "mode": {
+          "const": "process_rewards"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/processRewardsModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "grpoModePlan": {
+      "properties": {
+        "mode": {
+          "const": "grpo"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/grpoModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "rlModePlan": {
+      "properties": {
+        "mode": {
+          "const": "rl"
+        },
+        "mode_contract": {
+          "$ref": "#/$defs/rlModeContract"
+        }
+      },
+      "required": [
+        "mode",
+        "mode_contract"
+      ],
+      "type": "object"
+    },
+    "sftModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/defaultExecutableModeContract"
+        },
+        {
+          "$ref": "#/$defs/supervisedOnlyModeContract"
+        }
+      ]
+    },
+    "actionSftModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/defaultExecutableModeContract"
+        },
+        {
+          "$ref": "#/$defs/actionSftOnlyModeContract"
+        }
+      ]
+    },
+    "dpoModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/defaultExecutableModeContract"
+        },
+        {
+          "$ref": "#/$defs/dpoOnlyModeContract"
+        }
+      ]
+    },
+    "sftThenDpoModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/defaultExecutableModeContract"
+        },
+        {
+          "$ref": "#/$defs/sftThenDpoOnlyModeContract"
+        }
+      ]
+    },
+    "rewardModelModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/advancedRewardModeContract"
+        },
+        {
+          "$ref": "#/$defs/rewardModelOnlyModeContract"
+        }
+      ]
+    },
+    "processRewardsModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/advancedRewardModeContract"
+        },
+        {
+          "$ref": "#/$defs/processRewardsOnlyModeContract"
+        }
+      ]
+    },
+    "grpoModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/futureRlModeContract"
+        },
+        {
+          "$ref": "#/$defs/grpoOnlyModeContract"
+        }
+      ]
+    },
+    "rlModeContract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/modeContract"
+        },
+        {
+          "$ref": "#/$defs/futureRlModeContract"
+        },
+        {
+          "$ref": "#/$defs/rlOnlyModeContract"
+        }
+      ]
+    },
+    "defaultExecutableModeContract": {
+      "properties": {
+        "category": {
+          "const": "default_executable"
+        },
+        "planning_gate": {
+          "properties": {
+            "open": {
+              "const": true
+            },
+            "required_flag": {
+              "const": null
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "advancedRewardModeContract": {
+      "properties": {
+        "category": {
+          "const": "advanced_reward"
+        },
+        "planning_gate": {
+          "properties": {
+            "required_flag": {
+              "const": "--allow-advanced-training"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "futureRlModeContract": {
+      "properties": {
+        "category": {
+          "const": "future_rl"
+        },
+        "planning_gate": {
+          "properties": {
+            "required_flag": {
+              "const": "--allow-future-rl"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "supervisedOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "sft"
+        },
+        "data_requirements": {
+          "items": {
+            "properties": {
+              "id": {
+                "enum": [
+                  "supervised_response_rows"
+                ]
+              },
+              "required_schema_names": {
+                "items": {
+                  "enum": [
+                    "rl_sft"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/supervisedRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "const": "sft"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "actionSftOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "action_sft"
+        },
+        "data_requirements": {
+          "items": {
+            "properties": {
+              "id": {
+                "enum": [
+                  "action_supervision_rows"
+                ]
+              },
+              "required_schema_names": {
+                "items": {
+                  "enum": [
+                    "rl_sft"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/supervisedRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "const": "action_sft"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "dpoOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "dpo"
+        },
+        "data_requirements": {
+          "items": {
+            "$ref": "#/$defs/preferenceDataRequirement"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/preferenceRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "const": "dpo"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "sftThenDpoOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "sft_then_dpo"
+        },
+        "data_requirements": {
+          "items": {
+            "properties": {
+              "id": {
+                "enum": [
+                  "supervised_response_rows",
+                  "preference_pair_rows"
+                ]
+              },
+              "required_schema_names": {
+                "items": {
+                  "enum": [
+                    "rl_sft",
+                    "rl_dpo",
+                    "rl_preference"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/preferenceRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "enum": [
+              "sft",
+              "dpo"
+            ]
+          },
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "rewardModelOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "reward_model"
+        },
+        "data_requirements": {
+          "items": {
+            "properties": {
+              "id": {
+                "enum": [
+                  "reward_label_rows"
+                ]
+              },
+              "required_schema_names": {
+                "items": {
+                  "enum": [
+                    "rl_reward_model",
+                    "rl_preference"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/rewardModelRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "const": "reward_model"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "processRewardsOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "process_rewards"
+        },
+        "data_requirements": {
+          "items": {
+            "properties": {
+              "id": {
+                "enum": [
+                  "step_reward_rows"
+                ]
+              },
+              "required_schema_names": {
+                "items": {
+                  "enum": [
+                    "rl_step_reward"
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/processRewardsRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "const": "process_rewards"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "grpoOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "grpo"
+        },
+        "data_requirements": {
+          "items": {
+            "$ref": "#/$defs/episodeDataRequirement"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/grpoRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "const": "future_grpo"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "rlOnlyModeContract": {
+      "properties": {
+        "mode": {
+          "const": "rl"
+        },
+        "data_requirements": {
+          "items": {
+            "$ref": "#/$defs/episodeDataRequirement"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "reward_contract": {
+          "$ref": "#/$defs/rlRewardContract"
+        },
+        "stage_sequence": {
+          "items": {
+            "const": "future_rl"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "preferenceDataRequirement": {
+      "properties": {
+        "id": {
+          "enum": [
+            "preference_pair_rows"
+          ]
+        },
+        "required_schema_names": {
+          "items": {
+            "enum": [
+              "rl_dpo",
+              "rl_preference"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "episodeDataRequirement": {
+      "properties": {
+        "id": {
+          "enum": [
+            "rollout_episode_rows",
+            "external_reward_function_contract"
+          ]
+        },
+        "required_schema_names": {
+          "items": {
+            "enum": [
+              "rl_episode"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "supervisedRewardContract": {
+      "properties": {
+        "callable_signature": {
+          "const": ""
+        },
+        "external_runner_must_supply": {
+          "const": false
+        },
+        "external_runner_must_validate": {
+          "const": false
+        },
+        "kind": {
+          "const": "not_applicable"
+        },
+        "required": {
+          "const": false
+        }
+      },
+      "type": "object"
+    },
+    "preferenceRewardContract": {
+      "properties": {
+        "callable_signature": {
+          "const": ""
+        },
+        "external_runner_must_supply": {
+          "const": false
+        },
+        "external_runner_must_validate": {
+          "const": true
+        },
+        "kind": {
+          "const": "preference_pairs"
+        },
+        "required": {
+          "const": true
+        },
+        "source_views": {
+          "items": {
+            "enum": [
+              "dpo",
+              "preferences"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "rewardModelRewardContract": {
+      "properties": {
+        "callable_signature": {
+          "const": ""
+        },
+        "external_runner_must_supply": {
+          "const": false
+        },
+        "external_runner_must_validate": {
+          "const": true
+        },
+        "kind": {
+          "const": "scalar_or_preference_rewards"
+        },
+        "required": {
+          "const": true
+        },
+        "source_views": {
+          "items": {
+            "enum": [
+              "reward_model",
+              "preferences"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "processRewardsRewardContract": {
+      "properties": {
+        "callable_signature": {
+          "const": ""
+        },
+        "external_runner_must_supply": {
+          "const": false
+        },
+        "external_runner_must_validate": {
+          "const": true
+        },
+        "kind": {
+          "const": "step_rewards"
+        },
+        "required": {
+          "const": true
+        },
+        "source_views": {
+          "items": {
+            "enum": [
+              "process_rewards",
+              "step_rewards"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "grpoRewardContract": {
+      "properties": {
+        "callable_signature": {
+          "const": "reward_fn(prompts, completions, **kwargs) -> list[float]"
+        },
+        "external_runner_must_supply": {
+          "const": true
+        },
+        "external_runner_must_validate": {
+          "const": true
+        },
+        "kind": {
+          "const": "trl_grpo_reward_function"
+        },
+        "required": {
+          "const": true
+        },
+        "source_views": {
+          "items": {
+            "enum": [
+              "episodes",
+              "rollouts"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "rlRewardContract": {
+      "properties": {
+        "callable_signature": {
+          "const": "reward_fn(episodes, actions, **kwargs) -> list[float]"
+        },
+        "external_runner_must_supply": {
+          "const": true
+        },
+        "external_runner_must_validate": {
+          "const": true
+        },
+        "kind": {
+          "const": "external_rl_reward_function"
+        },
+        "required": {
+          "const": true
+        },
+        "source_views": {
+          "items": {
+            "enum": [
+              "episodes",
+              "rollouts"
+            ]
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
       "type": "object"
     },
     "trainerPlan": {

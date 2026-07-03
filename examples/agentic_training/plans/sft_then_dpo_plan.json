@@ -1,6 +1,6 @@
 {
   "blocked_reasons": [],
-  "check_count": 13,
+  "check_count": 19,
   "checks": [
     {
       "actual": {
@@ -154,6 +154,18 @@
     },
     {
       "actual": {
+        "mode": "sft_then_dpo",
+        "unsatisfied_requirement_ids": []
+      },
+      "expected": {
+        "all_data_requirements_satisfied": true
+      },
+      "id": "mode_contract_data_requirements_satisfied",
+      "passed": true,
+      "summary": "mode_contract_data_requirements_satisfied: passed=True"
+    },
+    {
+      "actual": {
         "allow_advanced_training": false,
         "mode": "sft_then_dpo"
       },
@@ -186,6 +198,34 @@
     },
     {
       "actual": {
+        "open": true,
+        "reason": "default executable handoff mode",
+        "required_flag": null
+      },
+      "expected": {
+        "open": true
+      },
+      "id": "mode_contract_planning_gate_open",
+      "passed": true,
+      "summary": "mode_contract_planning_gate_open: passed=True"
+    },
+    {
+      "actual": {
+        "flight_recorder_supplies_callable": false,
+        "may_call_paid_services_by_default": false,
+        "may_require_secrets_by_default": false
+      },
+      "expected": {
+        "flight_recorder_supplies_callable": false,
+        "may_call_paid_services_by_default": false,
+        "may_require_secrets_by_default": false
+      },
+      "id": "reward_contract_fail_closed",
+      "passed": true,
+      "summary": "reward_contract_fail_closed: passed=True"
+    },
+    {
+      "actual": {
         "training_started": false
       },
       "expected": {
@@ -205,10 +245,44 @@
       "id": "model_downloads_not_started",
       "passed": true,
       "summary": "model_downloads_not_started: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_jobs_started": false
+      },
+      "expected": {
+        "cloud_jobs_started": false
+      },
+      "id": "cloud_jobs_not_started",
+      "passed": true,
+      "summary": "cloud_jobs_not_started: passed=True"
+    },
+    {
+      "actual": {
+        "paid_model_grader_calls_started": false
+      },
+      "expected": {
+        "paid_model_grader_calls_started": false
+      },
+      "id": "paid_model_grader_calls_not_started",
+      "passed": true,
+      "summary": "paid_model_grader_calls_not_started: passed=True"
+    },
+    {
+      "actual": {
+        "weights_updated": false
+      },
+      "expected": {
+        "weights_updated": false
+      },
+      "id": "weights_not_updated",
+      "passed": true,
+      "summary": "weights_not_updated: passed=True"
     }
   ],
   "created_at": "2026-07-02T00:00:00+00:00",
   "execution": {
+    "cloud_jobs_started": false,
     "dry_run_only": true,
     "external_runner_command": [
       "<external-runner>",
@@ -223,10 +297,13 @@
       "runs/agentic_training/adapters"
     ],
     "model_downloads_started": false,
-    "training_started": false
+    "paid_model_grader_calls_started": false,
+    "training_started": false,
+    "weights_updated": false
   },
   "failed_check_count": 0,
   "handoff_contract": {
+    "advanced_modes_require_explicit_opt_in": true,
     "advanced_reward_modes_blocked_by_default": [
       "process_rewards",
       "reward_model"
@@ -249,16 +326,21 @@
     ],
     "disallow_unredacted_traces": true,
     "flight_recorder_executed_training": false,
+    "flight_recorder_started_cloud_provider": false,
     "future_rl_modes_blocked_by_default": [
       "grpo",
       "rl"
     ],
+    "future_rl_requires_explicit_opt_in": true,
+    "paid_model_grader_calls_started": false,
     "requires_known_license_status": true,
     "requires_redacted_dataset": true,
     "requires_registered_dataset": true,
     "requires_registered_model": true,
+    "reward_function_owned_by_external_runner": true,
     "runner_must_require_recommendation": "ready_for_external_trainer_plan",
-    "runner_owns_execution": true
+    "runner_owns_execution": true,
+    "weights_updated_by_flight_recorder": false
   },
   "input_manifests": {
     "dataset": {
@@ -335,6 +417,120 @@
     }
   },
   "mode": "sft_then_dpo",
+  "mode_contract": {
+    "category": "default_executable",
+    "data_requirements": [
+      {
+        "description": "Redacted supervised prompt/response rows for the SFT warmup stage.",
+        "evidence": [
+          {
+            "candidate_views": [
+              "sft"
+            ],
+            "row_count": 2,
+            "schema_version": "hfr.rl.sft.v1",
+            "selected_view": "sft"
+          }
+        ],
+        "id": "supervised_response_rows",
+        "minimum_rows_per_group": 1,
+        "required_schema_names": [
+          "rl_sft"
+        ],
+        "satisfied": true,
+        "view_groups": [
+          [
+            "sft"
+          ]
+        ]
+      },
+      {
+        "description": "Reviewed chosen/rejected preference pairs for the DPO stage.",
+        "evidence": [
+          {
+            "candidate_views": [
+              "dpo",
+              "preferences"
+            ],
+            "row_count": 2,
+            "schema_version": "hfr.rl.dpo.v1",
+            "selected_view": "dpo"
+          }
+        ],
+        "id": "preference_pair_rows",
+        "minimum_rows_per_group": 1,
+        "required_schema_names": [
+          "rl_dpo",
+          "rl_preference"
+        ],
+        "satisfied": true,
+        "view_groups": [
+          [
+            "dpo",
+            "preferences"
+          ]
+        ]
+      }
+    ],
+    "external_runner_contract": {
+      "runner_must_block_unredacted_traces": true,
+      "runner_must_require_recommendation": "ready_for_external_trainer_plan",
+      "runner_must_revalidate_inputs": true,
+      "runner_must_validate_reward_contract": true,
+      "runner_owns_execution": true
+    },
+    "mode": "sft_then_dpo",
+    "planning_gate": {
+      "open": true,
+      "reason": "default executable handoff mode",
+      "required_flag": null
+    },
+    "required_view_groups": [
+      [
+        "sft"
+      ],
+      [
+        "dpo",
+        "preferences"
+      ]
+    ],
+    "reward_contract": {
+      "callable_signature": "",
+      "external_runner_must_supply": false,
+      "external_runner_must_validate": true,
+      "flight_recorder_supplies_callable": false,
+      "kind": "preference_pairs",
+      "may_call_paid_services_by_default": false,
+      "may_require_secrets_by_default": false,
+      "must_not_use_unredacted_traces": true,
+      "notes": [
+        "External DPO trainers must validate reviewed chosen/rejected preference pairs."
+      ],
+      "required": true,
+      "requires_calibration_or_human_review_gate": false,
+      "source_views": [
+        "dpo",
+        "preferences"
+      ]
+    },
+    "selected_view_names": [
+      "sft",
+      "dpo"
+    ],
+    "side_effect_boundary": {
+      "cloud_jobs_started": false,
+      "dry_run_only": true,
+      "model_downloads_started": false,
+      "paid_model_grader_calls_started": false,
+      "provider_credentials_required_by_flight_recorder": false,
+      "training_started": false,
+      "weights_updated": false
+    },
+    "stage_sequence": [
+      "sft",
+      "dpo"
+    ]
+  },
   "notes": [
     "This is a dry-run plan only; Flight Recorder did not import trainer packages or update weights.",
     "External runners must revalidate manifests, redaction, license status, and file hashes immediately before launch."

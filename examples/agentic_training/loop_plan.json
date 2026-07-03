@@ -627,8 +627,8 @@
         "readiness": "ready",
         "role": "agentic_training_plan",
         "schema_version": "hfr.agentic_training_plan.v1",
-        "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
-        "size_bytes": 10379
+        "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+        "size_bytes": 15787
       }
     ],
     "agentic_training_result": [
@@ -640,7 +640,7 @@
         "readiness": "ready",
         "role": "agentic_training_result",
         "schema_version": "hfr.agentic_training_result.v1",
-        "sha256": "11d99420ab7c18830b108cfe896da4f8f68921418ba4d0bd3bcc00299412f476",
+        "sha256": "f8e385923184f9eba052715d6829e346822ef3f6ab92c21dadc21723bfa3f460",
         "size_bytes": 9800
       }
     ],
@@ -653,7 +653,7 @@
         "readiness": "ready",
         "role": "agentic_training_runtime_preflight",
         "schema_version": "hfr.agentic_training_runtime_preflight.v1",
-        "sha256": "01e90d892489cb0bb7125218f87cecf4559ddc342fab6339889ed3866929f6d9",
+        "sha256": "17ffa5335648f460aa2a157034dffaa4a80be8a0f9df462267b8521de942a222",
         "size_bytes": 5741
       }
     ],
@@ -666,7 +666,7 @@
         "readiness": "ready",
         "role": "cloud_training_artifact_manifest",
         "schema_version": "hfr.cloud_training_artifact_manifest.v1",
-        "sha256": "a86dd269d07fbc81b12c16353e216caa8795aeb101b485d6cd76e61ead6e21ca",
+        "sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9",
         "size_bytes": 6041
       }
     ],
@@ -679,7 +679,7 @@
         "readiness": "blocked",
         "role": "cloud_training_launch_plan",
         "schema_version": "hfr.cloud_training_launch_plan.v1",
-        "sha256": "94627803eec355ed072e88324e0862463c78cb393ffe3d80299394632a5e0803",
+        "sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020",
         "size_bytes": 5951
       }
     ],
@@ -692,7 +692,7 @@
         "readiness": "blocked",
         "role": "cloud_training_launch_receipt",
         "schema_version": "hfr.cloud_training_launch_receipt.v1",
-        "sha256": "f46198ff9d6cfa39e31833029a47e03b40efbf5968b342f99f0d1329a56deeb1",
+        "sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c",
         "size_bytes": 2643
       }
     ],
@@ -705,7 +705,7 @@
         "readiness": "blocked",
         "role": "cloud_training_preflight",
         "schema_version": "hfr.cloud_training_preflight.v1",
-        "sha256": "28b6a7db0d4c988b18dd0c8ff68fd55bc229c4bcb044b3f0ca7cb03867756d2c",
+        "sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509",
         "size_bytes": 11230
       }
     ],
@@ -731,7 +731,7 @@
         "readiness": "status_recorded",
         "role": "cloud_training_status_receipt",
         "schema_version": "hfr.cloud_training_status_receipt.v1",
-        "sha256": "f3ad19c5276b33717d16cccefd523ed3765738d717dc01a15cc8e973f0905465",
+        "sha256": "93ad4d79ddffaca9bebb01e2aa5682bd0d427d97ff482c83b1272a62addf5e1a",
         "size_bytes": 2682
       }
     ]

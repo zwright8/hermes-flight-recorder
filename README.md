@@ -297,8 +297,14 @@ flightrecorder agentic-training-flow \
 ```
 
 The delegated flow receipt records the exact external trainer command and
-SFT/action-SFT/DPO stage sequence without running it. After an external trainer
-finishes or fails, archive a receipt:
+SFT/action-SFT/DPO stage sequence without running it.
+Advanced reward-model, process-reward, GRPO, and RL modes remain planning-only
+unless their explicit opt-in flags are passed. The emitted plan includes a
+`mode_contract` with the required trainer views, reward-signal or reward-function
+contract, and hard-false side-effect flags for training, cloud jobs, paid grader
+calls, downloads, and weight updates.
+
+After an external trainer finishes or fails, archive a receipt:
 
 ```bash
 python3.11 scripts/archive_agentic_training_result.py \

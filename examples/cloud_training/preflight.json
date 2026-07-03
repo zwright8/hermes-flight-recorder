@@ -15,8 +15,8 @@
           "schema_errors": [],
           "schema_name": "agentic_training_plan",
           "schema_passed": true,
-          "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
-          "size_bytes": 10379,
+          "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+          "size_bytes": 15787,
           "source_passed": true,
           "source_recommendation": "ready_for_external_trainer_plan"
         }
@@ -362,8 +362,8 @@
       "schema_errors": [],
       "schema_name": "agentic_training_plan",
       "schema_passed": true,
-      "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
-      "size_bytes": 10379,
+      "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+      "size_bytes": 15787,
       "source_passed": true,
       "source_recommendation": "ready_for_external_trainer_plan"
     },

@@ -12,7 +12,7 @@
           "schema_errors": [],
           "schema_name": "cloud_training_launch_receipt",
           "schema_passed": true,
-          "sha256": "f46198ff9d6cfa39e31833029a47e03b40efbf5968b342f99f0d1329a56deeb1",
+          "sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c",
           "size_bytes": 2643,
           "source_passed": false,
           "source_recommendation": "block_live_cloud_launch"
@@ -76,7 +76,7 @@
       "schema_errors": [],
       "schema_name": "cloud_training_launch_receipt",
       "schema_passed": true,
-      "sha256": "f46198ff9d6cfa39e31833029a47e03b40efbf5968b342f99f0d1329a56deeb1",
+      "sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c",
       "size_bytes": 2643,
       "source_passed": false,
       "source_recommendation": "block_live_cloud_launch"
