@@ -24,6 +24,7 @@ from .agentic_training_result import (
     RESULT_STATUSES,
 )
 from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION
+from .agentic_loop_ledger import AGENTIC_LOOP_LEDGER_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
@@ -230,6 +231,7 @@ def validate_artifacts(
     training_plan_paths: list[str | Path] | None = None,
     agentic_training_result_paths: list[str | Path] | None = None,
     agentic_training_loop_plan_paths: list[str | Path] | None = None,
+    agentic_loop_ledger_paths: list[str | Path] | None = None,
     cloud_training_provider_registry_paths: list[str | Path] | None = None,
     cloud_training_preflight_paths: list[str | Path] | None = None,
     cloud_training_artifact_manifest_paths: list[str | Path] | None = None,
@@ -346,6 +348,8 @@ def validate_artifacts(
         targets.append(validate_agentic_training_result(agentic_training_result_path))
     for agentic_training_loop_plan_path in agentic_training_loop_plan_paths or []:
         targets.append(validate_agentic_training_loop_plan(agentic_training_loop_plan_path))
+    for agentic_loop_ledger_path in agentic_loop_ledger_paths or []:
+        targets.append(validate_agentic_loop_ledger(agentic_loop_ledger_path))
     for cloud_training_provider_registry_path in cloud_training_provider_registry_paths or []:
         targets.append(validate_cloud_training_provider_registry(cloud_training_provider_registry_path))
     for cloud_training_preflight_path in cloud_training_preflight_paths or []:
@@ -1266,6 +1270,16 @@ def validate_agentic_training_loop_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "agentic_training_loop_plan.json")
     if plan is not None:
         _validate_agentic_training_loop_plan(plan, target)
+    return target
+
+
+def validate_agentic_loop_ledger(path: str | Path) -> ValidationTarget:
+    """Validate a longitudinal closed-loop iteration ledger."""
+    ledger_path = Path(path)
+    target = ValidationTarget("agentic_loop_ledger", str(ledger_path))
+    ledger = _read_object(ledger_path, target, "agentic_loop_ledger.json")
+    if ledger is not None:
+        _validate_agentic_loop_ledger(ledger, target, ledger_path)
     return target
 
 
@@ -2605,6 +2619,128 @@ def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTar
         target.errors.append(f"{label}.status cannot be ready while required artifacts are missing.")
     if phase.get("status") == "blocked" and not missing:
         target.errors.append(f"{label}.status cannot be blocked without missing required artifacts.")
+
+
+def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarget, ledger_path: Path) -> None:
+    _require_equal(ledger, "schema_version", AGENTIC_LOOP_LEDGER_SCHEMA_VERSION, target, prefix="agentic_loop_ledger.")
+    if ledger.get("passed") is not True:
+        target.errors.append("agentic_loop_ledger.passed must be true.")
+    iterations = ledger.get("iterations")
+    if not isinstance(iterations, list) or not iterations:
+        target.errors.append("agentic_loop_ledger.iterations must be a non-empty list.")
+        iterations = []
+    if ledger.get("iteration_count") != len(iterations):
+        target.errors.append(f"agentic_loop_ledger.iteration_count expected {len(iterations)}, got {ledger.get('iteration_count')!r}.")
+    ready_count = 0
+    blocked_count = 0
+    for index, row in enumerate(iterations):
+        label = f"agentic_loop_ledger.iterations[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if row.get("index") != index:
+            target.errors.append(f"{label}.index expected {index}, got {row.get('index')!r}.")
+        if row.get("schema_version") != AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION:
+            target.errors.append(f"{label}.schema_version must be {AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION!r}.")
+        if not isinstance(row.get("iteration_id"), str) or not row.get("iteration_id"):
+            target.errors.append(f"{label}.iteration_id must be a non-empty string.")
+        if row.get("readiness") == "ready_for_governance_review":
+            ready_count += 1
+        else:
+            blocked_count += 1
+        if not _is_string_list(row.get("missing_phase_inputs")):
+            target.errors.append(f"{label}.missing_phase_inputs must be a list of strings.")
+        if not _is_non_negative_int(row.get("blocked_reason_count")):
+            target.errors.append(f"{label}.blocked_reason_count must be a non-negative integer.")
+        if not _is_non_negative_int(row.get("artifact_count")):
+            target.errors.append(f"{label}.artifact_count must be a non-negative integer.")
+        _validate_agentic_loop_ledger_counts(row.get("phase_status_counts"), target, f"{label}.phase_status_counts", "id")
+        _validate_agentic_loop_ledger_counts(row.get("artifact_group_counts"), target, f"{label}.artifact_group_counts", "group")
+        _validate_agentic_loop_ledger_counts(row.get("artifact_role_counts"), target, f"{label}.artifact_role_counts", "role")
+        _validate_agentic_loop_ledger_source(row, target, ledger_path, label)
+        governance = row.get("governance") if isinstance(row.get("governance"), dict) else {}
+        for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder"):
+            if governance.get(field_name) is not False:
+                target.errors.append(f"{label}.governance.{field_name} must be false.")
+    metrics = ledger.get("metrics")
+    if not isinstance(metrics, dict):
+        target.errors.append("agentic_loop_ledger.metrics must be an object.")
+        metrics = {}
+    if metrics.get("iteration_count") != len(iterations):
+        target.errors.append("agentic_loop_ledger.metrics.iteration_count must match iteration_count.")
+    if metrics.get("ready_iteration_count") != ready_count:
+        target.errors.append("agentic_loop_ledger.metrics.ready_iteration_count does not match iterations.")
+    if metrics.get("blocked_iteration_count") != blocked_count:
+        target.errors.append("agentic_loop_ledger.metrics.blocked_iteration_count does not match iterations.")
+    boundary = ledger.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append("agentic_loop_ledger.execution_boundary must be an object.")
+    else:
+        if boundary.get("ledger_only") is not True:
+            target.errors.append("agentic_loop_ledger.execution_boundary.ledger_only must be true.")
+        for field_name in (
+            "cloud_jobs_started",
+            "paid_model_grader_calls_started",
+            "live_benchmarks_started",
+            "model_downloads_started",
+            "weights_updated_by_flight_recorder",
+            "credential_values_recorded",
+        ):
+            if boundary.get(field_name) is not False:
+                target.errors.append(f"agentic_loop_ledger.execution_boundary.{field_name} must be false.")
+    target.details.update(
+        {
+            "iteration_count": len(iterations),
+            "latest_iteration_id": metrics.get("latest_iteration_id"),
+            "latest_readiness": metrics.get("latest_readiness"),
+        }
+    )
+
+
+def _validate_agentic_loop_ledger_counts(value: Any, target: ValidationTarget, label: str, key_name: str) -> None:
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list.")
+        return
+    seen: set[str] = set()
+    for index, row in enumerate(value):
+        row_label = f"{label}[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        key = row.get(key_name)
+        if not isinstance(key, str) or not key:
+            target.errors.append(f"{row_label}.{key_name} must be a non-empty string.")
+        elif key in seen:
+            target.errors.append(f"{row_label}.{key_name} duplicates {key!r}.")
+        seen.add(str(key))
+        if not _is_non_negative_int(row.get("count")):
+            target.errors.append(f"{row_label}.count must be a non-negative integer.")
+
+
+def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: ValidationTarget, ledger_path: Path, label: str) -> None:
+    path_value = row.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        return
+    if not _is_safe_agentic_training_result_path(path_value):
+        target.errors.append(f"{label}.path must be a safe relative path without traversal.")
+        return
+    source_path = (ledger_path.parent / path_value).resolve()
+    if not source_path.exists() or not source_path.is_file():
+        target.errors.append(f"{label}.path must resolve to an existing source loop plan.")
+        return
+    if row.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    size = row.get("size_bytes")
+    if not _is_non_negative_int(size):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    elif source_path.stat().st_size != size:
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    sha = row.get("sha256")
+    if not _is_sha256(sha):
+        target.errors.append(f"{label}.sha256 must be a sha256 hex digest.")
+    elif _sha256(source_path) != sha:
+        target.errors.append(f"{label}.sha256 does not match the current file.")
 
 
 def _validate_cloud_training_contract(payload: dict[str, Any], target: ValidationTarget, expected_schema_version: str) -> None:

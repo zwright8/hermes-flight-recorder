@@ -22,6 +22,7 @@ flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
 flightrecorder schemas --check runs/agentic_rollout_plan.json
+flightrecorder schemas --check runs/agentic_loop_ledger.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
 flightrecorder schemas --check runs/model_grader_gate.json
@@ -638,6 +639,14 @@ flightrecorder agentic-loop plan \
 flightrecorder validate \
   --agentic-loop-plan runs/agentic_training_loop_plan.json \
   --strict
+
+flightrecorder agentic-loop ledger \
+  --plan runs/agentic_training_loop_plan.json \
+  --out runs/agentic_loop_ledger.json
+
+flightrecorder validate \
+  --agentic-loop-ledger runs/agentic_loop_ledger.json \
+  --strict
 ```
 
 The loop artifact is `hfr.agentic_training_loop_plan.v1`. It is a
@@ -647,6 +656,11 @@ schema-checkable control-plane contract, not an executor: it records
 `weights_updated_by_flight_recorder: false`. If required receipts are missing,
 the plan remains `planned_fail_closed` and recommends collecting those receipts
 before any live launch or promotion claim.
+The companion `hfr.agentic_loop_ledger.v1` artifact records chronological
+iteration inputs, rollout/review/training/serving/eval/governance group counts,
+cost ceilings, promotion/rollback posture, and next-action scheduling state.
+It is ledger-only: it does not launch trainers, graders, cloud jobs, live
+benchmarks, downloads, promotion writes, or weight updates.
 
 Cloud trainer integrations use the same fail-closed receipt pattern. The
 `flightrecorder cloud-training` namespace currently emits provider registry,

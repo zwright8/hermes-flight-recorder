@@ -658,6 +658,14 @@
       "name": "agentic_training_loop_plan"
     },
     {
+      "artifact": "agentic_loop_ledger",
+      "artifact_schema_version": "hfr.agentic_loop_ledger.v1",
+      "description": "Longitudinal ledger over closed-loop agentic training iteration plans.",
+      "filename": "agentic_loop_ledger.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_ledger.v1.schema.json",
+      "name": "agentic_loop_ledger"
+    },
+    {
       "artifact": "cloud_training_provider_registry",
       "artifact_schema_version": "hfr.cloud_training_provider_registry.v1",
       "description": "Provider-neutral cloud training capability registry.",

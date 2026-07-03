@@ -1,0 +1,248 @@
+{
+  "decision": {
+    "blocked_iteration_count": 1,
+    "latest_iteration_id": "demo-loop-001",
+    "latest_iteration_index": 0,
+    "readiness": "blocked",
+    "recommendation": "continue_iteration",
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 15 missing phase input(s)."
+  },
+  "execution_boundary": {
+    "cloud_jobs_started": false,
+    "credential_values_recorded": false,
+    "ledger_only": true,
+    "live_benchmarks_started": false,
+    "model_downloads_started": false,
+    "paid_model_grader_calls_started": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "iteration_count": 1,
+  "iterations": [
+    {
+      "artifact_count": 3,
+      "artifact_group_counts": [
+        {
+          "count": 0,
+          "group": "datasets"
+        },
+        {
+          "count": 0,
+          "group": "eval"
+        },
+        {
+          "count": 0,
+          "group": "evidence"
+        },
+        {
+          "count": 0,
+          "group": "governance"
+        },
+        {
+          "count": 0,
+          "group": "improvement"
+        },
+        {
+          "count": 0,
+          "group": "review"
+        },
+        {
+          "count": 0,
+          "group": "rollouts"
+        },
+        {
+          "count": 0,
+          "group": "serving"
+        },
+        {
+          "count": 3,
+          "group": "training"
+        }
+      ],
+      "artifact_role_counts": [
+        {
+          "count": 1,
+          "role": "agentic_training_plan"
+        },
+        {
+          "count": 1,
+          "role": "agentic_training_result"
+        },
+        {
+          "count": 1,
+          "role": "agentic_training_runtime_preflight"
+        }
+      ],
+      "blocked_reason_count": 4,
+      "cost_estimate": {
+        "live_spend_allowed": false,
+        "max_cloud_cost_usd": 0,
+        "max_gpu_hours": 0
+      },
+      "evals": {
+        "artifact_count": 0,
+        "group": "eval",
+        "roles_missing": [
+          "heldout_manifest",
+          "external_eval_plan",
+          "eval_summary"
+        ],
+        "roles_present": []
+      },
+      "exists": true,
+      "governance": {
+        "artifact_count": 0,
+        "cloud_jobs_started": false,
+        "group": "governance",
+        "paid_model_grader_calls_started": false,
+        "promotion_decision_present": false,
+        "promotion_ledger_present": false,
+        "roles_missing": [
+          "promotion_decision",
+          "promotion_ledger",
+          "promotion_alias_apply",
+          "promotion_rollback_receipt"
+        ],
+        "roles_present": [],
+        "rollback_receipt_present": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "index": 0,
+      "iteration_id": "demo-loop-001",
+      "missing_phase_inputs": [
+        "action_ledger",
+        "eval_summary",
+        "evidence_bundle",
+        "external_eval_plan",
+        "harness_result",
+        "heldout_manifest",
+        "improvement_plan",
+        "promotion_decision",
+        "promotion_ledger",
+        "review_calibration",
+        "reviewed_gate",
+        "serving_lifecycle",
+        "trainer_launch_check",
+        "trainer_preflight",
+        "training_export"
+      ],
+      "next_actions": {
+        "recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
+        "requires_governance_decision": true,
+        "schedule": {},
+        "scheduled": false
+      },
+      "passed": false,
+      "path": "loop_plan.json",
+      "phase_status_counts": [
+        {
+          "count": 12,
+          "id": "blocked"
+        },
+        {
+          "count": 1,
+          "id": "planned"
+        }
+      ],
+      "readiness": "planned_fail_closed",
+      "recommendation": "collect_missing_receipts_before_live_execution",
+      "schema_version": "hfr.agentic_training_loop_plan.v1",
+      "serving": {
+        "artifact_count": 0,
+        "group": "serving",
+        "roles_missing": [
+          "serving_lifecycle",
+          "serving_endpoint_check",
+          "model_serving_probe_receipt"
+        ],
+        "roles_present": []
+      },
+      "sha256": "151c0899d16fa4681455488568c58baecb9843a87115431dba750f9fdbde9a80",
+      "size_bytes": 14535,
+      "training_outputs": {
+        "artifact_count": 3,
+        "group": "training",
+        "roles_missing": [
+          "trainer_preflight",
+          "trainer_launch_check"
+        ],
+        "roles_present": [
+          "agentic_training_plan",
+          "agentic_training_runtime_preflight",
+          "agentic_training_result"
+        ]
+      }
+    }
+  ],
+  "ledger_path": "examples/agentic_training/loop_ledger.json",
+  "metrics": {
+    "artifact_group_totals": [
+      {
+        "count": 0,
+        "group": "datasets"
+      },
+      {
+        "count": 0,
+        "group": "eval"
+      },
+      {
+        "count": 0,
+        "group": "evidence"
+      },
+      {
+        "count": 0,
+        "group": "governance"
+      },
+      {
+        "count": 0,
+        "group": "improvement"
+      },
+      {
+        "count": 0,
+        "group": "review"
+      },
+      {
+        "count": 0,
+        "group": "rollouts"
+      },
+      {
+        "count": 0,
+        "group": "serving"
+      },
+      {
+        "count": 3,
+        "group": "training"
+      }
+    ],
+    "blocked_iteration_count": 1,
+    "iteration_count": 1,
+    "latest_iteration_id": "demo-loop-001",
+    "latest_missing_phase_input_count": 15,
+    "latest_readiness": "planned_fail_closed",
+    "latest_recommendation": "collect_missing_receipts_before_live_execution",
+    "promotion_ready_count": 0,
+    "readiness_counts": [
+      {
+        "count": 1,
+        "id": "planned_fail_closed"
+      }
+    ],
+    "ready_iteration_count": 0,
+    "recommendation_counts": [
+      {
+        "count": 1,
+        "id": "collect_missing_receipts_before_live_execution"
+      }
+    ],
+    "rollback_receipt_count": 0,
+    "scheduled_next_iteration_count": 0,
+    "total_max_cloud_cost_usd": 0,
+    "total_max_gpu_hours": 0
+  },
+  "notes": [
+    "Agentic loop ledgers summarize archived loop-plan receipts across iterations; they do not execute training or promotion.",
+    "Each iteration groups rollout, review, trainer, serving, eval, governance, repair, cost, and next-action posture.",
+    "Promotion, rollback, live benchmark, and cloud trainer actions remain separate governed receipts."
+  ],
+  "passed": true,
+  "schema_version": "hfr.agentic_loop_ledger.v1"
+}

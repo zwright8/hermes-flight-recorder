@@ -1,0 +1,136 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_ledger.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Longitudinal ledger over closed-loop agentic training iteration plans.",
+  "properties": {
+    "decision": { "type": "object" },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": { "const": false },
+        "credential_values_recorded": { "const": false },
+        "ledger_only": { "const": true },
+        "live_benchmarks_started": { "const": false },
+        "model_downloads_started": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "ledger_only",
+        "cloud_jobs_started",
+        "paid_model_grader_calls_started",
+        "live_benchmarks_started",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "iteration_count": { "minimum": 1, "type": "integer" },
+    "iterations": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "artifact_count": { "minimum": 0, "type": "integer" },
+          "artifact_group_counts": {
+            "items": { "$ref": "#/$defs/group_count" },
+            "type": "array"
+          },
+          "blocked_reason_count": { "minimum": 0, "type": "integer" },
+          "cost_estimate": { "type": "object" },
+          "evals": { "type": "object" },
+          "exists": { "const": true },
+          "governance": { "type": "object" },
+          "index": { "minimum": 0, "type": "integer" },
+          "iteration_id": { "minLength": 1, "type": "string" },
+          "missing_phase_inputs": {
+            "items": { "type": "string" },
+            "type": "array"
+          },
+          "next_actions": { "type": "object" },
+          "passed": { "type": "boolean" },
+          "path": { "minLength": 1, "type": "string" },
+          "phase_status_counts": {
+            "items": { "$ref": "#/$defs/id_count" },
+            "type": "array"
+          },
+          "readiness": { "minLength": 1, "type": "string" },
+          "recommendation": { "minLength": 1, "type": "string" },
+          "schema_version": { "const": "hfr.agentic_training_loop_plan.v1" },
+          "serving": { "type": "object" },
+          "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+          "size_bytes": { "minimum": 0, "type": "integer" },
+          "training_outputs": { "type": "object" }
+        },
+        "required": [
+          "index",
+          "path",
+          "exists",
+          "schema_version",
+          "iteration_id",
+          "passed",
+          "readiness",
+          "recommendation",
+          "missing_phase_inputs",
+          "blocked_reason_count",
+          "artifact_count",
+          "phase_status_counts",
+          "artifact_group_counts",
+          "artifact_role_counts",
+          "cost_estimate",
+          "serving",
+          "evals",
+          "training_outputs",
+          "governance",
+          "next_actions",
+          "size_bytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "ledger_path": { "type": "string" },
+    "metrics": { "type": "object" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "type": "boolean" },
+    "schema_version": { "const": "hfr.agentic_loop_ledger.v1" }
+  },
+  "required": [
+    "schema_version",
+    "ledger_path",
+    "passed",
+    "iteration_count",
+    "iterations",
+    "metrics",
+    "decision",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Loop Ledger",
+  "type": "object",
+  "$defs": {
+    "group_count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "group": { "minLength": 1, "type": "string" }
+      },
+      "required": ["group", "count"],
+      "type": "object"
+    },
+    "id_count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "id": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    }
+  }
+}

@@ -97,4 +97,12 @@ flightrecorder schemas --check examples/agentic_training/loop_plan.json
 flightrecorder validate \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
+
+flightrecorder agentic-loop ledger \
+  --plan examples/agentic_training/loop_plan.json \
+  --out examples/agentic_training/loop_ledger.json
+
+flightrecorder validate \
+  --agentic-loop-ledger examples/agentic_training/loop_ledger.json \
+  --strict
 ```

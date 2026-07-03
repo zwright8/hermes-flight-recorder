@@ -28,6 +28,7 @@ from .agentic_training_loop_plan import (
     build_agentic_training_loop_plan,
     write_agentic_training_loop_plan,
 )
+from .agentic_loop_ledger import AgenticLoopLedgerError, build_agentic_loop_ledger, write_agentic_loop_ledger
 from .artifacts import (
     ArtifactError,
     build_suite_trend,
@@ -243,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionLedgerError,
         PromotionArchiveError,
         AgenticTrainingLoopPlanError,
+        AgenticLoopLedgerError,
         ModelGraderError,
         ReplayError,
         SchemaRegistryError,
@@ -1085,6 +1087,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         training_plan_paths=args.training_plan,
         agentic_training_result_paths=args.agentic_training_result,
         agentic_training_loop_plan_paths=args.agentic_loop_plan,
+        agentic_loop_ledger_paths=args.agentic_loop_ledger,
         cloud_training_provider_registry_paths=args.cloud_training_provider_registry,
         cloud_training_preflight_paths=args.cloud_training_preflight,
         cloud_training_artifact_manifest_paths=args.cloud_training_artifact_manifest,
@@ -1468,6 +1471,23 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         f"wrote {args.out} readiness={plan['readiness']} "
         f"checks={plan['check_count'] - plan['failed_check_count']}/{plan['check_count']}"
     )
+    return 0
+
+
+def cmd_agentic_loop_ledger(args: argparse.Namespace) -> int:
+    ledger = build_agentic_loop_ledger(
+        args.plan,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+    )
+    if args.out:
+        write_agentic_loop_ledger(args.out, ledger)
+        print(
+            f"wrote {args.out} iterations={ledger['iteration_count']} "
+            f"latest={ledger['metrics']['latest_iteration_id']}"
+        )
+    else:
+        print(json.dumps(ledger, indent=2, sort_keys=True, ensure_ascii=False))
     return 0
 
 
@@ -2920,6 +2940,7 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="Validate one agentic_training_loop_plan.json contract; may be repeated",
     )
+    validate.add_argument("--agentic-loop-ledger", action="append", default=[], help="Validate one agentic_loop_ledger.json; may be repeated")
     validate.add_argument("--cloud-training-provider-registry", action="append", default=[], help="Validate one cloud training provider registry")
     validate.add_argument("--cloud-training-preflight", action="append", default=[], help="Validate one cloud training preflight")
     validate.add_argument("--cloud-training-artifact-manifest", action="append", default=[], help="Validate one cloud training artifact manifest")
@@ -3198,6 +3219,12 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--model-grader-gate", action="append", default=[], help="model_grader_gate artifact; may be repeated")
     agentic_loop_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in plan output")
     agentic_loop_plan.set_defaults(func=cmd_agentic_loop_plan)
+
+    agentic_loop_ledger = agentic_loop_subparsers.add_parser("ledger", help="Write a longitudinal ledger over loop plans")
+    agentic_loop_ledger.add_argument("--plan", action="append", required=True, help="agentic_training_loop_plan JSON in chronological order; may be repeated")
+    agentic_loop_ledger.add_argument("--out", help="Write hfr.agentic_loop_ledger.v1 JSON to this path")
+    agentic_loop_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in ledger output")
+    agentic_loop_ledger.set_defaults(func=cmd_agentic_loop_ledger)
 
     cloud_training = subparsers.add_parser("cloud-training", help="Build fail-closed cloud training provider contracts")
     cloud_training_subparsers = cloud_training.add_subparsers(dest="cloud_training_command", required=True)

@@ -67,7 +67,7 @@ and handoff receipts that make those systems auditable.
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
-| Loop | Bind rollouts, review, trainer, serving, eval, improvement, and promotion receipts into one fail-closed iteration contract. | `agentic-loop plan`, `validate --agentic-loop-plan` |
+| Loop | Bind rollouts, review, trainer, serving, eval, improvement, promotion, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `validate --agentic-loop-ledger` |
 | Eval | Require identical held-out scenarios and separate raw movement from governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `compare-suite` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
 | Governance | Decide whether a candidate can move registry aliases and publish release records. | `promotion-decision`, `promotion-cards`, `promotion-release-record`, `promotion-alias-apply` |
@@ -612,6 +612,7 @@ flightrecorder schemas --check runs/review_calibration.json
 flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/reviewed_gate.json
 flightrecorder schemas --check runs/agentic_training_loop_plan.json
+flightrecorder schemas --check runs/agentic_loop_ledger.json
 flightrecorder schemas --check runs/cloud_preflight.json
 flightrecorder schemas --check runs/suite_compare.json
 flightrecorder schemas --check runs/suite_trend.json
