@@ -1321,6 +1321,7 @@ def validate_cloud_training_preflight(path: str | Path) -> ValidationTarget:
     if preflight is not None:
         _validate_cloud_training_contract(preflight, target, CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION)
         _validate_cloud_training_credentials(preflight.get("credential_checks"), target)
+        _validate_cloud_training_live_preflight(preflight.get("live_preflight"), target)
     return target
 
 
@@ -2811,6 +2812,58 @@ def _validate_cloud_training_credentials(value: Any, target: ValidationTarget) -
             target.errors.append(f"{label}.present must be a boolean.")
         if row.get("value_recorded") is not False:
             target.errors.append(f"{label}.value_recorded must be false.")
+
+
+def _validate_cloud_training_live_preflight(value: Any, target: ValidationTarget) -> None:
+    if value is None:
+        return
+    label = "cloud_training_preflight.live_preflight"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object when present.")
+        return
+    if not isinstance(value.get("requested"), bool):
+        target.errors.append(f"{label}.requested must be a boolean.")
+    if value.get("transport") != "metadata_only":
+        target.errors.append(f"{label}.transport must be metadata_only.")
+    for field_name in ("provider_api_called", "client_modules_imported", "credential_values_recorded"):
+        if value.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
+    dependency_checks = value.get("client_dependency_checks")
+    if not isinstance(dependency_checks, list):
+        target.errors.append(f"{label}.client_dependency_checks must be a list.")
+        dependency_checks = []
+    available_count = 0
+    for index, row in enumerate(dependency_checks):
+        row_label = f"{label}.client_dependency_checks[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{row_label} must be an object.")
+            continue
+        if not isinstance(row.get("module"), str) or not row.get("module"):
+            target.errors.append(f"{row_label}.module must be a non-empty string.")
+        if not isinstance(row.get("available"), bool):
+            target.errors.append(f"{row_label}.available must be a boolean.")
+        elif row["available"]:
+            available_count += 1
+        if row.get("module_imported") is not False:
+            target.errors.append(f"{row_label}.module_imported must be false.")
+    if value.get("client_dependency_required_count") != len(dependency_checks):
+        target.errors.append(
+            f"{label}.client_dependency_required_count expected {len(dependency_checks)}, got {value.get('client_dependency_required_count')!r}."
+        )
+    if value.get("client_dependency_available_count") != available_count:
+        target.errors.append(
+            f"{label}.client_dependency_available_count expected {available_count}, got {value.get('client_dependency_available_count')!r}."
+        )
+    if not _is_non_negative_int(value.get("credential_required_count")):
+        target.errors.append(f"{label}.credential_required_count must be a non-negative integer.")
+    if not _is_non_negative_int(value.get("credential_present_count")):
+        target.errors.append(f"{label}.credential_present_count must be a non-negative integer.")
+    if (
+        _is_non_negative_int(value.get("credential_required_count"))
+        and _is_non_negative_int(value.get("credential_present_count"))
+        and value.get("credential_present_count") > value.get("credential_required_count")
+    ):
+        target.errors.append(f"{label}.credential_present_count must not exceed credential_required_count.")
 
 
 def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarget) -> None:

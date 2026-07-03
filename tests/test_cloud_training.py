@@ -32,6 +32,7 @@ class CloudTrainingTests(unittest.TestCase):
         self.assertIn("databricks_mosaic", provider_ids)
         self.assertIn("nvidia_dgx_cloud", provider_ids)
         self.assertTrue(all(provider["default_live_execution_allowed"] is False for provider in registry["providers"]))
+        self.assertTrue(all(isinstance(provider["client_import_names"], list) for provider in registry["providers"]))
         self.assertFalse(registry["execution_boundary"]["provider_api_called"])
         schema = check_schema_contract(registry)
         self.assertTrue(schema["passed"], schema["errors"])
@@ -99,6 +100,7 @@ class CloudTrainingTests(unittest.TestCase):
                     "a100",
                     "--max-cost-usd",
                     "0",
+                    "--live-preflight",
                     "--created-at",
                     "2026-07-03T00:00:00+00:00",
                     "--out",
@@ -109,8 +111,24 @@ class CloudTrainingTests(unittest.TestCase):
             preflight_payload = json.loads(preflight.read_text(encoding="utf-8"))
             self.assertEqual(preflight_payload["recommendation"], "block_cloud_training_launch")
             self.assertFalse(preflight_payload["execution_boundary"]["provider_api_called"])
+            self.assertTrue(preflight_payload["execution_boundary"]["live_preflight_requested"])
+            self.assertTrue(preflight_payload["live_preflight"]["requested"])
+            self.assertEqual(preflight_payload["live_preflight"]["transport"], "metadata_only")
+            self.assertFalse(preflight_payload["live_preflight"]["provider_api_called"])
+            self.assertFalse(preflight_payload["live_preflight"]["client_modules_imported"])
+            self.assertFalse(preflight_payload["live_preflight"]["credential_values_recorded"])
             self.assertTrue(all(check["value_recorded"] is False for check in preflight_payload["credential_checks"]))
             self.assert_schema_and_validate(preflight, "cloud_training_preflight")
+
+            forged = json.loads(preflight.read_text(encoding="utf-8"))
+            forged["live_preflight"]["provider_api_called"] = True
+            preflight.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(cloud_training_preflight_paths=[preflight], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_preflight.live_preflight.provider_api_called must be false.", errors)
+            preflight_payload["live_preflight"]["provider_api_called"] = False
+            preflight.write_text(json.dumps(preflight_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             self.assertEqual(
                 run_cli(

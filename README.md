@@ -336,7 +336,9 @@ launch-plan, launch-receipt, and status/cancel receipts for providers such as
 Hugging Face Jobs, Modal, RunPod, Lambda Labs, CoreWeave, Together, Fireworks,
 Replicate, SageMaker, Vertex AI, Azure ML, Databricks/Mosaic, and NVIDIA DGX
 Cloud/Brev. They do not import provider SDKs, call provider APIs, create jobs,
-spend money, download models, or update weights.
+spend money, download models, or update weights. Optional live preflight probes
+only check environment-variable presence and provider client module
+discoverability; they still record `provider_api_called: false`.
 
 ```bash
 flightrecorder cloud-training providers --out runs/cloud_provider_registry.json
@@ -348,6 +350,7 @@ flightrecorder cloud-training preflight \
   --region provider_default \
   --gpu-class a100 \
   --max-cost-usd 0 \
+  --live-preflight \
   --out runs/cloud_preflight.json
 ```
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 from datetime import datetime, timezone
@@ -138,6 +139,22 @@ PROVIDERS: dict[str, dict[str, Any]] = {
     },
 }
 
+PROVIDER_CLIENT_MODULES: dict[str, list[str]] = {
+    "huggingface_jobs": ["huggingface_hub"],
+    "modal": ["modal"],
+    "runpod": ["runpod"],
+    "lambda_labs": ["requests"],
+    "coreweave": ["kubernetes"],
+    "together": ["together"],
+    "fireworks": ["fireworks"],
+    "replicate": ["replicate"],
+    "aws_sagemaker": ["boto3", "sagemaker"],
+    "gcp_vertex_ai": ["google.cloud.aiplatform"],
+    "azure_ml": ["azure.ai.ml"],
+    "databricks_mosaic": ["databricks.sdk", "mlflow"],
+    "nvidia_dgx_cloud": ["requests"],
+}
+
 
 class CloudTrainingError(ValueError):
     """Raised when cloud training contracts cannot be built."""
@@ -174,6 +191,7 @@ def build_cloud_training_preflight(
     region: str | None = None,
     gpu_class: str | None = None,
     max_cost_usd: float | None = None,
+    live_preflight: bool = False,
     live_requested: bool = False,
     allow_live: bool = False,
     preserve_paths: bool = False,
@@ -231,6 +249,7 @@ def build_cloud_training_preflight(
         {"max_cost_usd": "non_negative_number"},
     )
     credential_checks = _credential_checks(provider)
+    live_preflight_probe = _live_preflight_probe(provider_id, provider, credential_checks, live_preflight)
     _add_check(
         checks,
         "live_launch_explicitly_enabled",
@@ -244,6 +263,20 @@ def build_cloud_training_preflight(
         not live_requested or all(check["present"] for check in credential_checks),
         {"live_requested": live_requested, "credential_checks": credential_checks},
         {"all_provider_credentials_present": True},
+    )
+    _add_check(
+        checks,
+        "live_preflight_credentials_available_when_requested",
+        not live_preflight or all(check["present"] for check in credential_checks),
+        {"live_preflight": live_preflight, "credential_checks": credential_checks},
+        {"all_provider_credentials_present": True},
+    )
+    _add_check(
+        checks,
+        "live_preflight_client_dependencies_available_when_requested",
+        not live_preflight or all(check["available"] for check in live_preflight_probe["client_dependency_checks"]),
+        {"live_preflight": live_preflight, "client_dependency_checks": live_preflight_probe["client_dependency_checks"]},
+        {"all_client_dependencies_available": True},
     )
     _add_check(
         checks,
@@ -268,16 +301,17 @@ def build_cloud_training_preflight(
         "blocked_reasons": [check["summary"] for check in failed],
         "constraints": _constraints(region=region, gpu_class=gpu_class, max_cost_usd=max_cost_usd),
         "credential_checks": credential_checks,
+        "live_preflight": live_preflight_probe,
         "source_artifacts": {
             "agentic_training_plan": plan_ref,
             "trainer_preflight": trainer_preflight_ref,
             "trainer_launch_check": trainer_launch_ref,
         },
-        "execution_boundary": _boundary(live_requested=live_requested, allow_live=allow_live),
+        "execution_boundary": _boundary(live_requested=live_requested, allow_live=allow_live, live_preflight=live_preflight),
         "handoff_contract": _handoff_contract(),
         "notes": [
             "Preflight checks local receipts, constraints, and credential variable presence only.",
-            "No provider SDK is imported and no provider API call is made.",
+            "Live preflight probes use importlib metadata and environment-variable presence only; no provider SDK is imported and no provider API call is made.",
         ],
     }
 
@@ -473,6 +507,7 @@ def _provider_record(provider_id: str) -> dict[str, Any]:
         "gpu_classes": list(provider["gpu_classes"]),
         "job_modes": list(provider["job_modes"]),
         "artifact_protocols": list(provider["artifact_protocols"]),
+        "client_import_names": list(PROVIDER_CLIENT_MODULES.get(provider_id, ())),
         "live_status": provider["live_status"],
         "default_live_execution_allowed": False,
     }
@@ -487,6 +522,42 @@ def _credential_checks(provider: dict[str, Any]) -> list[dict[str, Any]]:
         }
         for name in provider["credential_env_vars"]
     ]
+
+
+def _live_preflight_probe(
+    provider_id: str,
+    provider: dict[str, Any],
+    credential_checks: list[dict[str, Any]],
+    requested: bool,
+) -> dict[str, Any]:
+    client_dependency_checks = [
+        {
+            "module": module,
+            "available": _module_available(module),
+            "module_imported": False,
+        }
+        for module in PROVIDER_CLIENT_MODULES.get(provider_id, [])
+    ]
+    return {
+        "requested": requested,
+        "transport": "metadata_only",
+        "provider_api_called": False,
+        "client_modules_imported": False,
+        "credential_values_recorded": False,
+        "credential_env_vars": list(provider["credential_env_vars"]),
+        "credential_present_count": sum(1 for check in credential_checks if check["present"]),
+        "credential_required_count": len(credential_checks),
+        "client_dependency_checks": client_dependency_checks,
+        "client_dependency_available_count": sum(1 for check in client_dependency_checks if check["available"]),
+        "client_dependency_required_count": len(client_dependency_checks),
+    }
+
+
+def _module_available(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, AttributeError, ValueError):
+        return False
 
 
 def _json_artifact_ref(role: str, path: Path, schema_name: str, preserve_paths: bool) -> dict[str, Any]:
@@ -569,9 +640,10 @@ def _constraints(*, region: str | None, gpu_class: str | None, max_cost_usd: flo
     }
 
 
-def _boundary(*, live_requested: bool = False, allow_live: bool = False) -> dict[str, Any]:
+def _boundary(*, live_requested: bool = False, allow_live: bool = False, live_preflight: bool = False) -> dict[str, Any]:
     return {
         "dry_run_only": True,
+        "live_preflight_requested": live_preflight,
         "live_requested": live_requested,
         "allow_live": allow_live,
         "provider_api_called": False,

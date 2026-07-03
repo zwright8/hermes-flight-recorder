@@ -1547,6 +1547,7 @@ def cmd_cloud_training_preflight(args: argparse.Namespace) -> int:
         region=args.region,
         gpu_class=args.gpu_class,
         max_cost_usd=args.max_cost_usd,
+        live_preflight=args.live_preflight,
         live_requested=args.live_requested,
         allow_live=args.allow_live,
         preserve_paths=args.preserve_paths,
@@ -3305,6 +3306,7 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_preflight.add_argument("--region", help="Requested provider region")
     cloud_training_preflight.add_argument("--gpu-class", help="Requested GPU class")
     cloud_training_preflight.add_argument("--max-cost-usd", type=float, help="Maximum allowed cloud cost for this launch")
+    cloud_training_preflight.add_argument("--live-preflight", action="store_true", help="Probe credential/dependency readiness without calling provider APIs")
     cloud_training_preflight.add_argument("--live-requested", action="store_true", help="Record that a live launch was requested")
     cloud_training_preflight.add_argument("--allow-live", action="store_true", help="Explicit live opt-in for preflight only; no launch is performed")
     cloud_training_preflight.add_argument("--created-at", help="Override generated timestamp for deterministic examples")

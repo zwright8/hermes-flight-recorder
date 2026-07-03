@@ -42,6 +42,9 @@
     "handoff_contract": {
       "$ref": "#/$defs/handoffContract"
     },
+    "live_preflight": {
+      "$ref": "#/$defs/livePreflight"
+    },
     "passed": {
       "type": "boolean"
     },
@@ -175,6 +178,78 @@
         "requires_status_and_cancel_receipts",
         "flight_recorder_controls_preflight_only",
         "external_provider_owns_execution"
+      ],
+      "type": "object"
+    },
+    "livePreflight": {
+      "additionalProperties": true,
+      "properties": {
+        "client_dependency_available_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "client_dependency_checks": {
+          "items": {
+            "additionalProperties": true,
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "module": {
+                "type": "string"
+              },
+              "module_imported": {
+                "const": false
+              }
+            },
+            "required": [
+              "module",
+              "available",
+              "module_imported"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "client_dependency_required_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "client_modules_imported": {
+          "const": false
+        },
+        "credential_present_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "credential_required_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "requested": {
+          "type": "boolean"
+        },
+        "transport": {
+          "const": "metadata_only"
+        }
+      },
+      "required": [
+        "requested",
+        "transport",
+        "provider_api_called",
+        "client_modules_imported",
+        "credential_values_recorded",
+        "credential_present_count",
+        "credential_required_count",
+        "client_dependency_checks",
+        "client_dependency_available_count",
+        "client_dependency_required_count"
       ],
       "type": "object"
     },

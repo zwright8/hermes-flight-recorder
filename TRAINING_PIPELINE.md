@@ -707,6 +707,7 @@ flightrecorder cloud-training preflight \
   --region provider_default \
   --gpu-class a100 \
   --max-cost-usd 0 \
+  --live-preflight \
   --out runs/cloud_preflight.json
 
 flightrecorder cloud-training plan \
@@ -726,8 +727,11 @@ flightrecorder cloud-training status \
 
 These commands are executable offline and keyless. They do not import provider
 SDKs, call provider APIs, create jobs, incur cost, download models, or update
-weights. `--live` launch receipts are intentionally blocked until a future
-provider transport proves explicit opt-in, credentials, cost limits,
+weights. `--live-preflight` records environment credential presence and provider
+client module discoverability with metadata-only probes; it still records
+`provider_api_called: false` and cannot launch jobs. `--live` launch receipts
+are intentionally blocked until a future provider transport proves explicit
+opt-in, credentials, cost limits,
 region/GPU constraints, artifact manifests, and status/cancel receipts.
 
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
