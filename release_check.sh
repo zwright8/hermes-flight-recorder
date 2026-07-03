@@ -1526,10 +1526,18 @@ improvement_preflight_gate = next(gate for gate in preflight["gates"] if gate["i
 assert improvement_preflight_gate["validation"]["available"] is True
 assert improvement_preflight_gate["validation"]["passed"] is True
 assert improvement_preflight_gate["validation"]["target_type"] == "improvement_ledger_gate"
-assert preflight["validation_summaries"][0]["path"] == "runs/gate_validation.json"
+assert preflight["validation_summaries"][0]["path"] == "gate_validation.json"
 assert preflight["validation_summaries"][0]["target_count"] == 2
 assert len(preflight["validation_summaries"][0]["sha256"]) == 64
+assert sorted(gate["path"] for gate in preflight["gates"]) == [
+    "compare_gate.json",
+    "improvement_ledger_gate.json",
+    "promotion_ledger_gate.json",
+    "reviewed_gate.json",
+    "training_gate.json",
+]
 assert preflight["schema_contracts"]["training_export_manifest_json"]["passed"] is True
+assert preflight["schema_contracts"]["training_export_manifest_json"]["path"] == "training_export/manifest.json"
 assert preflight["schema_contracts"]["training_export_sft_jsonl"]["schema_name"] == "rl_sft"
 assert preflight["schema_contracts"]["training_export_sft_jsonl"]["passed"] is True
 assert preflight["schema_contracts"]["compare_export_improvement_dpo_jsonl"]["schema_name"] == "compare_rl_dpo"
@@ -1538,6 +1546,7 @@ assert preflight["schema_contracts"]["reviewed_export_manifest_json"]["schema_na
 assert preflight["schema_contracts"]["reviewed_export_manifest_json"]["passed"] is True
 assert preflight["schema_contracts"]["evidence_bundle"]["schema_name"] == "evidence_bundle"
 assert preflight["schema_contracts"]["evidence_bundle"]["passed"] is True
+assert preflight["schema_contracts"]["evidence_bundle"]["path"] == "evidence_bundle_full.json"
 assert all(contract["passed"] is True for contract in preflight["schema_contracts"].values())
 assert preflight["trainer_command"]["argv"][:2] == ["python", "train.py"]
 assert len(preflight["artifacts"]["training_export_sft_jsonl"]["sha256"]) == 64

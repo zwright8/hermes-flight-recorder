@@ -13508,14 +13508,12 @@ def _validate_preflight_file_hash(
 
 
 def _resolve_preflight_record_path(value: Any, source_path: Path) -> Path | None:
-    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+    if not isinstance(value, str) or not value or value.startswith("<redacted:") or _is_windows_absolute(value):
         return None
     raw = Path(value)
-    candidates = [raw] if raw.is_absolute() else [Path.cwd() / raw, source_path.parent / raw]
-    for candidate in candidates:
-        if candidate.exists() and candidate.is_file():
-            return candidate
-    return candidates[0]
+    if raw.is_absolute():
+        return raw
+    return source_path.parent / raw
 
 
 def _validate_trainer_command(command: Any, target: ValidationTarget) -> None:

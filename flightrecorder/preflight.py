@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shlex
 from pathlib import Path
 from typing import Any
@@ -129,8 +130,9 @@ def build_trainer_preflight(
 
     checks: list[dict[str, Any]] = []
     required_dataset_versions = list(dict.fromkeys(required_dataset_versions or []))
-    validation_summaries, validation_targets = _validation_summary_records(validation_summary_paths or [], preserve_paths)
-    gates = [_gate_record(Path(path), preserve_paths, validation_targets) for path in gate_paths]
+    output_path = Path(out_path)
+    validation_summaries, validation_targets = _validation_summary_records(validation_summary_paths or [], preserve_paths, output_path)
+    gates = [_gate_record(Path(path), preserve_paths, validation_targets, output_path) for path in gate_paths]
     seen_gate_ids = {gate["id"] for gate in gates}
     for gate in gates:
         _add_bool_check(checks, "gate_passed", gate["passed"], {"gate": gate["id"], "path": gate["path"]})
@@ -155,36 +157,38 @@ def build_trainer_preflight(
     dataset_selection: list[dict[str, Any]] = []
     if training_export_dir is not None:
         training_root = Path(training_export_dir)
-        _add_export_artifacts(artifacts, checks, "training_export", training_root, _TRAINING_EXPORT_FILES, preserve_paths)
-        _add_schema_contracts(schema_contracts, checks, "training_export", training_root, _TRAINING_SCHEMA_CONTRACTS, preserve_paths)
+        _add_export_artifacts(artifacts, checks, "training_export", training_root, _TRAINING_EXPORT_FILES, preserve_paths, output_path)
+        _add_schema_contracts(schema_contracts, checks, "training_export", training_root, _TRAINING_SCHEMA_CONTRACTS, preserve_paths, output_path)
         _add_dataset_selection(
             dataset_selection,
             checks,
             "training_export",
             training_root,
             preserve_paths,
+            output_path,
             required_dataset_versions,
         )
     if compare_export_dir is not None:
         compare_root = Path(compare_export_dir)
-        _add_export_artifacts(artifacts, checks, "compare_export", compare_root, _COMPARE_EXPORT_FILES, preserve_paths)
-        _add_schema_contracts(schema_contracts, checks, "compare_export", compare_root, _COMPARE_SCHEMA_CONTRACTS, preserve_paths)
+        _add_export_artifacts(artifacts, checks, "compare_export", compare_root, _COMPARE_EXPORT_FILES, preserve_paths, output_path)
+        _add_schema_contracts(schema_contracts, checks, "compare_export", compare_root, _COMPARE_SCHEMA_CONTRACTS, preserve_paths, output_path)
     if reviewed_export_dir is not None:
         reviewed_root = Path(reviewed_export_dir)
-        _add_export_artifacts(artifacts, checks, "reviewed_export", reviewed_root, _REVIEWED_EXPORT_FILES, preserve_paths)
-        _add_schema_contracts(schema_contracts, checks, "reviewed_export", reviewed_root, _REVIEWED_SCHEMA_CONTRACTS, preserve_paths)
+        _add_export_artifacts(artifacts, checks, "reviewed_export", reviewed_root, _REVIEWED_EXPORT_FILES, preserve_paths, output_path)
+        _add_schema_contracts(schema_contracts, checks, "reviewed_export", reviewed_root, _REVIEWED_SCHEMA_CONTRACTS, preserve_paths, output_path)
         _add_dataset_selection(
             dataset_selection,
             checks,
             "reviewed_export",
             reviewed_root,
             preserve_paths,
+            output_path,
             required_dataset_versions,
         )
     if evidence_bundle_path is not None:
         bundle_path = Path(evidence_bundle_path)
-        artifacts["evidence_bundle"] = _file_record(bundle_path, preserve_paths)
-        _add_schema_contract(schema_contracts, checks, "evidence_bundle", bundle_path, "evidence_bundle", False, preserve_paths)
+        artifacts["evidence_bundle"] = _file_record(bundle_path, preserve_paths, output_path)
+        _add_schema_contract(schema_contracts, checks, "evidence_bundle", bundle_path, "evidence_bundle", False, preserve_paths, output_path)
         bundle = _read_json_optional(bundle_path)
         _add_bool_check(checks, "evidence_bundle_exists", bundle_path.exists() and bundle_path.is_file(), {"artifact": "evidence_bundle"})
         _add_bool_check(
@@ -195,8 +199,8 @@ def build_trainer_preflight(
         )
     if agentic_training_plan_path is not None:
         plan_path = Path(agentic_training_plan_path)
-        artifacts["agentic_training_plan"] = _file_record(plan_path, preserve_paths)
-        _add_schema_contract(schema_contracts, checks, "agentic_training_plan", plan_path, "agentic_training_plan", False, preserve_paths)
+        artifacts["agentic_training_plan"] = _file_record(plan_path, preserve_paths, output_path)
+        _add_schema_contract(schema_contracts, checks, "agentic_training_plan", plan_path, "agentic_training_plan", False, preserve_paths, output_path)
         plan = _read_json_optional(plan_path)
         _add_bool_check(checks, "agentic_training_plan_exists", plan_path.exists() and plan_path.is_file(), {"artifact": "agentic_training_plan"})
         _add_bool_check(
@@ -357,7 +361,7 @@ def build_trainer_launch_check(
     }
 
 
-def _gate_record(path: Path, preserve_paths: bool, validation_targets: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _gate_record(path: Path, preserve_paths: bool, validation_targets: dict[str, dict[str, Any]], output_path: Path) -> dict[str, Any]:
     gate = _read_json_required(path, "gate")
     schema_version = gate.get("schema_version") if isinstance(gate.get("schema_version"), str) else "unknown"
     metrics = gate.get("metrics") if isinstance(gate.get("metrics"), dict) else {}
@@ -365,7 +369,7 @@ def _gate_record(path: Path, preserve_paths: bool, validation_targets: dict[str,
     external_validation = _validation_target_for_path(path, validation_targets)
     record: dict[str, Any] = {
         "id": _gate_id(gate, path.stem),
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, output_path, preserve_paths),
         "exists": path.exists(),
         "schema_version": schema_version,
         "passed": gate.get("passed") is True,
@@ -402,6 +406,7 @@ def _add_schema_contracts(
     root: Path,
     contracts: tuple[tuple[str, str, bool], ...],
     preserve_paths: bool,
+    output_path: Path,
 ) -> None:
     for relative, schema_name, jsonl in contracts:
         _add_schema_contract(
@@ -412,6 +417,7 @@ def _add_schema_contracts(
             schema_name,
             jsonl,
             preserve_paths,
+            output_path,
         )
 
 
@@ -423,8 +429,9 @@ def _add_schema_contract(
     schema_name: str,
     jsonl: bool,
     preserve_paths: bool,
+    output_path: Path,
 ) -> None:
-    record = _schema_contract_record(path, schema_name, jsonl, preserve_paths)
+    record = _schema_contract_record(path, schema_name, jsonl, preserve_paths, output_path)
     schema_contracts[key] = record
     _add_bool_check(
         checks,
@@ -438,10 +445,10 @@ def _add_schema_contract(
     )
 
 
-def _schema_contract_record(path: Path, schema_name: str, jsonl: bool, preserve_paths: bool) -> dict[str, Any]:
+def _schema_contract_record(path: Path, schema_name: str, jsonl: bool, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
     regular_file = _is_regular_file(path)
     record: dict[str, Any] = {
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, output_path, preserve_paths),
         "exists": path.exists(),
         "kind": "jsonl" if jsonl else "json",
         "schema_name": schema_name,
@@ -479,6 +486,7 @@ def _schema_contract_record(path: Path, schema_name: str, jsonl: bool, preserve_
 def _validation_summary_records(
     paths: list[str | Path],
     preserve_paths: bool,
+    output_path: Path,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     records: list[dict[str, Any]] = []
     targets_by_path: dict[str, dict[str, Any]] = {}
@@ -486,7 +494,7 @@ def _validation_summary_records(
         path = Path(raw_path)
         summary = _read_json_required(path, "validation summary")
         record: dict[str, Any] = {
-            "path": _display_path(path, preserve_paths),
+            "path": _display_path_for_output_source(path, output_path, preserve_paths),
             "exists": path.exists(),
             "kind": "file",
             "regular_file": _is_regular_file(path),
@@ -511,7 +519,7 @@ def _validation_summary_records(
             warnings = [str(warning) for warning in target.get("warnings", []) if isinstance(warning, str)]
             target_record = {
                 "type": str(target.get("type") or ""),
-                "path": _display_target_path(target_path, preserve_paths),
+                "path": _display_target_path(target_path, preserve_paths, output_path),
                 "passed": target.get("passed") is True,
                 "error_count": len(errors),
                 "warning_count": len(warnings),
@@ -557,10 +565,10 @@ def _path_match_keys(value: str | Path) -> tuple[str, ...]:
     return tuple(dict.fromkeys(key for key in keys if key))
 
 
-def _display_target_path(value: str, preserve_paths: bool) -> str:
+def _display_target_path(value: str, preserve_paths: bool, output_path: Path) -> str:
     if not value:
         return ""
-    return _display_path(Path(value), preserve_paths)
+    return _display_path_for_output_source(Path(value), output_path, preserve_paths)
 
 
 def _add_export_artifacts(
@@ -570,14 +578,15 @@ def _add_export_artifacts(
     root: Path,
     files: tuple[str, ...],
     preserve_paths: bool,
+    output_path: Path,
 ) -> None:
-    artifacts[name] = _dir_record(root, preserve_paths)
+    artifacts[name] = _dir_record(root, preserve_paths, output_path)
     _add_bool_check(checks, "artifact_dir_exists", root.exists() and root.is_dir(), {"artifact": name})
     _add_bool_check(checks, "artifact_dir_regular", _is_regular_dir(root), {"artifact": name})
     for relative in files:
         key = f"{name}_{_artifact_key(relative)}"
         path = root / relative
-        artifacts[key] = _file_record(path, preserve_paths)
+        artifacts[key] = _file_record(path, preserve_paths, output_path)
         _add_bool_check(checks, "artifact_file_exists", path.exists() and path.is_file(), {"artifact": name, "file": relative})
         _add_bool_check(checks, "artifact_file_regular", _is_regular_file(path), {"artifact": name, "file": relative})
 
@@ -588,6 +597,7 @@ def _add_dataset_selection(
     artifact: str,
     root: Path,
     preserve_paths: bool,
+    output_path: Path,
     required_dataset_versions: list[str],
 ) -> None:
     manifest_path = root / "manifest.json"
@@ -607,10 +617,10 @@ def _add_dataset_selection(
     matches_required = bool(dataset_version and (not required_dataset_versions or dataset_version in required_dataset_versions))
     record: dict[str, Any] = {
         "artifact": artifact,
-        "root": _display_path(root, preserve_paths),
-        "manifest_path": _display_path(manifest_path, preserve_paths),
+        "root": _display_path_for_output_source(root, output_path, preserve_paths),
+        "manifest_path": _display_path_for_output_source(manifest_path, output_path, preserve_paths),
         "manifest_sha256": manifest_sha256,
-        "registry_path": _display_path(registry_path, preserve_paths),
+        "registry_path": _display_path_for_output_source(registry_path, output_path, preserve_paths),
         "registry_sha256": registry_sha256,
         "dataset_version": dataset_version,
         "required_dataset_versions": list(required_dataset_versions),
@@ -786,10 +796,10 @@ def _read_json_safely(path: Path) -> dict[str, Any]:
     return payload or {}
 
 
-def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _file_record(path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
     regular_file = _is_regular_file(path)
     record: dict[str, Any] = {
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, output_path, preserve_paths),
         "exists": path.exists(),
         "kind": "file",
         "regular_file": regular_file,
@@ -801,10 +811,10 @@ def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
     return record
 
 
-def _dir_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _dir_record(path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
     regular_directory = _is_regular_dir(path)
     record: dict[str, Any] = {
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path_for_output_source(path, output_path, preserve_paths),
         "exists": path.exists(),
         "kind": "directory",
         "regular_directory": regular_directory,
@@ -857,6 +867,17 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _display_path_for_output_source(path: Path, output_path: Path | None, preserve_paths: bool = False) -> str:
+    if preserve_paths or output_path is None:
+        return _display_path(path, preserve_paths)
+    raw = str(path)
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    output_dir = output_path.parent.resolve()
+    return os.path.relpath(resolved, output_dir)
 
 
 def _is_windows_absolute(value: str) -> bool:

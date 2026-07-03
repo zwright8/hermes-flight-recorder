@@ -211,3 +211,6 @@ file's directory, so cwd-relative lookalikes, deleted sources, stale hashes, and
 rewritten source decisions cannot validate as promotion-ready evidence.
 Promotion-ledger validation applies the same file-relative rule to recorded
 decision gates before trusting ledger metrics or longitudinal gate decisions.
+Trainer-preflight validation applies the same file-relative rule to recorded
+gates, validation summaries, schema contracts, and trainer artifacts before
+trainer launch or archive handoff evidence can pass.

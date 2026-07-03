@@ -359,18 +359,12 @@ def _resolve_recorded_path(value: Any, base_dir: Path) -> tuple[Path | None, str
     if not isinstance(value, str) or not value or value.startswith("<redacted:") or value.startswith("<missing-"):
         return None, "path is redacted or unavailable"
     raw = Path(value)
-    if ".." in raw.parts:
-        return None, "parent traversal is not allowed in recorded paths"
-    candidates = [raw] if raw.is_absolute() or _is_windows_absolute(value) else _unique_paths([Path.cwd() / raw, base_dir / raw])
-    copy_errors: list[str] = []
-    for candidate in candidates:
-        source_error = _copyable_path_error(candidate)
-        if source_error is None:
-            return candidate, None
-        if candidate.exists() or candidate.is_symlink():
-            copy_errors.append(source_error)
-    if copy_errors:
-        return None, "; ".join(copy_errors)
+    candidate = raw if raw.is_absolute() or _is_windows_absolute(value) else base_dir / raw
+    source_error = _copyable_path_error(candidate)
+    if source_error is None:
+        return candidate, None
+    if candidate.exists() or candidate.is_symlink():
+        return None, source_error
     return None, f"path could not be resolved: {value}"
 
 
@@ -725,21 +719,6 @@ def _path_resolves_inside(path: Path, root: Path) -> bool:
     except OSError:
         return False
     return path_resolved == root_resolved or path_resolved.is_relative_to(root_resolved)
-
-
-def _unique_paths(paths: list[Path]) -> list[Path]:
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for path in paths:
-        try:
-            key = str(path.resolve(strict=False))
-        except OSError:
-            key = str(path)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(path)
-    return unique
 
 
 def _suffix_for(path: Path) -> str:

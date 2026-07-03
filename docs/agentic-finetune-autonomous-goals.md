@@ -599,6 +599,9 @@ card, and dataset card decisions.
 - Promotion-ledger gate validation reopens the referenced promotion ledger,
   replays gate evaluation, and rejects stale metrics, checks, decisions, or
   omitted policy checks.
+- Trainer-preflight validation reopens gates, validation summaries, schema
+  contracts, and trainer artifacts from the preflight file location and rejects
+  missing, moved, stale, or cwd-substituted records.
 
 ### Verification
 

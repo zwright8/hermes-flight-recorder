@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -295,6 +296,188 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(plan["passed"])
             self.assertIn("agentic_training_plan", {item["artifact_name"] for item in plan["execution"]["trainer_inputs"]})
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
+
+    def test_trainer_preflight_writes_output_relative_source_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            gate = source_dir / "evidence_bundle.json"
+            preflight = output_dir / "trainer_preflight.json"
+            write_passed_evidence_bundle(gate)
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--evidence-bundle",
+                        str(gate),
+                        "--trainer-command",
+                        "python train.py --bundle ../src/evidence_bundle.json",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            self.assertEqual(result["gates"][0]["path"], "../src/evidence_bundle.json")
+            self.assertEqual(result["artifacts"]["evidence_bundle"]["path"], "../src/evidence_bundle.json")
+            self.assertEqual(result["schema_contracts"]["evidence_bundle"]["path"], "../src/evidence_bundle.json")
+            self.assertEqual(run_cli(["validate", "--trainer-preflight", str(preflight), "--strict"]), 0)
+
+    def test_validate_rejects_trainer_preflight_cwd_relative_source_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            gate = source_dir / "evidence_bundle.json"
+            preflight = output_dir / "trainer_preflight.json"
+            summary = root / "validation.json"
+            write_passed_evidence_bundle(gate)
+            run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--evidence-bundle",
+                    str(gate),
+                    "--trainer-command",
+                    "python train.py --bundle ../src/evidence_bundle.json",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            result["gates"][0]["path"] = "evidence_bundle.json"
+            result["artifacts"]["evidence_bundle"]["path"] = "evidence_bundle.json"
+            result["schema_contracts"]["evidence_bundle"]["path"] = "evidence_bundle.json"
+            preflight.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(source_dir)
+                code = run_cli(["validate", "--trainer-preflight", str(preflight), "--strict", "--out", str(summary)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_preflight.gates[0].path does not resolve to an existing file", errors)
+            self.assertIn("trainer_preflight.artifacts.evidence_bundle.path does not resolve to an existing file", errors)
+
+    def test_trainer_archive_includes_output_relative_parent_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            archive = root / "trainer_archive"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            gate = source_dir / "evidence_bundle.json"
+            preflight = output_dir / "trainer_preflight.json"
+            launch_check = output_dir / "trainer_launch_check.json"
+            write_passed_evidence_bundle(gate)
+            run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--evidence-bundle",
+                    str(gate),
+                    "--trainer-command",
+                    "python train.py --bundle ../src/evidence_bundle.json",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+            self.assertEqual(run_cli(["trainer-launch-check", "--preflight", str(preflight), "--out", str(launch_check)]), 0)
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-archive",
+                        "--preflight",
+                        str(preflight),
+                        "--launch-check",
+                        str(launch_check),
+                        "--out",
+                        str(archive),
+                        "--require-self-contained",
+                    ]
+                ),
+                0,
+            )
+            manifest = json.loads((archive / "trainer_archive.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest["passed"])
+            self.assertTrue(manifest["self_contained"])
+            self.assertEqual(manifest["metrics"]["missing_count"], 0)
+            self.assertIn("gate", {artifact["role"] for artifact in manifest["artifacts"]})
+
+    def test_trainer_archive_rejects_cwd_relative_source_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            archive = root / "trainer_archive"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            gate = source_dir / "evidence_bundle.json"
+            preflight = output_dir / "trainer_preflight.json"
+            launch_check = output_dir / "trainer_launch_check.json"
+            write_passed_evidence_bundle(gate)
+            run_cli(
+                [
+                    "trainer-preflight",
+                    "--gate",
+                    str(gate),
+                    "--evidence-bundle",
+                    str(gate),
+                    "--trainer-command",
+                    "python train.py --bundle ../src/evidence_bundle.json",
+                    "--out",
+                    str(preflight),
+                ]
+            )
+            self.assertEqual(run_cli(["trainer-launch-check", "--preflight", str(preflight), "--out", str(launch_check)]), 0)
+            result = json.loads(preflight.read_text(encoding="utf-8"))
+            result["gates"][0]["path"] = "evidence_bundle.json"
+            result["artifacts"]["evidence_bundle"]["path"] = "evidence_bundle.json"
+            result["schema_contracts"]["evidence_bundle"]["path"] = "evidence_bundle.json"
+            preflight.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(source_dir)
+                code = run_cli(
+                    [
+                        "trainer-archive",
+                        "--preflight",
+                        str(preflight),
+                        "--launch-check",
+                        str(launch_check),
+                        "--out",
+                        str(archive),
+                        "--require-self-contained",
+                    ]
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            manifest = json.loads((archive / "trainer_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(manifest["passed"])
+            self.assertFalse(manifest["self_contained"])
+            self.assertGreater(manifest["metrics"]["missing_count"], 0)
+            self.assertIn("gate", {item["role"] for item in manifest["missing"]})
 
     def test_trainer_preflight_accepts_passed_training_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
