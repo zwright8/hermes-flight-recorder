@@ -391,6 +391,10 @@
                 "kind": {
                   "const": "file"
                 },
+                "expected_sha256": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
                 "passed": {
                   "const": true
                 }
@@ -409,6 +413,10 @@
               "properties": {
                 "kind": {
                   "const": "directory"
+                },
+                "expected_sha256": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
                 },
                 "passed": {
                   "const": true
@@ -459,6 +467,7 @@
           "type": "integer"
         },
         "expected_sha256": {
+          "pattern": "^[0-9a-f]{64}$|^$",
           "type": "string"
         },
         "expected_size_bytes": {

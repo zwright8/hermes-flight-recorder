@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -921,6 +922,9 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(plan["handoff_contract"]["runner_owns_execution"])
             self.assertEqual(plan["execution"]["execution_cwd"], "archive_root")
             self.assertEqual(plan["execution"]["command_argv"][:2], ["python", "train.py"])
+            self.assertEqual(plan["execution"]["command_shell"], shlex.join(plan["execution"]["command_argv"]))
+            self.assertTrue(any("command_argv is canonical" in note for note in plan["handoff_contract"]["notes"]))
+            self.assertTrue(any("Local path integrity is rechecked" in note for note in plan["notes"]))
             self.assertIn("train.py", {item["path"] for item in plan["execution"]["external_code_files"]})
             self.assertEqual(plan["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
             self.assertEqual(plan["metrics"]["external_code_file_count"], contract["external_command_path_count"])
@@ -951,12 +955,42 @@ class TrainerPreflightTests(unittest.TestCase):
                 forged_schema = check_schema_contract(forged, name_or_id="trainer_consumer_plan")
                 self.assertFalse(forged_schema["passed"])
                 self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            forged = json.loads(json.dumps(plan))
+            next(item for item in forged["execution"]["trainer_inputs"] if item["passed"] and item["kind"] == "file")[
+                "expected_sha256"
+            ] = "not-a-hash"
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_consumer_plan")
+            self.assertFalse(forged_schema["passed"])
+            self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            passed_directory = next(
+                item for item in plan["execution"]["trainer_inputs"] if item["passed"] and item["kind"] == "directory"
+            )
+            self.assertEqual(len(passed_directory["sha256"]), 64)
+            self.assertIn("file_count", passed_directory)
+            self.assertIn("expected_file_count", passed_directory)
+            forged = json.loads(json.dumps(plan))
+            next(
+                item for item in forged["execution"]["trainer_inputs"] if item["passed"] and item["kind"] == "directory"
+            )["expected_sha256"] = "not-a-hash"
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_consumer_plan")
+            self.assertFalse(forged_schema["passed"])
+            self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
             failed_input = json.loads(json.dumps(plan))
             failed_input["execution"]["trainer_inputs"][0]["passed"] = False
             failed_input["execution"]["trainer_inputs"][0].pop("sha256")
             failed_input["execution"]["trainer_inputs"][0].pop("size_bytes")
+            failed_input["execution"]["trainer_inputs"][0]["expected_sha256"] = ""
             failed_input_schema = check_schema_contract(failed_input, name_or_id="trainer_consumer_plan")
             self.assertTrue(failed_input_schema["passed"], failed_input_schema["errors"])
+            malformed_failed_input = json.loads(json.dumps(plan))
+            malformed_failed_input["execution"]["trainer_inputs"][0]["passed"] = False
+            malformed_failed_input["execution"]["trainer_inputs"][0]["expected_sha256"] = "not-a-hash"
+            malformed_failed_input_schema = check_schema_contract(
+                malformed_failed_input,
+                name_or_id="trainer_consumer_plan",
+            )
+            self.assertFalse(malformed_failed_input_schema["passed"])
+            self.assertTrue(any("expected_sha256" in error for error in malformed_failed_input_schema["errors"]))
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
 
             forged_plan = Path(tmp) / "trainer_consumer_plan_forged_validation.json"

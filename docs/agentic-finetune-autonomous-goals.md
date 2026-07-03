@@ -647,8 +647,8 @@ card, and dataset card decisions.
 - Trainer preflight gate records reject existing gate files that omit SHA-256
   or byte-size evidence while preserving missing-gate diagnostics.
 - Trainer consumer plans reject passed trainer-input and external-code records
-  that omit SHA-256 or byte-size evidence while preserving failed-input
-  diagnostics.
+  that omit SHA-256 or byte-size evidence, or carry malformed expected
+  SHA-256 values, while preserving blank failed-input diagnostics.
 - Trainer wrapper dry-run receipts reject passed trainer-input and external-code
   records that omit SHA-256 or byte-size evidence while preserving failed-input
   diagnostics.

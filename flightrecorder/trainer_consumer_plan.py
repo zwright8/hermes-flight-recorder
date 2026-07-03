@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -106,7 +107,7 @@ def build_trainer_consumer_plan(
             "command_approved": portable_command.get("approved") is True,
             "command_available": portable_command.get("available") is True,
             "command_argv": argv,
-            "command_shell": str(portable_command.get("shell") or ""),
+            "command_shell": shlex.join(argv) if argv else "",
             "external_code_files": external_code_files,
             "trainer_inputs": trainer_inputs,
         },
@@ -120,6 +121,7 @@ def build_trainer_consumer_plan(
             "allowed_input_sets": ["execution.trainer_inputs", "execution.external_code_files"],
             "notes": [
                 "This plan is a launch contract for an external trainer wrapper; Flight Recorder does not execute it.",
+                "command_argv is canonical; command_shell is a derived display rendering.",
                 "The wrapper should verify this plan and then resolve command_argv relative to archive_root plus external_code_root.",
             ],
         },
@@ -128,6 +130,7 @@ def build_trainer_consumer_plan(
         "notes": [
             "Trainer consumer plans are deterministic handoff manifests, not trainer launchers.",
             "They make the exact command, archive inputs, external code files, and non-execution boundary machine-readable.",
+            "Local path integrity is rechecked when resolved paths are visible; redacted paths retain recorded fingerprint evidence.",
         ],
     }
 
