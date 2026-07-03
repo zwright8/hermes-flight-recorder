@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +74,22 @@ class ImprovementPlanTests(unittest.TestCase):
             self.assertIn("bundle_action", {row["id"] for row in plan["metrics"]["category_counts"]})
             self.assertEqual(plan["work_item_count"], len(plan["work_items"]))
             self.assertTrue(all(len(item["fingerprint"]) == 64 for item in plan["work_items"]))
+            self.assertEqual(len(plan["source_artifacts"]["evidence_bundle"]["sha256"]), 64)
+            schema = check_schema_contract(plan, name_or_id="improvement_plan")
+            self.assertTrue(schema["passed"], schema["errors"])
+            bad_plan = json.loads(json.dumps(plan))
+            bad_plan["source_artifacts"]["evidence_bundle"].pop("sha256")
+            bad_schema = check_schema_contract(bad_plan, name_or_id="improvement_plan")
+            self.assertFalse(bad_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_schema["errors"]))
+            diagnostic_plan = json.loads(json.dumps(plan))
+            diagnostic_plan["source_artifacts"]["evidence_bundle"] = {
+                "kind": "file",
+                "path": "missing-evidence-bundle.json",
+                "exists": False,
+            }
+            diagnostic_schema = check_schema_contract(diagnostic_plan, name_or_id="improvement_plan")
+            self.assertTrue(diagnostic_schema["passed"], diagnostic_schema["errors"])
             repair_items = [item for item in plan["work_items"] if item["category"] == "repair"]
             self.assertEqual(len(repair_items), repair_queue["item_count"])
             self.assertTrue(all(item["sources"]["curriculum_priorities"] for item in repair_items))

@@ -104,6 +104,71 @@
   "$defs": {
     "artifact": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "exists": {
+                  "const": true
+                },
+                "kind": {
+                  "const": "file"
+                }
+              },
+              "required": [
+                "kind",
+                "exists",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exists": {
+                  "const": false
+                },
+                "kind": {
+                  "const": "file"
+                }
+              },
+              "required": [
+                "kind",
+                "exists"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "directory"
+                }
+              },
+              "required": [
+                "kind",
+                "exists"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "exists": {
+                  "const": false
+                },
+                "kind": {
+                  "const": "missing"
+                }
+              },
+              "required": [
+                "kind",
+                "exists"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "entry_count": {
           "minimum": 0,

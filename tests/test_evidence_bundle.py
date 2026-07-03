@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 from flightrecorder.hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
+from flightrecorder.schema_registry import check_schema_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -316,6 +317,21 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["artifacts"]["training_export_curriculum"]["exists"], True)
             self.assertEqual(len(bundle["artifacts"]["training_export_curriculum"]["sha256"]), 64)
             self.assertEqual(len(bundle["artifacts"]["suite_summary"]["sha256"]), 64)
+            schema = check_schema_contract(bundle, name_or_id="evidence_bundle")
+            self.assertTrue(schema["passed"], schema["errors"])
+            bad_bundle = json.loads(json.dumps(bundle))
+            bad_bundle["artifacts"]["suite_summary"].pop("size_bytes")
+            bad_schema = check_schema_contract(bad_bundle, name_or_id="evidence_bundle")
+            self.assertFalse(bad_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_schema["errors"]))
+            diagnostic_bundle = json.loads(json.dumps(bundle))
+            diagnostic_bundle["artifacts"]["suite_summary"] = {
+                "kind": "file",
+                "path": "missing-suite-summary.json",
+                "exists": False,
+            }
+            diagnostic_schema = check_schema_contract(diagnostic_bundle, name_or_id="evidence_bundle")
+            self.assertTrue(diagnostic_schema["passed"], diagnostic_schema["errors"])
 
             self.assertEqual(
                 run_cli(

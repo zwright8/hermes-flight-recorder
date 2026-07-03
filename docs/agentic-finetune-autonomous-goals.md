@@ -103,6 +103,8 @@ evidence.
   failed checks, and next actions.
 - Later layers can consume artifact paths, hashes, and byte sizes without
   guessing.
+- Evidence bundles and improvement plans reject existing file artifacts that
+  omit SHA-256 or byte-size evidence at the schema boundary.
 - Improvement ledgers bind each source improvement plan to SHA-256 plus byte
   size evidence before downstream gates trust recurring-work metrics.
 
