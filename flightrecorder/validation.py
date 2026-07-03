@@ -1463,7 +1463,7 @@ def validate_rubric_spec(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("rubric_spec", str(rubric_path))
     rubric = _read_object(rubric_path, target, "rubric_spec.json")
     if rubric is not None:
-        _validate_rubric_spec(rubric, target)
+        _validate_rubric_spec(rubric, target, rubric_path)
     return target
 
 
@@ -1473,7 +1473,7 @@ def validate_model_grader_dry_run(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("model_grader_dry_run", str(receipt_path))
     receipt = _read_object(receipt_path, target, "model_grader_dry_run.json")
     if receipt is not None:
-        _validate_model_grader_dry_run(receipt, target)
+        _validate_model_grader_dry_run(receipt, target, receipt_path)
     return target
 
 
@@ -1483,7 +1483,7 @@ def validate_model_grader_override_receipt(path: str | Path) -> ValidationTarget
     target = ValidationTarget("model_grader_override_receipt", str(receipt_path))
     receipt = _read_object(receipt_path, target, "model_grader_override_receipt.json")
     if receipt is not None:
-        _validate_model_grader_override_receipt(receipt, target)
+        _validate_model_grader_override_receipt(receipt, target, receipt_path)
     return target
 
 
@@ -1493,7 +1493,7 @@ def validate_model_grader_gate(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("model_grader_gate", str(gate_path))
     gate = _read_object(gate_path, target, "model_grader_gate.json")
     if gate is not None:
-        _validate_model_grader_gate(gate, target)
+        _validate_model_grader_gate(gate, target, gate_path)
     return target
 
 
@@ -3941,8 +3941,14 @@ def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: st
             target.errors.append(f"{label}.manifest_size_bytes must be a non-negative integer for directory refs.")
 
 
-def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(rubric, "schema_version", RUBRIC_SPEC_SCHEMA_VERSION, target, prefix="rubric_spec.")
+    _validate_model_grader_review_export_ref(
+        rubric.get("review_export"),
+        target,
+        "rubric_spec.review_export",
+        source_path,
+    )
     if not isinstance(rubric.get("rubric_id"), str) or not rubric.get("rubric_id"):
         target.errors.append("rubric_spec.rubric_id must be a non-empty string.")
     criteria = rubric.get("criteria")
@@ -3998,9 +4004,10 @@ def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget) -> N
     )
 
 
-def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(receipt, "schema_version", MODEL_GRADER_DRY_RUN_SCHEMA_VERSION, target, prefix="model_grader_dry_run.")
     _validate_model_grader_checked_artifact(receipt, target, "model_grader_dry_run")
+    _validate_model_grader_dry_run_sources(receipt.get("source_artifacts"), target, source_path)
     grader = receipt.get("grader") if isinstance(receipt.get("grader"), dict) else {}
     if grader.get("mode") != "dry_run":
         target.errors.append("model_grader_dry_run.grader.mode must be dry_run.")
@@ -4073,7 +4080,7 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
     )
 
 
-def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(
         receipt,
         "schema_version",
@@ -4082,6 +4089,7 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
         prefix="model_grader_override_receipt.",
     )
     failed_checks = _validate_model_grader_checked_artifact(receipt, target, "model_grader_override_receipt")
+    _validate_model_grader_override_sources(receipt.get("source_artifacts"), target, source_path)
     expected_readiness = "ready_for_model_grader_gate" if failed_checks == 0 else "blocked"
     if receipt.get("readiness") != expected_readiness:
         target.errors.append(
@@ -4171,10 +4179,10 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
         }
     )
 
-
-def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(gate, "schema_version", MODEL_GRADER_GATE_SCHEMA_VERSION, target, prefix="model_grader_gate.")
     failed_checks = _validate_model_grader_checked_artifact(gate, target, "model_grader_gate")
+    _validate_model_grader_gate_sources(gate.get("source_artifacts"), target, source_path)
     expected_readiness = "labels_calibrated_for_curated_handoff" if failed_checks == 0 else "blocked"
     if gate.get("readiness") != expected_readiness:
         target.errors.append(f"model_grader_gate.readiness expected {expected_readiness!r}, got {gate.get('readiness')!r}.")
@@ -4241,6 +4249,172 @@ def _validate_model_grader_checked_artifact(payload: dict[str, Any], target: Val
     if not isinstance(payload.get("blocked_reasons"), list) or not all(isinstance(item, str) for item in payload.get("blocked_reasons", [])):
         target.errors.append(f"{label}.blocked_reasons must be a list of strings.")
     return failed_checks
+
+
+def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("model_grader_dry_run.source_artifacts must be an object.")
+        return
+    _validate_model_grader_review_export_ref(
+        value.get("review_export"),
+        target,
+        "model_grader_dry_run.source_artifacts.review_export",
+        source_path,
+    )
+    _validate_model_grader_referenced_artifact(
+        value.get("rubric_spec"),
+        target,
+        "model_grader_dry_run.source_artifacts.rubric_spec",
+        source_path,
+        validate_rubric_spec,
+        allow_missing=False,
+    )
+
+
+def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("model_grader_gate.source_artifacts must be an object.")
+        return
+    _validate_model_grader_referenced_artifact(
+        value.get("dry_run_receipt"),
+        target,
+        "model_grader_gate.source_artifacts.dry_run_receipt",
+        source_path,
+        validate_model_grader_dry_run,
+        allow_missing=False,
+    )
+    _validate_model_grader_referenced_artifact(
+        value.get("rubric_spec"),
+        target,
+        "model_grader_gate.source_artifacts.rubric_spec",
+        source_path,
+        validate_rubric_spec,
+        allow_missing=False,
+    )
+    _validate_model_grader_referenced_artifact(
+        value.get("review_calibration"),
+        target,
+        "model_grader_gate.source_artifacts.review_calibration",
+        source_path,
+        validate_review_calibration,
+        allow_missing=True,
+    )
+    _validate_model_grader_referenced_artifact(
+        value.get("model_grader_override_receipt"),
+        target,
+        "model_grader_gate.source_artifacts.model_grader_override_receipt",
+        source_path,
+        validate_model_grader_override_receipt,
+        allow_missing=True,
+    )
+
+
+def _validate_model_grader_override_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("model_grader_override_receipt.source_artifacts must be an object.")
+        return
+    _validate_model_grader_referenced_artifact(
+        value.get("dry_run_receipt"),
+        target,
+        "model_grader_override_receipt.source_artifacts.dry_run_receipt",
+        source_path,
+        validate_model_grader_dry_run,
+        allow_missing=False,
+    )
+    _validate_model_grader_source_file_ref(
+        value.get("override_rows"),
+        target,
+        "model_grader_override_receipt.source_artifacts.override_rows",
+        source_path,
+        allow_missing=False,
+    )
+
+
+def _validate_model_grader_review_export_ref(value: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(value.get("path"), str) or not value.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    _validate_model_grader_source_file_ref(value.get("manifest"), target, f"{label}.manifest", source_path, allow_missing=False)
+    _validate_model_grader_source_file_ref(
+        value.get("review_items"),
+        target,
+        f"{label}.review_items",
+        source_path,
+        allow_missing=False,
+    )
+
+
+def _validate_model_grader_referenced_artifact(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+    validator: Any,
+    *,
+    allow_missing: bool,
+) -> None:
+    if allow_missing and record is None:
+        return
+    artifact_path = _validate_model_grader_source_file_ref(record, target, label, source_path, allow_missing=allow_missing)
+    if artifact_path is None:
+        return
+    referenced = validator(artifact_path)
+    target.warnings.extend(f"{label}: {warning}" for warning in referenced.warnings)
+    target.errors.extend(f"{label}: {error}" for error in referenced.errors)
+
+
+def _validate_model_grader_source_file_ref(
+    record: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+    *,
+    allow_missing: bool,
+) -> Path | None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    exists = record.get("exists")
+    if exists is not True:
+        if allow_missing and exists is False:
+            return None
+        target.errors.append(f"{label}.exists must be true.")
+        return None
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
+        return None
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
+    if not _is_lowercase_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string when exists is true.")
+    artifact_path = _resolve_model_grader_source_path(record.get("path"), source_path)
+    if artifact_path is None:
+        target.errors.append(f"{label}.path must resolve from the model-grader artifact location.")
+        return None
+    if artifact_path.is_symlink():
+        target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return None
+    if not artifact_path.exists() or not artifact_path.is_file():
+        target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
+        return None
+    if _is_non_negative_int(record.get("size_bytes")) and artifact_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_lowercase_sha256(record.get("sha256")) and _sha256(artifact_path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+    return artifact_path
+
+
+def _resolve_model_grader_source_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    if _is_windows_absolute(value):
+        return None
+    return source_path.parent / path
 
 
 def _validate_model_grader_boundary(value: Any, target: ValidationTarget, label: str) -> None:

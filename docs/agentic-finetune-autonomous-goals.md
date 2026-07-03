@@ -695,6 +695,10 @@ card, and dataset card decisions.
 - Repair queue items include source artifact fingerprints for normalized
   traces, scorecards, and reports; validation reopens those refs from the queue
   location and rejects stale or moved repair evidence before work dispatch.
+- Model-grader rubric, dry-run, and gate artifacts emit output-relative source
+  refs with SHA-256 plus byte-size evidence; validation reopens those refs from
+  the artifact location and rejects stale review, rubric, dry-run, or
+  calibration evidence before labels can be trusted.
 - Improvement plans reject stale source-artifact SHA-256 and byte-size
   records when present file artifacts resolve during validation.
 - Action-ledger gate validation reopens the referenced action ledger from the

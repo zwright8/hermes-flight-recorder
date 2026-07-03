@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -28,9 +29,11 @@ def build_rubric_spec(
     criteria: list[str] | None = None,
     created_at: str | None = None,
     preserve_paths: bool = False,
+    out_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a schema-checkable rubric bound to a human-review queue."""
     review_dir = Path(review_export_dir)
+    output_path = Path(out_path) if out_path is not None else None
     items = _read_review_items(review_dir)
     criterion_rows = _criterion_rows(criteria)
     item_fingerprints = [_item_fingerprint(row) for row in items]
@@ -38,7 +41,7 @@ def build_rubric_spec(
         "schema_version": RUBRIC_SPEC_SCHEMA_VERSION,
         "rubric_id": rubric_id,
         "created_at": created_at or _now(),
-        "review_export": _review_export_ref(review_dir, preserve_paths),
+        "review_export": _review_export_ref(review_dir, preserve_paths, output_path),
         "criterion_count": len(criterion_rows),
         "criteria": criterion_rows,
         "label_options": list(REVIEW_LABELS),
@@ -66,16 +69,18 @@ def build_model_grader_dry_run(
     provider: str = "mock",
     created_at: str | None = None,
     preserve_paths: bool = False,
+    out_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic dry-run model-grader receipt without model calls."""
     review_dir = Path(review_export_dir)
     rubric_file = Path(rubric_path)
+    output_path = Path(out_path) if out_path is not None else None
     items = _read_review_items(review_dir)
     labels = [_mock_label(item, grader_id, provider) for item in items]
     label_counts = _label_counts(labels)
     disagreement_queue = [_disagreement_candidate(item, label) for item, label in zip(items, labels) if label["requires_human_review"]]
     checks: list[dict[str, Any]] = []
-    rubric_ref = _json_artifact_ref("rubric_spec", rubric_file, "rubric_spec", preserve_paths)
+    rubric_ref = _json_artifact_ref("rubric_spec", rubric_file, "rubric_spec", preserve_paths, output_path)
     _add_check(checks, "rubric_spec_valid", _artifact_ready(rubric_ref), {"artifact": rubric_ref}, {"schema": "rubric_spec", "passed": True})
     _add_check(checks, "review_export_non_empty", bool(items), {"review_item_count": len(items)}, {"review_item_count_min": 1})
     _add_check(checks, "paid_model_grader_not_called", True, {"paid_model_grader_calls_started": False}, {"paid_model_grader_calls_started": False})
@@ -100,7 +105,7 @@ def build_model_grader_dry_run(
         "checks": checks,
         "blocked_reasons": [check["summary"] for check in failed],
         "source_artifacts": {
-            "review_export": _review_export_ref(review_dir, preserve_paths),
+            "review_export": _review_export_ref(review_dir, preserve_paths, output_path),
             "rubric_spec": rubric_ref,
         },
         "graded_item_count": len(labels),
@@ -137,17 +142,37 @@ def build_model_grader_gate(
     max_disagreements: int | None = None,
     created_at: str | None = None,
     preserve_paths: bool = False,
+    out_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Gate model-grader labels before trainer-facing data admission."""
-    dry_ref = _json_artifact_ref("model_grader_dry_run", Path(dry_run_path), "model_grader_dry_run", preserve_paths)
-    rubric_ref = _json_artifact_ref("rubric_spec", Path(rubric_path), "rubric_spec", preserve_paths)
+    output_path = Path(out_path) if out_path is not None else None
+    dry_ref = _json_artifact_ref(
+        "model_grader_dry_run",
+        Path(dry_run_path),
+        "model_grader_dry_run",
+        preserve_paths,
+        output_path,
+    )
+    rubric_ref = _json_artifact_ref("rubric_spec", Path(rubric_path), "rubric_spec", preserve_paths, output_path)
     override_ref = (
-        _json_artifact_ref("model_grader_override_receipt", Path(override_receipt_path), "model_grader_override_receipt", preserve_paths)
+        _json_artifact_ref(
+            "model_grader_override_receipt",
+            Path(override_receipt_path),
+            "model_grader_override_receipt",
+            preserve_paths,
+            output_path,
+        )
         if override_receipt_path
         else _missing_ref("model_grader_override_receipt")
     )
     calibration_ref = (
-        _json_artifact_ref("review_calibration", Path(calibration_path), "review_calibration", preserve_paths)
+        _json_artifact_ref(
+            "review_calibration",
+            Path(calibration_path),
+            "review_calibration",
+            preserve_paths,
+            output_path,
+        )
         if calibration_path
         else _missing_ref("review_calibration")
     )
@@ -277,11 +302,13 @@ def build_model_grader_override_receipt(
     overrides_path: str | Path,
     created_at: str | None = None,
     preserve_paths: bool = False,
+    out_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a human override receipt resolving model-grader dry-run queue items."""
     dry_file = Path(dry_run_path)
     override_file = Path(overrides_path)
-    dry_ref = _json_artifact_ref("model_grader_dry_run", dry_file, "model_grader_dry_run", preserve_paths)
+    output_path = Path(out_path) if out_path is not None else None
+    dry_ref = _json_artifact_ref("model_grader_dry_run", dry_file, "model_grader_dry_run", preserve_paths, output_path)
     dry_run = _read_json(dry_file)
     queue = [item for item in dry_run.get("disagreement_queue", []) if isinstance(item, dict)] if isinstance(dry_run, dict) else []
     queue_ids = {str(item.get("review_item_id") or "") for item in queue if item.get("review_item_id")}
@@ -343,7 +370,7 @@ def build_model_grader_override_receipt(
         "blocked_reasons": [check["summary"] for check in failed],
         "source_artifacts": {
             "dry_run_receipt": dry_ref,
-            "override_rows": _file_ref("model_grader_override_rows", override_file, preserve_paths),
+            "override_rows": _file_ref("model_grader_override_rows", override_file, preserve_paths, output_path),
         },
         "queue": {
             "dry_run_disagreement_queue_count": len(queue_ids),
@@ -481,18 +508,24 @@ def _label_counts(labels: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{"label": label, "count": counts[label]} for label in REVIEW_LABELS]
 
 
-def _review_export_ref(path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _review_export_ref(path: Path, preserve_paths: bool, output_path: Path | None = None) -> dict[str, Any]:
     manifest = path / "manifest.json"
     items = path / "review_items.jsonl"
     return {
-        "path": _display_path(path, preserve_paths),
-        "manifest": _file_ref("review_manifest", manifest, preserve_paths),
-        "review_items": _file_ref("review_items", items, preserve_paths),
+        "path": _display_path(path, preserve_paths, output_path),
+        "manifest": _file_ref("review_manifest", manifest, preserve_paths, output_path),
+        "review_items": _file_ref("review_items", items, preserve_paths, output_path),
     }
 
 
-def _json_artifact_ref(role: str, path: Path, schema_name: str, preserve_paths: bool) -> dict[str, Any]:
-    ref = _file_ref(role, path, preserve_paths)
+def _json_artifact_ref(
+    role: str,
+    path: Path,
+    schema_name: str,
+    preserve_paths: bool,
+    output_path: Path | None = None,
+) -> dict[str, Any]:
+    ref = _file_ref(role, path, preserve_paths, output_path)
     schema = _schema_check(path, schema_name) if ref["exists"] else {"passed": False, "error_count": 1, "errors": ["artifact not found"]}
     payload = _read_json(path)
     ref.update(
@@ -508,11 +541,11 @@ def _json_artifact_ref(role: str, path: Path, schema_name: str, preserve_paths: 
     return ref
 
 
-def _file_ref(role: str, path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _file_ref(role: str, path: Path, preserve_paths: bool, output_path: Path | None = None) -> dict[str, Any]:
     exists = path.exists() and path.is_file()
     return {
         "role": role,
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path(path, preserve_paths, output_path),
         "exists": exists,
         "sha256": _sha256(path) if exists else None,
         "size_bytes": path.stat().st_size if exists else None,
@@ -696,8 +729,10 @@ def _stable_sha(value: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _display_path(path: Path, preserve_paths: bool) -> str:
-    return str(path) if preserve_paths else path.name
+def _display_path(path: Path, preserve_paths: bool, output_path: Path | None = None) -> str:
+    if preserve_paths or output_path is None:
+        return str(path) if preserve_paths else path.name
+    return os.path.relpath(path.resolve(), output_path.parent.resolve())
 
 
 def _now() -> str:

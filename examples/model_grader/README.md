@@ -40,6 +40,7 @@ Validate the examples:
 
 ```bash
 flightrecorder validate \
+  --review-export examples/model_grader/review \
   --rubric-spec examples/model_grader/rubric.json \
   --model-grader-dry-run examples/model_grader/dry_run.json \
   --model-grader-gate examples/model_grader/blocked_gate.json \

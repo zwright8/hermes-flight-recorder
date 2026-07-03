@@ -76,10 +76,11 @@ class ModelGraderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             review, calibration = make_review_flow(tmp)
             root = Path(tmp)
-            rubric = root / "rubric.json"
-            dry_run = root / "dry_run.json"
-            blocked_gate = root / "blocked_gate.json"
-            passing_gate = root / "passing_gate.json"
+            artifact_dir = root / "artifacts" / "model_grader"
+            rubric = artifact_dir / "rubric.json"
+            dry_run = artifact_dir / "dry_run.json"
+            blocked_gate = artifact_dir / "blocked_gate.json"
+            passing_gate = artifact_dir / "passing_gate.json"
 
             self.assertEqual(
                 run_cli(
@@ -104,6 +105,7 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(rubric_payload["schema_version"], "hfr.rubric_spec.v1")
             self.assertEqual(rubric_payload["review_item_count"], 2)
             self.assertFalse(rubric_payload["execution_boundary"]["provider_api_called"])
+            self.assertEqual(rubric_payload["review_export"]["manifest"]["path"], "../../review/manifest.json")
             self.assert_schema_and_validate(rubric, "rubric_spec")
 
             self.assertEqual(
@@ -134,6 +136,7 @@ class ModelGraderTests(unittest.TestCase):
             self.assertFalse(dry_payload["grader"]["paid_model_grader_calls_started"])
             self.assertFalse(dry_payload["training_admission"]["labels_allowed_for_training"])
             self.assertEqual(dry_payload["training_admission"]["labels_admitted_count"], 0)
+            self.assertEqual(dry_payload["source_artifacts"]["rubric_spec"]["path"], "rubric.json")
             self.assertTrue(all(len(row["label_sha256"]) == 64 for row in dry_payload["grader_labels"]))
             self.assert_schema_and_validate(dry_run, "model_grader_dry_run")
 
@@ -193,7 +196,36 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(passing_payload["metrics"]["dry_run_disagreement_queue_count"], 0)
             self.assertEqual(passing_payload["metrics"]["dry_run_labels_requiring_human_review_count"], 0)
             self.assertFalse(passing_payload["execution_boundary"]["provider_api_called"])
+            self.assertEqual(passing_payload["source_artifacts"]["review_calibration"]["path"], "../../review_calibration.json")
             self.assert_schema_and_validate(passing_gate, "model_grader_gate")
+
+            stale_rubric = artifact_dir / "stale_rubric.json"
+            stale_rubric_payload = dict(rubric_payload)
+            stale_rubric_payload["review_export"] = dict(rubric_payload["review_export"])
+            stale_rubric_payload["review_export"]["review_items"] = dict(rubric_payload["review_export"]["review_items"])
+            stale_rubric_payload["review_export"]["review_items"]["sha256"] = "0" * 64
+            stale_rubric.write_text(json.dumps(stale_rubric_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(stale_rubric, "rubric_spec", "review_items.sha256 does not match the current file")
+
+            stale_dry_run = artifact_dir / "stale_dry_run.json"
+            stale_dry_payload = dict(dry_payload)
+            stale_dry_payload["source_artifacts"] = dict(dry_payload["source_artifacts"])
+            stale_dry_payload["source_artifacts"]["rubric_spec"] = dict(dry_payload["source_artifacts"]["rubric_spec"])
+            stale_dry_payload["source_artifacts"]["rubric_spec"]["size_bytes"] += 1
+            stale_dry_run.write_text(json.dumps(stale_dry_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(stale_dry_run, "model_grader_dry_run", "rubric_spec.size_bytes does not match the current file")
+
+            stale_gate = artifact_dir / "stale_gate.json"
+            stale_gate_payload = dict(passing_payload)
+            stale_gate_payload["source_artifacts"] = dict(passing_payload["source_artifacts"])
+            stale_gate_payload["source_artifacts"]["dry_run_receipt"] = dict(passing_payload["source_artifacts"]["dry_run_receipt"])
+            stale_gate_payload["source_artifacts"]["dry_run_receipt"]["sha256"] = "0" * 64
+            stale_gate.write_text(json.dumps(stale_gate_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(
+                stale_gate,
+                "model_grader_gate",
+                "dry_run_receipt.sha256 does not match the current file",
+            )
 
     def test_gate_blocks_unresolved_model_grader_disagreement_queue(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -362,12 +394,38 @@ class ModelGraderTests(unittest.TestCase):
         self.assertIn("model_grader_override_receipt", names)
         self.assertIn("model_grader_gate", names)
 
+    def test_committed_examples_validate_strictly(self):
+        example_dir = ROOT / "examples" / "model_grader"
+        validation = validate_artifacts(
+            review_export_dir=example_dir / "review",
+            rubric_spec_paths=[example_dir / "rubric.json"],
+            model_grader_dry_run_paths=[example_dir / "dry_run.json"],
+            model_grader_gate_paths=[
+                example_dir / "blocked_gate.json",
+                example_dir / "passing_gate.json",
+            ],
+            review_calibration_paths=[example_dir / "review_calibration.json"],
+            strict=True,
+        )
+        self.assertTrue(validation["passed"], validation)
+
     def assert_schema_and_validate(self, path: Path, schema_name: str) -> None:
         schema = check_schema_file(path)
         self.assertTrue(schema["passed"], schema["errors"])
         kwargs = {f"{schema_name}_paths": [path]}
         validation = validate_artifacts(**kwargs, strict=True)
         self.assertTrue(validation["passed"], validation)
+
+    def assert_validation_error(self, path: Path, schema_name: str, expected: str) -> None:
+        kwargs = {f"{schema_name}_paths": [path]}
+        validation = validate_artifacts(**kwargs, strict=True)
+        self.assertFalse(validation["passed"], validation)
+        errors = [
+            error
+            for target in validation["targets"]
+            for error in target["errors"]
+        ]
+        self.assertTrue(any(expected in error for error in errors), errors)
 
 
 if __name__ == "__main__":

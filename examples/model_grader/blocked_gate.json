@@ -22,8 +22,8 @@
           "schema_errors": [],
           "schema_name": "model_grader_dry_run",
           "schema_passed": true,
-          "sha256": "4d6a8a663a634313eb8b9dfb163459fdefd1c7fffe9e10a09572181810d19e2d",
-          "size_bytes": 5587,
+          "sha256": "c27528d2c46301863411e04660032a7a3d269f634e09cfa60cee21fb861056db",
+          "size_bytes": 5601,
           "source_passed": true,
           "source_recommendation": "gate_before_training_admission"
         }
@@ -46,8 +46,8 @@
           "schema_errors": [],
           "schema_name": "rubric_spec",
           "schema_passed": true,
-          "sha256": "e0454715cc75355b9a703086640a25edc06aa0390178bd7b89cb96a70a132ae1",
-          "size_bytes": 2213,
+          "sha256": "419232b83c8a284b4095f99455017139648e766cf1d7cd12eff235086213d2a9",
+          "size_bytes": 2227,
           "source_passed": null,
           "source_recommendation": ""
         }
@@ -186,8 +186,8 @@
       "schema_errors": [],
       "schema_name": "model_grader_dry_run",
       "schema_passed": true,
-      "sha256": "4d6a8a663a634313eb8b9dfb163459fdefd1c7fffe9e10a09572181810d19e2d",
-      "size_bytes": 5587,
+      "sha256": "c27528d2c46301863411e04660032a7a3d269f634e09cfa60cee21fb861056db",
+      "size_bytes": 5601,
       "source_passed": true,
       "source_recommendation": "gate_before_training_admission"
     },
@@ -214,8 +214,8 @@
       "schema_errors": [],
       "schema_name": "rubric_spec",
       "schema_passed": true,
-      "sha256": "e0454715cc75355b9a703086640a25edc06aa0390178bd7b89cb96a70a132ae1",
-      "size_bytes": 2213,
+      "sha256": "419232b83c8a284b4095f99455017139648e766cf1d7cd12eff235086213d2a9",
+      "size_bytes": 2227,
       "source_passed": null,
       "source_recommendation": ""
     }

@@ -1720,6 +1720,7 @@ def cmd_model_grader_rubric(args: argparse.Namespace) -> int:
         criteria=args.criterion,
         created_at=args.created_at,
         preserve_paths=args.preserve_paths,
+        out_path=args.out,
     )
     write_model_grader_artifact(args.out, rubric)
     print(f"wrote {args.out} review_items={rubric['review_item_count']} criteria={rubric['criterion_count']}")
@@ -1734,6 +1735,7 @@ def cmd_model_grader_dry_run(args: argparse.Namespace) -> int:
         provider=args.provider,
         created_at=args.created_at,
         preserve_paths=args.preserve_paths,
+        out_path=args.out,
     )
     write_model_grader_artifact(args.out, receipt)
     print(
@@ -1749,6 +1751,7 @@ def cmd_model_grader_override_receipt(args: argparse.Namespace) -> int:
         overrides_path=args.overrides,
         created_at=args.created_at,
         preserve_paths=args.preserve_paths,
+        out_path=args.out,
     )
     write_model_grader_artifact(args.out, receipt)
     print(
@@ -1768,6 +1771,7 @@ def cmd_model_grader_gate(args: argparse.Namespace) -> int:
         max_disagreements=args.max_disagreements,
         created_at=args.created_at,
         preserve_paths=args.preserve_paths,
+        out_path=args.out,
     )
     write_model_grader_artifact(args.out, gate)
     print(
