@@ -80,12 +80,12 @@
           "adapter_kind": "lora",
           "readiness": "planned",
           "training_plan": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
-          "training_plan_sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8"
+          "training_plan_sha256": "4e91d16bad26bc6c4bb2c03dec010f27dbc5316205de15638c86cfb8c87be0a9"
         },
         "path": "experiments/registry/model_adapter_manifests/local_mock_tiny_chat_sft_adapter.json",
         "recorded_at": "2026-07-02T20:36:55Z",
-        "sha256": "62b3cddfae998fee606f5b167725f5fae7052e55e51b460785e5995cf0de0e54",
-        "size_bytes": 2909,
+        "sha256": "d01c3ec9a21f2e49732c7f1ea7f77997f9e2b881aa03abd6f2728bab6d00f7e4",
+        "size_bytes": 2933,
         "status": "planned_adapter"
       }
     ],
@@ -113,8 +113,8 @@
         "metadata": {},
         "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
         "recorded_at": "2026-07-02T14:52:35Z",
-        "sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8",
-        "size_bytes": 7579,
+        "sha256": "4e91d16bad26bc6c4bb2c03dec010f27dbc5316205de15638c86cfb8c87be0a9",
+        "size_bytes": 7603,
         "status": "dry_run_plan"
       }
     ]

@@ -45,7 +45,8 @@
     "recommendation": "ready_for_registry_dry_run",
     "sha256": "d0420af1dc9d5cbd8d7bb584b7f0774bc101d187ca78a1fc16e30da8b46c49b1",
     "unsupported_count": 1,
-    "verified_count": 0
+    "verified_count": 0,
+    "size_bytes": 6039
   },
   "compute": {
     "accelerator_required": false,

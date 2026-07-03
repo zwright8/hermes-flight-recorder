@@ -25,6 +25,9 @@ or launch GPU work.
   training candidate to a dataset manifest and optional compatibility report.
 - Path-backed registry links record SHA-256 and byte-size evidence; validation
   reopens resolvable link paths and rejects stale size or hash records.
+- Embedded compatibility-report refs in training plans and serving receipts,
+  plus training-plan refs in adapter manifests, use the same SHA-256 and
+  byte-size evidence checks.
 
 ## Command Sequence
 

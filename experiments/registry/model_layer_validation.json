@@ -106,7 +106,7 @@
         "model_id": "local/mock-tiny-chat",
         "readiness": "planned",
         "training_plan_path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
-        "training_plan_sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8"
+        "training_plan_sha256": "4e91d16bad26bc6c4bb2c03dec010f27dbc5316205de15638c86cfb8c87be0a9"
       },
       "errors": [],
       "passed": true,
@@ -123,7 +123,7 @@
         "model_id": "Qwen/Qwen3-4B-Instruct-2507",
         "readiness": "planned",
         "training_plan_path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
-        "training_plan_sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a"
+        "training_plan_sha256": "b364d0ef8d6a10d2c18edbad2a4b009fd0e0d8216976439eb98bca79f82aa8eb"
       },
       "errors": [],
       "passed": true,

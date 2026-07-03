@@ -1139,6 +1139,7 @@ def _serving_compatibility_report_record(
         else:
             record["path"] = _display_path(source_path, preserve_paths)
             record["sha256"] = _sha256(source_path)
+            record["size_bytes"] = source_path.stat().st_size
     if errors:
         raise ModelRegistryError("; ".join(errors))
     return record
@@ -1158,6 +1159,10 @@ def _serving_probe_compatibility_report_errors(
         errors.append("model_serving_probe_receipt.compatibility_report.passed must be true.")
     if "sha256" in report and not _is_sha256(report.get("sha256")):
         errors.append("model_serving_probe_receipt.compatibility_report.sha256 must be a 64-character hex digest.")
+    if "sha256" in report and not _is_non_negative_int(report.get("size_bytes")):
+        errors.append("model_serving_probe_receipt.compatibility_report.size_bytes must be a non-negative integer when sha256 is present.")
+    elif "size_bytes" in report and not _is_non_negative_int(report.get("size_bytes")):
+        errors.append("model_serving_probe_receipt.compatibility_report.size_bytes must be a non-negative integer.")
     if report.get("candidate_id") != receipt.get("candidate_id"):
         errors.append("model_serving_probe_receipt.compatibility_report.candidate_id must match receipt.candidate_id.")
     if report.get("model_id") != receipt.get("model_id"):
@@ -1256,6 +1261,7 @@ def _training_compatibility_report_record(
         else:
             record["path"] = _display_path(source_path, preserve_paths)
             record["sha256"] = _sha256(source_path)
+            record["size_bytes"] = source_path.stat().st_size
     if errors:
         raise ModelRegistryError("; ".join(errors))
     return record
@@ -1287,6 +1293,7 @@ def _adapter_training_plan_record(
     return {
         "path": _display_path(source_path, preserve_paths),
         "sha256": _sha256(source_path),
+        "size_bytes": source_path.stat().st_size,
         "candidate_id": model["candidate_id"],
         "model_id": model["model_id"],
         "dataset_id": dataset["dataset_id"],
@@ -1316,6 +1323,10 @@ def _adapter_training_plan_errors(plan: Any, errors: list[str]) -> None:
         _require_non_empty_string(plan, field_name, errors, "model_adapter_manifest.training_plan.")
     if "sha256" in plan and not _is_sha256(plan.get("sha256")):
         errors.append("model_adapter_manifest.training_plan.sha256 must be a 64-character hex digest.")
+    if "sha256" in plan and not _is_non_negative_int(plan.get("size_bytes")):
+        errors.append("model_adapter_manifest.training_plan.size_bytes must be a non-negative integer when sha256 is present.")
+    elif "size_bytes" in plan and not _is_non_negative_int(plan.get("size_bytes")):
+        errors.append("model_adapter_manifest.training_plan.size_bytes must be a non-negative integer.")
     for field_name, expected in (("dry_run", True), ("no_weight_download", True), ("gpu_execution", False)):
         if plan.get(field_name) is not expected:
             errors.append(f"model_adapter_manifest.training_plan.{field_name} must be {expected!r}.")
@@ -1331,6 +1342,10 @@ def _training_plan_compatibility_report_errors(report: dict[str, Any], model: di
         errors.append("training_plan.compatibility_report.passed must be true.")
     if "sha256" in report and not _is_sha256(report.get("sha256")):
         errors.append("training_plan.compatibility_report.sha256 must be a 64-character hex digest.")
+    if "sha256" in report and not _is_non_negative_int(report.get("size_bytes")):
+        errors.append("training_plan.compatibility_report.size_bytes must be a non-negative integer when sha256 is present.")
+    elif "size_bytes" in report and not _is_non_negative_int(report.get("size_bytes")):
+        errors.append("training_plan.compatibility_report.size_bytes must be a non-negative integer.")
     if report.get("candidate_id") != model.get("candidate_id"):
         errors.append("training_plan.compatibility_report.candidate_id must match training_plan.model.candidate_id.")
     if report.get("model_id") != model.get("model_id"):

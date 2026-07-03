@@ -21,7 +21,17 @@
     "registry_link": {"type": "object"},
     "schema_version": {"const": "hfr.model_adapter_manifest.v1"},
     "status": {"const": "planned"},
-    "training_plan": {"type": "object"}
+    "training_plan": {
+      "additionalProperties": true,
+      "if": {"required": ["sha256"]},
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "then": {"required": ["size_bytes"]},
+      "type": "object"
+    }
   },
   "required": [
     "schema_version",

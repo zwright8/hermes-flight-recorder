@@ -149,6 +149,7 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertTrue(plan["no_weight_download"])
             self.assertFalse(plan["gpu_execution"])
             self.assertFalse(plan["execution"]["flight_recorder_imported_heavy_ml"])
+            self.assertEqual(plan["compatibility_report"]["size_bytes"], report_path.stat().st_size)
             self.assertTrue(check_schema_contract(candidate)["passed"])
             self.assertTrue(check_schema_contract(report)["passed"])
             self.assertTrue(check_schema_contract(plan)["passed"])
@@ -342,6 +343,7 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertFalse(receipt["download_policy"]["launched_server"])
             self.assertFalse(receipt["execution"]["flight_recorder_opened_network_connection"])
             self.assertEqual(receipt["summary"]["probe_count"], 7)
+            self.assertEqual(receipt["compatibility_report"]["size_bytes"], report_path.stat().st_size)
             write_json(receipt_path, receipt)
 
             registry = link_model_registry_artifact(
@@ -383,6 +385,148 @@ class ModelRegistryTests(unittest.TestCase):
 
             self.assertIn("model_serving_probe_receipt.summary.verified_count", errors)
             self.assertIn("model_serving_probe_receipt.readiness verified", errors)
+
+    def test_validate_rejects_training_plan_compatibility_report_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            report_path = root / "compatibility_report.json"
+            plan_path = root / "training_plan.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            plan["compatibility_report"]["size_bytes"] += 1
+            write_json(plan_path, plan)
+
+            summary = validate_artifacts(training_plan_paths=[plan_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("training_plan.compatibility_report.size_bytes does not match the current file.", errors)
+
+    def test_validate_rejects_training_plan_compatibility_report_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            report_path = root / "compatibility_report.json"
+            report_link = root / "compatibility_report_link.json"
+            plan_path = root / "training_plan.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            try:
+                report_link.symlink_to(report_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            plan["compatibility_report"]["path"] = report_link.name
+            write_json(plan_path, plan)
+
+            summary = validate_artifacts(training_plan_paths=[plan_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("training_plan.compatibility_report.path must not resolve to a symlink.", errors)
+
+    def test_validate_rejects_serving_probe_compatibility_report_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            report_path = root / "compatibility_report.json"
+            receipt_path = root / "serving_probe_receipt.json"
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            receipt = build_model_serving_probe_receipt(
+                registry,
+                model_ref="candidate",
+                out_path=receipt_path,
+                profile_id="local_mock_tiny_chat_metadata",
+                provider="metadata_only",
+                serving_engine="not_launched",
+                base_url="metadata://not-launched",
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            receipt["compatibility_report"]["size_bytes"] += 1
+            write_json(receipt_path, receipt)
+
+            summary = validate_artifacts(model_serving_probe_receipt_paths=[receipt_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "model_serving_probe_receipt.compatibility_report.size_bytes does not match the current file.",
+                errors,
+            )
+
+    def test_validate_rejects_serving_probe_compatibility_report_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            report_path = root / "compatibility_report.json"
+            report_link = root / "compatibility_report_link.json"
+            receipt_path = root / "serving_probe_receipt.json"
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            try:
+                report_link.symlink_to(report_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            receipt = build_model_serving_probe_receipt(
+                registry,
+                model_ref="candidate",
+                out_path=receipt_path,
+                profile_id="local_mock_tiny_chat_metadata",
+                provider="metadata_only",
+                serving_engine="not_launched",
+                base_url="metadata://not-launched",
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            receipt["compatibility_report"]["path"] = report_link.name
+            write_json(receipt_path, receipt)
+
+            summary = validate_artifacts(model_serving_probe_receipt_paths=[receipt_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "model_serving_probe_receipt.compatibility_report.path must not resolve to a symlink.",
+                errors,
+            )
 
     def test_adapter_manifest_links_planned_adapter_without_materialization(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -430,6 +574,7 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(model_adapter_manifest_errors(manifest), [])
             self.assertTrue(check_schema_contract(manifest)["passed"])
             self.assertFalse(manifest["execution"]["flight_recorder_materialized_adapter"])
+            self.assertEqual(manifest["training_plan"]["size_bytes"], plan_path.stat().st_size)
             write_json(adapter_path, manifest)
 
             registry = link_model_registry_artifact(
@@ -446,6 +591,87 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(len(links["adapters"]), 1)
             self.assertEqual(links["adapters"][0]["kind"], "model_adapter_manifest")
             self.assertEqual(len(links["adapters"][0]["sha256"]), 64)
+
+    def test_validate_rejects_adapter_manifest_training_plan_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            plan_path = root / "training_plan.json"
+            adapter_path = root / "adapter_manifest.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+            )
+            write_json(plan_path, plan)
+            manifest = build_model_adapter_manifest(
+                registry,
+                model_ref="candidate",
+                adapter_id="local_mock_tiny_chat_sft_adapter",
+                training_plan=plan,
+                training_plan_path=plan_path,
+                out_path=adapter_path,
+            )
+            manifest["training_plan"]["size_bytes"] += 1
+            write_json(adapter_path, manifest)
+
+            summary = validate_artifacts(model_adapter_manifest_paths=[adapter_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("model_adapter_manifest.training_plan.size_bytes does not match the current file.", errors)
+
+    def test_validate_rejects_adapter_manifest_training_plan_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            plan_path = root / "training_plan.json"
+            plan_link = root / "training_plan_link.json"
+            adapter_path = root / "adapter_manifest.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+            )
+            write_json(plan_path, plan)
+            try:
+                plan_link.symlink_to(plan_path)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+            manifest = build_model_adapter_manifest(
+                registry,
+                model_ref="candidate",
+                adapter_id="local_mock_tiny_chat_sft_adapter",
+                training_plan=plan,
+                training_plan_path=plan_path,
+                out_path=adapter_path,
+            )
+            manifest["training_plan"]["path"] = plan_link.name
+            write_json(adapter_path, manifest)
+
+            summary = validate_artifacts(model_adapter_manifest_paths=[adapter_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("model_adapter_manifest.training_plan.path must not resolve to a symlink.", errors)
 
     def test_adapter_manifest_requires_matching_training_plan_model(self):
         with tempfile.TemporaryDirectory() as tmp:

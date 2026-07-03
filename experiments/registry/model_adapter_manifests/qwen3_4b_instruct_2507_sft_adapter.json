@@ -78,7 +78,8 @@
     "model_id": "Qwen/Qwen3-4B-Instruct-2507",
     "no_weight_download": true,
     "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
-    "sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a",
-    "trainer": "local-dry-run"
+    "sha256": "b364d0ef8d6a10d2c18edbad2a4b009fd0e0d8216976439eb98bca79f82aa8eb",
+    "trainer": "local-dry-run",
+    "size_bytes": 11841
   }
 }

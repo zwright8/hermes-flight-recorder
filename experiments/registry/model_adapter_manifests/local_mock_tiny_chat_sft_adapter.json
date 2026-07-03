@@ -78,7 +78,8 @@
     "model_id": "local/mock-tiny-chat",
     "no_weight_download": true,
     "path": "experiments/registry/training_plans/local_mock_tiny_chat_sft_dry_run.json",
-    "sha256": "deb80716f846ee0bc8f4706ec901fe42dd048744256994de40bd0099516842c8",
-    "trainer": "local-dry-run"
+    "sha256": "4e91d16bad26bc6c4bb2c03dec010f27dbc5316205de15638c86cfb8c87be0a9",
+    "trainer": "local-dry-run",
+    "size_bytes": 7603
   }
 }

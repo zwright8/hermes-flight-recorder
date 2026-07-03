@@ -6,7 +6,17 @@
   "properties": {
     "blocked_reasons": {"items": {"type": "string"}, "type": "array"},
     "checks": {"items": {"type": "object"}, "type": "array"},
-    "compatibility_report": {"type": "object"},
+    "compatibility_report": {
+      "additionalProperties": true,
+      "if": {"required": ["sha256"]},
+      "properties": {
+        "path": {"minLength": 1, "type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "then": {"required": ["size_bytes"]},
+      "type": "object"
+    },
     "compute": {"type": "object"},
     "created_at": {"minLength": 1, "type": "string"},
     "dataset": {"type": "object"},

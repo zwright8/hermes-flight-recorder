@@ -1153,7 +1153,7 @@ def validate_model_serving_probe_receipt(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("model_serving_probe_receipt", str(receipt_path))
     receipt = _read_object(receipt_path, target, "model_serving_probe_receipt.json")
     if receipt is not None:
-        _validate_model_serving_probe_receipt(receipt, target)
+        _validate_model_serving_probe_receipt(receipt, target, receipt_path)
     return target
 
 
@@ -1163,7 +1163,7 @@ def validate_model_adapter_manifest(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("model_adapter_manifest", str(manifest_path))
     manifest = _read_object(manifest_path, target, "model_adapter_manifest.json")
     if manifest is not None:
-        _validate_model_adapter_manifest(manifest, target)
+        _validate_model_adapter_manifest(manifest, target, manifest_path)
     return target
 
 
@@ -1193,7 +1193,7 @@ def validate_training_plan(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("training_plan", str(plan_path))
     plan = _read_object(plan_path, target, "training_plan.json")
     if plan is not None:
-        _validate_training_plan(plan, target)
+        _validate_training_plan(plan, target, plan_path)
     return target
 
 
@@ -1643,7 +1643,9 @@ def _validate_model_compatibility_report(report: dict[str, Any], target: Validat
     )
 
 
-def _validate_model_serving_probe_receipt(receipt: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_model_serving_probe_receipt(
+    receipt: dict[str, Any], target: ValidationTarget, source_path: Path | None = None
+) -> None:
     _require_equal(
         receipt,
         "schema_version",
@@ -1652,6 +1654,14 @@ def _validate_model_serving_probe_receipt(receipt: dict[str, Any], target: Valid
         prefix="model_serving_probe_receipt.",
     )
     target.errors.extend(model_serving_probe_receipt_errors(receipt))
+    compatibility_report = receipt.get("compatibility_report")
+    if source_path is not None and isinstance(compatibility_report, dict):
+        _validate_model_layer_file_ref(
+            compatibility_report,
+            target,
+            "model_serving_probe_receipt.compatibility_report",
+            source_path,
+        )
     summary = receipt.get("summary") if isinstance(receipt.get("summary"), dict) else {}
     profile = receipt.get("serving_profile") if isinstance(receipt.get("serving_profile"), dict) else {}
     target.details.update(
@@ -1672,7 +1682,9 @@ def _validate_model_serving_probe_receipt(receipt: dict[str, Any], target: Valid
     )
 
 
-def _validate_model_adapter_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_model_adapter_manifest(
+    manifest: dict[str, Any], target: ValidationTarget, source_path: Path | None = None
+) -> None:
     _require_equal(
         manifest,
         "schema_version",
@@ -1683,6 +1695,13 @@ def _validate_model_adapter_manifest(manifest: dict[str, Any], target: Validatio
     target.errors.extend(model_adapter_manifest_errors(manifest))
     base_model = manifest.get("base_model") if isinstance(manifest.get("base_model"), dict) else {}
     training_plan = manifest.get("training_plan") if isinstance(manifest.get("training_plan"), dict) else {}
+    if source_path is not None:
+        _validate_model_layer_file_ref(
+            training_plan,
+            target,
+            "model_adapter_manifest.training_plan",
+            source_path,
+        )
     target.details.update(
         {
             "adapter_id": manifest.get("adapter_id"),
@@ -1771,6 +1790,31 @@ def _validate_model_registry_links_files(
                 target.errors.append(f"{record_label}.sha256 does not match the current file.")
 
 
+def _validate_model_layer_file_ref(
+    record: dict[str, Any], target: ValidationTarget, label: str, source_path: Path
+) -> None:
+    if "sha256" not in record and "size_bytes" not in record:
+        return
+    path_value = record.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        return
+    link_path = _model_registry_link_path(path_value, source_path)
+    if link_path.is_symlink():
+        target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if not link_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to a linked artifact file.")
+        return
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer for path-backed refs.")
+    elif link_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if not _is_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a 64-character hex digest for path-backed refs.")
+    elif _sha256(link_path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
 def _model_registry_link_path(value: str, source_path: Path) -> Path:
     path = Path(value)
     if path.is_absolute():
@@ -1786,12 +1830,19 @@ def _model_registry_link_path(value: str, source_path: Path) -> Path:
     return source_relative
 
 
-def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path | None = None) -> None:
     _require_equal(plan, "schema_version", TRAINING_PLAN_SCHEMA_VERSION, target, prefix="training_plan.")
     target.errors.extend(training_plan_errors(plan))
     model = plan.get("model") if isinstance(plan.get("model"), dict) else {}
     dataset = plan.get("dataset") if isinstance(plan.get("dataset"), dict) else {}
     compatibility_report = plan.get("compatibility_report") if isinstance(plan.get("compatibility_report"), dict) else {}
+    if source_path is not None:
+        _validate_model_layer_file_ref(
+            compatibility_report,
+            target,
+            "training_plan.compatibility_report",
+            source_path,
+        )
     target.details.update(
         {
             "model_ref": model.get("model_ref"),

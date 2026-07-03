@@ -301,6 +301,8 @@ entries for candidates, champions, and rollback targets.
   job.
 - Registry entries link model candidates to datasets, training runs, evals, and
   promotion decisions with path-backed SHA-256 and byte-size evidence.
+- Training plans, serving receipts, and adapter manifests bind their embedded
+  compatibility-report and training-plan refs with matching byte-size evidence.
 - Rollback target is always explicit for promoted models.
 
 ### Verification

@@ -118,12 +118,12 @@
           "adapter_kind": "lora",
           "readiness": "planned",
           "training_plan": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
-          "training_plan_sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a"
+          "training_plan_sha256": "b364d0ef8d6a10d2c18edbad2a4b009fd0e0d8216976439eb98bca79f82aa8eb"
         },
         "path": "experiments/registry/model_adapter_manifests/qwen3_4b_instruct_2507_sft_adapter.json",
         "recorded_at": "2026-07-02T20:37:02Z",
-        "sha256": "6667bd1cd9bb89af16e1317558831ee5d3da5f58e55e8d6da42c8a5e0dfa1696",
-        "size_bytes": 2941,
+        "sha256": "bf7f59695fb554d46bd7ad8736675ab5369d05659de3971945af38029c36a680",
+        "size_bytes": 2966,
         "status": "planned_adapter"
       }
     ],
@@ -155,8 +155,8 @@
         },
         "path": "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json",
         "recorded_at": "2026-07-02T16:22:00Z",
-        "sha256": "ae7262005216c9ade49e03b4b3ba47084cd5d6701a3925adcfe94d7570ac7b3e",
-        "size_bytes": 6471,
+        "sha256": "f42be367c08c1de726dbcc6ae380c8e7422226b660351bc6b191de79fc206a4a",
+        "size_bytes": 6495,
         "status": "metadata_receipt"
       }
     ],
@@ -170,8 +170,8 @@
         },
         "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
         "recorded_at": "2026-07-02T15:37:36Z",
-        "sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a",
-        "size_bytes": 11817,
+        "sha256": "b364d0ef8d6a10d2c18edbad2a4b009fd0e0d8216976439eb98bca79f82aa8eb",
+        "size_bytes": 11841,
         "status": "dry_run_plan"
       }
     ]
