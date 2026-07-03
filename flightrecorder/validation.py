@@ -1327,7 +1327,7 @@ def validate_agentic_training_loop_plan(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("agentic_training_loop_plan", str(plan_path))
     plan = _read_object(plan_path, target, "agentic_training_loop_plan.json")
     if plan is not None:
-        _validate_agentic_training_loop_plan(plan, target)
+        _validate_agentic_training_loop_plan(plan, target, plan_path)
     return target
 
 
@@ -2531,7 +2531,7 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     )
 
 
-def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION, target, prefix="agentic_training_loop_plan.")
     checks = plan.get("checks")
     if not isinstance(checks, list):
@@ -2578,7 +2578,12 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
                 continue
             artifact_count += len(refs)
             for index, ref in enumerate(refs):
-                _validate_agentic_training_loop_plan_ref(ref, target, f"agentic_training_loop_plan.source_artifacts.{role}[{index}]")
+                _validate_agentic_training_loop_plan_ref(
+                    ref,
+                    target,
+                    f"agentic_training_loop_plan.source_artifacts.{role}[{index}]",
+                    source_path,
+                )
     if plan.get("artifact_count") != artifact_count:
         target.errors.append(f"agentic_training_loop_plan.artifact_count expected {artifact_count}, got {plan.get('artifact_count')!r}.")
 
@@ -2637,7 +2642,7 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
     )
 
 
-def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget, label: str) -> None:
+def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
     if not isinstance(ref, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -2656,6 +2661,20 @@ def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget,
             target.errors.append(f"{label}.sha256 must be a SHA-256 string for existing files.")
         if not isinstance(ref.get("size_bytes"), int) or ref.get("size_bytes") < 0:
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        file_path = _resolve_agentic_training_loop_plan_ref_path(path_value, source_path)
+        if file_path is None or not file_path.exists() or not file_path.is_file():
+            target.errors.append(f"{label}.path does not resolve to an existing file.")
+            return
+        if isinstance(ref.get("size_bytes"), int) and ref.get("size_bytes") >= 0 and file_path.stat().st_size != ref.get("size_bytes"):
+            target.errors.append(f"{label}.size_bytes does not match the current file.")
+        if isinstance(ref.get("sha256"), str) and len(ref.get("sha256", "")) == 64 and _sha256(file_path) != ref.get("sha256"):
+            target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _resolve_agentic_training_loop_plan_ref_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not _is_safe_agentic_training_result_path(value):
+        return None
+    return source_path.parent / value
 
 
 def _validate_agentic_training_loop_plan_phase(phase: Any, target: ValidationTarget, label: str) -> None:

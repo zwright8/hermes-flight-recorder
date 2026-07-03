@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -150,6 +151,65 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(validate_completed.returncode, 0, validate_completed.stderr + validate_completed.stdout)
+
+    def test_validate_rejects_stale_or_moved_loop_plan_source_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            agentic_plan = self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-stale-source",
+                artifact_paths={"agentic_training_plan": [agentic_plan]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
+            copied_plan = root / "copy" / "loop.json"
+            copied_plan.parent.mkdir()
+            copied_plan.write_text(loop_plan.read_text(encoding="utf-8"), encoding="utf-8")
+            copied_validation = validate_artifacts(agentic_training_loop_plan_paths=[copied_plan], strict=True)
+            self.assertFalse(copied_validation["passed"])
+            copied_errors = "\n".join(error for target in copied_validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].path does not resolve to an existing file.", copied_errors)
+
+            payload = json.loads(agentic_plan.read_text(encoding="utf-8"))
+            payload["stale_after_plan_write"] = True
+            agentic_plan.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            stale_validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertFalse(stale_validation["passed"])
+            stale_errors = "\n".join(error for target in stale_validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].size_bytes does not match the current file.", stale_errors)
+            self.assertIn("agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].sha256 does not match the current file.", stale_errors)
+
+    def test_loop_plan_refs_are_relative_to_output_directory_for_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            self.write_json(runs / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                plan = build_agentic_training_loop_plan(
+                    out_path=Path("runs/agentic_training_loop_plan.json"),
+                    iteration_id="loop-documented-paths",
+                    artifact_paths={"agentic_training_plan": [Path("runs/agentic_training_plan.json")]},
+                    created_at="2026-07-03T00:00:00+00:00",
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            ref = plan["source_artifacts"]["agentic_training_plan"][0]
+            self.assertEqual(ref["path"], "agentic_training_plan.json")
+            loop_plan = runs / "agentic_training_loop_plan.json"
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertTrue(validation["passed"], validation)
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

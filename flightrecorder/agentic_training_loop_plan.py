@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -166,7 +167,8 @@ def build_agentic_training_loop_plan(
     """Build a side-effect-free contract for one closed-loop training iteration."""
     if not iteration_id:
         raise AgenticTrainingLoopPlanError("iteration_id is required")
-    refs = _artifact_refs(artifact_paths or {}, preserve_paths)
+    output_path = Path(out_path)
+    refs = _artifact_refs(artifact_paths or {}, preserve_paths, output_path)
     phases = [_phase_row(spec, refs) for spec in PHASES]
     checks: list[dict[str, Any]] = []
     _add_check(checks, "phase_contracts_present", len(phases) == len(PHASES), {"phase_count": len(phases)}, {"phase_count": len(PHASES)})
@@ -283,7 +285,7 @@ def build_agentic_training_loop_plan(
         "schema_version": AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
         "iteration_id": iteration_id,
-        "plan_path": _display_path(Path(out_path), preserve_paths),
+        "plan_path": _display_path(output_path, preserve_paths),
         "objective": objective or "",
         "participants": {
             "baseline_policy": baseline or "",
@@ -349,24 +351,28 @@ def write_agentic_training_loop_plan(path: str | Path, plan: dict[str, Any]) -> 
     out_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _artifact_refs(artifact_paths: dict[str, list[str | Path]], preserve_paths: bool) -> dict[str, list[dict[str, Any]]]:
+def _artifact_refs(
+    artifact_paths: dict[str, list[str | Path]],
+    preserve_paths: bool,
+    output_path: Path,
+) -> dict[str, list[dict[str, Any]]]:
     refs: dict[str, list[dict[str, Any]]] = {}
     for role in sorted(artifact_paths):
         normalized_role = ARTIFACT_ROLES.get(role, role)
-        rows = [_artifact_ref(normalized_role, Path(path), preserve_paths) for path in artifact_paths[role] if str(path)]
+        rows = [_artifact_ref(normalized_role, Path(path), preserve_paths, output_path) for path in artifact_paths[role] if str(path)]
         if rows:
             refs[normalized_role] = rows
     return refs
 
 
-def _artifact_ref(role: str, path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _artifact_ref(role: str, path: Path, preserve_paths: bool, output_path: Path) -> dict[str, Any]:
     exists = path.exists()
     is_file = path.is_file()
     is_dir = path.is_dir()
     payload = _read_json(path) if is_file and path.suffix == ".json" else {}
     return {
         "role": role,
-        "path": _display_path(path, preserve_paths),
+        "path": _display_source_path(path, output_path, preserve_paths),
         "kind": "directory" if is_dir else "file",
         "exists": exists,
         "sha256": _sha256(path) if is_file else None,
@@ -456,6 +462,17 @@ def _display_path(path: Path, preserve_paths: bool) -> str:
         return str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
         return path.name
+
+
+def _display_source_path(path: Path, output_path: Path, preserve_paths: bool) -> str:
+    if preserve_paths:
+        return str(path)
+    try:
+        source = path if path.is_absolute() else Path.cwd() / path
+        output_dir = output_path.parent if output_path.is_absolute() else Path.cwd() / output_path.parent
+        return os.path.relpath(source.resolve(), output_dir.resolve())
+    except (OSError, ValueError):
+        return str(path)
 
 
 def _sha256(path: Path) -> str:

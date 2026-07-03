@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flightrecorder.agentic_training_loop_plan import build_agentic_training_loop_plan, write_agentic_training_loop_plan
 from flightrecorder.cli import main
-from flightrecorder.schema_registry import check_schema_file, list_schema_records
+from flightrecorder.schema_registry import list_schema_records
 
 
 def run_cli(args):
@@ -20,8 +20,8 @@ class AgenticLoopLedgerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             blocked_plan = self.write_loop_plan(root / "plans" / "blocked.json", "loop-001", {})
-            ready_artifacts = self.write_ready_artifacts(root / "artifacts")
-            ready_plan = self.write_loop_plan(root / "plans" / "ready.json", "loop-002", ready_artifacts)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            ready_plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-002", ready_artifacts)
             ledger = root / "ledger.json"
 
             code = run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--plan", str(ready_plan), "--out", str(ledger)])
