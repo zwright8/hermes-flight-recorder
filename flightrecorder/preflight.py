@@ -14,6 +14,7 @@ from .training import DATASET_SPLIT_ARTIFACTS, DATASET_SPLIT_NAMES
 
 TRAINER_PREFLIGHT_SCHEMA_VERSION = "hfr.trainer_preflight.v1"
 TRAINER_LAUNCH_CHECK_SCHEMA_VERSION = "hfr.trainer_launch_check.v1"
+TRAINER_DIRECTORY_TREE_HASH_ALGORITHM = "sha256(sorted-relative-path-size-file-sha256)"
 
 _TRAINING_EXPORT_BASE_FILES = (
     "manifest.json",
@@ -821,7 +822,12 @@ def _dir_record(path: Path, preserve_paths: bool, output_path: Path) -> dict[str
         "symlink": path.is_symlink(),
     }
     if regular_directory:
+        tree = _tree_fingerprint(path)
         record["entry_count"] = sum(1 for _ in path.iterdir())
+        record["file_count"] = tree["file_count"]
+        record["size_bytes"] = tree["size_bytes"]
+        record["sha256"] = tree["sha256"]
+        record["tree_hash_algorithm"] = TRAINER_DIRECTORY_TREE_HASH_ALGORITHM
     return record
 
 
@@ -853,6 +859,24 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _tree_fingerprint(root: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    file_count = 0
+    size_bytes = 0
+    for item in sorted(candidate for candidate in root.rglob("*") if candidate.is_file() and not candidate.is_symlink()):
+        relative = item.relative_to(root)
+        size = item.stat().st_size
+        digest.update(str(relative).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(size).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(_sha256(item).encode("ascii"))
+        digest.update(b"\0")
+        file_count += 1
+        size_bytes += size
+    return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
 
 
 def _display_path(path: Path, preserve_paths: bool = False) -> str:

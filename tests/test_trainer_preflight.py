@@ -538,6 +538,68 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertNotIn("stale-after-preflight", archived_text)
             self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
 
+    def test_trainer_archive_rejects_stale_preflight_directory_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            gate = root / "training_gate.json"
+            preflight = root / "trainer_preflight.json"
+            launch_check = root / "trainer_launch_check.json"
+            archive = root / "trainer_archive"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(runs / "training_export")])
+            self.assertEqual(run_cli(["gate-export", "--training-export", str(runs / "training_export"), "--out", str(gate)]), 0)
+            dataset_version = json.loads((runs / "training_export" / "manifest.json").read_text(encoding="utf-8"))["dataset_version"]
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--training-export",
+                        str(runs / "training_export"),
+                        "--require-dataset-version",
+                        dataset_version,
+                        "--trainer-command",
+                        f"python train.py --dataset {runs / 'training_export'}",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["trainer-launch-check", "--preflight", str(preflight), "--out", str(launch_check)]), 0)
+            late_file = runs / "training_export" / "late_after_preflight.json"
+            late_file.write_text(json.dumps({"stale": "directory-mutation-after-preflight"}) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "trainer-archive",
+                    "--preflight",
+                    str(preflight),
+                    "--launch-check",
+                    str(launch_check),
+                    "--out",
+                    str(archive),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            manifest = json.loads((archive / "trainer_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(manifest["passed"])
+            self.assertFalse(manifest["self_contained"])
+            self.assertTrue(
+                any(
+                    item["role"] == "trainer_artifact"
+                    and item.get("name") == "training_export"
+                    and "sha256 does not match preflight record" in item["reason"]
+                    for item in manifest["missing"]
+                )
+            )
+            self.assertFalse(any(path.name == "late_after_preflight.json" for path in (archive / "artifacts").rglob("*.json")))
+            self.assertEqual(run_cli(["validate", "--trainer-archive", str(archive), "--strict"]), 0)
+
     def test_trainer_preflight_accepts_passed_training_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -606,6 +668,12 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(result["gates"][0]["validation"]["passed"])
             self.assertEqual(result["metadata"]["launcher"], "dry-run")
             self.assertEqual(result["trainer_command"]["argv"][:2], ["python", "train.py"])
+            self.assertEqual(
+                result["artifacts"]["training_export"]["tree_hash_algorithm"],
+                "sha256(sorted-relative-path-size-file-sha256)",
+            )
+            self.assertEqual(len(result["artifacts"]["training_export"]["sha256"]), 64)
+            self.assertGreater(result["artifacts"]["training_export"]["file_count"], 0)
             self.assertIn("training_export_sft_jsonl", result["artifacts"])
             self.assertEqual(len(result["artifacts"]["training_export_sft_jsonl"]["sha256"]), 64)
             self.assertIn("training_export_dataset_splits_json", result["artifacts"])

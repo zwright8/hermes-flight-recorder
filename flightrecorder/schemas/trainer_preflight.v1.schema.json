@@ -138,6 +138,10 @@
         "exists": {
           "type": "boolean"
         },
+        "file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "kind": {
           "enum": [
             "file",
@@ -164,6 +168,9 @@
         },
         "symlink": {
           "type": "boolean"
+        },
+        "tree_hash_algorithm": {
+          "const": "sha256(sorted-relative-path-size-file-sha256)"
         }
       },
       "required": [

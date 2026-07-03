@@ -9,11 +9,15 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
+from .preflight import (
+    TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
+    TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
+    TRAINER_PREFLIGHT_SCHEMA_VERSION,
+)
 
 TRAINER_ARCHIVE_SCHEMA_VERSION = "hfr.trainer_archive.v1"
 _ARCHIVE_MANIFEST = "trainer_archive.json"
-_TREE_HASH_ALGORITHM = "sha256(sorted-relative-path-size-file-sha256)"
+_TREE_HASH_ALGORITHM = TRAINER_DIRECTORY_TREE_HASH_ALGORITHM
 
 
 class TrainerArchiveError(ValueError):
@@ -377,20 +381,48 @@ def _resolve_recorded_path(value: Any, base_dir: Path) -> tuple[Path | None, str
 
 
 def _record_integrity_error(record: dict[str, Any], source_path: Path) -> str | None:
-    if not source_path.is_file() or source_path.is_symlink():
+    if source_path.is_symlink():
         return None
-    expected_sha = record.get("sha256")
-    if expected_sha is not None:
-        if not _is_sha256(expected_sha):
-            return "sha256 is invalid in preflight record"
-        if _sha256(source_path) != expected_sha:
-            return "sha256 does not match preflight record"
-    expected_size = record.get("size_bytes")
-    if expected_size is not None:
-        if not _is_non_negative_int(expected_size):
-            return "size_bytes is invalid in preflight record"
-        if source_path.stat().st_size != expected_size:
-            return "size_bytes does not match preflight record"
+    if source_path.is_file():
+        expected_sha = record.get("sha256")
+        if expected_sha is not None:
+            if not _is_sha256(expected_sha):
+                return "sha256 is invalid in preflight record"
+            if _sha256(source_path) != expected_sha:
+                return "sha256 does not match preflight record"
+        expected_size = record.get("size_bytes")
+        if expected_size is not None:
+            if not _is_non_negative_int(expected_size):
+                return "size_bytes is invalid in preflight record"
+            if source_path.stat().st_size != expected_size:
+                return "size_bytes does not match preflight record"
+        return None
+    if source_path.is_dir():
+        expected_algorithm = record.get("tree_hash_algorithm")
+        if expected_algorithm is not None and expected_algorithm != _TREE_HASH_ALGORITHM:
+            return "tree_hash_algorithm is invalid in preflight record"
+        tree: dict[str, Any] | None = None
+        expected_sha = record.get("sha256")
+        if expected_sha is not None:
+            if not _is_sha256(expected_sha):
+                return "sha256 is invalid in preflight record"
+            tree = _tree_fingerprint(source_path)
+            if tree["sha256"] != expected_sha:
+                return "sha256 does not match preflight record"
+        expected_file_count = record.get("file_count")
+        if expected_file_count is not None:
+            if not _is_non_negative_int(expected_file_count):
+                return "file_count is invalid in preflight record"
+            tree = tree or _tree_fingerprint(source_path)
+            if tree["file_count"] != expected_file_count:
+                return "file_count does not match preflight record"
+        expected_size = record.get("size_bytes")
+        if expected_size is not None:
+            if not _is_non_negative_int(expected_size):
+                return "size_bytes is invalid in preflight record"
+            tree = tree or _tree_fingerprint(source_path)
+            if tree["size_bytes"] != expected_size:
+                return "size_bytes does not match preflight record"
     return None
 
 

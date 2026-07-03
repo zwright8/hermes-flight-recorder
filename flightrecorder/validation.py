@@ -57,7 +57,11 @@ from .model_registry import (
     model_serving_probe_receipt_errors,
     training_plan_errors,
 )
-from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION, TRAINER_PREFLIGHT_SCHEMA_VERSION
+from .preflight import (
+    TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
+    TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
+    TRAINER_PREFLIGHT_SCHEMA_VERSION,
+)
 from .governance import (
     PROMOTION_ALIAS_APPLY_SCHEMA_VERSION,
     PROMOTION_CARDS_REQUIRED_INPUTS,
@@ -13412,6 +13416,7 @@ def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: 
             target.errors.append(f"{label}.symlink must be a boolean when present.")
         if record.get("regular_directory") is True and not _is_non_negative_int(record.get("entry_count")):
             target.errors.append(f"{label}.entry_count must be a non-negative integer for existing directories.")
+        _validate_preflight_directory_hash(record, target, label, source_path)
 
 
 def _validate_trainer_preflight_dataset_selection(value: Any, target: ValidationTarget) -> None:
@@ -13484,6 +13489,44 @@ def _validate_preflight_file_hash(
         target.errors.append(f"{label}.size_bytes does not match the current file.")
     if _sha256(file_path) != record.get("sha256"):
         target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _validate_preflight_directory_hash(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if record.get("exists") is not True or record.get("regular_directory") is False:
+        return
+    has_tree_fields = any(field_name in record for field_name in ("file_count", "size_bytes", "sha256", "tree_hash_algorithm"))
+    if not has_tree_fields:
+        return
+    if record.get("tree_hash_algorithm") != TRAINER_DIRECTORY_TREE_HASH_ALGORITHM:
+        target.errors.append(f"{label}.tree_hash_algorithm is invalid.")
+    if not _is_non_negative_int(record.get("file_count")):
+        target.errors.append(f"{label}.file_count must be a non-negative integer for existing directories.")
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing directories.")
+    if not _is_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for existing directories.")
+        return
+    directory_path = _resolve_preflight_record_path(record.get("path"), source_path)
+    if directory_path is None:
+        return
+    if directory_path.is_symlink():
+        target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if not directory_path.exists() or not directory_path.is_dir():
+        target.errors.append(f"{label}.path does not resolve to an existing directory.")
+        return
+    tree = _directory_tree_fingerprint(directory_path)
+    if _is_non_negative_int(record.get("file_count")) and tree["file_count"] != record.get("file_count"):
+        target.errors.append(f"{label}.file_count does not match the current directory.")
+    if _is_non_negative_int(record.get("size_bytes")) and tree["size_bytes"] != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current directory.")
+    if tree["sha256"] != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current directory.")
 
 
 def _resolve_preflight_record_path(value: Any, source_path: Path) -> Path | None:
@@ -15791,12 +15834,30 @@ def _sha256(path: Path) -> str:
 
 def _directory_sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
+    for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file() and not candidate.is_symlink()):
         digest.update(str(item.relative_to(path)).encode("utf-8"))
         digest.update(b"\0")
         digest.update(_sha256(item).encode("ascii"))
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def _directory_tree_fingerprint(path: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    file_count = 0
+    size_bytes = 0
+    for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file() and not candidate.is_symlink()):
+        relative = item.relative_to(path)
+        size = item.stat().st_size
+        digest.update(str(relative).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(size).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(_sha256(item).encode("ascii"))
+        digest.update(b"\0")
+        file_count += 1
+        size_bytes += size
+    return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
 
 
 def _score_value(value: Any) -> int:
