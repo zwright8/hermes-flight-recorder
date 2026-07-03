@@ -355,6 +355,10 @@ assert evidence_bundle["metrics"]["run_digest_coverage"]["task_completion_status
     {"id": "not_applicable", "count": 1},
 ]
 assert evidence_bundle["metrics"]["repair_queue"]["critical_item_count"] == 14
+assert evidence_bundle["artifacts"]["suite_summary"]["path"] == "suite_summary.json"
+assert evidence_bundle["artifacts"]["repair_queue"]["path"] == "repair_queue.json"
+assert evidence_bundle["artifacts"]["training_export"]["path"] == "training_export"
+assert evidence_bundle["artifacts"]["training_export_curriculum"]["path"] == "training_export/curriculum.json"
 assert len(evidence_bundle["artifacts"]["training_export_curriculum"]["sha256"]) == 64
 assert evidence_bundle["failed_check_count"] == 0
 assert improvement_plan["schema_version"] == "hfr.improvement_plan.v1"

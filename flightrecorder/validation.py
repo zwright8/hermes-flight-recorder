@@ -14180,9 +14180,13 @@ def _validate_evidence_bundle_serving_lifecycle(
     artifact = artifacts.get("serving_lifecycle") if isinstance(artifacts.get("serving_lifecycle"), dict) else {}
     lifecycle_path = _resolve_evidence_bundle_artifact_path(artifact.get("path"), source_path)
     if lifecycle_path is None or not lifecycle_path.exists() or not lifecycle_path.is_file():
+        target.errors.append("evidence_bundle.artifacts.serving_lifecycle.path must resolve to an existing file when serving_lifecycle metrics are present.")
         return
     try:
         lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        target.errors.append(f"evidence_bundle.artifacts.serving_lifecycle is not valid UTF-8: {exc}")
+        return
     except json.JSONDecodeError as exc:
         target.errors.append(f"evidence_bundle.artifacts.serving_lifecycle contains invalid JSON: {exc}")
         return
@@ -14228,9 +14232,13 @@ def _validate_evidence_bundle_eval_summary(
         return
     eval_summary_path = _resolve_evidence_bundle_artifact_path(artifact.get("path"), source_path)
     if eval_summary_path is None or not eval_summary_path.exists() or not eval_summary_path.is_file():
+        target.errors.append("evidence_bundle.artifacts.eval_summary.path must resolve to an existing file when eval_summary metrics are present.")
         return
     try:
         summary = json.loads(eval_summary_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        target.errors.append(f"evidence_bundle.artifacts.eval_summary is not valid UTF-8: {exc}")
+        return
     except json.JSONDecodeError as exc:
         target.errors.append(f"evidence_bundle.artifacts.eval_summary contains invalid JSON: {exc}")
         return
@@ -14437,11 +14445,7 @@ def _resolve_evidence_bundle_artifact_path(value: Any, source_path: Path) -> Pat
     path = Path(value)
     if path.is_absolute():
         return path
-    candidates = [Path.cwd() / path, source_path.parent / path]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return candidates[-1]
+    return source_path.parent / path
 
 
 def _validate_bundle_gate_validation(value: Any, target: ValidationTarget, label: str) -> None:

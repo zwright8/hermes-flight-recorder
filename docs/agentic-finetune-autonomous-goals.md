@@ -590,6 +590,8 @@ card, and dataset card decisions.
 - New secret-exposure, forbidden-action, unsupported-claim, or critical
   task-completion regressions block promotion.
 - Promotion decisions are reproducible from artifacts.
+- Evidence-bundle validation reopens recorded eval-summary and serving-lifecycle
+  artifacts from the bundle file location before trusting derived metrics.
 - Action-ledger validation reopens recorded evidence bundles from the ledger
   file location and rejects missing, moved, stale, malformed, or
   cwd-substituted bundle records.

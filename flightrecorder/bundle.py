@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -107,20 +108,21 @@ def build_evidence_bundle(
     artifacts: dict[str, Any] = {}
     checks: list[dict[str, Any]] = []
     metrics: dict[str, Any] = {}
+    output_path = Path(out_path)
 
     if runs_dir is not None:
         runs_path = Path(runs_dir)
-        artifacts["runs_dir"] = _dir_record(runs_path, preserve_paths)
+        artifacts["runs_dir"] = _dir_record(runs_path, preserve_paths, output_path)
         _add_presence_check(checks, "runs_dir_exists", runs_path.exists() and runs_path.is_dir(), {"artifact": "runs_dir"})
         _summarize_run_digest_coverage(runs_path, metrics, checks, preserve_paths)
 
     if suite_summary_path is not None:
         summary_path = Path(suite_summary_path)
-        suite_summary = _read_json_artifact(summary_path, artifacts, "suite_summary", preserve_paths)
+        suite_summary = _read_json_artifact(summary_path, artifacts, "suite_summary", preserve_paths, output_path)
         _summarize_suite_summary(suite_summary, metrics, checks)
 
     if scenario_quality_path is not None:
-        scenario_quality = _read_json_artifact(Path(scenario_quality_path), artifacts, "scenario_quality", preserve_paths)
+        scenario_quality = _read_json_artifact(Path(scenario_quality_path), artifacts, "scenario_quality", preserve_paths, output_path)
         _summarize_boolean_artifact(
             scenario_quality,
             metrics,
@@ -140,7 +142,7 @@ def build_evidence_bundle(
         )
 
     if evidence_coverage_path is not None:
-        evidence_coverage = _read_json_artifact(Path(evidence_coverage_path), artifacts, "evidence_coverage", preserve_paths)
+        evidence_coverage = _read_json_artifact(Path(evidence_coverage_path), artifacts, "evidence_coverage", preserve_paths, output_path)
         _summarize_boolean_artifact(
             evidence_coverage,
             metrics,
@@ -157,7 +159,7 @@ def build_evidence_bundle(
         )
 
     if trace_observability_path is not None:
-        trace_observability = _read_json_artifact(Path(trace_observability_path), artifacts, "trace_observability", preserve_paths)
+        trace_observability = _read_json_artifact(Path(trace_observability_path), artifacts, "trace_observability", preserve_paths, output_path)
         _summarize_boolean_artifact(
             trace_observability,
             metrics,
@@ -176,7 +178,7 @@ def build_evidence_bundle(
         )
 
     if repair_queue_path is not None:
-        repair_queue = _read_json_artifact(Path(repair_queue_path), artifacts, "repair_queue", preserve_paths)
+        repair_queue = _read_json_artifact(Path(repair_queue_path), artifacts, "repair_queue", preserve_paths, output_path)
         _summarize_boolean_artifact(
             repair_queue,
             metrics,
@@ -195,11 +197,11 @@ def build_evidence_bundle(
         )
 
     if validation_path is not None:
-        validation = _read_json_artifact(Path(validation_path), artifacts, "validation", preserve_paths)
+        validation = _read_json_artifact(Path(validation_path), artifacts, "validation", preserve_paths, output_path)
         _summarize_validation_artifact(validation, metrics, checks)
 
     if eval_summary_path is not None:
-        eval_summary = _read_json_artifact(Path(eval_summary_path), artifacts, "eval_summary", preserve_paths)
+        eval_summary = _read_json_artifact(Path(eval_summary_path), artifacts, "eval_summary", preserve_paths, output_path)
         _summarize_eval_summary(eval_summary, metrics, checks)
 
     if training_export_dir is not None:
@@ -207,10 +209,10 @@ def build_evidence_bundle(
         manifest_path = training_dir / "manifest.json"
         dataset_metrics_path = training_dir / "dataset_metrics.json"
         curriculum_path = training_dir / "curriculum.json"
-        artifacts["training_export"] = _dir_record(training_dir, preserve_paths)
-        artifacts["training_export_manifest"] = _file_record(manifest_path, preserve_paths)
-        artifacts["training_export_dataset_metrics"] = _file_record(dataset_metrics_path, preserve_paths)
-        artifacts["training_export_curriculum"] = _file_record(curriculum_path, preserve_paths)
+        artifacts["training_export"] = _dir_record(training_dir, preserve_paths, output_path)
+        artifacts["training_export_manifest"] = _file_record(manifest_path, preserve_paths, output_path)
+        artifacts["training_export_dataset_metrics"] = _file_record(dataset_metrics_path, preserve_paths, output_path)
+        artifacts["training_export_curriculum"] = _file_record(curriculum_path, preserve_paths, output_path)
         manifest = _read_optional_json(manifest_path)
         dataset_metrics = _read_optional_json(dataset_metrics_path)
         curriculum = _read_optional_json(curriculum_path)
@@ -240,7 +242,7 @@ def build_evidence_bundle(
 
     if compare_export_dir is not None:
         compare_dir = Path(compare_export_dir)
-        artifacts["compare_export"] = _dir_record(compare_dir, preserve_paths)
+        artifacts["compare_export"] = _dir_record(compare_dir, preserve_paths, output_path)
         manifest = _read_optional_json(compare_dir / "manifest.json")
         _add_presence_check(checks, "compare_export_exists", compare_dir.exists() and compare_dir.is_dir(), {"artifact": "compare_export"})
         if isinstance(manifest, dict):
@@ -263,7 +265,7 @@ def build_evidence_bundle(
 
     if review_export_dir is not None:
         review_dir = Path(review_export_dir)
-        artifacts["review_export"] = _dir_record(review_dir, preserve_paths)
+        artifacts["review_export"] = _dir_record(review_dir, preserve_paths, output_path)
         manifest = _read_optional_json(review_dir / "manifest.json")
         _add_presence_check(checks, "review_export_exists", review_dir.exists() and review_dir.is_dir(), {"artifact": "review_export"})
         if isinstance(manifest, dict):
@@ -275,7 +277,7 @@ def build_evidence_bundle(
 
     if reviewed_export_dir is not None:
         reviewed_dir = Path(reviewed_export_dir)
-        artifacts["reviewed_export"] = _dir_record(reviewed_dir, preserve_paths)
+        artifacts["reviewed_export"] = _dir_record(reviewed_dir, preserve_paths, output_path)
         manifest = _read_optional_json(reviewed_dir / "manifest.json")
         _add_presence_check(checks, "reviewed_export_exists", reviewed_dir.exists() and reviewed_dir.is_dir(), {"artifact": "reviewed_export"})
         if isinstance(manifest, dict):
@@ -287,7 +289,7 @@ def build_evidence_bundle(
             }
 
     if review_calibration_path is not None:
-        review_calibration = _read_json_artifact(Path(review_calibration_path), artifacts, "review_calibration", preserve_paths)
+        review_calibration = _read_json_artifact(Path(review_calibration_path), artifacts, "review_calibration", preserve_paths, output_path)
         _summarize_boolean_artifact(
             review_calibration,
             metrics,
@@ -305,11 +307,11 @@ def build_evidence_bundle(
         )
 
     if live_smoke_summary_path is not None:
-        live_smoke_summary = _read_json_artifact(Path(live_smoke_summary_path), artifacts, "live_smoke_summary", preserve_paths)
+        live_smoke_summary = _read_json_artifact(Path(live_smoke_summary_path), artifacts, "live_smoke_summary", preserve_paths, output_path)
         _summarize_live_smoke_summary(live_smoke_summary, metrics, checks, preserve_paths=preserve_paths)
 
     if serving_lifecycle_path is not None:
-        serving_lifecycle = _read_json_artifact(Path(serving_lifecycle_path), artifacts, "serving_lifecycle", preserve_paths)
+        serving_lifecycle = _read_json_artifact(Path(serving_lifecycle_path), artifacts, "serving_lifecycle", preserve_paths, output_path)
         _summarize_serving_lifecycle(serving_lifecycle, metrics, checks)
 
     _summarize_trainer_handoff(
@@ -317,6 +319,7 @@ def build_evidence_bundle(
         metrics,
         checks,
         preserve_paths=preserve_paths,
+        output_path=output_path,
         trainer_preflight_path=trainer_preflight_path,
         trainer_launch_check_path=trainer_launch_check_path,
         trainer_archive_path=trainer_archive_path,
@@ -330,6 +333,7 @@ def build_evidence_bundle(
         metrics,
         checks,
         preserve_paths=preserve_paths,
+        output_path=output_path,
         manifest_paths=harness_manifest_paths,
         result_paths=harness_result_paths,
         require_harness=require_harness,
@@ -338,7 +342,7 @@ def build_evidence_bundle(
     gate_rows: list[dict[str, Any]] = []
     for index, gate_path in enumerate(gate_paths or []):
         gate_name = f"gate_{index + 1}"
-        gate = _read_json_artifact(Path(gate_path), artifacts, gate_name, preserve_paths)
+        gate = _read_json_artifact(Path(gate_path), artifacts, gate_name, preserve_paths, output_path)
         gate_id = _gate_id(gate, gate_name)
         schema_version = str(gate.get("schema_version") or "")
         passed = bool(gate.get("passed")) if isinstance(gate, dict) else False
@@ -1343,6 +1347,7 @@ def _summarize_harness_handoff(
     checks: list[dict[str, Any]],
     *,
     preserve_paths: bool,
+    output_path: Path,
     manifest_paths: list[str | Path] | None,
     result_paths: list[str | Path] | None,
     require_harness: bool,
@@ -1376,8 +1381,8 @@ def _summarize_harness_handoff(
     for index, (manifest_path, result_path) in enumerate(zip(manifests, results), start=1):
         manifest_key = f"harness_manifest_{index}"
         result_key = f"harness_result_{index}"
-        manifest = _read_json_artifact(manifest_path, artifacts, manifest_key, preserve_paths)
-        result = _read_json_artifact(result_path, artifacts, result_key, preserve_paths)
+        manifest = _read_json_artifact(manifest_path, artifacts, manifest_key, preserve_paths, output_path)
+        result = _read_json_artifact(result_path, artifacts, result_key, preserve_paths, output_path)
         row = _harness_pair_metrics(manifest_path, manifest, result_path, result, preserve_paths)
         rows.append(row)
         is_run_suite_pair = row["runner"] == "flightrecorder_run_suite"
@@ -1648,6 +1653,7 @@ def _summarize_trainer_handoff(
     checks: list[dict[str, Any]],
     *,
     preserve_paths: bool,
+    output_path: Path,
     trainer_preflight_path: str | Path | None,
     trainer_launch_check_path: str | Path | None,
     trainer_archive_path: str | Path | None,
@@ -1673,9 +1679,9 @@ def _summarize_trainer_handoff(
             continue
         path = Path(raw_path)
         if "manifest" in spec:
-            artifact = _read_json_manifest_artifact(path, artifacts, stage_id, spec["manifest"], preserve_paths)
+            artifact = _read_json_manifest_artifact(path, artifacts, stage_id, spec["manifest"], preserve_paths, output_path)
         else:
-            artifact = _read_json_artifact(path, artifacts, stage_id, preserve_paths)
+            artifact = _read_json_artifact(path, artifacts, stage_id, preserve_paths, output_path)
         stage = _trainer_stage_metrics(stage_id, artifact, artifacts[stage_id], spec)
         stages.append(stage)
         _add_presence_check(
@@ -1885,8 +1891,14 @@ def _validation_summary_counts_consistent(summary: dict[str, Any]) -> bool:
     return passed == expected_passed
 
 
-def _read_json_artifact(path: Path, artifacts: dict[str, Any], name: str, preserve_paths: bool) -> dict[str, Any]:
-    artifacts[name] = _file_record(path, preserve_paths)
+def _read_json_artifact(
+    path: Path,
+    artifacts: dict[str, Any],
+    name: str,
+    preserve_paths: bool,
+    output_path: Path | None,
+) -> dict[str, Any]:
+    artifacts[name] = _file_record(path, preserve_paths, output_path)
     if not path.exists():
         raise EvidenceBundleError(f"Evidence artifact not found: {path}")
     value = _read_optional_json(path)
@@ -1903,12 +1915,13 @@ def _read_json_manifest_artifact(
     name: str,
     manifest_name: str,
     preserve_paths: bool,
+    output_path: Path | None,
 ) -> dict[str, Any]:
     if not path.is_dir():
-        return _read_json_artifact(path, artifacts, name, preserve_paths)
-    artifacts[name] = _dir_record(path, preserve_paths)
+        return _read_json_artifact(path, artifacts, name, preserve_paths, output_path)
+    artifacts[name] = _dir_record(path, preserve_paths, output_path)
     manifest_path = path / manifest_name
-    value = _read_json_artifact(manifest_path, artifacts, f"{name}_manifest", preserve_paths)
+    value = _read_json_artifact(manifest_path, artifacts, f"{name}_manifest", preserve_paths, output_path)
     artifacts[name]["schema_version"] = value.get("schema_version")
     artifacts[name]["passed"] = value.get("passed") if isinstance(value.get("passed"), bool) else None
     return value
@@ -1965,16 +1978,16 @@ def _gate_validation_metrics(gate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _file_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
-    record: dict[str, Any] = {"path": _display_path(path, preserve_paths), "exists": path.exists(), "kind": "file"}
+def _file_record(path: Path, preserve_paths: bool, output_path: Path | None) -> dict[str, Any]:
+    record: dict[str, Any] = {"path": _display_path_for_output_source(path, output_path, preserve_paths), "exists": path.exists(), "kind": "file"}
     if path.exists() and path.is_file():
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
     return record
 
 
-def _dir_record(path: Path, preserve_paths: bool) -> dict[str, Any]:
-    record: dict[str, Any] = {"path": _display_path(path, preserve_paths), "exists": path.exists(), "kind": "directory"}
+def _dir_record(path: Path, preserve_paths: bool, output_path: Path | None) -> dict[str, Any]:
+    record: dict[str, Any] = {"path": _display_path_for_output_source(path, output_path, preserve_paths), "exists": path.exists(), "kind": "directory"}
     if path.exists() and path.is_dir():
         record["entry_count"] = sum(1 for _ in path.iterdir())
     return record
@@ -2000,6 +2013,17 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _display_path_for_output_source(path: Path, output_path: Path | None, preserve_paths: bool = False) -> str:
+    if preserve_paths or output_path is None:
+        return _display_path(path, preserve_paths)
+    raw = str(path)
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    output_dir = output_path.parent.resolve()
+    return os.path.relpath(resolved, output_dir)
 
 
 def _is_windows_absolute(value: str) -> bool:

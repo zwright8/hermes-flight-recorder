@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -868,6 +869,89 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["metrics"]["eval_summary"]["risk_count"], 0)
             self.assertEqual(bundle["decision"]["key_metrics"]["eval_summary"]["heldout_status"], "single_arm")
             self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_evidence_bundle_writes_output_relative_eval_summary_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            suite = _write_eval_suite_summary(source_dir / "candidate_suite.json")
+            eval_summary = source_dir / "eval_summary.json"
+            bundle_path = output_dir / "evidence_bundle.json"
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]),
+                0,
+            )
+
+            self.assertEqual(
+                run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]),
+                0,
+            )
+
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertEqual(bundle["artifacts"]["eval_summary"]["path"], "../src/eval_summary.json")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+
+    def test_validate_rejects_evidence_bundle_cwd_relative_eval_summary_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "src"
+            output_dir = root / "out"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            suite = _write_eval_suite_summary(source_dir / "candidate_suite.json")
+            eval_summary = source_dir / "eval_summary.json"
+            bundle_path = output_dir / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]),
+                0,
+            )
+            self.assertEqual(
+                run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]),
+                0,
+            )
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["eval_summary"]["path"] = "eval_summary.json"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(source_dir)
+                code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.eval_summary.path must resolve to an existing file", errors)
+
+    def test_validate_rejects_evidence_bundle_non_utf8_eval_summary_without_crashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = root / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(
+                run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]),
+                0,
+            )
+            self.assertEqual(
+                run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]),
+                0,
+            )
+            eval_summary.write_bytes(b"\xff\xfe\x00")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.eval_summary is not valid UTF-8", errors)
 
     def test_validate_evidence_bundle_rejects_forged_eval_summary_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
