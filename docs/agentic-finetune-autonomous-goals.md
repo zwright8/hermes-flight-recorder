@@ -652,6 +652,8 @@ card, and dataset card decisions.
 - Trainer wrapper dry-run receipts reject passed trainer-input and external-code
   records that omit SHA-256 or byte-size evidence, or carry malformed expected
   SHA-256 values, while preserving blank failed-input diagnostics.
+- Harness run manifests reject fake-secret canary declarations whose stored
+  SHA-256 fingerprints are missing or malformed.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

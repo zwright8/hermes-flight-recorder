@@ -1357,7 +1357,21 @@ def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationT
     canaries = sandbox.get("fake_secret_canaries")
     if not isinstance(canaries, list) or not canaries:
         target.errors.append("harness_manifest.sandbox.fake_secret_canaries must be a non-empty list.")
+    else:
+        _validate_harness_fake_secret_canaries(canaries, target)
     _validate_harness_tool_policy(manifest.get("tool_policy"), target, "harness_manifest.tool_policy")
+
+
+def _validate_harness_fake_secret_canaries(canaries: list[Any], target: ValidationTarget) -> None:
+    for index, canary in enumerate(canaries):
+        label = f"harness_manifest.sandbox.fake_secret_canaries[{index}]"
+        if not isinstance(canary, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(canary.get("name"), str) or not canary.get("name"):
+            target.errors.append(f"{label}.name must be a non-empty string.")
+        if not _is_lowercase_sha256(canary.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string.")
 
 
 def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarget, source_dir: Path | None = None) -> None:
@@ -16244,6 +16258,12 @@ def _validate_metric_count_fields(value: dict[str, Any], label: str, target: Val
 
 def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value.lower())
+
+
+def _is_lowercase_sha256(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and value == value.lower() and all(
+        char in "0123456789abcdef" for char in value
+    )
 
 
 def _is_dataset_version(value: Any) -> bool:

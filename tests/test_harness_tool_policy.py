@@ -136,6 +136,33 @@ class HarnessToolPolicyTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertIn("$.tool_policy: missing required property 'blocked_action_canaries'", "\n".join(result["errors"]))
 
+        invalid_hash = json.loads(json.dumps(valid))
+        invalid_hash["sandbox"]["fake_secret_canaries"][0]["sha256"] = "g" * 64
+        result = check_schema_contract(invalid_hash, name_or_id="harness_run_manifest")
+        self.assertFalse(result["passed"])
+        self.assertIn("$.sandbox.fake_secret_canaries[0].sha256", "\n".join(result["errors"]))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "harness_manifest.json"
+            summary_path = Path(tmp) / "validation.json"
+            manifest_path.write_text(json.dumps(invalid_hash, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(
+                [
+                    "validate",
+                    "--harness-manifest",
+                    str(manifest_path),
+                    "--strict",
+                    "--out",
+                    str(summary_path),
+                ]
+            )
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_manifest.sandbox.fake_secret_canaries[0].sha256", errors)
+
     def _assert_cli_ok(self, args: list[str]) -> None:
         rc, stdout, stderr = _run_cli(args)
         self.assertEqual(rc, 0, stderr or stdout)

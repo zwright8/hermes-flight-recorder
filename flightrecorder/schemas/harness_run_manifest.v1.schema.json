@@ -38,7 +38,7 @@
             "additionalProperties": true,
             "properties": {
               "name": { "minLength": 1, "type": "string" },
-              "sha256": { "minLength": 64, "type": "string" }
+              "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" }
             },
             "required": ["name", "sha256"],
             "type": "object"
