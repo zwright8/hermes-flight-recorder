@@ -475,6 +475,10 @@ class CliReportTests(unittest.TestCase):
             self.assertTrue(summary["validation"]["passed"])
             self.assertTrue(validation["passed"])
             self.assertTrue(evidence_bundle["passed"])
+            first_run = summary["runs"][0]
+            for artifact_name in ("report", "scorecard", "run_digest", "lineage"):
+                self.assertEqual(len(first_run[f"{artifact_name}_sha256"]), 64)
+                self.assertIsInstance(first_run[f"{artifact_name}_size_bytes"], int)
             self.assertEqual(evidence_bundle["metrics"]["trace_observability"]["run_count"], 7)
             self.assertEqual(evidence_bundle["metrics"]["repair_queue"]["item_count"], 14)
             self.assertEqual(evidence_bundle["metrics"]["training_export"]["episode_count"], 7)

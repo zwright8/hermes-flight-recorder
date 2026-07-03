@@ -844,7 +844,7 @@ def validate_suite_summary(path: str | Path) -> ValidationTarget:
     summary = _read_object(summary_path, target, "suite_summary.json")
     if summary is None:
         return target
-    _validate_suite_summary(summary, target)
+    _validate_suite_summary(summary, target, summary_path)
     return target
 
 
@@ -7207,7 +7207,7 @@ def _expected_curriculum_priority_band(priority_score: int) -> str:
     return "low"
 
 
-def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget, source_path: Path | None = None) -> None:
     _require_equal(summary, "schema_version", RUN_SUITE_SCHEMA_VERSION, target)
     runs = summary.get("runs")
     if not isinstance(runs, list):
@@ -7233,9 +7233,22 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -
         if not isinstance(run, dict):
             target.errors.append(f"suite_summary.runs[{index}] must be an object.")
             continue
-        for field_name in ("scenario_id", "scenario_title", "task_family", "scenario_path", "trace_path", "run_dir", "report", "scorecard", "lineage"):
+        for field_name in (
+            "scenario_id",
+            "scenario_title",
+            "task_family",
+            "scenario_path",
+            "trace_path",
+            "run_dir",
+            "report",
+            "scorecard",
+            "run_digest",
+            "lineage",
+        ):
             if not isinstance(run.get(field_name), str) or not run.get(field_name):
                 target.errors.append(f"suite_summary.runs[{index}].{field_name} must be a non-empty string.")
+        for field_name in ("report", "scorecard", "run_digest", "lineage"):
+            _validate_suite_run_artifact_ref(run, field_name, target, f"suite_summary.runs[{index}]", source_path)
         if not isinstance(run.get("passed"), bool):
             target.errors.append(f"suite_summary.runs[{index}].passed must be a boolean.")
         if not _is_int_between(run.get("score"), 0, 100):
@@ -7268,6 +7281,45 @@ def _validate_suite_summary(summary: dict[str, Any], target: ValidationTarget) -
             "error_count": len(errors),
         }
     )
+
+
+def _validate_suite_run_artifact_ref(
+    run: dict[str, Any],
+    field_name: str,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+) -> None:
+    sha_field = f"{field_name}_sha256"
+    size_field = f"{field_name}_size_bytes"
+    expected_sha = run.get(sha_field)
+    expected_size = run.get(size_field)
+    if not _is_sha256(expected_sha):
+        target.errors.append(f"{label}.{sha_field} must be a SHA-256 hex string.")
+    if not _is_non_negative_int(expected_size):
+        target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+    path = _resolve_suite_summary_ref_path(run.get(field_name), source_path)
+    if path is None:
+        return
+    if not path.is_file():
+        target.errors.append(f"{label}.{field_name} must resolve to an existing file.")
+        return
+    if _is_non_negative_int(expected_size) and path.stat().st_size != expected_size:
+        target.errors.append(f"{label}.{size_field} does not match the current file.")
+    if _is_sha256(expected_sha) and _sha256(path) != expected_sha:
+        target.errors.append(f"{label}.{sha_field} does not match the current file.")
+
+
+def _resolve_suite_summary_ref_path(value: Any, source_path: Path | None) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    candidates = [path.resolve()]
+    if source_path is not None:
+        candidates.append((source_path.parent / path).resolve())
+    return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
 
 
 def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget) -> None:

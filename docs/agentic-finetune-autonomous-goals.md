@@ -625,6 +625,9 @@ card, and dataset card decisions.
   `hermes-harness` entry point bind required artifact paths to SHA-256 plus
   byte-size evidence; validation rejects stale trace, scorecard, digest, report,
   or lineage artifact references before trusting the run receipt.
+- Suite summaries bind each run's report, scorecard, run digest, and lineage
+  refs to SHA-256 plus byte-size evidence; validation rejects stale resolvable
+  run artifact refs before downstream exports or bundles trust the suite.
 - Training-export and suite-comparison source fingerprints include input sizes;
   verified source-fingerprint coverage requires scenario and trace hashes plus
   sizes.

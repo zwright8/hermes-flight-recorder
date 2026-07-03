@@ -574,9 +574,13 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
                     "state_sha256": _lineage_input_hash(result["lineage"], "source_state_snapshot"),
                     "run_dir": _display_path(run_dir, args.preserve_paths),
                     "report": _display_path(result["paths"]["report"], args.preserve_paths),
+                    **_run_suite_artifact_fingerprint("report", result["paths"]["report"]),
                     "scorecard": _display_path(result["paths"]["scorecard"], args.preserve_paths),
+                    **_run_suite_artifact_fingerprint("scorecard", result["paths"]["scorecard"]),
                     "run_digest": _display_path(result["paths"]["run_digest"], args.preserve_paths),
+                    **_run_suite_artifact_fingerprint("run_digest", result["paths"]["run_digest"]),
                     "lineage": _display_path(result["paths"]["lineage"], args.preserve_paths),
+                    **_run_suite_artifact_fingerprint("lineage", result["paths"]["lineage"]),
                     "passed": bool(scorecard["passed"]),
                     "score": scorecard["score"],
                     "failed_rules": _failed_rule_ids(scorecard),
@@ -5548,6 +5552,13 @@ def _run_suite_summary(
             "warning_count": validation_summary.get("warning_count"),
         }
     return summary
+
+
+def _run_suite_artifact_fingerprint(field_name: str, path: Path) -> dict[str, Any]:
+    return {
+        f"{field_name}_sha256": _sha256_file(path),
+        f"{field_name}_size_bytes": path.stat().st_size,
+    }
 
 
 def _suite_metrics(runs: list[dict[str, Any]]) -> dict[str, Any]:

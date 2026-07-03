@@ -713,6 +713,34 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("suite_summary.metrics.pass_rate", errors)
 
+    def test_validate_rejects_stale_suite_summary_run_artifact_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs), "--preserve-paths"])
+            suite_path = runs / "suite_summary.json"
+            suite = json.loads(suite_path.read_text(encoding="utf-8"))
+            suite["runs"][0]["report_sha256"] = "0" * 64
+            suite["runs"][0]["scorecard_size_bytes"] += 1
+            suite_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--suite-summary",
+                    str(suite_path),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("suite_summary.runs[0].report_sha256 does not match the current file", errors)
+            self.assertIn("suite_summary.runs[0].scorecard_size_bytes does not match the current file", errors)
+
     def test_validate_warns_on_legacy_family_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
