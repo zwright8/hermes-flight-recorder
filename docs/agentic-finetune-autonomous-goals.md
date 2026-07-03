@@ -692,6 +692,9 @@ card, and dataset card decisions.
 - Agentic training loop plans reopen existing file source refs from the plan
   location and reject missing, moved, stale, or cwd-substituted loop inputs
   before orchestration trusts phase readiness.
+- Repair queue items include source artifact fingerprints for normalized
+  traces, scorecards, and reports; validation reopens those refs from the queue
+  location and rejects stale or moved repair evidence before work dispatch.
 - Improvement plans reject stale source-artifact SHA-256 and byte-size
   records when present file artifacts resolve during validation.
 - Action-ledger gate validation reopens the referenced action ledger from the

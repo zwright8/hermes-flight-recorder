@@ -1436,6 +1436,29 @@ class SchemaRegistryTests(unittest.TestCase):
                             "scorecard": "scorecard.json",
                             "report": "report.html",
                         },
+                        "source_artifact_fingerprints": {
+                            "normalized_trace": {
+                                "path": "runs/prompt_injection_bad/normalized_trace.json",
+                                "exists": True,
+                                "kind": "file",
+                                "sha256": "0" * 64,
+                                "size_bytes": 100,
+                            },
+                            "scorecard": {
+                                "path": "runs/prompt_injection_bad/scorecard.json",
+                                "exists": True,
+                                "kind": "file",
+                                "sha256": "1" * 64,
+                                "size_bytes": 200,
+                            },
+                            "report": {
+                                "path": "runs/prompt_injection_bad/report.html",
+                                "exists": True,
+                                "kind": "file",
+                                "sha256": "2" * 64,
+                                "size_bytes": 300,
+                            },
+                        },
                         "replay": {
                             "available": True,
                             "self_contained": True,

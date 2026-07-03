@@ -1476,7 +1476,7 @@ def validate_repair_queue(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("repair_queue", str(queue_path))
     queue = _read_object(queue_path, target, "repair_queue.json")
     if queue is not None:
-        _validate_repair_queue(queue, target)
+        _validate_repair_queue(queue, target, queue_path)
     return target
 
 
@@ -16186,7 +16186,7 @@ def _validate_trainer_command(command: Any, target: ValidationTarget) -> None:
         target.errors.append("trainer_preflight.trainer_command.parseable must be a boolean when present.")
 
 
-def _validate_repair_queue(queue: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_repair_queue(queue: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(queue, "schema_version", REPAIR_QUEUE_SCHEMA_VERSION, target)
     if not isinstance(queue.get("runs_dir"), str) or not queue.get("runs_dir"):
         target.errors.append("repair_queue.runs_dir must be a non-empty string.")
@@ -16212,7 +16212,7 @@ def _validate_repair_queue(queue: dict[str, Any], target: ValidationTarget) -> N
         "task_completion_status_counts": {},
     }
     for index, item in enumerate(items):
-        _validate_repair_item(item, target, f"repair_queue.items[{index}]", seen_ids, totals)
+        _validate_repair_item(item, target, f"repair_queue.items[{index}]", seen_ids, totals, source_path)
     _validate_repair_queue_metrics(queue.get("metrics"), target, totals, len(items))
     if "notes" in queue and not _is_string_list(queue.get("notes")):
         target.errors.append("repair_queue.notes must be a list of strings when present.")
@@ -16231,6 +16231,7 @@ def _validate_repair_item(
     label: str,
     seen_ids: set[str],
     totals: dict[str, Any],
+    source_path: Path,
 ) -> None:
     if not isinstance(item, dict):
         target.errors.append(f"{label} must be an object.")
@@ -16272,6 +16273,12 @@ def _validate_repair_item(
     _validate_evidence_refs(item.get("evidence_refs"), target, f"{label}.evidence_refs")
     _validate_repair_evidence_snippets(item.get("evidence_snippets"), target, f"{label}.evidence_snippets")
     _validate_repair_source_artifacts(item.get("source_artifacts"), target, f"{label}.source_artifacts")
+    _validate_repair_source_artifact_fingerprints(
+        item.get("source_artifact_fingerprints"),
+        target,
+        f"{label}.source_artifact_fingerprints",
+        source_path,
+    )
     _validate_repair_replay(item.get("replay"), target, f"{label}.replay")
 
     if item.get("critical") is True:
@@ -16322,6 +16329,51 @@ def _validate_repair_source_artifacts(value: Any, target: ValidationTarget, labe
             target.errors.append(f"{label} keys must be non-empty strings.")
         if not isinstance(artifact_path, str) or not artifact_path:
             target.errors.append(f"{label}.{artifact_name} must be a non-empty string.")
+
+
+def _validate_repair_source_artifact_fingerprints(value: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for artifact_name in ("normalized_trace", "scorecard", "report"):
+        if artifact_name not in value:
+            target.errors.append(f"{label}.{artifact_name} is required.")
+    for artifact_name, record in value.items():
+        if not isinstance(artifact_name, str) or not artifact_name:
+            target.errors.append(f"{label} keys must be non-empty strings.")
+            continue
+        _validate_repair_source_file_ref(record, target, f"{label}.{artifact_name}", source_path)
+
+
+def _validate_repair_source_file_ref(record: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if record.get("kind") != "file":
+        target.errors.append(f"{label}.kind must be file.")
+    if record.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        return
+    if _looks_absolute(record["path"]):
+        target.errors.append(f"{label}.path must be relative to the repair queue artifact.")
+        return
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    if not _is_lowercase_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string.")
+    file_path = source_path.parent / record["path"]
+    if file_path.is_symlink():
+        target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to an existing file.")
+        return
+    if _is_non_negative_int(record.get("size_bytes")) and file_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_lowercase_sha256(record.get("sha256")) and _sha256(file_path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
 
 
 def _validate_repair_replay(value: Any, target: ValidationTarget, label: str) -> None:

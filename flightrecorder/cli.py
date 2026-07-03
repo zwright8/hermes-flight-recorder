@@ -674,7 +674,7 @@ def cmd_run_suite(args: argparse.Namespace) -> int:
             _write_json(handoff_paths["trace_observability"], trace_observability)
             artifacts["trace_observability"] = _display_path(handoff_paths["trace_observability"], args.preserve_paths)
 
-            repair_queue = build_repair_queue(out_dir, preserve_paths=args.preserve_paths)
+            repair_queue = build_repair_queue(out_dir, preserve_paths=args.preserve_paths, output_path=handoff_paths["repair_queue"])
             _write_json(handoff_paths["repair_queue"], repair_queue)
             artifacts["repair_queue"] = _display_path(handoff_paths["repair_queue"], args.preserve_paths)
 
@@ -1867,6 +1867,7 @@ def cmd_repair_queue(args: argparse.Namespace) -> int:
         args.runs,
         preserve_paths=args.preserve_paths,
         only_critical=args.only_critical,
+        output_path=args.out,
     )
     rendered = json.dumps(queue, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     if args.out:

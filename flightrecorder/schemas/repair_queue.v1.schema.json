@@ -124,6 +124,7 @@
         "schema_version": { "const": "hfr.repair_item.v1" },
         "score": { "maximum": 100, "minimum": 0, "type": "integer" },
         "source_artifacts": { "$ref": "#/$defs/source_artifacts" },
+        "source_artifact_fingerprints": { "$ref": "#/$defs/source_artifact_fingerprints" },
         "suggested_action": { "minLength": 1, "type": "string" },
         "summary": { "minLength": 1, "type": "string" },
         "task_completion_passed": { "type": "boolean" },
@@ -151,6 +152,7 @@
         "evidence_refs",
         "evidence_snippets",
         "source_artifacts",
+        "source_artifact_fingerprints",
         "replay"
       ],
       "type": "object"
@@ -180,6 +182,30 @@
         "scorecard": { "minLength": 1, "type": "string" }
       },
       "required": ["run_dir", "normalized_trace", "scorecard", "report"],
+      "type": "object"
+    },
+    "source_artifact_fingerprints": {
+      "additionalProperties": { "$ref": "#/$defs/source_file_ref" },
+      "properties": {
+        "lineage": { "$ref": "#/$defs/source_file_ref" },
+        "normalized_trace": { "$ref": "#/$defs/source_file_ref" },
+        "regression_scenario": { "$ref": "#/$defs/source_file_ref" },
+        "report": { "$ref": "#/$defs/source_file_ref" },
+        "scorecard": { "$ref": "#/$defs/source_file_ref" }
+      },
+      "required": ["normalized_trace", "scorecard", "report"],
+      "type": "object"
+    },
+    "source_file_ref": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "kind": { "const": "file" },
+        "path": { "minLength": 1, "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["path", "exists", "kind", "sha256", "size_bytes"],
       "type": "object"
     }
   }

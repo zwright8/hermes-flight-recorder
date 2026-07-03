@@ -42,6 +42,8 @@ class RepairQueueTests(unittest.TestCase):
             self.assertEqual(item["priority"], "critical")
             self.assertTrue(item["critical"])
             self.assertIn("regression_scenario", item["source_artifacts"])
+            self.assertEqual(len(item["source_artifact_fingerprints"]["scorecard"]["sha256"]), 64)
+            self.assertIsInstance(item["source_artifact_fingerprints"]["scorecard"]["size_bytes"], int)
             self.assertIn("python -m flightrecorder run", item["replay"]["command"])
             self.assertTrue(item["evidence_refs"])
             self.assertTrue(item["evidence_snippets"])
@@ -102,6 +104,65 @@ class RepairQueueTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("repair_queue.metrics.item_count", errors)
             self.assertIn("evidence_snippets", errors)
+
+    def test_validate_rejects_stale_or_moved_repair_queue_source_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            queue_path = root / "repair_queue.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)]), 0)
+            self.assertEqual(run_cli(["repair-queue", "--runs", str(runs), "--out", str(queue_path)]), 0)
+            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict"]), 0)
+            queue = json.loads(queue_path.read_text(encoding="utf-8"))
+            scorecard_ref = queue["items"][0]["source_artifact_fingerprints"]["scorecard"]
+            scorecard_path = queue_path.parent / scorecard_ref["path"]
+            scorecard = json.loads(scorecard_path.read_text(encoding="utf-8"))
+            scorecard["stale_after_queue_write"] = True
+            scorecard_path.write_text(json.dumps(scorecard, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--repair-queue", str(queue_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary_path.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("repair_queue.items[0].source_artifact_fingerprints.scorecard.size_bytes does not match the current file.", errors)
+            self.assertIn("repair_queue.items[0].source_artifact_fingerprints.scorecard.sha256 does not match the current file.", errors)
+
+            copied_queue = root / "copy" / "repair_queue.json"
+            copied_queue.parent.mkdir()
+            copied_queue.write_text(queue_path.read_text(encoding="utf-8"), encoding="utf-8")
+            code = run_cli(["validate", "--repair-queue", str(copied_queue), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary_path.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("repair_queue.items[0].source_artifact_fingerprints.scorecard.path does not resolve to an existing file.", errors)
+
+    def test_repair_queue_nested_output_refs_validate_from_queue_location(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            queue_path = root / "nested" / "repair_queue.json"
+            self.assertEqual(run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)]), 0)
+            self.assertEqual(run_cli(["repair-queue", "--runs", str(runs), "--out", str(queue_path)]), 0)
+
+            queue = json.loads(queue_path.read_text(encoding="utf-8"))
+            scorecard_ref = queue["items"][0]["source_artifact_fingerprints"]["scorecard"]
+            self.assertTrue(scorecard_ref["path"].startswith("../runs/"), scorecard_ref)
+            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict"]), 0)
+
+    def test_repair_queue_preserve_paths_keeps_fingerprints_queue_relative(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            queue_path = root / "nested" / "repair_queue.json"
+            self.assertEqual(run_cli(["run-suite", "--scenarios", str(ROOT / "scenarios"), "--out", str(runs)]), 0)
+            self.assertEqual(run_cli(["repair-queue", "--runs", str(runs), "--out", str(queue_path), "--preserve-paths"]), 0)
+
+            queue = json.loads(queue_path.read_text(encoding="utf-8"))
+            item = queue["items"][0]
+            self.assertTrue(Path(item["source_artifacts"]["scorecard"]).is_absolute())
+            self.assertFalse(Path(item["source_artifact_fingerprints"]["scorecard"]["path"]).is_absolute())
+            self.assertEqual(run_cli(["validate", "--repair-queue", str(queue_path), "--strict"]), 0)
 
 
 if __name__ == "__main__":
