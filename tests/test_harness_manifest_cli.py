@@ -223,9 +223,31 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertEqual(replay_rc, 0, replay_stdout)
             replay_result = _json_from_stdout(replay_stdout)
             self.assertTrue(replay_result["passed"])
+            lineage_path = root / "suite" / "harness_suite_one" / "artifact_lineage.json"
+            scorecard_path = root / "suite_replay" / "scorecard.json"
+            self.assertEqual(replay_result["lineage_sha256"], _sha256_file(lineage_path))
+            self.assertEqual(replay_result["lineage_size_bytes"], lineage_path.stat().st_size)
+            self.assertEqual(replay_result["scorecard_sha256"], _sha256_file(scorecard_path))
+            self.assertEqual(replay_result["scorecard_size_bytes"], scorecard_path.stat().st_size)
             self._assert_flightrecorder_ok(
                 ["validate", "--harness-replay-result", str(root / "suite_replay" / "harness_replay_result.json"), "--strict"]
             )
+            forged_replay = json.loads((root / "suite_replay" / "harness_replay_result.json").read_text(encoding="utf-8"))
+            forged_replay["lineage_sha256"] = "0" * 64
+            forged_replay["scorecard_size_bytes"] += 1
+            forged_replay_path = root / "suite_replay" / "forged_harness_replay_result.json"
+            forged_summary = root / "suite_replay" / "forged_harness_replay_validation.json"
+            forged_replay_path.write_text(json.dumps(forged_replay, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_flightrecorder(
+                ["validate", "--harness-replay-result", str(forged_replay_path), "--strict", "--out", str(forged_summary)]
+            )
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            validation = json.loads(forged_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("harness_replay_result.lineage_sha256 does not match the current file", errors)
+            self.assertIn("harness_replay_result.scorecard_size_bytes does not match the current file", errors)
 
     def test_run_scenario_accepts_manifest_file_with_relative_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -292,6 +314,10 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertEqual(replay_rc, 0, replay_stdout)
             replay_result = _json_from_stdout(replay_stdout)
             self.assertTrue(replay_result["passed"])
+            self.assertEqual(replay_result["lineage_sha256"], _sha256_file(run_dir / "artifact_lineage.json"))
+            self.assertEqual(replay_result["lineage_size_bytes"], (run_dir / "artifact_lineage.json").stat().st_size)
+            self.assertEqual(replay_result["scorecard_sha256"], _sha256_file(replay_dir / "scorecard.json"))
+            self.assertEqual(replay_result["scorecard_size_bytes"], (replay_dir / "scorecard.json").stat().st_size)
             self._assert_flightrecorder_ok(
                 ["validate", "--harness-replay-result", str(replay_dir / "harness_replay_result.json"), "--strict"]
             )

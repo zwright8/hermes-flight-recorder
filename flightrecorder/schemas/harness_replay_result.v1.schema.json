@@ -2,17 +2,42 @@
   "$id": "https://schemas.hermes-flight-recorder.dev/harness_replay_result.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scorecard": { "type": "string" }
+        },
+        "required": ["scorecard"]
+      },
+      "then": {
+        "required": ["scorecard_sha256", "scorecard_size_bytes"]
+      }
+    }
+  ],
   "description": "Receipt emitted after replaying a harness lineage artifact.",
   "properties": {
     "created_at": { "type": "string" },
     "exit_code": { "minimum": 0, "type": "integer" },
     "lineage": { "minLength": 1, "type": "string" },
+    "lineage_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "lineage_size_bytes": { "minimum": 0, "type": "integer" },
     "out_dir": { "minLength": 1, "type": "string" },
     "passed": { "type": "boolean" },
     "schema_version": { "const": "hfr.harness_replay_result.v1" },
-    "scorecard": { "type": ["string", "null"] }
+    "scorecard": { "type": ["string", "null"] },
+    "scorecard_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "scorecard_size_bytes": { "minimum": 0, "type": "integer" }
   },
-  "required": ["schema_version", "lineage", "out_dir", "exit_code", "passed"],
+  "required": [
+    "schema_version",
+    "lineage",
+    "lineage_sha256",
+    "lineage_size_bytes",
+    "out_dir",
+    "exit_code",
+    "passed"
+  ],
   "title": "Hermes Flight Recorder Harness Replay Result",
   "type": "object"
 }

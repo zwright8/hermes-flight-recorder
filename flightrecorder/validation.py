@@ -1631,7 +1631,7 @@ def _validate_harness_replay_result(
         target.errors.append(
             f"harness_replay_result.schema_version must be {HARNESS_REPLAY_RESULT_SCHEMA_VERSION!r}, got {result.get('schema_version')!r}."
         )
-    _validate_existing_path_field(result, "lineage", target, "harness_replay_result.lineage", base_dir=source_dir)
+    _validate_harness_replay_artifact_ref(result, "lineage", target, "harness_replay_result", source_dir)
     out_dir = result.get("out_dir")
     if not isinstance(out_dir, str) or not out_dir:
         target.errors.append("harness_replay_result.out_dir must be a non-empty string.")
@@ -1645,13 +1645,17 @@ def _validate_harness_replay_result(
         target.errors.append("harness_replay_result.exit_code must be a non-negative integer.")
     scorecard_path: Path | None = None
     if result.get("scorecard") is not None:
-        _validate_existing_path_field(result, "scorecard", target, "harness_replay_result.scorecard", base_dir=source_dir)
-        if isinstance(result.get("scorecard"), str) and result["scorecard"]:
-            scorecard_path = Path(result["scorecard"])
-            if source_dir is not None and not scorecard_path.is_absolute():
-                scorecard_path = source_dir / scorecard_path
+        scorecard_path = _validate_harness_replay_artifact_ref(
+            result,
+            "scorecard",
+            target,
+            "harness_replay_result",
+            source_dir,
+        )
     elif result.get("passed") is True:
         target.errors.append("harness_replay_result.scorecard must be present when passed is true.")
+    elif "scorecard_sha256" in result or "scorecard_size_bytes" in result:
+        target.errors.append("harness_replay_result scorecard fingerprints must be omitted when scorecard is null.")
     if not isinstance(result.get("passed"), bool):
         target.errors.append("harness_replay_result.passed must be a boolean.")
     if scorecard_path is not None and scorecard_path.exists() and scorecard_path.is_file():
@@ -1660,6 +1664,45 @@ def _validate_harness_replay_result(
             _validate_scorecard(scorecard, target)
             if isinstance(result.get("passed"), bool) and isinstance(scorecard.get("passed"), bool) and result["passed"] != scorecard["passed"]:
                 target.errors.append("harness_replay_result.passed must match referenced scorecard.passed.")
+
+
+def _validate_harness_replay_artifact_ref(
+    result: dict[str, Any],
+    field_name: str,
+    target: ValidationTarget,
+    label: str,
+    source_dir: Path | None,
+) -> Path | None:
+    path_label = f"{label}.{field_name}"
+    path = _resolve_harness_replay_artifact_path(result.get(field_name), source_dir)
+    if path is None:
+        target.errors.append(f"{path_label} must be a non-empty path.")
+        return None
+    sha_field = f"{field_name}_sha256"
+    size_field = f"{field_name}_size_bytes"
+    expected_sha = result.get(sha_field)
+    expected_size = result.get(size_field)
+    if not _is_lowercase_sha256(expected_sha):
+        target.errors.append(f"{label}.{sha_field} must be a lowercase SHA-256 hex string.")
+    if not _is_non_negative_int(expected_size):
+        target.errors.append(f"{label}.{size_field} must be a non-negative integer.")
+    if not path.is_file():
+        target.errors.append(f"{path_label} must resolve to an existing file.")
+        return path
+    if _is_non_negative_int(expected_size) and path.stat().st_size != expected_size:
+        target.errors.append(f"{label}.{size_field} does not match the current file.")
+    if _is_lowercase_sha256(expected_sha) and _sha256(path) != expected_sha:
+        target.errors.append(f"{label}.{sha_field} does not match the current file.")
+    return path
+
+
+def _resolve_harness_replay_artifact_path(value: Any, source_dir: Path | None) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if path.is_absolute() or source_dir is None:
+        return path
+    return source_dir / path
 
 
 def _validate_harness_suite_result(result: dict[str, Any], target: ValidationTarget, source_dir: Path | None) -> None:

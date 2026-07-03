@@ -618,6 +618,9 @@ card, and dataset card decisions.
   file sizes when paths resolve.
 - Lineage replay fingerprints include input sizes; replay and replay-bundle
   validation reject size drift between recorded inputs and replay metadata.
+- Harness replay receipts bind lineage and scorecard paths to SHA-256 plus
+  byte-size evidence; validation rejects stale replay references before trusting
+  pass/fail summaries.
 - Training-export and suite-comparison source fingerprints include input sizes;
   verified source-fingerprint coverage requires scenario and trace hashes plus
   sizes.

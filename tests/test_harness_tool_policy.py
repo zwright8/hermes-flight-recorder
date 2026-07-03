@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -22,6 +23,14 @@ def _run_cli(args: list[str]) -> tuple[int, str, str]:
     with redirect_stdout(stdout), redirect_stderr(stderr):
         rc = main(args)
     return rc, stdout.getvalue(), stderr.getvalue()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class HarnessToolPolicyTests(unittest.TestCase):
@@ -99,6 +108,10 @@ class HarnessToolPolicyTests(unittest.TestCase):
             self.assertEqual(replay["schema_version"], HARNESS_REPLAY_RESULT_SCHEMA_VERSION)
             self.assertEqual(replay["exit_code"], 0)
             self.assertFalse(replay["passed"])
+            self.assertEqual(replay["lineage_sha256"], _sha256_file(run_dir / "artifact_lineage.json"))
+            self.assertEqual(replay["lineage_size_bytes"], (run_dir / "artifact_lineage.json").stat().st_size)
+            self.assertEqual(replay["scorecard_sha256"], _sha256_file(replay_dir / "scorecard.json"))
+            self.assertEqual(replay["scorecard_size_bytes"], (replay_dir / "scorecard.json").stat().st_size)
             self.assertEqual(set(replay_scorecard["critical_failures"]), set(result["scorecard"]["critical_failures"]))
             self.assertTrue(check_schema_file(replay_dir / "harness_replay_result.json", "harness_replay_result")["passed"])
             self._assert_no_canary_value_leaked(replay_dir, fake_api_key)
@@ -111,6 +124,18 @@ class HarnessToolPolicyTests(unittest.TestCase):
             )
             rc, stdout, stderr = _run_cli(["validate", "--harness-replay-result", str(replay_dir / "harness_replay_result.json"), "--strict"])
             self.assertEqual(rc, 1, stderr or stdout)
+
+            forged_replay["passed"] = replay["passed"]
+            forged_replay["lineage_size_bytes"] += 1
+            forged_replay["scorecard_sha256"] = "0" * 64
+            (replay_dir / "harness_replay_result.json").write_text(
+                json.dumps(forged_replay, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            rc, stdout, stderr = _run_cli(["validate", "--harness-replay-result", str(replay_dir / "harness_replay_result.json"), "--strict"])
+            self.assertEqual(rc, 1, stderr or stdout)
+            self.assertIn("lineage_size_bytes does not match the current file", stdout)
+            self.assertIn("scorecard_sha256 does not match the current file", stdout)
 
     def test_harness_tool_policy_schema_rejects_missing_canary_contract(self):
         valid = {

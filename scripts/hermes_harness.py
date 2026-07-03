@@ -434,6 +434,8 @@ def replay_trace(
         "schema_version": HARNESS_REPLAY_RESULT_SCHEMA_VERSION,
         "created_at": _now_iso(),
         "lineage": _display_replay_result_path(lineage_path, display_base, preserve_paths),
+        "lineage_sha256": _sha256_file(lineage_path),
+        "lineage_size_bytes": lineage_path.stat().st_size,
         "out_dir": _display_replay_result_path(out_dir, display_base, preserve_paths),
         "exit_code": exit_code,
         "scorecard": _display_replay_result_path(scorecard_path, display_base, preserve_paths)
@@ -441,6 +443,9 @@ def replay_trace(
         else None,
         "passed": bool(scorecard.get("passed")) if isinstance(scorecard, dict) else False,
     }
+    if scorecard_path.exists():
+        summary["scorecard_sha256"] = _sha256_file(scorecard_path)
+        summary["scorecard_size_bytes"] = scorecard_path.stat().st_size
     _write_json(out_dir / "harness_replay_result.json", summary)
     return summary
 
