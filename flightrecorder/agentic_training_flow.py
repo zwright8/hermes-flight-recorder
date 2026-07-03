@@ -366,20 +366,33 @@ def _display_path(path: Path, receipt_base: Path | None, preserve_paths: bool) -
     raw = str(path)
     if preserve_paths:
         return raw
-    if not path.is_absolute():
-        return raw
     resolved = path.resolve()
     if receipt_base is not None:
+        base = receipt_base.resolve()
         try:
-            relative = os.path.relpath(resolved, receipt_base.resolve())
+            relative = os.path.relpath(resolved, base)
         except OSError:
             relative = ""
         if relative and not relative.startswith("..") and not Path(relative).is_absolute():
             return relative
+        cwd = Path.cwd().resolve()
+        if relative and _is_relative_to(resolved, cwd) and _is_relative_to(base, cwd) and not Path(relative).is_absolute():
+            return relative
+        return f"<redacted:{resolved.name}>"
+    if not path.is_absolute():
+        return raw
     try:
         return str(resolved.relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
         return f"<redacted:{resolved.name}>"
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 def _sha256_or_none(path: Path) -> str | None:

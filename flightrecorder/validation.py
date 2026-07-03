@@ -2484,7 +2484,7 @@ def _validate_agentic_training_flow(flow: dict[str, Any], target: ValidationTarg
     flow_path = flow.get("flow_path")
     if not isinstance(flow_path, str):
         target.errors.append("agentic_training_flow.flow_path must be a string.")
-    elif flow_path and not _is_safe_or_redacted_training_flow_path(flow_path):
+    elif flow_path and not _is_safe_training_flow_metadata_path(flow_path):
         target.errors.append("agentic_training_flow.flow_path must be a safe relative path without traversal.")
     if not _is_string_list(flow.get("blocked_reasons")):
         target.errors.append("agentic_training_flow.blocked_reasons must be a list of strings.")
@@ -2559,15 +2559,32 @@ def _validate_agentic_training_flow_source_ref(
     if not _is_non_negative_int(ref.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
     if isinstance(path_value, str) and path_value and not path_value.startswith("<"):
-        current_path = (source_path.parent / path_value).resolve()
-        if current_path.exists():
-            if current_path.is_symlink() or not current_path.is_file():
-                target.errors.append(f"{label}.path must resolve to a regular file.")
-                return
-            if _is_non_negative_int(ref.get("size_bytes")) and current_path.stat().st_size != ref.get("size_bytes"):
-                target.errors.append(f"{label}.size_bytes does not match path.")
-            if _is_sha256(ref.get("sha256")) and _sha256(current_path) != ref.get("sha256"):
-                target.errors.append(f"{label}.sha256 does not match path.")
+        source_dir = source_path.resolve().parent
+        current_path = (source_dir / path_value).resolve()
+        allowed_roots = [source_dir]
+        repo_root = _repo_root_for_artifact(source_path)
+        if repo_root is not None:
+            allowed_roots.append(repo_root)
+        if not any(current_path.is_relative_to(root) for root in allowed_roots):
+            target.errors.append(f"{label}.path must resolve under the flow artifact directory or repository root.")
+            return
+        if not current_path.exists():
+            target.errors.append(f"{label}.path must resolve to an existing file.")
+            return
+        if current_path.is_symlink() or not current_path.is_file():
+            target.errors.append(f"{label}.path must resolve to a regular file.")
+            return
+        if _is_non_negative_int(ref.get("size_bytes")) and current_path.stat().st_size != ref.get("size_bytes"):
+            target.errors.append(f"{label}.size_bytes does not match path.")
+        if _is_sha256(ref.get("sha256")) and _sha256(current_path) != ref.get("sha256"):
+            target.errors.append(f"{label}.sha256 does not match path.")
+
+
+def _repo_root_for_artifact(source_path: Path) -> Path | None:
+    for root in source_path.resolve().parents:
+        if (root / ".git").exists() or (root / "pyproject.toml").exists():
+            return root
+    return None
 
 
 def _validate_agentic_training_flow_delegated_flow(value: Any, target: ValidationTarget) -> dict[str, Any]:
@@ -2736,7 +2753,23 @@ def _validate_agentic_training_flow_contract(value: Any, target: ValidationTarge
 
 
 def _is_safe_or_redacted_training_flow_path(value: str) -> bool:
-    return value.startswith("<redacted:") or _is_safe_agentic_training_result_path(value)
+    if value.startswith("<redacted:"):
+        return True
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+    )
+
+
+def _is_safe_training_flow_metadata_path(value: str) -> bool:
+    path = Path(value)
+    return _is_safe_or_redacted_training_flow_path(value) and ".." not in path.parts
 
 
 def _validate_agentic_training_result(result: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:

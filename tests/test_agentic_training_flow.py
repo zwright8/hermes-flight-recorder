@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,45 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             self.assertTrue(schema["passed"], schema["errors"])
             validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_relative_inputs_are_written_relative_to_receipt(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            old_cwd = Path.cwd()
+            try:
+                os.chdir(ROOT)
+                receipt = build_agentic_training_flow(
+                    plan_path=EXAMPLE_PLAN.relative_to(ROOT),
+                    runtime_preflight_path=runtime.relative_to(ROOT),
+                    trainer_consumer_plan_path=consumer.relative_to(ROOT),
+                    out_path=out.relative_to(ROOT),
+                    created_at="2026-07-03T00:00:00+00:00",
+                )
+            finally:
+                os.chdir(old_cwd)
+            write_agentic_training_flow(out, receipt)
+
+            sources = receipt["source_artifacts"]
+            self.assertEqual(
+                sources["agentic_training_plan"]["path"],
+                "../examples/agentic_training/plans/sft_then_dpo_plan.json",
+            )
+            self.assertEqual(sources["agentic_training_runtime_preflight"]["path"], "runtime_preflight.json")
+            self.assertEqual(sources["trainer_consumer_plan"]["path"], "trainer_consumer_plan.json")
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertTrue(validation["passed"], validation)
+            nested = root / "nested"
+            nested.mkdir()
+            old_cwd = Path.cwd()
+            try:
+                os.chdir(nested)
+                nested_validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            finally:
+                os.chdir(old_cwd)
+            self.assertTrue(nested_validation["passed"], nested_validation)
 
     def test_cli_writes_valid_flow_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -133,6 +173,91 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             self.assertFalse(validation["passed"], validation)
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("execution_boundary.trainer_command_executed must be false", errors)
+
+    def test_validation_rejects_flow_path_traversal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            receipt["flow_path"] = "../../../../etc/passwd"
+            write_agentic_training_flow(out, receipt)
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_flow.flow_path must be a safe relative path without traversal", errors)
+
+    def test_validation_rejects_missing_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            receipt["source_artifacts"]["trainer_consumer_plan"]["path"] = "missing_trainer_consumer_plan.json"
+            write_agentic_training_flow(out, receipt)
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("source_artifacts.trainer_consumer_plan.path must resolve to an existing file", errors)
+
+    def test_validation_rejects_stale_source_artifact_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_training_flow(out, receipt)
+            consumer.write_text(consumer.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("source_artifacts.trainer_consumer_plan.size_bytes does not match path", errors)
+            self.assertIn("source_artifacts.trainer_consumer_plan.sha256 does not match path", errors)
+
+    def test_validation_rejects_source_artifact_escape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            receipt["source_artifacts"]["trainer_consumer_plan"]["path"] = "../../../../../../../../etc/passwd"
+            write_agentic_training_flow(out, receipt)
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("source_artifacts.trainer_consumer_plan.path must resolve under", errors)
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

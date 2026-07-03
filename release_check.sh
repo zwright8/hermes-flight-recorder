@@ -1334,6 +1334,11 @@ test -f runs/agentic_training_runtime_preflight.json
   --out runs/agentic_training_result.json >/dev/null
 test -f runs/agentic_training_result.json
 "$PYTHON" -m flightrecorder schemas --check runs/agentic_training_result.json >/dev/null
+"$PYTHON" -m flightrecorder agentic-training-flow \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --out runs/agentic_training_flow.json >/dev/null
 "$PYTHON" -m flightrecorder schemas --check runs/agentic_training_flow.json >/dev/null
 "$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \

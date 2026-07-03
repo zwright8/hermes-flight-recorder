@@ -699,6 +699,10 @@ card, and dataset card decisions.
   refs with SHA-256 plus byte-size evidence; validation reopens those refs from
   the artifact location and rejects stale review, rubric, dry-run, or
   calibration evidence before labels can be trusted.
+- Agentic training flow receipts reopen plan, runtime-preflight, and trainer
+  consumer-plan refs from the flow artifact location and reject missing,
+  non-regular, stale SHA-256, or stale byte-size source evidence before
+  delegated trainer execution can be trusted.
 - Improvement plans reject stale source-artifact SHA-256 and byte-size
   records when present file artifacts resolve during validation.
 - Action-ledger gate validation reopens the referenced action ledger from the
