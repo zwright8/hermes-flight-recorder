@@ -1419,6 +1419,7 @@ assert all(
     for entry in action_ledger["entries"]
 )
 assert action_ledger_gate["schema_version"] == "hfr.action_ledger_gate.v1"
+assert action_ledger_gate["action_ledger"] == "action_ledger.json"
 assert action_ledger_gate["passed"] is True
 assert action_ledger_gate["failed_check_count"] == 0
 assert action_ledger_gate["decision"]["readiness"] == "ready"

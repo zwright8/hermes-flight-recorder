@@ -969,7 +969,7 @@ class PromotionLedgerTests(unittest.TestCase):
             release_record_path.unlink()
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
-    def test_promotion_archive_requires_self_contained_sources_when_requested(self):
+    def test_promotion_archive_includes_output_relative_sources_when_requested(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = root / "action_ledger_gate.json"
@@ -1021,12 +1021,85 @@ class PromotionLedgerTests(unittest.TestCase):
                 ]
             )
 
-            self.assertEqual(code, 1)
+            self.assertEqual(code, 0)
             archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
-            self.assertFalse(archive["passed"])
-            self.assertFalse(archive["self_contained"])
-            self.assertEqual(archive["metrics"]["missing_count"], 1)
-            self.assertEqual(archive["metrics"]["missing_role_counts"], [{"count": 1, "id": "source_artifact"}])
+            self.assertTrue(archive["passed"])
+            self.assertTrue(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["missing_count"], 0)
+            self.assertEqual(archive["metrics"]["source_artifact_count"], 1)
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_includes_sibling_output_relative_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src_dir = root / "src"
+            out_dir = root / "out"
+            src_dir.mkdir()
+            out_dir.mkdir()
+            source = src_dir / "action_ledger_gate.json"
+            decision_gate = out_dir / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            source.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.action_ledger_gate.v1",
+                        "passed": True,
+                        "decision": {
+                            "readiness": "ready",
+                            "recommendation": "promote_iteration",
+                            "summary": "ok",
+                            "blocking_check_count": 0,
+                            "key_metrics": {},
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                ),
+                0,
+            )
+            gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+            self.assertEqual(gate["source_artifact"]["path"], "../src/action_ledger_gate.json")
+            self.assertEqual(run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]), 0)
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            self.assertEqual(ledger["records"][0]["path"], "out/decision_gate.json")
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertTrue(archive["passed"])
+            self.assertTrue(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["missing_count"], 0)
+            self.assertEqual(archive["metrics"]["decision_gate_count"], 1)
+            self.assertEqual(archive["metrics"]["source_artifact_count"], 1)
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
     def test_promotion_archive_force_refuses_non_archive_directories(self):

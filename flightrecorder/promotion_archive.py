@@ -67,9 +67,9 @@ def build_promotion_archive(
         relationships.append({"from": gate_record["name"], "to": ledger_record["name"], "type": "gates"})
 
     decision_sources = _decision_gate_sources(ledger, ledger_path, decision_gate_paths or [])
-    copied_decisions: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
+    copied_decisions: list[tuple[dict[str, Any], dict[str, Any], Path, bool]] = []
     seen_decision_hashes: set[str] = set()
-    for decision_index, (source_path, missing_reason) in enumerate(decision_sources):
+    for decision_index, (source_path, missing_reason, allow_parent_sources) in enumerate(decision_sources):
         if source_path is None:
             missing.append(_missing("decision_gate", decision_index, missing_reason or "path is redacted or unavailable"))
             continue
@@ -93,13 +93,14 @@ def build_promotion_archive(
         )
         artifacts.append(record)
         relationships.append({"from": ledger_record["name"], "to": record["name"], "type": "summarizes"})
-        copied_decisions.append((record, decision_gate, source_path))
+        copied_decisions.append((record, decision_gate, source_path, allow_parent_sources))
 
     seen_source_hashes: set[str] = set()
     for artifact_index, artifact in enumerate(artifacts):
         artifact["index"] = artifact_index
-    for record, decision_gate, decision_path in copied_decisions:
-        source_path, missing_reason = _source_artifact_path(decision_gate, decision_path)
+    for record, decision_gate, decision_path, allow_parent_sources in copied_decisions:
+        evidence_root = ledger_path.parent if allow_parent_sources else None
+        source_path, missing_reason = _source_artifact_path(decision_gate, decision_path, evidence_root)
         if source_path is None:
             missing.append(_missing("source_artifact", record["index"], missing_reason or "source artifact path is redacted or unavailable"))
             continue
@@ -173,12 +174,13 @@ def _decision_gate_sources(
     ledger: dict[str, Any],
     ledger_path: Path,
     explicit_paths: list[str | Path],
-) -> list[tuple[Path | None, str | None]]:
-    paths: list[tuple[Path | None, str | None]] = [(Path(path), None) for path in explicit_paths]
+) -> list[tuple[Path | None, str | None, bool]]:
+    paths: list[tuple[Path | None, str | None, bool]] = [(Path(path), None, False) for path in explicit_paths]
     for record in ledger.get("records", []):
         if not isinstance(record, dict):
             continue
-        paths.append(_resolve_recorded_path(record.get("path"), ledger_path.parent))
+        source_path, reason = _resolve_recorded_path(record.get("path"), ledger_path.parent, allowed_parent_root=ledger_path.parent)
+        paths.append((source_path, reason, True))
     return paths
 
 
@@ -207,9 +209,9 @@ def _is_existing_promotion_archive(target: Path) -> bool:
     return isinstance(value, dict) and value.get("schema_version") == PROMOTION_ARCHIVE_SCHEMA_VERSION
 
 
-def _source_artifact_path(decision_gate: dict[str, Any], decision_path: Path) -> tuple[Path | None, str | None]:
+def _source_artifact_path(decision_gate: dict[str, Any], decision_path: Path, evidence_root: Path | None) -> tuple[Path | None, str | None]:
     source = decision_gate.get("source_artifact") if isinstance(decision_gate.get("source_artifact"), dict) else {}
-    return _resolve_recorded_path(source.get("path"), decision_path.parent)
+    return _resolve_recorded_path(source.get("path"), decision_path.parent, allowed_parent_root=evidence_root)
 
 
 def _copy_artifact(
@@ -271,23 +273,25 @@ def _read_json_artifact(path: Path, schema_version: str, label: str) -> dict[str
     return value
 
 
-def _resolve_recorded_path(value: Any, base_dir: Path) -> tuple[Path | None, str | None]:
+def _resolve_recorded_path(value: Any, base_dir: Path, *, allowed_parent_root: Path | None = None) -> tuple[Path | None, str | None]:
     if not isinstance(value, str) or not value or value.startswith("<redacted:") or value.startswith("<missing-"):
         return None, "path is redacted or unavailable"
     raw = Path(value)
     if raw.is_absolute() or _is_windows_absolute(value):
         return None, "absolute recorded paths are not archived"
-    if ".." in raw.parts:
-        return None, "parent traversal is not allowed in recorded paths"
+    has_parent_traversal = ".." in raw.parts
 
     candidates: list[Path] = []
     unsafe_reasons: list[str] = []
     for root in _unique_paths([Path.cwd(), base_dir]):
         candidate = root / raw
-        if _path_resolves_inside(candidate, root):
+        allowed_root = allowed_parent_root if has_parent_traversal and allowed_parent_root is not None else root
+        if has_parent_traversal and allowed_parent_root is None:
+            unsafe_reasons.append("parent traversal is not allowed in recorded paths")
+        elif _path_resolves_inside(candidate, allowed_root):
             candidates.append(candidate)
         else:
-            unsafe_reasons.append(f"path resolves outside allowed root: {root}")
+            unsafe_reasons.append(f"path resolves outside allowed root: {allowed_root}")
 
     copy_errors: list[str] = []
     for candidate in candidates:

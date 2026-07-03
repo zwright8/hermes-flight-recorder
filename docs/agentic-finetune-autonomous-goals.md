@@ -590,6 +590,8 @@ card, and dataset card decisions.
 - New secret-exposure, forbidden-action, unsupported-claim, or critical
   task-completion regressions block promotion.
 - Promotion decisions are reproducible from artifacts.
+- Action-ledger gate validation reopens the referenced action ledger from the
+  gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate
   file location and rejects missing, moved, stale, or cwd-substituted sources.
 - Promotion-ledger validation reopens recorded decision gates from the ledger

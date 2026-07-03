@@ -8752,12 +8752,15 @@ def _validate_action_ledger_gate_source_linkage(
     target: ValidationTarget,
     source_path: Path,
 ) -> None:
-    ledger_path = _resolve_redacted_or_relative_path(gate.get("action_ledger"), source_path)
+    ledger_path = _resolve_gate_source_path(gate.get("action_ledger"), source_path)
     if ledger_path is None or not ledger_path.exists() or not ledger_path.is_file():
         target.errors.append("action_ledger_gate.action_ledger must resolve to an existing action ledger.")
         return
     try:
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        target.errors.append(f"action_ledger_gate.action_ledger is not valid UTF-8: {exc}")
+        return
     except json.JSONDecodeError as exc:
         target.errors.append(f"action_ledger_gate.action_ledger contains invalid JSON: {exc}")
         return

@@ -2061,9 +2061,14 @@ def cmd_gate_compare_export(args: argparse.Namespace) -> int:
 def cmd_gate_action_ledger(args: argparse.Namespace) -> int:
     ledger = _read_json(Path(args.action_ledger))
     options = _action_ledger_gate_options(args)
+    output_path = Path(args.out) if args.out else None
     result = evaluate_action_ledger_gate(
         ledger,
-        action_ledger_path=_display_path(Path(args.action_ledger), args.preserve_paths),
+        action_ledger_path=_display_path_for_output_source(
+            Path(args.action_ledger),
+            output_path,
+            args.preserve_paths,
+        ),
         min_bundles=options["min_bundles"],
         max_open_actions=options["max_open_actions"],
         max_new_actions=options["max_new_actions"],
@@ -5420,13 +5425,7 @@ def _display_path_for_output_source(path: Path, out_path: Path | None, preserve_
     if _is_windows_absolute(raw):
         return f"<redacted:{_basename(raw)}>"
     resolved = path.resolve()
-    cwd = Path.cwd().resolve()
     out_dir = out_path.parent.resolve()
-    try:
-        resolved.relative_to(cwd)
-        out_dir.relative_to(cwd)
-    except ValueError:
-        return _display_path(path, preserve_paths)
     return os.path.relpath(resolved, out_dir)
 
 

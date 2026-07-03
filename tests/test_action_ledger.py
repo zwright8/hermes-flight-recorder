@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -22,6 +23,20 @@ def _count_rows(values):
         key = str(value or "unknown")
         counts[key] = counts.get(key, 0) + 1
     return [{"id": key, "count": counts[key]} for key in sorted(counts)]
+
+
+def _build_action_ledger(root):
+    runs = root / "runs"
+    runs.mkdir(exist_ok=True)
+    gate = root / "failed_gate.json"
+    bundle = root / "bundle.json"
+    ledger_path = root / "action_ledger.json"
+    gate.write_text(json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n", encoding="utf-8")
+    if run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate), "--out", str(bundle)]) != 1:
+        raise AssertionError("evidence-bundle fixture did not produce expected failing bundle")
+    if run_cli(["action-ledger", "--bundle", str(bundle), "--out", str(ledger_path)]) != 0:
+        raise AssertionError("action-ledger fixture failed")
+    return ledger_path
 
 
 class ActionLedgerTests(unittest.TestCase):
@@ -454,6 +469,63 @@ class ActionLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_ledger_gate.action_ledger must resolve to an existing action ledger", errors)
 
+    def test_gate_action_ledger_writes_output_relative_source_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            summary_path = runs / "validation.json"
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                ledger_path = _build_action_ledger(runs)
+                gate_path = runs / "action_ledger_gate.json"
+                self.assertEqual(
+                    run_cli(["gate-action-ledger", "--action-ledger", str(ledger_path.relative_to(root)), "--out", str(gate_path)]),
+                    0,
+                )
+                gate = json.loads(gate_path.read_text(encoding="utf-8"))
+                self.assertEqual(gate["action_ledger"], "action_ledger.json")
+                code = run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 0)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertEqual(errors, "")
+
+    def test_validate_rejects_action_ledger_gate_cwd_relative_source_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd_root = root / "cwd"
+            outside_root = root / "outside"
+            nested = cwd_root / "nested"
+            nested.mkdir(parents=True)
+            outside_root.mkdir()
+            summary_path = root / "validation.json"
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_root)
+                ledger_path = _build_action_ledger(nested)
+                gate_path = cwd_root / "action_ledger_gate.json"
+                self.assertEqual(
+                    run_cli(["gate-action-ledger", "--action-ledger", str(ledger_path.relative_to(cwd_root)), "--out", str(gate_path)]),
+                    0,
+                )
+                outside_gate = outside_root / "action_ledger_gate.json"
+                outside_gate.write_text(gate_path.read_text(encoding="utf-8"), encoding="utf-8")
+                code = run_cli(["validate", "--action-ledger-gate", str(outside_gate), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger_gate.action_ledger must resolve to an existing action ledger", errors)
+
     def test_validate_rejects_action_ledger_gate_invalid_source_ledger_without_crashing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -476,6 +548,22 @@ class ActionLedgerTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_ledger_gate.action_ledger could not be replayed", errors)
+
+    def test_validate_rejects_action_ledger_gate_non_utf8_source_ledger_without_crashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = _build_action_ledger(root)
+            gate_path = root / "action_ledger_gate.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["gate-action-ledger", "--action-ledger", str(ledger_path), "--out", str(gate_path)]), 0)
+            ledger_path.write_bytes(b"\xff\xfe\xff")
+
+            code = run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger_gate.action_ledger is not valid UTF-8", errors)
 
     def test_validate_rejects_action_ledger_gate_policy_check_omission(self):
         with tempfile.TemporaryDirectory() as tmp:
