@@ -118,6 +118,16 @@ printf "print('trainer placeholder; Flight Recorder never executes this file')\n
   --archive-check runs/trainer_archive_check.json \
   --out runs/trainer_consumer_plan.json \
   --strict
+"$PYTHON" scripts/preflight_agentic_training_runtime.py \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --skip-default-modules \
+  --require-module json \
+  --out runs/agentic_training_runtime_preflight.json
+"$PYTHON" -m flightrecorder agentic-training-flow \
+  --plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --out runs/agentic_training_flow.json
 "$PYTHON" examples/trainer-wrapper/consume_trainer_plan.py \
   --plan runs/trainer_consumer_plan.json \
   --out runs/trainer_wrapper_dry_run.json \
@@ -136,6 +146,7 @@ printf "print('trainer placeholder; Flight Recorder never executes this file')\n
   --trainer-archive runs/trainer_archive \
   --trainer-archive-check runs/trainer_archive_check.json \
   --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --agentic-training-flow runs/agentic_training_flow.json \
   --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
   --out runs/evidence_bundle_trainer.json
 "$PYTHON" -m flightrecorder index --runs runs --out runs/index.html

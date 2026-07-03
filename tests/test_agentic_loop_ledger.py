@@ -100,6 +100,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "dataset_curation_receipt": [self.write_json(root / "dataset_curation_receipt.json", "hfr.dataset_curation_receipt.v1")],
             "training_export": [training_export],
             "agentic_training_plan": [self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")],
+            "agentic_training_flow": [self.write_json(root / "agentic_training_flow.json", "hfr.agentic_training_flow.v1")],
             "trainer_preflight": [self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")],
             "trainer_launch_check": [self.write_json(root / "trainer_launch_check.json", "hfr.trainer_launch_check.v1")],
             "serving_lifecycle": [self.write_json(root / "serving_lifecycle.json", "hfr.serving_lifecycle.v1")],

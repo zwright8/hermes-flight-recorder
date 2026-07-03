@@ -65,7 +65,7 @@ and handoff receipts that make those systems auditable.
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs after rejection-sampling and curation admission. | `rejection-sampling-gate`, `dataset-curation-receipt`, `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
 | Review/grading | Bind rubrics, mock model-grader dry runs, calibration, human overrides, and training-admission gates. | `model-grader rubric`, `model-grader dry-run`, `model-grader gate` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
-| Training | Produce side-effect-free training plans, runtime preflights, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `archive_agentic_training_result.py` |
+| Training | Produce side-effect-free training plans, runtime preflights, delegated flow receipts, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `agentic-training-flow`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
 | Loop | Bind rollout plan/receipt, review, trainer, serving, eval, improvement, promotion, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `next-iteration-schedule`, `validate --agentic-loop-ledger` |
 | Eval | Require identical held-out scenarios and separate raw movement from governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `compare-suite` |
@@ -288,9 +288,17 @@ python3.11 scripts/preflight_agentic_training_runtime.py \
   --skip-default-modules \
   --require-module json \
   --out runs/agentic_training_runtime_preflight.json
+
+flightrecorder agentic-training-flow \
+  --plan runs/agentic_training_plan.json \
+  --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --out runs/agentic_training_flow.json
 ```
 
-After an external trainer finishes or fails, archive a receipt:
+The delegated flow receipt records the exact external trainer command and
+SFT/action-SFT/DPO stage sequence without running it. After an external trainer
+finishes or fails, archive a receipt:
 
 ```bash
 python3.11 scripts/archive_agentic_training_result.py \
@@ -583,8 +591,8 @@ Suite and handoff commands add:
 - `evidence_bundle.json`
 - `improvement_plan.json`
 - `promotion_archive/`
-- trainer preflight, launch-check, archive-check, consumer-plan, wrapper
-  dry-run, and agentic training result receipts.
+- trainer preflight, launch-check, archive-check, consumer-plan, delegated
+  flow, wrapper dry-run, and agentic training result receipts.
 
 Registry and governance commands add:
 

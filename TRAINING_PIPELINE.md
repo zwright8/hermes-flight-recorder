@@ -21,6 +21,7 @@ flightrecorder schemas --check runs/trainer_launch_check.json
 flightrecorder schemas --check runs/trainer_archive_check.json
 flightrecorder schemas --check runs/trainer_consumer_plan.json
 flightrecorder schemas --check runs/trainer_wrapper_dry_run.json
+flightrecorder schemas --check runs/agentic_training_flow.json
 flightrecorder schemas --check runs/agentic_rollout_plan.json
 flightrecorder schemas --check runs/agentic_rollout_receipt.json
 flightrecorder schemas --check runs/rejection_sampling_gate.json
@@ -159,8 +160,8 @@ shared `decision` contract; weak legacy gates without `readiness`,
 `recommendation`, `failed_checks`, and `next_actions` block the handoff.
 When trainer handoff artifacts are available, include them in a second
 trainer-facing bundle so the final preflight, launch-check, archive,
-archive-check, consumer-plan, wrapper dry-run, and agentic training result
-chain is visible in one validated manifest:
+archive-check, consumer-plan, delegated flow, wrapper dry-run, and agentic
+training result chain is visible in one validated manifest:
 
 ```bash
 flightrecorder evidence-bundle \
@@ -176,6 +177,7 @@ flightrecorder evidence-bundle \
   --trainer-archive runs/trainer_archive \
   --trainer-archive-check runs/trainer_archive_check.json \
   --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --agentic-training-flow runs/agentic_training_flow.json \
   --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
   --agentic-training-result runs/agentic_training_result.json \
   --out runs/evidence_bundle_trainer.json
@@ -587,6 +589,25 @@ records `training_started: false`, `model_downloads_started: false`, and
 `recommendation: ready_for_tiny_smoke_launch` as the next handoff condition;
 blocked runtime-preflight artifacts are still schema-checkable failure
 evidence.
+After a trainer consumer plan exists, use `flightrecorder agentic-training-flow`
+to bind the ready plan, runtime preflight, and consumer command into
+`hfr.agentic_training_flow.v1`. It delegates only SFT, action-SFT, DPO, and
+SFT-then-DPO flows by default; reward-model, process-reward, GRPO, and RL flows
+remain blocked at this boundary. The receipt records the exact external command,
+stage sequence, selected trainer views, and a fail-closed execution boundary
+without starting a subprocess, importing trainer modules, creating cloud jobs,
+downloading models, or updating weights.
+
+```bash
+flightrecorder agentic-training-flow \
+  --plan runs/agentic_training_plan.json \
+  --runtime-preflight runs/agentic_training_runtime_preflight.json \
+  --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --out runs/agentic_training_flow.json
+
+flightrecorder validate --agentic-training-flow runs/agentic_training_flow.json --strict
+```
+
 When an external runner finishes or fails, archive that outcome with
 `scripts/archive_agentic_training_result.py`. It emits
 `hfr.agentic_training_result.v1`, verifies the plan and runtime-preflight
@@ -1390,11 +1411,13 @@ should also block a training handoff.
 After `gate-export` and any comparison or reviewed gates pass, run
 `trainer-preflight`, build a `trainer-archive`, then have the external launcher
 run `trainer-launch-check`, `trainer-archive-check`, and
-`trainer-consumer-plan`; an external wrapper can then dry-run that plan with
-`examples/trainer-wrapper/consume_trainer_plan.py`. Require
+`trainer-consumer-plan`; Flight Recorder can then write an
+`agentic-training-flow` receipt before an external wrapper dry-runs that plan
+with `examples/trainer-wrapper/consume_trainer_plan.py`. Require
 `recommendation: launch_allowed`, `recommendation: consumer_ready`,
-`recommendation: ready_for_external_trainer`, and a wrapper receipt with
-`recommendation: dry_run_ready` before invoking a trainer. This closes the
+`recommendation: ready_for_external_trainer`,
+`recommendation: ready_for_delegated_trainer_execution`, and a wrapper receipt
+with `recommendation: dry_run_ready` before invoking a trainer. This closes the
 handoff loop: the trainer consumes only exports that are tied to passed gates,
 reviewed/calibration validation when applicable, current artifact hashes,
 regular-file export artifacts, local trainer code that the consumer explicitly

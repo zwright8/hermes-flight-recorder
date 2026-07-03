@@ -666,6 +666,14 @@
       "name": "agentic_training_runtime_preflight"
     },
     {
+      "artifact": "agentic_training_flow",
+      "artifact_schema_version": "hfr.agentic_training_flow.v1",
+      "description": "Fail-closed delegated trainer-flow receipt for executable SFT, action-SFT, and DPO handoffs.",
+      "filename": "agentic_training_flow.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_training_flow.v1.schema.json",
+      "name": "agentic_training_flow"
+    },
+    {
       "artifact": "agentic_training_result",
       "artifact_schema_version": "hfr.agentic_training_result.v1",
       "description": "Side-effect-free result receipt for externally executed agentic training runs.",

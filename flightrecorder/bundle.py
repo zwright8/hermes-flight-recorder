@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .agentic_training_flow import AGENTIC_TRAINING_FLOW_SCHEMA_VERSION, FLOW_READY_RECOMMENDATION
 from .agentic_training_result import (
     AGENTIC_TRAINING_RESULT_SCHEMA_VERSION,
     REGISTER_FAILURE_RECOMMENDATION,
@@ -56,6 +57,11 @@ _TRAINER_HANDOFF_STAGES: tuple[dict[str, Any], ...] = (
         "recommendation": "ready_for_external_trainer",
     },
     {
+        "id": "agentic_training_flow",
+        "schema_version": AGENTIC_TRAINING_FLOW_SCHEMA_VERSION,
+        "recommendation": FLOW_READY_RECOMMENDATION,
+    },
+    {
         "id": "trainer_wrapper_dry_run",
         "schema_version": "hfr.example_trainer_wrapper_dry_run.v1",
         "recommendation": "dry_run_ready",
@@ -95,6 +101,7 @@ def build_evidence_bundle(
     trainer_archive_path: str | Path | None = None,
     trainer_archive_check_path: str | Path | None = None,
     trainer_consumer_plan_path: str | Path | None = None,
+    agentic_training_flow_path: str | Path | None = None,
     trainer_wrapper_dry_run_path: str | Path | None = None,
     agentic_training_result_path: str | Path | None = None,
     harness_manifest_paths: list[str | Path] | None = None,
@@ -325,6 +332,7 @@ def build_evidence_bundle(
         trainer_archive_path=trainer_archive_path,
         trainer_archive_check_path=trainer_archive_check_path,
         trainer_consumer_plan_path=trainer_consumer_plan_path,
+        agentic_training_flow_path=agentic_training_flow_path,
         trainer_wrapper_dry_run_path=trainer_wrapper_dry_run_path,
         agentic_training_result_path=agentic_training_result_path,
     )
@@ -1659,6 +1667,7 @@ def _summarize_trainer_handoff(
     trainer_archive_path: str | Path | None,
     trainer_archive_check_path: str | Path | None,
     trainer_consumer_plan_path: str | Path | None,
+    agentic_training_flow_path: str | Path | None,
     trainer_wrapper_dry_run_path: str | Path | None,
     agentic_training_result_path: str | Path | None,
 ) -> None:
@@ -1668,6 +1677,7 @@ def _summarize_trainer_handoff(
         "trainer_archive": trainer_archive_path,
         "trainer_archive_check": trainer_archive_check_path,
         "trainer_consumer_plan": trainer_consumer_plan_path,
+        "agentic_training_flow": agentic_training_flow_path,
         "trainer_wrapper_dry_run": trainer_wrapper_dry_run_path,
         "agentic_training_result": agentic_training_result_path,
     }

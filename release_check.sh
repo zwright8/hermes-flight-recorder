@@ -1299,6 +1299,7 @@ test -f runs/agentic_training_runtime_preflight.json
   --out runs/agentic_training_result.json >/dev/null
 test -f runs/agentic_training_result.json
 "$PYTHON" -m flightrecorder schemas --check runs/agentic_training_result.json >/dev/null
+"$PYTHON" -m flightrecorder schemas --check runs/agentic_training_flow.json >/dev/null
 "$PYTHON" -m flightrecorder evidence-bundle \
   --runs runs \
   --suite-summary runs/suite_summary.json \
@@ -1318,6 +1319,7 @@ test -f runs/agentic_training_result.json
   --trainer-archive runs/trainer_archive \
   --trainer-archive-check runs/trainer_archive_check.json \
   --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --agentic-training-flow runs/agentic_training_flow.json \
   --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
   --agentic-training-result runs/agentic_training_result.json \
   --out runs/evidence_bundle_trainer.json >/dev/null
@@ -1340,6 +1342,7 @@ test -f runs/evidence_bundle_trainer.json
   --trainer-archive runs/trainer_archive \
   --trainer-archive-check runs/trainer_archive_check.json \
   --trainer-consumer-plan runs/trainer_consumer_plan.json \
+  --agentic-training-flow runs/agentic_training_flow.json \
   --trainer-wrapper-dry-run runs/trainer_wrapper_dry_run.json \
   --repair-queue runs/repair_queue.json \
   --review-calibration runs/review_calibration.json \
@@ -1367,11 +1370,13 @@ assert trainer_bundle["passed"] is True
 assert trainer_bundle["readiness"] == "ready"
 assert trainer_bundle["metrics"]["trainer_handoff"]["complete_chain"] is True
 assert trainer_bundle["metrics"]["trainer_handoff"]["all_included_ready"] is True
-assert trainer_bundle["metrics"]["trainer_handoff"]["stage_count"] == 7
-assert trainer_bundle["metrics"]["trainer_handoff"]["handoff_ready_count"] == 7
+assert trainer_bundle["metrics"]["trainer_handoff"]["stage_count"] == 8
+assert trainer_bundle["metrics"]["trainer_handoff"]["handoff_ready_count"] == 8
 assert trainer_bundle["metrics"]["trainer_handoff"]["blocked_stage_count"] == 0
-assert trainer_bundle["metrics"]["trainer_handoff"]["schema_supported_count"] == 7
+assert trainer_bundle["metrics"]["trainer_handoff"]["schema_supported_count"] == 8
 assert trainer_bundle["decision"]["key_metrics"]["trainer_handoff"]["complete_chain"] is True
+flow_stage = next(stage for stage in trainer_bundle["metrics"]["trainer_handoff"]["stages"] if stage["id"] == "agentic_training_flow")
+assert flow_stage["recommendation"] == "ready_for_delegated_trainer_execution"
 result_stage = next(stage for stage in trainer_bundle["metrics"]["trainer_handoff"]["stages"] if stage["id"] == "agentic_training_result")
 assert result_stage["recommendation"] == "register_training_result"
 assert result_stage["status"] == "completed"

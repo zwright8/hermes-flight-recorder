@@ -1,0 +1,255 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_flow.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Fail-closed delegated trainer-flow receipt for executable SFT, action-SFT, and DPO handoffs.",
+  "properties": {
+    "blocked_reasons": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": {
+      "items": { "$ref": "#/$defs/check" },
+      "type": "array"
+    },
+    "created_at": { "minLength": 1, "type": "string" },
+    "delegated_flow": { "$ref": "#/$defs/delegatedFlow" },
+    "execution_boundary": { "$ref": "#/$defs/executionBoundary" },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "flow_id": { "minLength": 1, "type": "string" },
+    "flow_path": { "type": "string" },
+    "handoff_contract": { "$ref": "#/$defs/handoffContract" },
+    "metrics": { "$ref": "#/$defs/metrics" },
+    "notes": {
+      "items": { "type": "string" },
+      "type": "array"
+    },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["ready", "blocked"] },
+    "recommendation": {
+      "enum": ["ready_for_delegated_trainer_execution", "block_delegated_trainer_execution"]
+    },
+    "schema_version": { "const": "hfr.agentic_training_flow.v1" },
+    "source_artifacts": { "$ref": "#/$defs/sourceArtifacts" }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "flow_path",
+    "flow_id",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "delegated_flow",
+    "metrics",
+    "execution_boundary",
+    "handoff_contract",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Training Flow",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": true,
+      "properties": {
+        "actual": { "type": "object" },
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "command": {
+      "additionalProperties": true,
+      "properties": {
+        "archive_root": { "type": "string" },
+        "command_arg_count": { "minimum": 0, "type": "integer" },
+        "command_argv": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "command_shell": { "type": "string" },
+        "execution_cwd": { "type": "string" },
+        "external_code_file_count": { "minimum": 0, "type": "integer" },
+        "external_code_root": { "type": "string" },
+        "trainer_input_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "execution_cwd",
+        "archive_root",
+        "external_code_root",
+        "command_argv",
+        "command_shell",
+        "trainer_input_count",
+        "external_code_file_count"
+      ],
+      "type": "object"
+    },
+    "delegatedFlow": {
+      "additionalProperties": true,
+      "properties": {
+        "backend": { "type": "string" },
+        "command": { "$ref": "#/$defs/command" },
+        "mode": { "type": "string" },
+        "stage_sequence": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "stages": {
+          "items": { "$ref": "#/$defs/stage" },
+          "type": "array"
+        }
+      },
+      "required": ["mode", "backend", "stage_sequence", "stages", "command"],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": true,
+      "properties": {
+        "cloud_jobs_started": { "const": false },
+        "credential_values_recorded": { "const": false },
+        "flow_plan_only": { "const": true },
+        "model_downloads_started": { "const": false },
+        "subprocess_started": { "const": false },
+        "trainer_command_executed": { "const": false },
+        "trainer_modules_imported": { "const": false },
+        "training_started": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "flow_plan_only",
+        "training_started",
+        "trainer_command_executed",
+        "subprocess_started",
+        "cloud_jobs_started",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "trainer_modules_imported",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "handoffContract": {
+      "additionalProperties": true,
+      "properties": {
+        "blocked_modes": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "executable_modes": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "flight_recorder_executed_trainer": { "const": false },
+        "requires_redacted_dataset": { "const": true },
+        "requires_registered_model_and_dataset": { "const": true },
+        "requires_runtime_preflight": { "const": true },
+        "requires_trainer_consumer_plan": { "const": true },
+        "runner_must_emit_result_schema": { "const": "hfr.agentic_training_result.v1" },
+        "runner_must_require_recommendation": { "const": "ready_for_delegated_trainer_execution" },
+        "runner_owns_execution": { "const": true }
+      },
+      "required": [
+        "runner_owns_execution",
+        "runner_must_require_recommendation",
+        "runner_must_emit_result_schema",
+        "requires_runtime_preflight",
+        "requires_trainer_consumer_plan",
+        "requires_registered_model_and_dataset",
+        "requires_redacted_dataset",
+        "executable_modes",
+        "blocked_modes",
+        "flight_recorder_executed_trainer"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "check_count": { "minimum": 0, "type": "integer" },
+        "command_arg_count": { "minimum": 0, "type": "integer" },
+        "executable_stage_count": { "minimum": 0, "type": "integer" },
+        "external_code_file_count": { "minimum": 0, "type": "integer" },
+        "failed_check_count": { "minimum": 0, "type": "integer" },
+        "selected_view_count": { "minimum": 0, "type": "integer" },
+        "stage_count": { "minimum": 0, "type": "integer" },
+        "trainer_input_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "check_count",
+        "failed_check_count",
+        "stage_count",
+        "executable_stage_count",
+        "selected_view_count",
+        "command_arg_count",
+        "trainer_input_count",
+        "external_code_file_count"
+      ],
+      "type": "object"
+    },
+    "sourceArtifact": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "passed": { "type": ["boolean", "null"] },
+        "path": { "minLength": 1, "type": "string" },
+        "recommendation": { "type": "string" },
+        "regular_file": { "type": "boolean" },
+        "role": { "minLength": 1, "type": "string" },
+        "schema_version": { "type": "string" },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": ["string", "null"]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": ["integer", "null"]
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "regular_file",
+        "schema_version",
+        "passed",
+        "recommendation",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "sourceArtifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "agentic_training_plan": { "$ref": "#/$defs/sourceArtifact" },
+        "agentic_training_runtime_preflight": { "$ref": "#/$defs/sourceArtifact" },
+        "trainer_consumer_plan": { "$ref": "#/$defs/sourceArtifact" }
+      },
+      "required": ["agentic_training_plan", "agentic_training_runtime_preflight", "trainer_consumer_plan"],
+      "type": "object"
+    },
+    "stage": {
+      "additionalProperties": true,
+      "properties": {
+        "row_count": { "minimum": 0, "type": "integer" },
+        "stage_id": { "minLength": 1, "type": "string" },
+        "stage_index": { "minimum": 0, "type": "integer" },
+        "view_name": { "type": "string" },
+        "view_path": { "type": "string" },
+        "view_ready": { "type": "boolean" },
+        "view_schema_version": { "type": "string" }
+      },
+      "required": ["stage_index", "stage_id", "view_name", "view_path", "view_schema_version", "row_count", "view_ready"],
+      "type": "object"
+    }
+  }
+}

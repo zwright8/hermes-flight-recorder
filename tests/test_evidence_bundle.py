@@ -507,6 +507,8 @@ class EvidenceBundleTests(unittest.TestCase):
                     str(artifacts["trainer_archive_check"]),
                     "--trainer-consumer-plan",
                     str(artifacts["trainer_consumer_plan"]),
+                    "--agentic-training-flow",
+                    str(artifacts["agentic_training_flow"]),
                     "--trainer-wrapper-dry-run",
                     str(artifacts["trainer_wrapper_dry_run"]),
                     "--agentic-training-result",
@@ -522,10 +524,10 @@ class EvidenceBundleTests(unittest.TestCase):
             self.assertEqual(bundle["decision"]["recommendation"], "promote_handoff")
             self.assertIn("trainer_handoff", bundle["decision"]["key_metrics"])
             trainer = bundle["metrics"]["trainer_handoff"]
-            self.assertEqual(trainer["stage_count"], 7)
-            self.assertEqual(trainer["handoff_ready_count"], 7)
+            self.assertEqual(trainer["stage_count"], 8)
+            self.assertEqual(trainer["handoff_ready_count"], 8)
             self.assertEqual(trainer["blocked_stage_count"], 0)
-            self.assertEqual(trainer["schema_supported_count"], 7)
+            self.assertEqual(trainer["schema_supported_count"], 8)
             self.assertTrue(trainer["complete_chain"])
             self.assertTrue(trainer["all_included_ready"])
             self.assertEqual(trainer["missing_stage_ids"], [])
@@ -535,6 +537,7 @@ class EvidenceBundleTests(unittest.TestCase):
                 "trainer_archive",
                 "trainer_archive_check",
                 "trainer_consumer_plan",
+                "agentic_training_flow",
                 "trainer_wrapper_dry_run",
                 "agentic_training_result",
             ])
@@ -600,6 +603,7 @@ class EvidenceBundleTests(unittest.TestCase):
                     "trainer_archive",
                     "trainer_archive_check",
                     "trainer_consumer_plan",
+                    "agentic_training_flow",
                     "trainer_wrapper_dry_run",
                     "agentic_training_result",
                 ],
@@ -672,6 +676,8 @@ class EvidenceBundleTests(unittest.TestCase):
                         str(artifacts["trainer_archive_check"]),
                         "--trainer-consumer-plan",
                         str(artifacts["trainer_consumer_plan"]),
+                        "--agentic-training-flow",
+                        str(artifacts["agentic_training_flow"]),
                         "--trainer-wrapper-dry-run",
                         str(artifacts["trainer_wrapper_dry_run"]),
                         "--agentic-training-result",
@@ -1642,6 +1648,7 @@ def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:
         "trainer_archive": root / "trainer_archive",
         "trainer_archive_check": root / "trainer_archive_check.json",
         "trainer_consumer_plan": root / "trainer_consumer_plan.json",
+        "agentic_training_flow": root / "agentic_training_flow.json",
         "trainer_wrapper_dry_run": root / "trainer_wrapper_dry_run.json",
         "agentic_training_result": root / "agentic_training_result.json",
     }
@@ -1707,6 +1714,20 @@ def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:
                 "external_code_ready_count": 1,
                 "trainer_input_count": 4,
                 "trainer_input_ready_count": 4,
+            },
+        },
+        artifacts["agentic_training_flow"]: {
+            "schema_version": "hfr.agentic_training_flow.v1",
+            "passed": True,
+            "readiness": "ready",
+            "recommendation": "ready_for_delegated_trainer_execution",
+            "check_count": 7,
+            "failed_check_count": 0,
+            "metrics": {
+                "command_arg_count": 3,
+                "external_code_file_count": 1,
+                "stage_count": 2,
+                "trainer_input_count": 4,
             },
         },
         artifacts["trainer_wrapper_dry_run"]: {

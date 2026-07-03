@@ -59,7 +59,7 @@ PHASES: tuple[dict[str, Any], ...] = (
         "id": "external_trainer_execution",
         "name": "External trainer execution",
         "required": ("agentic_training_plan", "trainer_preflight", "trainer_launch_check"),
-        "produces": ("agentic_training_runtime_preflight", "agentic_training_result"),
+        "produces": ("agentic_training_runtime_preflight", "agentic_training_flow", "agentic_training_result"),
         "gate": "live trainer launch requires explicit opt-in, credentials, and a passing preflight.",
     },
     {
@@ -111,6 +111,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "agentic_rollout_plan": "agentic_rollout_plan",
     "agentic_rollout_receipt": "agentic_rollout_receipt",
     "agentic_training_plan": "agentic_training_plan",
+    "agentic_training_flow": "agentic_training_flow",
     "agentic_training_result": "agentic_training_result",
     "agentic_training_runtime_preflight": "agentic_training_runtime_preflight",
     "compare_gate": "compare_gate",

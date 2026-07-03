@@ -23,6 +23,15 @@ from .agentic_training_result import (
     REGISTER_RESULT_RECOMMENDATION,
     RESULT_STATUSES,
 )
+from .agentic_training_flow import (
+    AGENTIC_TRAINING_FLOW_SCHEMA_VERSION,
+    BLOCKED_TRAINER_FLOW_MODES,
+    EXECUTABLE_FLOW_MODES,
+    EXECUTABLE_STAGES,
+    FLOW_BLOCK_RECOMMENDATION,
+    FLOW_READY_RECOMMENDATION,
+)
+from .agentic_training_runtime import AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION
 from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION
 from .agentic_loop_ledger import AGENTIC_LOOP_LEDGER_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
@@ -49,6 +58,7 @@ from .improvement_gate import IMPROVEMENT_LEDGER_GATE_POLICY_SCHEMA_VERSION, IMP
 from .improvement_ledger import IMPROVEMENT_LEDGER_SCHEMA_VERSION, stable_work_key
 from .improvement_plan import IMPROVEMENT_PLAN_SCHEMA_VERSION, PRIORITIES, work_item_fingerprint
 from .lineage import LINEAGE_SCHEMA_VERSION, REPLAY_BUNDLE_SCHEMA_VERSION
+from .agentic_training_plan import AGENTIC_TRAINING_PLAN_SCHEMA_VERSION
 from .model_registry import (
     MODEL_ADAPTER_MANIFEST_SCHEMA_VERSION,
     MODEL_CANDIDATE_SCHEMA_VERSION,
@@ -232,6 +242,7 @@ def validate_artifacts(
     model_registry_entry_paths: list[str | Path] | None = None,
     model_registry_paths: list[str | Path] | None = None,
     training_plan_paths: list[str | Path] | None = None,
+    agentic_training_flow_paths: list[str | Path] | None = None,
     agentic_training_result_paths: list[str | Path] | None = None,
     agentic_training_loop_plan_paths: list[str | Path] | None = None,
     agentic_loop_ledger_paths: list[str | Path] | None = None,
@@ -352,6 +363,8 @@ def validate_artifacts(
         targets.append(validate_model_registry(model_registry_path))
     for training_plan_path in training_plan_paths or []:
         targets.append(validate_training_plan(training_plan_path))
+    for agentic_training_flow_path in agentic_training_flow_paths or []:
+        targets.append(validate_agentic_training_flow(agentic_training_flow_path))
     for agentic_training_result_path in agentic_training_result_paths or []:
         targets.append(validate_agentic_training_result(agentic_training_result_path))
     for agentic_training_loop_plan_path in agentic_training_loop_plan_paths or []:
@@ -1308,6 +1321,16 @@ def validate_training_plan(path: str | Path) -> ValidationTarget:
     plan = _read_object(plan_path, target, "training_plan.json")
     if plan is not None:
         _validate_training_plan(plan, target, plan_path)
+    return target
+
+
+def validate_agentic_training_flow(path: str | Path) -> ValidationTarget:
+    """Validate a delegated agentic trainer-flow receipt."""
+    flow_path = Path(path)
+    target = ValidationTarget("agentic_training_flow", str(flow_path))
+    flow = _read_object(flow_path, target, "agentic_training_flow.json")
+    if flow is not None:
+        _validate_agentic_training_flow(flow, target, flow_path)
     return target
 
 
@@ -2404,6 +2427,292 @@ def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget, sour
             "no_weight_download": plan.get("no_weight_download"),
         }
     )
+
+
+def _validate_agentic_training_flow(flow: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(flow, "schema_version", AGENTIC_TRAINING_FLOW_SCHEMA_VERSION, target, prefix="agentic_training_flow.")
+    checks = flow.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("agentic_training_flow.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "agentic_training_flow.checks")
+    if flow.get("check_count") != len(checks):
+        target.errors.append(f"agentic_training_flow.check_count expected {len(checks)}, got {flow.get('check_count')!r}.")
+    if flow.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"agentic_training_flow.failed_check_count expected {failed_checks}, got {flow.get('failed_check_count')!r}."
+        )
+    expected_passed = failed_checks == 0
+    if not isinstance(flow.get("passed"), bool):
+        target.errors.append("agentic_training_flow.passed must be a boolean.")
+    elif flow.get("passed") != expected_passed:
+        target.errors.append("agentic_training_flow.passed must match failed_check_count.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    expected_recommendation = FLOW_READY_RECOMMENDATION if expected_passed else FLOW_BLOCK_RECOMMENDATION
+    if flow.get("readiness") != expected_readiness:
+        target.errors.append(f"agentic_training_flow.readiness expected {expected_readiness!r}, got {flow.get('readiness')!r}.")
+    if flow.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"agentic_training_flow.recommendation expected {expected_recommendation!r}, got {flow.get('recommendation')!r}."
+        )
+    if not isinstance(flow.get("flow_id"), str) or not flow.get("flow_id"):
+        target.errors.append("agentic_training_flow.flow_id must be a non-empty string.")
+    flow_path = flow.get("flow_path")
+    if not isinstance(flow_path, str):
+        target.errors.append("agentic_training_flow.flow_path must be a string.")
+    elif flow_path and not _is_safe_or_redacted_training_flow_path(flow_path):
+        target.errors.append("agentic_training_flow.flow_path must be a safe relative path without traversal.")
+    if not _is_string_list(flow.get("blocked_reasons")):
+        target.errors.append("agentic_training_flow.blocked_reasons must be a list of strings.")
+    elif expected_passed and flow.get("blocked_reasons"):
+        target.errors.append("agentic_training_flow.blocked_reasons must be empty when passed.")
+    elif not expected_passed and len(flow.get("blocked_reasons", [])) != failed_checks:
+        target.errors.append("agentic_training_flow.blocked_reasons must match failed_check_count.")
+
+    _validate_agentic_training_flow_sources(flow.get("source_artifacts"), target, source_path)
+    flow_counts = _validate_agentic_training_flow_delegated_flow(flow.get("delegated_flow"), target)
+    _validate_agentic_training_flow_metrics(flow.get("metrics"), target, flow_counts, len(checks), failed_checks)
+    _validate_agentic_training_flow_boundary(flow.get("execution_boundary"), target)
+    _validate_agentic_training_flow_contract(flow.get("handoff_contract"), target)
+    if not _is_string_list(flow.get("notes")):
+        target.errors.append("agentic_training_flow.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": flow.get("passed"),
+            "mode": flow_counts.get("mode"),
+            "stage_count": flow_counts.get("stage_count"),
+            "command_arg_count": flow_counts.get("command_arg_count"),
+        }
+    )
+
+
+def _validate_agentic_training_flow_sources(value: Any, target: ValidationTarget, source_path: Path) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.source_artifacts must be an object.")
+        return
+    expected = {
+        "agentic_training_plan": AGENTIC_TRAINING_PLAN_SCHEMA_VERSION,
+        "agentic_training_runtime_preflight": AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION,
+        "trainer_consumer_plan": TRAINER_CONSUMER_PLAN_SCHEMA_VERSION,
+    }
+    for role, schema_version in expected.items():
+        ref = value.get(role)
+        label = f"agentic_training_flow.source_artifacts.{role}"
+        if not isinstance(ref, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        _validate_agentic_training_flow_source_ref(ref, target, label, role, schema_version, source_path)
+
+
+def _validate_agentic_training_flow_source_ref(
+    ref: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    role: str,
+    schema_version: str,
+    source_path: Path,
+) -> None:
+    if ref.get("role") != role:
+        target.errors.append(f"{label}.role must be {role!r}.")
+    path_value = ref.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string.")
+        path_value = ""
+    elif not _is_safe_or_redacted_training_flow_path(path_value):
+        target.errors.append(f"{label}.path must be a safe relative path without traversal.")
+    if ref.get("schema_version") != schema_version:
+        target.errors.append(f"{label}.schema_version must be {schema_version!r}.")
+    if ref.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if ref.get("regular_file") is not True:
+        target.errors.append(f"{label}.regular_file must be true.")
+    if ref.get("passed") is not True:
+        target.errors.append(f"{label}.passed must be true.")
+    if not isinstance(ref.get("recommendation"), str) or not ref.get("recommendation"):
+        target.errors.append(f"{label}.recommendation must be a non-empty string.")
+    if not _is_sha256(ref.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+    if not _is_non_negative_int(ref.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    if isinstance(path_value, str) and path_value and not path_value.startswith("<"):
+        current_path = (source_path.parent / path_value).resolve()
+        if current_path.exists():
+            if current_path.is_symlink() or not current_path.is_file():
+                target.errors.append(f"{label}.path must resolve to a regular file.")
+                return
+            if _is_non_negative_int(ref.get("size_bytes")) and current_path.stat().st_size != ref.get("size_bytes"):
+                target.errors.append(f"{label}.size_bytes does not match path.")
+            if _is_sha256(ref.get("sha256")) and _sha256(current_path) != ref.get("sha256"):
+                target.errors.append(f"{label}.sha256 does not match path.")
+
+
+def _validate_agentic_training_flow_delegated_flow(value: Any, target: ValidationTarget) -> dict[str, Any]:
+    counts: dict[str, Any] = {
+        "mode": "",
+        "stage_count": 0,
+        "executable_stage_count": 0,
+        "selected_view_count": 0,
+        "command_arg_count": 0,
+        "trainer_input_count": 0,
+        "external_code_file_count": 0,
+    }
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.delegated_flow must be an object.")
+        return counts
+    mode = value.get("mode")
+    counts["mode"] = mode if isinstance(mode, str) else ""
+    if mode not in EXECUTABLE_FLOW_MODES:
+        target.errors.append(f"agentic_training_flow.delegated_flow.mode must be one of {list(EXECUTABLE_FLOW_MODES)!r}.")
+    if mode in BLOCKED_TRAINER_FLOW_MODES:
+        target.errors.append("agentic_training_flow.delegated_flow.mode must not be an advanced reward or RL mode.")
+    if not isinstance(value.get("backend"), str) or not value.get("backend"):
+        target.errors.append("agentic_training_flow.delegated_flow.backend must be a non-empty string.")
+    stage_sequence = value.get("stage_sequence")
+    if not _is_string_list(stage_sequence):
+        target.errors.append("agentic_training_flow.delegated_flow.stage_sequence must be a list of strings.")
+        stage_sequence = []
+    stages = value.get("stages")
+    if not isinstance(stages, list):
+        target.errors.append("agentic_training_flow.delegated_flow.stages must be a list.")
+        stages = []
+    if len(stages) != len(stage_sequence):
+        target.errors.append("agentic_training_flow.delegated_flow.stages must match stage_sequence length.")
+    counts["stage_count"] = len([stage for stage in stages if isinstance(stage, dict)])
+    seen_views: set[str] = set()
+    for index, stage in enumerate(stages):
+        label = f"agentic_training_flow.delegated_flow.stages[{index}]"
+        if not isinstance(stage, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        stage_id = stage.get("stage_id")
+        if stage_id not in EXECUTABLE_STAGES:
+            target.errors.append(f"{label}.stage_id must be one of {list(EXECUTABLE_STAGES)!r}.")
+        else:
+            counts["executable_stage_count"] += 1
+        if stage.get("stage_index") != index:
+            target.errors.append(f"{label}.stage_index expected {index}, got {stage.get('stage_index')!r}.")
+        if index < len(stage_sequence) and stage_id != stage_sequence[index]:
+            target.errors.append(f"{label}.stage_id must match delegated_flow.stage_sequence[{index}].")
+        if stage.get("view_ready") is not True:
+            target.errors.append(f"{label}.view_ready must be true.")
+        if not isinstance(stage.get("view_name"), str) or not stage.get("view_name"):
+            target.errors.append(f"{label}.view_name must be a non-empty string.")
+        else:
+            seen_views.add(stage["view_name"])
+        if not isinstance(stage.get("view_path"), str) or not stage.get("view_path"):
+            target.errors.append(f"{label}.view_path must be a non-empty string.")
+        if not isinstance(stage.get("view_schema_version"), str) or not stage.get("view_schema_version"):
+            target.errors.append(f"{label}.view_schema_version must be a non-empty string.")
+        if not _is_non_negative_int(stage.get("row_count")) or stage.get("row_count") <= 0:
+            target.errors.append(f"{label}.row_count must be a positive integer.")
+    counts["selected_view_count"] = len(seen_views)
+    command_counts = _validate_agentic_training_flow_command(value.get("command"), target)
+    counts.update(command_counts)
+    return counts
+
+
+def _validate_agentic_training_flow_command(value: Any, target: ValidationTarget) -> dict[str, int]:
+    counts = {"command_arg_count": 0, "trainer_input_count": 0, "external_code_file_count": 0}
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.delegated_flow.command must be an object.")
+        return counts
+    for field_name in ("execution_cwd", "archive_root", "external_code_root", "command_shell"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"agentic_training_flow.delegated_flow.command.{field_name} must be a string.")
+    argv = value.get("command_argv")
+    if not _is_string_list(argv):
+        target.errors.append("agentic_training_flow.delegated_flow.command.command_argv must be a list of strings.")
+        argv = []
+    clean_argv = [item for item in argv if isinstance(item, str)]
+    counts["command_arg_count"] = len(clean_argv)
+    expected_shell = shlex.join(clean_argv) if clean_argv else ""
+    if value.get("command_shell") != expected_shell:
+        target.errors.append("agentic_training_flow.delegated_flow.command.command_shell must match command_argv.")
+    for field_name in ("trainer_input_count", "external_code_file_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"agentic_training_flow.delegated_flow.command.{field_name} must be a non-negative integer.")
+        else:
+            counts[field_name] = int(value[field_name])
+    if not clean_argv:
+        target.errors.append("agentic_training_flow.delegated_flow.command.command_argv must not be empty.")
+    return counts
+
+
+def _validate_agentic_training_flow_metrics(
+    value: Any,
+    target: ValidationTarget,
+    counts: dict[str, Any],
+    check_count: int,
+    failed_check_count: int,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.metrics must be an object.")
+        return
+    expected = {
+        "check_count": check_count,
+        "failed_check_count": failed_check_count,
+        "stage_count": counts["stage_count"],
+        "executable_stage_count": counts["executable_stage_count"],
+        "selected_view_count": counts["selected_view_count"],
+        "command_arg_count": counts["command_arg_count"],
+        "trainer_input_count": counts["trainer_input_count"],
+        "external_code_file_count": counts["external_code_file_count"],
+    }
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"agentic_training_flow.metrics.{field_name} expected {expected_value}, got {value.get(field_name)!r}.")
+
+
+def _validate_agentic_training_flow_boundary(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.execution_boundary must be an object.")
+        return
+    if value.get("flow_plan_only") is not True:
+        target.errors.append("agentic_training_flow.execution_boundary.flow_plan_only must be true.")
+    for field_name in (
+        "training_started",
+        "trainer_command_executed",
+        "subprocess_started",
+        "cloud_jobs_started",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "trainer_modules_imported",
+        "credential_values_recorded",
+    ):
+        if value.get(field_name) is not False:
+            target.errors.append(f"agentic_training_flow.execution_boundary.{field_name} must be false.")
+
+
+def _validate_agentic_training_flow_contract(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_training_flow.handoff_contract must be an object.")
+        return
+    if value.get("runner_owns_execution") is not True:
+        target.errors.append("agentic_training_flow.handoff_contract.runner_owns_execution must be true.")
+    if value.get("runner_must_require_recommendation") != FLOW_READY_RECOMMENDATION:
+        target.errors.append(
+            "agentic_training_flow.handoff_contract.runner_must_require_recommendation must be ready_for_delegated_trainer_execution."
+        )
+    if value.get("runner_must_emit_result_schema") != AGENTIC_TRAINING_RESULT_SCHEMA_VERSION:
+        target.errors.append("agentic_training_flow.handoff_contract.runner_must_emit_result_schema must be hfr.agentic_training_result.v1.")
+    for field_name in (
+        "requires_runtime_preflight",
+        "requires_trainer_consumer_plan",
+        "requires_registered_model_and_dataset",
+        "requires_redacted_dataset",
+    ):
+        if value.get(field_name) is not True:
+            target.errors.append(f"agentic_training_flow.handoff_contract.{field_name} must be true.")
+    if value.get("flight_recorder_executed_trainer") is not False:
+        target.errors.append("agentic_training_flow.handoff_contract.flight_recorder_executed_trainer must be false.")
+    if sorted(value.get("executable_modes", [])) != sorted(EXECUTABLE_FLOW_MODES):
+        target.errors.append("agentic_training_flow.handoff_contract.executable_modes must match executable trainer flow modes.")
+    if sorted(value.get("blocked_modes", [])) != sorted(BLOCKED_TRAINER_FLOW_MODES):
+        target.errors.append("agentic_training_flow.handoff_contract.blocked_modes must match blocked trainer flow modes.")
+
+
+def _is_safe_or_redacted_training_flow_path(value: str) -> bool:
+    return value.startswith("<redacted:") or _is_safe_agentic_training_result_path(value)
 
 
 def _validate_agentic_training_result(result: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
@@ -17412,6 +17721,7 @@ def _validate_bundle_trainer_handoff(value: dict[str, Any], target: ValidationTa
         "trainer_archive",
         "trainer_archive_check",
         "trainer_consumer_plan",
+        "agentic_training_flow",
         "trainer_wrapper_dry_run",
         "agentic_training_result",
     )

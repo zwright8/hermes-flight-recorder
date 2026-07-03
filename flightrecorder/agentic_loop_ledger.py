@@ -20,6 +20,7 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "training": (
         "agentic_training_plan",
         "agentic_training_runtime_preflight",
+        "agentic_training_flow",
         "agentic_training_result",
         "trainer_preflight",
         "trainer_launch_check",

@@ -118,6 +118,7 @@ from .model_grader import (
     build_rubric_spec,
     write_model_grader_artifact,
 )
+from .agentic_training_flow import AgenticTrainingFlowError, build_agentic_training_flow, write_agentic_training_flow
 from .next_iteration_schedule import NextIterationScheduleError, build_next_iteration_schedule, write_next_iteration_schedule
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
@@ -264,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         ModelGraderError,
         RejectionSamplingGateError,
         DatasetCurationReceiptError,
+        AgenticTrainingFlowError,
         NextIterationScheduleError,
         ReplayError,
         SchemaRegistryError,
@@ -1108,6 +1110,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         model_registry_entry_paths=args.model_registry_entry,
         model_registry_paths=args.model_registry,
         training_plan_paths=args.training_plan,
+        agentic_training_flow_paths=args.agentic_training_flow,
         agentic_training_result_paths=args.agentic_training_result,
         agentic_training_loop_plan_paths=args.agentic_loop_plan,
         agentic_loop_ledger_paths=args.agentic_loop_ledger,
@@ -1472,6 +1475,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "agentic_rollout_plan": args.agentic_rollout_plan,
         "agentic_rollout_receipt": args.agentic_rollout_receipt,
         "agentic_training_plan": args.agentic_training_plan,
+        "agentic_training_flow": args.agentic_training_flow,
         "agentic_training_result": args.agentic_training_result,
         "agentic_training_runtime_preflight": args.agentic_training_runtime_preflight,
         "dataset_curation_receipt": args.dataset_curation_receipt,
@@ -1902,6 +1906,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         trainer_archive_path=args.trainer_archive,
         trainer_archive_check_path=args.trainer_archive_check,
         trainer_consumer_plan_path=args.trainer_consumer_plan,
+        agentic_training_flow_path=args.agentic_training_flow,
         trainer_wrapper_dry_run_path=args.trainer_wrapper_dry_run,
         agentic_training_result_path=args.agentic_training_result,
         harness_manifest_paths=args.harness_manifest,
@@ -2173,6 +2178,25 @@ def cmd_trainer_consumer_plan(args: argparse.Namespace) -> int:
         f"external_code={plan['metrics']['external_code_file_count']} out={args.out}"
     )
     return 0 if plan["passed"] else 1
+
+
+def cmd_agentic_training_flow(args: argparse.Namespace) -> int:
+    receipt = build_agentic_training_flow(
+        plan_path=args.plan,
+        runtime_preflight_path=args.runtime_preflight,
+        trainer_consumer_plan_path=args.trainer_consumer_plan,
+        out_path=args.out,
+        flow_id=args.flow_id or "",
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    write_agentic_training_flow(args.out, receipt)
+    print(
+        f"{'READY' if receipt['passed'] else 'BLOCKED'} agentic-training-flow "
+        f"mode={receipt['delegated_flow']['mode']} "
+        f"stages={receipt['metrics']['stage_count']} out={args.out}"
+    )
+    return 0 if receipt["passed"] else 1
 
 
 def cmd_export_review(args: argparse.Namespace) -> int:
@@ -3056,6 +3080,12 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--model-registry", action="append", default=[], help="Validate one model registry JSON; may be repeated")
     validate.add_argument("--training-plan", action="append", default=[], help="Validate one dry-run training plan JSON; may be repeated")
     validate.add_argument(
+        "--agentic-training-flow",
+        action="append",
+        default=[],
+        help="Validate one agentic_training_flow.json delegated trainer-flow receipt; may be repeated",
+    )
+    validate.add_argument(
         "--agentic-training-result",
         action="append",
         default=[],
@@ -3361,6 +3391,7 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="agentic_training_runtime_preflight artifact; may be repeated",
     )
+    agentic_loop_plan.add_argument("--agentic-training-flow", action="append", default=[], help="agentic_training_flow artifact; may be repeated")
     agentic_loop_plan.add_argument("--agentic-training-result", action="append", default=[], help="agentic_training_result artifact; may be repeated")
     agentic_loop_plan.add_argument("--trainer-preflight", action="append", default=[], help="trainer_preflight artifact; may be repeated")
     agentic_loop_plan.add_argument("--trainer-launch-check", action="append", default=[], help="trainer_launch_check artifact; may be repeated")
@@ -3398,6 +3429,16 @@ def _parser() -> argparse.ArgumentParser:
     next_iteration_schedule.add_argument("--out", required=True, help="Write hfr.next_iteration_schedule.v1 JSON to this path")
     next_iteration_schedule.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in schedule refs")
     next_iteration_schedule.set_defaults(func=cmd_next_iteration_schedule)
+
+    agentic_training_flow = subparsers.add_parser("agentic-training-flow", help="Write a fail-closed delegated trainer-flow receipt")
+    agentic_training_flow.add_argument("--plan", required=True, help="agentic_training_plan artifact")
+    agentic_training_flow.add_argument("--runtime-preflight", required=True, help="agentic_training_runtime_preflight artifact")
+    agentic_training_flow.add_argument("--trainer-consumer-plan", required=True, help="trainer_consumer_plan artifact")
+    agentic_training_flow.add_argument("--flow-id", help="Optional stable flow id")
+    agentic_training_flow.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    agentic_training_flow.add_argument("--out", required=True, help="Write hfr.agentic_training_flow.v1 JSON to this path")
+    agentic_training_flow.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in flow refs")
+    agentic_training_flow.set_defaults(func=cmd_agentic_training_flow)
 
     cloud_training = subparsers.add_parser("cloud-training", help="Build fail-closed cloud training provider contracts")
     cloud_training_subparsers = cloud_training.add_subparsers(dest="cloud_training_command", required=True)
@@ -3677,6 +3718,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--trainer-archive", help="Trainer archive directory or trainer_archive.json included in the handoff")
     evidence_bundle.add_argument("--trainer-archive-check", help="trainer_archive_check.json included in the handoff")
     evidence_bundle.add_argument("--trainer-consumer-plan", help="trainer_consumer_plan.json included in the handoff")
+    evidence_bundle.add_argument("--agentic-training-flow", help="agentic_training_flow.json included in the handoff")
     evidence_bundle.add_argument("--trainer-wrapper-dry-run", help="trainer_wrapper_dry_run.json included in the handoff")
     evidence_bundle.add_argument("--agentic-training-result", help="agentic_training_result.json included in the handoff")
     evidence_bundle.add_argument("--harness-manifest", action="append", default=[], help="harness_manifest.json included in the handoff; may be repeated")
