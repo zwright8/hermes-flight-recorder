@@ -1199,6 +1199,94 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertIn("trainer_consumer_plan.source_archive_check.size_bytes does not match path", errors)
             self.assertIn("trainer_consumer_plan.source_archive_check.sha256 does not match path", errors)
 
+            symlink_source_plan = Path(tmp) / "trainer_consumer_plan_symlink_source.json"
+            symlink_source_summary = Path(tmp) / "trainer_consumer_plan_symlink_source_summary.json"
+            source_link = Path(tmp) / "trainer_archive_check_link.json"
+            try:
+                source_link.symlink_to(archive_check)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            forged = json.loads(json.dumps(plan))
+            forged["source_archive_check"]["path"] = source_link.name
+            symlink_source_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(symlink_source_plan),
+                    "--strict",
+                    "--out",
+                    str(symlink_source_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(symlink_source_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "trainer_consumer_plan.source_archive_check.path must resolve to a regular non-symlink file",
+                errors,
+            )
+
+            broken_symlink_source_plan = Path(tmp) / "trainer_consumer_plan_broken_symlink_source.json"
+            broken_symlink_source_summary = Path(tmp) / "trainer_consumer_plan_broken_symlink_source_summary.json"
+            broken_source_link = Path(tmp) / "broken_archive_check_link.json"
+            try:
+                broken_source_link.symlink_to(Path(tmp) / "missing_archive_check_target.json")
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            forged = json.loads(json.dumps(plan))
+            forged["source_archive_check"]["path"] = broken_source_link.name
+            broken_symlink_source_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(broken_symlink_source_plan),
+                    "--strict",
+                    "--out",
+                    str(broken_symlink_source_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(broken_symlink_source_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "trainer_consumer_plan.source_archive_check.path must resolve to a regular non-symlink file",
+                errors,
+            )
+
+            symlink_parent_source_plan = Path(tmp) / "trainer_consumer_plan_symlink_parent_source.json"
+            symlink_parent_source_summary = Path(tmp) / "trainer_consumer_plan_symlink_parent_source_summary.json"
+            linked_target = Path(tmp) / "linked_target"
+            linked_target.mkdir()
+            linked_archive_check = linked_target / archive_check.name
+            linked_archive_check.write_text(archive_check.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = Path(tmp) / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            forged = json.loads(json.dumps(plan))
+            forged["source_archive_check"]["path"] = str(Path(linked_parent.name) / archive_check.name)
+            symlink_parent_source_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(symlink_parent_source_plan),
+                    "--strict",
+                    "--out",
+                    str(symlink_parent_source_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(symlink_parent_source_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "trainer_consumer_plan.source_archive_check.path must resolve to a regular non-symlink file",
+                errors,
+            )
+
             forged_plan = Path(tmp) / "trainer_consumer_plan_forged_validation.json"
             forged_summary = Path(tmp) / "trainer_consumer_plan_forged_validation_summary.json"
             forged = json.loads(json.dumps(plan))

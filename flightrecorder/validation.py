@@ -16510,6 +16510,9 @@ def _validate_trainer_consumer_plan_source(value: Any, target: ValidationTarget,
     path = _trainer_consumer_plan_source_path(value.get("path"), source_path)
     if path is None:
         return
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append("trainer_consumer_plan.source_archive_check.path must resolve to a regular non-symlink file.")
+        return
     if not path.exists():
         target.errors.append("trainer_consumer_plan.source_archive_check.path must resolve to an existing file.")
         return
@@ -16533,12 +16536,12 @@ def _trainer_consumer_plan_source_path(value: Any, source_path: Path) -> Path | 
     if raw.is_absolute():
         return raw
     source_dir = source_path.resolve().parent
-    source_relative = (source_dir / raw).resolve()
-    if source_relative.exists():
+    source_relative = source_dir / raw
+    if source_relative.exists() or _path_has_symlink_component(source_relative, include_leaf=True):
         return source_relative
     repo_root = _repo_root_for_artifact(source_path)
     if repo_root is not None:
-        return (repo_root / raw).resolve()
+        return repo_root / raw
     return source_relative
 
 

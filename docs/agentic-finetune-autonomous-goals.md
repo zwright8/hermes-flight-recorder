@@ -705,8 +705,8 @@ card, and dataset card decisions.
   non-regular, symlinked, stale SHA-256, or stale byte-size source evidence
   before delegated trainer execution can be trusted.
 - Trainer consumer plans reopen visible trainer archive-check source refs and
-  reject missing, non-regular, stale SHA-256, or stale byte-size handoff
-  evidence before an external trainer wrapper can trust command inputs.
+  reject missing, non-regular, symlinked, stale SHA-256, or stale byte-size
+  handoff evidence before an external trainer wrapper can trust command inputs.
 - Trainer archive checks, consumer-plan execution refs, and wrapper dry-run
   refs reject missing visible resolved paths before accepting external trainer
   code or trainer inputs as ready for wrapper handoff.
