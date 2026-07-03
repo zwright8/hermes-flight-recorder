@@ -265,6 +265,31 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertIn("$.links.datasets[0]: expected exactly one matching schema from oneOf, got 0", schema["errors"])
             self.assertIn("model_registry_entry.links.datasets[0].size_bytes must be a non-negative integer for path-backed links.", errors)
 
+    def test_registry_entry_semantics_reject_uppercase_path_link_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                path=dataset_manifest,
+            )
+            entry = registry["entries"][candidate["candidate_id"]]
+            entry["links"]["datasets"][0]["sha256"] = entry["links"]["datasets"][0]["sha256"].upper()
+
+            schema = check_schema_contract(entry)
+            errors = model_registry_entry_errors(entry)
+
+            self.assertFalse(schema["passed"])
+            self.assertIn("$.links.datasets[0].sha256", "\n".join(schema["errors"]))
+            self.assertIn("model_registry_entry.links.datasets[0].sha256 must be a 64-character hex digest.", errors)
+
     def test_validate_rejects_registry_link_size_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

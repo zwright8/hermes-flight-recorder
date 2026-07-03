@@ -1443,7 +1443,7 @@ def _model_registry_links_errors(links: Any, errors: list[str]) -> None:
                     errors.append(f"{prefix}size_bytes must be a non-negative integer for path-backed links.")
                 if "sha256" not in record:
                     errors.append(f"{prefix}sha256 is required for path-backed links.")
-            if "sha256" in record and not _is_sha256(str(record.get("sha256") or "").lower()):
+            if "sha256" in record and not _is_sha256(record.get("sha256")):
                 errors.append(f"{prefix}sha256 must be a 64-character hex digest.")
             if "size_bytes" in record and not _is_non_negative_int(record.get("size_bytes")):
                 errors.append(f"{prefix}size_bytes must be a non-negative integer.")
