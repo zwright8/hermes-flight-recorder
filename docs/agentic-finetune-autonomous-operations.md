@@ -117,6 +117,9 @@ The bundled schema name is `supervisor_state`, with schema version
 `hfr.autonomy.supervisor_state.v1`. It requires explicit readiness entries for
 Evidence, Harness, Data, Model, Training, Serving/demo, Eval, and Governance so
 the supervisor cannot silently drop a layer while resuming work.
+Each `latest_artifacts` record must include `size_bytes`, and hash-bearing
+records should include SHA-256 as well, so checkpoint readers can detect size
+drift before trusting a resumable artifact reference.
 
 The state contract is intentionally the coordination layer, not a workflow
 engine. It should record the active layer, current/completed/blocked/next

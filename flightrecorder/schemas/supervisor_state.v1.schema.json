@@ -90,9 +90,10 @@
         "description": { "minLength": 1, "type": "string" },
         "path": { "minLength": 1, "type": "string" },
         "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+        "size_bytes": { "minimum": 0, "type": "integer" },
         "type": { "minLength": 1, "type": "string" }
       },
-      "required": ["path"],
+      "required": ["path", "size_bytes"],
       "type": "object"
     },
     "layer_status": {

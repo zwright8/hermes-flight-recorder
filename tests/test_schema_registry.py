@@ -251,6 +251,7 @@ class SchemaRegistryTests(unittest.TestCase):
                         "path": "flightrecorder/schemas/supervisor_state.v1.schema.json",
                         "type": "schema",
                         "sha256": "0" * 64,
+                        "size_bytes": 123,
                     }
                 ],
                 "latest_verification": [
@@ -281,6 +282,41 @@ class SchemaRegistryTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result["errors"])
         self.assertEqual(result["schema"]["name"], "supervisor_state")
+
+    def test_supervisor_state_schema_requires_size_for_hashed_artifacts(self):
+        result = check_schema_contract(
+            {
+                "schema_version": "hfr.autonomy.supervisor_state.v1",
+                "updated_at": "2026-07-02T00:00:00Z",
+                "active_layer": "evidence",
+                "current_packet": "publish supervisor-state schema",
+                "completed_packets": [],
+                "blocked_packets": [],
+                "next_packets": [],
+                "latest_artifacts": [
+                    {
+                        "path": "flightrecorder/schemas/supervisor_state.v1.schema.json",
+                        "type": "schema",
+                        "sha256": "0" * 64,
+                    }
+                ],
+                "latest_verification": [],
+                "promotion_readiness": {
+                    "evidence": "in_progress",
+                    "harness": "not_started",
+                    "data": "not_started",
+                    "model": "not_started",
+                    "training": "not_started",
+                    "serving_demo": "not_started",
+                    "eval": "not_started",
+                    "governance": "not_started",
+                },
+            }
+        )
+
+        self.assertFalse(result["passed"])
+        errors = "\n".join(result["errors"])
+        self.assertIn("$.latest_artifacts[0]: missing required property 'size_bytes'", errors)
 
     def test_supervisor_state_schema_requires_all_layer_readiness(self):
         result = check_schema_contract(
