@@ -100,6 +100,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("agentic_training_result", names)
         self.assertIn("agentic_training_loop_plan", names)
         self.assertIn("cloud_training_provider_registry", names)
+        self.assertIn("next_iteration_schedule", names)
         self.assertIn("cloud_training_preflight", names)
         self.assertIn("cloud_training_artifact_manifest", names)
         self.assertIn("cloud_training_launch_plan", names)

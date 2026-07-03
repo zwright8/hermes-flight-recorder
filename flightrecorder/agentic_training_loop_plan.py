@@ -100,7 +100,7 @@ PHASES: tuple[dict[str, Any], ...] = (
         "id": "next_iteration",
         "name": "Next-iteration scheduling",
         "required": ("action_ledger",),
-        "produces": ("agentic_training_loop_plan",),
+        "produces": ("agentic_training_loop_plan", "next_iteration_schedule"),
         "gate": "new iterations are scheduled only from ledgered decisions and open repair actions.",
     },
 )
@@ -131,6 +131,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "promotion_ledger": "promotion_ledger",
     "model_grader_dry_run": "model_grader_dry_run",
     "model_grader_gate": "model_grader_gate",
+    "next_iteration_schedule": "next_iteration_schedule",
     "review_calibration": "review_calibration",
     "reviewed_gate": "reviewed_gate",
     "rejection_sampling_gate": "rejection_sampling_gate",
@@ -273,7 +274,6 @@ def build_agentic_training_loop_plan(
         {"promotion_decision_present": "promotion_decision" in refs, "promotion_ledger_present": "promotion_ledger" in refs},
         {"promotion_decision_present": True, "promotion_ledger_present": True},
     )
-
     failed_checks = [check for check in checks if not check["passed"]]
     missing_phase_inputs = sorted({missing for phase in phases for missing in phase["missing_required_artifacts"]})
     readiness = "ready_for_governance_review" if not failed_checks and not missing_phase_inputs else "planned_fail_closed"

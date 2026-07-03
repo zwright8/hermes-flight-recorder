@@ -690,6 +690,14 @@
       "name": "agentic_loop_ledger"
     },
     {
+      "artifact": "next_iteration_schedule",
+      "artifact_schema_version": "hfr.next_iteration_schedule.v1",
+      "description": "Side-effect-free next-iteration schedule proposal for closed-loop agentic training.",
+      "filename": "next_iteration_schedule.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/next_iteration_schedule.v1.schema.json",
+      "name": "next_iteration_schedule"
+    },
+    {
       "artifact": "cloud_training_provider_registry",
       "artifact_schema_version": "hfr.cloud_training_provider_registry.v1",
       "description": "Provider-neutral cloud training capability registry.",

@@ -118,6 +118,7 @@ from .model_grader import (
     build_rubric_spec,
     write_model_grader_artifact,
 )
+from .next_iteration_schedule import NextIterationScheduleError, build_next_iteration_schedule, write_next_iteration_schedule
 from .redaction import sanitize_trace
 from .preflight import TrainerPreflightError, build_trainer_launch_check, build_trainer_preflight
 from .promotion_archive import PromotionArchiveError, build_promotion_archive
@@ -263,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         ModelGraderError,
         RejectionSamplingGateError,
         DatasetCurationReceiptError,
+        NextIterationScheduleError,
         ReplayError,
         SchemaRegistryError,
         ModelRegistryError,
@@ -1109,6 +1111,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         agentic_training_result_paths=args.agentic_training_result,
         agentic_training_loop_plan_paths=args.agentic_loop_plan,
         agentic_loop_ledger_paths=args.agentic_loop_ledger,
+        next_iteration_schedule_paths=args.next_iteration_schedule,
         cloud_training_provider_registry_paths=args.cloud_training_provider_registry,
         cloud_training_preflight_paths=args.cloud_training_preflight,
         cloud_training_artifact_manifest_paths=args.cloud_training_artifact_manifest,
@@ -1486,6 +1489,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "rubric_spec": args.rubric_spec,
         "model_grader_dry_run": args.model_grader_dry_run,
         "model_grader_gate": args.model_grader_gate,
+        "next_iteration_schedule": args.next_iteration_schedule,
         "review_calibration": args.review_calibration,
         "reviewed_gate": args.reviewed_gate,
         "rejection_sampling_gate": args.rejection_sampling_gate,
@@ -1536,6 +1540,26 @@ def cmd_agentic_loop_ledger(args: argparse.Namespace) -> int:
     else:
         print(json.dumps(ledger, indent=2, sort_keys=True, ensure_ascii=False))
     return 0
+
+
+def cmd_next_iteration_schedule(args: argparse.Namespace) -> int:
+    schedule = build_next_iteration_schedule(
+        loop_ledger_path=args.loop_ledger,
+        action_ledger_path=args.action_ledger,
+        improvement_ledger_path=args.improvement_ledger,
+        next_iteration_id=args.next_iteration_id,
+        objective=args.objective,
+        schedule=dict(args.schedule or []),
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    write_next_iteration_schedule(args.out, schedule)
+    print(
+        f"wrote {args.out} readiness={schedule['readiness']} "
+        f"recommendation={schedule['recommendation']}"
+    )
+    return 0 if schedule["passed"] else 1
 
 
 def cmd_cloud_training_providers(args: argparse.Namespace) -> int:
@@ -3043,6 +3067,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one agentic_training_loop_plan.json contract; may be repeated",
     )
     validate.add_argument("--agentic-loop-ledger", action="append", default=[], help="Validate one agentic_loop_ledger.json; may be repeated")
+    validate.add_argument("--next-iteration-schedule", action="append", default=[], help="Validate one next_iteration_schedule.json; may be repeated")
     validate.add_argument("--cloud-training-provider-registry", action="append", default=[], help="Validate one cloud training provider registry")
     validate.add_argument("--cloud-training-preflight", action="append", default=[], help="Validate one cloud training preflight")
     validate.add_argument("--cloud-training-artifact-manifest", action="append", default=[], help="Validate one cloud training artifact manifest")
@@ -3348,6 +3373,7 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--action-ledger", action="append", default=[], help="action_ledger artifact; may be repeated")
     agentic_loop_plan.add_argument("--promotion-decision", action="append", default=[], help="promotion_decision artifact; may be repeated")
     agentic_loop_plan.add_argument("--promotion-ledger", action="append", default=[], help="promotion_ledger artifact; may be repeated")
+    agentic_loop_plan.add_argument("--next-iteration-schedule", action="append", default=[], help="next_iteration_schedule artifact; may be repeated")
     agentic_loop_plan.add_argument("--rubric-spec", action="append", default=[], help="rubric_spec artifact; may be repeated")
     agentic_loop_plan.add_argument("--model-grader-dry-run", action="append", default=[], help="model_grader_dry_run artifact; may be repeated")
     agentic_loop_plan.add_argument("--model-grader-gate", action="append", default=[], help="model_grader_gate artifact; may be repeated")
@@ -3359,6 +3385,18 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_ledger.add_argument("--out", help="Write hfr.agentic_loop_ledger.v1 JSON to this path")
     agentic_loop_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in ledger output")
     agentic_loop_ledger.set_defaults(func=cmd_agentic_loop_ledger)
+
+    next_iteration_schedule = subparsers.add_parser("next-iteration-schedule", help="Write a side-effect-free next-iteration schedule proposal")
+    next_iteration_schedule.add_argument("--loop-ledger", required=True, help="agentic_loop_ledger artifact")
+    next_iteration_schedule.add_argument("--action-ledger", required=True, help="action_ledger artifact")
+    next_iteration_schedule.add_argument("--improvement-ledger", required=True, help="improvement_ledger artifact")
+    next_iteration_schedule.add_argument("--next-iteration-id", help="Proposed next iteration id; defaults from latest loop id")
+    next_iteration_schedule.add_argument("--objective", help="Human-readable next iteration objective")
+    next_iteration_schedule.add_argument("--schedule", action="append", default=[], type=_state_set_arg, help="Attach schedule KEY=JSON_VALUE; may be repeated")
+    next_iteration_schedule.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    next_iteration_schedule.add_argument("--out", required=True, help="Write hfr.next_iteration_schedule.v1 JSON to this path")
+    next_iteration_schedule.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in schedule refs")
+    next_iteration_schedule.set_defaults(func=cmd_next_iteration_schedule)
 
     cloud_training = subparsers.add_parser("cloud-training", help="Build fail-closed cloud training provider contracts")
     cloud_training_subparsers = cloud_training.add_subparsers(dest="cloud_training_command", required=True)

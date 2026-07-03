@@ -26,6 +26,7 @@ flightrecorder schemas --check runs/agentic_rollout_receipt.json
 flightrecorder schemas --check runs/rejection_sampling_gate.json
 flightrecorder schemas --check runs/dataset_curation_receipt.json
 flightrecorder schemas --check runs/agentic_loop_ledger.json
+flightrecorder schemas --check runs/next_iteration_schedule.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
 flightrecorder schemas --check runs/model_grader_gate.json
@@ -708,6 +709,18 @@ flightrecorder agentic-loop ledger \
 flightrecorder validate \
   --agentic-loop-ledger runs/agentic_loop_ledger.json \
   --strict
+
+flightrecorder next-iteration-schedule \
+  --loop-ledger runs/agentic_loop_ledger.json \
+  --action-ledger runs/action_ledger.json \
+  --improvement-ledger runs/improvement_ledger.json \
+  --next-iteration-id loop-002 \
+  --objective "Resolve remaining ledgered repair pressure" \
+  --out runs/next_iteration_schedule.json
+
+flightrecorder validate \
+  --next-iteration-schedule runs/next_iteration_schedule.json \
+  --strict
 ```
 
 External benchmark adapters stay fail-closed until a separate runner executes
@@ -735,8 +748,11 @@ before any live launch or promotion claim.
 The companion `hfr.agentic_loop_ledger.v1` artifact records chronological
 iteration inputs, rollout/review/training/serving/eval/governance group counts,
 cost ceilings, promotion/rollback posture, and next-action scheduling state.
-It is ledger-only: it does not launch trainers, graders, cloud jobs, live
-benchmarks, downloads, promotion writes, or weight updates.
+The loop ledger is ledger-only: it does not launch trainers, graders, cloud
+jobs, live benchmarks, downloads, promotion writes, or weight updates. The
+`hfr.next_iteration_schedule.v1` receipt proposes a next loop iteration from
+the loop, action, and improvement ledgers without creating automations, threads,
+calendar events, cloud jobs, or weight updates.
 
 Cloud trainer integrations use the same fail-closed receipt pattern. The
 `flightrecorder cloud-training` namespace currently emits provider registry,

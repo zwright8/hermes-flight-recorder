@@ -1,0 +1,101 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/next_iteration_schedule.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Side-effect-free next-iteration schedule proposal for closed-loop agentic training.",
+  "properties": {
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "type": "object" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "execution_boundary": {
+      "additionalProperties": true,
+      "properties": {
+        "automations_created": { "const": false },
+        "calendar_events_created": { "const": false },
+        "cloud_jobs_started": { "const": false },
+        "codex_threads_created": { "const": false },
+        "credential_values_recorded": { "const": false },
+        "schedule_only": { "const": true },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "schedule_only",
+        "automations_created",
+        "codex_threads_created",
+        "calendar_events_created",
+        "cloud_jobs_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "next_iteration": {
+      "additionalProperties": true,
+      "properties": {
+        "iteration_id": { "minLength": 1, "type": "string" },
+        "latest_iteration_id": { "type": "string" },
+        "objective": { "minLength": 1, "type": "string" },
+        "reason": { "minLength": 1, "type": "string" },
+        "schedule": { "type": "object" },
+        "scheduled": { "const": false },
+        "trigger": { "const": "manual_or_external_scheduler" }
+      },
+      "required": ["iteration_id", "objective", "latest_iteration_id", "scheduled", "trigger", "schedule", "reason"],
+      "type": "object"
+    },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "pressure": {
+      "additionalProperties": true,
+      "properties": {
+        "critical_open_work_item_count": { "minimum": 0, "type": "integer" },
+        "high_open_work_item_count": { "minimum": 0, "type": "integer" },
+        "latest_loop_readiness": { "type": "string" },
+        "latest_missing_phase_input_count": { "minimum": 0, "type": "integer" },
+        "open_action_count": { "minimum": 0, "type": "integer" },
+        "open_work_item_count": { "minimum": 0, "type": "integer" },
+        "recurring_action_count": { "minimum": 0, "type": "integer" },
+        "total_open_signal_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "latest_loop_readiness",
+        "latest_missing_phase_input_count",
+        "open_action_count",
+        "recurring_action_count",
+        "open_work_item_count",
+        "critical_open_work_item_count",
+        "high_open_work_item_count",
+        "total_open_signal_count"
+      ],
+      "type": "object"
+    },
+    "readiness": { "enum": ["ready_to_schedule", "blocked"] },
+    "recommendation": {
+      "enum": ["create_next_loop_plan", "monitor_or_promote_without_new_iteration", "fix_schedule_inputs"]
+    },
+    "schedule_path": { "type": "string" },
+    "schema_version": { "const": "hfr.next_iteration_schedule.v1" },
+    "source_ledgers": { "type": "object" }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "schedule_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_ledgers",
+    "pressure",
+    "next_iteration",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Next Iteration Schedule",
+  "type": "object"
+}

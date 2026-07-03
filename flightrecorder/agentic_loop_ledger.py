@@ -28,6 +28,7 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "eval": ("heldout_manifest", "external_eval_plan", "eval_summary"),
     "improvement": ("repair_queue", "improvement_plan", "improvement_ledger", "action_ledger"),
     "governance": ("promotion_decision", "promotion_ledger", "promotion_alias_apply", "promotion_rollback_receipt"),
+    "next_iteration": ("action_ledger", "next_iteration_schedule"),
 }
 
 

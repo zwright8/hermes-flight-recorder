@@ -110,6 +110,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "improvement_plan": [self.write_json(root / "improvement_plan.json", "hfr.improvement_plan.v1")],
             "promotion_decision": [self.write_json(root / "promotion_decision.json", "hfr.promotion_decision.v1")],
             "promotion_ledger": [self.write_json(root / "promotion_ledger.json", "hfr.promotion_ledger.v1")],
+            "next_iteration_schedule": [self.write_json(root / "next_iteration_schedule.json", "hfr.next_iteration_schedule.v1")],
             "action_ledger": [self.write_json(root / "action_ledger.json", "hfr.action_ledger.v1")],
         }
 

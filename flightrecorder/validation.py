@@ -73,6 +73,7 @@ from .model_grader import (
     MODEL_GRADER_GATE_SCHEMA_VERSION,
     RUBRIC_SPEC_SCHEMA_VERSION,
 )
+from .next_iteration_schedule import NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION
 from .preflight import (
     TRAINER_DIRECTORY_TREE_HASH_ALGORITHM,
     TRAINER_LAUNCH_CHECK_SCHEMA_VERSION,
@@ -234,6 +235,7 @@ def validate_artifacts(
     agentic_training_result_paths: list[str | Path] | None = None,
     agentic_training_loop_plan_paths: list[str | Path] | None = None,
     agentic_loop_ledger_paths: list[str | Path] | None = None,
+    next_iteration_schedule_paths: list[str | Path] | None = None,
     cloud_training_provider_registry_paths: list[str | Path] | None = None,
     cloud_training_preflight_paths: list[str | Path] | None = None,
     cloud_training_artifact_manifest_paths: list[str | Path] | None = None,
@@ -356,6 +358,8 @@ def validate_artifacts(
         targets.append(validate_agentic_training_loop_plan(agentic_training_loop_plan_path))
     for agentic_loop_ledger_path in agentic_loop_ledger_paths or []:
         targets.append(validate_agentic_loop_ledger(agentic_loop_ledger_path))
+    for next_iteration_schedule_path in next_iteration_schedule_paths or []:
+        targets.append(validate_next_iteration_schedule(next_iteration_schedule_path))
     for cloud_training_provider_registry_path in cloud_training_provider_registry_paths or []:
         targets.append(validate_cloud_training_provider_registry(cloud_training_provider_registry_path))
     for cloud_training_preflight_path in cloud_training_preflight_paths or []:
@@ -1334,6 +1338,16 @@ def validate_agentic_loop_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "agentic_loop_ledger.json")
     if ledger is not None:
         _validate_agentic_loop_ledger(ledger, target, ledger_path)
+    return target
+
+
+def validate_next_iteration_schedule(path: str | Path) -> ValidationTarget:
+    """Validate one next-iteration schedule proposal."""
+    schedule_path = Path(path)
+    target = ValidationTarget("next_iteration_schedule", str(schedule_path))
+    schedule = _read_object(schedule_path, target, "next_iteration_schedule.json")
+    if schedule is not None:
+        _validate_next_iteration_schedule(schedule, target)
     return target
 
 
@@ -2796,6 +2810,140 @@ def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: Validation
         target.errors.append(f"{label}.sha256 must be a sha256 hex digest.")
     elif _sha256(source_path) != sha:
         target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _validate_next_iteration_schedule(schedule: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(schedule, "schema_version", NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION, target, prefix="next_iteration_schedule.")
+    checks = schedule.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("next_iteration_schedule.checks must be a list.")
+        checks = []
+    failed_checks = _validate_gate_like_checks(checks, target, "next_iteration_schedule.checks")
+    if schedule.get("check_count") != len(checks):
+        target.errors.append(f"next_iteration_schedule.check_count expected {len(checks)}, got {schedule.get('check_count')!r}.")
+    if schedule.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            f"next_iteration_schedule.failed_check_count expected {failed_checks}, got {schedule.get('failed_check_count')!r}."
+        )
+    if schedule.get("passed") != (failed_checks == 0):
+        target.errors.append("next_iteration_schedule.passed must match failed_check_count.")
+    expected_readiness = "ready_to_schedule" if failed_checks == 0 else "blocked"
+    if schedule.get("readiness") != expected_readiness:
+        target.errors.append(f"next_iteration_schedule.readiness expected {expected_readiness!r}, got {schedule.get('readiness')!r}.")
+    expected_recommendations = {"create_next_loop_plan", "monitor_or_promote_without_new_iteration"} if failed_checks == 0 else {"fix_schedule_inputs"}
+    if schedule.get("recommendation") not in expected_recommendations:
+        target.errors.append("next_iteration_schedule.recommendation does not match readiness.")
+    if not _is_string_list(schedule.get("blocked_reasons")):
+        target.errors.append("next_iteration_schedule.blocked_reasons must be a list of strings.")
+
+    ledgers = schedule.get("source_ledgers")
+    if not isinstance(ledgers, dict):
+        target.errors.append("next_iteration_schedule.source_ledgers must be an object.")
+        ledgers = {}
+    expected_sources = {
+        "agentic_loop_ledger": "hfr.agentic_loop_ledger.v1",
+        "action_ledger": "hfr.action_ledger.v1",
+        "improvement_ledger": "hfr.improvement_ledger.v1",
+    }
+    for role, schema_version in expected_sources.items():
+        rows = ledgers.get(role)
+        if not isinstance(rows, list) or len(rows) != 1:
+            target.errors.append(f"next_iteration_schedule.source_ledgers.{role} must contain exactly one ref.")
+            continue
+        _validate_next_iteration_schedule_ref(rows[0], target, f"next_iteration_schedule.source_ledgers.{role}[0]", role, schema_version)
+
+    pressure = schedule.get("pressure")
+    if not isinstance(pressure, dict):
+        target.errors.append("next_iteration_schedule.pressure must be an object.")
+        pressure = {}
+    else:
+        for field_name in (
+            "latest_missing_phase_input_count",
+            "open_action_count",
+            "recurring_action_count",
+            "open_work_item_count",
+            "critical_open_work_item_count",
+            "high_open_work_item_count",
+            "total_open_signal_count",
+        ):
+            if not _is_non_negative_int(pressure.get(field_name)):
+                target.errors.append(f"next_iteration_schedule.pressure.{field_name} must be a non-negative integer.")
+        expected_total = (
+            _safe_non_negative_int(pressure.get("latest_missing_phase_input_count"))
+            + _safe_non_negative_int(pressure.get("open_action_count"))
+            + _safe_non_negative_int(pressure.get("open_work_item_count"))
+        )
+        if _is_non_negative_int(pressure.get("total_open_signal_count")) and pressure.get("total_open_signal_count") != expected_total:
+            target.errors.append("next_iteration_schedule.pressure.total_open_signal_count must equal missing phases + open actions + open work.")
+    next_iteration = schedule.get("next_iteration")
+    if not isinstance(next_iteration, dict):
+        target.errors.append("next_iteration_schedule.next_iteration must be an object.")
+    else:
+        for field_name in ("iteration_id", "objective", "trigger", "reason"):
+            if not isinstance(next_iteration.get(field_name), str) or not next_iteration.get(field_name):
+                target.errors.append(f"next_iteration_schedule.next_iteration.{field_name} must be a non-empty string.")
+        if next_iteration.get("scheduled") is not False:
+            target.errors.append("next_iteration_schedule.next_iteration.scheduled must be false.")
+        if next_iteration.get("trigger") != "manual_or_external_scheduler":
+            target.errors.append("next_iteration_schedule.next_iteration.trigger must be manual_or_external_scheduler.")
+        if not isinstance(next_iteration.get("schedule"), dict):
+            target.errors.append("next_iteration_schedule.next_iteration.schedule must be an object.")
+
+    boundary = schedule.get("execution_boundary")
+    if not isinstance(boundary, dict):
+        target.errors.append("next_iteration_schedule.execution_boundary must be an object.")
+    else:
+        if boundary.get("schedule_only") is not True:
+            target.errors.append("next_iteration_schedule.execution_boundary.schedule_only must be true.")
+        for field_name in (
+            "automations_created",
+            "codex_threads_created",
+            "calendar_events_created",
+            "cloud_jobs_started",
+            "weights_updated_by_flight_recorder",
+            "credential_values_recorded",
+        ):
+            if boundary.get(field_name) is not False:
+                target.errors.append(f"next_iteration_schedule.execution_boundary.{field_name} must be false.")
+    target.details.update(
+        {
+            "readiness": schedule.get("readiness"),
+            "recommendation": schedule.get("recommendation"),
+            "next_iteration_id": next_iteration.get("iteration_id") if isinstance(next_iteration, dict) else None,
+        }
+    )
+
+
+def _validate_next_iteration_schedule_ref(
+    row: Any,
+    target: ValidationTarget,
+    label: str,
+    role: str,
+    schema_version: str,
+) -> None:
+    if not isinstance(row, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if row.get("role") != role:
+        target.errors.append(f"{label}.role must be {role!r}.")
+    if row.get("kind") != "file":
+        target.errors.append(f"{label}.kind must be 'file'.")
+    if row.get("exists") is not True:
+        target.errors.append(f"{label}.exists must be true.")
+    if row.get("schema_version") != schema_version:
+        target.errors.append(f"{label}.schema_version must be {schema_version!r}.")
+    if row.get("passed") is not True:
+        target.errors.append(f"{label}.passed must be true.")
+    if not isinstance(row.get("path"), str) or not row.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    if not _is_sha256(row.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
+    if not _is_non_negative_int(row.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+
+
+def _safe_non_negative_int(value: Any) -> int:
+    return value if _is_non_negative_int(value) else 0
 
 
 def _validate_cloud_training_contract(
