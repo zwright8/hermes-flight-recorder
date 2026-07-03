@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flightrecorder.agentic_training_plan import build_agentic_training_plan, write_agentic_training_plan
 from flightrecorder.cli import main
+from flightrecorder.schema_registry import check_schema_contract
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -801,6 +802,20 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(all(len(item["sha256"]) == 64 for item in external if item["passed"]))
             self.assertTrue(all("expected_size_bytes" in item for item in check["trainer_input_checks"] if item["passed"]))
             self.assertEqual(run_cli(["schemas", "--check", str(archive_check)]), 0)
+            schema = check_schema_contract(check, name_or_id="trainer_archive_check")
+            self.assertTrue(schema["passed"], schema["errors"])
+            forged_external = json.loads(json.dumps(check))
+            passed_external = next(item for item in forged_external["external_code_checks"] if item["passed"])
+            passed_external.pop("sha256")
+            forged_external_schema = check_schema_contract(forged_external, name_or_id="trainer_archive_check")
+            self.assertFalse(forged_external_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(forged_external_schema["errors"]))
+            forged_external = json.loads(json.dumps(check))
+            passed_external = next(item for item in forged_external["external_code_checks"] if item["passed"])
+            passed_external.pop("size_bytes")
+            forged_external_schema = check_schema_contract(forged_external, name_or_id="trainer_archive_check")
+            self.assertFalse(forged_external_schema["passed"])
+            self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(forged_external_schema["errors"]))
             self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check), "--strict"]), 0)
 
             forged_check = Path(tmp) / "trainer_archive_check_forged_input_size.json"
@@ -928,6 +943,8 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertFalse(missing["passed"])
             self.assertEqual(missing["recommendation"], "block_consumer_launch")
             self.assertGreater(missing["metrics"]["missing_external_code_count"], 0)
+            self.assertTrue(any(not item["passed"] and "sha256" not in item for item in missing["external_code_checks"]))
+            self.assertEqual(run_cli(["schemas", "--check", str(missing_check)]), 0)
             self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(missing_check), "--strict"]), 0)
 
             blocked_plan = Path(tmp) / "trainer_consumer_plan_blocked.json"

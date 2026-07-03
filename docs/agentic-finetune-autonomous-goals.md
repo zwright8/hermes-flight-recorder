@@ -630,6 +630,8 @@ card, and dataset card decisions.
   target, and detects missing duplicate output-artifact links.
 - Agentic training plans and runtime preflights also bind registered manifests
   and selected trainer views to SHA-256 plus byte-size evidence.
+- Trainer archive checks reject passed external-code file checks that omit
+  SHA-256 or byte-size evidence while preserving missing-code diagnostics.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

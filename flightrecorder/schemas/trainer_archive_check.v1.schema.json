@@ -140,6 +140,36 @@
     },
     "externalCodeCheck": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "passed",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "passed": {
+                  "const": false
+                }
+              },
+              "required": [
+                "passed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "argv_index": {
           "minimum": 0,
