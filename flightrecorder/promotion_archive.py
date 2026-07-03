@@ -180,6 +180,11 @@ def _decision_gate_sources(
         if not isinstance(record, dict):
             continue
         source_path, reason = _resolve_recorded_path(record.get("path"), ledger_path.parent, allowed_parent_root=ledger_path.parent)
+        if source_path is not None:
+            integrity_error = _record_integrity_error(record, source_path, "promotion ledger record")
+            if integrity_error is not None:
+                source_path = None
+                reason = integrity_error
         paths.append((source_path, reason, True))
     return paths
 
@@ -211,7 +216,13 @@ def _is_existing_promotion_archive(target: Path) -> bool:
 
 def _source_artifact_path(decision_gate: dict[str, Any], decision_path: Path, evidence_root: Path | None) -> tuple[Path | None, str | None]:
     source = decision_gate.get("source_artifact") if isinstance(decision_gate.get("source_artifact"), dict) else {}
-    return _resolve_recorded_path(source.get("path"), decision_path.parent, allowed_parent_root=evidence_root)
+    source_path, reason = _resolve_recorded_path(source.get("path"), decision_path.parent, allowed_parent_root=evidence_root)
+    if source_path is None:
+        return source_path, reason
+    integrity_error = _record_integrity_error(source, source_path, "decision gate source_artifact record")
+    if integrity_error is not None:
+        return None, integrity_error
+    return source_path, reason
 
 
 def _copy_artifact(
@@ -307,6 +318,24 @@ def _resolve_recorded_path(value: Any, base_dir: Path, *, allowed_parent_root: P
     return None, "; ".join(unsafe_reasons) or "recorded path could not be resolved safely"
 
 
+def _record_integrity_error(record: dict[str, Any], source_path: Path, label: str) -> str | None:
+    if not source_path.is_file() or source_path.is_symlink():
+        return None
+    expected_sha = record.get("sha256")
+    if expected_sha is not None:
+        if not _is_sha256(expected_sha):
+            return f"sha256 is invalid in {label}"
+        if _sha256(source_path) != expected_sha:
+            return f"sha256 does not match {label}"
+    expected_size = record.get("size_bytes")
+    if expected_size is not None:
+        if not _is_non_negative_int(expected_size):
+            return f"size_bytes is invalid in {label}"
+        if source_path.stat().st_size != expected_size:
+            return f"size_bytes does not match {label}"
+    return None
+
+
 def _copyable_file_error(path: Path) -> str | None:
     if path.is_symlink():
         return f"file is a symlink: {path}"
@@ -364,6 +393,14 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
+
+
+def _is_non_negative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _display_path(path: Path, preserve_paths: bool = False) -> str:

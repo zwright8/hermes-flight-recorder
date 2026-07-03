@@ -1162,6 +1162,110 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertNotIn("hfr.decision_gate.v1", archived_text)
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
+    def test_promotion_archive_rejects_stale_ledger_decision_gate_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            _write_ready_action_ledger_gate(source)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]), 0)
+            gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+            gate["notes"] = ["stale-after-ledger"]
+            decision_gate.write_text(json.dumps(gate, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["decision_gate_count"], 0)
+            self.assertEqual(archive["missing"][0]["role"], "decision_gate")
+            self.assertIn("sha256 does not match promotion ledger record", archive["missing"][0]["reason"])
+            archived_text = "\n".join(path.read_text(encoding="utf-8") for path in (archive_dir / "artifacts").glob("*.json"))
+            self.assertNotIn("stale-after-ledger", archived_text)
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
+    def test_promotion_archive_rejects_stale_decision_source_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "action_ledger_gate.json"
+            decision_gate = root / "decision_gate.json"
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            _write_ready_action_ledger_gate(source)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(source),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["promotion-ledger", "--decision-gate", str(decision_gate), "--out", str(ledger_path)]), 0)
+            stale_source = json.loads(source.read_text(encoding="utf-8"))
+            stale_source["decision"]["summary"] = "Stale source after decision gate approval."
+            stale_source["notes"] = ["stale-after-decision"]
+            source.write_text(json.dumps(stale_source, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(
+                [
+                    "promotion-archive",
+                    "--promotion-ledger",
+                    str(ledger_path),
+                    "--out",
+                    str(archive_dir),
+                    "--require-self-contained",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            archive = json.loads((archive_dir / "promotion_archive.json").read_text(encoding="utf-8"))
+            self.assertFalse(archive["self_contained"])
+            self.assertEqual(archive["metrics"]["decision_gate_count"], 1)
+            self.assertEqual(archive["metrics"]["source_artifact_count"], 0)
+            self.assertEqual(archive["missing"][0]["role"], "source_artifact")
+            self.assertIn("sha256 does not match decision gate source_artifact record", archive["missing"][0]["reason"])
+            archived_text = "\n".join(path.read_text(encoding="utf-8") for path in (archive_dir / "artifacts").glob("*.json"))
+            self.assertNotIn("stale-after-decision", archived_text)
+            self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
+
     def test_promotion_archive_force_refuses_non_archive_directories(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
