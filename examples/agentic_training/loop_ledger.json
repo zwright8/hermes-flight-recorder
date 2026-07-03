@@ -43,6 +43,10 @@
         },
         {
           "count": 0,
+          "group": "next_iteration"
+        },
+        {
+          "count": 0,
           "group": "review"
         },
         {
@@ -84,6 +88,7 @@
         "roles_missing": [
           "heldout_manifest",
           "external_eval_plan",
+          "external_eval_receipt",
           "eval_summary"
         ],
         "roles_present": []
@@ -165,6 +170,7 @@
         "artifact_count": 3,
         "group": "training",
         "roles_missing": [
+          "agentic_training_flow",
           "trainer_preflight",
           "trainer_launch_check"
         ],
@@ -198,6 +204,10 @@
       {
         "count": 0,
         "group": "improvement"
+      },
+      {
+        "count": 0,
+        "group": "next_iteration"
       },
       {
         "count": 0,
@@ -247,5 +257,56 @@
     "Promotion, rollback, live benchmark, and cloud trainer actions remain separate governed receipts."
   ],
   "passed": true,
+  "readiness_digest": {
+    "blocked_reason_count": 4,
+    "decision_readiness": "blocked",
+    "decision_recommendation": "continue_iteration",
+    "latest_iteration_id": "demo-loop-001",
+    "latest_iteration_index": 0,
+    "live_spend_allowed": false,
+    "missing_artifact_group_count": 9,
+    "missing_artifact_groups": [
+      "datasets",
+      "eval",
+      "evidence",
+      "governance",
+      "improvement",
+      "next_iteration",
+      "review",
+      "rollouts",
+      "serving"
+    ],
+    "missing_phase_input_count": 18,
+    "missing_phase_inputs": [
+      "action_ledger",
+      "eval_summary",
+      "evidence_bundle",
+      "external_eval_plan",
+      "external_eval_receipt",
+      "harness_result",
+      "heldout_manifest",
+      "improvement_plan",
+      "model_grader_gate",
+      "promotion_decision",
+      "promotion_ledger",
+      "review_calibration",
+      "reviewed_gate",
+      "rubric_spec",
+      "serving_lifecycle",
+      "trainer_launch_check",
+      "trainer_preflight",
+      "training_export"
+    ],
+    "next_action_recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
+    "next_action_scheduled": false,
+    "promotion_decision_present": false,
+    "readiness": "planned_fail_closed",
+    "ready_for_governance_review": false,
+    "recommendation": "collect_missing_receipts_before_live_execution",
+    "requires_governance_decision": true,
+    "rollback_receipt_present": false,
+    "side_effects_started": false,
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 18 missing phase input(s) across 9 empty artifact group(s)."
+  },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }

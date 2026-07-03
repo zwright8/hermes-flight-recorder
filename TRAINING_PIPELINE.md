@@ -770,6 +770,9 @@ before any live launch or promotion claim.
 The companion `hfr.agentic_loop_ledger.v1` artifact records chronological
 iteration inputs, rollout/review/training/serving/eval/governance group counts,
 cost ceilings, promotion/rollback posture, and next-action scheduling state.
+It also emits a `readiness_digest` for the latest iteration so operators can see
+the missing phase inputs, empty artifact groups, governance posture, next-action
+recommendation, and side-effect boundary without parsing the full ledger.
 Review group counts include `model_grader_override_receipt` when human override
 resolution is needed, and eval group counts include both `external_eval_plan`
 and `external_eval_receipt` so dry-run benchmark receipts are not lost between

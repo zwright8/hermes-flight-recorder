@@ -3083,6 +3083,7 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
         target.errors.append("agentic_loop_ledger.metrics.ready_iteration_count does not match iterations.")
     if metrics.get("blocked_iteration_count") != blocked_count:
         target.errors.append("agentic_loop_ledger.metrics.blocked_iteration_count does not match iterations.")
+    _validate_agentic_loop_ledger_digest(ledger.get("readiness_digest"), iterations, metrics, target)
     boundary = ledger.get("execution_boundary")
     if not isinstance(boundary, dict):
         target.errors.append("agentic_loop_ledger.execution_boundary must be an object.")
@@ -3106,6 +3107,61 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
             "latest_readiness": metrics.get("latest_readiness"),
         }
     )
+
+
+def _validate_agentic_loop_ledger_digest(
+    digest: Any,
+    iterations: list[Any],
+    metrics: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(digest, dict):
+        target.errors.append("agentic_loop_ledger.readiness_digest must be an object.")
+        return
+    latest = iterations[-1] if iterations and isinstance(iterations[-1], dict) else {}
+    missing_phase_inputs = digest.get("missing_phase_inputs")
+    if not _is_string_list(missing_phase_inputs):
+        target.errors.append("agentic_loop_ledger.readiness_digest.missing_phase_inputs must be a list of strings.")
+        missing_phase_inputs = []
+    if digest.get("missing_phase_input_count") != len(missing_phase_inputs):
+        target.errors.append("agentic_loop_ledger.readiness_digest.missing_phase_input_count must match missing_phase_inputs.")
+    missing_groups = digest.get("missing_artifact_groups")
+    if not _is_string_list(missing_groups):
+        target.errors.append("agentic_loop_ledger.readiness_digest.missing_artifact_groups must be a list of strings.")
+        missing_groups = []
+    if digest.get("missing_artifact_group_count") != len(missing_groups):
+        target.errors.append("agentic_loop_ledger.readiness_digest.missing_artifact_group_count must match missing_artifact_groups.")
+    if digest.get("side_effects_started") is not False:
+        target.errors.append("agentic_loop_ledger.readiness_digest.side_effects_started must be false.")
+    if latest:
+        latest_missing_phase_inputs = (
+            [item for item in latest.get("missing_phase_inputs", []) if isinstance(item, str)]
+            if isinstance(latest.get("missing_phase_inputs"), list)
+            else []
+        )
+        latest_group_counts = {
+            row.get("group"): _safe_non_negative_int(row.get("count"))
+            for row in latest.get("artifact_group_counts", [])
+            if isinstance(row, dict) and isinstance(row.get("group"), str)
+        }
+        latest_missing_groups = sorted(group for group, count in latest_group_counts.items() if count == 0)
+        if digest.get("latest_iteration_id") != latest.get("iteration_id"):
+            target.errors.append("agentic_loop_ledger.readiness_digest.latest_iteration_id must match the latest iteration.")
+        if digest.get("latest_iteration_index") != latest.get("index"):
+            target.errors.append("agentic_loop_ledger.readiness_digest.latest_iteration_index must match the latest iteration.")
+        if digest.get("readiness") != latest.get("readiness"):
+            target.errors.append("agentic_loop_ledger.readiness_digest.readiness must match the latest iteration.")
+        if digest.get("recommendation") != latest.get("recommendation"):
+            target.errors.append("agentic_loop_ledger.readiness_digest.recommendation must match the latest iteration.")
+        if missing_phase_inputs != latest_missing_phase_inputs:
+            target.errors.append("agentic_loop_ledger.readiness_digest.missing_phase_inputs must match the latest iteration.")
+        if missing_groups != latest_missing_groups:
+            target.errors.append("agentic_loop_ledger.readiness_digest.missing_artifact_groups must match the latest iteration.")
+        expected_ready = latest.get("readiness") == "ready_for_governance_review" and not latest_missing_phase_inputs
+        if digest.get("ready_for_governance_review") != expected_ready:
+            target.errors.append("agentic_loop_ledger.readiness_digest.ready_for_governance_review must match latest iteration readiness.")
+    if digest.get("latest_iteration_id") != metrics.get("latest_iteration_id"):
+        target.errors.append("agentic_loop_ledger.readiness_digest.latest_iteration_id must match metrics.latest_iteration_id.")
 
 
 def _validate_agentic_loop_ledger_counts(value: Any, target: ValidationTarget, label: str, key_name: str) -> None:

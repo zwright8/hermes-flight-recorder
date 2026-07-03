@@ -98,6 +98,61 @@
       "type": "array"
     },
     "passed": { "type": "boolean" },
+    "readiness_digest": {
+      "additionalProperties": true,
+      "description": "Operator-facing latest-iteration readiness summary derived from the ledger only.",
+      "properties": {
+        "blocked_reason_count": { "minimum": 0, "type": "integer" },
+        "decision_readiness": { "minLength": 1, "type": "string" },
+        "decision_recommendation": { "minLength": 1, "type": "string" },
+        "latest_iteration_id": { "minLength": 1, "type": "string" },
+        "latest_iteration_index": { "minimum": 0, "type": "integer" },
+        "live_spend_allowed": { "type": "boolean" },
+        "missing_artifact_group_count": { "minimum": 0, "type": "integer" },
+        "missing_artifact_groups": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "missing_phase_input_count": { "minimum": 0, "type": "integer" },
+        "missing_phase_inputs": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "next_action_recommendation": { "type": "string" },
+        "next_action_scheduled": { "type": "boolean" },
+        "promotion_decision_present": { "type": "boolean" },
+        "readiness": { "minLength": 1, "type": "string" },
+        "ready_for_governance_review": { "type": "boolean" },
+        "recommendation": { "minLength": 1, "type": "string" },
+        "requires_governance_decision": { "type": "boolean" },
+        "rollback_receipt_present": { "type": "boolean" },
+        "side_effects_started": { "const": false },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "latest_iteration_index",
+        "latest_iteration_id",
+        "readiness",
+        "recommendation",
+        "decision_readiness",
+        "decision_recommendation",
+        "ready_for_governance_review",
+        "missing_phase_input_count",
+        "missing_phase_inputs",
+        "missing_artifact_group_count",
+        "missing_artifact_groups",
+        "blocked_reason_count",
+        "next_action_scheduled",
+        "next_action_recommendation",
+        "requires_governance_decision",
+        "promotion_decision_present",
+        "rollback_receipt_present",
+        "live_spend_allowed",
+        "side_effects_started",
+        "summary"
+      ],
+      "type": "object"
+    },
     "schema_version": { "const": "hfr.agentic_loop_ledger.v1" }
   },
   "required": [
@@ -108,6 +163,7 @@
     "iterations",
     "metrics",
     "decision",
+    "readiness_digest",
     "execution_boundary",
     "notes"
   ],

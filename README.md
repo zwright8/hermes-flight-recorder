@@ -335,6 +335,9 @@ The loop plan remains fail-closed by default: it records that Flight Recorder
 did not launch cloud jobs, paid graders, live benchmarks, model downloads, or
 weight updates. Missing phase receipts produce a schema-checkable
 `planned_fail_closed` contract rather than a live launch.
+Loop ledgers add a `readiness_digest` over the latest iteration so review can
+spot missing phase inputs, empty artifact groups, next-action posture, and
+side-effect status without walking every receipt.
 
 ## Cloud Training Contracts
 

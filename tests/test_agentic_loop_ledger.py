@@ -35,6 +35,12 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(payload["metrics"]["blocked_iteration_count"], 1)
             self.assertEqual(payload["metrics"]["latest_iteration_id"], "loop-002")
             self.assertEqual(payload["decision"]["recommendation"], "ready_for_governance_review")
+            digest = payload["readiness_digest"]
+            self.assertEqual(digest["latest_iteration_id"], "loop-002")
+            self.assertTrue(digest["ready_for_governance_review"])
+            self.assertEqual(digest["missing_phase_input_count"], 0)
+            self.assertEqual(digest["missing_artifact_group_count"], 0)
+            self.assertFalse(digest["side_effects_started"])
             self.assertFalse(payload["execution_boundary"]["cloud_jobs_started"])
             ready_record = payload["iterations"][1]
             groups = {row["group"]: row["count"] for row in ready_record["artifact_group_counts"]}
@@ -67,6 +73,24 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(code, 1)
             errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
             self.assertIn("sha256 does not match the current file", errors)
+
+    def test_validate_rejects_tampered_readiness_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["readiness_digest"]["missing_phase_input_count"] = 9
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("readiness_digest.missing_phase_input_count must match missing_phase_inputs", errors)
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

@@ -60,6 +60,7 @@ def build_agentic_loop_ledger(
         plan = _read_loop_plan(path)
         iterations.append(_iteration_record(path, plan, index, output_path, preserve_paths))
     metrics = _metrics(iterations)
+    decision = _decision(iterations, metrics)
     return {
         "schema_version": AGENTIC_LOOP_LEDGER_SCHEMA_VERSION,
         "ledger_path": _display_path(Path(out_path), preserve_paths) if out_path is not None else "",
@@ -67,7 +68,8 @@ def build_agentic_loop_ledger(
         "iteration_count": len(iterations),
         "iterations": iterations,
         "metrics": metrics,
-        "decision": _decision(iterations, metrics),
+        "decision": decision,
+        "readiness_digest": _readiness_digest(iterations, decision),
         "execution_boundary": {
             "ledger_only": True,
             "cloud_jobs_started": False,
@@ -193,6 +195,55 @@ def _decision(iterations: list[dict[str, Any]], metrics: dict[str, Any]) -> dict
         "latest_iteration_index": latest.get("index"),
         "latest_iteration_id": latest.get("iteration_id"),
         "blocked_iteration_count": metrics.get("blocked_iteration_count"),
+    }
+
+
+def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]) -> dict[str, Any]:
+    latest = iterations[-1] if iterations else {}
+    missing_phase_inputs = latest.get("missing_phase_inputs") if isinstance(latest.get("missing_phase_inputs"), list) else []
+    missing_phase_inputs = [str(item) for item in missing_phase_inputs if isinstance(item, str)]
+    group_counts = {
+        row.get("group"): _non_negative_int(row.get("count"))
+        for row in latest.get("artifact_group_counts", [])
+        if isinstance(row, dict) and isinstance(row.get("group"), str)
+    }
+    missing_artifact_groups = [group for group in sorted(ROLE_GROUPS) if group_counts.get(group, 0) == 0]
+    governance = latest.get("governance") if isinstance(latest.get("governance"), dict) else {}
+    cost_estimate = latest.get("cost_estimate") if isinstance(latest.get("cost_estimate"), dict) else {}
+    next_actions = latest.get("next_actions") if isinstance(latest.get("next_actions"), dict) else {}
+    side_effects_started = any(
+        governance.get(field_name) is True
+        for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder")
+    )
+    ready = latest.get("readiness") == "ready_for_governance_review" and not missing_phase_inputs and not side_effects_started
+    if ready:
+        summary = f"Latest loop iteration {latest.get('iteration_id')} is ready for governance review."
+    else:
+        summary = (
+            f"Latest loop iteration {latest.get('iteration_id')} remains fail-closed with "
+            f"{len(missing_phase_inputs)} missing phase input(s) across {len(missing_artifact_groups)} empty artifact group(s)."
+        )
+    return {
+        "latest_iteration_index": latest.get("index"),
+        "latest_iteration_id": str(latest.get("iteration_id") or ""),
+        "readiness": str(latest.get("readiness") or ""),
+        "recommendation": str(latest.get("recommendation") or ""),
+        "decision_readiness": str(decision.get("readiness") or ""),
+        "decision_recommendation": str(decision.get("recommendation") or ""),
+        "ready_for_governance_review": ready,
+        "missing_phase_input_count": len(missing_phase_inputs),
+        "missing_phase_inputs": missing_phase_inputs,
+        "missing_artifact_group_count": len(missing_artifact_groups),
+        "missing_artifact_groups": missing_artifact_groups,
+        "blocked_reason_count": _non_negative_int(latest.get("blocked_reason_count")),
+        "next_action_scheduled": next_actions.get("scheduled") is True,
+        "next_action_recommendation": str(next_actions.get("recommendation") or ""),
+        "requires_governance_decision": next_actions.get("requires_governance_decision") is not False,
+        "promotion_decision_present": governance.get("promotion_decision_present") is True,
+        "rollback_receipt_present": governance.get("rollback_receipt_present") is True,
+        "live_spend_allowed": cost_estimate.get("live_spend_allowed") is True,
+        "side_effects_started": side_effects_started,
+        "summary": summary,
     }
 
 
