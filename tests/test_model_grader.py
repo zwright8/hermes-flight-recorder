@@ -33,6 +33,14 @@ def write_completed_labels(review_dir: Path, labels_path: Path) -> None:
     labels_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 
 
+def mark_first_review_item_needs_review(review_dir: Path) -> None:
+    items_path = review_dir / "review_items.jsonl"
+    rows = read_jsonl(items_path)
+    rows[0]["suggested_human_label"] = "needs_review"
+    rows[0]["notes"] = "Fixture forces a model-grader disagreement queue item."
+    items_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+
 def make_review_flow(tmp: str) -> tuple[Path, Path]:
     root = Path(tmp)
     runs = root / "runs"
@@ -182,8 +190,93 @@ class ModelGraderTests(unittest.TestCase):
             self.assertTrue(passing_payload["admission"]["labels_allowed_for_training"])
             self.assertEqual(passing_payload["admission"]["labels_admitted_count"], 2)
             self.assertEqual(passing_payload["admission"]["uncalibrated_labels_admitted"], 0)
+            self.assertEqual(passing_payload["metrics"]["dry_run_disagreement_queue_count"], 0)
+            self.assertEqual(passing_payload["metrics"]["dry_run_labels_requiring_human_review_count"], 0)
             self.assertFalse(passing_payload["execution_boundary"]["provider_api_called"])
             self.assert_schema_and_validate(passing_gate, "model_grader_gate")
+
+    def test_gate_blocks_unresolved_model_grader_disagreement_queue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            review, calibration = make_review_flow(tmp)
+            mark_first_review_item_needs_review(review)
+            root = Path(tmp)
+            rubric = root / "rubric.json"
+            dry_run = root / "dry_run.json"
+            gate = root / "gate.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "rubric",
+                        "--review-export",
+                        str(review),
+                        "--rubric-id",
+                        "prompt-injection-rubric",
+                        "--created-at",
+                        "2026-07-03T00:00:00+00:00",
+                        "--out",
+                        str(rubric),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "dry-run",
+                        "--review-export",
+                        str(review),
+                        "--rubric",
+                        str(rubric),
+                        "--grader-id",
+                        "mock-grader-v1",
+                        "--created-at",
+                        "2026-07-03T00:00:00+00:00",
+                        "--out",
+                        str(dry_run),
+                    ]
+                ),
+                0,
+            )
+            dry_payload = json.loads(dry_run.read_text(encoding="utf-8"))
+            self.assertEqual(dry_payload["disagreement_queue"][0]["mock_model_label"], "needs_review")
+            self.assertEqual(sum(1 for row in dry_payload["grader_labels"] if row["requires_human_review"]), 1)
+            self.assert_schema_and_validate(dry_run, "model_grader_dry_run")
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "gate",
+                        "--dry-run",
+                        str(dry_run),
+                        "--rubric",
+                        str(rubric),
+                        "--review-calibration",
+                        str(calibration),
+                        "--min-calibration-agreement-rate",
+                        "1.0",
+                        "--max-disagreements",
+                        "0",
+                        "--created-at",
+                        "2026-07-03T00:00:00+00:00",
+                        "--out",
+                        str(gate),
+                    ]
+                ),
+                1,
+            )
+            gate_payload = json.loads(gate.read_text(encoding="utf-8"))
+            self.assertFalse(gate_payload["passed"])
+            self.assertFalse(gate_payload["admission"]["labels_allowed_for_training"])
+            self.assertEqual(gate_payload["admission"]["labels_admitted_count"], 0)
+            self.assertEqual(gate_payload["metrics"]["dry_run_disagreement_queue_count"], 1)
+            self.assertEqual(gate_payload["metrics"]["dry_run_labels_requiring_human_review_count"], 1)
+            failed_ids = {check["id"] for check in gate_payload["checks"] if not check["passed"]}
+            self.assertIn("dry_run_human_review_queue_resolved", failed_ids)
+            self.assert_schema_and_validate(gate, "model_grader_gate")
 
     def test_schema_names_are_registered(self):
         names = {record["name"] for record in list_schema_records()}

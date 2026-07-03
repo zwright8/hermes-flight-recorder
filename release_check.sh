@@ -1025,6 +1025,38 @@ test -f runs/review_calibration.json
   --review-calibration runs/review_calibration.json \
   --strict >/dev/null
 "$PYTHON" -m flightrecorder schemas --check runs/review_calibration.json >/dev/null
+"$PYTHON" -m flightrecorder model-grader rubric \
+  --review-export runs/review_queue \
+  --rubric-id release-check-rubric \
+  --out runs/model_grader_rubric.json >/dev/null
+"$PYTHON" -m flightrecorder model-grader dry-run \
+  --review-export runs/review_queue \
+  --rubric runs/model_grader_rubric.json \
+  --grader-id mock-grader-release \
+  --out runs/model_grader_dry_run.json >/dev/null
+"$PYTHON" -m flightrecorder model-grader gate \
+  --dry-run runs/model_grader_dry_run.json \
+  --rubric runs/model_grader_rubric.json \
+  --review-calibration runs/review_calibration.json \
+  --min-calibration-agreement-rate 1.0 \
+  --max-disagreements 0 \
+  --out runs/model_grader_gate.json >/dev/null
+"$PYTHON" -m flightrecorder validate \
+  --rubric-spec runs/model_grader_rubric.json \
+  --model-grader-dry-run runs/model_grader_dry_run.json \
+  --model-grader-gate runs/model_grader_gate.json \
+  --strict >/dev/null
+"$PYTHON" - <<'PY'
+import json
+from pathlib import Path
+
+gate = json.loads(Path("runs/model_grader_gate.json").read_text(encoding="utf-8"))
+assert gate["passed"] is True
+assert gate["metrics"]["dry_run_disagreement_queue_count"] == 0
+assert gate["metrics"]["dry_run_labels_requiring_human_review_count"] == 0
+assert gate["admission"]["uncalibrated_labels_admitted"] == 0
+assert any(check["id"] == "dry_run_human_review_queue_resolved" for check in gate["checks"])
+PY
 if "$PYTHON" -m flightrecorder gate-reviewed \
   --reviewed-export runs/reviewed_export \
   --min-reviewed-labels 999 >/dev/null; then

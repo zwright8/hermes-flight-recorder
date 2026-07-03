@@ -165,6 +165,7 @@
     "agreement_rate": 1.0,
     "calibration_disagreement_count": 0,
     "dry_run_disagreement_queue_count": 0,
+    "dry_run_labels_requiring_human_review_count": 0,
     "graded_item_count": 2
   },
   "notes": [

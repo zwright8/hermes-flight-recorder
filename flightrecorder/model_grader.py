@@ -146,6 +146,8 @@ def build_model_grader_gate(
     )
     dry_run = _read_json(Path(dry_run_path))
     calibration = _read_json(Path(calibration_path)) if calibration_path else {}
+    labels_requiring_human_review = _labels_requiring_human_review_count(dry_run)
+    dry_run_disagreement_queue_count = _dry_run_disagreement_queue_count(dry_run)
     checks: list[dict[str, Any]] = []
     _add_check(checks, "dry_run_receipt_valid", _artifact_ready(dry_ref), {"artifact": dry_ref}, {"schema": "model_grader_dry_run", "passed": True})
     _add_check(checks, "rubric_spec_valid", _artifact_ready(rubric_ref), {"artifact": rubric_ref}, {"schema": "rubric_spec", "passed": True})
@@ -189,6 +191,16 @@ def build_model_grader_gate(
     )
     _add_check(
         checks,
+        "dry_run_human_review_queue_resolved",
+        labels_requiring_human_review == 0 and dry_run_disagreement_queue_count == 0,
+        {
+            "labels_requiring_human_review_count": labels_requiring_human_review,
+            "disagreement_queue_count": dry_run_disagreement_queue_count,
+        },
+        {"labels_requiring_human_review_count": 0, "disagreement_queue_count": 0},
+    )
+    _add_check(
+        checks,
         "paid_model_grader_not_called",
         _paid_calls_started(dry_run) is False,
         {"paid_model_grader_calls_started": _paid_calls_started(dry_run)},
@@ -213,7 +225,7 @@ def build_model_grader_gate(
         },
         "admission": {
             "labels_allowed_for_training": passed,
-            "labels_admitted_count": dry_run.get("graded_item_count", 0) if passed else 0,
+            "labels_admitted_count": _eligible_grader_label_count(dry_run) if passed else 0,
             "uncalibrated_labels_admitted": 0,
             "human_override_required_for_disagreements": True,
         },
@@ -221,12 +233,14 @@ def build_model_grader_gate(
             "graded_item_count": dry_run.get("graded_item_count", 0) if isinstance(dry_run, dict) else 0,
             "agreement_rate": agreement_rate,
             "calibration_disagreement_count": _calibration_disagreement_count(calibration),
-            "dry_run_disagreement_queue_count": len(dry_run.get("disagreement_queue", [])) if isinstance(dry_run, dict) else 0,
+            "dry_run_disagreement_queue_count": dry_run_disagreement_queue_count,
+            "dry_run_labels_requiring_human_review_count": labels_requiring_human_review,
         },
         "execution_boundary": _boundary(),
         "notes": [
             "The gate is the only artifact that can make model-grader labels eligible for downstream curation.",
             "Missing or failing calibration blocks by default.",
+            "Dry-run disagreement queues or labels requiring human review block until resolved by a future override contract.",
             "The gate records no provider calls and admits zero uncalibrated labels.",
         ],
     }
@@ -427,6 +441,21 @@ def _labels_admitted_count(dry_run: dict[str, Any]) -> int:
     admission = dry_run.get("training_admission") if isinstance(dry_run.get("training_admission"), dict) else {}
     value = admission.get("labels_admitted_count")
     return int(value) if isinstance(value, int) and value >= 0 else 0
+
+
+def _eligible_grader_label_count(dry_run: dict[str, Any]) -> int:
+    labels = dry_run.get("grader_labels") if isinstance(dry_run.get("grader_labels"), list) else []
+    return sum(1 for row in labels if isinstance(row, dict) and row.get("requires_human_review") is False)
+
+
+def _labels_requiring_human_review_count(dry_run: dict[str, Any]) -> int:
+    labels = dry_run.get("grader_labels") if isinstance(dry_run.get("grader_labels"), list) else []
+    return sum(1 for row in labels if isinstance(row, dict) and row.get("requires_human_review") is True)
+
+
+def _dry_run_disagreement_queue_count(dry_run: dict[str, Any]) -> int:
+    queue = dry_run.get("disagreement_queue") if isinstance(dry_run.get("disagreement_queue"), list) else []
+    return len(queue)
 
 
 def _paid_calls_started(dry_run: dict[str, Any]) -> bool:

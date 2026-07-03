@@ -371,7 +371,8 @@ environment-variable credentials.
 Model-grader support is currently executable as a deterministic, keyless
 dry-run control plane. `model-grader rubric` binds review items to a rubric,
 `model-grader dry-run` emits mock labels without calling a provider, and
-`model-grader gate` blocks those labels from training until calibration passes.
+`model-grader gate` blocks those labels from training until calibration passes
+and the dry-run disagreement queue is empty.
 
 ```bash
 flightrecorder model-grader rubric \
@@ -395,7 +396,8 @@ flightrecorder model-grader gate \
 
 The dry-run receipt records no provider API call, no paid grader call, no
 credential values, and zero labels admitted to training. The gate admits labels
-only after a passing review-calibration artifact and always records zero
+only after a passing review-calibration artifact, zero unresolved grader
+disagreements, and zero labels requiring human review. It always records zero
 uncalibrated labels.
 
 ## Comparison And Improvement Loops

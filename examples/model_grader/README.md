@@ -27,8 +27,9 @@ flightrecorder model-grader gate \
 provider, paid grader, trainer, or cloud job, and it admits zero labels to
 training. `blocked_gate.json` shows the default missing-calibration block.
 `passing_gate.json` shows the same dry-run labels becoming eligible only after a
-passing `review_calibration.json`; even then Flight Recorder records no provider
-call, no credential values, and no weight updates.
+passing `review_calibration.json` and an empty dry-run disagreement queue; even
+then Flight Recorder records no provider call, no credential values, and no
+weight updates.
 
 Validate the examples:
 

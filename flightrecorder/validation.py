@@ -4004,6 +4004,7 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
         target.errors.append(
             f"model_grader_dry_run.graded_item_count expected {len(labels)}, got {receipt.get('graded_item_count')!r}."
         )
+    labels_requiring_review = 0
     label_counts = _model_grader_label_counts(receipt.get("label_counts"), target, "model_grader_dry_run.label_counts")
     expected_counts = {label: 0 for label in REVIEW_LABELS}
     for index, row in enumerate(labels):
@@ -4022,6 +4023,8 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
             target.errors.append(f"{label}.mock_confidence must be one of {list(REVIEW_CONFIDENCE_LEVELS)!r}.")
         if not isinstance(row.get("requires_human_review"), bool):
             target.errors.append(f"{label}.requires_human_review must be a boolean.")
+        elif row.get("requires_human_review") is True:
+            labels_requiring_review += 1
         if not _is_sha256(row.get("review_item_sha256")):
             target.errors.append(f"{label}.review_item_sha256 must be a sha256 hex digest.")
         if not _is_sha256(row.get("label_sha256")):
@@ -4031,6 +4034,14 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
             target.errors.append(
                 f"model_grader_dry_run.label_counts[{label_name}] expected {expected}, got {label_counts.get(label_name)!r}."
             )
+    disagreement_queue = receipt.get("disagreement_queue")
+    if not isinstance(disagreement_queue, list):
+        target.errors.append("model_grader_dry_run.disagreement_queue must be a list.")
+        disagreement_queue = []
+    if len(disagreement_queue) != labels_requiring_review:
+        target.errors.append(
+            "model_grader_dry_run.disagreement_queue must contain one item for each label requiring human review."
+        )
     admission = receipt.get("training_admission") if isinstance(receipt.get("training_admission"), dict) else {}
     if admission.get("labels_allowed_for_training") is not False:
         target.errors.append("model_grader_dry_run.training_admission.labels_allowed_for_training must be false.")
@@ -4063,11 +4074,24 @@ def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget) 
     if failed_checks and admission.get("labels_admitted_count") != 0:
         target.errors.append("model_grader_gate.admission.labels_admitted_count must be 0 when the gate is blocked.")
     metrics = gate.get("metrics") if isinstance(gate.get("metrics"), dict) else {}
-    for field_name in ("graded_item_count", "calibration_disagreement_count", "dry_run_disagreement_queue_count"):
+    for field_name in (
+        "graded_item_count",
+        "calibration_disagreement_count",
+        "dry_run_disagreement_queue_count",
+        "dry_run_labels_requiring_human_review_count",
+    ):
         if not _is_non_negative_int(metrics.get(field_name)):
             target.errors.append(f"model_grader_gate.metrics.{field_name} must be a non-negative integer.")
     if not isinstance(metrics.get("agreement_rate"), (int, float)) or not 0 <= metrics.get("agreement_rate") <= 1:
         target.errors.append("model_grader_gate.metrics.agreement_rate must be a number from 0 to 1.")
+    if failed_checks == 0:
+        admitted_count = admission.get("labels_admitted_count")
+        if admitted_count != metrics.get("graded_item_count"):
+            target.errors.append("model_grader_gate.admission.labels_admitted_count must equal graded_item_count when passed.")
+        if metrics.get("dry_run_disagreement_queue_count") != 0:
+            target.errors.append("model_grader_gate.metrics.dry_run_disagreement_queue_count must be 0 when passed.")
+        if metrics.get("dry_run_labels_requiring_human_review_count") != 0:
+            target.errors.append("model_grader_gate.metrics.dry_run_labels_requiring_human_review_count must be 0 when passed.")
     _validate_model_grader_boundary(gate.get("execution_boundary"), target, "model_grader_gate")
     target.details.update(
         {

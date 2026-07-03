@@ -32,7 +32,24 @@
     "created_at": { "type": "string" },
     "execution_boundary": { "$ref": "#/$defs/boundary" },
     "failed_check_count": { "minimum": 0, "type": "integer" },
-    "metrics": { "type": "object" },
+    "metrics": {
+      "additionalProperties": true,
+      "properties": {
+        "agreement_rate": { "maximum": 1, "minimum": 0, "type": "number" },
+        "calibration_disagreement_count": { "minimum": 0, "type": "integer" },
+        "dry_run_disagreement_queue_count": { "minimum": 0, "type": "integer" },
+        "dry_run_labels_requiring_human_review_count": { "minimum": 0, "type": "integer" },
+        "graded_item_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "graded_item_count",
+        "agreement_rate",
+        "calibration_disagreement_count",
+        "dry_run_disagreement_queue_count",
+        "dry_run_labels_requiring_human_review_count"
+      ],
+      "type": "object"
+    },
     "notes": {
       "items": { "type": "string" },
       "type": "array"

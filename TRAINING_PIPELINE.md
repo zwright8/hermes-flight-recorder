@@ -984,8 +984,10 @@ The dry-run receipt records `provider_api_called: false`,
 `model-grader gate` is the training-admission boundary: without a passing
 `review-calibration` artifact it stays blocked and routes labels to human
 review or calibration. With a passing calibration artifact it can mark labels
-eligible for curated handoff while still recording zero uncalibrated labels,
-zero credential values, zero provider calls, and zero weight updates.
+eligible for curated handoff only when the dry-run disagreement queue is empty
+and no mock label still requires human review. It still records zero
+uncalibrated labels, zero credential values, zero provider calls, and zero
+weight updates.
 
 ```bash
 flightrecorder model-grader gate \
