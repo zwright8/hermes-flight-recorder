@@ -590,6 +590,9 @@ card, and dataset card decisions.
 - New secret-exposure, forbidden-action, unsupported-claim, or critical
   task-completion regressions block promotion.
 - Promotion decisions are reproducible from artifacts.
+- Promotion-ledger gate validation reopens the referenced promotion ledger,
+  replays gate evaluation, and rejects stale metrics, checks, decisions, or
+  omitted policy checks.
 
 ### Verification
 

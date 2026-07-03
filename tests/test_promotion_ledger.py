@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -13,6 +14,70 @@ ROOT = Path(__file__).resolve().parents[1]
 def run_cli(args):
     with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
         return main(args)
+
+
+def _write_ready_action_ledger_gate(path):
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "hfr.action_ledger_gate.v1",
+                "passed": True,
+                "decision": {
+                    "readiness": "ready",
+                    "recommendation": "promote_iteration",
+                    "summary": "ok",
+                    "blocking_check_count": 0,
+                    "key_metrics": {"recurring_action_count": 0},
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _build_clean_promotion_ledger_gate(root, *, gate_args=None, policy=False):
+    source = root / "action_ledger_gate.json"
+    decision_gate = root / "decision_gate.json"
+    ledger_path = root / "promotion_ledger.json"
+    gate_path = root / "promotion_ledger_gate.json"
+    _write_ready_action_ledger_gate(source)
+    decision_code = run_cli(
+        [
+            "gate-decision",
+            "--artifact",
+            str(source),
+            "--expect-recommendation",
+            "promote_iteration",
+            "--expect-readiness",
+            "ready",
+            "--require-passed",
+            "--preserve-paths",
+            "--out",
+            str(decision_gate),
+        ]
+    )
+    if decision_code != 0:
+        raise AssertionError(f"gate-decision fixture failed with code {decision_code}")
+    ledger_code = run_cli(
+        [
+            "promotion-ledger",
+            "--decision-gate",
+            str(decision_gate),
+            "--preserve-paths",
+            "--out",
+            str(ledger_path),
+        ]
+    )
+    if ledger_code != 0:
+        raise AssertionError(f"promotion-ledger fixture failed with code {ledger_code}")
+    command = ["gate-promotion-ledger", "--promotion-ledger", str(ledger_path)]
+    if policy:
+        command.extend(["--policy", str(ROOT / "examples" / "promotion_ledger_gate_policy.demo.json")])
+    command.extend(gate_args or [])
+    command.extend(["--out", str(gate_path)])
+    return ledger_path, gate_path, run_cli(command)
 
 
 class PromotionLedgerTests(unittest.TestCase):
@@ -321,6 +386,204 @@ class PromotionLedgerTests(unittest.TestCase):
             self.assertIn("max_failed_decisions", failed_checks)
             self.assertIn("forbid_source_recommendation", failed_checks)
             self.assertEqual(run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict"]), 0)
+
+    def test_validate_rejects_promotion_ledger_gate_stale_source_ledger_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(root)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            self.assertEqual(run_cli(["validate", "--promotion-ledger", str(ledger_path), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict"]), 0)
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["metrics"]["latest_recommendation"] = "block_promotion"
+            payload["decision"]["key_metrics"]["latest_recommendation"] = "block_promotion"
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.metrics must match replayed source ledger metrics", errors)
+
+    def test_validate_rejects_promotion_ledger_gate_forged_check_actuals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, gate_path, code = _build_clean_promotion_ledger_gate(root, gate_args=["--min-decisions", "2"])
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 1)
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["checks"][0]["actual"] = 2
+            payload["checks"][0]["passed"] = True
+            payload["checks"][0]["summary"] = "min_decisions: actual=2, min=2"
+            payload["failed_check_count"] = 0
+            payload["passed"] = True
+            payload["decision"]["readiness"] = "ready"
+            payload["decision"]["recommendation"] = "promote_iteration"
+            payload["decision"]["summary"] = "Promotion-ledger gate is ready: promotion history is within policy."
+            payload["decision"]["blocking_check_count"] = 0
+            payload["decision"]["blocking_checks"] = []
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.checks must match replayed source ledger checks", errors)
+
+    def test_validate_rejects_promotion_ledger_gate_forged_decision_details(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, gate_path, code = _build_clean_promotion_ledger_gate(root, gate_args=["--min-decisions", "2"])
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 1)
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["decision"]["summary"] = "Promotion-ledger gate is blocked by 1 check(s); first failure: forged"
+            payload["decision"]["blocking_checks"][0]["summary"] = "forged"
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.decision must match replayed source ledger decision", errors)
+
+    def test_validate_rejects_promotion_ledger_gate_missing_source_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(root)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            ledger_path.unlink()
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.promotion_ledger must resolve to an existing promotion ledger", errors)
+
+    def test_validate_rejects_promotion_ledger_gate_invalid_source_ledger_without_crashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(root)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            ledger_path.write_text(json.dumps({"schema_version": "hfr.not_promotion_ledger.v1", "metrics": {}, "records": []}) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.promotion_ledger could not be replayed", errors)
+
+    def test_validate_rejects_promotion_ledger_gate_missing_subpath_without_sibling_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, gate_path, code = _build_clean_promotion_ledger_gate(root)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["promotion_ledger"] = "missing/promotion_ledger.json"
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.promotion_ledger must resolve to an existing promotion ledger", errors)
+
+    def test_validate_rejects_promotion_ledger_gate_cwd_relative_source_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd_root = root / "cwd"
+            outside_root = root / "outside"
+            cwd_root.mkdir()
+            outside_root.mkdir()
+            ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(cwd_root)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            nested_ledger = cwd_root / "nested" / "promotion_ledger.json"
+            nested_ledger.parent.mkdir()
+            ledger_path.replace(nested_ledger)
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["promotion_ledger"] = "nested/promotion_ledger.json"
+            outside_gate = outside_root / "promotion_ledger_gate.json"
+            outside_gate.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_root)
+                code = run_cli(["validate", "--promotion-ledger-gate", str(outside_gate), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.promotion_ledger must resolve to an existing promotion ledger", errors)
+
+    def test_gate_promotion_ledger_writes_output_relative_source_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            summary_path = runs / "validation.json"
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(runs)
+                self.assertEqual(code, 0)
+                gate = json.loads(gate_path.read_text(encoding="utf-8"))
+                self.assertEqual(gate["promotion_ledger"], "promotion_ledger.json")
+                code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 0)
+            self.assertTrue(ledger_path.exists())
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertEqual(errors, "")
+
+    def test_validate_rejects_promotion_ledger_gate_non_utf8_source_ledger_without_crashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(root)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            ledger_path.write_bytes(b"\xff\xfe\xff")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.promotion_ledger is not valid UTF-8", errors)
+
+    def test_validate_rejects_promotion_ledger_gate_policy_check_omission(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, gate_path, code = _build_clean_promotion_ledger_gate(root, policy=True)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["checks"].pop()
+            payload["check_count"] = len(payload["checks"])
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_ledger_gate.checks must cover promotion_ledger_gate.policy.effective requirements", errors)
 
     def test_promotion_archive_remains_valid_after_source_paths_are_removed(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as tmp:

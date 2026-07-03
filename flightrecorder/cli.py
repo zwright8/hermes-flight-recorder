@@ -2119,9 +2119,14 @@ def cmd_gate_improvement_ledger(args: argparse.Namespace) -> int:
 def cmd_gate_promotion_ledger(args: argparse.Namespace) -> int:
     ledger = _read_json(Path(args.promotion_ledger))
     options = _promotion_ledger_gate_options(args)
+    output_path = Path(args.out) if args.out else None
     result = evaluate_promotion_ledger_gate(
         ledger,
-        promotion_ledger_path=_display_path(Path(args.promotion_ledger), args.preserve_paths),
+        promotion_ledger_path=_display_path_for_output_source(
+            Path(args.promotion_ledger),
+            output_path,
+            args.preserve_paths,
+        ),
         min_decisions=options["min_decisions"],
         min_allowed_count=options["min_allowed_count"],
         max_blocked_count=options["max_blocked_count"],
@@ -5400,6 +5405,23 @@ def _display_path(path: Path, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _display_path_for_output_source(path: Path, out_path: Path | None, preserve_paths: bool = False) -> str:
+    if preserve_paths or out_path is None:
+        return _display_path(path, preserve_paths)
+    raw = str(path)
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    cwd = Path.cwd().resolve()
+    out_dir = out_path.parent.resolve()
+    try:
+        resolved.relative_to(cwd)
+        out_dir.relative_to(cwd)
+    except ValueError:
+        return _display_path(path, preserve_paths)
+    return os.path.relpath(resolved, out_dir)
 
 
 def _is_windows_absolute(value: str) -> bool:
