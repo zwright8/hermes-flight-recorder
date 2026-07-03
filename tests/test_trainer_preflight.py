@@ -1270,6 +1270,27 @@ class TrainerPreflightTests(unittest.TestCase):
             failed_external["inputs"]["external_code_files"][0].pop("size_bytes")
             failed_external_schema = check_schema_contract(failed_external, name_or_id="trainer_wrapper_dry_run")
             self.assertTrue(failed_external_schema["passed"], failed_external_schema["errors"])
+            missing_external_path = json.loads(json.dumps(receipt))
+            next(item for item in missing_external_path["inputs"]["external_code_files"] if item["passed"])["resolved_path"] = str(
+                Path(tmp) / "missing_wrapper_external.py"
+            )
+            self._assert_trainer_wrapper_validation_rejects(
+                Path(tmp),
+                missing_external_path,
+                "trainer_wrapper_dry_run_missing_external_path",
+                "trainer_wrapper_dry_run.inputs.external_code_files",
+                "resolved_path must resolve to an existing file on disk",
+            )
+            redacted_external_path = json.loads(json.dumps(receipt))
+            redacted_external = next(item for item in redacted_external_path["inputs"]["external_code_files"] if item["passed"])
+            redacted_external["resolved_path"] = "<redacted:external-code>"
+            redacted_external["size_bytes"] += 1
+            redacted_external_receipt = Path(tmp) / "trainer_wrapper_dry_run_redacted_external_path.json"
+            redacted_external_receipt.write_text(json.dumps(redacted_external_path, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(
+                run_cli(["validate", "--trainer-wrapper-dry-run", str(redacted_external_receipt), "--strict"]),
+                0,
+            )
             wrapper_input = next(item for item in receipt["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "file")
             self.assertEqual(len(wrapper_input["sha256"]), 64)
             self.assertIn("size_bytes", wrapper_input)
@@ -1294,6 +1315,30 @@ class TrainerPreflightTests(unittest.TestCase):
             forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
             self.assertFalse(forged_schema["passed"])
             self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            missing_input_path = json.loads(json.dumps(receipt))
+            next(item for item in missing_input_path["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "file")[
+                "resolved_path"
+            ] = str(Path(tmp) / "missing_wrapper_input.json")
+            self._assert_trainer_wrapper_validation_rejects(
+                Path(tmp),
+                missing_input_path,
+                "trainer_wrapper_dry_run_missing_input_path",
+                "trainer_wrapper_dry_run.inputs.trainer_inputs",
+                "resolved_path must resolve to an existing file on disk",
+            )
+            redacted_input_path = json.loads(json.dumps(receipt))
+            redacted_input = next(
+                item for item in redacted_input_path["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "file"
+            )
+            redacted_input["resolved_path"] = "<redacted:trainer-input>"
+            redacted_input["size_bytes"] += 1
+            redacted_input["expected_size_bytes"] += 1
+            redacted_input_receipt = Path(tmp) / "trainer_wrapper_dry_run_redacted_input_path.json"
+            redacted_input_receipt.write_text(json.dumps(redacted_input_path, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(
+                run_cli(["validate", "--trainer-wrapper-dry-run", str(redacted_input_receipt), "--strict"]),
+                0,
+            )
             wrapper_directory = next(item for item in receipt["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "directory")
             self.assertEqual(len(wrapper_directory["sha256"]), 64)
             self.assertIn("size_bytes", wrapper_directory)
@@ -1320,6 +1365,17 @@ class TrainerPreflightTests(unittest.TestCase):
             forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
             self.assertFalse(forged_schema["passed"])
             self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            missing_directory_path = json.loads(json.dumps(receipt))
+            next(item for item in missing_directory_path["inputs"]["trainer_inputs"] if item["passed"] and item["kind"] == "directory")[
+                "resolved_path"
+            ] = str(Path(tmp) / "missing_wrapper_input_dir")
+            self._assert_trainer_wrapper_validation_rejects(
+                Path(tmp),
+                missing_directory_path,
+                "trainer_wrapper_dry_run_missing_directory_path",
+                "trainer_wrapper_dry_run.inputs.trainer_inputs",
+                "resolved_path must resolve to an existing directory on disk",
+            )
             failed_input = json.loads(json.dumps(receipt))
             failed_input["inputs"]["trainer_inputs"][0]["passed"] = False
             failed_input["inputs"]["trainer_inputs"][0].pop("size_bytes")
