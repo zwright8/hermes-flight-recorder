@@ -23,6 +23,8 @@ or launch GPU work.
   `champion`, and `rollback` aliases.
 - `experiments/registry/training_plans/*.json`: dry-run plans that bind a
   training candidate to a dataset manifest and optional compatibility report.
+- Path-backed registry links record SHA-256 and byte-size evidence; validation
+  reopens resolvable link paths and rejects stale size or hash records.
 
 ## Command Sequence
 

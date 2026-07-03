@@ -123,6 +123,7 @@
         "path": "experiments/registry/model_adapter_manifests/qwen3_4b_instruct_2507_sft_adapter.json",
         "recorded_at": "2026-07-02T20:37:02Z",
         "sha256": "6667bd1cd9bb89af16e1317558831ee5d3da5f58e55e8d6da42c8a5e0dfa1696",
+        "size_bytes": 2941,
         "status": "planned_adapter"
       }
     ],
@@ -136,6 +137,7 @@
         "path": "experiments/registry/datasets/local_mock_dataset_manifest.json",
         "recorded_at": "2026-07-02T15:37:30Z",
         "sha256": "a13e8bd2c3cd18b7dc164824a9f7fd6feedda4a7002822efbe39c06c1605c281",
+        "size_bytes": 399,
         "status": "dry_run_stub"
       }
     ],
@@ -154,6 +156,7 @@
         "path": "experiments/registry/serving_probes/qwen3_4b_instruct_2507_metadata_serving_probe.json",
         "recorded_at": "2026-07-02T16:22:00Z",
         "sha256": "ae7262005216c9ade49e03b4b3ba47084cd5d6701a3925adcfe94d7570ac7b3e",
+        "size_bytes": 6471,
         "status": "metadata_receipt"
       }
     ],
@@ -168,6 +171,7 @@
         "path": "experiments/registry/training_plans/qwen3_4b_instruct_2507_sft_dry_run.json",
         "recorded_at": "2026-07-02T15:37:36Z",
         "sha256": "372da5ef91c46825d3ffbd481b6cc53a3cd01567d573a84a0b2c46e678291a8a",
+        "size_bytes": 11817,
         "status": "dry_run_plan"
       }
     ]

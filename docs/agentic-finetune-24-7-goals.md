@@ -346,7 +346,7 @@ training plans, and model/adapter registry entries.
 
 - No model can be selected for training with unknown license status.
 - Registry links candidates, adapters, datasets, training runs, evals, and
-  promotion decisions.
+  promotion decisions with path-backed SHA-256 and byte-size evidence.
 - Rollback and champion aliases are explicit.
 
 ### 24/7 Prompt

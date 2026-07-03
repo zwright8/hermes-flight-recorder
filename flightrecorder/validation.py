@@ -1173,7 +1173,7 @@ def validate_model_registry_entry(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("model_registry_entry", str(entry_path))
     entry = _read_object(entry_path, target, "model_registry_entry.json")
     if entry is not None:
-        _validate_model_registry_entry(entry, target)
+        _validate_model_registry_entry(entry, target, entry_path)
     return target
 
 
@@ -1183,7 +1183,7 @@ def validate_model_registry(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("model_registry", str(registry_path))
     registry = _read_object(registry_path, target, "model_registry.json")
     if registry is not None:
-        _validate_model_registry(registry, target)
+        _validate_model_registry(registry, target, registry_path)
     return target
 
 
@@ -1697,10 +1697,12 @@ def _validate_model_adapter_manifest(manifest: dict[str, Any], target: Validatio
     )
 
 
-def _validate_model_registry_entry(entry: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_model_registry_entry(entry: dict[str, Any], target: ValidationTarget, source_path: Path | None = None) -> None:
     _require_equal(entry, "schema_version", MODEL_REGISTRY_ENTRY_SCHEMA_VERSION, target, prefix="model_registry_entry.")
     target.errors.extend(model_registry_entry_errors(entry))
     links = entry.get("links") if isinstance(entry.get("links"), dict) else {}
+    if source_path is not None:
+        _validate_model_registry_links_files(links, target, "model_registry_entry.links", source_path)
     target.details.update(
         {
             "entry_id": entry.get("entry_id"),
@@ -1716,14 +1718,16 @@ def _validate_model_registry_entry(entry: dict[str, Any], target: ValidationTarg
     )
 
 
-def _validate_model_registry(registry: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_model_registry(registry: dict[str, Any], target: ValidationTarget, source_path: Path | None = None) -> None:
     _require_equal(registry, "schema_version", MODEL_REGISTRY_SCHEMA_VERSION, target, prefix="model_registry.")
     target.errors.extend(model_registry_errors(registry))
     entries = registry.get("entries") if isinstance(registry.get("entries"), dict) else {}
     aliases = registry.get("aliases") if isinstance(registry.get("aliases"), dict) else {}
     link_counts: dict[str, int] = {}
-    for entry in entries.values():
+    for entry_id, entry in entries.items():
         links = entry.get("links") if isinstance(entry, dict) and isinstance(entry.get("links"), dict) else {}
+        if source_path is not None:
+            _validate_model_registry_links_files(links, target, f"model_registry.entries.{entry_id}.links", source_path)
         for collection, records in links.items():
             if isinstance(collection, str) and isinstance(records, list):
                 link_counts[collection] = link_counts.get(collection, 0) + len(records)
@@ -1737,6 +1741,49 @@ def _validate_model_registry(registry: dict[str, Any], target: ValidationTarget)
             "link_counts": link_counts,
         }
     )
+
+
+def _validate_model_registry_links_files(
+    links: Any, target: ValidationTarget, label: str, source_path: Path
+) -> None:
+    if not isinstance(links, dict):
+        return
+    for collection, records in links.items():
+        if not isinstance(collection, str) or not isinstance(records, list):
+            continue
+        for index, record in enumerate(records):
+            record_label = f"{label}.{collection}[{index}]"
+            if not isinstance(record, dict) or "path" not in record:
+                continue
+            path_value = record.get("path")
+            if not isinstance(path_value, str) or not path_value:
+                continue
+            link_path = _model_registry_link_path(path_value, source_path)
+            if link_path.is_symlink():
+                target.errors.append(f"{record_label}.path must not resolve to a symlink.")
+                continue
+            if not link_path.is_file():
+                target.errors.append(f"{record_label}.path does not resolve to a linked artifact file.")
+                continue
+            if _is_non_negative_int(record.get("size_bytes")) and link_path.stat().st_size != record.get("size_bytes"):
+                target.errors.append(f"{record_label}.size_bytes does not match the current file.")
+            if _is_sha256(record.get("sha256")) and _sha256(link_path) != record.get("sha256"):
+                target.errors.append(f"{record_label}.sha256 does not match the current file.")
+
+
+def _model_registry_link_path(value: str, source_path: Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    source_relative = source_path.parent / path
+    if source_relative.exists():
+        return source_relative
+    for root in source_path.resolve().parents:
+        if (root / ".git").exists() or (root / "pyproject.toml").exists():
+            repo_relative = root / path
+            if repo_relative.exists():
+                return repo_relative
+    return source_relative
 
 
 def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget) -> None:

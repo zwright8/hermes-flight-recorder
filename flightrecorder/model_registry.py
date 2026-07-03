@@ -481,6 +481,7 @@ def link_model_registry_artifact(
             raise ModelRegistryError("linked artifact sha256 does not match path contents")
         record["path"] = _display_path(source_path, preserve_paths)
         record["sha256"] = computed_sha256
+        record["size_bytes"] = source_path.stat().st_size
     elif sha256 is not None:
         normalized_sha256 = sha256.lower()
         if not _is_sha256(normalized_sha256):
@@ -1423,8 +1424,14 @@ def _model_registry_links_errors(links: Any, errors: list[str]) -> None:
             seen.add(record_key)
             if "path" in record:
                 _require_non_empty_string(record, "path", errors, prefix)
+                if not _is_non_negative_int(record.get("size_bytes")):
+                    errors.append(f"{prefix}size_bytes must be a non-negative integer for path-backed links.")
+                if "sha256" not in record:
+                    errors.append(f"{prefix}sha256 is required for path-backed links.")
             if "sha256" in record and not _is_sha256(str(record.get("sha256") or "").lower()):
                 errors.append(f"{prefix}sha256 must be a 64-character hex digest.")
+            if "size_bytes" in record and not _is_non_negative_int(record.get("size_bytes")):
+                errors.append(f"{prefix}size_bytes must be a non-negative integer.")
             if not isinstance(record.get("metadata", {}), dict):
                 errors.append(f"{prefix}metadata must be an object when present.")
 

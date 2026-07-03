@@ -11,12 +11,12 @@
     "links": {
       "additionalProperties": true,
       "properties": {
-        "adapters": {"items": {"type": "object"}, "type": "array"},
-        "datasets": {"items": {"type": "object"}, "type": "array"},
-        "evals": {"items": {"type": "object"}, "type": "array"},
-        "promotion_decisions": {"items": {"type": "object"}, "type": "array"},
-        "serving_probes": {"items": {"type": "object"}, "type": "array"},
-        "training_runs": {"items": {"type": "object"}, "type": "array"}
+        "adapters": {"items": {"$ref": "#/$defs/linkRecord"}, "type": "array"},
+        "datasets": {"items": {"$ref": "#/$defs/linkRecord"}, "type": "array"},
+        "evals": {"items": {"$ref": "#/$defs/linkRecord"}, "type": "array"},
+        "promotion_decisions": {"items": {"$ref": "#/$defs/linkRecord"}, "type": "array"},
+        "serving_probes": {"items": {"$ref": "#/$defs/linkRecord"}, "type": "array"},
+        "training_runs": {"items": {"$ref": "#/$defs/linkRecord"}, "type": "array"}
       },
       "required": ["datasets", "training_runs", "adapters", "evals", "serving_probes", "promotion_decisions"],
       "type": "object"
@@ -40,5 +40,24 @@
     "candidate"
   ],
   "title": "Hermes Flight Recorder Model Registry Entry",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "linkRecord": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {"minLength": 1, "type": "string"},
+        "kind": {"minLength": 1, "type": "string"},
+        "metadata": {"type": "object"},
+        "path": {"minLength": 1, "type": "string"},
+        "recorded_at": {"minLength": 1, "type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "size_bytes": {"minimum": 0, "type": "integer"},
+        "status": {"minLength": 1, "type": "string"}
+      },
+      "required": ["id", "kind", "status", "recorded_at"],
+      "if": {"required": ["path"]},
+      "then": {"required": ["sha256", "size_bytes"]},
+      "type": "object"
+    }
+  }
 }

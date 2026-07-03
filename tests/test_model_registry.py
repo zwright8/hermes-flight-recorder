@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import tempfile
@@ -174,6 +175,7 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(len(links["datasets"]), 1)
             self.assertEqual(links["datasets"][0]["id"], "local_mock_dataset_v1")
             self.assertEqual(len(links["datasets"][0]["sha256"]), 64)
+            self.assertEqual(links["datasets"][0]["size_bytes"], dataset_manifest.stat().st_size)
 
             registry = link_model_registry_artifact(
                 registry,
@@ -189,6 +191,9 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertEqual(links["datasets"][0]["status"], "verified")
             rows = [row for row in registry["entries"].values()]
             self.assertEqual(rows[0]["links"]["training_runs"], [])
+            write_json(root / "model_registry.json", registry)
+            summary = validate_artifacts(model_registry_paths=[root / "model_registry.json"])
+            self.assertTrue(summary["passed"], summary["targets"])
             with self.assertRaises(ModelRegistryError):
                 link_model_registry_artifact(
                     registry,
@@ -207,6 +212,92 @@ class ModelRegistryTests(unittest.TestCase):
                     artifact_id="x",
                     kind="x",
                 )
+
+    def test_validate_rejects_registry_link_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            registry_path = root / "model_registry.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=registry_path), candidate)
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                path=dataset_manifest,
+            )
+            registry["entries"][candidate["candidate_id"]]["links"]["datasets"][0].pop("size_bytes")
+            write_json(registry_path, registry)
+
+            summary = validate_artifacts(model_registry_paths=[registry_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("model_registry.entries.local-mock-tiny-chat.links.datasets[0].size_bytes", errors)
+
+    def test_validate_rejects_registry_link_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            registry_path = root / "model_registry.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            registry = register_model_candidate(new_model_registry(registry_path=registry_path), candidate)
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                path=dataset_manifest,
+            )
+            registry["entries"][candidate["candidate_id"]]["links"]["datasets"][0]["size_bytes"] += 1
+            write_json(registry_path, registry)
+
+            summary = validate_artifacts(model_registry_paths=[registry_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "model_registry.entries.local-mock-tiny-chat.links.datasets[0].size_bytes does not match the current file.",
+                errors,
+            )
+
+    def test_validate_rejects_registry_link_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            symlink_manifest = root / "dataset_manifest_link.json"
+            registry_path = root / "model_registry.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            try:
+                symlink_manifest.symlink_to(dataset_manifest)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+            registry = register_model_candidate(new_model_registry(registry_path=registry_path), candidate)
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                path=dataset_manifest,
+            )
+            registry["entries"][candidate["candidate_id"]]["links"]["datasets"][0]["path"] = symlink_manifest.name
+            write_json(registry_path, registry)
+
+            summary = validate_artifacts(model_registry_paths=[registry_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "model_registry.entries.local-mock-tiny-chat.links.datasets[0].path must not resolve to a symlink.",
+                errors,
+            )
 
     def test_serving_probe_receipt_avoids_launches_and_links(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -789,6 +880,21 @@ class ModelRegistryTests(unittest.TestCase):
         self.assertEqual(receipt["readiness"], "metadata_recorded")
         self.assertFalse(receipt["download_policy"]["launched_server"])
         self.assertFalse(receipt["execution"]["flight_recorder_launched_server"])
+
+    def test_checked_in_registry_links_validate_outside_repo_cwd(self):
+        root = Path(__file__).resolve().parents[1]
+        registry_path = root / "experiments/registry/model_registry.json"
+        entry_path = root / "experiments/registry/model_registry_entries/qwen3_4b_instruct_2507.json"
+
+        previous_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                summary = validate_artifacts(model_registry_paths=[registry_path], model_registry_entry_paths=[entry_path], strict=True)
+            finally:
+                os.chdir(previous_cwd)
+
+        self.assertTrue(summary["passed"], summary["targets"])
 
 
 def scout_manifest(

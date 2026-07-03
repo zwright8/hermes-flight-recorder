@@ -300,7 +300,7 @@ entries for candidates, champions, and rollback targets.
 - A training plan can be written without downloading weights or launching a GPU
   job.
 - Registry entries link model candidates to datasets, training runs, evals, and
-  promotion decisions.
+  promotion decisions with path-backed SHA-256 and byte-size evidence.
 - Rollback target is always explicit for promoted models.
 
 ### Verification
