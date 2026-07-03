@@ -889,7 +889,7 @@ def validate_evidence_bundle(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("evidence_bundle", str(bundle_path))
     bundle = _read_object(bundle_path, target, "evidence_bundle.json")
     if bundle is not None:
-        _validate_evidence_bundle(bundle, target)
+        _validate_evidence_bundle(bundle, target, bundle_path)
     return target
 
 
@@ -7688,7 +7688,7 @@ def _validate_trace_observability_metrics(metrics: dict[str, Any], totals: dict[
             target.errors.append(f"trace_observability.metrics.{field_name} does not match runs.")
 
 
-def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(bundle, "schema_version", EVIDENCE_BUNDLE_SCHEMA_VERSION, target)
     if not isinstance(bundle.get("bundle_path"), str) or not bundle.get("bundle_path"):
         target.errors.append("evidence_bundle.bundle_path must be a non-empty string.")
@@ -7733,6 +7733,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget) 
     _validate_evidence_bundle_metrics(metrics, target)
     _validate_evidence_bundle_harness_checks(metrics, checks, target)
     _validate_evidence_bundle_validation_checks(metrics, checks, target)
+    _validate_evidence_bundle_serving_lifecycle(metrics, artifacts, checks, target, source_path)
     target.details.update(
         {
             "readiness": bundle.get("readiness"),
@@ -13459,6 +13460,53 @@ def _validate_evidence_bundle_validation_checks(metrics: dict[str, Any], checks:
         )
 
 
+def _validate_evidence_bundle_serving_lifecycle(
+    metrics: dict[str, Any],
+    artifacts: dict[str, Any],
+    checks: list[Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    value = metrics.get("serving_lifecycle")
+    if not isinstance(value, dict):
+        return
+    failed_check_ids = {
+        check.get("id")
+        for check in checks
+        if isinstance(check, dict) and check.get("passed") is False and isinstance(check.get("id"), str)
+    }
+    if value.get("passed") is not True and "serving_lifecycle_passed" not in failed_check_ids:
+        target.errors.append("evidence_bundle.checks must include a failed serving_lifecycle_passed check when lifecycle metrics are not passed.")
+    if (
+        value.get("passed") is True
+        and value.get("preflight_artifact_count") != len(SERVING_LIFECYCLE_PREFLIGHT_ARTIFACTS)
+        and "serving_lifecycle_preflight_artifacts_present" not in failed_check_ids
+    ):
+        target.errors.append(
+            "evidence_bundle.checks must include a failed serving_lifecycle_preflight_artifacts_present check when passed lifecycle preflight artifacts are incomplete."
+        )
+
+    artifact = artifacts.get("serving_lifecycle") if isinstance(artifacts.get("serving_lifecycle"), dict) else {}
+    lifecycle_path = _resolve_evidence_bundle_artifact_path(artifact.get("path"), source_path)
+    if lifecycle_path is None or not lifecycle_path.exists() or not lifecycle_path.is_file():
+        return
+    try:
+        lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"evidence_bundle.artifacts.serving_lifecycle contains invalid JSON: {exc}")
+        return
+    if not isinstance(lifecycle, dict):
+        target.errors.append("evidence_bundle.artifacts.serving_lifecycle must contain a JSON object.")
+        return
+    _validate_serving_lifecycle(lifecycle, target, lifecycle_path)
+    expected = _serving_lifecycle_bundle_metrics(lifecycle)
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(
+                f"evidence_bundle.metrics.serving_lifecycle.{field_name} expected {expected_value!r}, got {value.get(field_name)!r}."
+            )
+
+
 def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: ValidationTarget) -> None:
     expected_sections = (
         "suite_summary",
@@ -13474,6 +13522,7 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
         "reviewed_export",
         "review_calibration",
         "live_smoke_summary",
+        "serving_lifecycle",
         "trainer_handoff",
         "harness_handoff",
     )
@@ -13498,6 +13547,9 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
     live_smoke_summary = metrics.get("live_smoke_summary")
     if isinstance(live_smoke_summary, dict):
         _validate_bundle_live_smoke_summary_paths(live_smoke_summary, target)
+    serving_lifecycle = metrics.get("serving_lifecycle")
+    if isinstance(serving_lifecycle, dict):
+        _validate_bundle_serving_lifecycle_metrics(serving_lifecycle, target)
     gates = metrics.get("gates")
     if gates is not None:
         if not isinstance(gates, list):
@@ -13517,6 +13569,61 @@ def _validate_evidence_bundle_metrics(metrics: dict[str, Any], target: Validatio
                 target.errors.append(f"evidence_bundle.metrics.gates[{index}].passed must be a boolean.")
             if "validation" in gate:
                 _validate_bundle_gate_validation(gate.get("validation"), target, f"evidence_bundle.metrics.gates[{index}].validation")
+
+
+def _validate_bundle_serving_lifecycle_metrics(value: dict[str, Any], target: ValidationTarget) -> None:
+    for field_name in ("passed", "ready", "readiness_probe_ready", "smoke_attempted", "smoke_passed", "teardown_clean"):
+        if field_name in value and value.get(field_name) is not None and not isinstance(value.get(field_name), bool):
+            target.errors.append(f"evidence_bundle.metrics.serving_lifecycle.{field_name} must be a boolean or null.")
+    if value.get("readiness") is not None and value.get("readiness") not in {"ready", "blocked"}:
+        target.errors.append("evidence_bundle.metrics.serving_lifecycle.readiness must be ready, blocked, or null.")
+    for field_name in ("profile", "engine", "model"):
+        if field_name in value and value.get(field_name) is not None and not isinstance(value.get(field_name), str):
+            target.errors.append(f"evidence_bundle.metrics.serving_lifecycle.{field_name} must be a string or null.")
+    for field_name in ("duration_ms", "error_count", "preflight_artifact_count"):
+        if not _is_non_negative_int(value.get(field_name)):
+            target.errors.append(f"evidence_bundle.metrics.serving_lifecycle.{field_name} must be a non-negative integer.")
+
+
+def _serving_lifecycle_bundle_metrics(lifecycle: dict[str, Any]) -> dict[str, Any]:
+    readiness_probe = lifecycle.get("readiness_probe") if isinstance(lifecycle.get("readiness_probe"), dict) else {}
+    smoke_check = lifecycle.get("smoke_check") if isinstance(lifecycle.get("smoke_check"), dict) else {}
+    teardown = lifecycle.get("teardown") if isinstance(lifecycle.get("teardown"), dict) else {}
+    errors = lifecycle.get("errors") if isinstance(lifecycle.get("errors"), list) else []
+    artifacts = lifecycle.get("artifacts") if isinstance(lifecycle.get("artifacts"), dict) else {}
+    return {
+        "passed": lifecycle.get("passed") if isinstance(lifecycle.get("passed"), bool) else None,
+        "ready": lifecycle.get("ready") if isinstance(lifecycle.get("ready"), bool) else None,
+        "readiness": lifecycle.get("readiness"),
+        "profile": lifecycle.get("profile"),
+        "engine": lifecycle.get("engine"),
+        "model": lifecycle.get("model"),
+        "duration_ms": lifecycle.get("duration_ms"),
+        "readiness_probe_ready": readiness_probe.get("ready") if isinstance(readiness_probe.get("ready"), bool) else None,
+        "smoke_attempted": smoke_check.get("attempted") if isinstance(smoke_check.get("attempted"), bool) else None,
+        "smoke_passed": smoke_check.get("passed") if isinstance(smoke_check.get("passed"), bool) else None,
+        "teardown_clean": teardown.get("clean") if isinstance(teardown.get("clean"), bool) else None,
+        "error_count": len(errors),
+        "preflight_artifact_count": sum(
+            1 for role in SERVING_LIFECYCLE_PREFLIGHT_ARTIFACTS if isinstance(artifacts.get(role), str) and artifacts.get(role)
+        ),
+    }
+
+
+def _resolve_evidence_bundle_artifact_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if value.startswith("<redacted:") and value.endswith(">"):
+        basename = value.removeprefix("<redacted:").removesuffix(">")
+        return source_path.parent / basename
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    candidates = [Path.cwd() / path, source_path.parent / path]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[-1]
 
 
 def _validate_bundle_gate_validation(value: Any, target: ValidationTarget, label: str) -> None:

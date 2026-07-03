@@ -155,3 +155,12 @@ python3 -m flightrecorder validate \
   --serving-demo-run experiments/qwen3_4b_flightrecorder/serving/demo_run.json \
   --strict
 ```
+
+Include the lifecycle receipt in evidence bundles when serving readiness is part
+of the handoff:
+
+```bash
+python3 -m flightrecorder evidence-bundle \
+  --serving-lifecycle experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json \
+  --out experiments/qwen3_4b_flightrecorder/evidence_bundle.json
+```

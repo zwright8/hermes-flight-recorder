@@ -86,6 +86,7 @@ def build_evidence_bundle(
     reviewed_export_dir: str | Path | None = None,
     review_calibration_path: str | Path | None = None,
     live_smoke_summary_path: str | Path | None = None,
+    serving_lifecycle_path: str | Path | None = None,
     trainer_preflight_path: str | Path | None = None,
     trainer_launch_check_path: str | Path | None = None,
     trainer_archive_path: str | Path | None = None,
@@ -300,6 +301,10 @@ def build_evidence_bundle(
     if live_smoke_summary_path is not None:
         live_smoke_summary = _read_json_artifact(Path(live_smoke_summary_path), artifacts, "live_smoke_summary", preserve_paths)
         _summarize_live_smoke_summary(live_smoke_summary, metrics, checks, preserve_paths=preserve_paths)
+
+    if serving_lifecycle_path is not None:
+        serving_lifecycle = _read_json_artifact(Path(serving_lifecycle_path), artifacts, "serving_lifecycle", preserve_paths)
+        _summarize_serving_lifecycle(serving_lifecycle, metrics, checks)
 
     _summarize_trainer_handoff(
         artifacts,
@@ -546,6 +551,20 @@ def _decision_key_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             "hermes_git_dirty",
             "flight_recorder_git_commit",
             "flight_recorder_git_dirty",
+        ),
+        "serving_lifecycle": (
+            "passed",
+            "ready",
+            "readiness",
+            "profile",
+            "engine",
+            "model",
+            "readiness_probe_ready",
+            "smoke_attempted",
+            "smoke_passed",
+            "teardown_clean",
+            "error_count",
+            "preflight_artifact_count",
         ),
         "trainer_handoff": (
             "stage_count",
@@ -1122,6 +1141,50 @@ def _summarize_live_smoke_summary(
     _add_presence_check(checks, "live_smoke_summary_passed", summary.get("passed") is True, {"artifact": "live_smoke_summary"})
     _add_presence_check(checks, "live_smoke_summary_consistent", consistent, {"artifact": "live_smoke_summary"})
     _add_presence_check(checks, "live_smoke_summary_no_missing_hooks", not missing_hooks, {"artifact": "live_smoke_summary"})
+
+
+def _summarize_serving_lifecycle(
+    lifecycle: dict[str, Any],
+    metrics: dict[str, Any],
+    checks: list[dict[str, Any]],
+) -> None:
+    summary = _serving_lifecycle_metric_summary(lifecycle)
+    metrics["serving_lifecycle"] = summary
+    _add_presence_check(checks, "serving_lifecycle_passed", lifecycle.get("passed") is True, {"artifact": "serving_lifecycle"})
+    preflight_ready = lifecycle.get("passed") is not True or summary["preflight_artifact_count"] == 3
+    _add_presence_check(
+        checks,
+        "serving_lifecycle_preflight_artifacts_present",
+        preflight_ready,
+        {
+            "artifact": "serving_lifecycle",
+            "preflight_artifact_count": str(summary["preflight_artifact_count"]),
+        },
+    )
+
+
+def _serving_lifecycle_metric_summary(lifecycle: dict[str, Any]) -> dict[str, Any]:
+    readiness_probe = lifecycle.get("readiness_probe") if isinstance(lifecycle.get("readiness_probe"), dict) else {}
+    smoke_check = lifecycle.get("smoke_check") if isinstance(lifecycle.get("smoke_check"), dict) else {}
+    teardown = lifecycle.get("teardown") if isinstance(lifecycle.get("teardown"), dict) else {}
+    errors = lifecycle.get("errors") if isinstance(lifecycle.get("errors"), list) else []
+    artifacts = lifecycle.get("artifacts") if isinstance(lifecycle.get("artifacts"), dict) else {}
+    preflight_roles = ("serving_profile", "compatibility_report", "serving_check")
+    return {
+        "passed": lifecycle.get("passed") if isinstance(lifecycle.get("passed"), bool) else None,
+        "ready": lifecycle.get("ready") if isinstance(lifecycle.get("ready"), bool) else None,
+        "readiness": lifecycle.get("readiness"),
+        "profile": lifecycle.get("profile"),
+        "engine": lifecycle.get("engine"),
+        "model": lifecycle.get("model"),
+        "duration_ms": lifecycle.get("duration_ms"),
+        "readiness_probe_ready": readiness_probe.get("ready") if isinstance(readiness_probe.get("ready"), bool) else None,
+        "smoke_attempted": smoke_check.get("attempted") if isinstance(smoke_check.get("attempted"), bool) else None,
+        "smoke_passed": smoke_check.get("passed") if isinstance(smoke_check.get("passed"), bool) else None,
+        "teardown_clean": teardown.get("clean") if isinstance(teardown.get("clean"), bool) else None,
+        "error_count": len(errors),
+        "preflight_artifact_count": sum(1 for role in preflight_roles if isinstance(artifacts.get(role), str) and artifacts.get(role)),
+    }
 
 
 def _live_smoke_summary_consistent(summary: dict[str, Any], missing_hooks: list[Any]) -> bool:

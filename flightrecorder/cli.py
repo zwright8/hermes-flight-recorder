@@ -1518,6 +1518,7 @@ def cmd_evidence_bundle(args: argparse.Namespace) -> int:
         reviewed_export_dir=args.reviewed_export,
         review_calibration_path=args.review_calibration,
         live_smoke_summary_path=args.live_smoke_summary,
+        serving_lifecycle_path=args.serving_lifecycle,
         trainer_preflight_path=args.trainer_preflight,
         trainer_launch_check_path=args.trainer_launch_check,
         trainer_archive_path=args.trainer_archive,
@@ -3026,6 +3027,7 @@ def _parser() -> argparse.ArgumentParser:
     evidence_bundle.add_argument("--reviewed-export", help="apply-review directory included in the handoff")
     evidence_bundle.add_argument("--review-calibration", help="review_calibration.json included in the handoff")
     evidence_bundle.add_argument("--live-smoke-summary", help="live_smoke_summary.json included in the handoff")
+    evidence_bundle.add_argument("--serving-lifecycle", help="serving_lifecycle.json included in the handoff")
     evidence_bundle.add_argument("--trainer-preflight", help="trainer_preflight.json included in the handoff")
     evidence_bundle.add_argument("--trainer-launch-check", help="trainer_launch_check.json included in the handoff")
     evidence_bundle.add_argument("--trainer-archive", help="Trainer archive directory or trainer_archive.json included in the handoff")

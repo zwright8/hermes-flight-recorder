@@ -797,6 +797,39 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("passed_digest_count + failed_digest_count", errors)
 
+    def test_validate_evidence_bundle_rejects_forged_serving_lifecycle_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lifecycle_path = _write_serving_lifecycle(root)
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "evidence-bundle",
+                        "--serving-lifecycle",
+                        str(lifecycle_path),
+                        "--out",
+                        str(bundle_path),
+                    ]
+                ),
+                0,
+            )
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            self.assertTrue(bundle["passed"])
+            self.assertEqual(bundle["metrics"]["serving_lifecycle"]["preflight_artifact_count"], 3)
+            self.assertEqual(bundle["decision"]["key_metrics"]["serving_lifecycle"]["readiness"], "ready")
+            self.assertEqual(run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict"]), 0)
+            bundle["metrics"]["serving_lifecycle"]["preflight_artifact_count"] = 0
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.metrics.serving_lifecycle.preflight_artifact_count expected 3", errors)
+
     def test_evidence_bundle_blocks_failed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1471,6 +1504,81 @@ def _write_trainer_handoff_artifacts(root: Path) -> dict[str, Path]:
     for path, payload in payloads.items():
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return artifacts
+
+
+def _write_serving_lifecycle(root: Path) -> Path:
+    preflight = root / "preflight"
+    preflight.mkdir()
+    for filename in ("serving_profile.json", "compatibility_report.json", "serving_check.json"):
+        (preflight / filename).write_text("{}\n", encoding="utf-8")
+    lifecycle = {
+        "schema_version": "hfr.serving_lifecycle.v1",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "finished_at": "2026-01-01T00:00:01Z",
+        "duration_ms": 1000,
+        "profile": "mock",
+        "engine": "mock",
+        "arm": "candidate",
+        "provider": "custom",
+        "model": "hfr-managed-mock",
+        "served_model_name": "hfr-managed-mock",
+        "adapter": "",
+        "adapter_strategy": {"present": False, "resolved_strategy": "none"},
+        "endpoint": {"base_url": "http://127.0.0.1:18080/v1", "host": "127.0.0.1", "port": 18080},
+        "launch": {
+            "command": ["python3", "scripts/mock_openai_server.py"],
+            "command_display": "python3 scripts/mock_openai_server.py",
+            "cwd": ".",
+            "env_keys": [],
+            "startup_timeout_s": 1.0,
+            "poll_interval_s": 0.1,
+            "grace_period_s": 1.0,
+        },
+        "process": {"started": True, "pid": 12345, "exit_code": 0},
+        "environment": {"python_version": "3.11.0", "platform": "test"},
+        "artifacts_root": ".",
+        "passed": True,
+        "ready": True,
+        "readiness": "ready",
+        "readiness_probe": {
+            "ready": True,
+            "summary": "readiness_endpoint_passed",
+            "url": "http://127.0.0.1:18080/v1/models",
+            "attempts": [{"ok": True, "status_code": 200}],
+        },
+        "smoke_check": {
+            "attempted": True,
+            "passed": True,
+            "readiness": "ready",
+            "failed_checks": [],
+            "artifacts": {
+                "serving_profile": "preflight/serving_profile.json",
+                "compatibility_report": "preflight/compatibility_report.json",
+                "serving_check": "preflight/serving_check.json",
+            },
+        },
+        "teardown": {
+            "attempted": True,
+            "already_exited": False,
+            "terminated": True,
+            "killed": False,
+            "clean": True,
+            "running_after_teardown": False,
+        },
+        "errors": [],
+        "artifacts": {
+            "serving_lifecycle": "serving_lifecycle.json",
+            "stdout_log": "server.stdout.log",
+            "stderr_log": "server.stderr.log",
+            "serving_profile": "preflight/serving_profile.json",
+            "compatibility_report": "preflight/compatibility_report.json",
+            "serving_check": "preflight/serving_check.json",
+        },
+        "logs": {"stdout_tail": "", "stderr_tail": ""},
+    }
+    lifecycle_path = root / "serving_lifecycle.json"
+    lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return lifecycle_path
 
 
 if __name__ == "__main__":
