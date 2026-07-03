@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -155,13 +157,22 @@ def _inputs(
 
 def _manifest_record(path: str | Path | None, preserve_paths: bool) -> dict[str, Any]:
     if path is None:
-        return {"path": None, "exists": False, "sha256": None, "schema_version": None, "ready": None, "scenario_count": None}
+        return {
+            "path": None,
+            "exists": False,
+            "sha256": None,
+            "size_bytes": None,
+            "schema_version": None,
+            "ready": None,
+            "scenario_count": None,
+        }
     manifest_path = Path(path)
     exists = manifest_path.exists() and manifest_path.is_file()
     return {
         "path": _display_path(manifest_path, preserve_paths),
         "exists": exists,
         "sha256": _sha256(manifest_path) if exists else None,
+        "size_bytes": manifest_path.stat().st_size if exists else None,
         **(_manifest_metadata(manifest_path) if exists else {"schema_version": None, "ready": None, "scenario_count": None}),
     }
 
@@ -271,8 +282,30 @@ def _display_path(path: Path, preserve_paths: bool) -> str:
         return str(path)
 
 
-def write_external_eval_plan(plan: dict[str, Any], out_path: str | Path) -> None:
+def write_external_eval_plan(plan: dict[str, Any], out_path: str | Path, *, preserve_paths: bool = False) -> None:
     """Write an external eval plan as stable JSON."""
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(plan, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    payload = _plan_for_write(plan, path, preserve_paths)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _plan_for_write(plan: dict[str, Any], out_path: Path, preserve_paths: bool) -> dict[str, Any]:
+    if preserve_paths:
+        return plan
+    payload = copy.deepcopy(plan)
+    manifest = payload.get("inputs", {}).get("scenario_manifest") if isinstance(payload.get("inputs"), dict) else None
+    if isinstance(manifest, dict):
+        manifest["path"] = _output_relative_path(manifest.get("path"), out_path.parent)
+    return payload
+
+
+def _output_relative_path(value: Any, output_dir: Path) -> Any:
+    if not isinstance(value, str) or not value:
+        return value
+    path = Path(value)
+    if not path.is_absolute():
+        if not path.exists():
+            return value
+        path = path.resolve()
+    return os.path.relpath(path.resolve(), output_dir.resolve())

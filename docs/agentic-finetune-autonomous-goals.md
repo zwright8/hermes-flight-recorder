@@ -443,6 +443,8 @@ comparison-ready summaries for promotion gates.
 - Candidate evals are run on identical held-out scenarios as baseline and
   trace-only arms.
 - Eval summaries are comparable without manual path edits.
+- External eval plans bind scenario-manifest references to plan-relative
+  SHA-256 and byte-size evidence.
 - Any new critical failure is visible to governance gates.
 - Failed evals generate repair/curriculum work items.
 

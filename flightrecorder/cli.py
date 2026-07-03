@@ -1372,7 +1372,7 @@ def cmd_external_eval_plan(args: argparse.Namespace) -> int:
         preserve_paths=args.preserve_paths,
     )
     if args.out:
-        write_external_eval_plan(plan, args.out)
+        write_external_eval_plan(plan, args.out, preserve_paths=args.preserve_paths)
         print(f"wrote {args.out}")
     else:
         print(json.dumps(plan, indent=2, sort_keys=True, ensure_ascii=False))

@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -37,6 +38,8 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertIn("no_ready_external_adapters", plan["blocking_reasons"])
             self.assertIn("adapter_disabled_until_allow_installed", plan["blocking_reasons"])
             self.assertEqual(len(plan["inputs"]["scenario_manifest"]["sha256"]), 64)
+            self.assertEqual(plan["inputs"]["scenario_manifest"]["path"], manifest.name)
+            self.assertEqual(plan["inputs"]["scenario_manifest"]["size_bytes"], manifest.stat().st_size)
             self.assertFalse(plan["governance_handoff"]["external_eval_claims_allowed"])
 
     def test_external_eval_plan_ready_path_with_mocked_dependency(self):
@@ -69,6 +72,9 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertTrue(plan["adapters"][0]["ready"])
             self.assertEqual(plan["adapters"][0]["blocking_reasons"], [])
             self.assertTrue(plan["governance_handoff"]["external_eval_claims_allowed"])
+            written = _read_json(out)
+            self.assertEqual(written["inputs"]["scenario_manifest"]["path"], manifest.name)
+            self.assertEqual(written["inputs"]["scenario_manifest"]["size_bytes"], manifest.stat().st_size)
 
     def test_eval_summary_surfaces_external_adapter_blockers(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -109,6 +115,64 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertIn("external_eval_plan.ready_adapter_count expected 1", errors)
             self.assertIn("blocking_reasons must include dependencies_missing", errors)
             self.assertIn("ready cannot be true while blockers remain", errors)
+
+    def test_validate_rejects_manifest_fingerprint_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
+            plan = _read_json(out)
+            plan["inputs"]["scenario_manifest"].pop("size_bytes")
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_plan.inputs.scenario_manifest.size_bytes must be a non-negative integer", errors)
+
+    def test_validate_rejects_manifest_fingerprint_size_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
+            plan = _read_json(out)
+            plan["inputs"]["scenario_manifest"]["size_bytes"] += 1
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_plan.inputs.scenario_manifest.size_bytes does not match the current file.", errors)
+
+    def test_validate_rejects_manifest_fingerprint_cwd_spoof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            receipt_dir = root / "receipt"
+            receipt_dir.mkdir()
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = receipt_dir / "external_eval_plan.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
+            plan = _read_json(out)
+            plan["inputs"]["scenario_manifest"]["path"] = manifest.name
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_plan.inputs.scenario_manifest.path does not resolve to a manifest file.", errors)
 
 
 def _scenario_manifest(path: Path) -> Path:

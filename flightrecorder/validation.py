@@ -818,7 +818,7 @@ def validate_external_eval_plan(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("external_eval_plan", str(plan_path))
     plan = _read_object(plan_path, target, "external_eval_plan.json")
     if plan is not None:
-        _validate_external_eval_plan(plan, target)
+        _validate_external_eval_plan(plan, target, plan_path)
     return target
 
 
@@ -7020,7 +7020,7 @@ def _count_eval_summary_work_item_field(items: list[Any], field_name: str) -> di
     return counts
 
 
-def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", EXTERNAL_EVAL_PLAN_SCHEMA_VERSION, target)
     if not isinstance(plan.get("ready"), bool):
         target.errors.append("external_eval_plan.ready must be a boolean.")
@@ -7054,7 +7054,7 @@ def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget)
     if not isinstance(inputs, dict):
         target.errors.append("external_eval_plan.inputs must be an object.")
         inputs = {}
-    _validate_external_eval_inputs(inputs, target)
+    _validate_external_eval_inputs(inputs, target, source_path)
 
     for index, adapter in enumerate(adapters):
         _validate_external_eval_adapter_plan(adapter, index, target, inputs)
@@ -7088,23 +7088,27 @@ def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget)
     )
 
 
-def _validate_external_eval_inputs(inputs: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_external_eval_inputs(inputs: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     manifest = inputs.get("scenario_manifest")
     if not isinstance(manifest, dict):
         target.errors.append("external_eval_plan.inputs.scenario_manifest must be an object.")
     else:
+        label = "external_eval_plan.inputs.scenario_manifest"
         if manifest.get("path") is not None and not isinstance(manifest.get("path"), str):
-            target.errors.append("external_eval_plan.inputs.scenario_manifest.path must be a string or null.")
+            target.errors.append(f"{label}.path must be a string or null.")
         if not isinstance(manifest.get("exists"), bool):
-            target.errors.append("external_eval_plan.inputs.scenario_manifest.exists must be a boolean.")
+            target.errors.append(f"{label}.exists must be a boolean.")
         if manifest.get("sha256") is not None and not _is_sha256(manifest.get("sha256")):
-            target.errors.append("external_eval_plan.inputs.scenario_manifest.sha256 must be a SHA-256 hex string or null.")
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+        if manifest.get("size_bytes") is not None and not _is_non_negative_int(manifest.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer or null.")
         if manifest.get("schema_version") is not None and not isinstance(manifest.get("schema_version"), str):
-            target.errors.append("external_eval_plan.inputs.scenario_manifest.schema_version must be a string or null.")
+            target.errors.append(f"{label}.schema_version must be a string or null.")
         if manifest.get("ready") is not None and not isinstance(manifest.get("ready"), bool):
-            target.errors.append("external_eval_plan.inputs.scenario_manifest.ready must be a boolean or null.")
+            target.errors.append(f"{label}.ready must be a boolean or null.")
         if manifest.get("scenario_count") is not None and not _is_non_negative_int(manifest.get("scenario_count")):
-            target.errors.append("external_eval_plan.inputs.scenario_manifest.scenario_count must be a non-negative integer or null.")
+            target.errors.append(f"{label}.scenario_count must be a non-negative integer or null.")
+        _validate_external_eval_scenario_manifest_file(manifest, target, label, source_path)
     for field_name in (
         "model_endpoint",
         "model",
@@ -7206,12 +7210,43 @@ def _external_eval_input_present(inputs: dict[str, Any], name: str) -> bool:
             isinstance(manifest, dict)
             and manifest.get("exists") is True
             and _is_sha256(manifest.get("sha256"))
+            and _is_non_negative_int(manifest.get("size_bytes"))
             and manifest.get("ready") is not False
         )
     value = inputs.get(name)
     if isinstance(value, list):
         return bool(value)
     return isinstance(value, str) and bool(value)
+
+
+def _validate_external_eval_scenario_manifest_file(
+    manifest: dict[str, Any], target: ValidationTarget, label: str, source_path: Path
+) -> None:
+    path_value = manifest.get("path")
+    if manifest.get("exists") is not True:
+        return
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
+        return
+    file_path = _external_eval_reference_path(path_value, source_path)
+    if not file_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to a manifest file.")
+        return
+    if not _is_non_negative_int(manifest.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
+    elif file_path.stat().st_size != manifest.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if not _is_sha256(manifest.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+    elif _sha256(file_path) != manifest.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _external_eval_reference_path(value: str, source_path: Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return source_path.parent / path
 
 
 def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:

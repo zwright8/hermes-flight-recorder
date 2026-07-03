@@ -87,9 +87,10 @@
         "ready": { "type": ["boolean", "null"] },
         "scenario_count": { "type": ["integer", "null"], "minimum": 0 },
         "schema_version": { "type": ["string", "null"] },
-        "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" }
+        "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0 }
       },
-      "required": ["path", "exists", "sha256", "schema_version", "ready", "scenario_count"],
+      "required": ["path", "exists", "sha256", "size_bytes", "schema_version", "ready", "scenario_count"],
       "type": "object"
     }
   }

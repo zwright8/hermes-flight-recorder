@@ -100,8 +100,9 @@ The supported adapter IDs are `bfcl`, `inspect_ai`, `lm_eval_harness`, and
 `swe_bench`. Plans fail closed by default: even when optional dependencies are
 installed, an adapter is not ready unless `--allow-installed` is present and all
 required inputs for that adapter are supplied. The plan records dependency
-status, held-out scenario manifest SHA-256, required inputs, and blocking
-reasons.
+status, held-out scenario manifest SHA-256 and byte size, required inputs, and
+blocking reasons. Validation resolves the manifest reference from the plan file
+location before trusting those fingerprints.
 
 Include the plan in the governance summary:
 
