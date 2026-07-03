@@ -81,6 +81,9 @@ class CliReportTests(unittest.TestCase):
             self.assertIn("source_trace", lineage["replay"]["input_fingerprints"])
             self.assertIn("source_before_state_snapshot", lineage["replay"]["input_fingerprints"])
             self.assertIn("source_state_snapshot", lineage["replay"]["input_fingerprints"])
+            inputs = {item["name"]: item for item in lineage["inputs"]}
+            for name, fingerprint in lineage["replay"]["input_fingerprints"].items():
+                self.assertEqual(fingerprint["size_bytes"], inputs[name]["size_bytes"])
             self.assertEqual(lineage["summary"]["self_contained_replay"], lineage["replay"]["self_contained"])
             self.assertTrue((out / "before_state_snapshot.json").exists())
             self.assertTrue((out / "state_snapshot.json").exists())
@@ -197,6 +200,34 @@ class CliReportTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.code, 2)
 
+    def test_replay_command_rejects_stale_input_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            replay = Path(tmp) / "replay"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run",
+                        "--scenario",
+                        str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                        "--out",
+                        str(source),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+            lineage_path = source / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            lineage["replay"]["input_fingerprints"]["scenario"]["size_bytes"] += 1
+            lineage_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    main(["replay", "--lineage", str(lineage_path), "--out", str(replay), "--preserve-paths"])
+
+            self.assertEqual(raised.exception.code, 2)
+
     def test_replay_bundle_replays_after_bundle_is_moved(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"
@@ -240,6 +271,8 @@ class CliReportTests(unittest.TestCase):
                 "inputs/source_before_state_snapshot.json",
             )
             self.assertEqual(lineage["replay"]["argv"][lineage["replay"]["argv"].index("--state") + 1], "inputs/source_state_snapshot.json")
+            for name, fingerprint in lineage["replay"]["input_fingerprints"].items():
+                self.assertEqual(fingerprint["size_bytes"], next(item for item in manifest["inputs"] if item["name"] == name)["size_bytes"])
             self.assertEqual(run_cli(["validate", "--replay-bundle", str(moved_bundle), "--strict"]), 0)
             self.assertEqual(run_cli(["validate", "--run", str(replay), "--strict"]), 0)
 
@@ -298,6 +331,25 @@ class CliReportTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("artifact_lineage.inputs.scenario.size_bytes", errors)
+
+    def test_validate_replay_bundle_rejects_stale_replay_input_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source"
+            bundle = Path(tmp) / "bundle"
+            summary_path = Path(tmp) / "validation.json"
+            self.assertEqual(run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(source)]), 0)
+            self.assertEqual(run_cli(["replay-bundle", "--lineage", str(source / "artifact_lineage.json"), "--out", str(bundle)]), 0)
+            lineage_path = bundle / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            lineage["replay"]["input_fingerprints"]["scenario"]["size_bytes"] += 1
+            lineage_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--replay-bundle", str(bundle), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("artifact_lineage.replay.input_fingerprints.scenario.size_bytes", errors)
 
     def test_failing_report_redacts_secret_values_and_writes_regression(self):
         with tempfile.TemporaryDirectory() as tmp:

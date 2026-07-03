@@ -5214,6 +5214,12 @@ def _verify_replay_input(name: str, path: Path, fingerprints: dict[str, Any]) ->
         raise ReplayError(f"artifact_lineage.replay.input_fingerprints.{name}.sha256 is missing")
     if not path.exists() or not path.is_file():
         raise ReplayError(f"replay input {name} not found: {path}")
+    expected_size = record.get("size_bytes")
+    if expected_size is not None:
+        if not isinstance(expected_size, int) or isinstance(expected_size, bool) or expected_size < 0:
+            raise ReplayError(f"artifact_lineage.replay.input_fingerprints.{name}.size_bytes is invalid")
+        if path.stat().st_size != expected_size:
+            raise ReplayError(f"replay input {name} size mismatch: {path}")
     actual = _sha256_file(path)
     if actual != expected:
         raise ReplayError(f"replay input {name} sha256 mismatch: {path}")
@@ -5286,6 +5292,7 @@ def _portable_replay_lineage(
             input_fingerprints[name] = record
         record["path"] = _bundle_relative_path(copied)
         record["sha256"] = copied["sha256"]
+        record["size_bytes"] = copied["size_bytes"]
         record["exists"] = True
     _rewrite_lineage_inputs_for_bundle(bundle_lineage, copied_inputs)
     summary = bundle_lineage.get("summary")

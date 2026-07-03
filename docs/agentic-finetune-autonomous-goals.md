@@ -598,6 +598,8 @@ card, and dataset card decisions.
 - Scenario-authored trace and state snapshot paths resolve from the scenario
   file location; only explicit CLI overrides resolve from the process working
   directory.
+- Lineage replay fingerprints include input sizes; replay and replay-bundle
+  validation reject size drift between recorded inputs and replay metadata.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

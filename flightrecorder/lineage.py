@@ -232,6 +232,7 @@ def _replay_contract(
         str(record.get("name")): {
             "path": record.get("path"),
             "sha256": record.get("sha256"),
+            "size_bytes": record.get("size_bytes"),
             "exists": record.get("exists"),
         }
         for record in inputs

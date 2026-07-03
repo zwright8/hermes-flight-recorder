@@ -13853,14 +13853,14 @@ def _validate_replay_bundle_lineage(
         if not isinstance(fingerprint, dict):
             target.errors.append(f"artifact_lineage.replay.input_fingerprints missing {name}.")
             continue
-        for field_name in ("path", "sha256"):
+        for field_name in ("path", "sha256", "size_bytes"):
             if fingerprint.get(field_name) != input_record.get(field_name):
                 target.errors.append(f"artifact_lineage.replay.input_fingerprints.{name}.{field_name} must match replay_bundle input.")
         if fingerprint.get("exists") is not True:
             target.errors.append(f"artifact_lineage.replay.input_fingerprints.{name}.exists must be true.")
         lineage_input = inputs.get(name)
         if lineage_input is not None:
-            for field_name in ("path", "sha256"):
+            for field_name in ("path", "sha256", "size_bytes"):
                 if lineage_input.get(field_name) != input_record.get(field_name):
                     target.errors.append(f"artifact_lineage.inputs.{name}.{field_name} must match replay_bundle input.")
     _validate_replay_bundle_copied_lineage_inputs(inputs, bundle_dir, target)
@@ -15520,19 +15520,21 @@ def _validate_lineage_replay(replay: dict[str, Any], inputs: dict[str, dict[str,
         if not isinstance(fingerprint, dict):
             target.errors.append(f"{label} must be an object.")
             continue
-        if "path" not in fingerprint or "sha256" not in fingerprint or "exists" not in fingerprint:
-            target.errors.append(f"{label} must contain path, sha256, and exists.")
+        if "path" not in fingerprint or "sha256" not in fingerprint or "exists" not in fingerprint or "size_bytes" not in fingerprint:
+            target.errors.append(f"{label} must contain path, sha256, size_bytes, and exists.")
         if fingerprint.get("path") is not None and not isinstance(fingerprint.get("path"), str):
             target.errors.append(f"{label}.path must be a string or null.")
         if fingerprint.get("sha256") is not None and not _is_sha256(fingerprint.get("sha256")):
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
+        if fingerprint.get("size_bytes") is not None and not _is_non_negative_int(fingerprint.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer or null.")
         if fingerprint.get("exists") is not None and not isinstance(fingerprint.get("exists"), bool):
             target.errors.append(f"{label}.exists must be a boolean or null.")
         input_record = inputs.get(name)
         if input_record is None:
             target.errors.append(f"{label} does not match an artifact_lineage input record.")
             continue
-        for field_name in ("path", "sha256", "exists"):
+        for field_name in ("path", "sha256", "size_bytes", "exists"):
             if fingerprint.get(field_name) != input_record.get(field_name):
                 target.errors.append(f"{label}.{field_name} must match artifact_lineage.inputs.{name}.{field_name}.")
 
