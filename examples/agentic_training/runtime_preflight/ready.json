@@ -142,7 +142,7 @@
   },
   "plan_mode": "sft_then_dpo",
   "plan_path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
-  "plan_sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
+  "plan_sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
   "readiness": "ready",
   "recommendation": "ready_for_tiny_smoke_launch",
   "schema_version": "hfr.agentic_training_runtime_preflight.v1",

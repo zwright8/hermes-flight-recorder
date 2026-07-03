@@ -145,6 +145,42 @@ class AgenticTrainingPlanTests(unittest.TestCase):
             self.assertIn("future_rl_explicitly_enabled", {check["id"] for check in blocked["checks"] if not check["passed"]})
             self.assertTrue(allowed["passed"], allowed["blocked_reasons"])
 
+    def test_reward_and_process_modes_are_blocked_without_advanced_opt_in(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "model.json"
+            dataset = root / "dataset.json"
+            self.write_model_manifest(model)
+            self.write_dataset_manifest(dataset)
+
+            reward_blocked = build_agentic_training_plan(
+                out_path=root / "reward_blocked.json",
+                mode="reward_model",
+                model_manifest_path=model,
+                dataset_manifest_path=dataset,
+            )
+            process_blocked = build_agentic_training_plan(
+                out_path=root / "process_blocked.json",
+                mode="process_rewards",
+                model_manifest_path=model,
+                dataset_manifest_path=dataset,
+            )
+            process_allowed = build_agentic_training_plan(
+                out_path=root / "process_allowed.json",
+                mode="process_rewards",
+                model_manifest_path=model,
+                dataset_manifest_path=dataset,
+                allow_advanced_training=True,
+            )
+
+            self.assertFalse(reward_blocked["passed"])
+            self.assertFalse(process_blocked["passed"])
+            self.assertIn(
+                "advanced_reward_mode_explicitly_enabled",
+                {check["id"] for check in process_blocked["checks"] if not check["passed"]},
+            )
+            self.assertTrue(process_allowed["passed"], process_allowed["blocked_reasons"])
+
     def test_cli_writes_schema_checkable_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -159,7 +195,7 @@ class AgenticTrainingPlanTests(unittest.TestCase):
                     sys.executable,
                     str(ROOT / "scripts" / "plan_agentic_training.py"),
                     "--mode",
-                    "process_rewards",
+                    "dpo",
                     "--model-manifest",
                     str(model),
                     "--dataset-manifest",
@@ -178,8 +214,8 @@ class AgenticTrainingPlanTests(unittest.TestCase):
 
             self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
             plan = json.loads(out.read_text(encoding="utf-8"))
-            self.assertEqual(plan["mode"], "process_rewards")
-            self.assertEqual(plan["selected_views"][0]["name"], "step_rewards")
+            self.assertEqual(plan["mode"], "dpo")
+            self.assertEqual(plan["selected_views"][0]["name"], "dpo")
             schema = check_schema_file(out)
             self.assertTrue(schema["passed"], schema["errors"])
 

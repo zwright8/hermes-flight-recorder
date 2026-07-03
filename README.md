@@ -37,8 +37,8 @@ model-improvement loops. It helps teams:
 - block weak, unsafe, malformed, or low-signal evidence,
 - export redacted training datasets with lineage and split metadata,
 - register model candidates, adapters, serving probes, and training plans,
-- plan SFT, action SFT, DPO, reward/process-reward, and future RL handoffs
-  without launching heavyweight training,
+- plan SFT, action SFT, and DPO handoffs without launching heavyweight
+  training, while keeping reward/process-reward and future RL paths gated,
 - verify OpenAI-compatible serving endpoints before eval or demo handoff,
 - compare held-out baseline/candidate runs without overstating raw movement,
 - gate promotion with model cards, dataset cards, rollback targets, release

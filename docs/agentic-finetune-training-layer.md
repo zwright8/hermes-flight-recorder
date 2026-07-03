@@ -21,20 +21,25 @@ python3 scripts/plan_agentic_training.py \
   --out runs/agentic_training_plan.json
 ```
 
-The planner currently supports:
+The planner currently supports these default executable handoff modes:
 
 - `sft`
 - `action_sft`
 - `dpo`
 - `sft_then_dpo`
+
+The planner also knows advanced extension modes, but they stay blocked by
+default:
+
 - `reward_model`
 - `process_rewards`
 - `grpo`
 - `rl`
 
-`grpo` and `rl` are future extension points and remain blocked unless
-`--allow-future-rl` is passed. That flag only allows planning; it still does not
-launch a trainer.
+`reward_model` and `process_rewards` require `--allow-advanced-training`.
+`grpo` and `rl` require `--allow-future-rl`. Those flags only allow planning;
+they still do not launch a trainer, import trainer stacks, download models, or
+update weights.
 
 ## Required Registry Inputs
 

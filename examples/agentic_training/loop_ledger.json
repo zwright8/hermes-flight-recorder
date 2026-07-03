@@ -5,7 +5,7 @@
     "latest_iteration_index": 0,
     "readiness": "blocked",
     "recommendation": "continue_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 15 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 18 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -113,13 +113,16 @@
         "eval_summary",
         "evidence_bundle",
         "external_eval_plan",
+        "external_eval_receipt",
         "harness_result",
         "heldout_manifest",
         "improvement_plan",
+        "model_grader_gate",
         "promotion_decision",
         "promotion_ledger",
         "review_calibration",
         "reviewed_gate",
+        "rubric_spec",
         "serving_lifecycle",
         "trainer_launch_check",
         "trainer_preflight",
@@ -156,8 +159,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "151c0899d16fa4681455488568c58baecb9843a87115431dba750f9fdbde9a80",
-      "size_bytes": 14535,
+      "sha256": "0ed89bc0afb868bdbb62c31ef76409f5b601525ea92149e619bc4f2810f64cf7",
+      "size_bytes": 15068,
       "training_outputs": {
         "artifact_count": 3,
         "group": "training",
@@ -216,7 +219,7 @@
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 15,
+    "latest_missing_phase_input_count": 18,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
     "promotion_ready_count": 0,

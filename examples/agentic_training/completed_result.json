@@ -116,11 +116,11 @@
     },
     {
       "actual": {
-        "plan_sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
-        "runtime_plan_sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194"
+        "plan_sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+        "runtime_plan_sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0"
       },
       "expected": {
-        "runtime_plan_sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194"
+        "runtime_plan_sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0"
       },
       "id": "runtime_preflight_matches_plan",
       "passed": true,
@@ -251,15 +251,15 @@
       "path": "plans/sft_then_dpo_plan.json",
       "regular_file": true,
       "schema_name": "agentic_training_plan",
-      "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
-      "size_bytes": 9104
+      "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+      "size_bytes": 10379
     },
     "runtime_preflight": {
       "exists": true,
       "path": "runtime_preflight/ready.json",
       "regular_file": true,
       "schema_name": "agentic_training_runtime_preflight",
-      "sha256": "68f1b625d85b924f03ee0ce2002643d2806d6f759f915e407ec1f492c6f878c0",
+      "sha256": "01e90d892489cb0bb7125218f87cecf4559ddc342fab6339889ed3866929f6d9",
       "size_bytes": 5741
     }
   },

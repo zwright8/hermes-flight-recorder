@@ -85,12 +85,16 @@
     },
     {
       "actual": {
+        "model_grader_gate_present": false,
         "review_calibration_present": false,
-        "reviewed_gate_present": false
+        "reviewed_gate_present": false,
+        "rubric_spec_present": false
       },
       "expected": {
+        "model_grader_gate_present": true,
         "review_calibration_present": true,
-        "reviewed_gate_present": true
+        "reviewed_gate_present": true,
+        "rubric_spec_present": true
       },
       "id": "uncalibrated_labels_block_training_data",
       "passed": false,
@@ -114,10 +118,12 @@
     {
       "actual": {
         "external_eval_plan_present": false,
+        "external_eval_receipt_present": false,
         "heldout_manifest_present": false
       },
       "expected": {
         "external_eval_plan_present": true,
+        "external_eval_receipt_present": true,
         "heldout_manifest_present": true
       },
       "id": "heldout_eval_is_fail_closed",
@@ -168,13 +174,16 @@
     "eval_summary",
     "evidence_bundle",
     "external_eval_plan",
+    "external_eval_receipt",
     "harness_result",
     "heldout_manifest",
     "improvement_plan",
+    "model_grader_gate",
     "promotion_decision",
     "promotion_ledger",
     "review_calibration",
     "reviewed_gate",
+    "rubric_spec",
     "serving_lifecycle",
     "trainer_launch_check",
     "trainer_preflight",
@@ -252,15 +261,20 @@
       "gate": "model-grader labels are blocked until calibration and human override paths exist.",
       "id": "rubric_model_grader_review",
       "missing_required_artifacts": [
+        "rubric_spec",
+        "model_grader_gate",
         "review_calibration"
       ],
       "name": "Rubric and model-grader review",
       "present_required_artifacts": [],
       "produces": [
         "review_manifest",
+        "model_grader_dry_run",
         "reviewed_manifest"
       ],
       "required_artifacts": [
+        "rubric_spec",
+        "model_grader_gate",
         "review_calibration"
       ],
       "status": "blocked"
@@ -344,6 +358,7 @@
       "missing_required_artifacts": [
         "heldout_manifest",
         "external_eval_plan",
+        "external_eval_receipt",
         "eval_summary"
       ],
       "name": "Held-out eval and external benchmarks",
@@ -356,6 +371,7 @@
       "required_artifacts": [
         "heldout_manifest",
         "external_eval_plan",
+        "external_eval_receipt",
         "eval_summary"
       ],
       "status": "blocked"
@@ -456,8 +472,8 @@
         "readiness": "ready",
         "role": "agentic_training_plan",
         "schema_version": "hfr.agentic_training_plan.v1",
-        "sha256": "a1a7c1c5a3b210ffb3d7a506abf56b15942262da755dca2ea9674b9600283194",
-        "size_bytes": 9104
+        "sha256": "e0b7ef46d269f26353991687b44fb7c18d8589e625fd81023f686486e4c374e0",
+        "size_bytes": 10379
       }
     ],
     "agentic_training_result": [
@@ -469,8 +485,8 @@
         "readiness": "ready",
         "role": "agentic_training_result",
         "schema_version": "hfr.agentic_training_result.v1",
-        "sha256": "0f0805938d4d05835310372980ccacae0fe0b7a540452d8ad25b0c62376ac2b0",
-        "size_bytes": 9799
+        "sha256": "11d99420ab7c18830b108cfe896da4f8f68921418ba4d0bd3bcc00299412f476",
+        "size_bytes": 9800
       }
     ],
     "agentic_training_runtime_preflight": [
@@ -482,7 +498,7 @@
         "readiness": "ready",
         "role": "agentic_training_runtime_preflight",
         "schema_version": "hfr.agentic_training_runtime_preflight.v1",
-        "sha256": "68f1b625d85b924f03ee0ce2002643d2806d6f759f915e407ec1f492c6f878c0",
+        "sha256": "01e90d892489cb0bb7125218f87cecf4559ddc342fab6339889ed3866929f6d9",
         "size_bytes": 5741
       }
     ]

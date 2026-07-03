@@ -565,11 +565,15 @@ real trainer takes over. That receipt can also be checked with
 part of the evidence contract rather than an untyped log file.
 Agentic fine-tuning modes can enter this same pipeline through
 `scripts/plan_agentic_training.py`, which emits `hfr.agentic_training_plan.v1`
-dry-run artifacts from registered model and dataset manifests for SFT, action
-SFT, DPO, SFT-then-DPO, reward-model, process-reward, and future GRPO/RL
-paths. Pass `--agentic-training-plan <plan.json>` to `trainer-preflight` to
-fingerprint a ready plan as a trainer input before archiving or handing it to
-an external runner.
+dry-run artifacts from registered model and dataset manifests. SFT, action SFT,
+DPO, and SFT-then-DPO are the default executable handoff modes. Reward-model
+and process-reward modes remain blocked unless `--allow-advanced-training` is
+passed, and GRPO/RL remain blocked unless `--allow-future-rl` is passed. Those
+flags only allow planning; they still do not launch a trainer, import training
+stacks, download models, or update weights. Pass
+`--agentic-training-plan <plan.json>` to `trainer-preflight` to fingerprint a
+ready plan as a trainer input before archiving or handing it to an external
+runner.
 Before a bounded tiny-smoke launch, run
 `scripts/preflight_agentic_training_runtime.py` against that plan. It emits
 `hfr.agentic_training_runtime_preflight.v1`, validates the selected trainer

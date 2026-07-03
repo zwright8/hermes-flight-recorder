@@ -1,6 +1,6 @@
 {
   "blocked_reasons": [],
-  "check_count": 11,
+  "check_count": 13,
   "checks": [
     {
       "actual": {
@@ -21,6 +21,26 @@
       "id": "mode_supported",
       "passed": true,
       "summary": "mode_supported: passed=True"
+    },
+    {
+      "actual": {
+        "allow_advanced_training": false,
+        "allow_future_rl": false,
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "advanced_reward_modes_require": "allow_advanced_training",
+        "default_ready_modes": [
+          "action_sft",
+          "dpo",
+          "sft",
+          "sft_then_dpo"
+        ],
+        "future_rl_modes_require": "allow_future_rl"
+      },
+      "id": "default_trainer_flow_mode_ready",
+      "passed": true,
+      "summary": "default_trainer_flow_mode_ready: passed=True"
     },
     {
       "actual": {
@@ -134,6 +154,22 @@
     },
     {
       "actual": {
+        "allow_advanced_training": false,
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "advanced_reward_modes": [
+          "process_rewards",
+          "reward_model"
+        ],
+        "allow_advanced_training": true
+      },
+      "id": "advanced_reward_mode_explicitly_enabled",
+      "passed": true,
+      "summary": "advanced_reward_mode_explicitly_enabled: passed=True"
+    },
+    {
+      "actual": {
         "allow_future_rl": false,
         "mode": "sft_then_dpo"
       },
@@ -191,6 +227,10 @@
   },
   "failed_check_count": 0,
   "handoff_contract": {
+    "advanced_reward_modes_blocked_by_default": [
+      "process_rewards",
+      "reward_model"
+    ],
     "allowed_modes": [
       "sft",
       "action_sft",
@@ -201,8 +241,18 @@
       "grpo",
       "rl"
     ],
+    "default_executable_modes": [
+      "action_sft",
+      "dpo",
+      "sft",
+      "sft_then_dpo"
+    ],
     "disallow_unredacted_traces": true,
     "flight_recorder_executed_training": false,
+    "future_rl_modes_blocked_by_default": [
+      "grpo",
+      "rl"
+    ],
     "requires_known_license_status": true,
     "requires_redacted_dataset": true,
     "requires_registered_dataset": true,

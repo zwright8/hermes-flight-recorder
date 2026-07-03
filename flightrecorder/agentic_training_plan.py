@@ -21,6 +21,8 @@ SUPPORTED_MODES = (
     "rl",
 )
 
+DEFAULT_EXECUTABLE_MODES = {"sft", "action_sft", "dpo", "sft_then_dpo"}
+ADVANCED_REWARD_MODES = {"reward_model", "process_rewards"}
 FUTURE_RL_MODES = {"grpo", "rl"}
 
 MODE_VIEW_REQUIREMENTS: dict[str, tuple[tuple[str, ...], ...]] = {
@@ -62,6 +64,7 @@ def build_agentic_training_plan(
     trainer_backend: str = "external",
     output_dir: str | Path | None = None,
     limit: int | None = None,
+    allow_advanced_training: bool = False,
     allow_future_rl: bool = False,
     created_at: str | None = None,
 ) -> dict[str, Any]:
@@ -82,6 +85,19 @@ def build_agentic_training_plan(
 
     checks: list[dict[str, Any]] = []
     _add_check(checks, "mode_supported", True, {"mode": mode}, {"supported_modes": list(SUPPORTED_MODES)})
+    _add_check(
+        checks,
+        "default_trainer_flow_mode_ready",
+        mode in DEFAULT_EXECUTABLE_MODES
+        or (mode in ADVANCED_REWARD_MODES and allow_advanced_training)
+        or (mode in FUTURE_RL_MODES and allow_future_rl),
+        {"mode": mode, "allow_advanced_training": allow_advanced_training, "allow_future_rl": allow_future_rl},
+        {
+            "default_ready_modes": sorted(DEFAULT_EXECUTABLE_MODES),
+            "advanced_reward_modes_require": "allow_advanced_training",
+            "future_rl_modes_require": "allow_future_rl",
+        },
+    )
     _add_check(checks, "model_manifest_registered", bool(model["id"]), {"model_id": model["id"]}, {"required": True})
     _add_check(
         checks,
@@ -118,6 +134,13 @@ def build_agentic_training_plan(
         _requirements_satisfied(selected_views, mode),
         {"selected_views": [view["name"] for view in selected_views]},
         {"required_view_groups": [list(group) for group in MODE_VIEW_REQUIREMENTS[mode]]},
+    )
+    _add_check(
+        checks,
+        "advanced_reward_mode_explicitly_enabled",
+        mode not in ADVANCED_REWARD_MODES or allow_advanced_training,
+        {"mode": mode, "allow_advanced_training": allow_advanced_training},
+        {"advanced_reward_modes": sorted(ADVANCED_REWARD_MODES), "allow_advanced_training": True},
     )
     _add_check(
         checks,
@@ -174,6 +197,9 @@ def build_agentic_training_plan(
             "requires_redacted_dataset": True,
             "disallow_unredacted_traces": True,
             "allowed_modes": list(SUPPORTED_MODES),
+            "default_executable_modes": sorted(DEFAULT_EXECUTABLE_MODES),
+            "advanced_reward_modes_blocked_by_default": sorted(ADVANCED_REWARD_MODES),
+            "future_rl_modes_blocked_by_default": sorted(FUTURE_RL_MODES),
         },
         "notes": [
             "This is a dry-run plan only; Flight Recorder did not import trainer packages or update weights.",
