@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -219,8 +220,9 @@ def build_promotion_decision(
         "serving_profile": serving_profile_path,
         "serving_report": serving_report_path,
     }
+    output_path = Path(out_path) if out_path is not None else None
     artifacts = {
-        role: _artifact_record(role, Path(raw_path) if raw_path else None, preserve_paths)
+        role: _artifact_record(role, Path(raw_path) if raw_path else None, preserve_paths, output_path)
         for role, raw_path in paths.items()
     }
     json_artifacts = {
@@ -229,7 +231,7 @@ def build_promotion_decision(
         if role in _JSON_ARTIFACT_ROLES or role in _PASSED_JSON_ROLES or role == "rollback_metadata"
     }
     policy_path = Path(promotion_policy_path) if promotion_policy_path else None
-    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths) if policy_path else None
+    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths, output_path) if policy_path else None
     policy = _load_promotion_policy(policy_path, preserve_paths)
 
     checks: list[dict[str, Any]] = []
@@ -395,8 +397,8 @@ def apply_promotion_aliases(
     registry_file = Path(registry_path)
     decision_file = Path(promotion_decision_path)
     receipt_path = Path(out_path)
-    registry_before_record = _artifact_record("registry", registry_file, preserve_paths)
-    decision_record = _artifact_record("promotion_decision", decision_file, preserve_paths)
+    registry_before_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path)
+    decision_record = _artifact_record("promotion_decision", decision_file, preserve_paths, receipt_path)
     registry = _read_json_artifact(registry_file)
     decision = _read_json_artifact(decision_file)
     registry_obj = registry if isinstance(registry, dict) else {}
@@ -557,7 +559,7 @@ def apply_promotion_aliases(
         }
         history.append(alias_history_entry)
         _write_json(registry_file, updated)
-        registry_after_record = _artifact_record("registry", registry_file, preserve_paths)
+        registry_after_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path)
         aliases_after = _registry_aliases(updated)
         alias_history_count_after += 1
 
@@ -625,7 +627,7 @@ def build_promotion_rollback_receipt(
     """Prove the rollback target is registered before a promotion decision consumes it."""
     registry_file = Path(registry_path)
     receipt_path = Path(out_path)
-    registry_record = _artifact_record("registry", registry_file, preserve_paths)
+    registry_record = _artifact_record("registry", registry_file, preserve_paths, receipt_path)
     registry = _read_json_artifact(registry_file)
     registry_obj = registry if isinstance(registry, dict) else {}
     aliases = _registry_aliases(registry_obj)
@@ -775,7 +777,7 @@ def build_promotion_release_record(
         "compare_gate": Path(compare_gate_path),
         "release_notes": Path(release_notes_path),
     }
-    artifacts = {role: _artifact_record(role, path, preserve_paths) for role, path in paths.items()}
+    artifacts = {role: _artifact_record(role, path, preserve_paths, record_path) for role, path in paths.items()}
     decision = _read_json_artifact(paths["promotion_decision"])
     cards_manifest_path = _promotion_cards_manifest_path(paths["promotion_cards"])
     cards = _read_json_artifact(cards_manifest_path) if cards_manifest_path is not None else None
@@ -788,7 +790,7 @@ def build_promotion_release_record(
     cards_obj = cards if isinstance(cards, dict) else {}
     alias_obj = alias_receipt if isinstance(alias_receipt, dict) else {}
     policy_path = Path(promotion_policy_path) if promotion_policy_path else None
-    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths) if policy_path else None
+    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths, record_path) if policy_path else None
     policy = _load_promotion_policy(policy_path, preserve_paths) if policy_path else None
     decision_policy = decision_obj.get("policy") if isinstance(decision_obj.get("policy"), dict) else {}
     decision_models = decision_obj.get("models") if isinstance(decision_obj.get("models"), dict) else {}
@@ -1043,7 +1045,7 @@ def build_promotion_cards(
         "safety_gate": safety_gate_path,
     }
     input_artifacts = {
-        role: _artifact_record(role, Path(raw_path) if raw_path else None, preserve_paths)
+        role: _artifact_record(role, Path(raw_path) if raw_path else None, preserve_paths, manifest_path)
         for role, raw_path in paths.items()
     }
     json_artifacts = {
@@ -1134,8 +1136,8 @@ def build_promotion_cards(
     dataset_card_path.write_text(dataset_card, encoding="utf-8")
 
     card_artifacts = {
-        "model_card": _artifact_record("model_card", model_card_path, preserve_paths),
-        "dataset_card": _artifact_record("dataset_card", dataset_card_path, preserve_paths),
+        "model_card": _artifact_record("model_card", model_card_path, preserve_paths, manifest_path),
+        "dataset_card": _artifact_record("dataset_card", dataset_card_path, preserve_paths, manifest_path),
     }
     metrics = {
         "check_count": len(checks),
@@ -1259,10 +1261,15 @@ def _render_dataset_card(
     return "\n".join(lines)
 
 
-def _artifact_record(role: str, path: Path | None, preserve_paths: bool) -> dict[str, Any]:
+def _artifact_record(
+    role: str,
+    path: Path | None,
+    preserve_paths: bool,
+    output_path: Path | None = None,
+) -> dict[str, Any]:
     record: dict[str, Any] = {
         "role": role,
-        "path": _display_path(path, preserve_paths) if path is not None else "",
+        "path": _display_path_for_output_source(path, output_path, preserve_paths) if path is not None else "",
         "exists": False,
         "kind": "missing",
     }
@@ -1987,6 +1994,17 @@ def _display_path(path: Path | None, preserve_paths: bool = False) -> str:
         return str(resolved.relative_to(cwd))
     except ValueError:
         return f"<redacted:{resolved.name}>"
+
+
+def _display_path_for_output_source(path: Path, output_path: Path | None, preserve_paths: bool = False) -> str:
+    if preserve_paths or output_path is None:
+        return _display_path(path, preserve_paths)
+    raw = str(path)
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
+    resolved = path.resolve()
+    output_dir = output_path.parent.resolve()
+    return os.path.relpath(resolved, output_dir)
 
 
 def _is_windows_absolute(value: str) -> bool:

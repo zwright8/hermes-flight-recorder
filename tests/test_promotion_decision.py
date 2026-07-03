@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -16,6 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def run_cli(args):
     with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
         return main(args)
+
+
+def without_preserve_paths(args):
+    return [arg for arg in args if arg != "--preserve-paths"]
 
 
 class PromotionDecisionTests(unittest.TestCase):
@@ -856,6 +861,114 @@ class PromotionDecisionTests(unittest.TestCase):
             artifacts["model_card"].write_text("# Model Card\n\nchanged after decision\n", encoding="utf-8")
 
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 1)
+
+    def test_promotion_cards_writes_output_relative_artifact_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "src"
+            output = root / "out"
+            source.mkdir()
+            output.mkdir()
+            artifacts = write_governance_artifacts(source)
+            training_export = write_training_export(source)
+            cards_dir = output / "cards"
+
+            code = run_cli(without_preserve_paths(promotion_cards_args(artifacts, training_export, cards_dir)))
+
+            self.assertEqual(code, 0)
+            manifest = json.loads((cards_dir / "promotion_cards.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["artifacts"]["model_card"]["path"], "MODEL_CARD.md")
+            self.assertEqual(manifest["artifacts"]["dataset_card"]["path"], "DATASET_CARD.md")
+            self.assertEqual(manifest["artifacts"]["evidence_bundle"]["path"], "../../src/evidence_bundle.json")
+            self.assertEqual(manifest["artifacts"]["training_export"]["path"], "../../src/training_export")
+            self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 0)
+
+    def test_promotion_decision_writes_output_relative_artifact_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "src"
+            output = root / "out"
+            source.mkdir()
+            output.mkdir()
+            artifacts = write_governance_artifacts(source)
+            decision_path = output / "promotion_decision.json"
+
+            code = run_cli(without_preserve_paths(promotion_decision_args(artifacts, decision_path)))
+
+            self.assertEqual(code, 0)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            self.assertEqual(decision["artifacts"]["evidence_bundle"]["path"], "../src/evidence_bundle.json")
+            self.assertEqual(decision["artifacts"]["model_card"]["path"], "../src/MODEL_CARD.md")
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_validate_promotion_decision_rejects_cwd_relative_artifact_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "src"
+            output = root / "out"
+            source.mkdir()
+            output.mkdir()
+            artifacts = write_governance_artifacts(source)
+            decision_path = output / "promotion_decision.json"
+            summary_path = output / "validation.json"
+            self.assertEqual(run_cli(without_preserve_paths(promotion_decision_args(artifacts, decision_path))), 0)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            decision["artifacts"]["evidence_bundle"]["path"] = "evidence_bundle.json"
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(source)
+                code = run_cli(["validate", "--promotion-decision", str(decision_path), "--strict", "--out", str(summary_path)])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_decision.artifacts.evidence_bundle.path does not exist at validation time", errors)
+
+    def test_promotion_release_record_writes_output_relative_artifact_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "src"
+            output = root / "out"
+            source.mkdir()
+            output.mkdir()
+            artifacts = write_governance_artifacts(source)
+            training_export = write_training_export(source)
+            cards_dir = output / "cards"
+            registry_path = write_model_registry(source)
+            decision_path = output / "promotion_decision.json"
+            alias_receipt_path = output / "promotion_alias_apply.json"
+            release_notes_path = write_release_notes(source)
+            release_record_path = output / "promotion_release_record.json"
+            self.assertEqual(run_cli(without_preserve_paths(promotion_cards_args(artifacts, training_export, cards_dir))), 0)
+            artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+            artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+            self.assertEqual(run_cli(without_preserve_paths(promotion_decision_args(artifacts, decision_path))), 0)
+            self.assertEqual(run_cli(without_preserve_paths(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path))), 0)
+
+            code = run_cli(
+                without_preserve_paths(
+                    promotion_release_record_args(
+                        artifacts,
+                        cards_dir,
+                        decision_path,
+                        alias_receipt_path,
+                        release_notes_path,
+                        release_record_path,
+                    )
+                )
+            )
+
+            self.assertEqual(code, 0)
+            record = json.loads(release_record_path.read_text(encoding="utf-8"))
+            self.assertEqual(record["artifacts"]["promotion_decision"]["path"], "promotion_decision.json")
+            self.assertEqual(record["artifacts"]["promotion_cards"]["path"], "cards")
+            self.assertEqual(record["artifacts"]["rollback_metadata"]["path"], "../src/rollback.json")
+            self.assertEqual(record["artifacts"]["release_notes"]["path"], "../src/RELEASE_NOTES.md")
+            self.assertEqual(run_cli(["validate", "--promotion-release-record", str(release_record_path), "--strict"]), 0)
 
     def test_validate_promotion_decision_rejects_missing_required_pass_check(self):
         with tempfile.TemporaryDirectory() as tmp:

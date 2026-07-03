@@ -551,9 +551,9 @@ first.
 
 Work packet by packet: improve promotion policies, required-artifact checks,
 frontier/base/trace-only/champion/candidate comparisons, rollback metadata,
-license gates, safety gates, card generation, alias updates, or tests. Run
-verification, update docs, update supervisor_state, append a journal checkpoint,
-and continue.
+license gates, safety gates, card generation, alias updates, output-relative
+artifact references, or tests. Run verification, update docs, update
+supervisor_state, append a journal checkpoint, and continue.
 
 Block promotion on missing evidence, unknown license, redaction failure,
 missing cards, missing rollback, eval mismatch, new critical failures, secret

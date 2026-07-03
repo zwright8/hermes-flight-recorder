@@ -10466,13 +10466,7 @@ def _resolve_promotion_decision_artifact_path(value: Any, source_path: Path, kin
     if not isinstance(value, str) or not value or value.startswith("<redacted:"):
         return None
     raw = Path(value)
-    candidates = [raw] if raw.is_absolute() else [Path.cwd() / raw, source_path.parent / raw]
-    for candidate in candidates:
-        if kind == "directory" and candidate.exists() and candidate.is_dir():
-            return candidate
-        if kind == "file" and candidate.exists() and candidate.is_file():
-            return candidate
-    return candidates[0]
+    return raw if raw.is_absolute() else source_path.parent / raw
 
 
 def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: ValidationTarget, policy: Any) -> None:
