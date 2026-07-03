@@ -31,6 +31,7 @@ class CloudTrainingTests(unittest.TestCase):
         self.assertIn("azure_ml", provider_ids)
         self.assertIn("databricks_mosaic", provider_ids)
         self.assertIn("nvidia_dgx_cloud", provider_ids)
+        self.assertIn("brev", provider_ids)
         self.assertTrue(all(provider["default_live_execution_allowed"] is False for provider in registry["providers"]))
         self.assertTrue(all(isinstance(provider["client_import_names"], list) for provider in registry["providers"]))
         self.assertFalse(registry["execution_boundary"]["provider_api_called"])
@@ -222,6 +223,7 @@ class CloudTrainingTests(unittest.TestCase):
         self.assertEqual(choices, sorted(choices))
         self.assertIn("fireworks", choices)
         self.assertIn("together", choices)
+        self.assertIn("brev", choices)
 
     def assert_schema_and_validate(self, path: Path, schema_name: str) -> None:
         schema = check_schema_file(path)

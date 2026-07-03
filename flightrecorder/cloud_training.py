@@ -129,11 +129,20 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "live_status": "preflight_only",
     },
     "nvidia_dgx_cloud": {
-        "display_name": "NVIDIA DGX Cloud / Brev",
-        "credential_env_vars": ["NVIDIA_API_KEY", "BREV_API_KEY"],
+        "display_name": "NVIDIA DGX Cloud",
+        "credential_env_vars": ["NVIDIA_API_KEY"],
         "regions": ["provider_default"],
         "gpu_classes": ["a100", "h100", "gb200"],
         "job_modes": ["sft", "action_sft", "dpo", "reward_model", "process_rewards", "grpo"],
+        "artifact_protocols": ["archive", "object_store"],
+        "live_status": "preflight_only",
+    },
+    "brev": {
+        "display_name": "NVIDIA Brev",
+        "credential_env_vars": ["BREV_API_KEY"],
+        "regions": ["provider_default"],
+        "gpu_classes": ["l4", "a10g", "a100", "h100"],
+        "job_modes": ["sft", "action_sft", "dpo", "reward_model"],
         "artifact_protocols": ["archive", "object_store"],
         "live_status": "preflight_only",
     },
@@ -153,6 +162,7 @@ PROVIDER_CLIENT_MODULES: dict[str, list[str]] = {
     "azure_ml": ["azure.ai.ml"],
     "databricks_mosaic": ["databricks.sdk", "mlflow"],
     "nvidia_dgx_cloud": ["requests"],
+    "brev": ["requests"],
 }
 
 

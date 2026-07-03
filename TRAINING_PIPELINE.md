@@ -743,7 +743,7 @@ Cloud trainer integrations use the same fail-closed receipt pattern. The
 preflight, artifact upload/download, launch-plan, launch-receipt, and
 status/cancel receipts for partner families such as Hugging Face Jobs/AutoTrain,
 Modal, RunPod, Lambda Labs, CoreWeave, Together, Fireworks, Replicate, AWS
-SageMaker, GCP Vertex AI, Azure ML, Databricks/Mosaic, and NVIDIA DGX Cloud/Brev:
+SageMaker, GCP Vertex AI, Azure ML, Databricks/Mosaic, NVIDIA DGX Cloud, and Brev:
 
 ```bash
 flightrecorder cloud-training providers \

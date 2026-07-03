@@ -334,8 +334,8 @@ Cloud provider integration is provider-neutral and fail-closed. The current
 `cloud-training` commands emit registry, preflight, artifact-manifest,
 launch-plan, launch-receipt, and status/cancel receipts for providers such as
 Hugging Face Jobs, Modal, RunPod, Lambda Labs, CoreWeave, Together, Fireworks,
-Replicate, SageMaker, Vertex AI, Azure ML, Databricks/Mosaic, and NVIDIA DGX
-Cloud/Brev. They do not import provider SDKs, call provider APIs, create jobs,
+Replicate, SageMaker, Vertex AI, Azure ML, Databricks/Mosaic, NVIDIA DGX
+Cloud, and Brev. They do not import provider SDKs, call provider APIs, create jobs,
 spend money, download models, or update weights. Optional live preflight probes
 only check environment-variable presence and provider client module
 discoverability; they still record `provider_api_called: false`.
