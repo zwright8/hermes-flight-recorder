@@ -686,6 +686,9 @@ card, and dataset card decisions.
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance
   consumes summarized claims.
+- Cloud-training artifact manifests, preflights, launch plans, launch receipts,
+  and status receipts reopen path-backed upload/source refs from their own file
+  location and reject stale SHA-256 or byte-size evidence before handoff.
 - Improvement plans reject stale source-artifact SHA-256 and byte-size
   records when present file artifacts resolve during validation.
 - Action-ledger gate validation reopens the referenced action ledger from the

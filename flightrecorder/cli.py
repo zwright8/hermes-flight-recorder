@@ -1550,6 +1550,7 @@ def cmd_cloud_training_artifacts(args: argparse.Namespace) -> int:
         upload_paths=args.upload,
         expected_downloads=args.download,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
         created_at=args.created_at,
     )
     _emit_json_payload(manifest, args.out)
@@ -1569,6 +1570,7 @@ def cmd_cloud_training_preflight(args: argparse.Namespace) -> int:
         live_requested=args.live_requested,
         allow_live=args.allow_live,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
         created_at=args.created_at,
     )
     _emit_json_payload(preflight, args.out)
@@ -1580,6 +1582,7 @@ def cmd_cloud_training_plan(args: argparse.Namespace) -> int:
         preflight_path=args.preflight,
         artifact_manifest_path=args.artifact_manifest,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
         created_at=args.created_at,
     )
     _emit_json_payload(plan, args.out)
@@ -1591,6 +1594,7 @@ def cmd_cloud_training_launch(args: argparse.Namespace) -> int:
         launch_plan_path=args.launch_plan,
         live=args.live,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
         created_at=args.created_at,
     )
     _emit_json_payload(receipt, args.out)
@@ -1602,6 +1606,7 @@ def cmd_cloud_training_status(args: argparse.Namespace) -> int:
         launch_receipt_path=args.launch_receipt,
         cancel_requested=args.cancel,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
         created_at=args.created_at,
     )
     _emit_json_payload(receipt, args.out)

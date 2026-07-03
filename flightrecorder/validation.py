@@ -1360,7 +1360,7 @@ def validate_cloud_training_preflight(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("cloud_training_preflight", str(preflight_path))
     preflight = _read_object(preflight_path, target, "cloud_training_preflight.json")
     if preflight is not None:
-        _validate_cloud_training_contract(preflight, target, CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION)
+        _validate_cloud_training_contract(preflight, target, CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION, source_path=preflight_path)
         _validate_cloud_training_credentials(preflight.get("credential_checks"), target)
         _validate_cloud_training_live_preflight(preflight.get("live_preflight"), target)
     return target
@@ -1372,7 +1372,7 @@ def validate_cloud_training_artifact_manifest(path: str | Path) -> ValidationTar
     target = ValidationTarget("cloud_training_artifact_manifest", str(manifest_path))
     manifest = _read_object(manifest_path, target, "cloud_training_artifact_manifest.json")
     if manifest is not None:
-        _validate_cloud_training_contract(manifest, target, CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION)
+        _validate_cloud_training_contract(manifest, target, CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION, source_path=manifest_path)
     return target
 
 
@@ -1382,7 +1382,7 @@ def validate_cloud_training_launch_plan(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("cloud_training_launch_plan", str(plan_path))
     plan = _read_object(plan_path, target, "cloud_training_launch_plan.json")
     if plan is not None:
-        _validate_cloud_training_contract(plan, target, CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION)
+        _validate_cloud_training_contract(plan, target, CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION, source_path=plan_path)
     return target
 
 
@@ -1392,7 +1392,7 @@ def validate_cloud_training_launch_receipt(path: str | Path) -> ValidationTarget
     target = ValidationTarget("cloud_training_launch_receipt", str(receipt_path))
     receipt = _read_object(receipt_path, target, "cloud_training_launch_receipt.json")
     if receipt is not None:
-        _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION)
+        _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION, source_path=receipt_path)
     return target
 
 
@@ -1402,7 +1402,7 @@ def validate_cloud_training_status_receipt(path: str | Path) -> ValidationTarget
     target = ValidationTarget("cloud_training_status_receipt", str(receipt_path))
     receipt = _read_object(receipt_path, target, "cloud_training_status_receipt.json")
     if receipt is not None:
-        _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION)
+        _validate_cloud_training_contract(receipt, target, CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION, source_path=receipt_path)
     return target
 
 
@@ -2798,7 +2798,13 @@ def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: Validation
         target.errors.append(f"{label}.sha256 does not match the current file.")
 
 
-def _validate_cloud_training_contract(payload: dict[str, Any], target: ValidationTarget, expected_schema_version: str) -> None:
+def _validate_cloud_training_contract(
+    payload: dict[str, Any],
+    target: ValidationTarget,
+    expected_schema_version: str,
+    *,
+    source_path: Path | None = None,
+) -> None:
     _require_equal(payload, "schema_version", expected_schema_version, target, prefix=f"{target.target_type}.")
     checks = payload.get("checks")
     if checks is not None:
@@ -2828,6 +2834,33 @@ def _validate_cloud_training_contract(payload: dict[str, Any], target: Validatio
             target.errors.append(f"{target.target_type}.execution_boundary.weights_updated_by_flight_recorder must be false.")
         if boundary.get("cloud_cost_incurred_usd") != 0:
             target.errors.append(f"{target.target_type}.execution_boundary.cloud_cost_incurred_usd must be 0.")
+    if expected_schema_version in {
+        CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
+        CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
+        CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
+        CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
+    }:
+        _validate_cloud_training_source_artifacts(
+            payload.get("source_artifacts"),
+            target,
+            f"{target.target_type}.source_artifacts",
+            source_path,
+            _cloud_training_required_source_artifacts(expected_schema_version),
+        )
+    if expected_schema_version == CLOUD_TRAINING_ARTIFACT_MANIFEST_SCHEMA_VERSION:
+        _validate_cloud_training_artifact_refs(
+            payload.get("upload_artifacts"),
+            target,
+            f"{target.target_type}.upload_artifacts",
+            source_path,
+            require_non_empty=True,
+        )
+        _validate_cloud_training_artifact_refs(
+            payload.get("expected_download_artifacts"),
+            target,
+            f"{target.target_type}.expected_download_artifacts",
+            source_path,
+        )
     target.details.update(
         {
             "schema_version": payload.get("schema_version"),
@@ -2836,6 +2869,98 @@ def _validate_cloud_training_contract(payload: dict[str, Any], target: Validatio
             "check_count": payload.get("check_count"),
         }
     )
+
+
+def _validate_cloud_training_source_artifacts(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+    required_names: tuple[str, ...],
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    for name in required_names:
+        if name not in value:
+            target.errors.append(f"{label}.{name} is required.")
+    for name, record in value.items():
+        if not isinstance(name, str) or not name:
+            target.errors.append(f"{label} keys must be non-empty strings.")
+            continue
+        _validate_cloud_training_artifact_ref(record, target, f"{label}.{name}", source_path)
+
+
+def _validate_cloud_training_artifact_refs(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path | None,
+    *,
+    require_non_empty: bool = False,
+) -> None:
+    if not isinstance(value, list):
+        target.errors.append(f"{label} must be a list.")
+        return
+    if require_non_empty and not value:
+        target.errors.append(f"{label} must include at least one artifact.")
+    for index, record in enumerate(value):
+        _validate_cloud_training_artifact_ref(record, target, f"{label}[{index}]", source_path)
+
+
+def _cloud_training_required_source_artifacts(schema_version: str) -> tuple[str, ...]:
+    return {
+        CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION: ("agentic_training_plan", "trainer_preflight", "trainer_launch_check"),
+        CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION: ("preflight", "artifact_manifest"),
+        CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION: ("launch_plan",),
+        CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION: ("launch_receipt",),
+    }.get(schema_version, ())
+
+
+def _validate_cloud_training_artifact_ref(record: Any, target: ValidationTarget, label: str, source_path: Path | None) -> None:
+    if not isinstance(record, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(record.get("role"), str) or not record.get("role"):
+        target.errors.append(f"{label}.role must be a non-empty string.")
+    if not isinstance(record.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+        return
+    if record.get("exists") is not True:
+        if record.get("sha256") is not None:
+            target.errors.append(f"{label}.sha256 must be null when exists is false.")
+        if record.get("size_bytes") is not None:
+            target.errors.append(f"{label}.size_bytes must be null when exists is false.")
+        return
+    if not isinstance(record.get("path"), str) or not record.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
+        return
+    if _looks_absolute(record["path"]):
+        target.errors.append(f"{label}.path must be relative to the cloud-training artifact.")
+        return
+    if not _is_lowercase_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string when exists is true.")
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
+    artifact_path = _resolve_cloud_training_artifact_path(record.get("path"), source_path)
+    if artifact_path is None or not artifact_path.exists() or not artifact_path.is_file():
+        target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
+        return
+    if _is_non_negative_int(record.get("size_bytes")) and artifact_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_lowercase_sha256(record.get("sha256")) and _sha256(artifact_path) != record.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _resolve_cloud_training_artifact_path(value: Any, source_path: Path | None) -> Path | None:
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    if _looks_absolute(value):
+        return None
+    if source_path is None:
+        return None
+    return source_path.parent / path
 
 
 def _validate_cloud_training_credentials(value: Any, target: ValidationTarget) -> None:

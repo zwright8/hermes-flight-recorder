@@ -205,19 +205,27 @@ def build_cloud_training_preflight(
     live_requested: bool = False,
     allow_live: bool = False,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a fail-closed readiness preflight for a cloud trainer handoff."""
     provider = _provider(provider_id)
     checks: list[dict[str, Any]] = []
-    plan_ref = _json_artifact_ref("agentic_training_plan", Path(agentic_training_plan_path), "agentic_training_plan", preserve_paths)
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
+    plan_ref = _json_artifact_ref(
+        "agentic_training_plan",
+        Path(agentic_training_plan_path),
+        "agentic_training_plan",
+        preserve_paths,
+        display_base_dir,
+    )
     trainer_preflight_ref = (
-        _json_artifact_ref("trainer_preflight", Path(trainer_preflight_path), "trainer_preflight", preserve_paths)
+        _json_artifact_ref("trainer_preflight", Path(trainer_preflight_path), "trainer_preflight", preserve_paths, display_base_dir)
         if trainer_preflight_path
         else _missing_ref("trainer_preflight")
     )
     trainer_launch_ref = (
-        _json_artifact_ref("trainer_launch_check", Path(trainer_launch_check_path), "trainer_launch_check", preserve_paths)
+        _json_artifact_ref("trainer_launch_check", Path(trainer_launch_check_path), "trainer_launch_check", preserve_paths, display_base_dir)
         if trainer_launch_check_path
         else _missing_ref("trainer_launch_check")
     )
@@ -332,13 +340,16 @@ def build_cloud_training_artifact_manifest(
     upload_paths: list[str | Path] | None = None,
     expected_downloads: list[str] | None = None,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build upload/download artifact manifest for a cloud trainer handoff."""
     provider = _provider(provider_id)
-    uploads = [_file_ref("upload", Path(path), preserve_paths) for path in upload_paths or []]
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
+    uploads = [_file_ref("upload", Path(path), preserve_paths, display_base_dir) for path in upload_paths or []]
     downloads = [{"role": "download", "path": path, "exists": False, "sha256": None, "size_bytes": None} for path in expected_downloads or []]
     checks: list[dict[str, Any]] = []
+    _add_check(checks, "upload_artifacts_declared", bool(uploads), {"upload_count": len(uploads)}, {"min_upload_count": 1})
     _add_check(checks, "upload_artifacts_exist", all(item["exists"] for item in uploads), {"uploads": uploads}, {"all_uploads_exist": True})
     _add_check(checks, "download_artifacts_not_assumed", True, {"downloads_exist": False}, {"downloads_exist": False})
     failed = [check for check in checks if not check["passed"]]
@@ -364,12 +375,20 @@ def build_cloud_training_launch_plan(
     preflight_path: str | Path,
     artifact_manifest_path: str | Path | None = None,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a dry-run launch plan from a cloud-training preflight."""
-    preflight_ref = _json_artifact_ref("cloud_training_preflight", Path(preflight_path), "cloud_training_preflight", preserve_paths)
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
+    preflight_ref = _json_artifact_ref("cloud_training_preflight", Path(preflight_path), "cloud_training_preflight", preserve_paths, display_base_dir)
     artifact_ref = (
-        _json_artifact_ref("cloud_training_artifact_manifest", Path(artifact_manifest_path), "cloud_training_artifact_manifest", preserve_paths)
+        _json_artifact_ref(
+            "cloud_training_artifact_manifest",
+            Path(artifact_manifest_path),
+            "cloud_training_artifact_manifest",
+            preserve_paths,
+            display_base_dir,
+        )
         if artifact_manifest_path
         else _missing_ref("cloud_training_artifact_manifest")
     )
@@ -415,10 +434,12 @@ def build_cloud_training_launch_receipt(
     launch_plan_path: str | Path,
     live: bool = False,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a dry-run launch receipt or blocked live-launch receipt."""
-    plan_ref = _json_artifact_ref("cloud_training_launch_plan", Path(launch_plan_path), "cloud_training_launch_plan", preserve_paths)
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
+    plan_ref = _json_artifact_ref("cloud_training_launch_plan", Path(launch_plan_path), "cloud_training_launch_plan", preserve_paths, display_base_dir)
     checks: list[dict[str, Any]] = []
     _add_check(checks, "launch_plan_ready", _artifact_ready(plan_ref), {"artifact": plan_ref}, {"schema": "cloud_training_launch_plan", "passed": True})
     _add_check(checks, "live_launch_not_implemented", not live, {"live": live}, {"live": False})
@@ -451,10 +472,18 @@ def build_cloud_training_status_receipt(
     launch_receipt_path: str | Path,
     cancel_requested: bool = False,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a dry-run status/cancellation receipt for a cloud training job."""
-    launch_ref = _json_artifact_ref("cloud_training_launch_receipt", Path(launch_receipt_path), "cloud_training_launch_receipt", preserve_paths)
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
+    launch_ref = _json_artifact_ref(
+        "cloud_training_launch_receipt",
+        Path(launch_receipt_path),
+        "cloud_training_launch_receipt",
+        preserve_paths,
+        display_base_dir,
+    )
     checks: list[dict[str, Any]] = []
     _add_check(checks, "launch_receipt_readable", launch_ref["exists"], {"artifact": launch_ref}, {"exists": True})
     _add_check(checks, "status_check_did_not_call_provider", True, {"provider_api_called": False}, {"provider_api_called": False})
@@ -570,8 +599,14 @@ def _module_available(module: str) -> bool:
         return False
 
 
-def _json_artifact_ref(role: str, path: Path, schema_name: str, preserve_paths: bool) -> dict[str, Any]:
-    ref = _file_ref(role, path, preserve_paths)
+def _json_artifact_ref(
+    role: str,
+    path: Path,
+    schema_name: str,
+    preserve_paths: bool,
+    display_base_dir: Path | None,
+) -> dict[str, Any]:
+    ref = _file_ref(role, path, preserve_paths, display_base_dir)
     schema = _schema_check(path, schema_name) if ref["exists"] else {"passed": False, "error_count": 1, "errors": ["artifact not found"]}
     payload = _read_json(path)
     ref.update(
@@ -587,11 +622,11 @@ def _json_artifact_ref(role: str, path: Path, schema_name: str, preserve_paths: 
     return ref
 
 
-def _file_ref(role: str, path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _file_ref(role: str, path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> dict[str, Any]:
     exists = path.exists() and path.is_file()
     return {
         "role": role,
-        "path": _display_path(path, preserve_paths),
+        "path": _display_path(path, preserve_paths, display_base_dir),
         "exists": exists,
         "sha256": _sha256(path) if exists else None,
         "size_bytes": path.stat().st_size if exists else None,
@@ -679,9 +714,11 @@ def _handoff_contract() -> dict[str, Any]:
     }
 
 
-def _display_path(path: Path, preserve_paths: bool) -> str:
+def _display_path(path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> str:
     if preserve_paths:
         return str(path)
+    if display_base_dir is not None:
+        return os.path.relpath(path.resolve(), display_base_dir.resolve())
     if not path.is_absolute():
         return str(path)
     try:

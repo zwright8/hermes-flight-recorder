@@ -73,6 +73,13 @@
       "const": "hfr.cloud_training_launch_plan.v1"
     },
     "source_artifacts": {
+      "additionalProperties": {
+        "$ref": "#/$defs/sourceArtifact"
+      },
+      "required": [
+        "preflight",
+        "artifact_manifest"
+      ],
       "type": "object"
     }
   },
@@ -93,5 +100,28 @@
     "handoff_contract"
   ],
   "title": "Hermes Flight Recorder Cloud Training Launch Plan",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "sourceArtifact": {
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "path": { "type": "string" },
+        "role": { "type": "string" },
+        "schema_error_count": { "minimum": 0, "type": "integer" },
+        "schema_errors": { "items": { "type": "string" }, "type": "array" },
+        "schema_name": { "type": "string" },
+        "schema_passed": { "type": "boolean" },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": ["string", "null"]
+        },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] },
+        "source_passed": { "type": ["boolean", "null"] },
+        "source_recommendation": { "type": "string" }
+      },
+      "required": ["role", "path", "exists", "sha256", "size_bytes"],
+      "type": "object"
+    }
+  }
 }
