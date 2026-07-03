@@ -159,6 +159,93 @@ class ImprovementPlanTests(unittest.TestCase):
             self.assertIn("curriculum", categories)
             self.assertIn("bundle_action", categories)
 
+    def test_validate_rejects_improvement_plan_missing_eval_summary_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            eval_plan_path = root / "improvement_plan_with_eval.json"
+            forged_plan_path = root / "improvement_plan.json"
+            validation = root / "validation.json"
+            eval_summary = root / "eval_summary.json"
+            compare_export = _compare_export(
+                root / "compare_rl",
+                baseline_wins=["email_reply_completion"],
+                task_completion_regressions=["email_reply_completion"],
+                regressed_rule_counts={"required_actions": 1},
+                new_critical_failure_counts={"secret_exposure": 1},
+                contract_drift_count=1,
+            )
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run-suite",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--out",
+                        str(runs),
+                        "--evidence-handoff",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "eval-summary",
+                        "--suite-summary",
+                        f"baseline={baseline}",
+                        "--suite-summary",
+                        f"candidate={candidate}",
+                        "--compare-export",
+                        f"candidate={compare_export}",
+                        "--out",
+                        str(eval_summary),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "improvement-plan",
+                        "--evidence-bundle",
+                        str(runs / "evidence_bundle.json"),
+                        "--eval-summary",
+                        str(eval_summary),
+                        "--out",
+                        str(eval_plan_path),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["validate", "--improvement-plan", str(eval_plan_path), "--strict"]), 0)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "improvement-plan",
+                        "--evidence-bundle",
+                        str(runs / "evidence_bundle.json"),
+                        "--out",
+                        str(forged_plan_path),
+                    ]
+                ),
+                0,
+            )
+            eval_plan = json.loads(eval_plan_path.read_text(encoding="utf-8"))
+            forged_plan = json.loads(forged_plan_path.read_text(encoding="utf-8"))
+            forged_plan["source_artifacts"]["eval_summary"] = eval_plan["source_artifacts"]["eval_summary"]
+            forged_plan_path.write_text(json.dumps(forged_plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-plan", str(forged_plan_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("improvement_plan.work_items missing", errors)
+            self.assertIn("eval_summary item", errors)
+
     def test_validate_rejects_stale_improvement_plan_metrics_and_fingerprints(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

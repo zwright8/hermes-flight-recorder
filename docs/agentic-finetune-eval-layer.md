@@ -196,3 +196,6 @@ Eval `repair` and `curriculum` items keep their improvement-plan categories.
 Eval gate and harness blockers are normalized as `bundle_action` items so the
 ledger can track recurring operational blockers without adding a separate
 category family.
+When an improvement plan lists an `eval_summary` source artifact, validation
+checks that the plan still carries every eval-derived repair-curriculum item
+from that source summary.

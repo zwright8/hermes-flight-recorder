@@ -899,7 +899,7 @@ def validate_improvement_plan(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("improvement_plan", str(plan_path))
     plan = _read_object(plan_path, target, "improvement_plan.json")
     if plan is not None:
-        _validate_improvement_plan(plan, target)
+        _validate_improvement_plan(plan, target, plan_path)
     return target
 
 
@@ -7807,7 +7807,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
     )
 
 
-def _validate_improvement_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_improvement_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", IMPROVEMENT_PLAN_SCHEMA_VERSION, target)
     if not isinstance(plan.get("plan_path"), str) or not plan.get("plan_path"):
         target.errors.append("improvement_plan.plan_path must be a non-empty string.")
@@ -7864,6 +7864,7 @@ def _validate_improvement_plan(plan: dict[str, Any], target: ValidationTarget) -
             if previous_sort_key is not None and sort_key < previous_sort_key:
                 target.errors.append("improvement_plan.work_items must be sorted by priority, category, task family, scenario, rule, and summary.")
             previous_sort_key = sort_key
+    _validate_improvement_plan_eval_summary_linkage(source_artifacts, work_items, target, source_path)
     _validate_improvement_metrics(plan.get("metrics"), target, totals, len(work_items))
     _validate_improvement_decision(plan.get("decision"), target, plan.get("readiness"), len(work_items), totals)
     if "notes" in plan and not _is_string_list(plan.get("notes")):
@@ -8027,6 +8028,92 @@ def _validate_improvement_item_sources(value: dict[str, Any], target: Validation
             for field_name in ("priority_score", "count", "critical_count", "max_penalty"):
                 if not _is_non_negative_int(priority.get(field_name)):
                     target.errors.append(f"{priority_label}.{field_name} must be a non-negative integer.")
+    if "eval_summary_items" in value:
+        if not isinstance(value.get("eval_summary_items"), list):
+            target.errors.append(f"{label}.eval_summary_items must be a list when present.")
+        else:
+            for index, source_item in enumerate(value["eval_summary_items"]):
+                item_label = f"{label}.eval_summary_items[{index}]"
+                if not isinstance(source_item, dict):
+                    target.errors.append(f"{item_label} must be an object.")
+                    continue
+                for field_name in ("work_item_id", "category", "source", "label", "reason"):
+                    if not isinstance(source_item.get(field_name), str) or not source_item.get(field_name):
+                        target.errors.append(f"{item_label}.{field_name} must be a non-empty string.")
+                if "count" in source_item and not _is_non_negative_int(source_item.get("count")):
+                    target.errors.append(f"{item_label}.count must be a non-negative integer when present.")
+
+
+def _validate_improvement_plan_eval_summary_linkage(
+    source_artifacts: dict[str, Any],
+    work_items: list[Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    artifact = source_artifacts.get("eval_summary")
+    if artifact is None:
+        return
+    if not isinstance(artifact, dict):
+        return
+    eval_summary_path = _resolve_evidence_bundle_artifact_path(artifact.get("path"), source_path)
+    if eval_summary_path is None or not eval_summary_path.exists() or not eval_summary_path.is_file():
+        target.errors.append("improvement_plan.source_artifacts.eval_summary.path must resolve to an existing eval_summary file.")
+        return
+    try:
+        summary = json.loads(eval_summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        target.errors.append(f"improvement_plan.source_artifacts.eval_summary contains invalid JSON: {exc}")
+        return
+    if not isinstance(summary, dict):
+        target.errors.append("improvement_plan.source_artifacts.eval_summary must contain a JSON object.")
+        return
+    _validate_eval_summary(summary, target)
+    expected = _expected_eval_summary_item_records(summary)
+    actual = _actual_improvement_eval_summary_item_records(work_items)
+    missing = expected - actual
+    extra = actual - expected
+    if missing:
+        target.errors.append(f"improvement_plan.work_items missing {len(missing)} eval_summary item(s) from source artifact.")
+    if extra:
+        target.errors.append(f"improvement_plan.work_items include {len(extra)} eval_summary item(s) not present in source artifact.")
+
+
+def _expected_eval_summary_item_records(summary: dict[str, Any]) -> set[tuple[Any, ...]]:
+    repair_curriculum = summary.get("repair_curriculum") if isinstance(summary.get("repair_curriculum"), dict) else {}
+    items = repair_curriculum.get("items") if isinstance(repair_curriculum.get("items"), list) else []
+    return {
+        _eval_summary_item_record(item)
+        for item in items
+        if isinstance(item, dict)
+    }
+
+
+def _actual_improvement_eval_summary_item_records(work_items: list[Any]) -> set[tuple[Any, ...]]:
+    records: set[tuple[Any, ...]] = set()
+    for item in work_items:
+        if not isinstance(item, dict):
+            continue
+        sources = item.get("sources") if isinstance(item.get("sources"), dict) else {}
+        source_items = sources.get("eval_summary_items") if isinstance(sources.get("eval_summary_items"), list) else []
+        for source_item in source_items:
+            if isinstance(source_item, dict):
+                records.add(_eval_summary_item_record(source_item))
+    return records
+
+
+def _eval_summary_item_record(item: dict[str, Any]) -> tuple[Any, ...]:
+    raw_category = str(item.get("category") or "eval_harness")
+    record = (
+        str(item.get("work_item_id") or item.get("reason") or "eval_summary_item"),
+        raw_category,
+        str(item.get("source") or "eval_summary"),
+        str(item.get("label") or "eval_summary"),
+        str(item.get("reason") or "eval_summary_item"),
+    )
+    if "count" not in item:
+        return (*record, False, None)
+    count = item.get("count")
+    return (*record, True, count if _is_non_negative_int(count) else 0)
 
 
 def _validate_improvement_metrics(metrics: Any, target: ValidationTarget, totals: dict[str, Any], work_item_count: int) -> None:
