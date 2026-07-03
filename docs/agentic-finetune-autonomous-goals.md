@@ -643,6 +643,9 @@ card, and dataset card decisions.
   diagnostics.
 - Trainer preflight gate records reject existing gate files that omit SHA-256
   or byte-size evidence while preserving missing-gate diagnostics.
+- Trainer consumer plans reject passed trainer-input and external-code records
+  that omit SHA-256 or byte-size evidence while preserving failed-input
+  diagnostics.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

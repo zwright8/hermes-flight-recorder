@@ -884,6 +884,38 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(plan["metrics"]["trainer_input_count"], len(result["trainer_inputs"]))
             self.assertEqual(plan["metrics"]["external_code_file_count"], contract["external_command_path_count"])
             self.assertEqual(run_cli(["schemas", "--check", str(consumer_plan)]), 0)
+            schema = check_schema_contract(plan, name_or_id="trainer_consumer_plan")
+            self.assertTrue(schema["passed"], schema["errors"])
+            passed_external = next(item for item in plan["execution"]["external_code_files"] if item["passed"])
+            self.assertEqual(len(passed_external["sha256"]), 64)
+            self.assertIn("size_bytes", passed_external)
+            for field_name in ("sha256", "size_bytes"):
+                forged = json.loads(json.dumps(plan))
+                next(item for item in forged["execution"]["external_code_files"] if item["passed"]).pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_consumer_plan")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            failed_external = json.loads(json.dumps(plan))
+            failed_external["execution"]["external_code_files"][0]["passed"] = False
+            failed_external["execution"]["external_code_files"][0].pop("sha256")
+            failed_external["execution"]["external_code_files"][0].pop("size_bytes")
+            failed_external_schema = check_schema_contract(failed_external, name_or_id="trainer_consumer_plan")
+            self.assertTrue(failed_external_schema["passed"], failed_external_schema["errors"])
+            passed_input = next(item for item in plan["execution"]["trainer_inputs"] if item["passed"])
+            self.assertEqual(len(passed_input["sha256"]), 64)
+            self.assertIn("size_bytes", passed_input)
+            for field_name in ("sha256", "size_bytes", "expected_sha256", "expected_size_bytes"):
+                forged = json.loads(json.dumps(plan))
+                next(item for item in forged["execution"]["trainer_inputs"] if item["passed"]).pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_consumer_plan")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            failed_input = json.loads(json.dumps(plan))
+            failed_input["execution"]["trainer_inputs"][0]["passed"] = False
+            failed_input["execution"]["trainer_inputs"][0].pop("sha256")
+            failed_input["execution"]["trainer_inputs"][0].pop("size_bytes")
+            failed_input_schema = check_schema_contract(failed_input, name_or_id="trainer_consumer_plan")
+            self.assertTrue(failed_input_schema["passed"], failed_input_schema["errors"])
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
 
             forged_plan = Path(tmp) / "trainer_consumer_plan_forged_validation.json"

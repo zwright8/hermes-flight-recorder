@@ -153,7 +153,7 @@
         },
         "external_code_files": {
           "items": {
-            "type": "object"
+            "$ref": "#/$defs/externalCodeFile"
           },
           "type": "array"
         },
@@ -162,7 +162,7 @@
         },
         "trainer_inputs": {
           "items": {
-            "type": "object"
+            "$ref": "#/$defs/trainerInput"
           },
           "type": "array"
         }
@@ -177,6 +177,106 @@
         "command_shell",
         "external_code_files",
         "trainer_inputs"
+      ],
+      "type": "object"
+    },
+    "externalCodeFile": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "exists": {
+                  "const": true
+                },
+                "passed": {
+                  "const": true
+                },
+                "regular_file": {
+                  "const": true
+                },
+                "symlink": {
+                  "const": false
+                }
+              },
+              "required": [
+                "passed",
+                "exists",
+                "regular_file",
+                "symlink",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "passed": {
+                  "const": false
+                }
+              },
+              "required": [
+                "passed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "argv_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "resolved_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symlink": {
+          "type": "boolean"
+        },
+        "token": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "argv_index",
+        "token",
+        "path",
+        "resolved_path",
+        "exists",
+        "regular_file",
+        "symlink",
+        "passed",
+        "reason"
       ],
       "type": "object"
     },
@@ -278,6 +378,148 @@
         "external_code_ready_count",
         "archive_check_error_count",
         "archive_check_warning_count"
+      ],
+      "type": "object"
+    },
+    "trainerInput": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "kind": {
+                  "const": "file"
+                },
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "passed",
+                "expected_sha256",
+                "expected_size_bytes",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "directory"
+                },
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "passed",
+                "expected_file_count",
+                "expected_sha256",
+                "expected_size_bytes",
+                "file_count",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "passed": {
+                  "const": false
+                }
+              },
+              "required": [
+                "passed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "archive_path": {
+          "type": "string"
+        },
+        "artifact_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "artifact_name": {
+          "type": "string"
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "expected_file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_sha256": {
+          "type": "string"
+        },
+        "expected_size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "regular_directory": {
+          "type": "boolean"
+        },
+        "regular_file": {
+          "type": "boolean"
+        },
+        "resolved_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "symlink": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "index",
+        "artifact_index",
+        "artifact_name",
+        "archive_path",
+        "resolved_path",
+        "kind",
+        "exists",
+        "regular_file",
+        "regular_directory",
+        "symlink",
+        "expected_sha256",
+        "passed",
+        "reason"
       ],
       "type": "object"
     },
