@@ -600,6 +600,9 @@ card, and dataset card decisions.
   directory.
 - Lineage replay fingerprints include input sizes; replay and replay-bundle
   validation reject size drift between recorded inputs and replay metadata.
+- Training-export and suite-comparison source fingerprints include input sizes;
+  verified source-fingerprint coverage requires scenario and trace hashes plus
+  sizes.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

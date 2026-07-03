@@ -2129,10 +2129,10 @@ def _paired_source_fingerprints_verified(row: dict[str, Any], side: str) -> bool
 
 def _source_fingerprints(record: RunRecord) -> dict[str, dict[str, Any]]:
     fingerprints = {
-        "scenario": {"path": None, "sha256": None, "exists": None},
-        "source_trace": {"path": None, "sha256": None, "exists": None},
-        "source_before_state_snapshot": {"path": None, "sha256": None, "exists": None},
-        "source_state_snapshot": {"path": None, "sha256": None, "exists": None},
+        "scenario": {"path": None, "sha256": None, "size_bytes": None, "exists": None},
+        "source_trace": {"path": None, "sha256": None, "size_bytes": None, "exists": None},
+        "source_before_state_snapshot": {"path": None, "sha256": None, "size_bytes": None, "exists": None},
+        "source_state_snapshot": {"path": None, "sha256": None, "size_bytes": None, "exists": None},
     }
     lineage = record.lineage if isinstance(record.lineage, dict) else {}
     inputs = lineage.get("inputs") if isinstance(lineage.get("inputs"), list) else []
@@ -2145,13 +2145,14 @@ def _source_fingerprints(record: RunRecord) -> dict[str, dict[str, Any]]:
         fingerprints[str(name)] = {
             "path": item.get("path") if isinstance(item.get("path"), str) else None,
             "sha256": item.get("sha256") if isinstance(item.get("sha256"), str) else None,
+            "size_bytes": item.get("size_bytes") if _is_non_negative_int(item.get("size_bytes")) else None,
             "exists": item.get("exists") if isinstance(item.get("exists"), bool) else None,
         }
     return fingerprints
 
 
 def _source_fingerprint_status(fingerprints: dict[str, Any]) -> str:
-    return "verified" if _fingerprint_sha(fingerprints.get("scenario")) and _fingerprint_sha(fingerprints.get("source_trace")) else "unverified"
+    return "verified" if _fingerprint_complete(fingerprints.get("scenario")) and _fingerprint_complete(fingerprints.get("source_trace")) else "unverified"
 
 
 def _fingerprint_sha(value: Any) -> str | None:
@@ -2161,19 +2162,29 @@ def _fingerprint_sha(value: Any) -> str | None:
     return sha if isinstance(sha, str) and sha else None
 
 
+def _fingerprint_complete(value: Any) -> bool:
+    return bool(_fingerprint_sha(value)) and isinstance(value, dict) and _is_non_negative_int(value.get("size_bytes"))
+
+
+def _is_non_negative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 def _episode_contract_comparison(baseline: dict[str, Any], candidate: dict[str, Any], contract_scope: str) -> dict[str, Any]:
     baseline_inputs = baseline.get("source_fingerprints") if isinstance(baseline.get("source_fingerprints"), dict) else {}
     candidate_inputs = candidate.get("source_fingerprints") if isinstance(candidate.get("source_fingerprints"), dict) else {}
     reasons: list[str] = []
     unknowns: list[str] = []
     for name in _contract_input_names(contract_scope):
-        baseline_hash = _fingerprint_sha(baseline_inputs.get(name))
-        candidate_hash = _fingerprint_sha(candidate_inputs.get(name))
-        if baseline_hash and candidate_hash:
+        baseline_record = baseline_inputs.get(name)
+        candidate_record = candidate_inputs.get(name)
+        if _fingerprint_complete(baseline_record) and _fingerprint_complete(candidate_record):
+            baseline_hash = _fingerprint_sha(baseline_record)
+            candidate_hash = _fingerprint_sha(candidate_record)
             if baseline_hash != candidate_hash:
                 reasons.append(f"{name}_sha256_changed")
         else:
-            unknowns.append(f"{name}_sha256_unverified")
+            unknowns.append(f"{name}_source_fingerprint_unverified")
     status = "drifted" if reasons else "unverified" if unknowns else "matched"
     return {
         "status": status,
@@ -2195,6 +2206,7 @@ def _contract_fingerprint_inputs(inputs: dict[str, Any]) -> dict[str, dict[str, 
         name: {
             "path": inputs.get(name, {}).get("path") if isinstance(inputs.get(name), dict) else None,
             "sha256": _fingerprint_sha(inputs.get(name)),
+            "size_bytes": inputs.get(name, {}).get("size_bytes") if isinstance(inputs.get(name), dict) else None,
         }
         for name in ("scenario", "source_trace")
     }

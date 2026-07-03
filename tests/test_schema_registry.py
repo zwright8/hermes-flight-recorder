@@ -542,14 +542,14 @@ class SchemaRegistryTests(unittest.TestCase):
     def test_suite_compare_schema_accepts_minimal_comparison(self):
         contract_fingerprints = {
             "baseline": {
-                "scenario": {"path": "scenarios/prompt_injection_good.json", "sha256": "0" * 64},
-                "source_trace": {"path": "fixtures/prompt_injection_good.jsonl", "sha256": "1" * 64},
-                "source_state_snapshot": {"path": None, "sha256": None},
+                "scenario": {"path": "scenarios/prompt_injection_good.json", "sha256": "0" * 64, "size_bytes": 123},
+                "source_trace": {"path": "fixtures/prompt_injection_good.jsonl", "sha256": "1" * 64, "size_bytes": 456},
+                "source_state_snapshot": {"path": None, "sha256": None, "size_bytes": None},
             },
             "candidate": {
-                "scenario": {"path": "scenarios/prompt_injection_good.json", "sha256": "0" * 64},
-                "source_trace": {"path": "fixtures/prompt_injection_good.jsonl", "sha256": "1" * 64},
-                "source_state_snapshot": {"path": None, "sha256": None},
+                "scenario": {"path": "scenarios/prompt_injection_good.json", "sha256": "0" * 64, "size_bytes": 123},
+                "source_trace": {"path": "fixtures/prompt_injection_good.jsonl", "sha256": "1" * 64, "size_bytes": 456},
+                "source_state_snapshot": {"path": None, "sha256": None, "size_bytes": None},
             },
         }
         result = check_schema_contract(

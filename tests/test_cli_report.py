@@ -1196,6 +1196,9 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(comparison["aggregate"]["avg_score_delta"], 0.0)
             self.assertTrue(all(item["delta"] == 0 for item in comparison["aggregate"]["failed_rule_deltas"]))
             self.assertTrue(all(item["delta"] == 0 for item in comparison["aggregate"]["critical_failure_deltas"]))
+            fingerprints = comparison["scenario_changes"][0]["contract_fingerprints"]
+            self.assertIsInstance(fingerprints["baseline"]["scenario"]["size_bytes"], int)
+            self.assertIsInstance(fingerprints["candidate"]["source_trace"]["size_bytes"], int)
             self.assertNotIn(str(runs), out.read_text(encoding="utf-8"))
 
     def test_compare_suite_includes_experiment_metadata(self):
@@ -1287,6 +1290,31 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(change["contract_fingerprint_status"], "drifted")
             self.assertIn("scenario_sha256_changed", change["contract_fingerprint_reasons"])
             self.assertIn("Contract Fingerprint Drift", html.read_text(encoding="utf-8"))
+
+    def test_compare_suite_requires_contract_fingerprint_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = root / "baseline"
+            candidate = root / "candidate"
+            out = root / "suite_compare.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(baseline / "prompt")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(candidate / "prompt")])
+            lineage_path = candidate / "prompt" / "artifact_lineage.json"
+            lineage = json.loads(lineage_path.read_text(encoding="utf-8"))
+            for record in lineage["inputs"]:
+                if record["name"] == "scenario":
+                    record.pop("size_bytes")
+                    break
+            lineage_path.write_text(json.dumps(lineage, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["compare-suite", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(out)])
+
+            self.assertEqual(code, 0)
+            comparison = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(comparison["aggregate"]["unverified_contract_count"], 1)
+            change = comparison["scenario_changes"][0]
+            self.assertEqual(change["contract_fingerprint_status"], "unverified")
+            self.assertIn("scenario_source_fingerprint_unverified", change["contract_fingerprint_reasons"])
 
     def test_compare_suite_contract_scope_allows_live_trace_changes_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:

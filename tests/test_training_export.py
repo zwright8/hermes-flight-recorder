@@ -138,6 +138,8 @@ class TrainingExportTests(unittest.TestCase):
             self.assertEqual({episode["source_fingerprint_status"] for episode in episodes}, {"verified"})
             self.assertTrue(all(len(episode["source_fingerprints"]["scenario"]["sha256"]) == 64 for episode in episodes))
             self.assertTrue(all(len(episode["source_fingerprints"]["source_trace"]["sha256"]) == 64 for episode in episodes))
+            self.assertTrue(all(isinstance(episode["source_fingerprints"]["scenario"]["size_bytes"], int) for episode in episodes))
+            self.assertTrue(all(isinstance(episode["source_fingerprints"]["source_trace"]["size_bytes"], int) for episode in episodes))
             self.assertEqual({episode["task_completion"]["schema_version"] for episode in episodes}, {"hfr.task_completion.v1"})
             self.assertEqual({episode["task_completion"]["status"] for episode in episodes}, {"complete", "incomplete"})
             self.assertTrue(all(episode["outcome"]["task_completion_status"] == episode["task_completion"]["status"] for episode in episodes))
@@ -500,7 +502,9 @@ class TrainingExportTests(unittest.TestCase):
                 len(completed_email["source_fingerprints"]["source_before_state_snapshot"]["sha256"]),
                 64,
             )
+            self.assertIsInstance(completed_email["source_fingerprints"]["source_before_state_snapshot"]["size_bytes"], int)
             self.assertEqual(len(completed_email["source_fingerprints"]["source_state_snapshot"]["sha256"]), 64)
+            self.assertIsInstance(completed_email["source_fingerprints"]["source_state_snapshot"]["size_bytes"], int)
             self.assertTrue(completed_email["state_diff"]["changed"])
             self.assertEqual(completed_email["state_diff"]["change_count"], 2)
             self.assertEqual(run_cli(["validate", "--suite-summary", str(runs / "suite_summary.json"), "--strict"]), 0)

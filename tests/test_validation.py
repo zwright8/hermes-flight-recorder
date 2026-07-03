@@ -54,6 +54,25 @@ class ValidationTests(unittest.TestCase):
             self.assertTrue(schema["passed"], schema["errors"])
             self.assertEqual(schema["schema"]["name"], "validation")
 
+    def test_validate_rejects_verified_source_fingerprint_without_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            export = Path(tmp) / "training_export"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(export)])
+            episodes_path = export / "episodes.jsonl"
+            episodes = [json.loads(line) for line in episodes_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            episodes[0]["source_fingerprints"]["scenario"].pop("size_bytes")
+            write_jsonl(episodes_path, episodes)
+
+            code = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("episodes[0].source_fingerprint_status verified requires scenario and source_trace SHA-256 and size_bytes values.", errors)
+
     def test_validate_rejects_inconsistent_scorecard(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"

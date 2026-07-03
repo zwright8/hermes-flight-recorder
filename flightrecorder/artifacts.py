@@ -576,6 +576,7 @@ def _run_fingerprints(run_dir: Path) -> dict[str, Any]:
         fingerprints["inputs"][name] = {
             "path": record.get("path"),
             "sha256": record.get("sha256"),
+            "size_bytes": record.get("size_bytes"),
             "exists": record.get("exists"),
         }
     return fingerprints
@@ -589,13 +590,15 @@ def _contract_comparison(before: dict[str, Any], after: dict[str, Any], contract
     reasons: list[str] = []
     unknowns: list[str] = []
     for name in _contract_input_names(contract_scope):
-        before_hash = _input_sha(before_inputs.get(name))
-        after_hash = _input_sha(after_inputs.get(name))
-        if before_hash and after_hash:
+        before_record = before_inputs.get(name)
+        after_record = after_inputs.get(name)
+        if _input_fingerprint_complete(before_record) and _input_fingerprint_complete(after_record):
+            before_hash = _input_sha(before_record)
+            after_hash = _input_sha(after_record)
             if before_hash != after_hash:
                 reasons.append(f"{name}_sha256_changed")
         else:
-            unknowns.append(f"{name}_sha256_unverified")
+            unknowns.append(f"{name}_source_fingerprint_unverified")
     status = "drifted" if reasons else "unverified" if unknowns else "matched"
     return {
         "status": status,
@@ -619,11 +622,20 @@ def _input_sha(value: Any) -> str | None:
     return sha if isinstance(sha, str) and sha else None
 
 
+def _input_fingerprint_complete(value: Any) -> bool:
+    return bool(_input_sha(value)) and isinstance(value, dict) and _is_non_negative_int(value.get("size_bytes"))
+
+
+def _is_non_negative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 def _contract_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
     return {
         name: {
             "path": inputs.get(name, {}).get("path") if isinstance(inputs.get(name), dict) else None,
             "sha256": _input_sha(inputs.get(name)),
+            "size_bytes": inputs.get(name, {}).get("size_bytes") if isinstance(inputs.get(name), dict) else None,
         }
         for name in ("scenario", "source_trace", "source_state_snapshot")
     }

@@ -5015,33 +5015,35 @@ def _validate_source_fingerprint_fields(
     if not isinstance(fingerprints, dict):
         target.errors.append(f"{label}.source_fingerprints must be an object.")
         return
-    scenario_sha = _validate_source_fingerprint_record(fingerprints.get("scenario"), target, f"{label}.source_fingerprints.scenario")
-    trace_sha = _validate_source_fingerprint_record(
+    scenario_verified = _validate_source_fingerprint_record(fingerprints.get("scenario"), target, f"{label}.source_fingerprints.scenario")
+    trace_verified = _validate_source_fingerprint_record(
         fingerprints.get("source_trace"),
         target,
         f"{label}.source_fingerprints.source_trace",
     )
-    if status == "verified" and not (scenario_sha and trace_sha):
-        target.errors.append(f"{label}.source_fingerprint_status verified requires scenario and source_trace SHA-256 values.")
-    if status == "unverified" and scenario_sha and trace_sha:
-        target.errors.append(f"{label}.source_fingerprint_status should be verified when both source hashes are present.")
+    if status == "verified" and not (scenario_verified and trace_verified):
+        target.errors.append(f"{label}.source_fingerprint_status verified requires scenario and source_trace SHA-256 and size_bytes values.")
+    if status == "unverified" and scenario_verified and trace_verified:
+        target.errors.append(f"{label}.source_fingerprint_status should be verified when both source hashes and sizes are present.")
 
 
-def _validate_source_fingerprint_record(value: Any, target: ValidationTarget, label: str) -> str | None:
+def _validate_source_fingerprint_record(value: Any, target: ValidationTarget, label: str) -> bool:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
-        return None
+        return False
     path = value.get("path")
     if path is not None and not isinstance(path, str):
         target.errors.append(f"{label}.path must be a string or null.")
     sha = value.get("sha256")
     if sha is not None and not _is_sha256(sha):
         target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
-        sha = None
+    size_bytes = value.get("size_bytes")
+    if size_bytes is not None and not _is_non_negative_int(size_bytes):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer or null.")
     exists = value.get("exists")
     if exists is not None and not isinstance(exists, bool):
         target.errors.append(f"{label}.exists must be a boolean or null.")
-    return sha if isinstance(sha, str) else None
+    return _source_fingerprint_record_complete(value)
 
 
 def _validate_matching_source_fingerprints(
@@ -5102,6 +5104,11 @@ def _validate_contract_fingerprint_inputs(value: dict[str, Any], target: Validat
         sha = record.get("sha256")
         if sha is not None and not _is_sha256(sha):
             target.errors.append(f"{label}.{name}.sha256 must be a SHA-256 hex string or null.")
+        if "size_bytes" not in record:
+            target.errors.append(f"{label}.{name}.size_bytes is required.")
+        size_bytes = record.get("size_bytes")
+        if size_bytes is not None and not _is_non_negative_int(size_bytes):
+            target.errors.append(f"{label}.{name}.size_bytes must be a non-negative integer or null.")
 
 
 def _validate_source_fingerprint_coverage(value: Any, target: ValidationTarget, episodes: list[dict[str, Any]]) -> None:
@@ -5130,7 +5137,7 @@ def _expected_source_fingerprint_coverage(episodes: list[dict[str, Any]]) -> dic
             with_scenario += 1
         if _is_sha256(trace_sha):
             with_trace += 1
-        if _is_sha256(scenario_sha) and _is_sha256(trace_sha):
+        if _source_fingerprint_record_complete(scenario) and _source_fingerprint_record_complete(source_trace):
             fully_verified += 1
     return {
         "episodes": len(episodes),
@@ -5185,7 +5192,7 @@ def _row_source_fingerprints_verified(row: dict[str, Any]) -> bool:
     fingerprints = row.get("source_fingerprints") if isinstance(row.get("source_fingerprints"), dict) else {}
     return (
         row.get("source_fingerprint_status") == "verified"
-        and _fingerprints_have_source_hashes(fingerprints)
+        and _fingerprints_have_source_evidence(fingerprints)
     )
 
 
@@ -5197,13 +5204,17 @@ def _paired_source_fingerprints_verified(row: dict[str, Any], side: str) -> bool
     fingerprints_key = f"{side}_source_fingerprints"
     status_key = f"{side}_source_fingerprint_status"
     fingerprints = row.get(fingerprints_key) if isinstance(row.get(fingerprints_key), dict) else {}
-    return row.get(status_key) == "verified" and _fingerprints_have_source_hashes(fingerprints)
+    return row.get(status_key) == "verified" and _fingerprints_have_source_evidence(fingerprints)
 
 
-def _fingerprints_have_source_hashes(fingerprints: dict[str, Any]) -> bool:
+def _fingerprints_have_source_evidence(fingerprints: dict[str, Any]) -> bool:
     scenario = fingerprints.get("scenario") if isinstance(fingerprints.get("scenario"), dict) else {}
     source_trace = fingerprints.get("source_trace") if isinstance(fingerprints.get("source_trace"), dict) else {}
-    return _is_sha256(scenario.get("sha256")) and _is_sha256(source_trace.get("sha256"))
+    return _source_fingerprint_record_complete(scenario) and _source_fingerprint_record_complete(source_trace)
+
+
+def _source_fingerprint_record_complete(value: Any) -> bool:
+    return isinstance(value, dict) and _is_sha256(value.get("sha256")) and _is_non_negative_int(value.get("size_bytes"))
 
 
 def _validate_messages(value: Any, target: ValidationTarget, label: str) -> None:
