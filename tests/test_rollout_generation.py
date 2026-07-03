@@ -34,6 +34,11 @@ class RolloutGenerationTests(unittest.TestCase):
 
         self.assertTrue(plan["passed"], plan["blocked_reasons"])
         self.assertEqual(plan["budget"]["planned_rollouts"], 3)
+        verifier_gate = plan["environment"]["external_state_verifier_gate"]
+        self.assertEqual(verifier_gate["declared_count"], 1)
+        self.assertEqual(verifier_gate["resolved_count"], 1)
+        self.assertTrue(verifier_gate["all_declared_verifiers_resolved"])
+        self.assertFalse(verifier_gate["verification_side_effects_started"])
         self.assertFalse(plan["execution_boundary"]["rollouts_started"])
         self.assertFalse(plan["execution_boundary"]["dataset_rows_written"])
         self.assertTrue(plan["rejection_sampling"]["requires_review_calibration_before_training"])
@@ -81,6 +86,7 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertTrue(validation["passed"], validation)
             payload = json.loads(out.read_text(encoding="utf-8"))
             self.assertEqual(payload["budget"]["planned_rollouts"], 2)
+            self.assertTrue(payload["environment"]["external_state_verifier_gate"]["all_declared_verifiers_resolved"])
 
             receipt_completed = subprocess.run(
                 [
@@ -145,6 +151,7 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertTrue(all(row["status"] == "mock_recorded" for row in payload["mock_rollouts"]))
             self.assertFalse(any(row["model_provider_called"] for row in payload["mock_rollouts"]))
             self.assertFalse(any(row["dataset_row_written"] for row in payload["mock_rollouts"]))
+            self.assertTrue(payload["environment"]["external_state_verifier_gate"]["all_declared_verifiers_resolved"])
 
     def test_rollout_receipt_validation_rejects_live_side_effect_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -165,12 +172,34 @@ class RolloutGenerationTests(unittest.TestCase):
                 created_at="2026-07-03T00:00:00+00:00",
             )
             receipt["execution_boundary"]["model_provider_calls_started"] = True
+            receipt["environment"]["external_state_verifier_gate"]["verification_side_effects_started"] = True
             write_agentic_rollout_receipt(receipt_path, receipt)
 
             validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
             self.assertFalse(validation["passed"], validation)
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("execution_boundary.model_provider_calls_started must be false", errors)
+            self.assertIn("external_state_verifier_gate.verification_side_effects_started must be false", errors)
+
+    def test_rollout_plan_blocks_missing_verifier_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing_verifier = Path(tmp) / "missing.verifier.json"
+            plan = build_agentic_rollout_plan(
+                out_path=Path(tmp) / "rollout_plan.json",
+                iteration_id="rollout-missing-verifier",
+                scenario_paths=[SCENARIO],
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                verifier_paths=[missing_verifier],
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertEqual(plan["readiness"], "blocked")
+            self.assertEqual(plan["environment"]["external_state_verifier_gate"]["declared_count"], 1)
+            self.assertEqual(plan["environment"]["external_state_verifier_gate"]["resolved_count"], 0)
+            self.assertFalse(plan["environment"]["external_state_verifier_gate"]["all_declared_verifiers_resolved"])
+            self.assertIn("external_state_verifiers_resolved: passed=False", plan["blocked_reasons"])
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}

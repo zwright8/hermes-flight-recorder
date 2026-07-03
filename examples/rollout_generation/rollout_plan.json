@@ -5,7 +5,7 @@
     "max_rollouts": 6,
     "planned_rollouts": 6
   },
-  "check_count": 5,
+  "check_count": 6,
   "checks": [
     {
       "actual": {
@@ -68,6 +68,24 @@
     },
     {
       "actual": {
+        "external_state_verifier_gate": {
+          "all_declared_verifiers_resolved": true,
+          "credential_values_recorded": false,
+          "declared_count": 1,
+          "required_for_external_state_checks": true,
+          "resolved_count": 1,
+          "verification_side_effects_started": false
+        }
+      },
+      "expected": {
+        "all_declared_verifiers_resolved": true
+      },
+      "id": "external_state_verifiers_resolved",
+      "passed": true,
+      "summary": "external_state_verifiers_resolved: passed=True"
+    },
+    {
+      "actual": {
         "rollouts_started": false
       },
       "expected": {
@@ -80,6 +98,14 @@
   ],
   "created_at": "2026-07-03T00:00:00+00:00",
   "environment": {
+    "external_state_verifier_gate": {
+      "all_declared_verifiers_resolved": true,
+      "credential_values_recorded": false,
+      "declared_count": 1,
+      "required_for_external_state_checks": true,
+      "resolved_count": 1,
+      "verification_side_effects_started": false
+    },
     "external_state_verifiers": [
       {
         "exists": true,

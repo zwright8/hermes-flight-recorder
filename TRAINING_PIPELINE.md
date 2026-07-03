@@ -632,6 +632,9 @@ binds scenarios, baseline/candidate/teacher policy ids, replayable environment
 metadata, external-state verifier refs, rollout budgets, rejection-sampling
 requirements, and expected trace/dataset lineage without calling model
 providers or writing dataset rows:
+Declared external-state verifier refs are summarized by an
+`external_state_verifier_gate`; missing verifier configs block rollout planning,
+and receipts preserve the same gate without starting verifier side effects.
 
 ```bash
 flightrecorder agentic-rollout-plan \

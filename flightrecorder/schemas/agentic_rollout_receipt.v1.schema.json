@@ -8,7 +8,7 @@
     "check_count": { "minimum": 0, "type": "integer" },
     "checks": { "items": { "type": "object" }, "type": "array" },
     "created_at": { "type": "string" },
-    "environment": { "type": "object" },
+    "environment": { "$ref": "#/$defs/environment" },
     "execution_boundary": {
       "additionalProperties": true,
       "properties": {
@@ -120,5 +120,42 @@
     "notes"
   ],
   "title": "Hermes Flight Recorder Agentic Rollout Receipt",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "environment": {
+      "additionalProperties": true,
+      "properties": {
+        "external_state_verifier_gate": { "$ref": "#/$defs/externalStateVerifierGate" },
+        "external_state_verifiers": {
+          "items": { "type": "object" },
+          "type": "array"
+        },
+        "id": { "minLength": 1, "type": "string" },
+        "network_default": { "const": "disabled" },
+        "replayable": { "const": true }
+      },
+      "required": ["id", "replayable", "network_default", "external_state_verifiers", "external_state_verifier_gate"],
+      "type": "object"
+    },
+    "externalStateVerifierGate": {
+      "additionalProperties": true,
+      "properties": {
+        "all_declared_verifiers_resolved": { "type": "boolean" },
+        "credential_values_recorded": { "const": false },
+        "declared_count": { "minimum": 0, "type": "integer" },
+        "required_for_external_state_checks": { "type": "boolean" },
+        "resolved_count": { "minimum": 0, "type": "integer" },
+        "verification_side_effects_started": { "const": false }
+      },
+      "required": [
+        "declared_count",
+        "resolved_count",
+        "all_declared_verifiers_resolved",
+        "required_for_external_state_checks",
+        "verification_side_effects_started",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    }
+  }
 }

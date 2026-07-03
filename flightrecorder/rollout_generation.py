@@ -43,12 +43,20 @@ def build_agentic_rollout_plan(
     if not policy_rows:
         raise RolloutGenerationError("at least one policy id is required")
     verifier_refs = [_file_ref("verifier_config", Path(path), preserve_paths) for path in verifier_paths or []]
+    verifier_gate = _external_state_verifier_gate(verifier_refs)
     batches = _batches(scenarios, policy_rows, max_rollouts)
     checks: list[dict[str, Any]] = []
     _add_check(checks, "scenario_inputs_exist", all(row["exists"] for row in scenarios), {"scenarios": scenarios}, {"all_scenarios_exist": True})
     _add_check(checks, "rollout_budget_positive", max_rollouts > 0, {"max_rollouts": max_rollouts}, {"max_rollouts": ">0"})
     _add_check(checks, "rollout_budget_not_exceeded", len(batches) <= max_rollouts, {"planned_rollouts": len(batches)}, {"max_rollouts": max_rollouts})
     _add_check(checks, "at_least_one_policy_configured", bool(policy_rows), {"policy_count": len(policy_rows)}, {"policy_count": ">=1"})
+    _add_check(
+        checks,
+        "external_state_verifiers_resolved",
+        verifier_gate["all_declared_verifiers_resolved"],
+        {"external_state_verifier_gate": verifier_gate},
+        {"all_declared_verifiers_resolved": True},
+    )
     _add_check(checks, "flight_recorder_did_not_run_rollouts", True, {"rollouts_started": False}, {"rollouts_started": False})
     failed = [check for check in checks if not check["passed"]]
     return {
@@ -68,6 +76,7 @@ def build_agentic_rollout_plan(
             "replayable": True,
             "network_default": "disabled",
             "external_state_verifiers": verifier_refs,
+            "external_state_verifier_gate": verifier_gate,
         },
         "budget": {
             "max_rollouts": max_rollouts,
@@ -252,6 +261,18 @@ def _file_ref(role: str, path: Path, preserve_paths: bool) -> dict[str, Any]:
         "exists": exists,
         "sha256": _sha256(path) if exists else None,
         "size_bytes": path.stat().st_size if exists else None,
+    }
+
+
+def _external_state_verifier_gate(verifier_refs: list[dict[str, Any]]) -> dict[str, Any]:
+    resolved_count = sum(1 for ref in verifier_refs if ref.get("exists") is True)
+    return {
+        "declared_count": len(verifier_refs),
+        "resolved_count": resolved_count,
+        "all_declared_verifiers_resolved": resolved_count == len(verifier_refs),
+        "required_for_external_state_checks": bool(verifier_refs),
+        "verification_side_effects_started": False,
+        "credential_values_recorded": False,
     }
 
 

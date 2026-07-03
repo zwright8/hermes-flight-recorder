@@ -4,6 +4,9 @@ This fixture is a deterministic, keyless rollout-generation plan. It schedules
 baseline, candidate, and teacher harness batches over committed scenarios, but
 does not call model providers, run harnesses, invoke graders, or write dataset
 rows.
+The fixture includes an `external_state_verifier_gate` that proves the declared
+verifier config exists and that no verifier side effects or credential values
+were recorded.
 
 Regenerate it with:
 

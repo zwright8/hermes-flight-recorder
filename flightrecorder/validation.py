@@ -3707,6 +3707,7 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
         target.errors.append(f"agentic_rollout_plan.budget.planned_rollouts expected {len(batches)}, got {budget.get('planned_rollouts')!r}.")
     if budget.get("live_provider_calls_allowed") is not False:
         target.errors.append("agentic_rollout_plan.budget.live_provider_calls_allowed must be false.")
+    _validate_agentic_rollout_environment(plan.get("environment"), target, "agentic_rollout_plan.environment")
     boundary = plan.get("execution_boundary")
     if not isinstance(boundary, dict):
         target.errors.append("agentic_rollout_plan.execution_boundary must be an object.")
@@ -3758,6 +3759,8 @@ def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: Validatio
     else:
         _validate_agentic_rollout_receipt_source_plan(source_plan, target, source_path)
 
+    _validate_agentic_rollout_environment(receipt.get("environment"), target, "agentic_rollout_receipt.environment")
+
     rollouts = receipt.get("mock_rollouts")
     if not isinstance(rollouts, list):
         target.errors.append("agentic_rollout_receipt.mock_rollouts must be a list.")
@@ -3803,6 +3806,60 @@ def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: Validatio
             "mock_rollout_count": len(rollouts),
         }
     )
+
+
+def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    if not isinstance(value.get("id"), str) or not value.get("id"):
+        target.errors.append(f"{label}.id must be a non-empty string.")
+    if value.get("replayable") is not True:
+        target.errors.append(f"{label}.replayable must be true.")
+    if value.get("network_default") != "disabled":
+        target.errors.append(f"{label}.network_default must be disabled.")
+    verifier_refs = value.get("external_state_verifiers")
+    if not isinstance(verifier_refs, list):
+        target.errors.append(f"{label}.external_state_verifiers must be a list.")
+        verifier_refs = []
+    resolved_count = 0
+    for index, ref in enumerate(verifier_refs):
+        ref_label = f"{label}.external_state_verifiers[{index}]"
+        if not isinstance(ref, dict):
+            target.errors.append(f"{ref_label} must be an object.")
+            continue
+        if ref.get("role") != "verifier_config":
+            target.errors.append(f"{ref_label}.role must be verifier_config.")
+        if not isinstance(ref.get("path"), str) or not ref.get("path"):
+            target.errors.append(f"{ref_label}.path must be a non-empty string.")
+        if not isinstance(ref.get("exists"), bool):
+            target.errors.append(f"{ref_label}.exists must be a boolean.")
+        elif ref.get("exists") is True:
+            resolved_count += 1
+            if not _is_sha256(ref.get("sha256")):
+                target.errors.append(f"{ref_label}.sha256 must be a SHA-256 hex string when exists is true.")
+            if not _is_non_negative_int(ref.get("size_bytes")):
+                target.errors.append(f"{ref_label}.size_bytes must be a non-negative integer when exists is true.")
+        else:
+            if ref.get("sha256") is not None:
+                target.errors.append(f"{ref_label}.sha256 must be null when exists is false.")
+            if ref.get("size_bytes") is not None:
+                target.errors.append(f"{ref_label}.size_bytes must be null when exists is false.")
+    gate = value.get("external_state_verifier_gate")
+    if not isinstance(gate, dict):
+        target.errors.append(f"{label}.external_state_verifier_gate must be an object.")
+        return
+    if gate.get("declared_count") != len(verifier_refs):
+        target.errors.append(f"{label}.external_state_verifier_gate.declared_count must match external_state_verifiers.")
+    if gate.get("resolved_count") != resolved_count:
+        target.errors.append(f"{label}.external_state_verifier_gate.resolved_count must match existing verifier refs.")
+    if gate.get("all_declared_verifiers_resolved") != (resolved_count == len(verifier_refs)):
+        target.errors.append(f"{label}.external_state_verifier_gate.all_declared_verifiers_resolved must match verifier refs.")
+    if gate.get("required_for_external_state_checks") != bool(verifier_refs):
+        target.errors.append(f"{label}.external_state_verifier_gate.required_for_external_state_checks must match verifier refs.")
+    for field_name in ("verification_side_effects_started", "credential_values_recorded"):
+        if gate.get(field_name) is not False:
+            target.errors.append(f"{label}.external_state_verifier_gate.{field_name} must be false.")
 
 
 def _validate_agentic_rollout_receipt_source_plan(source_plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
