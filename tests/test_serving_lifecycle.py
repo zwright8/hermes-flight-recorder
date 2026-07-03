@@ -3,10 +3,11 @@ import json
 import socket
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+from flightrecorder.cli import main as flightrecorder_main
 from flightrecorder.schema_registry import check_schema_file
 
 
@@ -86,6 +87,40 @@ class ServingLifecycleTests(unittest.TestCase):
 
             profile_result = check_schema_file(out / "preflight" / "serving_profile.json")
             self.assertTrue(profile_result["passed"], profile_result["errors"])
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                validation_code = flightrecorder_main(["validate", "--serving-lifecycle", str(out / "serving_lifecycle.json"), "--strict"])
+            self.assertEqual(validation_code, 0)
+
+    def test_validate_lifecycle_rejects_forged_ready_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lifecycle_path = root / "serving_lifecycle.json"
+            summary_path = root / "validation.json"
+            lifecycle = _blocked_lifecycle()
+            lifecycle["passed"] = True
+            lifecycle["ready"] = True
+            lifecycle["readiness"] = "ready"
+            _write_json(lifecycle_path, lifecycle)
+
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                code = flightrecorder_main(
+                    [
+                        "validate",
+                        "--serving-lifecycle",
+                        str(lifecycle_path),
+                        "--strict",
+                        "--out",
+                        str(summary_path),
+                    ]
+                )
+
+            self.assertEqual(code, 1)
+            summary = _read_json(summary_path)
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("serving_lifecycle.passed", errors)
+            self.assertIn("serving_lifecycle.ready", errors)
+            self.assertIn("serving_lifecycle.readiness expected 'blocked'", errors)
 
     def test_lifecycle_records_blocked_when_process_exits_before_ready(self):
         manage_openai_serving = _load_script(LIFECYCLE_SCRIPT, "manage_openai_serving_failure")
@@ -198,6 +233,65 @@ class ServingLifecycleTests(unittest.TestCase):
 
 def _read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, value: dict):
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _blocked_lifecycle() -> dict:
+    return {
+        "schema_version": "hfr.serving_lifecycle.v1",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "finished_at": "2026-01-01T00:00:01Z",
+        "duration_ms": 1000,
+        "profile": "mock",
+        "engine": "mock",
+        "arm": "candidate",
+        "provider": "custom",
+        "model": "hfr-managed-mock",
+        "served_model_name": "hfr-managed-mock",
+        "adapter": "",
+        "adapter_strategy": {"present": False, "resolved_strategy": "none"},
+        "endpoint": {"base_url": "http://127.0.0.1:18080/v1", "host": "127.0.0.1", "port": 18080},
+        "launch": {
+            "command": ["python3", "scripts/mock_openai_server.py"],
+            "command_display": "python3 scripts/mock_openai_server.py",
+            "cwd": ".",
+            "env_keys": [],
+            "startup_timeout_s": 1.0,
+            "poll_interval_s": 0.1,
+            "grace_period_s": 1.0,
+        },
+        "process": {"started": True, "pid": 12345, "exit_code": 3},
+        "environment": {"python_version": "3.11.0", "platform": "test"},
+        "artifacts_root": ".",
+        "passed": False,
+        "ready": False,
+        "readiness": "blocked",
+        "readiness_probe": {
+            "ready": False,
+            "summary": "process_exited_before_ready",
+            "exit_code": 3,
+            "attempts": [],
+        },
+        "smoke_check": {"attempted": False, "passed": False, "summary": "not_started"},
+        "teardown": {
+            "attempted": True,
+            "already_exited": True,
+            "terminated": False,
+            "killed": False,
+            "clean": True,
+            "running_after_teardown": False,
+        },
+        "errors": ["process_exited_before_ready"],
+        "artifacts": {
+            "serving_lifecycle": "serving_lifecycle.json",
+            "stdout_log": "server.stdout.log",
+            "stderr_log": "server.stderr.log",
+        },
+        "logs": {"stdout_tail": "", "stderr_tail": ""},
+    }
 
 
 def _free_port() -> int:

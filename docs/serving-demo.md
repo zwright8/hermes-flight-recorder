@@ -52,7 +52,9 @@ python3 scripts/manage_openai_serving.py \
 The command writes `serving_lifecycle.json`, `server.stdout.log`,
 `server.stderr.log`, and a nested `preflight/` directory containing the same
 serving profile, compatibility report, and endpoint check emitted by
-`check_openai_serving.py`.
+`check_openai_serving.py`. Semantic validation recomputes lifecycle readiness
+from the readiness probe, smoke check, teardown, and required preflight artifact
+links so forged ready lifecycle records cannot stand on schema shape alone.
 
 For vLLM, use the built-in launch profile or pass an explicit command:
 
@@ -149,6 +151,7 @@ python3 -m flightrecorder validate \
   --serving-profile experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_profile.json \
   --serving-compatibility-report experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/compatibility_report.json \
   --serving-endpoint-check experiments/qwen3_4b_flightrecorder/serving/mock_openai_check/serving_check.json \
+  --serving-lifecycle experiments/qwen3_4b_flightrecorder/serving/managed_mock_lifecycle/serving_lifecycle.json \
   --serving-demo-run experiments/qwen3_4b_flightrecorder/serving/demo_run.json \
   --strict
 ```

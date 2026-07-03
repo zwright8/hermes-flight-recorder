@@ -1078,6 +1078,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         serving_profile_paths=args.serving_profile,
         serving_compatibility_report_paths=args.serving_compatibility_report,
         serving_endpoint_check_paths=args.serving_endpoint_check,
+        serving_lifecycle_paths=args.serving_lifecycle,
         serving_demo_run_paths=args.serving_demo_run,
         strict=args.strict,
     )
@@ -2701,6 +2702,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one compatibility_report.json; may be repeated",
     )
     validate.add_argument("--serving-endpoint-check", action="append", default=[], help="Validate one serving_check.json; may be repeated")
+    validate.add_argument("--serving-lifecycle", action="append", default=[], help="Validate one serving_lifecycle.json; may be repeated")
     validate.add_argument("--serving-demo-run", action="append", default=[], help="Validate one serving demo_run.json; may be repeated")
     validate.add_argument("--out", help="Write validation summary JSON to this path")
     validate.add_argument("--strict", action="store_true", help="Treat warnings as validation failure")

@@ -138,8 +138,10 @@ RUN_SUITE_HARNESS_SOURCE = "flightrecorder run-suite --evidence-handoff"
 SERVING_PROFILE_SCHEMA_VERSION = "hfr.serving_profile.v1"
 SERVING_COMPATIBILITY_REPORT_SCHEMA_VERSION = "hfr.serving_compatibility_report.v1"
 SERVING_ENDPOINT_CHECK_SCHEMA_VERSION = "hfr.serving_endpoint_check.v1"
+SERVING_LIFECYCLE_SCHEMA_VERSION = "hfr.serving_lifecycle.v1"
 SERVING_DEMO_RUN_SCHEMA_VERSION = "hfr.serving_demo_run.v1"
 SERVING_CAPABILITY_STATUSES = {"supported", "not_verified"}
+SERVING_LIFECYCLE_PREFLIGHT_ARTIFACTS = ("serving_profile", "compatibility_report", "serving_check")
 _COMPANION_NOT_PROVIDED = object()
 
 
@@ -223,6 +225,7 @@ def validate_artifacts(
     serving_profile_paths: list[str | Path] | None = None,
     serving_compatibility_report_paths: list[str | Path] | None = None,
     serving_endpoint_check_paths: list[str | Path] | None = None,
+    serving_lifecycle_paths: list[str | Path] | None = None,
     serving_demo_run_paths: list[str | Path] | None = None,
     strict: bool = False,
 ) -> dict[str, Any]:
@@ -346,6 +349,8 @@ def validate_artifacts(
         targets.append(validate_serving_compatibility_report(serving_compatibility_report_path))
     for serving_endpoint_check_path in serving_endpoint_check_paths or []:
         targets.append(validate_serving_endpoint_check(serving_endpoint_check_path))
+    for serving_lifecycle_path in serving_lifecycle_paths or []:
+        targets.append(validate_serving_lifecycle(serving_lifecycle_path))
     for serving_demo_run_path in serving_demo_run_paths or []:
         targets.append(validate_serving_demo_run(serving_demo_run_path))
     if not targets:
@@ -845,6 +850,16 @@ def validate_serving_endpoint_check(path: str | Path) -> ValidationTarget:
     check = _read_object(check_path, target, "serving_check.json")
     if check is not None:
         _validate_serving_endpoint_check(check, target)
+    return target
+
+
+def validate_serving_lifecycle(path: str | Path) -> ValidationTarget:
+    """Validate one managed serving_lifecycle.json artifact."""
+    lifecycle_path = Path(path)
+    target = ValidationTarget("serving_lifecycle", str(lifecycle_path))
+    lifecycle = _read_object(lifecycle_path, target, "serving_lifecycle.json")
+    if lifecycle is not None:
+        _validate_serving_lifecycle(lifecycle, target, lifecycle_path)
     return target
 
 
@@ -6000,6 +6015,137 @@ def _validate_serving_endpoint_check(check: dict[str, Any], target: ValidationTa
             "failed_check_count": len(failed_from_rows),
         }
     )
+
+
+def _validate_serving_lifecycle(lifecycle: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(lifecycle, "schema_version", SERVING_LIFECYCLE_SCHEMA_VERSION, target, prefix="serving_lifecycle.")
+    for field_name in ("generated_at", "finished_at", "profile", "engine", "model"):
+        if not isinstance(lifecycle.get(field_name), str) or not lifecycle.get(field_name):
+            target.errors.append(f"serving_lifecycle.{field_name} must be a non-empty string.")
+    if not _is_non_negative_int(lifecycle.get("duration_ms")):
+        target.errors.append("serving_lifecycle.duration_ms must be a non-negative integer.")
+
+    for field_name in ("endpoint", "launch", "process", "adapter_strategy"):
+        if not isinstance(lifecycle.get(field_name), dict):
+            target.errors.append(f"serving_lifecycle.{field_name} must be an object.")
+    if not isinstance(lifecycle.get("passed"), bool):
+        target.errors.append("serving_lifecycle.passed must be a boolean.")
+    if not isinstance(lifecycle.get("ready"), bool):
+        target.errors.append("serving_lifecycle.ready must be a boolean.")
+    if lifecycle.get("readiness") not in {"ready", "blocked"}:
+        target.errors.append("serving_lifecycle.readiness must be ready or blocked.")
+    if not _is_string_list(lifecycle.get("errors")):
+        target.errors.append("serving_lifecycle.errors must be a list of strings.")
+
+    readiness_probe = lifecycle.get("readiness_probe") if isinstance(lifecycle.get("readiness_probe"), dict) else {}
+    smoke_check = lifecycle.get("smoke_check") if isinstance(lifecycle.get("smoke_check"), dict) else {}
+    teardown = lifecycle.get("teardown") if isinstance(lifecycle.get("teardown"), dict) else {}
+    if not readiness_probe:
+        target.errors.append("serving_lifecycle.readiness_probe must be an object.")
+    if not smoke_check:
+        target.errors.append("serving_lifecycle.smoke_check must be an object.")
+    if not teardown:
+        target.errors.append("serving_lifecycle.teardown must be an object.")
+
+    _validate_serving_lifecycle_readiness_probe(readiness_probe, target)
+    _validate_serving_lifecycle_smoke_check(smoke_check, target)
+    _validate_serving_lifecycle_teardown(teardown, target)
+
+    errors = lifecycle.get("errors") if _is_string_list(lifecycle.get("errors")) else []
+    expected_passed = (
+        readiness_probe.get("ready") is True
+        and smoke_check.get("passed") is True
+        and teardown.get("clean") is True
+        and not errors
+    )
+    if isinstance(lifecycle.get("passed"), bool) and lifecycle["passed"] != expected_passed:
+        target.errors.append("serving_lifecycle.passed must match readiness_probe, smoke_check, teardown, and errors.")
+    if isinstance(lifecycle.get("ready"), bool) and lifecycle["ready"] != expected_passed:
+        target.errors.append("serving_lifecycle.ready must match computed pass state.")
+    expected_readiness = "ready" if expected_passed else "blocked"
+    if lifecycle.get("readiness") != expected_readiness:
+        target.errors.append(f"serving_lifecycle.readiness expected {expected_readiness!r}, got {lifecycle.get('readiness')!r}.")
+    if expected_passed:
+        _validate_serving_lifecycle_preflight_artifacts(lifecycle, target, source_path)
+    elif not errors and not smoke_check.get("failed_checks"):
+        target.errors.append("serving_lifecycle.errors or smoke_check.failed_checks must explain blocked readiness.")
+
+    target.details.update(
+        {
+            "profile": lifecycle.get("profile"),
+            "engine": lifecycle.get("engine"),
+            "model": lifecycle.get("model"),
+            "readiness": lifecycle.get("readiness"),
+            "passed": lifecycle.get("passed"),
+        }
+    )
+
+
+def _validate_serving_lifecycle_readiness_probe(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "serving_lifecycle.readiness_probe"
+    if value and not isinstance(value.get("ready"), bool):
+        target.errors.append(f"{label}.ready must be a boolean.")
+    if value and (not isinstance(value.get("summary"), str) or not value.get("summary")):
+        target.errors.append(f"{label}.summary must be a non-empty string.")
+    attempts = value.get("attempts") if value else None
+    if not isinstance(attempts, list):
+        target.errors.append(f"{label}.attempts must be a list.")
+        attempts = []
+    if value.get("ready") is True and not attempts:
+        target.errors.append(f"{label}.ready requires at least one readiness attempt.")
+
+
+def _validate_serving_lifecycle_smoke_check(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "serving_lifecycle.smoke_check"
+    if value and not isinstance(value.get("attempted"), bool):
+        target.errors.append(f"{label}.attempted must be a boolean.")
+    if value and not isinstance(value.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+    if value.get("passed") is True and value.get("attempted") is not True:
+        target.errors.append(f"{label}.passed requires attempted true.")
+    if value.get("attempted") is True:
+        _validate_serving_readiness(value, target, label, ready_field="passed")
+        artifacts = value.get("artifacts")
+        if not isinstance(artifacts, dict):
+            target.errors.append(f"{label}.artifacts must be an object when attempted is true.")
+
+
+def _validate_serving_lifecycle_teardown(value: dict[str, Any], target: ValidationTarget) -> None:
+    label = "serving_lifecycle.teardown"
+    for field_name in ("attempted", "clean", "running_after_teardown"):
+        if value and not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if value.get("clean") is True and value.get("running_after_teardown") is True:
+        target.errors.append(f"{label}.clean cannot be true when running_after_teardown is true.")
+
+
+def _validate_serving_lifecycle_preflight_artifacts(
+    lifecycle: dict[str, Any],
+    target: ValidationTarget,
+    source_path: Path,
+) -> None:
+    artifacts = lifecycle.get("artifacts") if isinstance(lifecycle.get("artifacts"), dict) else {}
+    if not artifacts:
+        target.errors.append("serving_lifecycle.artifacts must be an object.")
+    smoke_check = lifecycle.get("smoke_check") if isinstance(lifecycle.get("smoke_check"), dict) else {}
+    smoke_artifacts = smoke_check.get("artifacts") if isinstance(smoke_check.get("artifacts"), dict) else {}
+    for role in SERVING_LIFECYCLE_PREFLIGHT_ARTIFACTS:
+        value = artifacts.get(role)
+        if not isinstance(value, str) or not value:
+            target.errors.append(f"serving_lifecycle.artifacts.{role} must be a non-empty string when passed.")
+            continue
+        if smoke_artifacts and smoke_artifacts.get(role) != value:
+            target.errors.append(f"serving_lifecycle.artifacts.{role} must match smoke_check.artifacts.{role}.")
+        artifact_path = _resolve_serving_lifecycle_artifact_path(value, source_path)
+        if artifact_path is None or not artifact_path.is_file():
+            target.errors.append(f"serving_lifecycle.artifacts.{role} must point at an existing file when passed.")
+
+
+def _resolve_serving_lifecycle_artifact_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else source_path.parent / path
 
 
 def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -> None:
