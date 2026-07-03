@@ -38,8 +38,10 @@ flightrecorder cloud-training preflight \
 ```
 
 The preflight is intentionally blocked because the example does not include
-`trainer_preflight` or `trainer_launch_check` receipts. Continue the dry-run
-chain with:
+`trainer_preflight` or `trainer_launch_check` receipts. Loop plans surface that
+as missing `cloud_training_lineage` links even though the downstream dry-run
+launch/status receipts are still schema-checkable. Continue the dry-run chain
+with:
 
 ```bash
 flightrecorder cloud-training plan \

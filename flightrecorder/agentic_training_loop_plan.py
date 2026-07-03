@@ -12,6 +12,58 @@ from typing import Any
 
 AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION = "hfr.agentic_training_loop_plan.v1"
 
+CLOUD_TRAINING_LINEAGE_LINKS: tuple[dict[str, str], ...] = (
+    {
+        "id": "preflight_links_agentic_training_plan",
+        "source_role": "cloud_training_preflight",
+        "source_ref": "agentic_training_plan",
+        "target_role": "agentic_training_plan",
+    },
+    {
+        "id": "preflight_links_trainer_preflight",
+        "source_role": "cloud_training_preflight",
+        "source_ref": "trainer_preflight",
+        "target_role": "trainer_preflight",
+    },
+    {
+        "id": "preflight_links_trainer_launch_check",
+        "source_role": "cloud_training_preflight",
+        "source_ref": "trainer_launch_check",
+        "target_role": "trainer_launch_check",
+    },
+    {
+        "id": "launch_plan_links_preflight",
+        "source_role": "cloud_training_launch_plan",
+        "source_ref": "preflight",
+        "target_role": "cloud_training_preflight",
+    },
+    {
+        "id": "launch_plan_links_artifact_manifest",
+        "source_role": "cloud_training_launch_plan",
+        "source_ref": "artifact_manifest",
+        "target_role": "cloud_training_artifact_manifest",
+    },
+    {
+        "id": "launch_receipt_links_launch_plan",
+        "source_role": "cloud_training_launch_receipt",
+        "source_ref": "launch_plan",
+        "target_role": "cloud_training_launch_plan",
+    },
+    {
+        "id": "status_receipt_links_launch_receipt",
+        "source_role": "cloud_training_status_receipt",
+        "source_ref": "launch_receipt",
+        "target_role": "cloud_training_launch_receipt",
+    },
+)
+CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES: tuple[str, ...] = tuple(
+    sorted(
+        {"cloud_training_provider_registry"}
+        | {link["source_role"] for link in CLOUD_TRAINING_LINEAGE_LINKS}
+        | {link["target_role"] for link in CLOUD_TRAINING_LINEAGE_LINKS}
+    )
+)
+
 PHASES: tuple[dict[str, Any], ...] = (
     {
         "id": "scenario_task_generation",
@@ -186,8 +238,10 @@ def build_agentic_training_loop_plan(
     if not iteration_id:
         raise AgenticTrainingLoopPlanError("iteration_id is required")
     output_path = Path(out_path)
-    refs = _artifact_refs(artifact_paths or {}, preserve_paths, output_path)
+    normalized_artifact_paths = _normalized_artifact_paths(artifact_paths or {})
+    refs = _artifact_refs(normalized_artifact_paths, preserve_paths, output_path)
     cloud_training = _cloud_training_summary(refs)
+    cloud_training_lineage = _cloud_training_lineage(refs, normalized_artifact_paths)
     phases = [_phase_row(spec, refs) for spec in PHASES]
     checks: list[dict[str, Any]] = []
     _add_check(checks, "phase_contracts_present", len(phases) == len(PHASES), {"phase_count": len(phases)}, {"phase_count": len(PHASES)})
@@ -286,6 +340,20 @@ def build_agentic_training_loop_plan(
     )
     _add_check(
         checks,
+        "cloud_training_lineage_bound_for_provider_handoff",
+        cloud_training_lineage["passed"],
+        {"cloud_training_lineage": cloud_training_lineage},
+        {
+            "passed": True,
+            "missing_link_count": 0,
+            "mismatched_link_count": 0,
+            "ambiguous_link_count": 0,
+            "duplicate_role_count": 0,
+            "provider_consistent": True,
+        },
+    )
+    _add_check(
+        checks,
         "heldout_eval_is_fail_closed",
         "heldout_manifest" in refs and "external_eval_plan" in refs and "external_eval_receipt" in refs,
         {
@@ -333,6 +401,7 @@ def build_agentic_training_loop_plan(
         "budget": _budget(budget or {}),
         "provider_constraints": _provider_constraints(provider_constraints or {}),
         "cloud_training": cloud_training,
+        "cloud_training_lineage": cloud_training_lineage,
         "execution_boundary": {
             "dry_run_plan_only": True,
             "cloud_jobs_started": False,
@@ -378,17 +447,26 @@ def write_agentic_training_loop_plan(path: str | Path, plan: dict[str, Any]) -> 
     out_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _normalized_artifact_paths(artifact_paths: dict[str, list[str | Path]]) -> dict[str, list[Path]]:
+    normalized: dict[str, list[Path]] = {}
+    for role in sorted(artifact_paths):
+        normalized_role = ARTIFACT_ROLES.get(role, role)
+        rows = [Path(path) for path in artifact_paths[role] if str(path)]
+        if rows:
+            normalized.setdefault(normalized_role, []).extend(rows)
+    return normalized
+
+
 def _artifact_refs(
-    artifact_paths: dict[str, list[str | Path]],
+    artifact_paths: dict[str, list[Path]],
     preserve_paths: bool,
     output_path: Path,
 ) -> dict[str, list[dict[str, Any]]]:
     refs: dict[str, list[dict[str, Any]]] = {}
     for role in sorted(artifact_paths):
-        normalized_role = ARTIFACT_ROLES.get(role, role)
-        rows = [_artifact_ref(normalized_role, Path(path), preserve_paths, output_path) for path in artifact_paths[role] if str(path)]
+        rows = [_artifact_ref(role, path, preserve_paths, output_path) for path in artifact_paths[role]]
         if rows:
-            refs[normalized_role] = rows
+            refs[role] = rows
     return refs
 
 
@@ -485,6 +563,150 @@ def _cloud_training_summary(refs: dict[str, list[dict[str, Any]]]) -> dict[str, 
         "credential_values_recorded": False,
         "live_spend_allowed": False,
     }
+
+
+def _cloud_training_lineage(refs: dict[str, list[dict[str, Any]]], artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
+    provider = _cloud_training_provider_lineage(artifact_paths)
+    links = [_cloud_training_lineage_link(refs, artifact_paths, spec) for spec in CLOUD_TRAINING_LINEAGE_LINKS]
+    missing_links = [link["id"] for link in links if link["status"].startswith("missing_")]
+    mismatched_links = [link["id"] for link in links if link["status"] == "mismatched_sha256"]
+    ambiguous_links = [link["id"] for link in links if link["status"].startswith("ambiguous_")]
+    role_counts = _cloud_training_lineage_role_counts(refs)
+    duplicate_roles = [row["role"] for row in role_counts if row["count"] > 1]
+    matched_link_count = sum(1 for link in links if link["passed"])
+    passed = (
+        provider["provider_consistent"]
+        and provider["registry_contains_pipeline_provider"]
+        and not missing_links
+        and not mismatched_links
+        and not ambiguous_links
+        and not duplicate_roles
+    )
+    return {
+        "passed": passed,
+        "required_link_count": len(links),
+        "matched_link_count": matched_link_count,
+        "missing_link_count": len(missing_links),
+        "mismatched_link_count": len(mismatched_links),
+        "ambiguous_link_count": len(ambiguous_links),
+        "duplicate_role_count": len(duplicate_roles),
+        "missing_links": missing_links,
+        "mismatched_links": mismatched_links,
+        "ambiguous_links": ambiguous_links,
+        "duplicate_roles": duplicate_roles,
+        "role_counts": role_counts,
+        "provider": provider,
+        "links": links,
+    }
+
+
+def _cloud_training_provider_lineage(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
+    registry_provider_ids = sorted(
+        {
+            provider_id
+            for path in artifact_paths.get("cloud_training_provider_registry", [])
+            for provider_id in _registry_provider_ids(_read_json(path))
+        }
+    )
+    provider_by_role = {
+        role: _provider_id_from_payload(_first_payload(artifact_paths, role))
+        for role in ("cloud_training_preflight", "cloud_training_artifact_manifest", "cloud_training_launch_plan")
+    }
+    pipeline_provider_ids = sorted({provider_id for provider_id in provider_by_role.values() if provider_id})
+    pipeline_provider_id = pipeline_provider_ids[0] if len(pipeline_provider_ids) == 1 else ""
+    registry_contains_pipeline_provider = bool(pipeline_provider_id) and pipeline_provider_id in registry_provider_ids
+    return {
+        "registry_provider_ids": registry_provider_ids,
+        "pipeline_provider_ids": pipeline_provider_ids,
+        "pipeline_provider_id": pipeline_provider_id,
+        "provider_by_role": provider_by_role,
+        "provider_consistent": len(pipeline_provider_ids) == 1,
+        "registry_contains_pipeline_provider": registry_contains_pipeline_provider,
+    }
+
+
+def _cloud_training_lineage_link(
+    refs: dict[str, list[dict[str, Any]]],
+    artifact_paths: dict[str, list[Path]],
+    spec: dict[str, str],
+) -> dict[str, Any]:
+    source_role = spec["source_role"]
+    target_role = spec["target_role"]
+    source_ref_name = spec["source_ref"]
+    source_count = _lineage_role_count(refs, source_role)
+    target_count = _lineage_role_count(refs, target_role)
+    source_ref = _first_ref(refs, source_role)
+    target_ref = _first_ref(refs, target_role)
+    source_payload = _first_payload(artifact_paths, source_role)
+    source_artifacts = source_payload.get("source_artifacts") if isinstance(source_payload.get("source_artifacts"), dict) else {}
+    nested_ref = source_artifacts.get(source_ref_name) if isinstance(source_artifacts, dict) else None
+    nested_ref = nested_ref if isinstance(nested_ref, dict) else {}
+    nested_sha = nested_ref.get("sha256") if isinstance(nested_ref.get("sha256"), str) else ""
+    target_sha = target_ref.get("sha256") if isinstance(target_ref.get("sha256"), str) else ""
+    status = "matched"
+    if source_count > 1:
+        status = "ambiguous_source_artifacts"
+    elif target_count > 1:
+        status = "ambiguous_target_artifacts"
+    elif not source_ref:
+        status = "missing_source_artifact"
+    elif not target_ref:
+        status = "missing_target_artifact"
+    elif not nested_ref:
+        status = "missing_source_link"
+    elif not nested_sha:
+        status = "missing_source_link_sha256"
+    elif not target_sha:
+        status = "missing_target_sha256"
+    elif nested_sha != target_sha:
+        status = "mismatched_sha256"
+    return {
+        "id": spec["id"],
+        "source_role": source_role,
+        "source_ref": source_ref_name,
+        "target_role": target_role,
+        "source_artifact_count": source_count,
+        "target_artifact_count": target_count,
+        "source_schema_version": source_ref.get("schema_version", "") if source_ref else "",
+        "target_schema_version": target_ref.get("schema_version", "") if target_ref else "",
+        "source_ref_sha256": nested_sha,
+        "target_sha256": target_sha,
+        "passed": status == "matched",
+        "status": status,
+    }
+
+
+def _cloud_training_lineage_role_counts(refs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    return [{"role": role, "count": _lineage_role_count(refs, role)} for role in CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES]
+
+
+def _lineage_role_count(refs: dict[str, list[dict[str, Any]]], role: str) -> int:
+    rows = refs.get(role)
+    return len(rows) if isinstance(rows, list) else 0
+
+
+def _first_ref(refs: dict[str, list[dict[str, Any]]], role: str) -> dict[str, Any]:
+    rows = refs.get(role)
+    return rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+
+
+def _first_payload(artifact_paths: dict[str, list[Path]], role: str) -> dict[str, Any]:
+    paths = artifact_paths.get(role)
+    return _read_json(paths[0]) if paths else {}
+
+
+def _registry_provider_ids(payload: dict[str, Any]) -> list[str]:
+    providers = payload.get("providers")
+    if not isinstance(providers, list):
+        return []
+    return [str(provider.get("id")) for provider in providers if isinstance(provider, dict) and str(provider.get("id") or "")]
+
+
+def _provider_id_from_payload(payload: dict[str, Any]) -> str:
+    provider = payload.get("provider")
+    if not isinstance(provider, dict):
+        return ""
+    return str(provider.get("id") or "")
 
 
 def _refs_are_safe(refs: dict[str, list[dict[str, Any]]]) -> bool:

@@ -148,6 +148,7 @@ def _iteration_record(
         "serving": _group_summary(source_artifacts, "serving"),
         "evals": _group_summary(source_artifacts, "eval"),
         "cloud_training": _cloud_training_summary(source_artifacts, plan),
+        "cloud_training_lineage": _cloud_training_lineage(plan),
         "training_outputs": _group_summary(source_artifacts, "training"),
         "governance": _governance_summary(source_artifacts, plan),
         "next_actions": {
@@ -220,11 +221,16 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
     governance = latest.get("governance") if isinstance(latest.get("governance"), dict) else {}
     cost_estimate = latest.get("cost_estimate") if isinstance(latest.get("cost_estimate"), dict) else {}
     next_actions = latest.get("next_actions") if isinstance(latest.get("next_actions"), dict) else {}
+    cloud_training_lineage = latest.get("cloud_training_lineage") if isinstance(latest.get("cloud_training_lineage"), dict) else {}
+    cloud_training_provider = (
+        cloud_training_lineage.get("provider") if isinstance(cloud_training_lineage.get("provider"), dict) else {}
+    )
     side_effects_started = any(
         governance.get(field_name) is True
         for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder")
     )
-    ready = latest.get("readiness") == "ready_for_governance_review" and not missing_phase_inputs and not side_effects_started
+    lineage_bound = cloud_training_lineage.get("passed") is True
+    ready = latest.get("readiness") == "ready_for_governance_review" and not missing_phase_inputs and not side_effects_started and lineage_bound
     if ready:
         summary = f"Latest loop iteration {latest.get('iteration_id')} is ready for governance review."
     else:
@@ -252,6 +258,12 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         "rollback_receipt_present": governance.get("rollback_receipt_present") is True,
         "live_spend_allowed": cost_estimate.get("live_spend_allowed") is True,
         "side_effects_started": side_effects_started,
+        "cloud_training_lineage_bound": lineage_bound,
+        "cloud_training_provider_id": str(cloud_training_provider.get("pipeline_provider_id") or ""),
+        "cloud_training_missing_link_count": _non_negative_int(cloud_training_lineage.get("missing_link_count")),
+        "cloud_training_mismatched_link_count": _non_negative_int(cloud_training_lineage.get("mismatched_link_count")),
+        "cloud_training_ambiguous_link_count": _non_negative_int(cloud_training_lineage.get("ambiguous_link_count")),
+        "cloud_training_duplicate_role_count": _non_negative_int(cloud_training_lineage.get("duplicate_role_count")),
         "summary": summary,
     }
 
@@ -288,6 +300,11 @@ def _cloud_training_summary(source_artifacts: dict[str, Any], plan: dict[str, An
         }
     )
     return summary
+
+
+def _cloud_training_lineage(plan: dict[str, Any]) -> dict[str, Any]:
+    lineage = plan.get("cloud_training_lineage")
+    return lineage if isinstance(lineage, dict) else {}
 
 
 def _governance_summary(source_artifacts: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:

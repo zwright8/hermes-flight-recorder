@@ -34,7 +34,11 @@ from .agentic_training_flow import (
     FLOW_READY_RECOMMENDATION,
 )
 from .agentic_training_runtime import AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION
-from .agentic_training_loop_plan import AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION
+from .agentic_training_loop_plan import (
+    AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
+    CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES,
+    CLOUD_TRAINING_LINEAGE_LINKS,
+)
 from .agentic_loop_ledger import AGENTIC_LOOP_LEDGER_SCHEMA_VERSION
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
@@ -3104,7 +3108,6 @@ AGENTIC_LOOP_CLOUD_TRAINING_ROLES: tuple[str, ...] = (
     "cloud_training_status_receipt",
 )
 
-
 def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION, target, prefix="agentic_training_loop_plan.")
     checks = plan.get("checks")
@@ -3166,6 +3169,13 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         source_artifacts,
         target,
         "agentic_training_loop_plan.cloud_training",
+    )
+    _validate_agentic_training_loop_cloud_training_lineage(
+        plan.get("cloud_training_lineage"),
+        source_artifacts,
+        target,
+        "agentic_training_loop_plan.cloud_training_lineage",
+        source_path,
     )
 
     phases = plan.get("phases")
@@ -3322,6 +3332,225 @@ def _validate_agentic_training_loop_cloud_training(
             target.errors.append(f"{label}.{field_name} must match cloud training source artifacts.")
 
 
+def _validate_agentic_training_loop_cloud_training_lineage(
+    value: Any,
+    source_artifacts: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    expected = _expected_agentic_training_loop_cloud_training_lineage(source_artifacts, source_path)
+    for field_name in (
+        "passed",
+        "required_link_count",
+        "matched_link_count",
+        "missing_link_count",
+        "mismatched_link_count",
+        "ambiguous_link_count",
+        "duplicate_role_count",
+        "missing_links",
+        "mismatched_links",
+        "ambiguous_links",
+        "duplicate_roles",
+        "role_counts",
+    ):
+        if value.get(field_name) != expected[field_name]:
+            target.errors.append(f"{label}.{field_name} must match cloud training source lineage.")
+    if value.get("provider") != expected["provider"]:
+        target.errors.append(f"{label}.provider must match cloud training provider lineage.")
+    links = value.get("links")
+    if not isinstance(links, list):
+        target.errors.append(f"{label}.links must be a list.")
+        links = []
+    if len(links) != len(expected["links"]):
+        target.errors.append(f"{label}.links must include every required cloud training source link.")
+    for index, expected_link in enumerate(expected["links"]):
+        if index >= len(links) or not isinstance(links[index], dict):
+            target.errors.append(f"{label}.links[{index}] must be an object.")
+            continue
+        for field_name, expected_value in expected_link.items():
+            if links[index].get(field_name) != expected_value:
+                target.errors.append(f"{label}.links[{index}].{field_name} must match cloud training source lineage.")
+
+
+def _expected_agentic_training_loop_cloud_training_lineage(
+    source_artifacts: dict[str, Any],
+    source_path: Path,
+) -> dict[str, Any]:
+    provider = _expected_agentic_training_loop_cloud_training_provider_lineage(source_artifacts, source_path)
+    links = [
+        _expected_agentic_training_loop_cloud_training_link(source_artifacts, source_path, spec)
+        for spec in CLOUD_TRAINING_LINEAGE_LINKS
+    ]
+    missing_links = [link["id"] for link in links if link["status"].startswith("missing_")]
+    mismatched_links = [link["id"] for link in links if link["status"] == "mismatched_sha256"]
+    ambiguous_links = [link["id"] for link in links if link["status"].startswith("ambiguous_")]
+    role_counts = _expected_agentic_training_loop_cloud_training_role_counts(source_artifacts)
+    duplicate_roles = [row["role"] for row in role_counts if row["count"] > 1]
+    matched_link_count = sum(1 for link in links if link["passed"])
+    passed = (
+        provider["provider_consistent"]
+        and provider["registry_contains_pipeline_provider"]
+        and not missing_links
+        and not mismatched_links
+        and not ambiguous_links
+        and not duplicate_roles
+    )
+    return {
+        "passed": passed,
+        "required_link_count": len(links),
+        "matched_link_count": matched_link_count,
+        "missing_link_count": len(missing_links),
+        "mismatched_link_count": len(mismatched_links),
+        "ambiguous_link_count": len(ambiguous_links),
+        "duplicate_role_count": len(duplicate_roles),
+        "missing_links": missing_links,
+        "mismatched_links": mismatched_links,
+        "ambiguous_links": ambiguous_links,
+        "duplicate_roles": duplicate_roles,
+        "role_counts": role_counts,
+        "provider": provider,
+        "links": links,
+    }
+
+
+def _expected_agentic_training_loop_cloud_training_provider_lineage(
+    source_artifacts: dict[str, Any],
+    source_path: Path,
+) -> dict[str, Any]:
+    registry_provider_ids = sorted(
+        {
+            provider_id
+            for payload in _agentic_training_loop_payloads(source_artifacts, "cloud_training_provider_registry", source_path)
+            for provider_id in _agentic_training_loop_registry_provider_ids(payload)
+        }
+    )
+    provider_by_role = {
+        role: _agentic_training_loop_provider_id(_agentic_training_loop_first_payload(source_artifacts, role, source_path))
+        for role in ("cloud_training_preflight", "cloud_training_artifact_manifest", "cloud_training_launch_plan")
+    }
+    pipeline_provider_ids = sorted({provider_id for provider_id in provider_by_role.values() if provider_id})
+    pipeline_provider_id = pipeline_provider_ids[0] if len(pipeline_provider_ids) == 1 else ""
+    return {
+        "registry_provider_ids": registry_provider_ids,
+        "pipeline_provider_ids": pipeline_provider_ids,
+        "pipeline_provider_id": pipeline_provider_id,
+        "provider_by_role": provider_by_role,
+        "provider_consistent": len(pipeline_provider_ids) == 1,
+        "registry_contains_pipeline_provider": bool(pipeline_provider_id) and pipeline_provider_id in registry_provider_ids,
+    }
+
+
+def _expected_agentic_training_loop_cloud_training_link(
+    source_artifacts: dict[str, Any],
+    source_path: Path,
+    spec: dict[str, str],
+) -> dict[str, Any]:
+    source_role = spec["source_role"]
+    target_role = spec["target_role"]
+    source_ref_name = spec["source_ref"]
+    source_count = _agentic_loop_role_count(source_artifacts, source_role)
+    target_count = _agentic_loop_role_count(source_artifacts, target_role)
+    source_ref = _agentic_training_loop_first_ref(source_artifacts, source_role)
+    target_ref = _agentic_training_loop_first_ref(source_artifacts, target_role)
+    source_payload = _agentic_training_loop_first_payload(source_artifacts, source_role, source_path)
+    nested_refs = source_payload.get("source_artifacts") if isinstance(source_payload.get("source_artifacts"), dict) else {}
+    nested_ref = nested_refs.get(source_ref_name) if isinstance(nested_refs, dict) else None
+    nested_ref = nested_ref if isinstance(nested_ref, dict) else {}
+    nested_sha = nested_ref.get("sha256") if isinstance(nested_ref.get("sha256"), str) else ""
+    target_sha = target_ref.get("sha256") if isinstance(target_ref.get("sha256"), str) else ""
+    status = "matched"
+    if source_count > 1:
+        status = "ambiguous_source_artifacts"
+    elif target_count > 1:
+        status = "ambiguous_target_artifacts"
+    elif not source_ref:
+        status = "missing_source_artifact"
+    elif not target_ref:
+        status = "missing_target_artifact"
+    elif not nested_ref:
+        status = "missing_source_link"
+    elif not nested_sha:
+        status = "missing_source_link_sha256"
+    elif not target_sha:
+        status = "missing_target_sha256"
+    elif nested_sha != target_sha:
+        status = "mismatched_sha256"
+    return {
+        "id": spec["id"],
+        "source_role": source_role,
+        "source_ref": source_ref_name,
+        "target_role": target_role,
+        "source_artifact_count": source_count,
+        "target_artifact_count": target_count,
+        "source_schema_version": source_ref.get("schema_version", "") if source_ref else "",
+        "target_schema_version": target_ref.get("schema_version", "") if target_ref else "",
+        "source_ref_sha256": nested_sha,
+        "target_sha256": target_sha,
+        "passed": status == "matched",
+        "status": status,
+    }
+
+
+def _expected_agentic_training_loop_cloud_training_role_counts(source_artifacts: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"role": role, "count": _agentic_loop_role_count(source_artifacts, role)}
+        for role in CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES
+    ]
+
+
+def _agentic_training_loop_first_ref(source_artifacts: dict[str, Any], role: str) -> dict[str, Any]:
+    rows = source_artifacts.get(role)
+    return rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+
+
+def _agentic_training_loop_payloads(source_artifacts: dict[str, Any], role: str, source_path: Path) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    rows = source_artifacts.get(role)
+    if not isinstance(rows, list):
+        return payloads
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        path = _resolve_agentic_training_loop_plan_ref_path(row.get("path"), source_path)
+        payload = _read_json_object_silent(path) if path is not None else {}
+        if payload:
+            payloads.append(payload)
+    return payloads
+
+
+def _agentic_training_loop_first_payload(source_artifacts: dict[str, Any], role: str, source_path: Path) -> dict[str, Any]:
+    payloads = _agentic_training_loop_payloads(source_artifacts, role, source_path)
+    return payloads[0] if payloads else {}
+
+
+def _agentic_training_loop_registry_provider_ids(payload: dict[str, Any]) -> list[str]:
+    providers = payload.get("providers")
+    if not isinstance(providers, list):
+        return []
+    return [str(provider.get("id")) for provider in providers if isinstance(provider, dict) and str(provider.get("id") or "")]
+
+
+def _agentic_training_loop_provider_id(payload: dict[str, Any]) -> str:
+    provider = payload.get("provider")
+    if not isinstance(provider, dict):
+        return ""
+    return str(provider.get("id") or "")
+
+
+def _read_json_object_silent(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarget, ledger_path: Path) -> None:
     _require_equal(ledger, "schema_version", AGENTIC_LOOP_LEDGER_SCHEMA_VERSION, target, prefix="agentic_loop_ledger.")
     if ledger.get("passed") is not True:
@@ -3364,6 +3593,7 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
             if governance.get(field_name) is not False:
                 target.errors.append(f"{label}.governance.{field_name} must be false.")
         _validate_agentic_loop_ledger_cloud_training(row.get("cloud_training"), row, target, f"{label}.cloud_training")
+        _validate_agentic_loop_ledger_cloud_training_lineage(row.get("cloud_training_lineage"), row, target, ledger_path, label)
     metrics = ledger.get("metrics")
     if not isinstance(metrics, dict):
         target.errors.append("agentic_loop_ledger.metrics must be an object.")
@@ -3449,8 +3679,23 @@ def _validate_agentic_loop_ledger_digest(
         if missing_groups != latest_missing_groups:
             target.errors.append("agentic_loop_ledger.readiness_digest.missing_artifact_groups must match the latest iteration.")
         expected_ready = latest.get("readiness") == "ready_for_governance_review" and not latest_missing_phase_inputs
+        latest_lineage = latest.get("cloud_training_lineage") if isinstance(latest.get("cloud_training_lineage"), dict) else {}
+        latest_lineage_provider = latest_lineage.get("provider") if isinstance(latest_lineage.get("provider"), dict) else {}
+        expected_ready = expected_ready and latest_lineage.get("passed") is True
         if digest.get("ready_for_governance_review") != expected_ready:
             target.errors.append("agentic_loop_ledger.readiness_digest.ready_for_governance_review must match latest iteration readiness.")
+        if digest.get("cloud_training_lineage_bound") != (latest_lineage.get("passed") is True):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_lineage_bound must match the latest iteration.")
+        if digest.get("cloud_training_provider_id") != str(latest_lineage_provider.get("pipeline_provider_id") or ""):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_provider_id must match the latest iteration.")
+        if digest.get("cloud_training_missing_link_count") != _safe_non_negative_int(latest_lineage.get("missing_link_count")):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_missing_link_count must match the latest iteration.")
+        if digest.get("cloud_training_mismatched_link_count") != _safe_non_negative_int(latest_lineage.get("mismatched_link_count")):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_mismatched_link_count must match the latest iteration.")
+        if digest.get("cloud_training_ambiguous_link_count") != _safe_non_negative_int(latest_lineage.get("ambiguous_link_count")):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_ambiguous_link_count must match the latest iteration.")
+        if digest.get("cloud_training_duplicate_role_count") != _safe_non_negative_int(latest_lineage.get("duplicate_role_count")):
+            target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_duplicate_role_count must match the latest iteration.")
     if digest.get("latest_iteration_id") != metrics.get("latest_iteration_id"):
         target.errors.append("agentic_loop_ledger.readiness_digest.latest_iteration_id must match metrics.latest_iteration_id.")
 
@@ -3481,6 +3726,26 @@ def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any]
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match ledger cloud training role counts.")
+
+
+def _validate_agentic_loop_ledger_cloud_training_lineage(
+    value: Any,
+    row: dict[str, Any],
+    target: ValidationTarget,
+    ledger_path: Path,
+    row_label: str,
+) -> None:
+    label = f"{row_label}.cloud_training_lineage"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
+    if source_path is None or not source_path.exists() or not source_path.is_file():
+        return
+    source_plan = _read_json_object_silent(source_path)
+    expected = source_plan.get("cloud_training_lineage") if isinstance(source_plan.get("cloud_training_lineage"), dict) else {}
+    if value != expected:
+        target.errors.append(f"{label} must match the source loop plan cloud_training_lineage.")
 
 
 def _agentic_loop_role_count(source_artifacts: dict[str, Any], role: str) -> int:
@@ -3526,7 +3791,10 @@ def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: Validation
     if not _is_safe_agentic_training_result_path(path_value):
         target.errors.append(f"{label}.path must be a safe relative path without traversal.")
         return
-    source_path = (ledger_path.parent / path_value).resolve()
+    source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
+    if source_path is None:
+        target.errors.append(f"{label}.path must be a safe relative path without traversal.")
+        return
     if not source_path.exists() or not source_path.is_file():
         target.errors.append(f"{label}.path must resolve to an existing source loop plan.")
         return
@@ -3542,6 +3810,13 @@ def _validate_agentic_loop_ledger_source(row: dict[str, Any], target: Validation
         target.errors.append(f"{label}.sha256 must be a sha256 hex digest.")
     elif _sha256(source_path) != sha:
         target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _resolve_agentic_loop_ledger_source_path(row: dict[str, Any], ledger_path: Path) -> Path | None:
+    path_value = row.get("path")
+    if not isinstance(path_value, str) or not path_value or not _is_safe_agentic_training_result_path(path_value):
+        return None
+    return (ledger_path.parent / path_value).resolve()
 
 
 def _validate_next_iteration_schedule(schedule: dict[str, Any], target: ValidationTarget) -> None:

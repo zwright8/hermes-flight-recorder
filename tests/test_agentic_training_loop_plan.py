@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -39,6 +40,9 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertFalse(plan["execution_boundary"]["cloud_jobs_started"])
             self.assertFalse(plan["handoff_contract"]["default_live_execution_allowed"])
             self.assertEqual(plan["cloud_training"]["missing_artifacts"], [])
+            self.assertTrue(plan["cloud_training_lineage"]["passed"])
+            self.assertEqual(plan["cloud_training_lineage"]["matched_link_count"], plan["cloud_training_lineage"]["required_link_count"])
+            self.assertEqual(plan["cloud_training_lineage"]["provider"]["pipeline_provider_id"], "modal")
             self.assertFalse(plan["cloud_training"]["provider_api_calls_started"])
             self.assertEqual(plan["missing_phase_inputs"], [])
             self.assertTrue(all(phase["status"] != "blocked" for phase in plan["phases"]))
@@ -68,6 +72,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
             self.assertIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
             self.assertIn("cloud_training_receipts_bound_for_provider_handoff", {check["id"] for check in plan["checks"] if not check["passed"]})
+            self.assertIn("cloud_training_lineage_bound_for_provider_handoff", {check["id"] for check in plan["checks"] if not check["passed"]})
             schema = check_schema_contract(plan)
             self.assertTrue(schema["passed"], schema["errors"])
 
@@ -236,6 +241,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             )
             plan["cloud_training"]["artifact_count"] = 0
             plan["cloud_training"]["provider_api_calls_started"] = True
+            plan["cloud_training_lineage"]["matched_link_count"] = 0
             loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
@@ -244,6 +250,72 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("agentic_training_loop_plan.cloud_training.artifact_count must match cloud training source artifacts.", errors)
             self.assertIn("agentic_training_loop_plan.cloud_training.provider_api_calls_started must match cloud training source artifacts.", errors)
+            self.assertIn("agentic_training_loop_plan.cloud_training_lineage.matched_link_count must match cloud training source lineage.", errors)
+
+    def test_unlinked_cloud_training_receipts_keep_loop_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            receipt = artifacts["cloud_training_launch_receipt"][0]
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["source_artifacts"]["launch_plan"]["sha256"] = "0" * 64
+            receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="loop-cloud-unlinked",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertFalse(plan["cloud_training_lineage"]["passed"])
+            self.assertIn("launch_receipt_links_launch_plan", plan["cloud_training_lineage"]["mismatched_links"])
+            self.assertIn(
+                "cloud_training_lineage_bound_for_provider_handoff",
+                {check["id"] for check in plan["checks"] if not check["passed"]},
+            )
+            schema = check_schema_contract(plan)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_duplicate_cloud_training_lineage_roles_keep_loop_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            duplicate_receipt = root / "cloud_training_launch_receipt_duplicate.json"
+            duplicate_receipt.write_text(
+                artifacts["cloud_training_launch_receipt"][0].read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            artifacts["cloud_training_launch_receipt"].append(duplicate_receipt)
+
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-cloud-duplicate",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertFalse(plan["passed"])
+            self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertEqual(plan["cloud_training_lineage"]["duplicate_roles"], ["cloud_training_launch_receipt"])
+            self.assertIn("launch_receipt_links_launch_plan", plan["cloud_training_lineage"]["ambiguous_links"])
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
+            plan["cloud_training_lineage"]["duplicate_role_count"] = 0
+            plan["cloud_training_lineage"]["duplicate_roles"] = []
+            plan["cloud_training_lineage"]["ambiguous_link_count"] = 0
+            plan["cloud_training_lineage"]["ambiguous_links"] = []
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            tampered = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertFalse(tampered["passed"], tampered)
+            errors = "\n".join(error for target in tampered["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_lineage.duplicate_role_count must match cloud training source lineage", errors)
+            self.assertIn("cloud_training_lineage.ambiguous_link_count must match cloud training source lineage", errors)
 
     def test_schema_is_registered(self):
         names = {record["name"] for record in list_schema_records()}
@@ -252,6 +324,40 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
     def write_loop_artifacts(self, root: Path) -> dict[str, list[Path]]:
         training_export = root / "training_export"
         training_export.mkdir()
+        agentic_training_plan = self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")
+        trainer_preflight = self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")
+        trainer_launch_check = self.write_json(root / "trainer_launch_check.json", "hfr.trainer_launch_check.v1")
+        cloud_artifact_manifest = self.write_provider_json(
+            root / "cloud_training_artifact_manifest.json",
+            "hfr.cloud_training_artifact_manifest.v1",
+        )
+        cloud_preflight = self.write_provider_json(
+            root / "cloud_training_preflight.json",
+            "hfr.cloud_training_preflight.v1",
+            {
+                "agentic_training_plan": self.artifact_ref(agentic_training_plan, "agentic_training_plan"),
+                "trainer_preflight": self.artifact_ref(trainer_preflight, "trainer_preflight"),
+                "trainer_launch_check": self.artifact_ref(trainer_launch_check, "trainer_launch_check"),
+            },
+        )
+        cloud_launch_plan = self.write_provider_json(
+            root / "cloud_training_launch_plan.json",
+            "hfr.cloud_training_launch_plan.v1",
+            {
+                "preflight": self.artifact_ref(cloud_preflight, "cloud_training_preflight"),
+                "artifact_manifest": self.artifact_ref(cloud_artifact_manifest, "cloud_training_artifact_manifest"),
+            },
+        )
+        cloud_launch_receipt = self.write_json(
+            root / "cloud_training_launch_receipt.json",
+            "hfr.cloud_training_launch_receipt.v1",
+            {"launch_plan": self.artifact_ref(cloud_launch_plan, "cloud_training_launch_plan")},
+        )
+        cloud_status_receipt = self.write_json(
+            root / "cloud_training_status_receipt.json",
+            "hfr.cloud_training_status_receipt.v1",
+            {"launch_receipt": self.artifact_ref(cloud_launch_receipt, "cloud_training_launch_receipt")},
+        )
         return {
             "agentic_rollout_plan": [self.write_json(root / "agentic_rollout_plan.json", "hfr.agentic_rollout_plan.v1")],
             "agentic_rollout_receipt": [self.write_json(root / "agentic_rollout_receipt.json", "hfr.agentic_rollout_receipt.v1")],
@@ -268,24 +374,18 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "rejection_sampling_gate": [self.write_json(root / "rejection_sampling_gate.json", "hfr.rejection_sampling_gate.v1")],
             "dataset_curation_receipt": [self.write_json(root / "dataset_curation_receipt.json", "hfr.dataset_curation_receipt.v1")],
             "training_export": [training_export],
-            "agentic_training_plan": [self.write_json(root / "agentic_training_plan.json", "hfr.agentic_training_plan.v1")],
+            "agentic_training_plan": [agentic_training_plan],
             "agentic_training_flow": [self.write_json(root / "agentic_training_flow.json", "hfr.agentic_training_flow.v1")],
             "cloud_training_provider_registry": [
-                self.write_json(root / "cloud_training_provider_registry.json", "hfr.cloud_training_provider_registry.v1")
+                self.write_provider_registry(root / "cloud_training_provider_registry.json")
             ],
-            "cloud_training_preflight": [self.write_json(root / "cloud_training_preflight.json", "hfr.cloud_training_preflight.v1")],
-            "cloud_training_artifact_manifest": [
-                self.write_json(root / "cloud_training_artifact_manifest.json", "hfr.cloud_training_artifact_manifest.v1")
-            ],
-            "cloud_training_launch_plan": [self.write_json(root / "cloud_training_launch_plan.json", "hfr.cloud_training_launch_plan.v1")],
-            "cloud_training_launch_receipt": [
-                self.write_json(root / "cloud_training_launch_receipt.json", "hfr.cloud_training_launch_receipt.v1")
-            ],
-            "cloud_training_status_receipt": [
-                self.write_json(root / "cloud_training_status_receipt.json", "hfr.cloud_training_status_receipt.v1")
-            ],
-            "trainer_preflight": [self.write_json(root / "trainer_preflight.json", "hfr.trainer_preflight.v1")],
-            "trainer_launch_check": [self.write_json(root / "trainer_launch_check.json", "hfr.trainer_launch_check.v1")],
+            "cloud_training_preflight": [cloud_preflight],
+            "cloud_training_artifact_manifest": [cloud_artifact_manifest],
+            "cloud_training_launch_plan": [cloud_launch_plan],
+            "cloud_training_launch_receipt": [cloud_launch_receipt],
+            "cloud_training_status_receipt": [cloud_status_receipt],
+            "trainer_preflight": [trainer_preflight],
+            "trainer_launch_check": [trainer_launch_check],
             "serving_lifecycle": [self.write_json(root / "serving_lifecycle.json", "hfr.serving_lifecycle.v1")],
             "heldout_manifest": [self.write_json(root / "heldout_manifest.json", "hfr.heldout_scenario_manifest.v1")],
             "external_eval_plan": [self.write_json(root / "external_eval_plan.json", "hfr.external_eval_adapters.v1")],
@@ -298,13 +398,14 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "action_ledger": [self.write_json(root / "action_ledger.json", "hfr.action_ledger.v1")],
         }
 
-    def write_json(self, path: Path, schema_version: str) -> Path:
+    def write_json(self, path: Path, schema_version: str, source_artifacts: dict[str, dict[str, object]] | None = None) -> Path:
         path.write_text(
             json.dumps(
                 {
                     "schema_version": schema_version,
                     "passed": True,
                     "readiness": "ready",
+                    "source_artifacts": source_artifacts or {},
                 },
                 indent=2,
                 sort_keys=True,
@@ -313,3 +414,52 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             encoding="utf-8",
         )
         return path
+
+    def write_provider_registry(self, path: Path) -> Path:
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "hfr.cloud_training_provider_registry.v1",
+                    "passed": True,
+                    "readiness": "ready",
+                    "providers": [{"id": "modal"}],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def write_provider_json(
+        self,
+        path: Path,
+        schema_version: str,
+        source_artifacts: dict[str, dict[str, object]] | None = None,
+    ) -> Path:
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": schema_version,
+                    "passed": True,
+                    "readiness": "ready",
+                    "provider": {"id": "modal"},
+                    "source_artifacts": source_artifacts or {},
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def artifact_ref(self, path: Path, role: str) -> dict[str, object]:
+        return {
+            "role": role,
+            "path": path.name,
+            "exists": True,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size_bytes": path.stat().st_size,
+        }

@@ -90,7 +90,9 @@ flightrecorder agentic-loop plan \
 The committed plan is intentionally `planned_fail_closed` because this example
 does not include rollout, review, local trainer-preflight, serving, held-out
 eval, or promotion receipts. It does bind nested cloud-training receipts and
-summarizes them in `cloud_training` without provider side effects.
+summarizes them in `cloud_training` without provider side effects. The
+`cloud_training_lineage` block records the SHA-256 chain from preflight through
+launch plan, launch receipt, and status receipt.
 
 Validate the committed receipt before including it in a trainer-facing evidence
 bundle:

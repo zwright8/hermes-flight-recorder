@@ -799,6 +799,9 @@ cost ceilings, promotion/rollback posture, and next-action scheduling state.
 It also emits a `readiness_digest` for the latest iteration so operators can see
 the missing phase inputs, empty artifact groups, governance posture, next-action
 recommendation, and side-effect boundary without parsing the full ledger.
+The digest includes cloud-training lineage posture as well: a latest iteration
+is not ready unless the provider id is consistent and every cloud handoff
+receipt points to its required upstream receipt by SHA-256.
 Review group counts include `model_grader_override_receipt` when human override
 resolution is needed, and eval group counts include both `external_eval_plan`
 and `external_eval_receipt` so dry-run benchmark receipts are not lost between

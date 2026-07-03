@@ -39,6 +39,7 @@
           },
           "blocked_reason_count": { "minimum": 0, "type": "integer" },
           "cloud_training": { "$ref": "#/$defs/group_summary" },
+          "cloud_training_lineage": { "$ref": "#/$defs/cloud_training_lineage" },
           "cost_estimate": { "type": "object" },
           "evals": { "type": "object" },
           "exists": { "const": true },
@@ -80,6 +81,7 @@
           "artifact_group_counts",
           "artifact_role_counts",
           "cloud_training",
+          "cloud_training_lineage",
           "cost_estimate",
           "serving",
           "evals",
@@ -105,6 +107,12 @@
       "description": "Operator-facing latest-iteration readiness summary derived from the ledger only.",
       "properties": {
         "blocked_reason_count": { "minimum": 0, "type": "integer" },
+        "cloud_training_ambiguous_link_count": { "minimum": 0, "type": "integer" },
+        "cloud_training_duplicate_role_count": { "minimum": 0, "type": "integer" },
+        "cloud_training_lineage_bound": { "type": "boolean" },
+        "cloud_training_mismatched_link_count": { "minimum": 0, "type": "integer" },
+        "cloud_training_missing_link_count": { "minimum": 0, "type": "integer" },
+        "cloud_training_provider_id": { "type": "string" },
         "decision_readiness": { "minLength": 1, "type": "string" },
         "decision_recommendation": { "minLength": 1, "type": "string" },
         "latest_iteration_id": { "minLength": 1, "type": "string" },
@@ -144,6 +152,12 @@
         "missing_artifact_group_count",
         "missing_artifact_groups",
         "blocked_reason_count",
+        "cloud_training_ambiguous_link_count",
+        "cloud_training_duplicate_role_count",
+        "cloud_training_lineage_bound",
+        "cloud_training_provider_id",
+        "cloud_training_missing_link_count",
+        "cloud_training_mismatched_link_count",
         "next_action_scheduled",
         "next_action_recommendation",
         "requires_governance_decision",
@@ -172,6 +186,121 @@
   "title": "Hermes Flight Recorder Agentic Loop Ledger",
   "type": "object",
   "$defs": {
+    "cloud_training_lineage": {
+      "additionalProperties": true,
+      "properties": {
+        "ambiguous_link_count": { "minimum": 0, "type": "integer" },
+        "ambiguous_links": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "duplicate_role_count": { "minimum": 0, "type": "integer" },
+        "duplicate_roles": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "links": {
+          "items": { "$ref": "#/$defs/cloud_training_lineage_link" },
+          "type": "array"
+        },
+        "matched_link_count": { "minimum": 0, "type": "integer" },
+        "mismatched_link_count": { "minimum": 0, "type": "integer" },
+        "mismatched_links": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "missing_link_count": { "minimum": 0, "type": "integer" },
+        "missing_links": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "passed": { "type": "boolean" },
+        "provider": { "$ref": "#/$defs/cloud_training_lineage_provider" },
+        "required_link_count": { "minimum": 0, "type": "integer" },
+        "role_counts": {
+          "items": { "$ref": "#/$defs/role_count" },
+          "type": "array"
+        }
+      },
+      "required": [
+        "passed",
+        "required_link_count",
+        "matched_link_count",
+        "missing_link_count",
+        "mismatched_link_count",
+        "ambiguous_link_count",
+        "duplicate_role_count",
+        "missing_links",
+        "mismatched_links",
+        "ambiguous_links",
+        "duplicate_roles",
+        "role_counts",
+        "provider",
+        "links"
+      ],
+      "type": "object"
+    },
+    "cloud_training_lineage_link": {
+      "additionalProperties": true,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "source_artifact_count": { "minimum": 0, "type": "integer" },
+        "source_ref": { "minLength": 1, "type": "string" },
+        "source_ref_sha256": { "type": "string" },
+        "source_role": { "minLength": 1, "type": "string" },
+        "source_schema_version": { "type": "string" },
+        "status": { "minLength": 1, "type": "string" },
+        "target_artifact_count": { "minimum": 0, "type": "integer" },
+        "target_role": { "minLength": 1, "type": "string" },
+        "target_schema_version": { "type": "string" },
+        "target_sha256": { "type": "string" }
+      },
+      "required": [
+        "id",
+        "source_role",
+        "source_ref",
+        "target_role",
+        "source_artifact_count",
+        "target_artifact_count",
+        "source_schema_version",
+        "target_schema_version",
+        "source_ref_sha256",
+        "target_sha256",
+        "passed",
+        "status"
+      ],
+      "type": "object"
+    },
+    "cloud_training_lineage_provider": {
+      "additionalProperties": true,
+      "properties": {
+        "pipeline_provider_id": { "type": "string" },
+        "pipeline_provider_ids": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "provider_by_role": {
+          "additionalProperties": { "type": "string" },
+          "type": "object"
+        },
+        "provider_consistent": { "type": "boolean" },
+        "registry_contains_pipeline_provider": { "type": "boolean" },
+        "registry_provider_ids": {
+          "items": { "type": "string" },
+          "type": "array"
+        }
+      },
+      "required": [
+        "registry_provider_ids",
+        "pipeline_provider_ids",
+        "pipeline_provider_id",
+        "provider_by_role",
+        "provider_consistent",
+        "registry_contains_pipeline_provider"
+      ],
+      "type": "object"
+    },
     "group_count": {
       "additionalProperties": true,
       "properties": {
@@ -230,6 +359,15 @@
         "id": { "minLength": 1, "type": "string" }
       },
       "required": ["id", "count"],
+      "type": "object"
+    },
+    "role_count": {
+      "additionalProperties": true,
+      "properties": {
+        "count": { "minimum": 0, "type": "integer" },
+        "role": { "minLength": 1, "type": "string" }
+      },
+      "required": ["role", "count"],
       "type": "object"
     }
   }

@@ -43,6 +43,7 @@
     "uncalibrated_labels_block_training_data: passed=False",
     "dataset_curation_receipt_required_for_trainer_handoff: passed=False",
     "external_trainer_handoff_is_preflighted: passed=False",
+    "cloud_training_lineage_bound_for_provider_handoff: passed=False",
     "heldout_eval_is_fail_closed: passed=False",
     "governance_required_for_promotion: passed=False"
   ],
@@ -53,7 +54,7 @@
     "max_rollouts": null,
     "max_training_examples": null
   },
-  "check_count": 11,
+  "check_count": 12,
   "checks": [
     {
       "actual": {
@@ -213,6 +214,192 @@
     },
     {
       "actual": {
+        "cloud_training_lineage": {
+          "ambiguous_link_count": 0,
+          "ambiguous_links": [],
+          "duplicate_role_count": 0,
+          "duplicate_roles": [],
+          "links": [
+            {
+              "id": "preflight_links_agentic_training_plan",
+              "passed": true,
+              "source_artifact_count": 1,
+              "source_ref": "agentic_training_plan",
+              "source_ref_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+              "source_role": "cloud_training_preflight",
+              "source_schema_version": "hfr.cloud_training_preflight.v1",
+              "status": "matched",
+              "target_artifact_count": 1,
+              "target_role": "agentic_training_plan",
+              "target_schema_version": "hfr.agentic_training_plan.v1",
+              "target_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b"
+            },
+            {
+              "id": "preflight_links_trainer_preflight",
+              "passed": false,
+              "source_artifact_count": 1,
+              "source_ref": "trainer_preflight",
+              "source_ref_sha256": "",
+              "source_role": "cloud_training_preflight",
+              "source_schema_version": "hfr.cloud_training_preflight.v1",
+              "status": "missing_target_artifact",
+              "target_artifact_count": 0,
+              "target_role": "trainer_preflight",
+              "target_schema_version": "",
+              "target_sha256": ""
+            },
+            {
+              "id": "preflight_links_trainer_launch_check",
+              "passed": false,
+              "source_artifact_count": 1,
+              "source_ref": "trainer_launch_check",
+              "source_ref_sha256": "",
+              "source_role": "cloud_training_preflight",
+              "source_schema_version": "hfr.cloud_training_preflight.v1",
+              "status": "missing_target_artifact",
+              "target_artifact_count": 0,
+              "target_role": "trainer_launch_check",
+              "target_schema_version": "",
+              "target_sha256": ""
+            },
+            {
+              "id": "launch_plan_links_preflight",
+              "passed": true,
+              "source_artifact_count": 1,
+              "source_ref": "preflight",
+              "source_ref_sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509",
+              "source_role": "cloud_training_launch_plan",
+              "source_schema_version": "hfr.cloud_training_launch_plan.v1",
+              "status": "matched",
+              "target_artifact_count": 1,
+              "target_role": "cloud_training_preflight",
+              "target_schema_version": "hfr.cloud_training_preflight.v1",
+              "target_sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509"
+            },
+            {
+              "id": "launch_plan_links_artifact_manifest",
+              "passed": true,
+              "source_artifact_count": 1,
+              "source_ref": "artifact_manifest",
+              "source_ref_sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9",
+              "source_role": "cloud_training_launch_plan",
+              "source_schema_version": "hfr.cloud_training_launch_plan.v1",
+              "status": "matched",
+              "target_artifact_count": 1,
+              "target_role": "cloud_training_artifact_manifest",
+              "target_schema_version": "hfr.cloud_training_artifact_manifest.v1",
+              "target_sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9"
+            },
+            {
+              "id": "launch_receipt_links_launch_plan",
+              "passed": true,
+              "source_artifact_count": 1,
+              "source_ref": "launch_plan",
+              "source_ref_sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020",
+              "source_role": "cloud_training_launch_receipt",
+              "source_schema_version": "hfr.cloud_training_launch_receipt.v1",
+              "status": "matched",
+              "target_artifact_count": 1,
+              "target_role": "cloud_training_launch_plan",
+              "target_schema_version": "hfr.cloud_training_launch_plan.v1",
+              "target_sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020"
+            },
+            {
+              "id": "status_receipt_links_launch_receipt",
+              "passed": true,
+              "source_artifact_count": 1,
+              "source_ref": "launch_receipt",
+              "source_ref_sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c",
+              "source_role": "cloud_training_status_receipt",
+              "source_schema_version": "hfr.cloud_training_status_receipt.v1",
+              "status": "matched",
+              "target_artifact_count": 1,
+              "target_role": "cloud_training_launch_receipt",
+              "target_schema_version": "hfr.cloud_training_launch_receipt.v1",
+              "target_sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c"
+            }
+          ],
+          "matched_link_count": 5,
+          "mismatched_link_count": 0,
+          "mismatched_links": [],
+          "missing_link_count": 2,
+          "missing_links": [
+            "preflight_links_trainer_preflight",
+            "preflight_links_trainer_launch_check"
+          ],
+          "passed": false,
+          "provider": {
+            "pipeline_provider_id": "modal",
+            "pipeline_provider_ids": [
+              "modal"
+            ],
+            "provider_by_role": {
+              "cloud_training_artifact_manifest": "modal",
+              "cloud_training_launch_plan": "modal",
+              "cloud_training_preflight": "modal"
+            },
+            "provider_consistent": true,
+            "registry_contains_pipeline_provider": true,
+            "registry_provider_ids": [
+              "huggingface_jobs",
+              "modal"
+            ]
+          },
+          "required_link_count": 7,
+          "role_counts": [
+            {
+              "count": 1,
+              "role": "agentic_training_plan"
+            },
+            {
+              "count": 1,
+              "role": "cloud_training_artifact_manifest"
+            },
+            {
+              "count": 1,
+              "role": "cloud_training_launch_plan"
+            },
+            {
+              "count": 1,
+              "role": "cloud_training_launch_receipt"
+            },
+            {
+              "count": 1,
+              "role": "cloud_training_preflight"
+            },
+            {
+              "count": 1,
+              "role": "cloud_training_provider_registry"
+            },
+            {
+              "count": 1,
+              "role": "cloud_training_status_receipt"
+            },
+            {
+              "count": 0,
+              "role": "trainer_launch_check"
+            },
+            {
+              "count": 0,
+              "role": "trainer_preflight"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "ambiguous_link_count": 0,
+        "duplicate_role_count": 0,
+        "mismatched_link_count": 0,
+        "missing_link_count": 0,
+        "passed": true,
+        "provider_consistent": true
+      },
+      "id": "cloud_training_lineage_bound_for_provider_handoff",
+      "passed": false,
+      "summary": "cloud_training_lineage_bound_for_provider_handoff: passed=False"
+    },
+    {
+      "actual": {
         "external_eval_plan_present": false,
         "external_eval_receipt_present": false,
         "heldout_manifest_present": false
@@ -270,6 +457,177 @@
     ],
     "status_receipt_present": true
   },
+  "cloud_training_lineage": {
+    "ambiguous_link_count": 0,
+    "ambiguous_links": [],
+    "duplicate_role_count": 0,
+    "duplicate_roles": [],
+    "links": [
+      {
+        "id": "preflight_links_agentic_training_plan",
+        "passed": true,
+        "source_artifact_count": 1,
+        "source_ref": "agentic_training_plan",
+        "source_ref_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
+        "source_role": "cloud_training_preflight",
+        "source_schema_version": "hfr.cloud_training_preflight.v1",
+        "status": "matched",
+        "target_artifact_count": 1,
+        "target_role": "agentic_training_plan",
+        "target_schema_version": "hfr.agentic_training_plan.v1",
+        "target_sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b"
+      },
+      {
+        "id": "preflight_links_trainer_preflight",
+        "passed": false,
+        "source_artifact_count": 1,
+        "source_ref": "trainer_preflight",
+        "source_ref_sha256": "",
+        "source_role": "cloud_training_preflight",
+        "source_schema_version": "hfr.cloud_training_preflight.v1",
+        "status": "missing_target_artifact",
+        "target_artifact_count": 0,
+        "target_role": "trainer_preflight",
+        "target_schema_version": "",
+        "target_sha256": ""
+      },
+      {
+        "id": "preflight_links_trainer_launch_check",
+        "passed": false,
+        "source_artifact_count": 1,
+        "source_ref": "trainer_launch_check",
+        "source_ref_sha256": "",
+        "source_role": "cloud_training_preflight",
+        "source_schema_version": "hfr.cloud_training_preflight.v1",
+        "status": "missing_target_artifact",
+        "target_artifact_count": 0,
+        "target_role": "trainer_launch_check",
+        "target_schema_version": "",
+        "target_sha256": ""
+      },
+      {
+        "id": "launch_plan_links_preflight",
+        "passed": true,
+        "source_artifact_count": 1,
+        "source_ref": "preflight",
+        "source_ref_sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509",
+        "source_role": "cloud_training_launch_plan",
+        "source_schema_version": "hfr.cloud_training_launch_plan.v1",
+        "status": "matched",
+        "target_artifact_count": 1,
+        "target_role": "cloud_training_preflight",
+        "target_schema_version": "hfr.cloud_training_preflight.v1",
+        "target_sha256": "be2e917e2d040fad953eebfdfff42cbc59f0ae8d20d1d3ec2330a56b7f19d509"
+      },
+      {
+        "id": "launch_plan_links_artifact_manifest",
+        "passed": true,
+        "source_artifact_count": 1,
+        "source_ref": "artifact_manifest",
+        "source_ref_sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9",
+        "source_role": "cloud_training_launch_plan",
+        "source_schema_version": "hfr.cloud_training_launch_plan.v1",
+        "status": "matched",
+        "target_artifact_count": 1,
+        "target_role": "cloud_training_artifact_manifest",
+        "target_schema_version": "hfr.cloud_training_artifact_manifest.v1",
+        "target_sha256": "754fe1b58169df44a5fa9abf7be1aaf6a7d4672c246c9fd010bbf3dc5391d5e9"
+      },
+      {
+        "id": "launch_receipt_links_launch_plan",
+        "passed": true,
+        "source_artifact_count": 1,
+        "source_ref": "launch_plan",
+        "source_ref_sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020",
+        "source_role": "cloud_training_launch_receipt",
+        "source_schema_version": "hfr.cloud_training_launch_receipt.v1",
+        "status": "matched",
+        "target_artifact_count": 1,
+        "target_role": "cloud_training_launch_plan",
+        "target_schema_version": "hfr.cloud_training_launch_plan.v1",
+        "target_sha256": "0a211be311968f3a48d94b73e0bd19de35f876e48d86dcfce6d9221047a92020"
+      },
+      {
+        "id": "status_receipt_links_launch_receipt",
+        "passed": true,
+        "source_artifact_count": 1,
+        "source_ref": "launch_receipt",
+        "source_ref_sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c",
+        "source_role": "cloud_training_status_receipt",
+        "source_schema_version": "hfr.cloud_training_status_receipt.v1",
+        "status": "matched",
+        "target_artifact_count": 1,
+        "target_role": "cloud_training_launch_receipt",
+        "target_schema_version": "hfr.cloud_training_launch_receipt.v1",
+        "target_sha256": "cc973b6359e0295c11233c56606129cc500689186201f20ee04b5513395d434c"
+      }
+    ],
+    "matched_link_count": 5,
+    "mismatched_link_count": 0,
+    "mismatched_links": [],
+    "missing_link_count": 2,
+    "missing_links": [
+      "preflight_links_trainer_preflight",
+      "preflight_links_trainer_launch_check"
+    ],
+    "passed": false,
+    "provider": {
+      "pipeline_provider_id": "modal",
+      "pipeline_provider_ids": [
+        "modal"
+      ],
+      "provider_by_role": {
+        "cloud_training_artifact_manifest": "modal",
+        "cloud_training_launch_plan": "modal",
+        "cloud_training_preflight": "modal"
+      },
+      "provider_consistent": true,
+      "registry_contains_pipeline_provider": true,
+      "registry_provider_ids": [
+        "huggingface_jobs",
+        "modal"
+      ]
+    },
+    "required_link_count": 7,
+    "role_counts": [
+      {
+        "count": 1,
+        "role": "agentic_training_plan"
+      },
+      {
+        "count": 1,
+        "role": "cloud_training_artifact_manifest"
+      },
+      {
+        "count": 1,
+        "role": "cloud_training_launch_plan"
+      },
+      {
+        "count": 1,
+        "role": "cloud_training_launch_receipt"
+      },
+      {
+        "count": 1,
+        "role": "cloud_training_preflight"
+      },
+      {
+        "count": 1,
+        "role": "cloud_training_provider_registry"
+      },
+      {
+        "count": 1,
+        "role": "cloud_training_status_receipt"
+      },
+      {
+        "count": 0,
+        "role": "trainer_launch_check"
+      },
+      {
+        "count": 0,
+        "role": "trainer_preflight"
+      }
+    ]
+  },
   "created_at": "2026-07-03T00:00:00+00:00",
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -281,7 +639,7 @@
     "public_artifact_paths_redacted": true,
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 6,
+  "failed_check_count": 7,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -640,8 +998,8 @@
         "readiness": "ready",
         "role": "agentic_training_result",
         "schema_version": "hfr.agentic_training_result.v1",
-        "sha256": "b007df8a1688ebf784f183a4735eb561625b3d2cab1d5aee843cf24f111f65df",
-        "size_bytes": 9800
+        "sha256": "7f766c0ffdd14e066177e38344e5111f060464a5bdf24c2ce7473e3c424e289a",
+        "size_bytes": 11554
       }
     ],
     "agentic_training_runtime_preflight": [
