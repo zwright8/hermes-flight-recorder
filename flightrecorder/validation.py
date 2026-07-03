@@ -14398,7 +14398,13 @@ def _validate_promotion_decision_artifact_hash(
     if not current_path.exists():
         target.errors.append(f"{label}.path does not exist at validation time.")
         return
+    if _promotion_artifact_path_uses_symlink_ancestor(record.get("path"), source_path):
+        target.errors.append(f"{label}.path must not resolve through a symlink.")
+        return
     if kind == "file":
+        if current_path.is_symlink():
+            target.errors.append(f"{label}.path must not resolve to a symlink.")
+            return
         if not current_path.is_file():
             target.errors.append(f"{label}.path is not a file at validation time.")
             return
@@ -14407,6 +14413,9 @@ def _validate_promotion_decision_artifact_hash(
         if _is_sha256(record.get("sha256")) and _sha256(current_path) != record.get("sha256"):
             target.errors.append(f"{label}.sha256 does not match the current file.")
     if kind == "directory":
+        if current_path.is_symlink():
+            target.errors.append(f"{label}.path must not resolve to a symlink.")
+            return
         if not current_path.is_dir():
             target.errors.append(f"{label}.path is not a directory at validation time.")
             return
@@ -14422,6 +14431,37 @@ def _resolve_promotion_decision_artifact_path(value: Any, source_path: Path, kin
         return None
     raw = Path(value)
     return raw if raw.is_absolute() else source_path.parent / raw
+
+
+def _promotion_artifact_path_uses_symlink_ancestor(value: Any, source_path: Path) -> bool:
+    if _path_has_symlink_component(source_path, include_leaf=True):
+        return True
+    if not isinstance(value, str) or not value or value.startswith("<redacted:"):
+        return False
+    current_path = _resolve_promotion_decision_artifact_path(value, source_path, None)
+    return current_path is not None and _path_has_symlink_component(current_path, include_leaf=False)
+
+
+def _path_has_symlink_component(path: Path, *, include_leaf: bool) -> bool:
+    parts = [part for part in path.parts if part not in {"", "."}]
+    if not parts:
+        return False
+    current = Path(path.anchor) if path.is_absolute() else Path()
+    walk_parts = parts[1:] if path.is_absolute() else parts
+    for index, part in enumerate(walk_parts):
+        if not include_leaf and index == len(walk_parts) - 1:
+            break
+        current = current.parent if part == ".." else current / part
+        if current.is_symlink():
+            if _is_root_level_path(current):
+                current = current.resolve(strict=False)
+                continue
+            return True
+    return False
+
+
+def _is_root_level_path(path: Path) -> bool:
+    return path.is_absolute() and path.parent == Path(path.anchor)
 
 
 def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: ValidationTarget, policy: Any) -> None:

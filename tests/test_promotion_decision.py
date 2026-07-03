@@ -10,6 +10,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.validation import _path_has_symlink_component
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -958,6 +959,181 @@ class PromotionDecisionTests(unittest.TestCase):
             artifacts["model_card"].write_text("# Model Card\n\nchanged after decision\n", encoding="utf-8")
 
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 1)
+
+    def test_validate_promotion_decision_rejects_symlink_artifact_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            summary_path = root / "validation.json"
+            model_card_link = root / "MODEL_CARD_LINK.md"
+            try:
+                model_card_link.symlink_to(artifacts["model_card"])
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            decision["artifacts"]["model_card"]["path"] = "MODEL_CARD_LINK.md"
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-decision", str(decision_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_decision.artifacts.model_card.path must not resolve to a symlink", errors)
+
+    def test_validate_promotion_decision_rejects_symlink_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            summary_path = root / "validation.json"
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "MODEL_CARD.md").write_text(
+                artifacts["model_card"].read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            decision["artifacts"]["model_card"]["path"] = "linked_artifacts/MODEL_CARD.md"
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-decision", str(decision_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_decision.artifacts.model_card.path must not resolve through a symlink", errors)
+
+    def test_validate_promotion_decision_rejects_absolute_symlink_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            summary_path = root / "validation.json"
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "MODEL_CARD.md").write_text(
+                artifacts["model_card"].read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            decision["artifacts"]["model_card"]["path"] = str(linked_parent / "MODEL_CARD.md")
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-decision", str(decision_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_decision.artifacts.model_card.path must not resolve through a symlink", errors)
+
+    def test_promotion_symlink_scan_continues_after_root_alias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            root_component = Path(root.anchor) / root.parts[1] if root.is_absolute() and len(root.parts) > 1 else None
+            if root_component is None or not root_component.is_symlink():
+                self.skipTest("root-level symlink unavailable")
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            self.assertTrue(_path_has_symlink_component(linked_parent / "MODEL_CARD.md", include_leaf=False))
+
+    def test_validate_promotion_cards_rejects_symlink_directory_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            summary_path = root / "validation.json"
+            training_export_link = root / "training_export_link"
+            try:
+                training_export_link.symlink_to(training_export, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            manifest_path = cards_dir / "promotion_cards.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifacts"]["training_export"]["path"] = "../training_export_link"
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_cards.artifacts.training_export.path must not resolve to a symlink", errors)
+
+    def test_validate_promotion_cards_rejects_absolute_symlink_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            summary_path = root / "validation.json"
+            linked_target = root / "linked_target"
+            linked_export = linked_target / "training_export"
+            linked_export.mkdir(parents=True)
+            (linked_export / "DATASET_CARD.md").write_text(
+                (training_export / "DATASET_CARD.md").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            manifest_path = cards_dir / "promotion_cards.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["artifacts"]["training_export"]["path"] = str(linked_parent / "training_export")
+            manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_cards.artifacts.training_export.path must not resolve through a symlink", errors)
+
+    def test_validate_promotion_cards_rejects_symlink_manifest_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            cards_link = root / "cards_link"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+            try:
+                cards_link.symlink_to(cards_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--promotion-cards", str(cards_link), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_cards.artifacts.model_card.path must not resolve through a symlink", errors)
 
     def test_promotion_cards_writes_output_relative_artifact_paths(self):
         with tempfile.TemporaryDirectory() as tmp:

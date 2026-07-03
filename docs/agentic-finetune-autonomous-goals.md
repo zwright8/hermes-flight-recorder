@@ -724,7 +724,7 @@ card, and dataset card decisions.
 - Promotion cards, promotion decisions, alias receipts, rollback receipts, and
   release records write referenced artifacts relative to their own output files;
   validation reopens those references from the source file location and rejects
-  cwd-substituted governance artifacts.
+  symlinked or cwd-substituted governance artifacts.
 - Promotion alias receipts and rollback receipts bind human-facing
   promotion-decision, applied-registry, and rollback-registry refs to the same
   SHA-256 and byte-size evidence carried by their fingerprinted artifact
