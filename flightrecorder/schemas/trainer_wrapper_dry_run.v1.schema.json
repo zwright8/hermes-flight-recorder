@@ -121,13 +121,13 @@
       "properties": {
         "external_code_files": {
           "items": {
-            "type": "object"
+            "$ref": "#/$defs/externalCodeFile"
           },
           "type": "array"
         },
         "trainer_inputs": {
           "items": {
-            "type": "object"
+            "$ref": "#/$defs/trainerInput"
           },
           "type": "array"
         }
@@ -135,6 +135,178 @@
       "required": [
         "trainer_inputs",
         "external_code_files"
+      ],
+      "type": "object"
+    },
+    "externalCodeFile": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "passed",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "passed": {
+                  "const": false
+                }
+              },
+              "required": [
+                "passed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "resolved_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$|^$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "resolved_path",
+        "sha256",
+        "passed"
+      ],
+      "type": "object"
+    },
+    "trainerInput": {
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "kind": {
+                  "const": "file"
+                },
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "passed",
+                "expected_sha256",
+                "expected_size_bytes",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "directory"
+                },
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "passed",
+                "expected_file_count",
+                "expected_sha256",
+                "expected_size_bytes",
+                "file_count",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "passed": {
+                  "const": false
+                }
+              },
+              "required": [
+                "passed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "archive_path": {
+          "type": "string"
+        },
+        "artifact_name": {
+          "type": "string"
+        },
+        "expected_file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_sha256": {
+          "type": "string"
+        },
+        "expected_size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "resolved_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$|^$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifact_name",
+        "archive_path",
+        "resolved_path",
+        "kind",
+        "sha256",
+        "expected_sha256",
+        "passed"
       ],
       "type": "object"
     },
