@@ -595,6 +595,9 @@ card, and dataset card decisions.
 - Action-ledger validation reopens recorded evidence bundles from the ledger
   file location and rejects missing, moved, stale, malformed, or
   cwd-substituted bundle records.
+- Scenario-authored trace and state snapshot paths resolve from the scenario
+  file location; only explicit CLI overrides resolve from the process working
+  directory.
 - Action-ledger gate validation reopens the referenced action ledger from the
   gate file location before trusting gate metrics, checks, or decisions.
 - Decision-gate validation reopens the referenced source artifact from the gate

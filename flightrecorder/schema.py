@@ -369,6 +369,7 @@ def _validate_constraint(constraint: Any, label: str) -> None:
 
 def resolve_trace_path(scenario: dict[str, Any], override: str | None = None) -> Path:
     """Resolve a trace path from CLI override or scenario trace config."""
+    has_override = override is not None
     raw = override
     if raw is None:
         trace = scenario.get("trace") or {}
@@ -380,9 +381,8 @@ def resolve_trace_path(scenario: dict[str, Any], override: str | None = None) ->
     trace_path = Path(raw)
     if trace_path.is_absolute():
         return trace_path
+    if has_override:
+        return trace_path.resolve()
 
     base_dir = Path(scenario.get("_base_dir") or ".")
-    base_candidate = (base_dir / trace_path).resolve()
-    if base_candidate.exists():
-        return base_candidate
-    return trace_path.resolve()
+    return (base_dir / trace_path).resolve()

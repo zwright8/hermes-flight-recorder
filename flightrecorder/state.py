@@ -28,6 +28,7 @@ def _resolve_state_path(
     override: str | Path | None,
     keys: tuple[str, ...],
 ) -> Path | None:
+    has_override = override is not None
     raw_path: str | Path | None = override
     if raw_path is None:
         state = scenario.get("state")
@@ -41,11 +42,10 @@ def _resolve_state_path(
     path = Path(raw_path)
     if path.is_absolute():
         return path
+    if has_override:
+        return path.resolve()
     base = Path(scenario.get("_base_dir") or ".")
-    base_candidate = (base / path).resolve()
-    if base_candidate.exists():
-        return base_candidate
-    return path.resolve()
+    return (base / path).resolve()
 
 
 def load_state_snapshot(path: str | Path) -> dict[str, Any]:

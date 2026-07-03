@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -7,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.schema import load_scenario, resolve_trace_path
+from flightrecorder.state import resolve_before_state_snapshot_path, resolve_state_snapshot_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +117,45 @@ class ScenarioCheckTests(unittest.TestCase):
                 main(["check-scenarios", "--scenarios", str(Path(tmp) / "missing")])
 
             self.assertEqual(raised.exception.code, 2)
+
+    def test_scenario_relative_trace_and_state_do_not_fallback_to_cwd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cwd_root = root / "cwd"
+            scenario_dir = root / "scenarios"
+            cwd_root.mkdir()
+            scenario_dir.mkdir()
+            (cwd_root / "trace.jsonl").write_text("{}\n", encoding="utf-8")
+            (cwd_root / "before.json").write_text("{}\n", encoding="utf-8")
+            (cwd_root / "after.json").write_text("{}\n", encoding="utf-8")
+            scenario_path = scenario_dir / "scenario.json"
+            scenario_path.write_text(
+                json.dumps(
+                    {
+                        "id": "cwd-lookalike",
+                        "title": "CWD Lookalike",
+                        "prompt": "x",
+                        "policy": {},
+                        "trace": {"path": "trace.jsonl"},
+                        "state": {"before_path": "before.json", "path": "after.json"},
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(cwd_root)
+                scenario = load_scenario(scenario_path)
+                self.assertEqual(resolve_trace_path(scenario), (scenario_dir / "trace.jsonl").resolve())
+                self.assertEqual(resolve_before_state_snapshot_path(scenario), (scenario_dir / "before.json").resolve())
+                self.assertEqual(resolve_state_snapshot_path(scenario), (scenario_dir / "after.json").resolve())
+                self.assertEqual(resolve_trace_path(scenario, "trace.jsonl"), (cwd_root / "trace.jsonl").resolve())
+                self.assertEqual(resolve_state_snapshot_path(scenario, "after.json"), (cwd_root / "after.json").resolve())
+            finally:
+                os.chdir(previous_cwd)
 
 
 if __name__ == "__main__":
