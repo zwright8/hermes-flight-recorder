@@ -44,6 +44,14 @@
   "$defs": {
     "linkRecord": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {"properties": {"path": false}, "type": "object"},
+            {"required": ["path", "sha256", "size_bytes"], "type": "object"}
+          ]
+        }
+      ],
       "properties": {
         "id": {"minLength": 1, "type": "string"},
         "kind": {"minLength": 1, "type": "string"},
@@ -55,8 +63,6 @@
         "status": {"minLength": 1, "type": "string"}
       },
       "required": ["id", "kind", "status", "recorded_at"],
-      "if": {"required": ["path"]},
-      "then": {"required": ["sha256", "size_bytes"]},
       "type": "object"
     }
   }
