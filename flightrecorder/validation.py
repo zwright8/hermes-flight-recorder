@@ -8182,7 +8182,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
     if not artifacts:
         target.errors.append("evidence_bundle.artifacts must not be empty.")
     for name, record in artifacts.items():
-        _validate_evidence_bundle_artifact_record(name, record, target)
+        _validate_evidence_bundle_artifact_record(name, record, target, source_path)
     _validate_evidence_bundle_metrics(metrics, target)
     _validate_evidence_bundle_harness_checks(metrics, checks, target)
     _validate_evidence_bundle_validation_checks(metrics, checks, target)
@@ -14534,7 +14534,7 @@ def _validate_evidence_bundle_decision(
         target.errors.append("evidence_bundle.decision.key_metrics must be an object.")
 
 
-def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: ValidationTarget) -> None:
+def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: ValidationTarget, source_path: Path) -> None:
     if not isinstance(name, str) or not name:
         target.errors.append("evidence_bundle.artifacts keys must be non-empty strings.")
     label = f"evidence_bundle.artifacts.{name}"
@@ -14562,6 +14562,25 @@ def _validate_evidence_bundle_artifact_record(name: Any, record: Any, target: Va
         target.errors.append(f"{label}.schema_version must be a string or null.")
     if "passed" in record and record.get("passed") is not None and not isinstance(record.get("passed"), bool):
         target.errors.append(f"{label}.passed must be a boolean or null.")
+    _validate_evidence_bundle_artifact_file_fingerprint(record, target, label, source_path)
+
+
+def _validate_evidence_bundle_artifact_file_fingerprint(
+    record: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if record.get("kind") != "file":
+        return
+    current_path = _resolve_evidence_bundle_artifact_path(record.get("path"), source_path)
+    if current_path is None or not current_path.is_file():
+        return
+    if _is_non_negative_int(record.get("size_bytes")) and current_path.stat().st_size != record.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    sha = record.get("sha256")
+    if isinstance(sha, str) and len(sha) == 64 and _sha256(current_path) != sha:
+        target.errors.append(f"{label}.sha256 does not match the current file.")
 
 
 def _evidence_bundle_action_fingerprint(action: dict[str, Any]) -> str:

@@ -1017,6 +1017,49 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.metrics.eval_summary.risk_count expected 1", errors)
 
+    def test_validate_evidence_bundle_rejects_stale_artifact_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = root / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]), 0)
+            self.assertEqual(run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]), 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["eval_summary"]["sha256"] = "0" * 64
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.eval_summary.sha256 does not match the current file.", errors)
+
+    def test_validate_evidence_bundle_rejects_present_artifact_marked_missing_with_stale_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = root / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]), 0)
+            self.assertEqual(run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]), 0)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["eval_summary"]["exists"] = False
+            bundle["artifacts"]["eval_summary"]["sha256"] = "0" * 64
+            bundle["artifacts"]["eval_summary"]["size_bytes"] += 1
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.eval_summary.sha256 does not match the current file.", errors)
+            self.assertIn("evidence_bundle.artifacts.eval_summary.size_bytes does not match the current file.", errors)
+
     def test_evidence_bundle_blocks_failed_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
