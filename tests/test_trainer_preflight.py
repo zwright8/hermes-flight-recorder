@@ -830,6 +830,47 @@ class TrainerPreflightTests(unittest.TestCase):
             forged_external_schema = check_schema_contract(forged_external, name_or_id="trainer_archive_check")
             self.assertFalse(forged_external_schema["passed"])
             self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(forged_external_schema["errors"]))
+            passed_input = next(item for item in check["trainer_input_checks"] if item["passed"] and item["kind"] == "file")
+            self.assertEqual(len(passed_input["sha256"]), 64)
+            self.assertIn("size_bytes", passed_input)
+            for field_name in ("sha256", "size_bytes", "expected_sha256", "expected_size_bytes"):
+                forged = json.loads(json.dumps(check))
+                next(item for item in forged["trainer_input_checks"] if item["passed"] and item["kind"] == "file").pop(
+                    field_name
+                )
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_archive_check")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            forged = json.loads(json.dumps(check))
+            next(item for item in forged["trainer_input_checks"] if item["passed"] and item["kind"] == "file")[
+                "expected_sha256"
+            ] = "not-a-hash"
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_archive_check")
+            self.assertFalse(forged_schema["passed"])
+            self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            passed_directory = next(
+                item for item in check["trainer_input_checks"] if item["passed"] and item["kind"] == "directory"
+            )
+            self.assertEqual(len(passed_directory["sha256"]), 64)
+            self.assertIn("size_bytes", passed_directory)
+            self.assertIn("file_count", passed_directory)
+            self.assertIn("expected_file_count", passed_directory)
+            for field_name in ("file_count", "expected_file_count"):
+                forged = json.loads(json.dumps(check))
+                next(
+                    item
+                    for item in forged["trainer_input_checks"]
+                    if item["passed"] and item["kind"] == "directory"
+                ).pop(field_name)
+                forged_schema = check_schema_contract(forged, name_or_id="trainer_archive_check")
+                self.assertFalse(forged_schema["passed"])
+                self.assertTrue(any("oneOf" in error for error in forged_schema["errors"]))
+            failed_input = json.loads(json.dumps(check))
+            failed_input["trainer_input_checks"][0]["passed"] = False
+            failed_input["trainer_input_checks"][0].pop("size_bytes")
+            failed_input["trainer_input_checks"][0].pop("expected_size_bytes")
+            failed_input_schema = check_schema_contract(failed_input, name_or_id="trainer_archive_check")
+            self.assertTrue(failed_input_schema["passed"], failed_input_schema["errors"])
             self.assertEqual(run_cli(["validate", "--trainer-archive-check", str(archive_check), "--strict"]), 0)
 
             forged_check = Path(tmp) / "trainer_archive_check_forged_input_size.json"

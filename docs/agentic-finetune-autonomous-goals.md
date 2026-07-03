@@ -632,6 +632,9 @@ card, and dataset card decisions.
   and selected trainer views to SHA-256 plus byte-size evidence.
 - Trainer archive checks reject passed external-code file checks that omit
   SHA-256 or byte-size evidence while preserving missing-code diagnostics.
+- Trainer archive checks reject passed trainer-input checks that omit SHA-256,
+  byte-size, or directory file-count evidence while preserving failed-input
+  diagnostics.
 - Trainer preflight artifact records reject regular file or directory artifacts
   that omit SHA-256 and byte-size evidence while preserving non-regular artifact
   diagnostics.

@@ -299,6 +299,71 @@
     },
     "trainerInputCheck": {
       "additionalProperties": true,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "kind": {
+                  "const": "file"
+                },
+                "expected_sha256": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "passed",
+                "expected_sha256",
+                "expected_size_bytes",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "directory"
+                },
+                "expected_sha256": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "passed": {
+                  "const": true
+                }
+              },
+              "required": [
+                "kind",
+                "passed",
+                "expected_file_count",
+                "expected_sha256",
+                "expected_size_bytes",
+                "file_count",
+                "sha256",
+                "size_bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "passed": {
+                  "const": false
+                }
+              },
+              "required": [
+                "passed"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      ],
       "properties": {
         "archive_path": {
           "type": "string"
