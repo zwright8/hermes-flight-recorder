@@ -116,6 +116,32 @@ flightrecorder rejection-sampling-gate \
 The rejection-sampling gate is ready for dataset curation, but it remains
 gate-only: it does not write accepted/rejected rows or update weights.
 
+Build the real trainer-view export and archive the side-effect-free curation
+receipt:
+
+```bash
+flightrecorder run-suite \
+  --scenarios scenarios \
+  --out examples/agentic_training/training_runs \
+  --export-rl \
+  --training-export-out examples/agentic_training/training_export \
+  --metadata agent=hermes-demo \
+  --metadata candidate=mock-candidate \
+  --metadata model=local-mock
+
+rm -rf examples/agentic_training/training_runs
+
+flightrecorder dataset-curation-receipt \
+  --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
+  --training-export examples/agentic_training/training_export \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/dataset_curation_receipt.json
+```
+
+The committed export is a deterministic local `export-rl` bundle. The curation
+receipt binds it to rejection sampling, but records that Flight Recorder did not
+write curated rows, update registries, start cloud jobs, or update weights.
+
 Bind the example receipts into a fail-closed loop contract:
 
 ```bash
@@ -134,6 +160,8 @@ flightrecorder agentic-loop plan \
   --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
   --reviewed-gate examples/agentic_training/model_grader/reviewed_gate.json \
   --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
+  --dataset-curation-receipt examples/agentic_training/dataset_curation_receipt.json \
+  --training-export examples/agentic_training/training_export \
   --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
   --agentic-training-flow examples/agentic_training/agentic_training_flow.json \
@@ -157,11 +185,11 @@ flightrecorder agentic-loop plan \
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include harness results, dataset-curation, local trainer-preflight,
-serving, held-out eval, or promotion receipts. It does bind loop-local rollout
-plan and mock receipt, nested model-grader review, rejection-sampling,
-cloud-training, action-ledger, and improvement-ledger receipts without provider,
-dataset-write, or scheduler side effects. The
+does not include harness results, local trainer-preflight, serving, held-out
+eval, or promotion receipts. It does bind loop-local rollout plan and mock
+receipt, nested model-grader review, rejection-sampling, dataset-curation,
+training-export, cloud-training, action-ledger, and improvement-ledger receipts
+without provider, dataset-write, or scheduler side effects. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
@@ -185,6 +213,8 @@ flightrecorder validate \
   --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
   --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
   --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
+  --training-export examples/agentic_training/training_export \
+  --dataset-curation-receipt examples/agentic_training/dataset_curation_receipt.json \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 

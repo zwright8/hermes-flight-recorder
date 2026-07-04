@@ -45,11 +45,11 @@ class AgenticLoopLedgerTests(unittest.TestCase):
         self.assertEqual(ledger["readiness_digest"]["cloud_training_cost_incurred_usd"], 0)
         groups = {row["group"]: row["count"] for row in iteration["artifact_group_counts"]}
         self.assertEqual(groups["review"], 6)
-        self.assertEqual(groups["datasets"], 1)
+        self.assertEqual(groups["datasets"], 3)
         self.assertEqual(groups["improvement"], 3)
         self.assertEqual(groups["next_iteration"], 1)
         self.assertEqual(groups["rollouts"], 2)
-        self.assertEqual(ledger["readiness_digest"]["missing_phase_input_count"], 13)
+        self.assertEqual(ledger["readiness_digest"]["missing_phase_input_count"], 11)
         self.assertEqual(ledger["readiness_digest"]["missing_artifact_group_count"], 4)
         self.assertFalse(ledger["execution_boundary"]["cloud_jobs_started"])
         self.assertFalse(ledger["execution_boundary"]["paid_model_grader_calls_started"])

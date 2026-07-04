@@ -1,5 +1,5 @@
 {
-  "artifact_count": 22,
+  "artifact_count": 24,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -55,6 +55,10 @@
     },
     {
       "count": 1,
+      "role": "dataset_curation_receipt"
+    },
+    {
+      "count": 1,
       "role": "improvement_ledger"
     },
     {
@@ -88,10 +92,13 @@
     {
       "count": 1,
       "role": "rubric_spec"
+    },
+    {
+      "count": 1,
+      "role": "training_export"
     }
   ],
   "blocked_reasons": [
-    "dataset_curation_receipt_required_for_trainer_handoff: passed=False",
     "external_trainer_handoff_is_preflighted: passed=False",
     "cloud_training_lineage_bound_for_provider_handoff: passed=False",
     "heldout_eval_is_fail_closed: passed=False",
@@ -194,9 +201,9 @@
     },
     {
       "actual": {
-        "dataset_curation_receipt_present": false,
+        "dataset_curation_receipt_present": true,
         "rejection_sampling_gate_present": true,
-        "training_export_present": false
+        "training_export_present": true
       },
       "expected": {
         "dataset_curation_receipt_present": true,
@@ -204,8 +211,8 @@
         "training_export_present": true
       },
       "id": "dataset_curation_receipt_required_for_trainer_handoff",
-      "passed": false,
-      "summary": "dataset_curation_receipt_required_for_trainer_handoff: passed=False"
+      "passed": true,
+      "summary": "dataset_curation_receipt_required_for_trainer_handoff: passed=True"
     },
     {
       "actual": {
@@ -809,7 +816,7 @@
     "recommendation": "",
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 5,
+  "failed_check_count": 4,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -824,7 +831,6 @@
   },
   "iteration_id": "demo-loop-001",
   "missing_phase_inputs": [
-    "dataset_curation_receipt",
     "eval_summary",
     "evidence_bundle",
     "external_eval_plan",
@@ -835,8 +841,7 @@
     "promotion_ledger",
     "serving_lifecycle",
     "trainer_launch_check",
-    "trainer_preflight",
-    "training_export"
+    "trainer_preflight"
   ],
   "next_iteration": {
     "recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
@@ -957,13 +962,12 @@
     {
       "gate": "datasets must be redacted, licensed, hashed, and split before trainer handoff.",
       "id": "dataset_curation",
-      "missing_required_artifacts": [
-        "dataset_curation_receipt",
-        "training_export"
-      ],
+      "missing_required_artifacts": [],
       "name": "Dataset curation",
       "present_required_artifacts": [
-        "rejection_sampling_gate"
+        "rejection_sampling_gate",
+        "dataset_curation_receipt",
+        "training_export"
       ],
       "produces": [
         "training_manifest",
@@ -974,7 +978,7 @@
         "dataset_curation_receipt",
         "training_export"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "live trainer launch requires explicit opt-in, credentials, cloud-provider receipts, and a passing preflight.",
@@ -1310,6 +1314,19 @@
         "size_bytes": 2682
       }
     ],
+    "dataset_curation_receipt": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "dataset_curation_receipt.json",
+        "readiness": "ready_for_external_trainer_handoff",
+        "role": "dataset_curation_receipt",
+        "schema_version": "hfr.dataset_curation_receipt.v1",
+        "sha256": "53f68e9228d03bb7dc537e366950ca57d232662244bf8f17bae6cd4917184834",
+        "size_bytes": 3947
+      }
+    ],
     "improvement_ledger": [
       {
         "exists": true,
@@ -1425,6 +1442,19 @@
         "schema_version": "hfr.rubric_spec.v1",
         "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
         "size_bytes": 2227
+      }
+    ],
+    "training_export": [
+      {
+        "exists": true,
+        "kind": "directory",
+        "passed": null,
+        "path": "training_export",
+        "readiness": "",
+        "role": "training_export",
+        "schema_version": "",
+        "sha256": null,
+        "size_bytes": null
       }
     ]
   }

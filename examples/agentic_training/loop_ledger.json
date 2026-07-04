@@ -43,7 +43,7 @@
     "readiness": "blocked",
     "recommendation": "continue_iteration",
     "recommended_governance_action": "request_another_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 13 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 11 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -57,14 +57,14 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 22,
+      "artifact_count": 24,
       "artifact_group_counts": [
         {
           "count": 6,
           "group": "cloud_training"
         },
         {
-          "count": 1,
+          "count": 3,
           "group": "datasets"
         },
         {
@@ -159,6 +159,10 @@
         },
         {
           "count": 1,
+          "role": "dataset_curation_receipt"
+        },
+        {
+          "count": 1,
           "role": "improvement_ledger"
         },
         {
@@ -192,9 +196,13 @@
         {
           "count": 1,
           "role": "rubric_spec"
+        },
+        {
+          "count": 1,
+          "role": "training_export"
         }
       ],
-      "blocked_reason_count": 5,
+      "blocked_reason_count": 4,
       "cloud_training": {
         "artifact_count": 6,
         "artifact_manifest_present": true,
@@ -480,7 +488,6 @@
       "index": 0,
       "iteration_id": "demo-loop-001",
       "missing_phase_inputs": [
-        "dataset_curation_receipt",
         "eval_summary",
         "evidence_bundle",
         "external_eval_plan",
@@ -491,8 +498,7 @@
         "promotion_ledger",
         "serving_lifecycle",
         "trainer_launch_check",
-        "trainer_preflight",
-        "training_export"
+        "trainer_preflight"
       ],
       "next_actions": {
         "recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
@@ -504,7 +510,7 @@
       "path": "loop_plan.json",
       "phase_status_counts": [
         {
-          "count": 8,
+          "count": 7,
           "id": "blocked"
         },
         {
@@ -512,7 +518,7 @@
           "id": "planned"
         },
         {
-          "count": 4,
+          "count": 5,
           "id": "ready"
         }
       ],
@@ -529,8 +535,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "211be0efa7465fae1ebc889e0a82fbdc908d01de6709656ad4ef3ee0c23e7a91",
-      "size_bytes": 46646,
+      "sha256": "09f7e8221bf5cfa86a5b8d605730e1310f700250307bdea6e7c55ab0093d3e71",
+      "size_bytes": 47395,
       "training_outputs": {
         "artifact_count": 4,
         "group": "training",
@@ -555,7 +561,7 @@
         "group": "cloud_training"
       },
       {
-        "count": 1,
+        "count": 3,
         "group": "datasets"
       },
       {
@@ -598,7 +604,7 @@
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 13,
+    "latest_missing_phase_input_count": 11,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
     "promotion_ready_count": 0,
@@ -627,7 +633,7 @@
   ],
   "passed": true,
   "readiness_digest": {
-    "blocked_reason_count": 5,
+    "blocked_reason_count": 4,
     "cloud_training_ambiguous_link_count": 0,
     "cloud_training_cost_incurred_usd": 0,
     "cloud_training_duplicate_role_count": 0,
@@ -663,9 +669,8 @@
       "governance",
       "serving"
     ],
-    "missing_phase_input_count": 13,
+    "missing_phase_input_count": 11,
     "missing_phase_inputs": [
-      "dataset_curation_receipt",
       "eval_summary",
       "evidence_bundle",
       "external_eval_plan",
@@ -676,8 +681,7 @@
       "promotion_ledger",
       "serving_lifecycle",
       "trainer_launch_check",
-      "trainer_preflight",
-      "training_export"
+      "trainer_preflight"
     ],
     "next_action_recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
     "next_action_scheduled": false,
@@ -690,7 +694,7 @@
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 13 missing phase input(s) across 4 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 11 missing phase input(s) across 4 empty artifact group(s)."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }

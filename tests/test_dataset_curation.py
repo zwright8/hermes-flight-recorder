@@ -14,6 +14,37 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DatasetCurationReceiptTests(unittest.TestCase):
+    def test_committed_agentic_training_curation_receipt_binds_real_export_without_writes(self):
+        example_root = ROOT / "examples" / "agentic_training"
+        receipt_path = example_root / "dataset_curation_receipt.json"
+        export_dir = example_root / "training_export"
+        manifest = json.loads((export_dir / "manifest.json").read_text(encoding="utf-8"))
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["schema_version"], "hfr.rl.manifest.v1")
+        self.assertEqual(manifest["episode_count"], 7)
+        self.assertEqual(manifest["sft_count"], 2)
+        self.assertEqual(manifest["dpo_count"], 2)
+        self.assertTrue(receipt["passed"], receipt["blocked_reasons"])
+        self.assertEqual(receipt["readiness"], "ready_for_external_trainer_handoff")
+        self.assertEqual(receipt["input_artifacts"]["rejection_sampling_gate"][0]["path"], "rejection_sampling_gate.json")
+        self.assertEqual(receipt["input_artifacts"]["training_export"][0]["path"], "training_export")
+        self.assertEqual(receipt["input_artifacts"]["training_export"][0]["manifest_path"], "training_export/manifest.json")
+        self.assertEqual(receipt["curation_summary"]["curated_rows_written"], 0)
+        self.assertFalse(receipt["curation_summary"]["dataset_registry_updated"])
+        self.assertFalse(receipt["execution_boundary"]["dataset_rows_written"])
+        self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
+
+        schema = check_schema_file(receipt_path)
+        validation = validate_artifacts(
+            training_export_dir=export_dir,
+            dataset_curation_receipt_paths=[receipt_path],
+            strict=True,
+        )
+
+        self.assertTrue(schema["passed"], schema["errors"])
+        self.assertTrue(validation["passed"], validation)
+
     def test_receipt_admits_training_exports_without_writing_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

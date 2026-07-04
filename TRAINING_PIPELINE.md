@@ -799,6 +799,10 @@ Dataset-curation receipts use the same public-safe replay boundary as
 rejection-sampling gates: gate refs, training-export directories, and manifest
 refs must resolve relative to the receipt directory. Unsafe absolute or
 traversal refs are redacted when generated and rejected during validation.
+The committed closed-loop demo includes a real local `export-rl` bundle under
+`examples/agentic_training/training_export/` plus a
+`dataset_curation_receipt.json` that binds it to rejection sampling while
+recording that no curated rows, registries, cloud jobs, or weights were changed.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,
@@ -939,10 +943,10 @@ after replaying that receipt against its current source external-eval plan, so
 stale or forged receipts cannot self-certify held-out eval readiness.
 The committed agentic-training loop example binds loop-local rollout plan and
 mock-receipt artifacts, a local model-grader bundle, reviewed gate,
-rejection-sampling gate, action ledger, and improvement ledger so rollout
-references, review, rejection-sampling, improvement-planning, and next-iteration
-phases are replayable without pulling sibling example paths into the public loop
-contract.
+rejection-sampling gate, training export, dataset-curation receipt, action
+ledger, and improvement ledger so rollout references, review, rejection
+sampling, curation, improvement-planning, and next-iteration phases are
+replayable without pulling sibling example paths into the public loop contract.
 Loop ledgers also require each source loop plan to be replayable from the ledger
 output directory; a plan that would need an absolute or traversal path blocks
 ledger creation instead of producing a public artifact that cannot validate.

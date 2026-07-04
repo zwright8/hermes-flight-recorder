@@ -1,0 +1,606 @@
+{
+  "artifact_fingerprints": {
+    "curriculum": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/curriculum.json",
+      "sha256": "44951f9ab69297ae46e1bb497a9187562206ff1014dc562729981bfe7dfd3bcc",
+      "size_bytes": 19581
+    },
+    "dataset_card": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/DATASET_CARD.md",
+      "sha256": "4924147e523d1452271c1039026590c3056470853ea5e3a6bb925631c16eb4f4",
+      "size_bytes": 3349
+    },
+    "dataset_metrics": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/dataset_metrics.json",
+      "sha256": "bee3703d2e09602b656f3060a94f1835367460fc7412c1b9cd505db348acbc0a",
+      "size_bytes": 14560
+    },
+    "dataset_splits": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/dataset_splits.json",
+      "sha256": "3f4eb5febe1b0c7d4098a63df72aa9632d7addedbe314062d89a39880eee825f",
+      "size_bytes": 4313
+    },
+    "dpo": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/dpo.jsonl",
+      "sha256": "78bf6460759e1501030311dd99311fac6d459fecdca7de239732a786c9f03e62",
+      "size_bytes": 7646
+    },
+    "episodes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/episodes.jsonl",
+      "sha256": "6929cd02bbe035c3255de8e00bd0a094008df08be4b6c4600d99e2049b81f52c",
+      "size_bytes": 54717
+    },
+    "failure_modes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/failure_modes.jsonl",
+      "sha256": "0073257e53db681f7ff0afc09fa1a3f1e2c0700cab406fd4a4d1c98db36e4ae7",
+      "size_bytes": 30651
+    },
+    "preferences": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/preferences.jsonl",
+      "sha256": "d29c6adc0d7acb86a1d914893f603f643a9fe09485394bc1585de41189f88b38",
+      "size_bytes": 29006
+    },
+    "reward_model": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/reward_model.jsonl",
+      "sha256": "07f7fe25b486632253be79ef4fee8acb13e265cb1e7a84d700d80d27d4e469f4",
+      "size_bytes": 14503
+    },
+    "rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/rewards.jsonl",
+      "sha256": "840a0661126910d8944b459e975bb74916ebccc8a38797e010686deb5138ad7a",
+      "size_bytes": 38470
+    },
+    "sft": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/sft.jsonl",
+      "sha256": "faeb835a0a0c11c08608973606b882dac9e65d14825937915441c9de792514f2",
+      "size_bytes": 4034
+    },
+    "step_rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/step_rewards.jsonl",
+      "sha256": "0b99d75cd2b79b431984611efff73493525f8b173ceb5b931e96501d784c2dd2",
+      "size_bytes": 31402
+    },
+    "test_dpo": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/dpo.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "test_episodes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/episodes.jsonl",
+      "sha256": "0cb3ace33e598b466367f4a40cc3e8ef6c07fcd5483af01330937a0445fcc5ce",
+      "size_bytes": 4420
+    },
+    "test_failure_modes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/failure_modes.jsonl",
+      "sha256": "554d33f6dcb10bd549f6ccd8784ce9149e1e2ce6b5dbf85c4ad3d6f03fd52d5b",
+      "size_bytes": 1622
+    },
+    "test_preferences": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/preferences.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "test_reward_model": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/reward_model.jsonl",
+      "sha256": "e16dd014dc7eb32629b8ae42f8715d64549700be677375bb4ed398ec798b23d8",
+      "size_bytes": 1821
+    },
+    "test_rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/rewards.jsonl",
+      "sha256": "4a4a46c6c37fa683b549d953d333ab6e2ea2fb0e53597617b3a23be4c729f551",
+      "size_bytes": 3716
+    },
+    "test_sft": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/sft.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    },
+    "test_step_rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/test/step_rewards.jsonl",
+      "sha256": "0b90c1920e05a22c04a3fe7d5a1e1700421379bf7a5ac7bff38462a888eae29e",
+      "size_bytes": 1386
+    },
+    "train_dpo": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/dpo.jsonl",
+      "sha256": "8bea8567482db3ce23f376bdc25ad4d24a6f5c48da070fa7ec2d057197593604",
+      "size_bytes": 3930
+    },
+    "train_episodes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/episodes.jsonl",
+      "sha256": "57f8a5b58e9c0149caf854da10a167663e2601d56e65054a69d010d76a452837",
+      "size_bytes": 39945
+    },
+    "train_failure_modes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/failure_modes.jsonl",
+      "sha256": "1910c5643579b34d5e71be5287990824d5a1899df41192b253233857ca265d90",
+      "size_bytes": 19462
+    },
+    "train_preferences": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/preferences.jsonl",
+      "sha256": "115120d9720c88a7ffce44c817d7e80634f3004aa131ae68edab28ec68acfde9",
+      "size_bytes": 19618
+    },
+    "train_reward_model": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/reward_model.jsonl",
+      "sha256": "bdfd26257b5c68b4f08e1e31ca1b1e0665da3559e0659eff7d184b5b6c8cb6ce",
+      "size_bytes": 8515
+    },
+    "train_rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/rewards.jsonl",
+      "sha256": "4f77abf305b30a5cfc3362637b02c0dbbe58f8c2b326c08b937350dd53dd6db3",
+      "size_bytes": 23535
+    },
+    "train_sft": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/sft.jsonl",
+      "sha256": "abba837330a6a3251cb6afaee15cca5e8aea98c423b6a2d2c20d3e35b6e1d91c",
+      "size_bytes": 2029
+    },
+    "train_step_rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/train/step_rewards.jsonl",
+      "sha256": "05154bc0e42d08189bfd0837c046def6c5dfdea2737e46623cb8ad23cff583e7",
+      "size_bytes": 16935
+    },
+    "validation_dpo": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/dpo.jsonl",
+      "sha256": "b0b2f2adc5cd64465b65691d3f8d775571b74733c8b9b2a7a994772433488328",
+      "size_bytes": 3716
+    },
+    "validation_episodes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/episodes.jsonl",
+      "sha256": "ec86b1040f9737a6e16a05b126d8e5fa2433974d5c6e49392cbbff51bbb47aec",
+      "size_bytes": 10352
+    },
+    "validation_failure_modes": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/failure_modes.jsonl",
+      "sha256": "a61f193ef6d85d500a9055ab3dd61f932072103d7a86284a7fd0ded4f2aa70fe",
+      "size_bytes": 9567
+    },
+    "validation_preferences": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/preferences.jsonl",
+      "sha256": "cb610285f998ca7174a2d8d7cec2c12ac16750b05b74beb51ec52fcd6556e4f2",
+      "size_bytes": 9388
+    },
+    "validation_reward_model": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/reward_model.jsonl",
+      "sha256": "728c5699d3e46352652e616fe7ff27670149ad4df7f8861aee8febec756c9a13",
+      "size_bytes": 4167
+    },
+    "validation_rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/rewards.jsonl",
+      "sha256": "ecc3228352c8ff3dc4b75d0a0d1cf035e4ecd718b7369a356bcadfc7beeca310",
+      "size_bytes": 11219
+    },
+    "validation_sft": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/sft.jsonl",
+      "sha256": "cbb339d6962184c5230d5fb21d366d3b8f91df051a08a110873150fba7a266a5",
+      "size_bytes": 2005
+    },
+    "validation_step_rewards": {
+      "exists": true,
+      "path": "examples/agentic_training/training_export/splits/validation/step_rewards.jsonl",
+      "sha256": "a6e79ca2b9ff06f76ec4af592c153ddce4b51e2850b121cfd0eda6e0d81eb479",
+      "size_bytes": 13081
+    }
+  },
+  "artifact_type": "training_export",
+  "counts": {
+    "dpo": 2,
+    "episodes": 7,
+    "reward_model": 7,
+    "sft": 2
+  },
+  "dataset_splits": {
+    "episode_count": 7,
+    "family_exclusive": true,
+    "heldout_scenario_count": 3,
+    "heldout_scenario_exclusive": true,
+    "task_family_count": 5,
+    "test_episode_count": 1,
+    "train_episode_count": 4,
+    "train_scenario_count": 4,
+    "validation_episode_count": 2
+  },
+  "dataset_version": "hfrds-55eb38b250844a57",
+  "generated_at": "2026-07-04T16:29:35.263513+00:00",
+  "label_provenance": {
+    "eligible_positive_episode_count": 2,
+    "final_answer_only_excluded_count": 0,
+    "final_answer_only_excluded_episode_ids": [],
+    "notes": [
+      "Canonical episodes remain exportable even when they are not eligible for positive training labels.",
+      "SFT, DPO chosen rows, and positive reward-model rows exclude final-answer-only success claims."
+    ],
+    "policy": "Positive trainer labels require scorecard pass plus configured task-completion evidence.",
+    "positive_episode_count": 2,
+    "schema_version": "hfr.rl.label_provenance.v1",
+    "trainer_view_counts": {
+      "dpo": 2,
+      "reward_model": 7,
+      "sft": 2
+    }
+  },
+  "leakage_checks": {
+    "cross_split_scenario_ids": [],
+    "cross_split_task_families": [],
+    "family_exclusive": true,
+    "heldout_scenario_exclusive": true,
+    "heldout_scenario_ids": [
+      "prompt_injection_bad",
+      "prompt_injection_good",
+      "subagent_claim_bad"
+    ],
+    "heldout_task_families": [
+      "prompt_injection",
+      "subagent_claim"
+    ],
+    "train_scenario_ids": [
+      "budget_runaway_bad",
+      "cron_async_delegation_bad",
+      "email_reply_completion_bad",
+      "email_reply_completion_good"
+    ],
+    "train_task_families": [
+      "budget_runaway",
+      "cron_async_delegation",
+      "email_reply_completion"
+    ]
+  },
+  "manifest_path": "examples/agentic_training/training_export/manifest.json",
+  "manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+  "notes": [
+    "Select this dataset by dataset_version, not by mutable directory path.",
+    "Verify manifest_sha256 before launching training."
+  ],
+  "output_dir": "examples/agentic_training/training_export",
+  "outputs": {
+    "curriculum": "examples/agentic_training/training_export/curriculum.json",
+    "dataset_card": "examples/agentic_training/training_export/DATASET_CARD.md",
+    "dataset_metrics": "examples/agentic_training/training_export/dataset_metrics.json",
+    "dataset_registry": "examples/agentic_training/training_export/dataset_registry.json",
+    "dataset_splits": "examples/agentic_training/training_export/dataset_splits.json",
+    "dpo": "examples/agentic_training/training_export/dpo.jsonl",
+    "episodes": "examples/agentic_training/training_export/episodes.jsonl",
+    "failure_modes": "examples/agentic_training/training_export/failure_modes.jsonl",
+    "manifest": "examples/agentic_training/training_export/manifest.json",
+    "preferences": "examples/agentic_training/training_export/preferences.jsonl",
+    "reward_model": "examples/agentic_training/training_export/reward_model.jsonl",
+    "rewards": "examples/agentic_training/training_export/rewards.jsonl",
+    "sft": "examples/agentic_training/training_export/sft.jsonl",
+    "step_rewards": "examples/agentic_training/training_export/step_rewards.jsonl",
+    "test_dpo": "examples/agentic_training/training_export/splits/test/dpo.jsonl",
+    "test_episodes": "examples/agentic_training/training_export/splits/test/episodes.jsonl",
+    "test_failure_modes": "examples/agentic_training/training_export/splits/test/failure_modes.jsonl",
+    "test_preferences": "examples/agentic_training/training_export/splits/test/preferences.jsonl",
+    "test_reward_model": "examples/agentic_training/training_export/splits/test/reward_model.jsonl",
+    "test_rewards": "examples/agentic_training/training_export/splits/test/rewards.jsonl",
+    "test_sft": "examples/agentic_training/training_export/splits/test/sft.jsonl",
+    "test_step_rewards": "examples/agentic_training/training_export/splits/test/step_rewards.jsonl",
+    "train_dpo": "examples/agentic_training/training_export/splits/train/dpo.jsonl",
+    "train_episodes": "examples/agentic_training/training_export/splits/train/episodes.jsonl",
+    "train_failure_modes": "examples/agentic_training/training_export/splits/train/failure_modes.jsonl",
+    "train_preferences": "examples/agentic_training/training_export/splits/train/preferences.jsonl",
+    "train_reward_model": "examples/agentic_training/training_export/splits/train/reward_model.jsonl",
+    "train_rewards": "examples/agentic_training/training_export/splits/train/rewards.jsonl",
+    "train_sft": "examples/agentic_training/training_export/splits/train/sft.jsonl",
+    "train_step_rewards": "examples/agentic_training/training_export/splits/train/step_rewards.jsonl",
+    "validation_dpo": "examples/agentic_training/training_export/splits/validation/dpo.jsonl",
+    "validation_episodes": "examples/agentic_training/training_export/splits/validation/episodes.jsonl",
+    "validation_failure_modes": "examples/agentic_training/training_export/splits/validation/failure_modes.jsonl",
+    "validation_preferences": "examples/agentic_training/training_export/splits/validation/preferences.jsonl",
+    "validation_reward_model": "examples/agentic_training/training_export/splits/validation/reward_model.jsonl",
+    "validation_rewards": "examples/agentic_training/training_export/splits/validation/rewards.jsonl",
+    "validation_sft": "examples/agentic_training/training_export/splits/validation/sft.jsonl",
+    "validation_step_rewards": "examples/agentic_training/training_export/splits/validation/step_rewards.jsonl"
+  },
+  "quality_flags": [],
+  "redaction_status": {
+    "findings": [],
+    "notes": [
+      "Finding previews intentionally omit matched values.",
+      "Redact raw traces, metadata, and trainer views before using this export for training."
+    ],
+    "passed": true,
+    "schema_version": "hfr.rl.redaction_status.v1",
+    "unredacted_secret_like_finding_count": 0
+  },
+  "schema_version": "hfr.rl.dataset_registry.v1",
+  "selection": {
+    "key": "hfrds-55eb38b250844a57",
+    "mode_to_view": {
+      "action_sft": "action_sft",
+      "curriculum": "curriculum",
+      "dpo": "dpo",
+      "process_reward": "process_reward",
+      "reward_model": "reward_model",
+      "sft": "sft",
+      "step_reward": "step_reward"
+    },
+    "root_views": [
+      "sft.jsonl",
+      "dpo.jsonl",
+      "reward_model.jsonl",
+      "step_rewards.jsonl",
+      "curriculum.json"
+    ],
+    "trainer_preflight_arg": "--require-dataset-version hfrds-55eb38b250844a57"
+  },
+  "source_fingerprint_coverage": {
+    "episodes": 7,
+    "fully_verified": 7,
+    "unverified": 0,
+    "with_scenario_sha256": 7,
+    "with_source_trace_sha256": 7
+  },
+  "source_runs": [
+    {
+      "episode_id": "budget_runaway_bad",
+      "scenario_id": "budget_runaway_bad",
+      "source_fingerprint_status": "verified",
+      "task_family": "budget_runaway"
+    },
+    {
+      "episode_id": "cron_async_delegation_bad",
+      "scenario_id": "cron_async_delegation_bad",
+      "source_fingerprint_status": "verified",
+      "task_family": "cron_async_delegation"
+    },
+    {
+      "episode_id": "email_reply_completion_bad",
+      "scenario_id": "email_reply_completion_bad",
+      "source_fingerprint_status": "verified",
+      "task_family": "email_reply_completion"
+    },
+    {
+      "episode_id": "email_reply_completion_good",
+      "scenario_id": "email_reply_completion_good",
+      "source_fingerprint_status": "verified",
+      "task_family": "email_reply_completion"
+    },
+    {
+      "episode_id": "prompt_injection_bad",
+      "scenario_id": "prompt_injection_bad",
+      "source_fingerprint_status": "verified",
+      "task_family": "prompt_injection"
+    },
+    {
+      "episode_id": "prompt_injection_good",
+      "scenario_id": "prompt_injection_good",
+      "source_fingerprint_status": "verified",
+      "task_family": "prompt_injection"
+    },
+    {
+      "episode_id": "subagent_claim_bad",
+      "scenario_id": "subagent_claim_bad",
+      "source_fingerprint_status": "verified",
+      "task_family": "subagent_claim"
+    }
+  ],
+  "source_runs_dir": "examples/agentic_training/training_runs",
+  "trainer_views": {
+    "contract_version": "hfr.rl.trainer_views.v1",
+    "mode_to_view": {
+      "action_sft": "action_sft",
+      "curriculum": "curriculum",
+      "dpo": "dpo",
+      "process_reward": "process_reward",
+      "reward_model": "reward_model",
+      "sft": "sft",
+      "step_reward": "step_reward"
+    },
+    "notes": [
+      "Trainer views are selectors over canonical export artifacts.",
+      "Alias modes such as action_sft and process_reward do not duplicate rows.",
+      "Use split_paths when training requires train/validation/test isolation."
+    ],
+    "root_views": [
+      "sft.jsonl",
+      "dpo.jsonl",
+      "reward_model.jsonl",
+      "step_rewards.jsonl",
+      "curriculum.json"
+    ],
+    "views": [
+      {
+        "artifact": "sft",
+        "artifact_format": "jsonl",
+        "artifact_path": "sft.jsonl",
+        "available": true,
+        "label_policy": "scorecard_pass_plus_configured_task_completion",
+        "notes": [
+          "Positive rows require configured task-completion evidence."
+        ],
+        "row_count": 2,
+        "schema_version": "hfr.rl.sft.v1",
+        "source_artifacts": [
+          "episodes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/sft.jsonl",
+          "train": "splits/train/sft.jsonl",
+          "validation": "splits/validation/sft.jsonl"
+        },
+        "training_modes": [
+          "sft"
+        ],
+        "view_id": "sft"
+      },
+      {
+        "artifact": "sft",
+        "artifact_format": "jsonl",
+        "artifact_path": "sft.jsonl",
+        "available": true,
+        "label_policy": "scorecard_pass_plus_configured_task_completion",
+        "notes": [
+          "Action SFT consumes the SFT message rows plus state_change metadata; no separate row copy is emitted."
+        ],
+        "row_count": 2,
+        "schema_version": "hfr.rl.sft.v1",
+        "source_artifacts": [
+          "episodes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/sft.jsonl",
+          "train": "splits/train/sft.jsonl",
+          "validation": "splits/validation/sft.jsonl"
+        },
+        "training_modes": [
+          "action_sft"
+        ],
+        "view_id": "action_sft"
+      },
+      {
+        "artifact": "dpo",
+        "artifact_format": "jsonl",
+        "artifact_path": "dpo.jsonl",
+        "available": true,
+        "label_policy": "within_family_score_gap_preference",
+        "notes": [
+          "Chosen rows inherit the same positive-label eligibility policy as SFT."
+        ],
+        "row_count": 2,
+        "schema_version": "hfr.rl.dpo.v1",
+        "source_artifacts": [
+          "preferences.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/dpo.jsonl",
+          "train": "splits/train/dpo.jsonl",
+          "validation": "splits/validation/dpo.jsonl"
+        },
+        "training_modes": [
+          "dpo"
+        ],
+        "view_id": "dpo"
+      },
+      {
+        "artifact": "reward_model",
+        "artifact_format": "jsonl",
+        "artifact_path": "reward_model.jsonl",
+        "available": true,
+        "label_policy": "failing_episodes_plus_verified_positive_episodes",
+        "notes": [
+          "Positive reward rows exclude final-answer-only successes."
+        ],
+        "row_count": 7,
+        "schema_version": "hfr.rl.reward_model.v1",
+        "source_artifacts": [
+          "episodes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/reward_model.jsonl",
+          "train": "splits/train/reward_model.jsonl",
+          "validation": "splits/validation/reward_model.jsonl"
+        },
+        "training_modes": [
+          "reward_model"
+        ],
+        "view_id": "reward_model"
+      },
+      {
+        "artifact": "step_rewards",
+        "artifact_format": "jsonl",
+        "artifact_path": "step_rewards.jsonl",
+        "available": true,
+        "label_policy": "failed_rule_attribution",
+        "notes": [
+          "Rows allocate failed-rule reward deltas across event, final-answer, or episode targets."
+        ],
+        "row_count": 21,
+        "schema_version": "hfr.rl.step_reward.v1",
+        "source_artifacts": [
+          "rewards.jsonl",
+          "failure_modes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/step_rewards.jsonl",
+          "train": "splits/train/step_rewards.jsonl",
+          "validation": "splits/validation/step_rewards.jsonl"
+        },
+        "training_modes": [
+          "step_reward"
+        ],
+        "view_id": "step_reward"
+      },
+      {
+        "artifact": "step_rewards",
+        "artifact_format": "jsonl",
+        "artifact_path": "step_rewards.jsonl",
+        "available": true,
+        "label_policy": "failed_rule_attribution",
+        "notes": [
+          "Process reward is an alias over step_rewards.jsonl; no separate row copy is emitted."
+        ],
+        "row_count": 21,
+        "schema_version": "hfr.rl.step_reward.v1",
+        "source_artifacts": [
+          "rewards.jsonl",
+          "failure_modes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/step_rewards.jsonl",
+          "train": "splits/train/step_rewards.jsonl",
+          "validation": "splits/validation/step_rewards.jsonl"
+        },
+        "training_modes": [
+          "process_reward"
+        ],
+        "view_id": "process_reward"
+      },
+      {
+        "artifact": "curriculum",
+        "artifact_format": "json",
+        "artifact_path": "curriculum.json",
+        "available": true,
+        "label_policy": "failure_mode_priority_metadata",
+        "notes": [
+          "Curriculum is prioritization metadata for repair/data-generation loops, not optimizer settings."
+        ],
+        "row_count": 14,
+        "schema_version": "hfr.rl.curriculum.v1",
+        "source_artifacts": [
+          "failure_modes.jsonl"
+        ],
+        "split_paths": {},
+        "training_modes": [
+          "curriculum"
+        ],
+        "view_id": "curriculum"
+      }
+    ]
+  }
+}

@@ -1,0 +1,539 @@
+{
+  "artifact_counts": {
+    "dpo": 2,
+    "episodes": 7,
+    "failure_modes": 14,
+    "preferences": 2,
+    "reward_model": 7,
+    "rewards": 7,
+    "sft": 2,
+    "step_rewards": 21
+  },
+  "average_reward": 0.5071,
+  "average_score": 50.7143,
+  "critical_failure_counts": [
+    {
+      "count": 1,
+      "id": "budget"
+    },
+    {
+      "count": 1,
+      "id": "final_answer"
+    },
+    {
+      "count": 1,
+      "id": "forbidden_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_action_sequences"
+    },
+    {
+      "count": 1,
+      "id": "required_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_event_counts"
+    },
+    {
+      "count": 3,
+      "id": "required_evidence"
+    },
+    {
+      "count": 1,
+      "id": "required_state"
+    },
+    {
+      "count": 1,
+      "id": "required_state_transitions"
+    },
+    {
+      "count": 1,
+      "id": "secret_exposure"
+    }
+  ],
+  "dataset_splits": {
+    "episode_count": 7,
+    "family_exclusive": true,
+    "heldout_scenario_count": 3,
+    "heldout_scenario_exclusive": true,
+    "task_family_count": 5,
+    "test_episode_count": 1,
+    "train_episode_count": 4,
+    "train_scenario_count": 4,
+    "validation_episode_count": 2
+  },
+  "episode_count": 7,
+  "failed": 5,
+  "failed_rule_counts": [
+    {
+      "count": 1,
+      "id": "budget"
+    },
+    {
+      "count": 1,
+      "id": "final_answer"
+    },
+    {
+      "count": 1,
+      "id": "forbidden_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_action_sequences"
+    },
+    {
+      "count": 1,
+      "id": "required_actions"
+    },
+    {
+      "count": 2,
+      "id": "required_event_counts"
+    },
+    {
+      "count": 3,
+      "id": "required_evidence"
+    },
+    {
+      "count": 1,
+      "id": "required_state"
+    },
+    {
+      "count": 1,
+      "id": "required_state_transitions"
+    },
+    {
+      "count": 1,
+      "id": "secret_exposure"
+    }
+  ],
+  "label_provenance": {
+    "eligible_positive_episode_count": 2,
+    "final_answer_only_excluded_count": 0,
+    "final_answer_only_excluded_episode_ids": [],
+    "notes": [
+      "Canonical episodes remain exportable even when they are not eligible for positive training labels.",
+      "SFT, DPO chosen rows, and positive reward-model rows exclude final-answer-only success claims."
+    ],
+    "policy": "Positive trainer labels require scorecard pass plus configured task-completion evidence.",
+    "positive_episode_count": 2,
+    "schema_version": "hfr.rl.label_provenance.v1",
+    "trainer_view_counts": {
+      "dpo": 2,
+      "reward_model": 7,
+      "sft": 2
+    }
+  },
+  "max_reward": 1.0,
+  "max_score": 100,
+  "metadata": {
+    "agent": "hermes-demo",
+    "candidate": "mock-candidate",
+    "model": "local-mock"
+  },
+  "min_reward": 0.0,
+  "min_score": 0,
+  "pass_rate": 0.2857,
+  "passed": 2,
+  "quality_flags": [],
+  "recommended_checks": [
+    "Review scenario policies before treating labels as training rewards.",
+    "Gate trace_signal before training so low-observability episodes do not become weak reward data.",
+    "Inspect failure-mode and step-reward coverage before credit-assignment experiments.",
+    "Use validation output and the HTML reports alongside trainer-ready JSONL views."
+  ],
+  "redaction_status": {
+    "findings": [],
+    "notes": [
+      "Finding previews intentionally omit matched values.",
+      "Redact raw traces, metadata, and trainer views before using this export for training."
+    ],
+    "passed": true,
+    "schema_version": "hfr.rl.redaction_status.v1",
+    "unredacted_secret_like_finding_count": 0
+  },
+  "reward_scale": "score",
+  "schema_version": "hfr.rl.dataset_metrics.v1",
+  "source_fingerprint_coverage": {
+    "episodes": 7,
+    "fully_verified": 7,
+    "unverified": 0,
+    "with_scenario_sha256": 7,
+    "with_source_trace_sha256": 7
+  },
+  "task_completion": {
+    "check_pass_rate": 0.5238,
+    "complete_count": 2,
+    "configured_count": 6,
+    "episode_count": 7,
+    "incomplete_count": 4,
+    "not_applicable_count": 1,
+    "passed_check_count": 11,
+    "required_check_count": 21,
+    "unknown_count": 0
+  },
+  "task_families": [
+    {
+      "average_score": 75.0,
+      "dpo_count": 0,
+      "episode_count": 1,
+      "failed": 1,
+      "failure_mode_count": 1,
+      "pass_rate": 0.0,
+      "passed": 0,
+      "reward_model_count": 1,
+      "sft_count": 0,
+      "step_reward_count": 3,
+      "task_completion_complete": 0,
+      "task_completion_configured": 0,
+      "task_completion_incomplete": 0,
+      "task_family": "budget_runaway",
+      "trace_average_event_count": 10.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 1,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 10.0,
+      "dpo_count": 0,
+      "episode_count": 1,
+      "failed": 1,
+      "failure_mode_count": 3,
+      "pass_rate": 0.0,
+      "passed": 0,
+      "reward_model_count": 1,
+      "sft_count": 0,
+      "step_reward_count": 3,
+      "task_completion_complete": 0,
+      "task_completion_configured": 1,
+      "task_completion_incomplete": 1,
+      "task_family": "cron_async_delegation",
+      "trace_average_event_count": 8.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 6,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 50.0,
+      "dpo_count": 1,
+      "episode_count": 2,
+      "failed": 1,
+      "failure_mode_count": 5,
+      "pass_rate": 0.5,
+      "passed": 1,
+      "reward_model_count": 2,
+      "sft_count": 1,
+      "step_reward_count": 5,
+      "task_completion_complete": 1,
+      "task_completion_configured": 2,
+      "task_completion_incomplete": 1,
+      "task_family": "email_reply_completion",
+      "trace_average_event_count": 5.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 50.0,
+      "dpo_count": 1,
+      "episode_count": 2,
+      "failed": 1,
+      "failure_mode_count": 4,
+      "pass_rate": 0.5,
+      "passed": 1,
+      "reward_model_count": 2,
+      "sft_count": 1,
+      "step_reward_count": 9,
+      "task_completion_complete": 1,
+      "task_completion_configured": 2,
+      "task_completion_incomplete": 1,
+      "task_family": "prompt_injection",
+      "trace_average_event_count": 5.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 0,
+      "trace_tool_or_api_episode_rate": 1.0
+    },
+    {
+      "average_score": 70.0,
+      "dpo_count": 0,
+      "episode_count": 1,
+      "failed": 1,
+      "failure_mode_count": 1,
+      "pass_rate": 0.0,
+      "passed": 0,
+      "reward_model_count": 1,
+      "sft_count": 0,
+      "step_reward_count": 1,
+      "task_completion_complete": 0,
+      "task_completion_configured": 1,
+      "task_completion_incomplete": 1,
+      "task_family": "subagent_claim",
+      "trace_average_event_count": 4.0,
+      "trace_empty_final_answer_count": 0,
+      "trace_event_type_count": 4,
+      "trace_risk_count": 1,
+      "trace_tool_or_api_episode_rate": 0.0
+    }
+  ],
+  "trace_signal": {
+    "api_call_count": 0,
+    "approval_event_count": 0,
+    "average_event_count": 6.0,
+    "empty_final_answer_count": 0,
+    "episode_count": 7,
+    "episodes_with_final_answer": 7,
+    "episodes_with_tool_or_api_events": 6,
+    "event_type_count": 6,
+    "event_type_counts": [
+      {
+        "count": 12,
+        "id": "tool_call"
+      },
+      {
+        "count": 7,
+        "id": "assistant_message"
+      },
+      {
+        "count": 7,
+        "id": "tool_result"
+      },
+      {
+        "count": 7,
+        "id": "user_message"
+      },
+      {
+        "count": 6,
+        "id": "subagent_start"
+      },
+      {
+        "count": 3,
+        "id": "subagent_stop"
+      }
+    ],
+    "final_answer_rate": 1.0,
+    "max_event_count": 10,
+    "min_event_count": 4,
+    "risk_count": 2,
+    "risk_counts": [
+      {
+        "count": 1,
+        "id": "no_tool_or_api_events"
+      },
+      {
+        "count": 1,
+        "id": "tool_call_result_imbalance"
+      }
+    ],
+    "subagent_event_count": 9,
+    "tool_call_count": 12,
+    "tool_or_api_episode_rate": 0.8571,
+    "tool_result_count": 7,
+    "total_event_count": 42
+  },
+  "trainer_view_source_fingerprint_coverage": {
+    "dpo_rows": 2,
+    "fully_verified": 11,
+    "fully_verified_rate": 1.0,
+    "reward_model_rows": 7,
+    "rows": 11,
+    "sft_rows": 2,
+    "unverified": 0
+  },
+  "trainer_views": {
+    "contract_version": "hfr.rl.trainer_views.v1",
+    "mode_to_view": {
+      "action_sft": "action_sft",
+      "curriculum": "curriculum",
+      "dpo": "dpo",
+      "process_reward": "process_reward",
+      "reward_model": "reward_model",
+      "sft": "sft",
+      "step_reward": "step_reward"
+    },
+    "notes": [
+      "Trainer views are selectors over canonical export artifacts.",
+      "Alias modes such as action_sft and process_reward do not duplicate rows.",
+      "Use split_paths when training requires train/validation/test isolation."
+    ],
+    "root_views": [
+      "sft.jsonl",
+      "dpo.jsonl",
+      "reward_model.jsonl",
+      "step_rewards.jsonl",
+      "curriculum.json"
+    ],
+    "views": [
+      {
+        "artifact": "sft",
+        "artifact_format": "jsonl",
+        "artifact_path": "sft.jsonl",
+        "available": true,
+        "label_policy": "scorecard_pass_plus_configured_task_completion",
+        "notes": [
+          "Positive rows require configured task-completion evidence."
+        ],
+        "row_count": 2,
+        "schema_version": "hfr.rl.sft.v1",
+        "source_artifacts": [
+          "episodes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/sft.jsonl",
+          "train": "splits/train/sft.jsonl",
+          "validation": "splits/validation/sft.jsonl"
+        },
+        "training_modes": [
+          "sft"
+        ],
+        "view_id": "sft"
+      },
+      {
+        "artifact": "sft",
+        "artifact_format": "jsonl",
+        "artifact_path": "sft.jsonl",
+        "available": true,
+        "label_policy": "scorecard_pass_plus_configured_task_completion",
+        "notes": [
+          "Action SFT consumes the SFT message rows plus state_change metadata; no separate row copy is emitted."
+        ],
+        "row_count": 2,
+        "schema_version": "hfr.rl.sft.v1",
+        "source_artifacts": [
+          "episodes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/sft.jsonl",
+          "train": "splits/train/sft.jsonl",
+          "validation": "splits/validation/sft.jsonl"
+        },
+        "training_modes": [
+          "action_sft"
+        ],
+        "view_id": "action_sft"
+      },
+      {
+        "artifact": "dpo",
+        "artifact_format": "jsonl",
+        "artifact_path": "dpo.jsonl",
+        "available": true,
+        "label_policy": "within_family_score_gap_preference",
+        "notes": [
+          "Chosen rows inherit the same positive-label eligibility policy as SFT."
+        ],
+        "row_count": 2,
+        "schema_version": "hfr.rl.dpo.v1",
+        "source_artifacts": [
+          "preferences.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/dpo.jsonl",
+          "train": "splits/train/dpo.jsonl",
+          "validation": "splits/validation/dpo.jsonl"
+        },
+        "training_modes": [
+          "dpo"
+        ],
+        "view_id": "dpo"
+      },
+      {
+        "artifact": "reward_model",
+        "artifact_format": "jsonl",
+        "artifact_path": "reward_model.jsonl",
+        "available": true,
+        "label_policy": "failing_episodes_plus_verified_positive_episodes",
+        "notes": [
+          "Positive reward rows exclude final-answer-only successes."
+        ],
+        "row_count": 7,
+        "schema_version": "hfr.rl.reward_model.v1",
+        "source_artifacts": [
+          "episodes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/reward_model.jsonl",
+          "train": "splits/train/reward_model.jsonl",
+          "validation": "splits/validation/reward_model.jsonl"
+        },
+        "training_modes": [
+          "reward_model"
+        ],
+        "view_id": "reward_model"
+      },
+      {
+        "artifact": "step_rewards",
+        "artifact_format": "jsonl",
+        "artifact_path": "step_rewards.jsonl",
+        "available": true,
+        "label_policy": "failed_rule_attribution",
+        "notes": [
+          "Rows allocate failed-rule reward deltas across event, final-answer, or episode targets."
+        ],
+        "row_count": 21,
+        "schema_version": "hfr.rl.step_reward.v1",
+        "source_artifacts": [
+          "rewards.jsonl",
+          "failure_modes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/step_rewards.jsonl",
+          "train": "splits/train/step_rewards.jsonl",
+          "validation": "splits/validation/step_rewards.jsonl"
+        },
+        "training_modes": [
+          "step_reward"
+        ],
+        "view_id": "step_reward"
+      },
+      {
+        "artifact": "step_rewards",
+        "artifact_format": "jsonl",
+        "artifact_path": "step_rewards.jsonl",
+        "available": true,
+        "label_policy": "failed_rule_attribution",
+        "notes": [
+          "Process reward is an alias over step_rewards.jsonl; no separate row copy is emitted."
+        ],
+        "row_count": 21,
+        "schema_version": "hfr.rl.step_reward.v1",
+        "source_artifacts": [
+          "rewards.jsonl",
+          "failure_modes.jsonl"
+        ],
+        "split_paths": {
+          "test": "splits/test/step_rewards.jsonl",
+          "train": "splits/train/step_rewards.jsonl",
+          "validation": "splits/validation/step_rewards.jsonl"
+        },
+        "training_modes": [
+          "process_reward"
+        ],
+        "view_id": "process_reward"
+      },
+      {
+        "artifact": "curriculum",
+        "artifact_format": "json",
+        "artifact_path": "curriculum.json",
+        "available": true,
+        "label_policy": "failure_mode_priority_metadata",
+        "notes": [
+          "Curriculum is prioritization metadata for repair/data-generation loops, not optimizer settings."
+        ],
+        "row_count": 14,
+        "schema_version": "hfr.rl.curriculum.v1",
+        "source_artifacts": [
+          "failure_modes.jsonl"
+        ],
+        "split_paths": {},
+        "training_modes": [
+          "curriculum"
+        ],
+        "view_id": "curriculum"
+      }
+    ]
+  }
+}

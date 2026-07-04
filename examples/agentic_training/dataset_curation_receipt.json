@@ -1,0 +1,131 @@
+{
+  "blocked_reasons": [],
+  "check_count": 4,
+  "checks": [
+    {
+      "actual": {
+        "gate_count": 1,
+        "passing_count": 1
+      },
+      "expected": {
+        "all_passed": true,
+        "gate_count": ">=1",
+        "readiness": "ready_for_dataset_curation"
+      },
+      "id": "rejection_sampling_gate_ready",
+      "passed": true,
+      "summary": "rejection_sampling_gate_ready: passed=True"
+    },
+    {
+      "actual": {
+        "existing_count": 1,
+        "training_export_count": 1
+      },
+      "expected": {
+        "all_exist": true,
+        "training_export_count": ">=1"
+      },
+      "id": "training_exports_present",
+      "passed": true,
+      "summary": "training_exports_present: passed=True"
+    },
+    {
+      "actual": {
+        "accepted_rows_written": 0,
+        "curated_rows_written": 0,
+        "dataset_registry_updated": false,
+        "rejected_rows_written": 0
+      },
+      "expected": {
+        "accepted_rows_written": 0,
+        "curated_rows_written": 0,
+        "dataset_registry_updated": false,
+        "rejected_rows_written": 0
+      },
+      "id": "flight_recorder_did_not_write_curated_rows",
+      "passed": true,
+      "summary": "flight_recorder_did_not_write_curated_rows: passed=True"
+    },
+    {
+      "actual": {
+        "training_gate_required_before_live_training": true
+      },
+      "expected": {
+        "training_gate_required_before_live_training": true
+      },
+      "id": "trainer_handoff_requires_existing_training_gate",
+      "passed": true,
+      "summary": "trainer_handoff_requires_existing_training_gate: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "curation_summary": {
+    "accepted_rows_written": 0,
+    "curated_rows_written": 0,
+    "dataset_registry_updated": false,
+    "rejected_rows_written": 0,
+    "rejection_sampling_gate_count": 1,
+    "training_export_count": 1
+  },
+  "execution_boundary": {
+    "cloud_jobs_started": false,
+    "dataset_registry_updated": false,
+    "dataset_rows_written": false,
+    "receipt_only": true,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "input_artifacts": {
+    "rejection_sampling_gate": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "rejection_sampling_gate.json",
+        "readiness": "ready_for_dataset_curation",
+        "role": "rejection_sampling_gate",
+        "schema_version": "hfr.rejection_sampling_gate.v1",
+        "sha256": "5fa35da1cc9bff69597e6090b15bffdd3b0808e0ac364d300e99cbaf49b9cd07",
+        "size_bytes": 5506
+      }
+    ],
+    "training_export": [
+      {
+        "exists": true,
+        "kind": "directory",
+        "manifest_exists": true,
+        "manifest_path": "training_export/manifest.json",
+        "manifest_sha256": "37faec3191c6135cecb9692f35188e3420db3ce83e20a5e1c43c52c8a115610c",
+        "manifest_size_bytes": 22973,
+        "passed": null,
+        "path": "training_export",
+        "readiness": "",
+        "role": "training_export",
+        "schema_version": "hfr.rl.manifest.v1",
+        "sha256": null,
+        "size_bytes": null
+      }
+    ]
+  },
+  "notes": [
+    "This receipt records dataset curation readiness only; it does not write accepted or rejected rows.",
+    "Existing training exports remain the source for downstream training gates and trainer preflights."
+  ],
+  "passed": true,
+  "readiness": "ready_for_external_trainer_handoff",
+  "receipt_path": "dataset_curation_receipt.json",
+  "recommendation": "run_training_gate_and_trainer_preflight",
+  "schema_version": "hfr.dataset_curation_receipt.v1",
+  "trainer_handoff": {
+    "allowed_dataset_roles": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "reward_model"
+    ],
+    "dataset_rows_source": "existing_training_exports",
+    "requires_rejection_sampling_gate": true,
+    "requires_trainer_preflight": true,
+    "requires_training_gate_before_live_training": true
+  }
+}
