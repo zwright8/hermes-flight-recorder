@@ -41,6 +41,23 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             self.assertEqual(payload["curation_summary"]["curated_rows_written"], 0)
             self.assertFalse(payload["execution_boundary"]["dataset_rows_written"])
 
+            preserved_out = root / "preserved_dataset_curation_receipt.json"
+            preserved_receipt = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=preserved_out,
+                preserve_paths=True,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_dataset_curation_receipt(preserved_out, preserved_receipt)
+            preserved_payload = json.loads(preserved_out.read_text(encoding="utf-8"))
+            self.assertNotIn(str(root), json.dumps(preserved_payload, sort_keys=True))
+            self.assertEqual(preserved_payload["input_artifacts"]["rejection_sampling_gate"][0]["path"], "rejection_sampling_gate.json")
+            self.assertEqual(preserved_payload["input_artifacts"]["training_export"][0]["path"], "training_export")
+            self.assertEqual(preserved_payload["input_artifacts"]["training_export"][0]["manifest_path"], "training_export/manifest.json")
+            preserved_validation = validate_artifacts(dataset_curation_receipt_paths=[preserved_out], strict=True)
+            self.assertTrue(preserved_validation["passed"], preserved_validation)
+
     def test_cli_writes_valid_dataset_curation_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -73,6 +90,33 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
             validation = validate_artifacts(dataset_curation_receipt_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_receipt_redacts_unreplayable_external_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            external_root = root / "external"
+            public_root = root / "public"
+            external_root.mkdir(parents=True)
+            gate = self.write_rejection_sampling_gate(external_root / "rejection_sampling_gate.json")
+            export_dir = self.write_training_export(external_root / "training_export")
+            out = public_root / "dataset_curation_receipt.json"
+            receipt = build_dataset_curation_receipt(
+                rejection_sampling_gate_paths=[gate],
+                training_export_paths=[export_dir],
+                out_path=out,
+                preserve_paths=True,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_dataset_curation_receipt(out, receipt)
+
+            payload = json.loads(out.read_text(encoding="utf-8"))
+            serialized = json.dumps(payload, sort_keys=True)
+            self.assertNotIn(str(external_root), serialized)
+            self.assertFalse(payload["passed"])
+            self.assertEqual(payload["input_artifacts"]["rejection_sampling_gate"][0]["path"], "<redacted:rejection_sampling_gate.json>")
+            self.assertFalse(payload["input_artifacts"]["rejection_sampling_gate"][0]["exists"])
+            self.assertEqual(payload["input_artifacts"]["training_export"][0]["path"], "<redacted:training_export>")
+            self.assertFalse(payload["input_artifacts"]["training_export"][0]["exists"])
 
     def test_receipt_blocks_missing_training_export(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -141,7 +185,7 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             self.assertIn("dataset_curation_receipt.input_artifacts contains unknown field", errors)
             self.assertIn("dataset_curation_receipt.trainer_handoff contains unknown field", errors)
 
-    def test_strict_validation_warns_on_absolute_input_artifact_refs(self):
+    def test_validation_rejects_absolute_input_artifact_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             gate = self.write_rejection_sampling_gate(root / "rejection_sampling_gate.json")
@@ -161,18 +205,23 @@ class DatasetCurationReceiptTests(unittest.TestCase):
             payload["input_artifacts"]["training_export"][0]["manifest_path"] = str((export_dir / "manifest.json").resolve())
             out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-            permissive_validation = validate_artifacts(dataset_curation_receipt_paths=[out])
             validation = validate_artifacts(dataset_curation_receipt_paths=[out], strict=True)
 
-            self.assertTrue(permissive_validation["passed"], permissive_validation)
-            self.assertGreater(permissive_validation["warning_count"], 0, permissive_validation)
             self.assertFalse(validation["passed"], validation)
-            self.assertEqual(validation["error_count"], 0, validation)
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            self.assertIn("dataset_curation_receipt.receipt_path is absolute", warnings)
-            self.assertIn("dataset_curation_receipt.input_artifacts.rejection_sampling_gate[0].path is absolute", warnings)
-            self.assertIn("dataset_curation_receipt.input_artifacts.training_export[0].path is absolute", warnings)
-            self.assertIn("dataset_curation_receipt.input_artifacts.training_export[0].manifest_path is absolute", warnings)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("dataset_curation_receipt.receipt_path must be a safe relative path or redacted placeholder", errors)
+            self.assertIn(
+                "dataset_curation_receipt.input_artifacts.rejection_sampling_gate[0].path must be a safe relative path or redacted placeholder",
+                errors,
+            )
+            self.assertIn(
+                "dataset_curation_receipt.input_artifacts.training_export[0].path must be a safe relative path or redacted placeholder",
+                errors,
+            )
+            self.assertIn(
+                "dataset_curation_receipt.input_artifacts.training_export[0].manifest_path must be a safe relative path or redacted placeholder",
+                errors,
+            )
 
     def test_validation_rejects_stale_rejection_sampling_gate_ref(self):
         with tempfile.TemporaryDirectory() as tmp:

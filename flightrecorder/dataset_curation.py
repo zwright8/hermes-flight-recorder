@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 DATASET_CURATION_RECEIPT_SCHEMA_VERSION = "hfr.dataset_curation_receipt.v1"
@@ -25,9 +25,10 @@ def build_dataset_curation_receipt(
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a dataset curation handoff receipt without writing dataset rows."""
+    output_dir = Path(out_path).parent if out_path else None
     refs = {
-        "rejection_sampling_gate": [_artifact_ref(path, "rejection_sampling_gate", preserve_paths) for path in rejection_sampling_gate_paths],
-        "training_export": [_artifact_ref(path, "training_export", preserve_paths) for path in training_export_paths],
+        "rejection_sampling_gate": [_artifact_ref(path, "rejection_sampling_gate", preserve_paths, output_dir) for path in rejection_sampling_gate_paths],
+        "training_export": [_artifact_ref(path, "training_export", preserve_paths, output_dir) for path in training_export_paths],
     }
     checks: list[dict[str, Any]] = []
     _add_check(
@@ -62,7 +63,7 @@ def build_dataset_curation_receipt(
     return {
         "schema_version": DATASET_CURATION_RECEIPT_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
-        "receipt_path": _display_path(Path(out_path), preserve_paths) if out_path else "",
+        "receipt_path": _display_path(Path(out_path), preserve_paths, output_dir) if out_path else "",
         "passed": not failed,
         "readiness": "ready_for_external_trainer_handoff" if not failed else "blocked",
         "recommendation": "run_training_gate_and_trainer_preflight" if not failed else "fix_rejection_sampling_or_training_exports",
@@ -116,28 +117,32 @@ def write_dataset_curation_receipt(path: str | Path, receipt: dict[str, Any]) ->
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool) -> dict[str, Any]:
+def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, output_dir: Path | None = None) -> dict[str, Any]:
     path = Path(path_value)
     manifest_path = path / "manifest.json" if path.is_dir() else path
-    payload = _read_json(manifest_path)
+    displayed_path = _display_path(path, preserve_paths, output_dir)
+    exists = _is_public_dataset_curation_ref_path(displayed_path) and path.exists()
+    manifest_displayed_path = _display_path(manifest_path, preserve_paths, output_dir)
+    manifest_exists = _is_public_dataset_curation_ref_path(manifest_displayed_path) and manifest_path.exists() and manifest_path.is_file()
+    payload = _read_json(manifest_path) if manifest_exists else {}
     ref = {
         "role": role,
-        "path": _display_path(path, preserve_paths),
-        "kind": "directory" if path.exists() and path.is_dir() else "file",
-        "exists": path.exists(),
-        "sha256": _sha256(path) if path.exists() and path.is_file() else None,
-        "size_bytes": path.stat().st_size if path.exists() and path.is_file() else None,
+        "path": displayed_path,
+        "kind": "directory" if exists and path.is_dir() else "file",
+        "exists": exists,
+        "sha256": _sha256(path) if exists and path.is_file() else None,
+        "size_bytes": path.stat().st_size if exists and path.is_file() else None,
         "schema_version": str(payload.get("schema_version") or ""),
         "passed": payload.get("passed") if isinstance(payload.get("passed"), bool) else None,
         "readiness": str(payload.get("readiness") or ""),
     }
-    if path.exists() and path.is_dir():
+    if exists and path.is_dir():
         ref.update(
             {
-                "manifest_path": _display_path(manifest_path, preserve_paths),
-                "manifest_exists": manifest_path.exists(),
-                "manifest_sha256": _sha256(manifest_path) if manifest_path.exists() and manifest_path.is_file() else None,
-                "manifest_size_bytes": manifest_path.stat().st_size if manifest_path.exists() and manifest_path.is_file() else None,
+                "manifest_path": manifest_displayed_path,
+                "manifest_exists": manifest_exists,
+                "manifest_sha256": _sha256(manifest_path) if manifest_exists else None,
+                "manifest_size_bytes": manifest_path.stat().st_size if manifest_exists else None,
             }
         )
     return ref
@@ -166,26 +171,61 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _display_path(path: Path, preserve_paths: bool) -> str:
+def _display_path(path: Path, preserve_paths: bool, output_dir: Path | None = None) -> str:
+    raw = str(path)
+    if output_dir is not None:
+        try:
+            relative = os.path.relpath(path.resolve(), output_dir.resolve())
+        except OSError:
+            return f"<redacted:{_basename(raw)}>"
+        return relative if _is_public_dataset_curation_ref_path(relative) else f"<redacted:{_basename(raw)}>"
     if preserve_paths:
-        return str(path)
+        return raw if _is_public_dataset_curation_ref_path(raw) else f"<redacted:{_basename(raw)}>"
     if not path.is_absolute():
-        return str(path)
+        return raw if _is_public_dataset_curation_ref_path(raw) else f"<redacted:{_basename(raw)}>"
     try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
+        relative = str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
-        return str(path)
+        return f"<redacted:{_basename(raw)}>"
+    return relative if _is_public_dataset_curation_ref_path(relative) else f"<redacted:{_basename(raw)}>"
 
 
 def _output_relative_path(value: Any, output_dir: Path) -> Any:
     if not isinstance(value, str) or not value:
         return value
+    if value.startswith("<redacted:"):
+        return value
     path = Path(value)
     if not path.is_absolute():
+        if not _is_public_dataset_curation_ref_path(value):
+            return f"<redacted:{_basename(value)}>"
         if not path.exists():
             return value
         path = path.resolve()
-    return os.path.relpath(path.resolve(), output_dir.resolve())
+    try:
+        relative = os.path.relpath(path.resolve(), output_dir.resolve())
+    except OSError:
+        return f"<redacted:{_basename(value)}>"
+    return relative if _is_public_dataset_curation_ref_path(relative) else f"<redacted:{_basename(value)}>"
+
+
+def _is_public_dataset_curation_ref_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
 
 
 def _sha256(path: Path) -> str:

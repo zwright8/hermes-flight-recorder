@@ -756,6 +756,11 @@ flightrecorder validate \
   --strict
 ```
 
+Dataset-curation receipts use the same public-safe replay boundary as
+rejection-sampling gates: gate refs, training-export directories, and manifest
+refs must resolve relative to the receipt directory. Unsafe absolute or
+traversal refs are redacted when generated and rejected during validation.
+
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,
 promotion, and next-iteration receipts into one iteration contract:

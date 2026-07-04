@@ -3716,7 +3716,7 @@ def _parser() -> argparse.ArgumentParser:
     dataset_curation_receipt.add_argument("--training-export", action="append", required=True, help="training export directory or manifest; may be repeated")
     dataset_curation_receipt.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     dataset_curation_receipt.add_argument("--out", required=True, help="Write hfr.dataset_curation_receipt.v1 JSON to this path")
-    dataset_curation_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in receipt refs")
+    dataset_curation_receipt.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in receipt refs; unsafe absolute or traversal refs remain redacted")
     dataset_curation_receipt.set_defaults(func=cmd_dataset_curation_receipt)
 
     model_grader = subparsers.add_parser("model-grader", help="Build fail-closed rubric/model-grader review contracts")

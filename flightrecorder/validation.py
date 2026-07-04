@@ -8979,8 +8979,8 @@ def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: Validati
         target.errors.append("dataset_curation_receipt.blocked_reasons must be a list of strings.")
     if not isinstance(receipt.get("receipt_path"), str):
         target.errors.append("dataset_curation_receipt.receipt_path must be a string.")
-    else:
-        _warn_absolute_public_path(target, "dataset_curation_receipt.receipt_path", receipt.get("receipt_path"))
+    elif receipt.get("receipt_path") and not _is_public_dataset_curation_ref_path(receipt.get("receipt_path")):
+        target.errors.append("dataset_curation_receipt.receipt_path must be a safe relative path or redacted placeholder.")
 
     artifacts = receipt.get("input_artifacts")
     if not isinstance(artifacts, dict):
@@ -9084,7 +9084,11 @@ def _validate_dataset_curation_ref(
         if not isinstance(row.get(field_name), str) or not row.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
     if isinstance(row.get("path"), str) and row.get("path"):
-        _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
+        if row["path"].startswith("<redacted:"):
+            if row.get("exists") is True:
+                target.errors.append(f"{label}.path cannot be redacted when exists is true.")
+        elif not _is_public_dataset_curation_ref_path(row["path"]):
+            target.errors.append(f"{label}.path must be a safe relative path or redacted placeholder.")
     if row.get("role") != role:
         target.errors.append(f"{label}.role must be {role!r}.")
     if row.get("kind") not in {"file", "directory"}:
@@ -9108,7 +9112,11 @@ def _validate_dataset_curation_ref(
         if not isinstance(row.get("manifest_path"), str) or not row.get("manifest_path"):
             target.errors.append(f"{label}.manifest_path must be a non-empty string for directory refs.")
         elif isinstance(row.get("manifest_path"), str):
-            _warn_absolute_public_path(target, f"{label}.manifest_path", row.get("manifest_path"))
+            if row["manifest_path"].startswith("<redacted:"):
+                if row.get("manifest_exists") is True:
+                    target.errors.append(f"{label}.manifest_path cannot be redacted when manifest_exists is true.")
+            elif not _is_public_dataset_curation_ref_path(row["manifest_path"]):
+                target.errors.append(f"{label}.manifest_path must be a safe relative path or redacted placeholder.")
         if row.get("manifest_exists") is not True:
             target.errors.append(f"{label}.manifest_exists must be true for directory refs.")
         if not _is_sha256(row.get("manifest_sha256")):
@@ -9165,12 +9173,23 @@ def _validate_dataset_curation_directory_ref(row: dict[str, Any], target: Valida
 
 
 def _resolve_dataset_curation_ref_path(value: Any, source_path: Path) -> Path | None:
-    if not isinstance(value, str) or not value or value.startswith("<redacted:") or _is_windows_absolute(value):
+    if not isinstance(value, str) or value.startswith("<redacted:") or not _is_public_dataset_curation_ref_path(value):
         return None
+    return source_path.parent / value
+
+
+def _is_public_dataset_curation_ref_path(value: str) -> bool:
     path = Path(value)
-    if path.is_absolute():
-        return path
-    return source_path.parent / path
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and (value.startswith("<redacted:") or not path.is_absolute())
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
 
 
 def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
