@@ -256,7 +256,7 @@
       "type": "object"
     },
     "cloud_training_lineage": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "ambiguous_link_count": { "minimum": 0, "type": "integer" },
         "ambiguous_links": {
@@ -503,7 +503,7 @@
       "type": "object"
     },
     "group_summary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "artifact_count": { "minimum": 0, "type": "integer" },
         "artifact_manifest_present": { "type": "boolean" },

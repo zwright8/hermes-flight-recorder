@@ -4439,6 +4439,18 @@ _AGENTIC_LOOP_LEDGER_ITERATION_KEYS = {
 }
 _AGENTIC_LOOP_LEDGER_COST_KEYS = {"max_cloud_cost_usd", "max_gpu_hours", "live_spend_allowed"}
 _AGENTIC_LOOP_LEDGER_BASIC_GROUP_KEYS = {"group", "artifact_count", "roles_present", "roles_missing"}
+_AGENTIC_LOOP_LEDGER_CLOUD_TRAINING_KEYS = _AGENTIC_LOOP_LEDGER_BASIC_GROUP_KEYS | {
+    "provider_registry_present",
+    "preflight_present",
+    "artifact_manifest_present",
+    "launch_plan_present",
+    "launch_receipt_present",
+    "status_receipt_present",
+    "provider_api_calls_started",
+    "cloud_jobs_started",
+    "credential_values_recorded",
+    "live_spend_allowed",
+}
 _AGENTIC_LOOP_LEDGER_GOVERNANCE_KEYS = _AGENTIC_LOOP_LEDGER_BASIC_GROUP_KEYS | {
     "promotion_decision_present",
     "promotion_ledger_present",
@@ -5175,6 +5187,7 @@ def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any]
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_LOOP_LEDGER_CLOUD_TRAINING_KEYS, target, label)
     role_counts = _agentic_loop_count_map(row.get("artifact_role_counts"), "role")
     present = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role_counts.get(role, 0) > 0]
     missing = [role for role in AGENTIC_LOOP_CLOUD_TRAINING_ROLES if role not in present]
@@ -5231,6 +5244,7 @@ def _validate_agentic_loop_ledger_cloud_training_lineage(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_CLOUD_LINEAGE_KEYS, target, label)
     source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
     if source_path is None or not source_path.exists() or not source_path.is_file():
         return

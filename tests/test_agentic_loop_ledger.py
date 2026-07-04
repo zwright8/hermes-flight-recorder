@@ -371,6 +371,8 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             iteration["provider_job_id"] = "job_live"
             iteration["artifact_group_counts"][0]["private_metric"] = "hidden"
             iteration["cost_estimate"]["provider_invoice_id"] = "invoice_live"
+            iteration["cloud_training"]["provider_console_url"] = "https://example.invalid/cloud"
+            iteration["cloud_training_lineage"]["provider_trace_url"] = "https://example.invalid/trace"
             iteration["serving"]["live_endpoint_url"] = "https://example.invalid/serve"
             iteration["evals"]["benchmark_job_id"] = "bench_live"
             iteration["training_outputs"]["model_download_path"] = "/redacted/model"
@@ -390,6 +392,14 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             )
             self.assertIn(
                 "agentic_loop_ledger.iterations[0].cost_estimate contains unknown field(s): ['provider_invoice_id'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_loop_ledger.iterations[0].cloud_training contains unknown field(s): ['provider_console_url'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_loop_ledger.iterations[0].cloud_training_lineage contains unknown field(s): ['provider_trace_url'].",
                 errors,
             )
             self.assertIn("agentic_loop_ledger.iterations[0].serving contains unknown field(s): ['live_endpoint_url'].", errors)
