@@ -366,6 +366,8 @@ entries for candidates, champions, and rollback targets.
   promotion decisions with path-backed SHA-256 and byte-size evidence.
 - Training plans, serving receipts, and adapter manifests bind their embedded
   compatibility-report and training-plan refs with matching byte-size evidence.
+- Model-layer path-backed links and embedded refs reject symlinked parent
+  components before trusting SHA-256 or byte-size evidence.
 - Rollback target is always explicit for promoted models.
 
 ### Verification

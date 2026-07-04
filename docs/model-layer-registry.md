@@ -24,12 +24,15 @@ or launch GPU work.
 - `experiments/registry/training_plans/*.json`: dry-run plans that bind a
   training candidate to a dataset manifest and optional compatibility report.
 - Path-backed registry links record SHA-256 and byte-size evidence; validation
-  reopens resolvable link paths and rejects stale size or hash records.
+  reopens resolvable link paths and rejects stale size or hash records. Link
+  paths must not be symlinks or traverse symlinked parent directories.
 - Schema contracts reject path-backed registry links that omit SHA-256 or
   byte-size evidence.
 - Embedded compatibility-report refs in training plans and serving receipts,
   plus training-plan refs in adapter manifests, must carry SHA-256 and
-  byte-size evidence for the same stale-reference checks.
+  byte-size evidence for the same stale-reference checks. Validation rejects
+  embedded refs that traverse symlinked parent directories before trusting
+  their fingerprints.
 - Schema contracts reject embedded refs that omit required byte-size evidence.
 
 ## Command Sequence

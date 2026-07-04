@@ -2625,6 +2625,9 @@ def _validate_model_registry_links_files(
             if link_path.is_symlink():
                 target.errors.append(f"{record_label}.path must not resolve to a symlink.")
                 continue
+            if _path_has_symlink_component(link_path, include_leaf=False):
+                target.errors.append(f"{record_label}.path must not traverse symlinked components.")
+                continue
             if not link_path.is_file():
                 target.errors.append(f"{record_label}.path does not resolve to a linked artifact file.")
                 continue
@@ -2645,6 +2648,9 @@ def _validate_model_layer_file_ref(
     link_path = _model_registry_link_path(path_value, source_path)
     if link_path.is_symlink():
         target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if _path_has_symlink_component(link_path, include_leaf=False):
+        target.errors.append(f"{label}.path must not traverse symlinked components.")
         return
     if not link_path.is_file():
         target.errors.append(f"{label}.path does not resolve to a linked artifact file.")

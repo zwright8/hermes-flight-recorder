@@ -351,6 +351,43 @@ class ModelRegistryTests(unittest.TestCase):
                 errors,
             )
 
+    def test_validate_rejects_registry_link_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            dataset_manifest = linked_target / "dataset_manifest.json"
+            linked_parent = root / "linked_manifests"
+            registry_path = root / "model_registry.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+            registry = register_model_candidate(new_model_registry(registry_path=registry_path), candidate)
+            registry = link_model_registry_artifact(
+                registry,
+                entry_id=candidate["candidate_id"],
+                collection="datasets",
+                artifact_id="local_mock_dataset_v1",
+                kind="dataset_manifest",
+                path=dataset_manifest,
+            )
+            registry["entries"][candidate["candidate_id"]]["links"]["datasets"][0]["path"] = str(
+                Path(linked_parent.name) / dataset_manifest.name
+            )
+            write_json(registry_path, registry)
+
+            summary = validate_artifacts(model_registry_paths=[registry_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "model_registry.entries.local-mock-tiny-chat.links.datasets[0].path must not traverse symlinked components.",
+                errors,
+            )
+
     def test_serving_probe_receipt_avoids_launches_and_links(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -543,6 +580,46 @@ class ModelRegistryTests(unittest.TestCase):
             self.assertFalse(summary["passed"])
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("training_plan.compatibility_report.path must not resolve to a symlink.", errors)
+
+    def test_validate_rejects_training_plan_compatibility_report_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = approved_candidate()
+            dataset_manifest = root / "dataset_manifest.json"
+            report_dir = root / "reports"
+            report_dir.mkdir()
+            report_path = report_dir / "compatibility_report.json"
+            report_link_parent = root / "linked_reports"
+            plan_path = root / "training_plan.json"
+            write_json(dataset_manifest, {"dataset_id": "local_mock_dataset_v1"})
+            report = build_model_compatibility_report(candidate, out_path=report_path)
+            write_json(report_path, report)
+            try:
+                report_link_parent.symlink_to(report_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks are not available: {exc}")
+            registry = register_model_candidate(new_model_registry(registry_path=root / "model_registry.json"), candidate)
+            registry = move_model_alias(registry, alias="candidate", target=candidate["candidate_id"], reason="unit test")
+            plan = build_dry_run_training_plan(
+                registry,
+                model_ref="candidate",
+                dataset_id="local_mock_dataset_v1",
+                dataset_manifest=dataset_manifest,
+                trainer="local-dry-run",
+                mode="sft",
+                output_dir=root / "outputs",
+                out_path=plan_path,
+                compatibility_report=report,
+                compatibility_report_path=report_path,
+            )
+            plan["compatibility_report"]["path"] = str(Path(report_link_parent.name) / report_path.name)
+            write_json(plan_path, plan)
+
+            summary = validate_artifacts(training_plan_paths=[plan_path])
+
+            self.assertFalse(summary["passed"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("training_plan.compatibility_report.path must not traverse symlinked components.", errors)
 
     def test_validate_rejects_serving_probe_compatibility_report_size_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
