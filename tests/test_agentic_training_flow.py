@@ -251,6 +251,90 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("execution_boundary.trainer_command_executed must be false", errors)
 
+    def test_validation_rejects_forged_flow_side_effect_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            receipt["provider_job_id"] = "job-123"
+            receipt["checks"][0]["signed_url"] = "https://example.invalid/receipt"
+            receipt["source_artifacts"]["trainer_consumer_plan"]["credential_hint"] = "redacted"
+            receipt["delegated_flow"]["live_endpoint_url"] = "https://example.invalid/endpoint"
+            receipt["delegated_flow"]["stages"][0]["provider_dataset_id"] = "dataset-123"
+            receipt["delegated_flow"]["command"]["cloud_command_id"] = "cmd-123"
+            receipt["mode_contract_check"]["provider_job_started"] = True
+            receipt["mode_contract_check"]["reward_contract"]["secret_env"] = "TOKEN"
+            receipt["mode_contract_check"]["side_effect_boundary"]["provider_api_called"] = False
+            receipt["mode_contract_check"]["external_runner_contract"]["provider_signed_url"] = "redacted-url"
+            receipt["flow_mode_gate"]["live_training_override"] = True
+            receipt["metrics"]["cloud_cost_usd"] = 0
+            receipt["execution_boundary"]["provider_api_called"] = False
+            receipt["handoff_contract"]["weights_mutation_allowed"] = False
+            write_agentic_training_flow(out, receipt)
+
+            schema = check_schema_file(out)
+            self.assertFalse(schema["passed"])
+
+            validation = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_flow contains unknown field(s): ['provider_job_id'].", errors)
+            self.assertIn("agentic_training_flow.checks[0] contains unknown field(s): ['signed_url'].", errors)
+            self.assertIn(
+                "agentic_training_flow.source_artifacts.trainer_consumer_plan contains unknown field(s): ['credential_hint'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.delegated_flow contains unknown field(s): ['live_endpoint_url'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.delegated_flow.stages[0] contains unknown field(s): ['provider_dataset_id'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.delegated_flow.command contains unknown field(s): ['cloud_command_id'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check contains unknown field(s): ['provider_job_started'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.reward_contract contains unknown field(s): ['secret_env'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.side_effect_boundary contains unknown field(s): ['provider_api_called'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.external_runner_contract contains unknown field(s): ['provider_signed_url'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.flow_mode_gate contains unknown field(s): ['live_training_override'].",
+                errors,
+            )
+            self.assertIn("agentic_training_flow.metrics contains unknown field(s): ['cloud_cost_usd'].", errors)
+            self.assertIn(
+                "agentic_training_flow.execution_boundary contains unknown field(s): ['provider_api_called'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.handoff_contract contains unknown field(s): ['weights_mutation_allowed'].",
+                errors,
+            )
+
     def test_validation_rejects_flow_path_traversal(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

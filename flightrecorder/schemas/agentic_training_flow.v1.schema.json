@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_flow.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Fail-closed delegated trainer-flow receipt for executable SFT, action-SFT, and DPO handoffs.",
   "properties": {
     "blocked_reasons": {
@@ -60,7 +60,7 @@
   "type": "object",
   "$defs": {
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": { "type": "object" },
         "expected": { "type": "object" },
@@ -72,7 +72,7 @@
       "type": "object"
     },
     "command": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_root": { "type": "string" },
         "command_arg_count": { "minimum": 0, "type": "integer" },
@@ -98,7 +98,7 @@
       "type": "object"
     },
     "delegatedFlow": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "backend": { "type": "string" },
         "command": { "$ref": "#/$defs/command" },
@@ -116,7 +116,7 @@
       "type": "object"
     },
     "executionBoundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": { "const": false },
         "credential_values_recorded": { "const": false },
@@ -142,7 +142,7 @@
       "type": "object"
     },
     "flowModeGate": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "blocked_by_default": { "type": "boolean" },
         "category": { "type": "string" },
@@ -176,7 +176,7 @@
       "type": "object"
     },
     "handoffContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "blocked_mode_categories": {
           "items": { "type": "string" },
@@ -224,7 +224,7 @@
       "type": "object"
     },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "check_count": { "minimum": 0, "type": "integer" },
         "command_arg_count": { "minimum": 0, "type": "integer" },
@@ -248,7 +248,7 @@
       "type": "object"
     },
     "modeContractCheck": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "category": { "type": "string" },
         "data_requirement_count": { "minimum": 0, "type": "integer" },
@@ -290,7 +290,7 @@
       "type": "object"
     },
     "modeExternalRunnerContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "runner_must_block_unredacted_traces": { "type": "boolean" },
         "runner_must_require_recommendation": { "type": "string" },
@@ -308,7 +308,7 @@
       "type": "object"
     },
     "modeRewardContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "callable_signature": { "type": "string" },
         "external_runner_must_supply": { "type": "boolean" },
@@ -334,7 +334,7 @@
       "type": "object"
     },
     "modeSideEffectBoundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": { "type": "boolean" },
         "dry_run_only": { "type": "boolean" },
@@ -356,7 +356,7 @@
       "type": "object"
     },
     "sourceArtifact": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": { "type": "boolean" },
         "passed": { "type": ["boolean", "null"] },
@@ -398,7 +398,7 @@
       "type": "object"
     },
     "stage": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "row_count": { "minimum": 0, "type": "integer" },
         "stage_id": { "minLength": 1, "type": "string" },

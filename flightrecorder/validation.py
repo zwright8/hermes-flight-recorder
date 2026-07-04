@@ -2563,12 +2563,170 @@ def _validate_training_plan(plan: dict[str, Any], target: ValidationTarget, sour
     )
 
 
+_AGENTIC_TRAINING_FLOW_KEYS = {
+    "schema_version",
+    "created_at",
+    "flow_path",
+    "flow_id",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "mode_contract_check",
+    "flow_mode_gate",
+    "source_artifacts",
+    "delegated_flow",
+    "metrics",
+    "execution_boundary",
+    "handoff_contract",
+    "notes",
+}
+_AGENTIC_TRAINING_FLOW_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_AGENTIC_TRAINING_FLOW_SOURCE_ARTIFACT_KEYS = {
+    "agentic_training_plan",
+    "agentic_training_runtime_preflight",
+    "trainer_consumer_plan",
+}
+_AGENTIC_TRAINING_FLOW_SOURCE_REF_KEYS = {
+    "role",
+    "path",
+    "exists",
+    "regular_file",
+    "schema_version",
+    "passed",
+    "recommendation",
+    "sha256",
+    "size_bytes",
+}
+_AGENTIC_TRAINING_FLOW_DELEGATED_KEYS = {"mode", "backend", "stage_sequence", "stages", "command"}
+_AGENTIC_TRAINING_FLOW_STAGE_KEYS = {
+    "stage_index",
+    "stage_id",
+    "view_name",
+    "view_path",
+    "view_schema_version",
+    "row_count",
+    "view_ready",
+}
+_AGENTIC_TRAINING_FLOW_COMMAND_KEYS = {
+    "execution_cwd",
+    "archive_root",
+    "external_code_root",
+    "command_argv",
+    "command_shell",
+    "command_arg_count",
+    "trainer_input_count",
+    "external_code_file_count",
+}
+_AGENTIC_TRAINING_FLOW_MODE_CONTRACT_KEYS = {
+    "mode",
+    "category",
+    "present",
+    "mode_matches_plan",
+    "planning_gate_open",
+    "planning_required_flag",
+    "data_requirement_count",
+    "unsatisfied_data_requirement_ids",
+    "reward_contract",
+    "side_effect_boundary",
+    "external_runner_contract",
+    "passed",
+    "error_count",
+    "errors",
+}
+_AGENTIC_TRAINING_FLOW_REWARD_CONTRACT_KEYS = {
+    "kind",
+    "required",
+    "external_runner_must_supply",
+    "external_runner_must_validate",
+    "flight_recorder_supplies_callable",
+    "may_call_paid_services_by_default",
+    "may_require_secrets_by_default",
+    "must_not_use_unredacted_traces",
+    "callable_signature",
+}
+_AGENTIC_TRAINING_FLOW_SIDE_EFFECT_KEYS = {
+    "dry_run_only",
+    "training_started",
+    "cloud_jobs_started",
+    "model_downloads_started",
+    "paid_model_grader_calls_started",
+    "weights_updated",
+    "provider_credentials_required_by_flight_recorder",
+}
+_AGENTIC_TRAINING_FLOW_EXTERNAL_RUNNER_KEYS = {
+    "runner_owns_execution",
+    "runner_must_revalidate_inputs",
+    "runner_must_require_recommendation",
+    "runner_must_validate_reward_contract",
+    "runner_must_block_unredacted_traces",
+}
+_AGENTIC_TRAINING_FLOW_MODE_GATE_KEYS = {
+    "mode",
+    "category",
+    "executable_by_default",
+    "blocked_by_default",
+    "promotion_required",
+    "promotion_status",
+    "required_plan_opt_in_flag",
+    "mode_contract_ready",
+    "reward_contract_kind",
+    "external_runner_must_supply_reward",
+    "external_runner_must_validate_reward",
+    "reason",
+}
+_AGENTIC_TRAINING_FLOW_METRIC_KEYS = {
+    "check_count",
+    "failed_check_count",
+    "stage_count",
+    "executable_stage_count",
+    "selected_view_count",
+    "command_arg_count",
+    "trainer_input_count",
+    "external_code_file_count",
+}
+_AGENTIC_TRAINING_FLOW_BOUNDARY_KEYS = {
+    "flow_plan_only",
+    "training_started",
+    "trainer_command_executed",
+    "subprocess_started",
+    "cloud_jobs_started",
+    "model_downloads_started",
+    "weights_updated_by_flight_recorder",
+    "trainer_modules_imported",
+    "credential_values_recorded",
+}
+_AGENTIC_TRAINING_FLOW_HANDOFF_KEYS = {
+    "runner_owns_execution",
+    "runner_must_require_recommendation",
+    "runner_must_emit_result_schema",
+    "requires_runtime_preflight",
+    "requires_trainer_consumer_plan",
+    "requires_mode_contract",
+    "requires_mode_contract_ready",
+    "requires_registered_model_and_dataset",
+    "requires_redacted_dataset",
+    "executable_modes",
+    "blocked_modes",
+    "blocked_mode_categories",
+    "blocked_mode_stages",
+    "flight_recorder_executed_trainer",
+}
+
+
 def _validate_agentic_training_flow(flow: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(flow, _AGENTIC_TRAINING_FLOW_KEYS, target, "agentic_training_flow")
     _require_equal(flow, "schema_version", AGENTIC_TRAINING_FLOW_SCHEMA_VERSION, target, prefix="agentic_training_flow.")
     checks = flow.get("checks")
     if not isinstance(checks, list):
         target.errors.append("agentic_training_flow.checks must be a list.")
         checks = []
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _AGENTIC_TRAINING_FLOW_CHECK_KEYS, target, f"agentic_training_flow.checks[{index}]")
     failed_checks = _validate_gate_like_checks(checks, target, "agentic_training_flow.checks")
     if flow.get("check_count") != len(checks):
         target.errors.append(f"agentic_training_flow.check_count expected {len(checks)}, got {flow.get('check_count')!r}.")
@@ -2637,6 +2795,7 @@ def _validate_agentic_training_flow_sources(value: Any, target: ValidationTarget
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.source_artifacts must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_SOURCE_ARTIFACT_KEYS, target, "agentic_training_flow.source_artifacts")
     expected = {
         "agentic_training_plan": AGENTIC_TRAINING_PLAN_SCHEMA_VERSION,
         "agentic_training_runtime_preflight": AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION,
@@ -2659,6 +2818,7 @@ def _validate_agentic_training_flow_source_ref(
     schema_version: str,
     source_path: Path,
 ) -> None:
+    _validate_allowed_keys(ref, _AGENTIC_TRAINING_FLOW_SOURCE_REF_KEYS, target, label)
     if ref.get("role") != role:
         target.errors.append(f"{label}.role must be {role!r}.")
     path_value = ref.get("path")
@@ -2731,6 +2891,7 @@ def _validate_agentic_training_flow_delegated_flow(
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.delegated_flow must be an object.")
         return counts
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_DELEGATED_KEYS, target, "agentic_training_flow.delegated_flow")
     mode = value.get("mode")
     counts["mode"] = mode if isinstance(mode, str) else ""
     blocked_advanced_mode = mode in BLOCKED_TRAINER_FLOW_MODES and not expected_passed
@@ -2761,6 +2922,7 @@ def _validate_agentic_training_flow_delegated_flow(
         if not isinstance(stage, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(stage, _AGENTIC_TRAINING_FLOW_STAGE_KEYS, target, label)
         stage_id = stage.get("stage_id")
         allowed_stages = (*EXECUTABLE_STAGES, *BLOCKED_TRAINER_FLOW_STAGES) if blocked_advanced_mode else EXECUTABLE_STAGES
         if stage_id not in allowed_stages:
@@ -2799,6 +2961,12 @@ def _validate_agentic_training_flow_mode_contract_check(
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.mode_contract_check must be an object.")
         return {}
+    _validate_allowed_keys(
+        value,
+        _AGENTIC_TRAINING_FLOW_MODE_CONTRACT_KEYS,
+        target,
+        "agentic_training_flow.mode_contract_check",
+    )
     for field_name in ("mode", "category"):
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"agentic_training_flow.mode_contract_check.{field_name} must be a string.")
@@ -2839,6 +3007,7 @@ def _validate_agentic_training_flow_reward_contract(value: Any, target: Validati
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_REWARD_CONTRACT_KEYS, target, label)
     if not isinstance(value.get("kind"), str):
         target.errors.append(f"{label}.kind must be a string.")
     if not isinstance(value.get("callable_signature"), str):
@@ -2861,6 +3030,7 @@ def _validate_agentic_training_flow_side_effect_boundary(value: Any, target: Val
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_SIDE_EFFECT_KEYS, target, label)
     for field_name in (
         "dry_run_only",
         "training_started",
@@ -2879,6 +3049,7 @@ def _validate_agentic_training_flow_external_runner_contract(value: Any, target:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_EXTERNAL_RUNNER_KEYS, target, label)
     if not isinstance(value.get("runner_must_require_recommendation"), str):
         target.errors.append(f"{label}.runner_must_require_recommendation must be a string.")
     for field_name in (
@@ -2901,6 +3072,7 @@ def _validate_agentic_training_flow_mode_gate(
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.flow_mode_gate must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_MODE_GATE_KEYS, target, "agentic_training_flow.flow_mode_gate")
     if value.get("mode") != mode:
         target.errors.append("agentic_training_flow.flow_mode_gate.mode must match delegated_flow.mode.")
     category = value.get("category")
@@ -2945,6 +3117,7 @@ def _validate_agentic_training_flow_command(value: Any, target: ValidationTarget
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.delegated_flow.command must be an object.")
         return counts
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_COMMAND_KEYS, target, "agentic_training_flow.delegated_flow.command")
     for field_name in ("execution_cwd", "archive_root", "external_code_root", "command_shell"):
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"agentic_training_flow.delegated_flow.command.{field_name} must be a string.")
@@ -2954,6 +3127,8 @@ def _validate_agentic_training_flow_command(value: Any, target: ValidationTarget
         argv = []
     clean_argv = [item for item in argv if isinstance(item, str)]
     counts["command_arg_count"] = len(clean_argv)
+    if "command_arg_count" in value and value.get("command_arg_count") != len(clean_argv):
+        target.errors.append("agentic_training_flow.delegated_flow.command.command_arg_count must match command_argv length.")
     expected_shell = shlex.join(clean_argv) if clean_argv else ""
     if value.get("command_shell") != expected_shell:
         target.errors.append("agentic_training_flow.delegated_flow.command.command_shell must match command_argv.")
@@ -2977,6 +3152,7 @@ def _validate_agentic_training_flow_metrics(
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.metrics must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_METRIC_KEYS, target, "agentic_training_flow.metrics")
     expected = {
         "check_count": check_count,
         "failed_check_count": failed_check_count,
@@ -2996,6 +3172,7 @@ def _validate_agentic_training_flow_boundary(value: Any, target: ValidationTarge
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.execution_boundary must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_BOUNDARY_KEYS, target, "agentic_training_flow.execution_boundary")
     if value.get("flow_plan_only") is not True:
         target.errors.append("agentic_training_flow.execution_boundary.flow_plan_only must be true.")
     for field_name in (
@@ -3016,6 +3193,7 @@ def _validate_agentic_training_flow_contract(value: Any, target: ValidationTarge
     if not isinstance(value, dict):
         target.errors.append("agentic_training_flow.handoff_contract must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_HANDOFF_KEYS, target, "agentic_training_flow.handoff_contract")
     if value.get("runner_owns_execution") is not True:
         target.errors.append("agentic_training_flow.handoff_contract.runner_owns_execution must be true.")
     if value.get("runner_must_require_recommendation") != FLOW_READY_RECOMMENDATION:
