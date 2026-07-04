@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/review_calibration.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Calibration report comparing reviewed human labels with deterministic scorecard outcomes.",
   "properties": {
     "check_count": { "minimum": 0, "type": "integer" },
@@ -40,20 +40,66 @@
   "type": "object",
   "$defs": {
     "check": {
-      "additionalProperties": true,
+      "oneOf": [
+        { "$ref": "#/$defs/min_check" },
+        { "$ref": "#/$defs/max_check" },
+        { "$ref": "#/$defs/validation_check" }
+      ]
+    },
+    "expected_max": {
+      "additionalProperties": false,
       "properties": {
-        "actual": {},
-        "expected": { "type": "object" },
-        "id": { "minLength": 1, "type": "string" },
+        "max": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["max"],
+      "type": "object"
+    },
+    "expected_min": {
+      "additionalProperties": false,
+      "properties": {
+        "min": { "minimum": 0, "type": "number" }
+      },
+      "required": ["min"],
+      "type": "object"
+    },
+    "max_check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": { "minimum": 0, "type": "integer" },
+        "expected": { "$ref": "#/$defs/expected_max" },
+        "id": { "enum": ["max_disagreements", "max_false_positives", "max_false_negatives"], "type": "string" },
         "passed": { "type": "boolean" },
-        "scope": { "type": "object" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "min_check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": { "minimum": 0, "type": "number" },
+        "expected": { "$ref": "#/$defs/expected_min" },
+        "id": { "enum": ["min_comparable_labels", "min_agreement_rate"], "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "validation_check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": { "$ref": "#/$defs/validation" },
+        "expected": { "$ref": "#/$defs/validation_expected" },
+        "id": { "const": "valid_reviewed_export" },
+        "passed": { "type": "boolean" },
         "summary": { "minLength": 1, "type": "string" }
       },
       "required": ["id", "passed", "actual", "expected", "summary"],
       "type": "object"
     },
     "disagreement": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "critical_failures": {
           "items": { "type": "string" },
@@ -94,7 +140,7 @@
       "type": "object"
     },
     "label_count": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "count": { "minimum": 0, "type": "integer" },
         "label": { "enum": ["accept", "reject", "needs_review", "unsafe", "incomplete"], "type": "string" }
@@ -103,7 +149,7 @@
       "type": "object"
     },
     "mean_score": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "average_score": { "maximum": 100, "minimum": 0, "type": "number" },
         "count": { "minimum": 0, "type": "integer" },
@@ -113,7 +159,7 @@
       "type": "object"
     },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "agreement_count": { "minimum": 0, "type": "integer" },
         "agreement_rate": { "maximum": 1, "minimum": 0, "type": "number" },
@@ -161,7 +207,7 @@
       "type": "object"
     },
     "source": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "reviewed_labels": { "minLength": 1, "type": "string" }
       },
@@ -169,7 +215,7 @@
       "type": "object"
     },
     "validation": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "available": { "type": "boolean" },
         "error_count": { "minimum": 0, "type": "integer" },
@@ -179,6 +225,15 @@
         "warning_count": { "minimum": 0, "type": "integer" }
       },
       "required": ["available", "passed", "strict", "target_count", "error_count", "warning_count"],
+      "type": "object"
+    },
+    "validation_expected": {
+      "additionalProperties": false,
+      "properties": {
+        "error_count": { "const": 0 },
+        "passed": { "const": true }
+      },
+      "required": ["passed", "error_count"],
       "type": "object"
     }
   }

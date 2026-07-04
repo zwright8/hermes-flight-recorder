@@ -148,6 +148,74 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
 
+    def test_validate_rejects_review_calibration_with_unknown_control_plane_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            reviewed = make_reviewed_export(tmp, reject_good=True)
+            out = Path(tmp) / "review_calibration.json"
+            validation = Path(tmp) / "validation.json"
+            run_cli(
+                [
+                    "review-calibration",
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--out",
+                    str(out),
+                    "--min-agreement-rate",
+                    "1.0",
+                    "--max-disagreements",
+                    "0",
+                    "--max-false-positives",
+                    "0",
+                ]
+            )
+            calibration = json.loads(out.read_text(encoding="utf-8"))
+            calibration["provider_console_url"] = "https://example.invalid/calibration"
+            calibration["source"]["reviewed_labels_signed_url"] = "https://example.invalid/labels"
+            calibration["checks"][0]["provider_call"] = {"url": "https://example.invalid/check"}
+            calibration["checks"][0]["actual"]["provider_call"] = {"url": "https://example.invalid/check-actual"}
+            calibration["checks"][0]["expected"]["provider_call"] = {"url": "https://example.invalid/check-expected"}
+            calibration["checks"][1]["scope"] = {"provider_call": "https://example.invalid/check-scope"}
+            calibration["metrics"]["calibration_job_url"] = "https://example.invalid/job"
+            calibration["metrics"]["validation"]["provider_call"] = {"url": "https://example.invalid/validation"}
+            calibration["metrics"]["label_counts"][0]["provider_call"] = {"url": "https://example.invalid/label-count"}
+            calibration["metrics"]["mean_score_by_human_label"][0]["provider_call"] = {
+                "url": "https://example.invalid/mean-score"
+            }
+            calibration["disagreements"][0]["review_thread_ref"] = "redacted-thread"
+            out.write_text(json.dumps(calibration, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertNotEqual(run_cli(["schemas", "--check", str(out)]), 0)
+            code = run_cli(["validate", "--review-calibration", str(out), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(validation.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("review_calibration contains unknown field(s): ['provider_console_url']", errors)
+            self.assertIn(
+                "review_calibration.source contains unknown field(s): ['reviewed_labels_signed_url']",
+                errors,
+            )
+            self.assertIn("review_calibration.checks[0] contains unknown field(s): ['provider_call']", errors)
+            self.assertIn("review_calibration.checks[0].actual contains unknown field(s): ['provider_call']", errors)
+            self.assertIn("review_calibration.checks[0].expected contains unknown field(s): ['provider_call']", errors)
+            self.assertIn("review_calibration.checks[1] contains unknown field(s): ['scope']", errors)
+            self.assertIn("review_calibration.metrics contains unknown field(s): ['calibration_job_url']", errors)
+            self.assertIn(
+                "review_calibration.metrics.validation contains unknown field(s): ['provider_call']",
+                errors,
+            )
+            self.assertIn(
+                "review_calibration.metrics.label_counts[0] contains unknown field(s): ['provider_call']",
+                errors,
+            )
+            self.assertIn(
+                "review_calibration.metrics.mean_score_by_human_label[0] contains unknown field(s): ['provider_call']",
+                errors,
+            )
+            self.assertIn(
+                "review_calibration.disagreements[0] contains unknown field(s): ['review_thread_ref']",
+                errors,
+            )
+
     def test_review_calibration_fails_invalid_reviewed_export_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             reviewed = make_reviewed_export(tmp)

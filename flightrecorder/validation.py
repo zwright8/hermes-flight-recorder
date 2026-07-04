@@ -24723,15 +24723,74 @@ def _validate_bundle_top_curriculum_priorities(value: Any, target: ValidationTar
         _validate_evidence_refs(item.get("example_evidence_refs"), target, f"{label}.example_evidence_refs")
 
 
+_REVIEW_CALIBRATION_KEYS = {
+    "schema_version",
+    "reviewed_export",
+    "source",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "metrics",
+    "disagreements",
+    "notes",
+}
+_REVIEW_CALIBRATION_SOURCE_KEYS = {"reviewed_labels"}
+_REVIEW_CALIBRATION_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_REVIEW_CALIBRATION_MIN_CHECK_IDS = {"min_comparable_labels", "min_agreement_rate"}
+_REVIEW_CALIBRATION_MAX_CHECK_IDS = {"max_disagreements", "max_false_positives", "max_false_negatives"}
+_REVIEW_CALIBRATION_EXPECTED_MIN_KEYS = {"min"}
+_REVIEW_CALIBRATION_EXPECTED_MAX_KEYS = {"max"}
+_REVIEW_CALIBRATION_EXPECTED_VALIDATION_KEYS = {"passed", "error_count"}
+_REVIEW_CALIBRATION_METRICS_KEYS = {
+    "reviewed_label_count",
+    "comparable_label_count",
+    "needs_review_count",
+    "agreement_count",
+    "disagreement_count",
+    "agreement_rate",
+    "scorecard_positive_count",
+    "scorecard_negative_count",
+    "human_positive_count",
+    "human_negative_count",
+    "false_positive_count",
+    "false_negative_count",
+    "label_counts",
+    "mean_score_by_human_label",
+    "task_families",
+    "validation",
+}
+_REVIEW_CALIBRATION_DISAGREEMENT_KEYS = {
+    "review_item_id",
+    "episode_id",
+    "scenario_id",
+    "task_family",
+    "human_label",
+    "scorecard_passed",
+    "scorecard_score",
+    "failed_rules",
+    "critical_failures",
+    "source_report",
+    "source_lineage",
+    "disagreement_type",
+}
+_REVIEW_CALIBRATION_LABEL_COUNT_KEYS = {"label", "count"}
+_REVIEW_CALIBRATION_MEAN_SCORE_KEYS = {"label", "count", "average_score"}
+_REVIEW_CALIBRATION_VALIDATION_KEYS = {"available", "passed", "strict", "target_count", "error_count", "warning_count"}
+
+
 def _validate_review_calibration(calibration: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(calibration, _REVIEW_CALIBRATION_KEYS, target, "review_calibration")
     _require_equal(calibration, "schema_version", REVIEW_CALIBRATION_SCHEMA_VERSION, target)
     if not isinstance(calibration.get("reviewed_export"), str) or not calibration.get("reviewed_export"):
         target.errors.append("review_calibration.reviewed_export must be a non-empty string.")
     source = calibration.get("source")
     if not isinstance(source, dict):
         target.errors.append("review_calibration.source must be an object.")
-    elif not isinstance(source.get("reviewed_labels"), str) or not source.get("reviewed_labels"):
-        target.errors.append("review_calibration.source.reviewed_labels must be a non-empty string.")
+    else:
+        _validate_allowed_keys(source, _REVIEW_CALIBRATION_SOURCE_KEYS, target, "review_calibration.source")
+        if not isinstance(source.get("reviewed_labels"), str) or not source.get("reviewed_labels"):
+            target.errors.append("review_calibration.source.reviewed_labels must be a non-empty string.")
     if not isinstance(calibration.get("passed"), bool):
         target.errors.append("review_calibration.passed must be a boolean.")
 
@@ -24740,6 +24799,11 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
         target.errors.append("review_calibration.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "review_calibration.checks")
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            check_label = f"review_calibration.checks[{index}]"
+            _validate_allowed_keys(check, _REVIEW_CALIBRATION_CHECK_KEYS, target, check_label)
+            _validate_review_calibration_check_payload(check, target, check_label)
     if calibration.get("check_count") != len(checks):
         target.errors.append(f"review_calibration.check_count expected {len(checks)}, got {calibration.get('check_count')!r}.")
     if calibration.get("failed_check_count") != failed_checks:
@@ -24753,6 +24817,8 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
     if not isinstance(metrics, dict):
         target.errors.append("review_calibration.metrics must be an object.")
         metrics = {}
+    else:
+        _validate_allowed_keys(metrics, _REVIEW_CALIBRATION_METRICS_KEYS, target, "review_calibration.metrics")
     disagreements = calibration.get("disagreements")
     if not isinstance(disagreements, list):
         target.errors.append("review_calibration.disagreements must be a list.")
@@ -24793,6 +24859,41 @@ def _validate_gate_like_checks(checks: list[Any], target: ValidationTarget, labe
     return failed_checks
 
 
+def _validate_review_calibration_check_payload(check: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    check_id = check.get("id")
+    expected = check.get("expected")
+    if check_id == "valid_reviewed_export":
+        _validate_review_calibration_validation_metrics(check.get("actual"), target, f"{label}.actual")
+        if not isinstance(expected, dict):
+            return
+        _validate_allowed_keys(expected, _REVIEW_CALIBRATION_EXPECTED_VALIDATION_KEYS, target, f"{label}.expected")
+        if expected.get("passed") is not True:
+            target.errors.append(f"{label}.expected.passed must be true.")
+        if expected.get("error_count") != 0:
+            target.errors.append(f"{label}.expected.error_count must be 0.")
+        return
+    if check_id in _REVIEW_CALIBRATION_MIN_CHECK_IDS:
+        if not _is_number_between(check.get("actual"), 0.0, float("inf")):
+            target.errors.append(f"{label}.actual must be a non-negative number.")
+        if not isinstance(expected, dict):
+            return
+        _validate_allowed_keys(expected, _REVIEW_CALIBRATION_EXPECTED_MIN_KEYS, target, f"{label}.expected")
+        if not _is_number_between(expected.get("min"), 0.0, float("inf")):
+            target.errors.append(f"{label}.expected.min must be a non-negative number.")
+        return
+    if check_id in _REVIEW_CALIBRATION_MAX_CHECK_IDS:
+        if not _is_non_negative_int(check.get("actual")):
+            target.errors.append(f"{label}.actual must be a non-negative integer.")
+        if not isinstance(expected, dict):
+            return
+        _validate_allowed_keys(expected, _REVIEW_CALIBRATION_EXPECTED_MAX_KEYS, target, f"{label}.expected")
+        if not _is_non_negative_int(expected.get("max")):
+            target.errors.append(f"{label}.expected.max must be a non-negative integer.")
+        return
+    allowed_ids = sorted(_REVIEW_CALIBRATION_MIN_CHECK_IDS | _REVIEW_CALIBRATION_MAX_CHECK_IDS | {"valid_reviewed_export"})
+    target.errors.append(f"{label}.id must be one of {allowed_ids!r}.")
+
+
 def _validate_review_calibration_disagreements(disagreements: list[Any], target: ValidationTarget) -> dict[str, int]:
     counts = {"false_positive_count": 0, "false_negative_count": 0}
     for index, row in enumerate(disagreements):
@@ -24800,6 +24901,7 @@ def _validate_review_calibration_disagreements(disagreements: list[Any], target:
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _REVIEW_CALIBRATION_DISAGREEMENT_KEYS, target, label)
         for field_name in ("review_item_id", "episode_id", "scenario_id", "task_family", "human_label", "disagreement_type"):
             if not isinstance(row.get(field_name), str) or not row.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -24868,16 +24970,21 @@ def _validate_review_calibration_metrics(metrics: dict[str, Any], disagreement_c
     _validate_mean_score_by_human_label(metrics.get("mean_score_by_human_label"), label_counts, target)
 
 
-def _validate_review_calibration_validation_metrics(value: Any, target: ValidationTarget) -> None:
+def _validate_review_calibration_validation_metrics(
+    value: Any,
+    target: ValidationTarget,
+    label: str = "review_calibration.metrics.validation",
+) -> None:
     if not isinstance(value, dict):
-        target.errors.append("review_calibration.metrics.validation must be an object when present.")
+        target.errors.append(f"{label} must be an object when present.")
         return
     for field_name in ("available", "passed", "strict"):
         if not isinstance(value.get(field_name), bool):
-            target.errors.append(f"review_calibration.metrics.validation.{field_name} must be a boolean.")
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    _validate_allowed_keys(value, _REVIEW_CALIBRATION_VALIDATION_KEYS, target, label)
     for field_name in ("target_count", "error_count", "warning_count"):
         if not _is_non_negative_int(value.get(field_name)):
-            target.errors.append(f"review_calibration.metrics.validation.{field_name} must be a non-negative integer.")
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
 
 
 def _label_count_rows(value: Any, target: ValidationTarget) -> dict[str, int]:
@@ -24892,6 +24999,7 @@ def _label_count_rows(value: Any, target: ValidationTarget) -> dict[str, int]:
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _REVIEW_CALIBRATION_LABEL_COUNT_KEYS, target, label)
         row_label = row.get("label")
         count = row.get("count")
         if not isinstance(row_label, str) or row_label not in labels:
@@ -24917,6 +25025,7 @@ def _validate_mean_score_by_human_label(value: Any, label_counts: dict[str, int]
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _REVIEW_CALIBRATION_MEAN_SCORE_KEYS, target, label)
         row_label = row.get("label")
         if not isinstance(row_label, str) or not row_label:
             target.errors.append(f"{label}.label must be a non-empty string.")
