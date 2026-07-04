@@ -307,6 +307,8 @@ Flight Recorder turns Hermes' experience into regression pressure.
 15. Enforce absolute suite thresholds with `flightrecorder gate-suite`.
 16. Export a human review queue with `flightrecorder export-review` when
    maintainers want to curate deterministic score labels before training.
+   Strict validation warns before preserved per-item source artifact paths are
+   published in public review queues.
 17. Apply completed labels with `flightrecorder apply-review` to produce
    human-reviewed SFT, reward-model, preference, and DPO views.
 18. Gate reviewed-export readiness with `flightrecorder gate-reviewed` before

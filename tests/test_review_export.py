@@ -80,6 +80,31 @@ class ReviewExportTests(unittest.TestCase):
             self.assertIn("Human labels should be grounded", instructions)
             self.assertEqual(run_cli(["validate", "--review-export", str(out), "--strict"]), 0)
 
+    def test_strict_validate_warns_on_absolute_review_item_source_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            validation = Path(tmp) / "validation.json"
+            strict_validation = Path(tmp) / "strict_validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+
+            code = run_cli(["export-review", "--runs", str(runs), "--out", str(out), "--preserve-paths"])
+
+            self.assertEqual(code, 0)
+            items = read_jsonl(out / "review_items.jsonl")
+            self.assertTrue(Path(items[0]["source_artifacts"]["run_dir"]).is_absolute())
+            self.assertTrue(Path(items[0]["source_artifacts"]["report"]).is_absolute())
+            self.assertEqual(run_cli(["validate", "--review-export", str(out), "--out", str(validation)]), 0)
+            self.assertEqual(run_cli(["validate", "--review-export", str(out), "--strict", "--out", str(strict_validation)]), 1)
+            warnings = [
+                warning
+                for target in json.loads(strict_validation.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            self.assertTrue(any(".source_artifacts.run_dir is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any(".source_artifacts.report is absolute" in warning for warning in warnings), warnings)
+
     def test_export_review_only_failed_filters_queue(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

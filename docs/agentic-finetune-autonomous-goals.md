@@ -78,6 +78,9 @@ evidence.
   trace, or state source paths warn under strict validation.
 - Validate review-calibration receipts before public handoff so preserved
   reviewed-export or reviewed-label source paths warn under strict validation.
+- Validate review-export queues before public handoff so preserved per-item run,
+  report, trace, scorecard, lineage, or regression refs warn under strict
+  validation.
 - Add a single evidence-readiness command or documented command sequence that
   produces a complete handoff bundle from runs.
 - Ensure failed evidence produces repair/curriculum work items instead of

@@ -11397,6 +11397,22 @@ def _validate_review_items(items: list[dict[str, Any]], target: ValidationTarget
             for artifact_name in ("run_dir", "normalized_trace", "scorecard", "report"):
                 if not isinstance(source_artifacts.get(artifact_name), str) or not source_artifacts.get(artifact_name):
                     target.errors.append(f"review_items[{index}].source_artifacts.{artifact_name} must be a non-empty string.")
+                else:
+                    _warn_absolute_public_path(
+                        target,
+                        f"review_items[{index}].source_artifacts.{artifact_name}",
+                        source_artifacts.get(artifact_name),
+                    )
+            for artifact_name in ("lineage", "regression_scenario"):
+                if artifact_name in source_artifacts:
+                    if not isinstance(source_artifacts.get(artifact_name), str) or not source_artifacts.get(artifact_name):
+                        target.errors.append(f"review_items[{index}].source_artifacts.{artifact_name} must be a non-empty string when present.")
+                    else:
+                        _warn_absolute_public_path(
+                            target,
+                            f"review_items[{index}].source_artifacts.{artifact_name}",
+                            source_artifacts.get(artifact_name),
+                        )
         scorecard = item.get("scorecard")
         if not isinstance(scorecard, dict):
             target.errors.append(f"review_items[{index}].scorecard must be an object.")

@@ -961,6 +961,8 @@ flightrecorder validate \
 report path, and lineage pointer for each run. `label_template.jsonl` is an
 editable starting point for human labels such as `accept`, `reject`,
 `needs_review`, `unsafe`, and `incomplete`.
+Strict validation warns if preserved review-item source artifact paths would
+publish local run, report, trace, scorecard, lineage, or regression references.
 Reviewers can also set `reviewer_confidence` to `high`, `medium`, `low`, or
 `unknown` so downstream gates can distinguish strongly grounded labels from
 labels that need another pass.
