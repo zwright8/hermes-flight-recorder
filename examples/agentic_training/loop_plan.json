@@ -1,5 +1,5 @@
 {
-  "artifact_count": 30,
+  "artifact_count": 32,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -63,11 +63,19 @@
     },
     {
       "count": 1,
+      "role": "evidence_bundle"
+    },
+    {
+      "count": 1,
       "role": "external_eval_plan"
     },
     {
       "count": 1,
       "role": "external_eval_receipt"
+    },
+    {
+      "count": 1,
+      "role": "harness_result"
     },
     {
       "count": 1,
@@ -847,8 +855,6 @@
   },
   "iteration_id": "demo-loop-001",
   "missing_phase_inputs": [
-    "evidence_bundle",
-    "harness_result",
     "promotion_decision",
     "promotion_ledger",
     "serving_lifecycle"
@@ -888,13 +894,12 @@
     {
       "gate": "rollouts must stay inside declared budget and environment descriptors.",
       "id": "rollout_collection",
-      "missing_required_artifacts": [
-        "harness_result"
-      ],
+      "missing_required_artifacts": [],
       "name": "Rollout collection",
       "present_required_artifacts": [
         "agentic_rollout_plan",
-        "agentic_rollout_receipt"
+        "agentic_rollout_receipt",
+        "harness_result"
       ],
       "produces": [
         "trace",
@@ -906,16 +911,16 @@
         "agentic_rollout_receipt",
         "harness_result"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "evidence must be schema-checkable and traceable before training data selection.",
       "id": "evidence_scoring",
-      "missing_required_artifacts": [
+      "missing_required_artifacts": [],
+      "name": "Evidence scoring",
+      "present_required_artifacts": [
         "evidence_bundle"
       ],
-      "name": "Evidence scoring",
-      "present_required_artifacts": [],
       "produces": [
         "evidence_coverage",
         "trace_observability",
@@ -924,7 +929,7 @@
       "required_artifacts": [
         "evidence_bundle"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "model-grader labels are blocked until calibration and human override paths exist.",
@@ -1349,6 +1354,19 @@
         "size_bytes": 8290
       }
     ],
+    "evidence_bundle": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "evidence_handoff/evidence_bundle.json",
+        "readiness": "ready",
+        "role": "evidence_bundle",
+        "schema_version": "hfr.evidence_bundle.v1",
+        "sha256": "2f14ec69f4b74105f78938aa98871deb757194ebefdaf61a1c5a35a876b63296",
+        "size_bytes": 16431
+      }
+    ],
     "external_eval_plan": [
       {
         "exists": true,
@@ -1373,6 +1391,19 @@
         "schema_version": "hfr.external_eval_receipt.v1",
         "sha256": "cc732646249677ad91769421f91492a6669f65dfa3ce30f11eab045942c4d9e4",
         "size_bytes": 9657
+      }
+    ],
+    "harness_result": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": null,
+        "path": "evidence_handoff/harness_handoff/harness_result.json",
+        "readiness": "",
+        "role": "harness_result",
+        "schema_version": "hfr.harness_run_result.v1",
+        "sha256": "56c7c655f09aab8ab7a7e4fcab0205b155688d8de55cc1496390811409a238e9",
+        "size_bytes": 2987
       }
     ],
     "heldout_manifest": [

@@ -34,6 +34,36 @@ def bundle_action_fingerprint(action: dict) -> str:
 
 
 class EvidenceBundleTests(unittest.TestCase):
+    def test_committed_agentic_training_evidence_handoff_replays_harness_result(self):
+        handoff_root = ROOT / "examples" / "agentic_training" / "evidence_handoff"
+        harness_result_path = handoff_root / "harness_handoff" / "harness_result.json"
+        evidence_bundle_path = handoff_root / "evidence_bundle.json"
+        harness_result = json.loads(harness_result_path.read_text(encoding="utf-8"))
+        bundle = json.loads(evidence_bundle_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(harness_result["schema_version"], "hfr.harness_run_result.v1")
+        self.assertEqual(harness_result["scenario_id"], "prompt_injection_good")
+        self.assertTrue(harness_result["scorecard"]["passed"])
+        self.assertEqual(harness_result["suite"]["summary"], "../suite_summary.json")
+        self.assertTrue(bundle["passed"])
+        self.assertEqual(bundle["readiness"], "ready")
+        self.assertEqual(bundle["decision"]["recommendation"], "promote_handoff")
+        self.assertEqual(bundle["decision"]["key_metrics"]["harness_handoff"]["passed_pair_count"], 1)
+        self.assertEqual(bundle["decision"]["key_metrics"]["run_digest_coverage"]["passed_digest_count"], 1)
+        self.assertEqual(
+            run_cli(
+                [
+                    "validate",
+                    "--harness-result",
+                    str(harness_result_path),
+                    "--evidence-bundle",
+                    str(evidence_bundle_path),
+                    "--strict",
+                ]
+            ),
+            0,
+        )
+
     def test_evidence_bundle_summarizes_ready_handoff(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

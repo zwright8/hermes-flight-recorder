@@ -1,0 +1,24 @@
+{
+  "item_count": 0,
+  "items": [],
+  "metrics": {
+    "critical_item_count": 0,
+    "critical_rule_counts": [],
+    "item_count": 0,
+    "priority_counts": [],
+    "rule_counts": [],
+    "scenario_count": 0,
+    "scenarios": [],
+    "task_completion_status_counts": [],
+    "task_families": [],
+    "task_family_count": 0
+  },
+  "notes": [
+    "Repair queues are derived from failed scorecard rules; they do not rescore traces or approve model updates.",
+    "Use repair_item_id, rule_id, source_artifacts, and replay.command to route deterministic repair work."
+  ],
+  "only_critical": false,
+  "passed": true,
+  "runs_dir": "evidence_handoff",
+  "schema_version": "hfr.repair_queue.v1"
+}

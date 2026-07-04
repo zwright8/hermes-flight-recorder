@@ -817,7 +817,9 @@ against the selected dataset version. The `heldout_eval/` fixture adds
 deterministic baseline/candidate suite summaries, a held-out manifest,
 external-eval plan/receipt artifacts for BFCL, Inspect AI, lm-eval-harness, and
 SWE-bench adapters, plus an eval summary. Those adapter receipts remain
-fail-closed until optional dependencies are explicitly enabled.
+fail-closed until optional dependencies are explicitly enabled. The
+`evidence_handoff/` fixture records a compact passing harness result and ready
+evidence bundle for a deterministic prompt-injection scenario.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,

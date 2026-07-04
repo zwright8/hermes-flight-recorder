@@ -28,6 +28,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         plan_path = ROOT / "examples" / "agentic_training" / "loop_plan.json"
         rollout_plan_path = ROOT / "examples" / "agentic_training" / "rollouts" / "rollout_plan.json"
         rollout_receipt_path = ROOT / "examples" / "agentic_training" / "rollouts" / "rollout_receipt.json"
+        harness_result_path = ROOT / "examples" / "agentic_training" / "evidence_handoff" / "harness_handoff" / "harness_result.json"
+        evidence_bundle_path = ROOT / "examples" / "agentic_training" / "evidence_handoff" / "evidence_bundle.json"
         reviewed_gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "reviewed_gate.json"
         rejection_sampling_gate_path = ROOT / "examples" / "agentic_training" / "rejection_sampling_gate.json"
         dataset_curation_receipt_path = ROOT / "examples" / "agentic_training" / "dataset_curation_receipt.json"
@@ -48,6 +50,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         expected_refs = {
             "agentic_rollout_plan": ("rollouts/rollout_plan.json", rollout_plan_path),
             "agentic_rollout_receipt": ("rollouts/rollout_receipt.json", rollout_receipt_path),
+            "harness_result": ("evidence_handoff/harness_handoff/harness_result.json", harness_result_path),
+            "evidence_bundle": ("evidence_handoff/evidence_bundle.json", evidence_bundle_path),
             "reviewed_gate": ("model_grader/reviewed_gate.json", reviewed_gate_path),
             "rejection_sampling_gate": ("rejection_sampling_gate.json", rejection_sampling_gate_path),
             "dataset_curation_receipt": ("dataset_curation_receipt.json", dataset_curation_receipt_path),
@@ -71,9 +75,11 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertFalse(plan["passed"])
         self.assertEqual(plan["readiness"], "planned_fail_closed")
-        self.assertEqual(plan["artifact_count"], 30)
+        self.assertEqual(plan["artifact_count"], 32)
         self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
         self.assertNotIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
+        self.assertNotIn("harness_result", plan["missing_phase_inputs"])
+        self.assertNotIn("evidence_bundle", plan["missing_phase_inputs"])
         self.assertNotIn("reviewed_gate", plan["missing_phase_inputs"])
         self.assertNotIn("rejection_sampling_gate", plan["missing_phase_inputs"])
         self.assertNotIn("dataset_curation_receipt", plan["missing_phase_inputs"])
@@ -93,8 +99,13 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertEqual(training_export_ref["kind"], "directory")
         self.assertTrue(training_export_ref["exists"])
         phases = {phase["id"]: phase for phase in plan["phases"]}
-        self.assertEqual(set(phases["rollout_collection"]["present_required_artifacts"]), {"agentic_rollout_plan", "agentic_rollout_receipt"})
-        self.assertIn("harness_result", phases["rollout_collection"]["missing_required_artifacts"])
+        self.assertEqual(
+            set(phases["rollout_collection"]["present_required_artifacts"]),
+            {"agentic_rollout_plan", "agentic_rollout_receipt", "harness_result"},
+        )
+        self.assertEqual(phases["rollout_collection"]["missing_required_artifacts"], [])
+        self.assertEqual(phases["evidence_scoring"]["status"], "ready")
+        self.assertEqual(phases["evidence_scoring"]["missing_required_artifacts"], [])
         self.assertEqual(phases["rubric_model_grader_review"]["status"], "ready")
         self.assertEqual(phases["rejection_sampling"]["status"], "ready")
         self.assertEqual(phases["dataset_curation"]["status"], "ready")

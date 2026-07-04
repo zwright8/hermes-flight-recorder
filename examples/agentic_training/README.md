@@ -258,6 +258,23 @@ are not enabled. They still write schema-checkable artifacts with zero provider
 API calls, model downloads, benchmark launches, credential recording, cost, or
 weight updates.
 
+Generate the evidence handoff harness result and bundle:
+
+```bash
+flightrecorder run-suite \
+  --scenarios scenarios \
+  --pattern prompt_injection_good.json \
+  --out examples/agentic_training/evidence_handoff \
+  --no-index \
+  --evidence-handoff \
+  --validate \
+  --strict
+```
+
+The committed evidence handoff uses one deterministic passing scenario to keep
+the public fixture compact. It emits `harness_handoff/harness_result.json` and
+`evidence_bundle.json` without raw sensitive traces or live external calls.
+
 Bind the example receipts into a fail-closed loop contract:
 
 ```bash
@@ -274,6 +291,8 @@ flightrecorder agentic-loop plan \
   --budget max_gpu_hours=0 \
   --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
   --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
+  --harness-result examples/agentic_training/evidence_handoff/harness_handoff/harness_result.json \
+  --evidence-bundle examples/agentic_training/evidence_handoff/evidence_bundle.json \
   --reviewed-gate examples/agentic_training/model_grader/reviewed_gate.json \
   --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
   --dataset-curation-receipt examples/agentic_training/dataset_curation_receipt.json \
@@ -307,10 +326,10 @@ flightrecorder agentic-loop plan \
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include harness results, evidence bundles, serving, or promotion
-receipts, and because external adapter dependencies are intentionally not
-enabled. It does bind loop-local rollout plan and mock receipt, nested
-model-grader review, rejection-sampling, dataset-curation, training-export,
+does not include serving or promotion receipts, and because external adapter
+dependencies are intentionally not enabled. It does bind loop-local rollout plan
+and mock receipt, harness/evidence handoff artifacts, nested model-grader
+review, rejection-sampling, dataset-curation, training-export,
 trainer-preflight, trainer-launch-check, cloud-training, held-out eval,
 action-ledger, and improvement-ledger receipts without provider, dataset-write,
 benchmark-launch, or scheduler side effects. The
@@ -337,6 +356,8 @@ flightrecorder schemas --check examples/agentic_training/training_gate.json
 flightrecorder validate \
   --agentic-rollout-plan examples/agentic_training/rollouts/rollout_plan.json \
   --agentic-rollout-receipt examples/agentic_training/rollouts/rollout_receipt.json \
+  --harness-result examples/agentic_training/evidence_handoff/harness_handoff/harness_result.json \
+  --evidence-bundle examples/agentic_training/evidence_handoff/evidence_bundle.json \
   --rejection-sampling-gate examples/agentic_training/rejection_sampling_gate.json \
   --training-export examples/agentic_training/training_export \
   --dataset-curation-receipt examples/agentic_training/dataset_curation_receipt.json \

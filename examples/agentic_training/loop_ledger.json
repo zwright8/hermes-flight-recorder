@@ -43,7 +43,7 @@
     "readiness": "blocked",
     "recommendation": "continue_iteration",
     "recommended_governance_action": "request_another_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 5 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 3 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -57,7 +57,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 30,
+      "artifact_count": 32,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -72,7 +72,7 @@
           "group": "eval"
         },
         {
-          "count": 0,
+          "count": 1,
           "group": "evidence"
         },
         {
@@ -92,7 +92,7 @@
           "group": "review"
         },
         {
-          "count": 2,
+          "count": 3,
           "group": "rollouts"
         },
         {
@@ -167,11 +167,19 @@
         },
         {
           "count": 1,
+          "role": "evidence_bundle"
+        },
+        {
+          "count": 1,
           "role": "external_eval_plan"
         },
         {
           "count": 1,
           "role": "external_eval_receipt"
+        },
+        {
+          "count": 1,
+          "role": "harness_result"
         },
         {
           "count": 1,
@@ -509,8 +517,6 @@
       "index": 0,
       "iteration_id": "demo-loop-001",
       "missing_phase_inputs": [
-        "evidence_bundle",
-        "harness_result",
         "promotion_decision",
         "promotion_ledger",
         "serving_lifecycle"
@@ -525,7 +531,7 @@
       "path": "loop_plan.json",
       "phase_status_counts": [
         {
-          "count": 5,
+          "count": 3,
           "id": "blocked"
         },
         {
@@ -533,7 +539,7 @@
           "id": "planned"
         },
         {
-          "count": 7,
+          "count": 9,
           "id": "ready"
         }
       ],
@@ -550,8 +556,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "f6acfe879641851afd63153691f78792c50d876cc076f4da3daf65baf6731c17",
-      "size_bytes": 50406,
+      "sha256": "d0bf971e28e34f605663ec924f7cc9b382ce9eabd67cec975b92754318ab4267",
+      "size_bytes": 51302,
       "training_outputs": {
         "artifact_count": 6,
         "group": "training",
@@ -583,7 +589,7 @@
         "group": "eval"
       },
       {
-        "count": 0,
+        "count": 1,
         "group": "evidence"
       },
       {
@@ -603,7 +609,7 @@
         "group": "review"
       },
       {
-        "count": 2,
+        "count": 3,
         "group": "rollouts"
       },
       {
@@ -618,7 +624,7 @@
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 5,
+    "latest_missing_phase_input_count": 3,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
     "promotion_ready_count": 0,
@@ -676,16 +682,13 @@
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "live_spend_allowed": false,
-    "missing_artifact_group_count": 3,
+    "missing_artifact_group_count": 2,
     "missing_artifact_groups": [
-      "evidence",
       "governance",
       "serving"
     ],
-    "missing_phase_input_count": 5,
+    "missing_phase_input_count": 3,
     "missing_phase_inputs": [
-      "evidence_bundle",
-      "harness_result",
       "promotion_decision",
       "promotion_ledger",
       "serving_lifecycle"
@@ -701,7 +704,7 @@
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 5 missing phase input(s) across 3 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 3 missing phase input(s) across 2 empty artifact group(s)."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }
