@@ -708,6 +708,9 @@ card, and dataset card decisions.
 - Training and reviewed dataset selection keys hash pathless fingerprint
   identity while manifests keep display paths as provenance, so registry keys
   remain stable across cwd and path-redaction presentation changes.
+- Review item label hashes ignore source-artifact display paths while still
+  binding artifact-role presence and review content, so benign path-redaction
+  changes do not invalidate completed labels.
 - Agentic training flow receipts reopen plan, runtime-preflight, and trainer
   consumer-plan refs from the flow artifact location and reject missing,
   non-regular, symlinked, stale SHA-256, or stale byte-size source evidence

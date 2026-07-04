@@ -7,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
-from flightrecorder.review import _reviewed_dataset_version_id
+from flightrecorder.review import _reviewed_dataset_version_id, review_item_sha256
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file
 
 
@@ -230,6 +230,28 @@ class ReviewExportTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("review_item_sha256 does not match review item contents", errors)
             self.assertIn("review_item_sha256 does not match referenced review item", errors)
+
+    def test_review_item_sha256_ignores_source_artifact_display_paths(self):
+        item = {
+            "schema_version": "hfr.review.item.v1",
+            "review_item_id": "case-1",
+            "source_artifacts": {
+                "run_dir": "runs/case-1",
+                "normalized_trace": "runs/case-1/normalized_trace.json",
+                "scorecard": "runs/case-1/scorecard.json",
+            },
+            "prompt": "Summarize the issue.",
+            "final_answer": "Done.",
+        }
+        moved = json.loads(json.dumps(item))
+        moved["source_artifacts"]["run_dir"] = "<redacted:case-1>"
+        moved["source_artifacts"]["normalized_trace"] = "elsewhere/normalized_trace.json"
+        moved["source_artifacts"]["scorecard"] = "elsewhere/scorecard.json"
+        missing_role = json.loads(json.dumps(item))
+        missing_role["source_artifacts"].pop("scorecard")
+
+        self.assertEqual(review_item_sha256(item), review_item_sha256(moved))
+        self.assertNotEqual(review_item_sha256(item), review_item_sha256(missing_role))
 
     def test_validate_review_export_rejects_missing_confidence_options(self):
         with tempfile.TemporaryDirectory() as tmp:

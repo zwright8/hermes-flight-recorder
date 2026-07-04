@@ -10,7 +10,7 @@
     "review_calibration_passed: failed",
     "min_calibration_agreement_rate: failed"
   ],
-  "check_count": 7,
+  "check_count": 8,
   "checks": [
     {
       "actual": {
@@ -22,7 +22,7 @@
           "schema_errors": [],
           "schema_name": "model_grader_dry_run",
           "schema_passed": true,
-          "sha256": "c27528d2c46301863411e04660032a7a3d269f634e09cfa60cee21fb861056db",
+          "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
           "size_bytes": 5601,
           "source_passed": true,
           "source_recommendation": "gate_before_training_admission"
@@ -46,7 +46,7 @@
           "schema_errors": [],
           "schema_name": "rubric_spec",
           "schema_passed": true,
-          "sha256": "419232b83c8a284b4095f99455017139648e766cf1d7cd12eff235086213d2a9",
+          "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
           "size_bytes": 2227,
           "source_passed": null,
           "source_recommendation": ""
@@ -137,6 +137,23 @@
     },
     {
       "actual": {
+        "disagreement_queue_count": 0,
+        "labels_requiring_human_review_count": 0,
+        "override_receipt_passed": null,
+        "override_receipt_required": false,
+        "override_resolved_count": 0,
+        "override_unresolved_count": 0
+      },
+      "expected": {
+        "override_receipt_required": false,
+        "unresolved_count": 0
+      },
+      "id": "dry_run_human_review_queue_resolved",
+      "passed": true,
+      "summary": "dry_run_human_review_queue_resolved: passed"
+    },
+    {
+      "actual": {
         "paid_model_grader_calls_started": false
       },
       "expected": {
@@ -171,6 +188,7 @@
   "notes": [
     "The gate is the only artifact that can make model-grader labels eligible for downstream curation.",
     "Missing or failing calibration blocks by default.",
+    "Dry-run disagreement queues or labels requiring human review block until resolved by a future override contract.",
     "The gate records no provider calls and admits zero uncalibrated labels."
   ],
   "passed": false,
@@ -186,10 +204,25 @@
       "schema_errors": [],
       "schema_name": "model_grader_dry_run",
       "schema_passed": true,
-      "sha256": "c27528d2c46301863411e04660032a7a3d269f634e09cfa60cee21fb861056db",
+      "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
       "size_bytes": 5601,
       "source_passed": true,
       "source_recommendation": "gate_before_training_admission"
+    },
+    "model_grader_override_receipt": {
+      "exists": false,
+      "path": null,
+      "role": "model_grader_override_receipt",
+      "schema_error_count": 1,
+      "schema_errors": [
+        "artifact not provided"
+      ],
+      "schema_name": "model_grader_override_receipt",
+      "schema_passed": false,
+      "sha256": null,
+      "size_bytes": null,
+      "source_passed": null,
+      "source_recommendation": ""
     },
     "review_calibration": {
       "exists": false,
@@ -214,7 +247,7 @@
       "schema_errors": [],
       "schema_name": "rubric_spec",
       "schema_passed": true,
-      "sha256": "419232b83c8a284b4095f99455017139648e766cf1d7cd12eff235086213d2a9",
+      "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
       "size_bytes": 2227,
       "source_passed": null,
       "source_recommendation": ""

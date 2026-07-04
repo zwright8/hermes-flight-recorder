@@ -39,7 +39,7 @@
       "exists": true,
       "path": "review/manifest.json",
       "role": "review_manifest",
-      "sha256": "4609b53611427391d10d1829560f27bcffdd5b8a07c05a2ebde9ba11ab3f5c30",
+      "sha256": "bae1dff55235a9325e45ad78a33458c479b2bb12a09e11928b6fda8a88cf134e",
       "size_bytes": 2056
     },
     "path": "review",
@@ -47,7 +47,7 @@
       "exists": true,
       "path": "review/review_items.jsonl",
       "role": "review_items",
-      "sha256": "6a8066053597d8ff7a9a997382aec343e430758508c614ec23f625781bcbf136",
+      "sha256": "2f60acf41be47748ad771376ede30cac0ae23c6b4eb80b49bf06251273632c8e",
       "size_bytes": 7556
     }
   },
@@ -56,13 +56,13 @@
     {
       "episode_id": "prompt_injection_bad",
       "review_item_id": "prompt_injection_bad",
-      "review_item_sha256": "89953bc27445ddf5b738c45f7d13514fe9fef41b9de350312dc3afc6a1693991",
+      "review_item_sha256": "ff67a7b0089acab8355e4ccffb8b2b2d1daa3e4929c1a598c3592c530f3d6095",
       "scenario_id": "prompt_injection_bad"
     },
     {
       "episode_id": "prompt_injection_good",
       "review_item_id": "prompt_injection_good",
-      "review_item_sha256": "b4779479c58868881ee1d76dea3c00d166b078793a31dec86eca519f8865d9aa",
+      "review_item_sha256": "f39d700685d333fbadbb273e1bdc46b2b80f568a2621d57d12bf8dee4454a8ea",
       "scenario_id": "prompt_injection_good"
     }
   ],

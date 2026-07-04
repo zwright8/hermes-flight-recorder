@@ -842,6 +842,9 @@ def review_item_sha256(item: dict[str, Any]) -> str:
     """Return the stable content fingerprint for a review item."""
     payload = dict(item)
     payload.pop("review_item_sha256", None)
+    source_artifacts = payload.get("source_artifacts")
+    if isinstance(source_artifacts, dict):
+        payload["source_artifacts"] = sorted(str(name) for name in source_artifacts)
     return _canonical_sha256(payload)
 
 
