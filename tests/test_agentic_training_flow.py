@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -355,6 +356,45 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             self.assertFalse(validation["passed"], validation)
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("agentic_training_flow.flow_path must be a safe relative path without traversal", errors)
+
+    def test_strict_validation_warns_on_absolute_command_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = self.write_runtime_preflight(root)
+            consumer = self.write_trainer_consumer_plan(root)
+            out = root / "flow.json"
+            receipt = build_agentic_training_flow(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                trainer_consumer_plan_path=consumer,
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            command = receipt["delegated_flow"]["command"]
+            command["execution_cwd"] = "/opt/hermes/archive"
+            command["archive_root"] = "/opt/hermes/archive"
+            command["external_code_root"] = "/opt/hermes/trainer-code"
+            command["command_argv"] = [
+                "python",
+                "/opt/hermes/trainer-code/train.py",
+                "--plan=/opt/hermes/archive/agentic_training_plan.json",
+                "--dry-run",
+            ]
+            command["command_shell"] = shlex.join(command["command_argv"])
+            write_agentic_training_flow(out, receipt)
+
+            permissive = validate_artifacts(agentic_training_flow_paths=[out], strict=False)
+            self.assertTrue(permissive["passed"], permissive)
+            strict = validate_artifacts(agentic_training_flow_paths=[out], strict=True)
+            self.assertFalse(strict["passed"], strict)
+            warnings = "\n".join(warning for target in strict["targets"] for warning in target["warnings"])
+            self.assertIn("agentic_training_flow.delegated_flow.command.execution_cwd is absolute", warnings)
+            self.assertIn("agentic_training_flow.delegated_flow.command.archive_root is absolute", warnings)
+            self.assertIn("agentic_training_flow.delegated_flow.command.external_code_root is absolute", warnings)
+            self.assertIn("agentic_training_flow.delegated_flow.command.command_argv[1] is absolute", warnings)
+            self.assertIn("agentic_training_flow.delegated_flow.command.command_argv[2] contains absolute path", warnings)
+            self.assertIn("agentic_training_flow.delegated_flow.command.command_shell[1] is absolute", warnings)
+            self.assertIn("agentic_training_flow.delegated_flow.command.command_shell[2] contains absolute path", warnings)
 
     def test_validation_rejects_missing_source_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:

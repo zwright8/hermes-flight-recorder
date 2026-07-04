@@ -2381,16 +2381,31 @@ def _warn_replay_metadata_public_paths(replay: dict[str, Any], target: Validatio
     argv = replay.get("argv")
     if isinstance(argv, list):
         for index, item in enumerate(argv):
-            _warn_absolute_public_path(target, f"{label}.argv[{index}]", item)
+            _warn_command_token_public_path(target, f"{label}.argv[{index}]", item)
     command = replay.get("command")
     if not isinstance(command, str) or not command:
         return
+    _warn_shell_tokens_public_paths(command, target, f"{label}.command")
+
+
+def _warn_shell_tokens_public_paths(command: str, target: ValidationTarget, label: str) -> None:
     try:
         tokens = shlex.split(command)
     except ValueError:
         tokens = command.split()
     for index, token in enumerate(tokens):
-        _warn_absolute_public_path(target, f"{label}.command[{index}]", token)
+        _warn_command_token_public_path(target, f"{label}[{index}]", token)
+
+
+def _warn_command_token_public_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _looks_absolute(value):
+        _warn_absolute_public_path(target, label, value)
+        return
+    _, separator, token_value = value.partition("=")
+    if separator and _looks_absolute(token_value):
+        target.warnings.append(f"{label} contains absolute path; use relative or redacted command tokens for public bundles.")
 
 
 def _resolve_harness_suite_artifact_path(value: Any, source_dir: Path | None) -> Path | None:
@@ -3882,27 +3897,35 @@ def _validate_agentic_training_flow_command(value: Any, target: ValidationTarget
         target.errors.append("agentic_training_flow.delegated_flow.command must be an object.")
         return counts
     _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_COMMAND_KEYS, target, "agentic_training_flow.delegated_flow.command")
+    label = "agentic_training_flow.delegated_flow.command"
     for field_name in ("execution_cwd", "archive_root", "external_code_root", "command_shell"):
         if not isinstance(value.get(field_name), str):
-            target.errors.append(f"agentic_training_flow.delegated_flow.command.{field_name} must be a string.")
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    for field_name in ("execution_cwd", "archive_root", "external_code_root"):
+        _warn_absolute_public_path(target, f"{label}.{field_name}", value.get(field_name))
     argv = value.get("command_argv")
     if not _is_string_list(argv):
-        target.errors.append("agentic_training_flow.delegated_flow.command.command_argv must be a list of strings.")
+        target.errors.append(f"{label}.command_argv must be a list of strings.")
         argv = []
     clean_argv = [item for item in argv if isinstance(item, str)]
+    for index, item in enumerate(clean_argv):
+        _warn_command_token_public_path(target, f"{label}.command_argv[{index}]", item)
     counts["command_arg_count"] = len(clean_argv)
     if "command_arg_count" in value and value.get("command_arg_count") != len(clean_argv):
-        target.errors.append("agentic_training_flow.delegated_flow.command.command_arg_count must match command_argv length.")
+        target.errors.append(f"{label}.command_arg_count must match command_argv length.")
     expected_shell = shlex.join(clean_argv) if clean_argv else ""
     if value.get("command_shell") != expected_shell:
-        target.errors.append("agentic_training_flow.delegated_flow.command.command_shell must match command_argv.")
+        target.errors.append(f"{label}.command_shell must match command_argv.")
+    command_shell = value.get("command_shell")
+    if isinstance(command_shell, str) and command_shell:
+        _warn_shell_tokens_public_paths(command_shell, target, f"{label}.command_shell")
     for field_name in ("trainer_input_count", "external_code_file_count"):
         if not _is_non_negative_int(value.get(field_name)):
-            target.errors.append(f"agentic_training_flow.delegated_flow.command.{field_name} must be a non-negative integer.")
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer.")
         else:
             counts[field_name] = int(value[field_name])
     if not clean_argv:
-        target.errors.append("agentic_training_flow.delegated_flow.command.command_argv must not be empty.")
+        target.errors.append(f"{label}.command_argv must not be empty.")
     return counts
 
 

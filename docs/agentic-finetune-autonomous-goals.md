@@ -79,6 +79,9 @@ evidence.
   run-artifact paths warn under strict validation.
 - Validate run lineage before public handoff so preserved output paths, replay
   args, commands, and input fingerprint paths warn under strict validation.
+- Validate agentic training flow handoffs before public use so preserved
+  delegated command cwd, archive roots, external code roots, argv, or shell
+  tokens warn under strict validation.
 - Validate scenario-check receipts before public handoff so preserved scenario,
   trace, or state source paths warn under strict validation.
 - Validate review-calibration receipts before public handoff so preserved
