@@ -93,6 +93,8 @@ evidence.
 - Validate agentic training flow handoffs before public use so preserved
   delegated command cwd, archive roots, external code roots, argv, or shell
   tokens warn under strict validation.
+- Validate cloud-training launch plans before public use so preserved dry-run
+  command tokens warn under strict validation.
 - Validate scenario-check receipts before public handoff so preserved scenario,
   trace, or state source paths warn under strict validation.
 - Validate review-calibration receipts before public handoff so preserved
@@ -775,7 +777,8 @@ card, and dataset card decisions.
 - Cloud-training artifact manifests, preflights, launch plans, launch receipts,
   and status receipts reopen path-backed upload/source refs from their own file
   location and reject symlinked, stale SHA-256, or byte-size evidence before
-  handoff.
+  handoff. Launch-plan strict validation also warns on absolute dry-run command
+  tokens before cloud-training handoffs become public evidence.
 - Agentic training loop plans reopen existing file source refs from the plan
   location and reject missing, moved, stale, symlinked, or cwd-substituted loop
   inputs before orchestration trusts phase readiness.

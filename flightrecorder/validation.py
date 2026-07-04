@@ -7513,8 +7513,12 @@ def _validate_cloud_training_launch_plan_launch(value: Any, target: ValidationTa
         target.errors.append(f"{label}.live_launch_supported must be false.")
     if value.get("provider_api_call_planned") is not False:
         target.errors.append(f"{label}.provider_api_call_planned must be false.")
-    if not _is_string_list(value.get("command")):
+    command = value.get("command")
+    if not _is_string_list(command):
         target.errors.append(f"{label}.command must be a list of strings.")
+    else:
+        for index, item in enumerate(command):
+            _warn_command_token_public_path(target, f"{label}.command[{index}]", item)
 
 
 def _validate_cloud_training_handoff_contract(value: Any, target: ValidationTarget, label: str) -> None:

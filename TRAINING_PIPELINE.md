@@ -939,7 +939,8 @@ transport, disabled live launch support, and zero provider API calls.
 Artifact manifests also carry a derived `transfer_plan` that must match the
 upload/download rows and provider protocols while proving Flight Recorder did
 not upload artifacts, download outputs, record credentials, or call provider
-APIs.
+APIs. Before public handoff, strict launch-plan validation warns if the dry-run
+command still contains absolute local path tokens.
 
 After the receipt exists, regenerate `evidence_bundle_trainer.json` and validate
 it with `flightrecorder validate --evidence-bundle
