@@ -663,8 +663,8 @@ card, and dataset card decisions.
   validation reject size drift or symlinked copied inputs between recorded
   inputs and replay metadata.
 - Harness replay receipts bind lineage and scorecard paths to SHA-256 plus
-  byte-size evidence; validation rejects stale replay references before trusting
-  pass/fail summaries.
+  byte-size evidence and require non-symlink replay output directories;
+  validation rejects stale replay references before trusting pass/fail summaries.
 - Harness run results from both the common publishers and installed
   `hermes-harness` entry point bind required artifact paths to SHA-256 plus
   byte-size evidence; validation rejects stale trace, scorecard, digest, report,

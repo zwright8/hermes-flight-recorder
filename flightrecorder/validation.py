@@ -2220,7 +2220,9 @@ def _validate_harness_replay_result(
         out_path = Path(out_dir)
         if not out_path.is_absolute() and source_dir is not None:
             out_path = source_dir / out_path
-        if not out_path.is_dir():
+        if _path_has_symlink_component(out_path, include_leaf=True):
+            target.errors.append("harness_replay_result.out_dir must resolve to a non-symlink directory.")
+        elif not out_path.is_dir():
             target.errors.append(f"harness_replay_result.out_dir does not exist or is not a directory: {out_dir}.")
     if not _is_non_negative_int(result.get("exit_code")):
         target.errors.append("harness_replay_result.exit_code must be a non-negative integer.")

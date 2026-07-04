@@ -389,6 +389,32 @@ class HarnessToolPolicyTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("harness_replay_result.lineage must resolve to a regular non-symlink file", errors)
 
+    def test_validate_rejects_symlink_harness_replay_out_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            run_dir, _result = _write_policy_violation_harness(root)
+            replay_dir = root / "replay"
+            _replay_trace_quietly(run_dir / "artifact_lineage.json", replay_dir)
+            result_path = replay_dir / "harness_replay_result.json"
+            summary_path = replay_dir / "validation.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            out_link = replay_dir / "out_link"
+            try:
+                out_link.symlink_to(replay_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            payload["out_dir"] = "out_link"
+            result_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout, stderr = _run_cli(
+                ["validate", "--harness-replay-result", str(result_path), "--strict", "--out", str(summary_path)]
+            )
+
+            self.assertEqual(rc, 1, stderr or stdout)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("harness_replay_result.out_dir must resolve to a non-symlink directory", errors)
+
     def test_validate_rejects_present_harness_canary_artifact_marked_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir, _result = _write_policy_violation_harness(Path(tmp))
