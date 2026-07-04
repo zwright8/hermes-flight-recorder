@@ -356,6 +356,7 @@ class DeploymentHardeningTests(unittest.TestCase):
     def test_live_smoke_summary_is_persisted(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
+            validation_path = out / "validation.json"
 
             summary = _write_smoke_summary(
                 out,
@@ -385,7 +386,18 @@ class DeploymentHardeningTests(unittest.TestCase):
             self.assertEqual(persisted["summary"], str(summary_path))
             self.assertEqual(persisted["environment"]["platform"], "Linux-test")
             self.assertEqual(persisted["environment"]["hermes_git_commit"], "abcdef123456")
-            self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path), "--strict"]), 0)
+            self.assertEqual(_run_cli(["validate", "--live-smoke-summary", str(summary_path), "--out", str(validation_path)]), 0)
+            self.assertEqual(
+                _run_cli(["validate", "--live-smoke-summary", str(summary_path), "--strict", "--out", str(validation_path)]),
+                1,
+            )
+            warnings = "\n".join(
+                warning for target in json.loads(validation_path.read_text(encoding="utf-8"))["targets"] for warning in target["warnings"]
+            )
+            self.assertIn("live_smoke_summary.observer_file is absolute", warnings)
+            self.assertIn("live_smoke_summary.summary is absolute", warnings)
+            self.assertIn("live_smoke_summary.environment.hermes_root is absolute", warnings)
+            self.assertIn("live_smoke_summary.environment.flight_recorder_root is absolute", warnings)
 
             persisted["missing_hooks"] = ["post_llm_call"]
             summary_path.write_text(json.dumps(persisted, indent=2, sort_keys=True) + "\n", encoding="utf-8")

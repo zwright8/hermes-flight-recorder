@@ -9315,6 +9315,8 @@ def _validate_live_smoke_summary(summary: dict[str, Any], target: ValidationTarg
     for field_name in required_paths:
         if not isinstance(summary.get(field_name), str) or not summary.get(field_name):
             target.errors.append(f"live_smoke_summary.{field_name} must be a non-empty string.")
+        else:
+            _warn_absolute_public_path(target, f"live_smoke_summary.{field_name}", summary.get(field_name))
     hooks = summary.get("hooks")
     if not _is_string_list(hooks):
         target.errors.append("live_smoke_summary.hooks must be a list of strings.")
@@ -9372,6 +9374,8 @@ def _validate_live_smoke_environment(environment: Any, target: ValidationTarget)
         value = environment.get(field_name)
         if not isinstance(value, str) or not value:
             target.errors.append(f"live_smoke_summary.environment.{field_name} must be a non-empty string.")
+    for field_name in ("hermes_root", "flight_recorder_root"):
+        _warn_absolute_public_path(target, f"live_smoke_summary.environment.{field_name}", environment.get(field_name))
     for field_name in ("hermes_git_dirty", "flight_recorder_git_dirty"):
         value = environment.get(field_name)
         if value is not None and not isinstance(value, bool):
