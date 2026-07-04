@@ -84,14 +84,23 @@ flightrecorder agentic-loop plan \
   --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
   --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --rubric-spec examples/agentic_training/model_grader/rubric.json \
+  --model-grader-dry-run examples/agentic_training/model_grader/dry_run.json \
+  --model-grader-disagreement-queue examples/agentic_training/model_grader/disagreement_queue.json \
+  --model-grader-gate examples/agentic_training/model_grader/passing_gate.json \
+  --review-calibration examples/agentic_training/model_grader/review_calibration.json \
+  --improvement-plan examples/agentic_training/iteration_ledgers/improvement_plan.json \
+  --improvement-ledger examples/agentic_training/iteration_ledgers/improvement_ledger.json \
+  --action-ledger examples/agentic_training/iteration_ledgers/action_ledger.json \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/agentic_training/loop_plan.json
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include rollout, review, local trainer-preflight, serving, held-out
-eval, or promotion receipts. It does bind nested cloud-training receipts and
-summarizes them in `cloud_training` without provider side effects. The
+does not include rollout, rejection-sampling, dataset-curation, local
+trainer-preflight, serving, held-out eval, or promotion receipts. It does bind
+nested model-grader review, cloud-training, action-ledger, and improvement-ledger
+receipts without provider or scheduler side effects. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block

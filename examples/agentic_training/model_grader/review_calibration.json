@@ -1,0 +1,134 @@
+{
+  "check_count": 5,
+  "checks": [
+    {
+      "actual": {
+        "reviewed_export": "reviewed",
+        "reviewed_labels": "reviewed/reviewed_labels.jsonl"
+      },
+      "expected": {
+        "safe_relative_paths": true
+      },
+      "id": "source_paths_replayable",
+      "passed": true,
+      "summary": "source_paths_replayable: passed=True"
+    },
+    {
+      "actual": {
+        "available": true,
+        "error_count": 0,
+        "passed": true,
+        "strict": false,
+        "target_count": 1,
+        "warning_count": 0
+      },
+      "expected": {
+        "error_count": 0,
+        "passed": true
+      },
+      "id": "valid_reviewed_export",
+      "passed": true,
+      "summary": "valid_reviewed_export: passed=True, errors=0, warnings=0"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_comparable_labels",
+      "passed": true,
+      "summary": "min_comparable_labels: actual=2, min=2"
+    },
+    {
+      "actual": 1.0,
+      "expected": {
+        "min": 1.0
+      },
+      "id": "min_agreement_rate",
+      "passed": true,
+      "summary": "min_agreement_rate: actual=1.0, min=1.0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_disagreements",
+      "passed": true,
+      "summary": "max_disagreements: actual=0, max=0"
+    }
+  ],
+  "disagreements": [],
+  "failed_check_count": 0,
+  "metrics": {
+    "agreement_count": 2,
+    "agreement_rate": 1.0,
+    "comparable_label_count": 2,
+    "disagreement_count": 0,
+    "false_negative_count": 0,
+    "false_positive_count": 0,
+    "human_negative_count": 1,
+    "human_positive_count": 1,
+    "label_counts": [
+      {
+        "count": 1,
+        "label": "accept"
+      },
+      {
+        "count": 1,
+        "label": "reject"
+      },
+      {
+        "count": 0,
+        "label": "needs_review"
+      },
+      {
+        "count": 0,
+        "label": "unsafe"
+      },
+      {
+        "count": 0,
+        "label": "incomplete"
+      }
+    ],
+    "mean_score_by_human_label": [
+      {
+        "average_score": 100.0,
+        "count": 1,
+        "label": "accept"
+      },
+      {
+        "average_score": 0.0,
+        "count": 1,
+        "label": "reject"
+      }
+    ],
+    "needs_review_count": 0,
+    "reviewed_label_count": 2,
+    "scorecard_negative_count": 1,
+    "scorecard_positive_count": 1,
+    "task_families": [
+      "prompt_injection"
+    ],
+    "validation": {
+      "available": true,
+      "error_count": 0,
+      "passed": true,
+      "strict": false,
+      "target_count": 1,
+      "warning_count": 0
+    }
+  },
+  "notes": [
+    "Calibration compares deterministic scorecard pass/fail outcomes with human review labels.",
+    "By default, calibration fails when the reviewed export no longer passes artifact validation.",
+    "Disagreements are evidence for scenario-policy review; they are not automatic proof that either side is correct.",
+    "Rows labeled needs_review are tracked but excluded from agreement-rate denominators."
+  ],
+  "passed": true,
+  "reviewed_export": "reviewed",
+  "schema_version": "hfr.review_calibration.v1",
+  "source": {
+    "reviewed_labels": "reviewed/reviewed_labels.jsonl"
+  }
+}

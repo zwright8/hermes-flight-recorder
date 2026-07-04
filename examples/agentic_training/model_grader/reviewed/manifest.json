@@ -1,0 +1,254 @@
+{
+  "artifact_fingerprints": {
+    "reviewed_dpo": {
+      "exists": true,
+      "path": "examples/model_grader/reviewed/reviewed_dpo.jsonl",
+      "regular_file": true,
+      "sha256": "35c47c576b9239c292846ce5a77c7e4f738c7beab0d3ea53488584f28489b91c",
+      "size_bytes": 1026,
+      "symlink": false
+    },
+    "reviewed_labels": {
+      "exists": true,
+      "path": "examples/model_grader/reviewed/reviewed_labels.jsonl",
+      "regular_file": true,
+      "sha256": "f0157fadda76ee7feccfcd9da206fcfe69cab42fe9f91390ecc473673237d54e",
+      "size_bytes": 3636,
+      "symlink": false
+    },
+    "reviewed_preferences": {
+      "exists": true,
+      "path": "examples/model_grader/reviewed/reviewed_preferences.jsonl",
+      "regular_file": true,
+      "sha256": "f78168fd56498f97b6b9c7a983bdba7907b97322f269508c479196d208d85a26",
+      "size_bytes": 1626,
+      "symlink": false
+    },
+    "reviewed_reward_model": {
+      "exists": true,
+      "path": "examples/model_grader/reviewed/reviewed_reward_model.jsonl",
+      "regular_file": true,
+      "sha256": "213d4d8744eff7ca1f537b9d9eb6c712034a92c5de7dd6246d664d5f566dd5f8",
+      "size_bytes": 1316,
+      "symlink": false
+    },
+    "reviewed_sft": {
+      "exists": true,
+      "path": "examples/model_grader/reviewed/reviewed_sft.jsonl",
+      "regular_file": true,
+      "sha256": "cfa1abd8d3bcaf4ae172cb6bdd69b281881c6dae620666c63b0fcdf1d0a9da62",
+      "size_bytes": 683,
+      "symlink": false
+    }
+  },
+  "confidence_counts": {
+    "high": 2,
+    "low": 0,
+    "medium": 0,
+    "unknown": 0
+  },
+  "dataset_version": "hfrds-4fde3fee61ba0c98",
+  "dpo_count": 1,
+  "generated_at": "2026-07-04T13:43:33.358806+00:00",
+  "high_confidence_label_count": 2,
+  "label_counts": {
+    "accept": 1,
+    "reject": 1
+  },
+  "label_provenance": {
+    "accepted_label_count": 1,
+    "needs_review_excluded_count": 0,
+    "negative_label_count": 1,
+    "notes": [
+      "Reviewed SFT rows require human_label='accept'.",
+      "Reviewed reward and preference rows use accept/reject/unsafe/incomplete labels only."
+    ],
+    "policy": "Completed human labels bound to review_item_sha256 drive reviewed trainer views.",
+    "reviewed_label_count": 2,
+    "schema_version": "hfr.rl.label_provenance.v1",
+    "trainer_view_counts": {
+      "reviewed_dpo": 1,
+      "reviewed_preferences": 1,
+      "reviewed_reward_model": 2,
+      "reviewed_sft": 1
+    }
+  },
+  "labels_artifact": {
+    "exists": true,
+    "path": "examples/model_grader/review/completed_labels.jsonl",
+    "regular_file": true,
+    "sha256": "cb29bf5fc87f2e1d35b15e498d3a055976c0fa9ad9990dc4425232848f2cfd98",
+    "size_bytes": 1153,
+    "symlink": false
+  },
+  "labels_path": "examples/model_grader/review/completed_labels.jsonl",
+  "low_confidence_label_count": 0,
+  "max_pairs_per_family": 0,
+  "medium_or_high_confidence_label_count": 2,
+  "notes": [
+    "Reviewed exports are derived from review_items.jsonl plus completed human labels.",
+    "Completed labels are bound to review_item_sha256 so stale labels cannot silently attach to changed review items.",
+    "Rows with human_label='needs_review' are kept in reviewed_labels.jsonl but excluded from trainer-ready views.",
+    "Reviewed SFT rows include only human_label='accept'.",
+    "Reviewed reward-model rows include accept/reject/unsafe/incomplete labels.",
+    "Reviewed preferences pair accepted rows against rejected/unsafe/incomplete rows in the same task family.",
+    "reviewer_confidence is human-entered evidence quality metadata; gate-reviewed can reject low or unknown confidence.",
+    "trainer_views maps supported reviewed training modes to reviewed SFT, DPO, and reward-model artifacts.",
+    "dataset_registry.json binds dataset_version to manifest SHA-256, source review artifacts, labels artifact, and redaction status."
+  ],
+  "output_dir": "examples/model_grader/reviewed",
+  "outputs": {
+    "dataset_registry": "examples/model_grader/reviewed/dataset_registry.json",
+    "manifest": "examples/model_grader/reviewed/manifest.json",
+    "reviewed_dpo": "examples/model_grader/reviewed/reviewed_dpo.jsonl",
+    "reviewed_labels": "examples/model_grader/reviewed/reviewed_labels.jsonl",
+    "reviewed_preferences": "examples/model_grader/reviewed/reviewed_preferences.jsonl",
+    "reviewed_reward_model": "examples/model_grader/reviewed/reviewed_reward_model.jsonl",
+    "reviewed_sft": "examples/model_grader/reviewed/reviewed_sft.jsonl"
+  },
+  "preference_count": 1,
+  "redaction_status": {
+    "findings": [],
+    "notes": [
+      "Finding previews intentionally omit matched values.",
+      "Redact raw traces, metadata, and trainer views before using this export for training."
+    ],
+    "passed": true,
+    "schema_version": "hfr.rl.redaction_status.v1",
+    "unredacted_secret_like_finding_count": 0
+  },
+  "registry": {
+    "manifest_path": "examples/model_grader/reviewed/manifest.json",
+    "mode_to_view": {
+      "action_sft": "reviewed_sft",
+      "dpo": "reviewed_dpo",
+      "reward_model": "reviewed_reward_model",
+      "sft": "reviewed_sft"
+    },
+    "path": "examples/model_grader/reviewed/dataset_registry.json",
+    "redaction_passed": true,
+    "root_views": [
+      "reviewed_sft.jsonl",
+      "reviewed_dpo.jsonl",
+      "reviewed_reward_model.jsonl"
+    ],
+    "schema_version": "hfr.rl.dataset_registry.v1",
+    "selection_key": "hfrds-4fde3fee61ba0c98"
+  },
+  "reviewed_label_count": 2,
+  "reward_model_count": 2,
+  "schema_version": "hfr.reviewed.manifest.v1",
+  "sft_count": 1,
+  "source_review_artifacts": {
+    "label_template": {
+      "exists": true,
+      "path": "examples/model_grader/review/label_template.jsonl",
+      "regular_file": true,
+      "sha256": "25cca03d14251b85cc5100e9d3ce4cc797deec70165ba4c1469de5ef7406646b",
+      "size_bytes": 949,
+      "symlink": false
+    },
+    "review_items": {
+      "exists": true,
+      "path": "examples/model_grader/review/review_items.jsonl",
+      "regular_file": true,
+      "sha256": "2f60acf41be47748ad771376ede30cac0ae23c6b4eb80b49bf06251273632c8e",
+      "size_bytes": 7556,
+      "symlink": false
+    },
+    "review_manifest": {
+      "exists": true,
+      "path": "examples/model_grader/review/manifest.json",
+      "regular_file": true,
+      "sha256": "bae1dff55235a9325e45ad78a33458c479b2bb12a09e11928b6fda8a88cf134e",
+      "size_bytes": 2056,
+      "symlink": false
+    }
+  },
+  "source_review_export": "examples/model_grader/review",
+  "task_families": [
+    "prompt_injection"
+  ],
+  "trainer_views": {
+    "contract_version": "hfr.rl.trainer_views.v1",
+    "mode_to_view": {
+      "action_sft": "reviewed_sft",
+      "dpo": "reviewed_dpo",
+      "reward_model": "reviewed_reward_model",
+      "sft": "reviewed_sft"
+    },
+    "notes": [
+      "Reviewed trainer views are selectors over human-reviewed artifacts.",
+      "Use gate-reviewed and review-calibration before launching reviewed dataset training."
+    ],
+    "root_views": [
+      "reviewed_sft.jsonl",
+      "reviewed_dpo.jsonl",
+      "reviewed_reward_model.jsonl"
+    ],
+    "views": [
+      {
+        "artifact": "reviewed_sft",
+        "artifact_format": "jsonl",
+        "artifact_path": "reviewed_sft.jsonl",
+        "available": true,
+        "label_policy": "human_reviewed_accept",
+        "notes": [
+          "Action SFT consumes the same human-accepted rows; no separate row copy is emitted."
+        ],
+        "row_count": 1,
+        "schema_version": "hfr.reviewed.sft.v1",
+        "source_artifacts": [
+          "reviewed_labels.jsonl"
+        ],
+        "split_paths": {},
+        "training_modes": [
+          "sft",
+          "action_sft"
+        ],
+        "view_id": "reviewed_sft"
+      },
+      {
+        "artifact": "reviewed_dpo",
+        "artifact_format": "jsonl",
+        "artifact_path": "reviewed_dpo.jsonl",
+        "available": true,
+        "label_policy": "human_reviewed_within_family_preference",
+        "notes": [
+          "DPO rows are derived from human-accepted versus rejected/unsafe/incomplete reviewed preferences."
+        ],
+        "row_count": 1,
+        "schema_version": "hfr.reviewed.dpo.v1",
+        "source_artifacts": [
+          "reviewed_preferences.jsonl"
+        ],
+        "split_paths": {},
+        "training_modes": [
+          "dpo"
+        ],
+        "view_id": "reviewed_dpo"
+      },
+      {
+        "artifact": "reviewed_reward_model",
+        "artifact_format": "jsonl",
+        "artifact_path": "reviewed_reward_model.jsonl",
+        "available": true,
+        "label_policy": "human_reviewed_label_reward",
+        "notes": [
+          "Reward rows exclude needs_review labels and carry reviewer confidence metadata."
+        ],
+        "row_count": 2,
+        "schema_version": "hfr.reviewed.reward_model.v1",
+        "source_artifacts": [
+          "reviewed_labels.jsonl"
+        ],
+        "split_paths": {},
+        "training_modes": [
+          "reward_model"
+        ],
+        "view_id": "reviewed_reward_model"
+      }
+    ]
+  },
+  "unknown_confidence_label_count": 0
+}

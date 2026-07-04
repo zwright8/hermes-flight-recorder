@@ -1,6 +1,10 @@
 {
-  "artifact_count": 10,
+  "artifact_count": 18,
   "artifact_role_counts": [
+    {
+      "count": 1,
+      "role": "action_ledger"
+    },
     {
       "count": 1,
       "role": "agentic_training_flow"
@@ -40,6 +44,34 @@
     {
       "count": 1,
       "role": "cloud_training_status_receipt"
+    },
+    {
+      "count": 1,
+      "role": "improvement_ledger"
+    },
+    {
+      "count": 1,
+      "role": "improvement_plan"
+    },
+    {
+      "count": 1,
+      "role": "model_grader_disagreement_queue"
+    },
+    {
+      "count": 1,
+      "role": "model_grader_dry_run"
+    },
+    {
+      "count": 1,
+      "role": "model_grader_gate"
+    },
+    {
+      "count": 1,
+      "role": "review_calibration"
+    },
+    {
+      "count": 1,
+      "role": "rubric_spec"
     }
   ],
   "blocked_reasons": [
@@ -129,11 +161,11 @@
     },
     {
       "actual": {
-        "model_grader_gate_present": false,
+        "model_grader_gate_present": true,
         "rejection_sampling_gate_present": false,
-        "review_calibration_present": false,
+        "review_calibration_present": true,
         "reviewed_gate_present": false,
-        "rubric_spec_present": false
+        "rubric_spec_present": true
       },
       "expected": {
         "model_grader_gate_present": true,
@@ -778,7 +810,6 @@
   },
   "iteration_id": "demo-loop-001",
   "missing_phase_inputs": [
-    "action_ledger",
     "agentic_rollout_plan",
     "agentic_rollout_receipt",
     "dataset_curation_receipt",
@@ -788,14 +819,10 @@
     "external_eval_receipt",
     "harness_result",
     "heldout_manifest",
-    "improvement_plan",
-    "model_grader_gate",
     "promotion_decision",
     "promotion_ledger",
     "rejection_sampling_gate",
-    "review_calibration",
     "reviewed_gate",
-    "rubric_spec",
     "serving_lifecycle",
     "trainer_launch_check",
     "trainer_preflight",
@@ -876,13 +903,13 @@
     {
       "gate": "model-grader labels are blocked until calibration and human override paths exist.",
       "id": "rubric_model_grader_review",
-      "missing_required_artifacts": [
+      "missing_required_artifacts": [],
+      "name": "Rubric and model-grader review",
+      "present_required_artifacts": [
         "rubric_spec",
         "model_grader_gate",
         "review_calibration"
       ],
-      "name": "Rubric and model-grader review",
-      "present_required_artifacts": [],
       "produces": [
         "review_manifest",
         "model_grader_dry_run",
@@ -895,7 +922,7 @@
         "model_grader_gate",
         "review_calibration"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "uncalibrated or low-confidence labels must not enter trainer-ready datasets.",
@@ -1016,11 +1043,11 @@
     {
       "gate": "next work must be evidence-backed, deduplicated, and linked to repair/curriculum signals.",
       "id": "improvement_planning",
-      "missing_required_artifacts": [
+      "missing_required_artifacts": [],
+      "name": "Improvement planning",
+      "present_required_artifacts": [
         "improvement_plan"
       ],
-      "name": "Improvement planning",
-      "present_required_artifacts": [],
       "produces": [
         "improvement_ledger",
         "action_ledger"
@@ -1028,7 +1055,7 @@
       "required_artifacts": [
         "improvement_plan"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "governance must approve, reject, rollback, or request another iteration before aliases move.",
@@ -1068,11 +1095,11 @@
     {
       "gate": "new iterations are scheduled only from ledgered decisions and open repair actions.",
       "id": "next_iteration",
-      "missing_required_artifacts": [
+      "missing_required_artifacts": [],
+      "name": "Next-iteration scheduling",
+      "present_required_artifacts": [
         "action_ledger"
       ],
-      "name": "Next-iteration scheduling",
-      "present_required_artifacts": [],
       "produces": [
         "agentic_training_loop_plan",
         "next_iteration_schedule"
@@ -1080,7 +1107,7 @@
       "required_artifacts": [
         "action_ledger"
       ],
-      "status": "blocked"
+      "status": "ready"
     }
   ],
   "plan_path": "examples/agentic_training/loop_plan.json",
@@ -1102,6 +1129,19 @@
   "recommendation": "collect_missing_receipts_before_live_execution",
   "schema_version": "hfr.agentic_training_loop_plan.v1",
   "source_artifacts": {
+    "action_ledger": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "iteration_ledgers/action_ledger.json",
+        "readiness": "",
+        "role": "action_ledger",
+        "schema_version": "hfr.action_ledger.v1",
+        "sha256": "326140dbe3e5f542e58a1a5a7dba94e8a3dcfd39759d8f8eb2de1c273176d90b",
+        "size_bytes": 3791
+      }
+    ],
     "agentic_training_flow": [
       {
         "exists": true,
@@ -1230,6 +1270,97 @@
         "schema_version": "hfr.cloud_training_status_receipt.v1",
         "sha256": "b6540f61f643d1026c7e489cd95b011b3de654042244c67adb3e4136f1bfc6fc",
         "size_bytes": 2682
+      }
+    ],
+    "improvement_ledger": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "iteration_ledgers/improvement_ledger.json",
+        "readiness": "",
+        "role": "improvement_ledger",
+        "schema_version": "hfr.improvement_ledger.v1",
+        "sha256": "5d85365c5b9f1452d0766ac5cabff3e5c19df925c16965ea6f1b395229daad0c",
+        "size_bytes": 6059
+      }
+    ],
+    "improvement_plan": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "iteration_ledgers/improvement_plan.json",
+        "readiness": "blocked",
+        "role": "improvement_plan",
+        "schema_version": "hfr.improvement_plan.v1",
+        "sha256": "ebe4afc592c097e77cffd66eb9fe9478314401371cfc8e24959ee7a21886a5ff",
+        "size_bytes": 5355
+      }
+    ],
+    "model_grader_disagreement_queue": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/disagreement_queue.json",
+        "readiness": "queue_empty",
+        "role": "model_grader_disagreement_queue",
+        "schema_version": "hfr.model_grader_disagreement_queue.v1",
+        "sha256": "58e3153b493d24443a1a879a048d0c600eb1665203f3a478cf0edfe7e6817e2f",
+        "size_bytes": 3522
+      }
+    ],
+    "model_grader_dry_run": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/dry_run.json",
+        "readiness": "ready_for_calibration_gate",
+        "role": "model_grader_dry_run",
+        "schema_version": "hfr.model_grader_dry_run.v1",
+        "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
+        "size_bytes": 5601
+      }
+    ],
+    "model_grader_gate": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/passing_gate.json",
+        "readiness": "labels_calibrated_for_curated_handoff",
+        "role": "model_grader_gate",
+        "schema_version": "hfr.model_grader_gate.v1",
+        "sha256": "4dccbf0cc7893b4c156dc9b5c1b3edf729e549e41b623d4d7aec0f5738cf2571",
+        "size_bytes": 7754
+      }
+    ],
+    "review_calibration": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/review_calibration.json",
+        "readiness": "",
+        "role": "review_calibration",
+        "schema_version": "hfr.review_calibration.v1",
+        "sha256": "15f3bfcc64011bfc1ea8212d6b0f01bbf9968bd234452280d79441a6a35fe9d4",
+        "size_bytes": 3197
+      }
+    ],
+    "rubric_spec": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": null,
+        "path": "model_grader/rubric.json",
+        "readiness": "",
+        "role": "rubric_spec",
+        "schema_version": "hfr.rubric_spec.v1",
+        "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
+        "size_bytes": 2227
       }
     ]
   }

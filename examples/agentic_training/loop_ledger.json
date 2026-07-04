@@ -43,7 +43,7 @@
     "readiness": "blocked",
     "recommendation": "continue_iteration",
     "recommended_governance_action": "request_another_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 22 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 17 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -57,7 +57,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 10,
+      "artifact_count": 18,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -80,15 +80,15 @@
           "group": "governance"
         },
         {
-          "count": 0,
+          "count": 3,
           "group": "improvement"
         },
         {
-          "count": 0,
+          "count": 1,
           "group": "next_iteration"
         },
         {
-          "count": 0,
+          "count": 5,
           "group": "review"
         },
         {
@@ -105,6 +105,10 @@
         }
       ],
       "artifact_role_counts": [
+        {
+          "count": 1,
+          "role": "action_ledger"
+        },
         {
           "count": 1,
           "role": "agentic_training_flow"
@@ -144,6 +148,34 @@
         {
           "count": 1,
           "role": "cloud_training_status_receipt"
+        },
+        {
+          "count": 1,
+          "role": "improvement_ledger"
+        },
+        {
+          "count": 1,
+          "role": "improvement_plan"
+        },
+        {
+          "count": 1,
+          "role": "model_grader_disagreement_queue"
+        },
+        {
+          "count": 1,
+          "role": "model_grader_dry_run"
+        },
+        {
+          "count": 1,
+          "role": "model_grader_gate"
+        },
+        {
+          "count": 1,
+          "role": "review_calibration"
+        },
+        {
+          "count": 1,
+          "role": "rubric_spec"
         }
       ],
       "blocked_reason_count": 7,
@@ -432,7 +464,6 @@
       "index": 0,
       "iteration_id": "demo-loop-001",
       "missing_phase_inputs": [
-        "action_ledger",
         "agentic_rollout_plan",
         "agentic_rollout_receipt",
         "dataset_curation_receipt",
@@ -442,14 +473,10 @@
         "external_eval_receipt",
         "harness_result",
         "heldout_manifest",
-        "improvement_plan",
-        "model_grader_gate",
         "promotion_decision",
         "promotion_ledger",
         "rejection_sampling_gate",
-        "review_calibration",
         "reviewed_gate",
-        "rubric_spec",
         "serving_lifecycle",
         "trainer_launch_check",
         "trainer_preflight",
@@ -465,12 +492,16 @@
       "path": "loop_plan.json",
       "phase_status_counts": [
         {
-          "count": 12,
+          "count": 9,
           "id": "blocked"
         },
         {
           "count": 1,
           "id": "planned"
+        },
+        {
+          "count": 3,
+          "id": "ready"
         }
       ],
       "readiness": "planned_fail_closed",
@@ -486,8 +517,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "05dacff784ea044ac4a4eb889ecfef216e0b4533e434e825e4eea6de2095bd3a",
-      "size_bytes": 41160,
+      "sha256": "b9da5c741c0f75b2cc7a0dda9ef5c9fb5cac1ff6691adad57107b8fe2887e142",
+      "size_bytes": 44904,
       "training_outputs": {
         "artifact_count": 4,
         "group": "training",
@@ -528,15 +559,15 @@
         "group": "governance"
       },
       {
-        "count": 0,
+        "count": 3,
         "group": "improvement"
       },
       {
-        "count": 0,
+        "count": 1,
         "group": "next_iteration"
       },
       {
-        "count": 0,
+        "count": 5,
         "group": "review"
       },
       {
@@ -555,7 +586,7 @@
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 22,
+    "latest_missing_phase_input_count": 17,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
     "promotion_ready_count": 0,
@@ -613,21 +644,17 @@
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "live_spend_allowed": false,
-    "missing_artifact_group_count": 9,
+    "missing_artifact_group_count": 6,
     "missing_artifact_groups": [
       "datasets",
       "eval",
       "evidence",
       "governance",
-      "improvement",
-      "next_iteration",
-      "review",
       "rollouts",
       "serving"
     ],
-    "missing_phase_input_count": 22,
+    "missing_phase_input_count": 17,
     "missing_phase_inputs": [
-      "action_ledger",
       "agentic_rollout_plan",
       "agentic_rollout_receipt",
       "dataset_curation_receipt",
@@ -637,14 +664,10 @@
       "external_eval_receipt",
       "harness_result",
       "heldout_manifest",
-      "improvement_plan",
-      "model_grader_gate",
       "promotion_decision",
       "promotion_ledger",
       "rejection_sampling_gate",
-      "review_calibration",
       "reviewed_gate",
-      "rubric_spec",
       "serving_lifecycle",
       "trainer_launch_check",
       "trainer_preflight",
@@ -661,7 +684,7 @@
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 22 missing phase input(s) across 9 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 17 missing phase input(s) across 6 empty artifact group(s)."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }

@@ -27,14 +27,28 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
     def test_committed_example_loop_plan_replays_fail_closed_sources(self):
         plan_path = ROOT / "examples" / "agentic_training" / "loop_plan.json"
         provider_registry_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "provider_registry.json"
+        model_grader_gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "passing_gate.json"
+        action_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "action_ledger.json"
+        improvement_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "improvement_ledger.json"
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
 
-        provider_registry_ref = plan["source_artifacts"]["cloud_training_provider_registry"][0]
-        self.assertEqual(provider_registry_ref["path"], "cloud_training/provider_registry.json")
-        self.assertEqual(provider_registry_ref["size_bytes"], provider_registry_path.stat().st_size)
-        self.assertEqual(provider_registry_ref["sha256"], hashlib.sha256(provider_registry_path.read_bytes()).hexdigest())
+        expected_refs = {
+            "cloud_training_provider_registry": ("cloud_training/provider_registry.json", provider_registry_path),
+            "model_grader_gate": ("model_grader/passing_gate.json", model_grader_gate_path),
+            "action_ledger": ("iteration_ledgers/action_ledger.json", action_ledger_path),
+            "improvement_ledger": ("iteration_ledgers/improvement_ledger.json", improvement_ledger_path),
+        }
+        for role, (expected_path, source_path) in expected_refs.items():
+            ref = plan["source_artifacts"][role][0]
+            self.assertEqual(ref["path"], expected_path)
+            self.assertEqual(ref["size_bytes"], source_path.stat().st_size)
+            self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertFalse(plan["passed"])
         self.assertEqual(plan["readiness"], "planned_fail_closed")
+        phases = {phase["id"]: phase for phase in plan["phases"]}
+        self.assertEqual(phases["rubric_model_grader_review"]["status"], "ready")
+        self.assertEqual(phases["improvement_planning"]["status"], "ready")
+        self.assertEqual(phases["next_iteration"]["status"], "ready")
         self.assertFalse(plan["cloud_training"]["cloud_jobs_started"])
         self.assertFalse(plan["cloud_training"]["provider_api_calls_started"])
         self.assertTrue(plan["cloud_training_receipt_state"]["fail_closed"])

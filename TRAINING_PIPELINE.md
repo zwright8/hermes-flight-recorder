@@ -925,6 +925,10 @@ provider API / model download / credential flags are replayed from the archived
 receipt files. Strict loop and ledger validation count a receipt as passed only
 after replaying that receipt against its current source external-eval plan, so
 stale or forged receipts cannot self-certify held-out eval readiness.
+The committed agentic-training loop example binds a local model-grader bundle,
+action ledger, and improvement ledger so review, improvement-planning, and
+next-iteration phases are replayable without pulling sibling example paths into
+the public loop contract.
 Loop ledgers also require each source loop plan to be replayable from the ledger
 output directory; a plan that would need an absolute or traversal path blocks
 ledger creation instead of producing a public artifact that cannot validate.

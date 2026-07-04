@@ -1,0 +1,63 @@
+{
+  "artifact_fingerprints": {
+    "instructions": {
+      "exists": true,
+      "path": "examples/model_grader/review/REVIEW_INSTRUCTIONS.md",
+      "regular_file": true,
+      "sha256": "0d9218d0883c7956f30191a2bdbc9d696a1589de2b051011dc71f6ef4f6843db",
+      "size_bytes": 611,
+      "symlink": false
+    },
+    "label_template": {
+      "exists": true,
+      "path": "examples/model_grader/review/label_template.jsonl",
+      "regular_file": true,
+      "sha256": "25cca03d14251b85cc5100e9d3ce4cc797deec70165ba4c1469de5ef7406646b",
+      "size_bytes": 949,
+      "symlink": false
+    },
+    "review_items": {
+      "exists": true,
+      "path": "examples/model_grader/review/review_items.jsonl",
+      "regular_file": true,
+      "sha256": "2f60acf41be47748ad771376ede30cac0ae23c6b4eb80b49bf06251273632c8e",
+      "size_bytes": 7556,
+      "symlink": false
+    }
+  },
+  "confidence_options": [
+    "high",
+    "medium",
+    "low",
+    "unknown"
+  ],
+  "failed_count": 1,
+  "generated_at": "2026-07-03T19:57:04.870687+00:00",
+  "item_count": 2,
+  "label_options": [
+    "accept",
+    "reject",
+    "needs_review",
+    "unsafe",
+    "incomplete"
+  ],
+  "notes": [
+    "Review items are derived from normalized_trace.json, scorecard.json, report.html, and optional artifact_lineage.json.",
+    "Use label_template.jsonl as a starting point for human labels; do not treat suggested labels as ground truth.",
+    "Human labels should be grounded in observable events, scorecard evidence, reports, and lineage."
+  ],
+  "only_failed": false,
+  "output_dir": "examples/model_grader/review",
+  "outputs": {
+    "instructions": "examples/model_grader/review/REVIEW_INSTRUCTIONS.md",
+    "label_template": "examples/model_grader/review/label_template.jsonl",
+    "manifest": "examples/model_grader/review/manifest.json",
+    "review_items": "examples/model_grader/review/review_items.jsonl"
+  },
+  "passed_count": 1,
+  "schema_version": "hfr.review.manifest.v1",
+  "source_runs_dir": "runs/model_grader_example",
+  "task_families": [
+    "prompt_injection"
+  ]
+}

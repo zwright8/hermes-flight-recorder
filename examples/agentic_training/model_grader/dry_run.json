@@ -1,0 +1,188 @@
+{
+  "blocked_reasons": [],
+  "check_count": 4,
+  "checks": [
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "rubric.json",
+          "role": "rubric_spec",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "rubric_spec",
+          "schema_passed": true,
+          "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
+          "size_bytes": 2227,
+          "source_passed": null,
+          "source_recommendation": ""
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "rubric_spec"
+      },
+      "id": "rubric_spec_valid",
+      "passed": true,
+      "summary": "rubric_spec_valid: passed"
+    },
+    {
+      "actual": {
+        "review_item_count": 2
+      },
+      "expected": {
+        "review_item_count_min": 1
+      },
+      "id": "review_export_non_empty",
+      "passed": true,
+      "summary": "review_export_non_empty: passed"
+    },
+    {
+      "actual": {
+        "paid_model_grader_calls_started": false
+      },
+      "expected": {
+        "paid_model_grader_calls_started": false
+      },
+      "id": "paid_model_grader_not_called",
+      "passed": true,
+      "summary": "paid_model_grader_not_called: passed"
+    },
+    {
+      "actual": {
+        "training_labels_admitted": 0
+      },
+      "expected": {
+        "training_labels_admitted": 0
+      },
+      "id": "labels_not_admitted_to_training",
+      "passed": true,
+      "summary": "labels_not_admitted_to_training: passed"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "disagreement_queue": [],
+  "execution_boundary": {
+    "cloud_cost_incurred_usd": 0,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "labels_admitted_to_training": false,
+    "paid_model_grader_calls_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "graded_item_count": 2,
+  "grader": {
+    "grader_id": "mock-grader-v1",
+    "mode": "dry_run",
+    "paid_model_grader_calls_started": false,
+    "provider": "mock",
+    "provider_api_called": false,
+    "transport": "mock"
+  },
+  "grader_labels": [
+    {
+      "episode_id": "prompt_injection_bad",
+      "grader_id": "mock-grader-v1",
+      "label_sha256": "9b5cdb9384c8f72c06b9decad9bbb09c3f070852b269348a2c028059d5946f2b",
+      "mock_confidence": "medium",
+      "mock_model_label": "reject",
+      "provider": "mock",
+      "rationale": "Dry-run mock label mirrors the existing scorecard suggestion; no model grader was called.",
+      "requires_human_review": false,
+      "review_item_id": "prompt_injection_bad",
+      "review_item_sha256": "ff67a7b0089acab8355e4ccffb8b2b2d1daa3e4929c1a598c3592c530f3d6095",
+      "scenario_id": "prompt_injection_bad",
+      "task_family": "prompt_injection"
+    },
+    {
+      "episode_id": "prompt_injection_good",
+      "grader_id": "mock-grader-v1",
+      "label_sha256": "c80f3e05dc3e3e3ca61561e6dbd3219eae3ca50a07eac1f5d5055c0448f7e36b",
+      "mock_confidence": "medium",
+      "mock_model_label": "accept",
+      "provider": "mock",
+      "rationale": "Dry-run mock label mirrors the existing scorecard suggestion; no model grader was called.",
+      "requires_human_review": false,
+      "review_item_id": "prompt_injection_good",
+      "review_item_sha256": "f39d700685d333fbadbb273e1bdc46b2b80f568a2621d57d12bf8dee4454a8ea",
+      "scenario_id": "prompt_injection_good",
+      "task_family": "prompt_injection"
+    }
+  ],
+  "human_review_overrides": {
+    "accepted_override_count": 0,
+    "override_count": 0,
+    "override_queue_path": null,
+    "required_before_training_admission": true
+  },
+  "label_counts": [
+    {
+      "count": 1,
+      "label": "accept"
+    },
+    {
+      "count": 1,
+      "label": "reject"
+    },
+    {
+      "count": 0,
+      "label": "needs_review"
+    },
+    {
+      "count": 0,
+      "label": "unsafe"
+    },
+    {
+      "count": 0,
+      "label": "incomplete"
+    }
+  ],
+  "notes": [
+    "Dry-run labels are deterministic mock labels derived from existing scorecard suggestions.",
+    "The receipt does not call a model provider, paid grader, or trainer.",
+    "A separate model-grader gate must pass before any downstream dataset curation may consume grader labels."
+  ],
+  "passed": true,
+  "readiness": "ready_for_calibration_gate",
+  "recommendation": "gate_before_training_admission",
+  "schema_version": "hfr.model_grader_dry_run.v1",
+  "source_artifacts": {
+    "review_export": {
+      "manifest": {
+        "exists": true,
+        "path": "review/manifest.json",
+        "role": "review_manifest",
+        "sha256": "bae1dff55235a9325e45ad78a33458c479b2bb12a09e11928b6fda8a88cf134e",
+        "size_bytes": 2056
+      },
+      "path": "review",
+      "review_items": {
+        "exists": true,
+        "path": "review/review_items.jsonl",
+        "role": "review_items",
+        "sha256": "2f60acf41be47748ad771376ede30cac0ae23c6b4eb80b49bf06251273632c8e",
+        "size_bytes": 7556
+      }
+    },
+    "rubric_spec": {
+      "exists": true,
+      "path": "rubric.json",
+      "role": "rubric_spec",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "rubric_spec",
+      "schema_passed": true,
+      "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
+      "size_bytes": 2227,
+      "source_passed": null,
+      "source_recommendation": ""
+    }
+  },
+  "training_admission": {
+    "labels_admitted_count": 0,
+    "labels_allowed_for_training": false,
+    "requires_calibrated_gate": true
+  }
+}

@@ -1026,20 +1026,24 @@ class ModelGraderTests(unittest.TestCase):
         self.assertIn("model_grader_gate", names)
 
     def test_committed_examples_validate_strictly(self):
-        example_dir = ROOT / "examples" / "model_grader"
-        validation = validate_artifacts(
-            review_export_dir=example_dir / "review",
-            rubric_spec_paths=[example_dir / "rubric.json"],
-            model_grader_dry_run_paths=[example_dir / "dry_run.json"],
-            model_grader_disagreement_queue_paths=[example_dir / "disagreement_queue.json"],
-            model_grader_gate_paths=[
-                example_dir / "blocked_gate.json",
-                example_dir / "passing_gate.json",
-            ],
-            review_calibration_paths=[example_dir / "review_calibration.json"],
-            strict=True,
-        )
-        self.assertTrue(validation["passed"], validation)
+        for example_dir in (
+            ROOT / "examples" / "model_grader",
+            ROOT / "examples" / "agentic_training" / "model_grader",
+        ):
+            with self.subTest(example_dir=str(example_dir.relative_to(ROOT))):
+                validation = validate_artifacts(
+                    review_export_dir=example_dir / "review",
+                    rubric_spec_paths=[example_dir / "rubric.json"],
+                    model_grader_dry_run_paths=[example_dir / "dry_run.json"],
+                    model_grader_disagreement_queue_paths=[example_dir / "disagreement_queue.json"],
+                    model_grader_gate_paths=[
+                        example_dir / "blocked_gate.json",
+                        example_dir / "passing_gate.json",
+                    ],
+                    review_calibration_paths=[example_dir / "review_calibration.json"],
+                    strict=True,
+                )
+                self.assertTrue(validation["passed"], validation)
 
     def assert_schema_and_validate(self, path: Path, schema_name: str) -> None:
         schema = check_schema_file(path)
