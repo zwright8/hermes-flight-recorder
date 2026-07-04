@@ -22,6 +22,32 @@ SCENARIO = ROOT / "scenarios" / "prompt_injection_good.json"
 
 
 class RejectionSamplingGateTests(unittest.TestCase):
+    def test_committed_agentic_training_rejection_sampling_gate_replays_inputs(self):
+        gate_path = ROOT / "examples" / "agentic_training" / "rejection_sampling_gate.json"
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(gate["passed"], gate["blocked_reasons"])
+        self.assertEqual(gate["readiness"], "ready_for_dataset_curation")
+        self.assertEqual(gate["rollout_summary"]["mock_rollout_count"], 6)
+        self.assertFalse(gate["rollout_summary"]["dataset_rows_created"])
+        self.assertFalse(gate["execution_boundary"]["dataset_rows_written"])
+        self.assertFalse(gate["execution_boundary"]["weights_updated_by_flight_recorder"])
+        input_paths = {
+            role: rows[0]["path"]
+            for role, rows in gate["input_artifacts"].items()
+            if isinstance(rows, list) and rows
+        }
+        self.assertEqual(input_paths["agentic_rollout_receipt"], "rollouts/rollout_receipt.json")
+        self.assertEqual(input_paths["model_grader_gate"], "model_grader/passing_gate.json")
+        self.assertEqual(input_paths["review_calibration"], "model_grader/review_calibration.json")
+        self.assertEqual(input_paths["reviewed_gate"], "model_grader/reviewed_gate.json")
+
+        schema = check_schema_file(gate_path)
+        validation = validate_artifacts(rejection_sampling_gate_paths=[gate_path], strict=True)
+
+        self.assertTrue(schema["passed"], schema["errors"])
+        self.assertTrue(validation["passed"], validation)
+
     def test_gate_admits_calibrated_mock_rollouts_without_writing_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

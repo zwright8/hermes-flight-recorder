@@ -52,6 +52,20 @@ def make_reviewed_export(tmp: str):
 
 
 class ReviewedGateTests(unittest.TestCase):
+    def test_committed_agentic_training_reviewed_gate_is_schema_checkable(self):
+        gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "reviewed_gate.json"
+        result = json.loads(gate_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["schema_version"], "hfr.reviewed_gate.v1")
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["failed_check_count"], 0)
+        self.assertEqual(result["decision"]["readiness"], "ready")
+        self.assertEqual(result["metrics"]["reviewed_label_count"], 2)
+        self.assertEqual(result["metrics"]["accepted_count"], 1)
+        self.assertEqual(result["metrics"]["rejected_count"], 1)
+        self.assertEqual(result["metrics"]["task_families"], ["prompt_injection"])
+        self.assertEqual(run_cli(["schemas", "--check", str(gate_path)]), 0)
+
     def test_gate_reviewed_accepts_demo_policy(self):
         with tempfile.TemporaryDirectory() as tmp:
             reviewed = make_reviewed_export(tmp)

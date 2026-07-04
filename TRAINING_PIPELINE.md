@@ -774,6 +774,10 @@ Rejection-sampling gate refs are public-safe by default: generated artifacts
 write paths relative to the gate output directory, redact absolute or traversal
 refs that cannot be replayed from there, and validation rejects hand-authored
 unsafe refs before curation can proceed.
+The committed closed-loop demo includes
+`examples/agentic_training/rejection_sampling_gate.json`, which admits its mock
+rollout receipt only after the reviewed-gate and calibration receipts pass while
+still recording `dataset_rows_written: false`.
 
 Archive a curation receipt after rejection-sampling admission and before
 trainer preflight. It binds existing training exports to the admission gate and
@@ -934,10 +938,11 @@ receipt files. Strict loop and ledger validation count a receipt as passed only
 after replaying that receipt against its current source external-eval plan, so
 stale or forged receipts cannot self-certify held-out eval readiness.
 The committed agentic-training loop example binds loop-local rollout plan and
-mock-receipt artifacts, a local model-grader bundle, action ledger, and
-improvement ledger so rollout references, review, improvement-planning, and
-next-iteration phases are replayable without pulling sibling example paths into
-the public loop contract.
+mock-receipt artifacts, a local model-grader bundle, reviewed gate,
+rejection-sampling gate, action ledger, and improvement ledger so rollout
+references, review, rejection-sampling, improvement-planning, and next-iteration
+phases are replayable without pulling sibling example paths into the public loop
+contract.
 Loop ledgers also require each source loop plan to be replayable from the ledger
 output directory; a plan that would need an absolute or traversal path blocks
 ledger creation instead of producing a public artifact that cannot validate.

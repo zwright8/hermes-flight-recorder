@@ -1,0 +1,191 @@
+{
+  "admission_policy": {
+    "accepted_dataset_roles": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "reward_model"
+    ],
+    "accepts_uncalibrated_labels": false,
+    "requires_calibrated_review": true,
+    "requires_mock_rollout_receipt": true,
+    "requires_model_grader_gate": true,
+    "requires_reviewed_gate": true
+  },
+  "blocked_reasons": [],
+  "check_count": 7,
+  "checks": [
+    {
+      "actual": {
+        "passing_count": 1,
+        "receipt_count": 1
+      },
+      "expected": {
+        "all_passed": true,
+        "readiness": "mock_rollouts_recorded",
+        "receipt_count": ">=1"
+      },
+      "id": "mock_rollout_receipts_present_and_passing",
+      "passed": true,
+      "summary": "mock_rollout_receipts_present_and_passing: passed=True"
+    },
+    {
+      "actual": {
+        "mock_rollout_count": 6
+      },
+      "expected": {
+        "mock_rollout_count": ">0"
+      },
+      "id": "mock_rollouts_available",
+      "passed": true,
+      "summary": "mock_rollouts_available: passed=True"
+    },
+    {
+      "actual": {
+        "gate_count": 1,
+        "passing_count": 1
+      },
+      "expected": {
+        "all_passed": true,
+        "gate_count": ">=1"
+      },
+      "id": "model_grader_gate_present_and_passing",
+      "passed": true,
+      "summary": "model_grader_gate_present_and_passing: passed=True"
+    },
+    {
+      "actual": {
+        "calibration_count": 1,
+        "passing_count": 1
+      },
+      "expected": {
+        "all_passed": true,
+        "calibration_count": ">=1"
+      },
+      "id": "review_calibration_present_and_passing",
+      "passed": true,
+      "summary": "review_calibration_present_and_passing: passed=True"
+    },
+    {
+      "actual": {
+        "passing_count": 1,
+        "reviewed_gate_count": 1
+      },
+      "expected": {
+        "all_passed": true,
+        "reviewed_gate_count": ">=1"
+      },
+      "id": "reviewed_gate_present_and_passing",
+      "passed": true,
+      "summary": "reviewed_gate_present_and_passing: passed=True"
+    },
+    {
+      "actual": {
+        "accepted_rows_written": 0,
+        "dataset_rows_written": false,
+        "rejected_rows_written": 0
+      },
+      "expected": {
+        "accepted_rows_written": 0,
+        "dataset_rows_written": false,
+        "rejected_rows_written": 0
+      },
+      "id": "flight_recorder_did_not_write_training_rows",
+      "passed": true,
+      "summary": "flight_recorder_did_not_write_training_rows: passed=True"
+    },
+    {
+      "actual": {
+        "live_rollouts_started": false
+      },
+      "expected": {
+        "live_rollouts_started": false
+      },
+      "id": "only_mock_rollout_inputs_admitted",
+      "passed": true,
+      "summary": "only_mock_rollout_inputs_admitted: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "dataset_rows_written": false,
+    "gate_only": true,
+    "model_provider_calls_started": false,
+    "paid_model_grader_calls_started": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "gate_path": "rejection_sampling_gate.json",
+  "input_artifacts": {
+    "agentic_rollout_receipt": [
+      {
+        "dataset_rows_written": false,
+        "exists": true,
+        "kind": "file",
+        "live_rollouts_started": false,
+        "mock_receipt_only": true,
+        "mock_rollout_count": 6,
+        "passed": true,
+        "path": "rollouts/rollout_receipt.json",
+        "readiness": "mock_rollouts_recorded",
+        "role": "agentic_rollout_receipt",
+        "schema_version": "hfr.agentic_rollout_receipt.v1",
+        "sha256": "8b8e6f3b92de54fc14f477d17f92d0985a503962c0aca44ecaad99c224e40947",
+        "size_bytes": 6783
+      }
+    ],
+    "model_grader_gate": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/passing_gate.json",
+        "readiness": "labels_calibrated_for_curated_handoff",
+        "role": "model_grader_gate",
+        "schema_version": "hfr.model_grader_gate.v1",
+        "sha256": "4dccbf0cc7893b4c156dc9b5c1b3edf729e549e41b623d4d7aec0f5738cf2571",
+        "size_bytes": 7754
+      }
+    ],
+    "review_calibration": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/review_calibration.json",
+        "readiness": "",
+        "role": "review_calibration",
+        "schema_version": "hfr.review_calibration.v1",
+        "sha256": "15f3bfcc64011bfc1ea8212d6b0f01bbf9968bd234452280d79441a6a35fe9d4",
+        "size_bytes": 3197
+      }
+    ],
+    "reviewed_gate": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/reviewed_gate.json",
+        "readiness": "",
+        "role": "reviewed_gate",
+        "schema_version": "hfr.reviewed_gate.v1",
+        "sha256": "0c151fa74f7d3afe08614c3ab830b15c41e75a41a62962a1099b27ac1bd4cc4c",
+        "size_bytes": 4545
+      }
+    ]
+  },
+  "notes": [
+    "This gate admits reviewed rollout evidence to dataset curation; it does not write dataset rows.",
+    "Uncalibrated labels, missing reviewed gates, and live-rollout claims keep rejection sampling blocked."
+  ],
+  "passed": true,
+  "readiness": "ready_for_dataset_curation",
+  "recommendation": "curate_accepted_training_rows",
+  "rollout_summary": {
+    "dataset_rows_created": false,
+    "live_rollouts_started": false,
+    "mock_rollout_count": 6,
+    "receipt_count": 1
+  },
+  "schema_version": "hfr.rejection_sampling_gate.v1"
+}

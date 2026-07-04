@@ -1,0 +1,203 @@
+{
+  "check_count": 12,
+  "checks": [
+    {
+      "actual": {
+        "available": true,
+        "error_count": 0,
+        "passed": true,
+        "strict": false,
+        "target_count": 1,
+        "warning_count": 0
+      },
+      "expected": {
+        "error_count": 0,
+        "passed": true
+      },
+      "id": "valid_reviewed_export",
+      "passed": true,
+      "summary": "valid_reviewed_export: passed=True, errors=0, warnings=0"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_reviewed_labels",
+      "passed": true,
+      "summary": "min_reviewed_labels: actual=2, min=2"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_accepted",
+      "passed": true,
+      "summary": "min_accepted: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_rejected",
+      "passed": true,
+      "summary": "min_rejected: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_sft",
+      "passed": true,
+      "summary": "min_sft: actual=1, min=1"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_reward_model",
+      "passed": true,
+      "summary": "min_reward_model: actual=2, min=2"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_preferences",
+      "passed": true,
+      "summary": "min_preferences: actual=1, min=1"
+    },
+    {
+      "actual": 1,
+      "expected": {
+        "min": 1
+      },
+      "id": "min_dpo",
+      "passed": true,
+      "summary": "min_dpo: actual=1, min=1"
+    },
+    {
+      "actual": 2,
+      "expected": {
+        "min": 2
+      },
+      "id": "min_medium_or_high_confidence_labels",
+      "passed": true,
+      "summary": "min_medium_or_high_confidence_labels: actual=2, min=2"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_needs_review",
+      "passed": true,
+      "summary": "max_needs_review: actual=0, max=0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_low_confidence_labels",
+      "passed": true,
+      "summary": "max_low_confidence_labels: actual=0, max=0"
+    },
+    {
+      "actual": 0,
+      "expected": {
+        "max": 0
+      },
+      "id": "max_unknown_confidence_labels",
+      "passed": true,
+      "summary": "max_unknown_confidence_labels: actual=0, max=0"
+    }
+  ],
+  "decision": {
+    "blocking_check_count": 0,
+    "blocking_checks": [],
+    "failed_checks": [],
+    "key_metrics": {
+      "accepted_count": 1,
+      "confidence_counts": {
+        "high": 2,
+        "low": 0,
+        "medium": 0,
+        "unknown": 0
+      },
+      "dpo_count": 1,
+      "high_confidence_label_count": 2,
+      "label_counts": {
+        "accept": 1,
+        "reject": 1
+      },
+      "low_confidence_label_count": 0,
+      "medium_or_high_confidence_label_count": 2,
+      "preference_count": 1,
+      "rejected_count": 1,
+      "reviewed_label_count": 2,
+      "reward_model_count": 2,
+      "sft_count": 1,
+      "task_families": [
+        "prompt_injection"
+      ],
+      "unknown_confidence_label_count": 0,
+      "validation": {
+        "available": true,
+        "error_count": 0,
+        "passed": true,
+        "strict": false,
+        "target_count": 1,
+        "warning_count": 0
+      }
+    },
+    "next_action_count": 0,
+    "next_actions": [],
+    "readiness": "ready",
+    "recommendation": "promote_iteration",
+    "summary": "Gate is ready: all checks passed."
+  },
+  "failed_check_count": 0,
+  "metrics": {
+    "accepted_count": 1,
+    "confidence_counts": {
+      "high": 2,
+      "low": 0,
+      "medium": 0,
+      "unknown": 0
+    },
+    "dpo_count": 1,
+    "high_confidence_label_count": 2,
+    "label_counts": {
+      "accept": 1,
+      "reject": 1
+    },
+    "low_confidence_label_count": 0,
+    "medium_or_high_confidence_label_count": 2,
+    "preference_count": 1,
+    "rejected_count": 1,
+    "reviewed_label_count": 2,
+    "reward_model_count": 2,
+    "sft_count": 1,
+    "task_families": [
+      "prompt_injection"
+    ],
+    "unknown_confidence_label_count": 0,
+    "validation": {
+      "available": true,
+      "error_count": 0,
+      "passed": true,
+      "strict": false,
+      "target_count": 1,
+      "warning_count": 0
+    }
+  },
+  "passed": true,
+  "reviewed_export": "examples/agentic_training/model_grader/reviewed",
+  "schema_version": "hfr.reviewed_gate.v1"
+}

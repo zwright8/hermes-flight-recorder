@@ -1,5 +1,5 @@
 {
-  "artifact_count": 20,
+  "artifact_count": 22,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -75,7 +75,15 @@
     },
     {
       "count": 1,
+      "role": "rejection_sampling_gate"
+    },
+    {
+      "count": 1,
       "role": "review_calibration"
+    },
+    {
+      "count": 1,
+      "role": "reviewed_gate"
     },
     {
       "count": 1,
@@ -83,7 +91,6 @@
     }
   ],
   "blocked_reasons": [
-    "uncalibrated_labels_block_training_data: passed=False",
     "dataset_curation_receipt_required_for_trainer_handoff: passed=False",
     "external_trainer_handoff_is_preflighted: passed=False",
     "cloud_training_lineage_bound_for_provider_handoff: passed=False",
@@ -169,9 +176,9 @@
     {
       "actual": {
         "model_grader_gate_present": true,
-        "rejection_sampling_gate_present": false,
+        "rejection_sampling_gate_present": true,
         "review_calibration_present": true,
-        "reviewed_gate_present": false,
+        "reviewed_gate_present": true,
         "rubric_spec_present": true
       },
       "expected": {
@@ -182,13 +189,13 @@
         "rubric_spec_present": true
       },
       "id": "uncalibrated_labels_block_training_data",
-      "passed": false,
-      "summary": "uncalibrated_labels_block_training_data: passed=False"
+      "passed": true,
+      "summary": "uncalibrated_labels_block_training_data: passed=True"
     },
     {
       "actual": {
         "dataset_curation_receipt_present": false,
-        "rejection_sampling_gate_present": false,
+        "rejection_sampling_gate_present": true,
         "training_export_present": false
       },
       "expected": {
@@ -802,7 +809,7 @@
     "recommendation": "",
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 6,
+  "failed_check_count": 5,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -826,8 +833,6 @@
     "heldout_manifest",
     "promotion_decision",
     "promotion_ledger",
-    "rejection_sampling_gate",
-    "reviewed_gate",
     "serving_lifecycle",
     "trainer_launch_check",
     "trainer_preflight",
@@ -933,12 +938,12 @@
     {
       "gate": "uncalibrated or low-confidence labels must not enter trainer-ready datasets.",
       "id": "rejection_sampling",
-      "missing_required_artifacts": [
+      "missing_required_artifacts": [],
+      "name": "Rejection sampling",
+      "present_required_artifacts": [
         "reviewed_gate",
         "rejection_sampling_gate"
       ],
-      "name": "Rejection sampling",
-      "present_required_artifacts": [],
       "produces": [
         "dataset_registry",
         "dataset_splits"
@@ -947,18 +952,19 @@
         "reviewed_gate",
         "rejection_sampling_gate"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "datasets must be redacted, licensed, hashed, and split before trainer handoff.",
       "id": "dataset_curation",
       "missing_required_artifacts": [
-        "rejection_sampling_gate",
         "dataset_curation_receipt",
         "training_export"
       ],
       "name": "Dataset curation",
-      "present_required_artifacts": [],
+      "present_required_artifacts": [
+        "rejection_sampling_gate"
+      ],
       "produces": [
         "training_manifest",
         "dataset_registry"
@@ -1369,6 +1375,19 @@
         "size_bytes": 7754
       }
     ],
+    "rejection_sampling_gate": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "rejection_sampling_gate.json",
+        "readiness": "ready_for_dataset_curation",
+        "role": "rejection_sampling_gate",
+        "schema_version": "hfr.rejection_sampling_gate.v1",
+        "sha256": "5fa35da1cc9bff69597e6090b15bffdd3b0808e0ac364d300e99cbaf49b9cd07",
+        "size_bytes": 5506
+      }
+    ],
     "review_calibration": [
       {
         "exists": true,
@@ -1380,6 +1399,19 @@
         "schema_version": "hfr.review_calibration.v1",
         "sha256": "15f3bfcc64011bfc1ea8212d6b0f01bbf9968bd234452280d79441a6a35fe9d4",
         "size_bytes": 3197
+      }
+    ],
+    "reviewed_gate": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "model_grader/reviewed_gate.json",
+        "readiness": "",
+        "role": "reviewed_gate",
+        "schema_version": "hfr.reviewed_gate.v1",
+        "sha256": "0c151fa74f7d3afe08614c3ab830b15c41e75a41a62962a1099b27ac1bd4cc4c",
+        "size_bytes": 4545
       }
     ],
     "rubric_spec": [
