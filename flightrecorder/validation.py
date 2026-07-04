@@ -3066,12 +3066,108 @@ def _is_safe_training_flow_metadata_path(value: str) -> bool:
     return _is_safe_or_redacted_training_flow_path(value) and ".." not in path.parts
 
 
+_AGENTIC_TRAINING_RESULT_KEYS = {
+    "schema_version",
+    "created_at",
+    "artifact_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "training_result",
+    "lineage",
+    "failure",
+    "artifacts",
+    "metrics",
+    "registry_update",
+    "execution_boundary",
+    "handoff_contract",
+    "notes",
+}
+_AGENTIC_TRAINING_RESULT_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_AGENTIC_TRAINING_RESULT_TRAINING_KEYS = {
+    "status",
+    "runner_id",
+    "run_id",
+    "mode",
+    "backend",
+    "output_dir",
+    "external_runner_reported_status",
+    "flight_recorder_executed_training",
+    "model_downloads_started_by_flight_recorder",
+}
+_AGENTIC_TRAINING_RESULT_LINEAGE_KEYS = {"plan", "runtime_preflight", "model", "dataset", "agentic_training_flow"}
+_AGENTIC_TRAINING_RESULT_LINEAGE_REF_KEYS = {"path", "exists", "regular_file", "schema_name", "sha256", "size_bytes"}
+_AGENTIC_TRAINING_RESULT_MANIFEST_REF_KEYS = {"id", "path", "sha256", "size_bytes", "license_allows_training"}
+_AGENTIC_TRAINING_RESULT_FAILURE_KEYS = {"class", "message", "recoverable", "source"}
+_AGENTIC_TRAINING_RESULT_ARTIFACT_KEYS = {"role", "path", "exists", "regular_file", "sha256", "size_bytes"}
+_AGENTIC_TRAINING_RESULT_METRIC_KEYS = {
+    "artifact_count",
+    "regular_artifact_count",
+    "output_artifact_count",
+    "config_count",
+    "metrics_file_count",
+    "adapter_count",
+    "checkpoint_count",
+    "log_count",
+    "failure_report_count",
+}
+_AGENTIC_TRAINING_RESULT_BOUNDARY_KEYS = {
+    "archive_only",
+    "runner_owns_execution",
+    "flight_recorder_launched_training",
+    "training_started_by_flight_recorder",
+    "model_downloads_started_by_flight_recorder",
+    "trainer_modules_imported_by_flight_recorder",
+}
+_AGENTIC_TRAINING_RESULT_HANDOFF_KEYS = {
+    "runner_owns_execution",
+    "requires_agentic_training_plan",
+    "requires_runtime_preflight",
+    "requires_agentic_training_flow_for_completed",
+    "requires_runtime_ready_for_completed",
+    "requires_flow_ready_for_completed",
+    "requires_classified_failure_for_non_completed",
+    "requires_output_artifact_for_completed",
+    "requires_registered_model",
+    "requires_registered_dataset",
+    "requires_redacted_dataset",
+    "flight_recorder_launched_training",
+    "model_downloads_started_by_flight_recorder",
+}
+_AGENTIC_TRAINING_RESULT_REGISTRY_UPDATE_KEYS = {
+    "applied",
+    "side_effect_free",
+    "ready_to_apply",
+    "target_model_id",
+    "target_dataset_id",
+    "links",
+    "notes",
+}
+_AGENTIC_TRAINING_RESULT_REGISTRY_LINK_KEYS = {
+    "collection",
+    "artifact_id",
+    "kind",
+    "status",
+    "path",
+    "sha256",
+    "size_bytes",
+}
+
+
 def _validate_agentic_training_result(result: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(result, _AGENTIC_TRAINING_RESULT_KEYS, target, "agentic_training_result")
     _require_equal(result, "schema_version", AGENTIC_TRAINING_RESULT_SCHEMA_VERSION, target, prefix="agentic_training_result.")
     checks = result.get("checks")
     if not isinstance(checks, list):
         target.errors.append("agentic_training_result.checks must be a list.")
         checks = []
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _AGENTIC_TRAINING_RESULT_CHECK_KEYS, target, f"agentic_training_result.checks[{index}]")
     failed_checks = _validate_gate_like_checks(checks, target, "agentic_training_result.checks")
     if result.get("check_count") != len(checks):
         target.errors.append(f"agentic_training_result.check_count expected {len(checks)}, got {result.get('check_count')!r}.")
@@ -3100,6 +3196,13 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     if not isinstance(training_result, dict):
         target.errors.append("agentic_training_result.training_result must be an object.")
         training_result = {}
+    else:
+        _validate_allowed_keys(
+            training_result,
+            _AGENTIC_TRAINING_RESULT_TRAINING_KEYS,
+            target,
+            "agentic_training_result.training_result",
+        )
     status = training_result.get("status")
     if status not in RESULT_STATUSES:
         target.errors.append(f"agentic_training_result.training_result.status must be one of {list(RESULT_STATUSES)!r}.")
@@ -3119,6 +3222,8 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     if not isinstance(failure, dict):
         target.errors.append("agentic_training_result.failure must be an object.")
         failure = {}
+    else:
+        _validate_allowed_keys(failure, _AGENTIC_TRAINING_RESULT_FAILURE_KEYS, target, "agentic_training_result.failure")
     failure_class = failure.get("class")
     failure_message = failure.get("message")
     if failure_class not in FAILURE_CLASSES:
@@ -3142,6 +3247,8 @@ def _validate_agentic_training_result(result: dict[str, Any], target: Validation
     if not isinstance(metrics, dict):
         target.errors.append("agentic_training_result.metrics must be an object.")
         metrics = {}
+    else:
+        _validate_allowed_keys(metrics, _AGENTIC_TRAINING_RESULT_METRIC_KEYS, target, "agentic_training_result.metrics")
     for field_name, expected in artifact_counts.items():
         if metrics.get(field_name) != expected:
             target.errors.append(f"agentic_training_result.metrics.{field_name} expected {expected}, got {metrics.get(field_name)!r}.")
@@ -7949,6 +8056,7 @@ def _validate_agentic_training_result_artifacts(value: Any, target: ValidationTa
         if not isinstance(artifact, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(artifact, _AGENTIC_TRAINING_RESULT_ARTIFACT_KEYS, target, label)
         role = artifact.get("role")
         if not isinstance(role, str) or not role:
             target.errors.append(f"{label}.role must be a non-empty string.")
@@ -7998,6 +8106,7 @@ def _validate_agentic_training_result_lineage(
     if not isinstance(value, dict):
         target.errors.append("agentic_training_result.lineage must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_RESULT_LINEAGE_KEYS, target, "agentic_training_result.lineage")
     plan_inputs = _agentic_training_result_plan_input_manifests(value, source_path)
     for field_name in ("plan", "runtime_preflight"):
         ref = value.get(field_name)
@@ -8005,6 +8114,7 @@ def _validate_agentic_training_result_lineage(
         if not isinstance(ref, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(ref, _AGENTIC_TRAINING_RESULT_LINEAGE_REF_KEYS, target, label)
         for string_field in ("path", "schema_name"):
             if not isinstance(ref.get(string_field), str) or not ref.get(string_field):
                 target.errors.append(f"{label}.{string_field} must be a non-empty string.")
@@ -8024,6 +8134,7 @@ def _validate_agentic_training_result_lineage(
         if not isinstance(ref, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(ref, _AGENTIC_TRAINING_RESULT_MANIFEST_REF_KEYS, target, label)
         for string_field in ("id", "path", "sha256"):
             if not isinstance(ref.get(string_field), str):
                 target.errors.append(f"{label}.{string_field} must be a string.")
@@ -8043,6 +8154,7 @@ def _validate_agentic_training_result_lineage(
         target.errors.append("agentic_training_result.lineage.agentic_training_flow is required for completed receipts.")
     if isinstance(flow_ref, dict):
         label = "agentic_training_result.lineage.agentic_training_flow"
+        _validate_allowed_keys(flow_ref, _AGENTIC_TRAINING_RESULT_LINEAGE_REF_KEYS, target, label)
         for string_field in ("path", "schema_name"):
             if not isinstance(flow_ref.get(string_field), str) or not flow_ref.get(string_field):
                 target.errors.append(f"{label}.{string_field} must be a non-empty string.")
@@ -8209,6 +8321,7 @@ def _validate_agentic_training_result_boundary(value: Any, target: ValidationTar
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_RESULT_BOUNDARY_KEYS, target, label)
     expected = {
         "archive_only": True,
         "runner_owns_execution": True,
@@ -8227,6 +8340,7 @@ def _validate_agentic_training_result_contract(value: Any, target: ValidationTar
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_RESULT_HANDOFF_KEYS, target, label)
     expected = {
         "runner_owns_execution": True,
         "requires_agentic_training_plan": True,
@@ -8254,6 +8368,7 @@ def _validate_agentic_training_result_registry_update(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object when present.")
         return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_RESULT_REGISTRY_UPDATE_KEYS, target, label)
     for key, expected_value in {"applied": False, "side_effect_free": True, "ready_to_apply": expected_ready}.items():
         if value.get(key) != expected_value:
             target.errors.append(f"{label}.{key} expected {expected_value!r}, got {value.get(key)!r}.")
@@ -8264,6 +8379,9 @@ def _validate_agentic_training_result_registry_update(
     if not isinstance(links, list):
         target.errors.append(f"{label}.links must be a list.")
         return
+    notes = value.get("notes")
+    if notes is not None and (not isinstance(notes, list) or not all(isinstance(item, str) for item in notes)):
+        target.errors.append(f"{label}.notes must be a list of strings when present.")
     if not links:
         target.errors.append(f"{label}.links must not be empty.")
     output_artifact_counter = _agentic_training_result_output_artifact_counter(artifacts)
@@ -8273,6 +8391,7 @@ def _validate_agentic_training_result_registry_update(
         if not isinstance(link, dict):
             target.errors.append(f"{link_label} must be an object.")
             continue
+        _validate_allowed_keys(link, _AGENTIC_TRAINING_RESULT_REGISTRY_LINK_KEYS, target, link_label)
         for field_name in ("collection", "artifact_id", "kind", "status", "path"):
             if not isinstance(link.get(field_name), str) or not link.get(field_name):
                 target.errors.append(f"{link_label}.{field_name} must be a non-empty string.")

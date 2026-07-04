@@ -791,6 +791,78 @@ class AgenticTrainingResultTests(unittest.TestCase):
                 errors,
             )
 
+    def test_validate_rejects_agentic_training_result_forged_side_effect_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime_preflight.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            summary_path = root / "validation.json"
+            self.write_runtime_preflight(runtime, ready=True)
+            adapter.write_bytes(b"tiny adapter bytes")
+
+            result = build_agentic_training_result(
+                plan_path=EXAMPLE_PLAN,
+                runtime_preflight_path=runtime,
+                out_path=out,
+                status="completed",
+                artifacts={"adapter": [adapter]},
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+            result["cloud_cost_usd"] = 42
+            result["training_result"]["provider_signed_url"] = "https://example.invalid/upload"
+            result["execution_boundary"]["credential_values_recorded"] = False
+            result["handoff_contract"]["live_provider_launch_allowed"] = True
+            result["artifacts"][0]["private_path"] = "redacted/private/output.safetensors"
+            result["lineage"]["model"]["downloaded_weights_path"] = "models/base.bin"
+            result["registry_update"]["alias_updates_applied"] = True
+            result["registry_update"]["links"][0]["provider_job_id"] = "job-123"
+            write_agentic_training_result(out, result)
+
+            schema = check_schema_file(out)
+            self.assertFalse(schema["passed"])
+
+            code = run_cli(
+                [
+                    "validate",
+                    "--agentic-training-result",
+                    str(out),
+                    "--out",
+                    str(summary_path),
+                    "--strict",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_result contains unknown field(s): ['cloud_cost_usd'].", errors)
+            self.assertIn(
+                "agentic_training_result.training_result contains unknown field(s): ['provider_signed_url'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_result.execution_boundary contains unknown field(s): ['credential_values_recorded'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_result.handoff_contract contains unknown field(s): ['live_provider_launch_allowed'].",
+                errors,
+            )
+            self.assertIn("agentic_training_result.artifacts[0] contains unknown field(s): ['private_path'].", errors)
+            self.assertIn(
+                "agentic_training_result.lineage.model contains unknown field(s): ['downloaded_weights_path'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_result.registry_update contains unknown field(s): ['alias_updates_applied'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_result.registry_update.links[0] contains unknown field(s): ['provider_job_id'].",
+                errors,
+            )
+
     def test_builder_redacts_out_of_tree_artifact_paths_to_basename(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_result.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "allOf": [
     {
       "oneOf": [
@@ -157,7 +157,7 @@
   "type": "object",
   "$defs": {
     "artifactRef": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": {
           "type": "boolean"
@@ -194,7 +194,7 @@
       "type": "object"
     },
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": {
           "type": "object"
@@ -224,7 +224,7 @@
       "type": "object"
     },
     "executionBoundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_only": {
           "const": true
@@ -256,7 +256,7 @@
       "type": "object"
     },
     "failure": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "class": {
           "enum": [
@@ -292,7 +292,7 @@
       "type": "object"
     },
     "handoffContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "flight_recorder_launched_training": {
           "const": false
@@ -352,7 +352,7 @@
       "type": "object"
     },
     "lineage": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "agentic_training_flow": {
           "$ref": "#/$defs/lineageRef"
@@ -379,7 +379,7 @@
       "type": "object"
     },
     "lineageRef": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": {
           "type": "boolean"
@@ -417,7 +417,7 @@
       "type": "object"
     },
     "manifestRef": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "id": {
           "type": "string"
@@ -446,7 +446,7 @@
       "type": "object"
     },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "adapter_count": {
           "minimum": 0,
@@ -499,7 +499,7 @@
       "type": "object"
     },
     "registryUpdate": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "applied": {
           "const": false
@@ -507,6 +507,12 @@
         "links": {
           "items": {
             "$ref": "#/$defs/registryLink"
+          },
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
           },
           "type": "array"
         },
@@ -534,7 +540,7 @@
       "type": "object"
     },
     "registryLink": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "oneOf": [
@@ -622,7 +628,7 @@
       "type": "string"
     },
     "trainingResult": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "backend": {
           "type": "string"
