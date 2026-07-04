@@ -795,6 +795,9 @@ lm-eval, or SWE-bench job was started by Flight Recorder:
 External eval plan and receipt adapter rows include an `adapter_contract` that
 keeps live benchmark support disabled and records zero provider API calls, model
 downloads, credential values, cloud spend, or weight updates.
+Strict receipt validation replays the current source plan, selected adapters,
+and dry-run/live mode so stale or forged benchmark receipts cannot promote
+external-eval claims.
 
 ```bash
 flightrecorder external-eval-receipt \

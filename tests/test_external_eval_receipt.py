@@ -102,6 +102,50 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertFalse(receipt["execution_boundary"]["provider_api_called"])
             self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
 
+    def test_validate_rejects_subset_receipt_for_multi_adapter_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+            validation = root / "validation.json"
+
+            with patch(
+                "flightrecorder.external_eval._dependency_status",
+                return_value={"available": True, "imports": {"mock_adapter": True}, "commands": {"mock-adapter": True}},
+            ):
+                plan = build_external_eval_plan(
+                    adapters=["bfcl", "inspect_ai"],
+                    scenario_manifest=manifest,
+                    model_endpoint="http://127.0.0.1:8000/v1",
+                    tool_schema_set="heldout-tools",
+                    inspect_task_set="heldout-inspect",
+                    sandbox_policy="locked-network",
+                    allow_installed=True,
+                )
+            write_external_eval_plan(plan, plan_path)
+            receipt_code = run_cli(
+                [
+                    "external-eval-receipt",
+                    "--plan",
+                    str(plan_path),
+                    "--adapter",
+                    "bfcl",
+                    "--created-at",
+                    "2026-07-03T00:00:00+00:00",
+                    "--out",
+                    str(receipt_path),
+                ]
+            )
+
+            code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--out", str(validation), "--strict"])
+
+            self.assertEqual(receipt_code, 0)
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_receipt.adapter_receipts must match current source plan selected_adapters.", errors)
+            self.assertIn("external_eval_receipt.adapter_count must match current source plan replay.", errors)
+
     def test_strict_validate_warns_on_absolute_source_plan_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -177,6 +221,39 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
             self.assertIn("model_downloads_started must be false", errors)
+
+    def test_validate_rejects_forged_passing_receipt_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
+            run_cli(["external-eval-receipt", "--plan", str(plan_path), "--out", str(receipt_path)])
+            receipt = _read_json(receipt_path)
+            receipt["passed"] = True
+            receipt["readiness"] = "dry_run_recorded"
+            receipt["recommendation"] = "archive_external_eval_dry_run"
+            receipt["failed_check_count"] = 0
+            receipt["blocked_reasons"] = []
+            for check in receipt["checks"]:
+                check["passed"] = True
+                check["summary"] = f"{check['id']}: passed"
+            for row in receipt["adapter_receipts"]:
+                row["ready"] = True
+                row["planned_ready"] = True
+                row["blocking_reasons"] = []
+            receipt["ready_adapter_count"] = receipt["adapter_count"]
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_receipt.passed must match current source plan replay.", errors)
+            self.assertIn("external_eval_receipt.checks must match current source plan replay.", errors)
+            self.assertIn("external_eval_receipt.adapter_receipts must match current source plan replay.", errors)
 
     def test_validate_and_schema_reject_unknown_external_eval_receipt_fields(self):
         with tempfile.TemporaryDirectory() as tmp:

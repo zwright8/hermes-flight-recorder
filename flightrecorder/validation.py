@@ -85,6 +85,8 @@ from .external_eval import (
     EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES,
     EXTERNAL_EVAL_PLAN_SCHEMA_VERSION,
     EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION,
+    ExternalEvalPlanError,
+    build_external_eval_receipt,
 )
 from .heldout_manifest import HELDOUT_MANIFEST_SCHEMA_VERSION
 from .hermes_plugin import LIVE_SMOKE_SUMMARY_SCHEMA_VERSION
@@ -15847,10 +15849,11 @@ def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationT
         target.errors.append("external_eval_receipt.blocked_reasons must be a list of strings.")
 
     source_plan = receipt.get("source_plan")
+    source_plan_path = None
     if not isinstance(source_plan, dict):
         target.errors.append("external_eval_receipt.source_plan must be an object.")
     else:
-        _validate_external_eval_receipt_source_plan(source_plan, target, source_path)
+        source_plan_path = _validate_external_eval_receipt_source_plan(source_plan, target, source_path)
 
     adapter_receipts = receipt.get("adapter_receipts")
     if not isinstance(adapter_receipts, list):
@@ -15870,6 +15873,7 @@ def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationT
 
     _validate_external_eval_receipt_launch(receipt.get("launch"), target)
     _validate_external_eval_receipt_boundary(receipt.get("execution_boundary"), target)
+    _validate_external_eval_receipt_replay(receipt, source_plan_path, adapter_receipts, target)
     target.details.update(
         {
             "passed": receipt.get("passed"),
@@ -15880,7 +15884,7 @@ def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationT
     )
 
 
-def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> Path | None:
     label = "external_eval_receipt.source_plan"
     _validate_allowed_keys(
         source_plan,
@@ -15896,16 +15900,16 @@ def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], tar
         target.errors.append(f"{label}.adapter_count must be a non-negative integer.")
     if source_plan.get("exists") is not True:
         target.errors.append(f"{label}.exists must be true.")
-        return
+        return None
     path_value = source_plan.get("path")
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
-        return
+        return None
     _warn_absolute_public_path(target, f"{label}.path", path_value)
     plan_path = _external_eval_reference_path(path_value, source_path)
     if not plan_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an external eval plan file.")
-        return
+        return None
     if not _is_non_negative_int(source_plan.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
     elif plan_path.stat().st_size != source_plan.get("size_bytes"):
@@ -15922,6 +15926,57 @@ def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], tar
             target.errors.append(f"{label}.ready must match the current file.")
         if plan.get("adapter_count") != source_plan.get("adapter_count"):
             target.errors.append(f"{label}.adapter_count must match the current file.")
+    return plan_path
+
+
+def _validate_external_eval_receipt_replay(
+    receipt: dict[str, Any],
+    source_plan_path: Path | None,
+    adapter_receipts: list[Any],
+    target: ValidationTarget,
+) -> None:
+    if source_plan_path is None:
+        return
+    launch = receipt.get("launch") if isinstance(receipt.get("launch"), dict) else {}
+    mode = launch.get("mode")
+    if mode not in {"dry_run", "live"}:
+        return
+    adapter_ids = [row.get("id") for row in adapter_receipts if isinstance(row, dict) and row.get("id") in ADAPTERS]
+    if len(adapter_ids) != len(adapter_receipts):
+        return
+    plan = _read_json_object_silent(source_plan_path)
+    selected_adapters = plan.get("selected_adapters") if _is_string_list(plan.get("selected_adapters")) else []
+    if sorted(adapter_ids) != sorted(selected_adapters):
+        target.errors.append("external_eval_receipt.adapter_receipts must match current source plan selected_adapters.")
+    if len(adapter_ids) != len(set(adapter_ids)):
+        target.errors.append("external_eval_receipt.adapter_receipts must not contain duplicate adapter ids.")
+        return
+    try:
+        expected = build_external_eval_receipt(
+            plan_path=source_plan_path,
+            adapters=selected_adapters,
+            live=mode == "live",
+            created_at=receipt.get("created_at") if isinstance(receipt.get("created_at"), str) else None,
+        )
+    except ExternalEvalPlanError as exc:
+        target.errors.append(f"external_eval_receipt could not replay current source plan: {exc}")
+        return
+    for field_name in (
+        "passed",
+        "readiness",
+        "recommendation",
+        "check_count",
+        "failed_check_count",
+        "checks",
+        "blocked_reasons",
+        "adapter_count",
+        "ready_adapter_count",
+        "adapter_receipts",
+        "launch",
+        "execution_boundary",
+    ):
+        if receipt.get(field_name) != expected.get(field_name):
+            target.errors.append(f"external_eval_receipt.{field_name} must match current source plan replay.")
 
 
 def _validate_external_eval_adapter_receipt(row: Any, index: int, target: ValidationTarget) -> None:
