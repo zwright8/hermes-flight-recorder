@@ -15424,6 +15424,8 @@ def _validate_serving_lifecycle_preflight_artifacts(
         artifact_path = _resolve_serving_lifecycle_artifact_path(value, source_path)
         if artifact_path is None or not artifact_path.is_file():
             target.errors.append(f"serving_lifecycle.artifacts.{role} must point at an existing file when passed.")
+        elif _path_has_symlink_component(artifact_path, include_leaf=True):
+            target.errors.append(f"serving_lifecycle.artifacts.{role} must point at a regular non-symlink file when passed.")
 
 
 def _resolve_serving_lifecycle_artifact_path(value: Any, source_path: Path) -> Path | None:

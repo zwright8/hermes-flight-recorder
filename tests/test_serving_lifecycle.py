@@ -188,6 +188,50 @@ class ServingLifecycleTests(unittest.TestCase):
             self.assertIn("serving_lifecycle.smoke_check contains unknown field(s): ['signed_url']", errors)
             self.assertIn("serving_lifecycle.teardown contains unknown field(s): ['provider_call']", errors)
 
+    def test_validate_lifecycle_rejects_symlinked_preflight_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_preflight = root / "preflight_real"
+            linked_preflight = root / "preflight"
+            lifecycle_path = root / "serving_lifecycle.json"
+            summary_path = root / "validation.json"
+            real_preflight.mkdir()
+            for artifact in ("serving_profile.json", "compatibility_report.json", "serving_check.json"):
+                _write_json(real_preflight / artifact, {"schema_version": "hfr.test.v1"})
+            try:
+                linked_preflight.symlink_to(real_preflight, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            lifecycle = _passed_lifecycle()
+            _write_json(lifecycle_path, lifecycle)
+
+            code = flightrecorder_main(
+                [
+                    "validate",
+                    "--serving-lifecycle",
+                    str(lifecycle_path),
+                    "--strict",
+                    "--out",
+                    str(summary_path),
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            summary = _read_json(summary_path)
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "serving_lifecycle.artifacts.serving_profile must point at a regular non-symlink file when passed.",
+                errors,
+            )
+            self.assertIn(
+                "serving_lifecycle.artifacts.compatibility_report must point at a regular non-symlink file when passed.",
+                errors,
+            )
+            self.assertIn(
+                "serving_lifecycle.artifacts.serving_check must point at a regular non-symlink file when passed.",
+                errors,
+            )
+
     def test_lifecycle_records_blocked_when_process_exits_before_ready(self):
         manage_openai_serving = _load_script(LIFECYCLE_SCRIPT, "manage_openai_serving_failure")
         port = _free_port()
@@ -358,6 +402,45 @@ def _blocked_lifecycle() -> dict:
         },
         "logs": {"stdout_tail": "", "stderr_tail": ""},
     }
+
+
+def _passed_lifecycle() -> dict:
+    lifecycle = _blocked_lifecycle()
+    artifacts = {
+        "serving_profile": "preflight/serving_profile.json",
+        "compatibility_report": "preflight/compatibility_report.json",
+        "serving_check": "preflight/serving_check.json",
+    }
+    lifecycle.update(
+        {
+            "passed": True,
+            "ready": True,
+            "readiness": "ready",
+            "readiness_probe": {"ready": True, "summary": "ready", "attempts": [{"ready": True}]},
+            "smoke_check": {
+                "attempted": True,
+                "passed": True,
+                "summary": "ok",
+                "readiness": "ready",
+                "failed_checks": [],
+                "artifacts": artifacts,
+            },
+            "teardown": {
+                "attempted": True,
+                "already_exited": False,
+                "terminated": True,
+                "killed": False,
+                "clean": True,
+                "running_after_teardown": False,
+            },
+            "errors": [],
+            "artifacts": {
+                **lifecycle["artifacts"],
+                **artifacts,
+            },
+        }
+    )
+    return lifecycle
 
 
 def _free_port() -> int:
