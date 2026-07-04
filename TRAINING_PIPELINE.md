@@ -236,7 +236,9 @@ flightrecorder validate --improvement-plan runs/improvement_plan.json --strict
 The plan keeps repairs external and auditable. It joins bundle `next_actions`,
 repair queue items, curriculum priorities, and per-run digests into stable
 `work_items` with priorities, categories, evidence refs/snippets, replay
-metadata, `routing_key`, and content `fingerprint` fields.
+metadata, `routing_key`, and content `fingerprint` fields. Validation reopens
+source artifacts from the plan file location and rejects symlinked
+source-bundle paths before trusting recorded hashes or byte counts.
 
 Across repeated plan snapshots, use `flightrecorder improvement-ledger` to
 measure concrete work-item pressure:
@@ -285,7 +287,9 @@ flightrecorder validate --action-ledger runs/action_ledger.json --strict
 
 The ledger groups advisory actions by `routing_key`, records which bundle first
 and last saw each action, and marks each one as `new`, `recurring`, `open`, or
-`resolved` relative to the latest bundle.
+`resolved` relative to the latest bundle. Validation reopens source bundles
+from the ledger file location and rejects symlinked source-bundle paths before
+trusting recurring-action counts.
 
 Use `flightrecorder gate-action-ledger` to block trainer promotion when repair
 pressure is not shrinking:

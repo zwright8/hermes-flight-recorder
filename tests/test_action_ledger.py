@@ -248,6 +248,41 @@ class ActionLedgerTests(unittest.TestCase):
             self.assertIn("action_ledger.bundles[0].sha256 does not match current file contents", errors)
             self.assertIn("action_ledger.bundles[0].path is not valid UTF-8", errors)
 
+    def test_validate_rejects_action_ledger_parent_symlink_source_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate = root / "failed_gate.json"
+            bundle = root / "bundle.json"
+            ledger_path = root / "action_ledger.json"
+            summary_path = root / "validation.json"
+            gate.write_text(json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate), "--out", str(bundle)]), 1)
+            self.assertEqual(run_cli(["action-ledger", "--bundle", str(bundle), "--out", str(ledger_path)]), 0)
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            linked_bundle = str(Path("linked_source") / "bundle.json")
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            ledger["bundles"][0]["path"] = linked_bundle
+            ledger["metrics"]["bundle_action_counts"][0]["path"] = linked_bundle
+            for entry in ledger["entries"]:
+                entry["first_seen_path"] = linked_bundle
+                entry["last_seen_path"] = linked_bundle
+                for occurrence in entry["occurrences"]:
+                    occurrence["bundle_path"] = linked_bundle
+            ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger", str(ledger_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("action_ledger.bundles[0].path must resolve to a regular non-symlink evidence bundle.", errors)
+
     def test_gate_action_ledger_rejects_wrong_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

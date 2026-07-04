@@ -18027,7 +18027,7 @@ def _validate_improvement_source_artifact_file_fingerprint(
         if not current_path.exists():
             target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
             return
-        if current_path.is_symlink() or not current_path.is_file():
+        if _path_has_symlink_component(current_path, include_leaf=True) or not current_path.is_file():
             target.errors.append(f"{label}.path must resolve to a regular file when exists is true.")
             return
     elif not current_path.is_file():
@@ -24150,8 +24150,11 @@ def _validate_action_ledger_bundle_linkage(
         if not isinstance(bundle_record, dict):
             continue
         bundle_path = _resolve_action_ledger_bundle_path(bundle_record.get("path"), source_path)
-        if bundle_path is None or not bundle_path.exists() or not bundle_path.is_file():
+        if bundle_path is None or not bundle_path.exists():
             target.errors.append(f"action_ledger.bundles[{index}].path must resolve to an existing evidence bundle.")
+            continue
+        if _path_has_symlink_component(bundle_path, include_leaf=True) or not bundle_path.is_file():
+            target.errors.append(f"action_ledger.bundles[{index}].path must resolve to a regular non-symlink evidence bundle.")
             continue
         expected_size = bundle_record.get("size_bytes")
         if _is_non_negative_int(expected_size) and bundle_path.stat().st_size != expected_size:

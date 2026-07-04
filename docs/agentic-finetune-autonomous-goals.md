@@ -147,7 +147,8 @@ evidence.
 - Scenario-quality artifacts warn before scenario, trace, or state source paths
   are published as public handoff evidence.
 - Evidence bundles and improvement plans reject existing file artifacts that
-  omit SHA-256 or byte-size evidence at the schema boundary.
+  omit SHA-256 or byte-size evidence at the schema boundary, and validation
+  rejects symlinked source paths before trusting those fingerprints.
 - Improvement ledgers bind each source improvement plan to SHA-256 plus byte
   size evidence before downstream gates trust recurring-work metrics.
 
@@ -653,7 +654,7 @@ card, and dataset card decisions.
   directories before trusting file or directory evidence.
 - Action-ledger validation reopens recorded evidence bundles from the ledger
   file location, requires SHA-256 plus byte-size evidence, and rejects missing,
-  moved, stale, malformed, or cwd-substituted bundle records.
+  moved, stale, malformed, symlinked, or cwd-substituted bundle records.
 - Scenario-authored trace and state snapshot paths resolve from the scenario
   file location; only explicit CLI overrides resolve from the process working
   directory.

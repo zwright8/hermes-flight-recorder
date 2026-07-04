@@ -443,6 +443,52 @@ class ImprovementPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("improvement_plan.source_artifacts.evidence_bundle.path must resolve to a regular file when exists is true.", errors)
 
+    def test_validate_rejects_parent_symlink_existing_improvement_plan_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            plan_path = runs / "improvement_plan.json"
+            summary_path = runs / "validation.json"
+            self.assertEqual(
+                run_cli(
+                    [
+                        "run-suite",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--out",
+                        str(runs),
+                        "--evidence-handoff",
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "improvement-plan",
+                        "--evidence-bundle",
+                        str(runs / "evidence_bundle.json"),
+                        "--out",
+                        str(plan_path),
+                    ]
+                ),
+                0,
+            )
+            linked_parent = runs / "linked_source"
+            try:
+                linked_parent.symlink_to(runs, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            plan["source_artifacts"]["evidence_bundle"]["path"] = str(Path("linked_source") / "evidence_bundle.json")
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-plan", str(plan_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("improvement_plan.source_artifacts.evidence_bundle.path must resolve to a regular file when exists is true.", errors)
+
     def test_validate_rejects_present_improvement_plan_source_artifact_marked_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
