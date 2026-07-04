@@ -43,7 +43,7 @@
     "readiness": "blocked",
     "recommendation": "continue_iteration",
     "recommended_governance_action": "request_another_iteration",
-    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 9 missing phase input(s)."
+    "summary": "Latest loop iteration demo-loop-001 is fail-closed with 5 missing phase input(s)."
   },
   "execution_boundary": {
     "cloud_jobs_started": false,
@@ -57,7 +57,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 26,
+      "artifact_count": 30,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -68,7 +68,7 @@
           "group": "datasets"
         },
         {
-          "count": 0,
+          "count": 4,
           "group": "eval"
         },
         {
@@ -160,6 +160,22 @@
         {
           "count": 1,
           "role": "dataset_curation_receipt"
+        },
+        {
+          "count": 1,
+          "role": "eval_summary"
+        },
+        {
+          "count": 1,
+          "role": "external_eval_plan"
+        },
+        {
+          "count": 1,
+          "role": "external_eval_receipt"
+        },
+        {
+          "count": 1,
+          "role": "heldout_manifest"
         },
         {
           "count": 1,
@@ -442,34 +458,34 @@
         "max_gpu_hours": 0
       },
       "evals": {
-        "artifact_count": 0,
+        "artifact_count": 4,
         "group": "eval",
-        "roles_missing": [
+        "roles_missing": [],
+        "roles_present": [
           "heldout_manifest",
           "external_eval_plan",
           "external_eval_receipt",
           "eval_summary"
-        ],
-        "roles_present": []
+        ]
       },
       "exists": true,
       "external_eval_receipt_state": {
-        "adapter_count": 0,
+        "adapter_count": 4,
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
-        "dry_run_only": false,
+        "dry_run_only": true,
         "fail_closed": true,
-        "launch_mode": "",
+        "launch_mode": "dry_run",
         "live_benchmark_requested": false,
         "live_benchmarks_started": false,
         "model_downloads_started": false,
         "provider_api_calls_started": false,
-        "readiness": "",
+        "readiness": "blocked",
         "ready_adapter_count": 0,
-        "receipt_count": 0,
+        "receipt_count": 1,
         "receipt_passed_count": 0,
         "receipts_passed": false,
-        "recommendation": "",
+        "recommendation": "keep_external_eval_claims_disabled",
         "weights_updated_by_flight_recorder": false
       },
       "governance": {
@@ -493,12 +509,8 @@
       "index": 0,
       "iteration_id": "demo-loop-001",
       "missing_phase_inputs": [
-        "eval_summary",
         "evidence_bundle",
-        "external_eval_plan",
-        "external_eval_receipt",
         "harness_result",
-        "heldout_manifest",
         "promotion_decision",
         "promotion_ledger",
         "serving_lifecycle"
@@ -513,7 +525,7 @@
       "path": "loop_plan.json",
       "phase_status_counts": [
         {
-          "count": 6,
+          "count": 5,
           "id": "blocked"
         },
         {
@@ -521,7 +533,7 @@
           "id": "planned"
         },
         {
-          "count": 6,
+          "count": 7,
           "id": "ready"
         }
       ],
@@ -538,8 +550,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "81fe740cae4a7ea4973c04fc034369582509ad3d7ec2417f2f1c206b0e9a3bb7",
-      "size_bytes": 48554,
+      "sha256": "f6acfe879641851afd63153691f78792c50d876cc076f4da3daf65baf6731c17",
+      "size_bytes": 50406,
       "training_outputs": {
         "artifact_count": 6,
         "group": "training",
@@ -567,7 +579,7 @@
         "group": "datasets"
       },
       {
-        "count": 0,
+        "count": 4,
         "group": "eval"
       },
       {
@@ -606,7 +618,7 @@
     "blocked_iteration_count": 1,
     "iteration_count": 1,
     "latest_iteration_id": "demo-loop-001",
-    "latest_missing_phase_input_count": 9,
+    "latest_missing_phase_input_count": 5,
     "latest_readiness": "planned_fail_closed",
     "latest_recommendation": "collect_missing_receipts_before_live_execution",
     "promotion_ready_count": 0,
@@ -649,36 +661,31 @@
     "cloud_training_status_provider_status": "not_started",
     "decision_readiness": "blocked",
     "decision_recommendation": "continue_iteration",
-    "external_eval_adapter_count": 0,
+    "external_eval_adapter_count": 4,
     "external_eval_cost_incurred_usd": 0,
     "external_eval_credential_values_recorded": false,
-    "external_eval_launch_mode": "",
+    "external_eval_launch_mode": "dry_run",
     "external_eval_live_benchmark_requested": false,
     "external_eval_live_benchmarks_started": false,
     "external_eval_model_downloads_started": false,
     "external_eval_provider_api_calls_started": false,
     "external_eval_ready_adapter_count": 0,
-    "external_eval_receipt_count": 0,
+    "external_eval_receipt_count": 1,
     "external_eval_receipts_fail_closed": true,
     "external_eval_receipts_passed": false,
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "live_spend_allowed": false,
-    "missing_artifact_group_count": 4,
+    "missing_artifact_group_count": 3,
     "missing_artifact_groups": [
-      "eval",
       "evidence",
       "governance",
       "serving"
     ],
-    "missing_phase_input_count": 9,
+    "missing_phase_input_count": 5,
     "missing_phase_inputs": [
-      "eval_summary",
       "evidence_bundle",
-      "external_eval_plan",
-      "external_eval_receipt",
       "harness_result",
-      "heldout_manifest",
       "promotion_decision",
       "promotion_ledger",
       "serving_lifecycle"
@@ -694,7 +701,7 @@
     "requires_governance_decision": true,
     "rollback_receipt_present": false,
     "side_effects_started": false,
-    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 9 missing phase input(s) across 4 empty artifact group(s)."
+    "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 5 missing phase input(s) across 3 empty artifact group(s)."
   },
   "schema_version": "hfr.agentic_loop_ledger.v1"
 }

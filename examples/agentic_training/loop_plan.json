@@ -1,5 +1,5 @@
 {
-  "artifact_count": 26,
+  "artifact_count": 30,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -56,6 +56,22 @@
     {
       "count": 1,
       "role": "dataset_curation_receipt"
+    },
+    {
+      "count": 1,
+      "role": "eval_summary"
+    },
+    {
+      "count": 1,
+      "role": "external_eval_plan"
+    },
+    {
+      "count": 1,
+      "role": "external_eval_receipt"
+    },
+    {
+      "count": 1,
+      "role": "heldout_manifest"
     },
     {
       "count": 1,
@@ -511,12 +527,12 @@
       "actual": {
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
-        "eval_summary_present": false,
-        "external_eval_plan_present": false,
-        "external_eval_receipt_present": false,
+        "eval_summary_present": true,
+        "external_eval_plan_present": true,
+        "external_eval_receipt_present": true,
         "external_eval_receipts_fail_closed": true,
         "external_eval_receipts_passed": false,
-        "heldout_manifest_present": false,
+        "heldout_manifest_present": true,
         "live_benchmark_requested": false,
         "live_benchmarks_started": false,
         "model_downloads_started": false,
@@ -798,22 +814,22 @@
     "weights_updated_by_flight_recorder": false
   },
   "external_eval_receipt_state": {
-    "adapter_count": 0,
+    "adapter_count": 4,
     "cost_incurred_usd": 0,
     "credential_values_recorded": false,
-    "dry_run_only": false,
+    "dry_run_only": true,
     "fail_closed": true,
-    "launch_mode": "",
+    "launch_mode": "dry_run",
     "live_benchmark_requested": false,
     "live_benchmarks_started": false,
     "model_downloads_started": false,
     "provider_api_calls_started": false,
-    "readiness": "",
+    "readiness": "blocked",
     "ready_adapter_count": 0,
-    "receipt_count": 0,
+    "receipt_count": 1,
     "receipt_passed_count": 0,
     "receipts_passed": false,
-    "recommendation": "",
+    "recommendation": "keep_external_eval_claims_disabled",
     "weights_updated_by_flight_recorder": false
   },
   "failed_check_count": 2,
@@ -831,12 +847,8 @@
   },
   "iteration_id": "demo-loop-001",
   "missing_phase_inputs": [
-    "eval_summary",
     "evidence_bundle",
-    "external_eval_plan",
-    "external_eval_receipt",
     "harness_result",
-    "heldout_manifest",
     "promotion_decision",
     "promotion_ledger",
     "serving_lifecycle"
@@ -1032,14 +1044,14 @@
     {
       "gate": "live external benchmarks remain disabled until dependencies and held-out scenario parity pass.",
       "id": "heldout_eval",
-      "missing_required_artifacts": [
+      "missing_required_artifacts": [],
+      "name": "Held-out eval and external benchmarks",
+      "present_required_artifacts": [
         "heldout_manifest",
         "external_eval_plan",
         "external_eval_receipt",
         "eval_summary"
       ],
-      "name": "Held-out eval and external benchmarks",
-      "present_required_artifacts": [],
       "produces": [
         "eval_summary",
         "compare_gate",
@@ -1051,7 +1063,7 @@
         "external_eval_receipt",
         "eval_summary"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "next work must be evidence-backed, deduplicated, and linked to repair/curriculum signals.",
@@ -1322,6 +1334,58 @@
         "schema_version": "hfr.dataset_curation_receipt.v1",
         "sha256": "53f68e9228d03bb7dc537e366950ca57d232662244bf8f17bae6cd4917184834",
         "size_bytes": 3947
+      }
+    ],
+    "eval_summary": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": false,
+        "path": "heldout_eval/eval_summary.json",
+        "readiness": "",
+        "role": "eval_summary",
+        "schema_version": "hfr.eval_summary.v1",
+        "sha256": "12c0e5c772740fff1aebaf00604b4a67b1591bad95311ca33345492888a93875",
+        "size_bytes": 8290
+      }
+    ],
+    "external_eval_plan": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": null,
+        "path": "heldout_eval/external_eval_plan.json",
+        "readiness": "",
+        "role": "external_eval_plan",
+        "schema_version": "hfr.external_eval_adapters.v1",
+        "sha256": "bca930fac06bb0790eb6332b403c42b66c1c36faece4fa4f9f82aefa6a85a5a2",
+        "size_bytes": 9275
+      }
+    ],
+    "external_eval_receipt": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": false,
+        "path": "heldout_eval/external_eval_receipt.json",
+        "readiness": "blocked",
+        "role": "external_eval_receipt",
+        "schema_version": "hfr.external_eval_receipt.v1",
+        "sha256": "cc732646249677ad91769421f91492a6669f65dfa3ce30f11eab045942c4d9e4",
+        "size_bytes": 9657
+      }
+    ],
+    "heldout_manifest": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": null,
+        "path": "heldout_eval/heldout_manifest.json",
+        "readiness": "identical",
+        "role": "heldout_manifest",
+        "schema_version": "hfr.heldout_scenario_manifest.v1",
+        "sha256": "3b354c1ec497a363f75def5a64117e0e5390c02adb366cd12ab683f5ec02fee9",
+        "size_bytes": 2032
       }
     ],
     "improvement_ledger": [

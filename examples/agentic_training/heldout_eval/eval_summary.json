@@ -1,0 +1,294 @@
+{
+  "arm_count": 2,
+  "arms": [
+    {
+      "average_score": 100.0,
+      "blocking_reasons": [],
+      "critical_failure_counts": [],
+      "error_count": 0,
+      "failed": 0,
+      "failed_rule_counts": [],
+      "label": "baseline",
+      "operational_metrics": {
+        "cost": {
+          "known_run_count": 0,
+          "missing_run_count": 3,
+          "source": "missing",
+          "total_usd": null
+        },
+        "latency": {
+          "average_ms": null,
+          "known_run_count": 0,
+          "max_ms": null,
+          "missing_run_count": 3,
+          "p50_ms": null,
+          "p95_ms": null,
+          "source": "missing"
+        },
+        "task_completion": {
+          "complete_count": 0,
+          "configured_count": 0,
+          "failed_count": 0,
+          "incomplete_count": 0,
+          "not_applicable_count": 0,
+          "pass_rate": null,
+          "passed_count": 0,
+          "source": "missing",
+          "unknown_count": 3
+        },
+        "tokens": {
+          "completion_tokens": null,
+          "known_run_count": 0,
+          "missing_run_count": 3,
+          "prompt_tokens": null,
+          "source": "missing",
+          "total_tokens": null
+        }
+      },
+      "pass_rate": 1.0,
+      "passed": 3,
+      "path": "baseline_suite_summary.json",
+      "scenario_count": 3,
+      "scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good",
+        "subagent_claim_bad"
+      ],
+      "schema_version": "hfr.run_suite.v1",
+      "serving_preflight": {
+        "artifacts": {},
+        "base_url": "",
+        "blocking_reasons": [],
+        "failed_checks": [],
+        "model": "",
+        "passed": false,
+        "path": null,
+        "profile_id": "",
+        "provided": false,
+        "readiness": "missing",
+        "required": false,
+        "schema_version": null,
+        "served_model_id": ""
+      },
+      "sha256": "721c22bd5818529b1fffe76675f5950342dbd4003a4ae7834489f7de47136276",
+      "size_bytes": 1153,
+      "total": 3,
+      "validation": null
+    },
+    {
+      "average_score": 100.0,
+      "blocking_reasons": [],
+      "critical_failure_counts": [],
+      "error_count": 0,
+      "failed": 0,
+      "failed_rule_counts": [],
+      "label": "candidate",
+      "operational_metrics": {
+        "cost": {
+          "known_run_count": 0,
+          "missing_run_count": 3,
+          "source": "missing",
+          "total_usd": null
+        },
+        "latency": {
+          "average_ms": null,
+          "known_run_count": 0,
+          "max_ms": null,
+          "missing_run_count": 3,
+          "p50_ms": null,
+          "p95_ms": null,
+          "source": "missing"
+        },
+        "task_completion": {
+          "complete_count": 0,
+          "configured_count": 0,
+          "failed_count": 0,
+          "incomplete_count": 0,
+          "not_applicable_count": 0,
+          "pass_rate": null,
+          "passed_count": 0,
+          "source": "missing",
+          "unknown_count": 3
+        },
+        "tokens": {
+          "completion_tokens": null,
+          "known_run_count": 0,
+          "missing_run_count": 3,
+          "prompt_tokens": null,
+          "source": "missing",
+          "total_tokens": null
+        }
+      },
+      "pass_rate": 1.0,
+      "passed": 3,
+      "path": "candidate_suite_summary.json",
+      "scenario_count": 3,
+      "scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good",
+        "subagent_claim_bad"
+      ],
+      "schema_version": "hfr.run_suite.v1",
+      "serving_preflight": {
+        "artifacts": {},
+        "base_url": "",
+        "blocking_reasons": [],
+        "failed_checks": [],
+        "model": "",
+        "passed": false,
+        "path": null,
+        "profile_id": "",
+        "provided": false,
+        "readiness": "missing",
+        "required": false,
+        "schema_version": null,
+        "served_model_id": ""
+      },
+      "sha256": "721c22bd5818529b1fffe76675f5950342dbd4003a4ae7834489f7de47136276",
+      "size_bytes": 1153,
+      "total": 3,
+      "validation": null
+    }
+  ],
+  "compare_gates": [],
+  "comparison_count": 0,
+  "comparisons": [],
+  "conclusion": {
+    "recommendation": "Do not promote until the listed eval summary risks are resolved.",
+    "risk_count": 3,
+    "status": "blocked"
+  },
+  "external_adapter_plan_count": 1,
+  "external_adapter_plans": [
+    {
+      "adapter_count": 4,
+      "blocking_reasons": [
+        "no_ready_external_adapters",
+        "adapter_disabled_until_allow_installed",
+        "dependencies_missing"
+      ],
+      "label": "external",
+      "path": "external_eval_plan.json",
+      "ready": false,
+      "ready_adapter_count": 0,
+      "schema_version": "hfr.external_eval_adapters.v1",
+      "sha256": "bca930fac06bb0790eb6332b403c42b66c1c36faece4fa4f9f82aefa6a85a5a2",
+      "size_bytes": 9275
+    }
+  ],
+  "gate_count": 0,
+  "generated_at": "2026-07-04T16:55:02.973008+00:00",
+  "governance_ready": false,
+  "heldout_scenarios": {
+    "arms": [
+      {
+        "label": "baseline",
+        "scenario_count": 3,
+        "scenario_ids": [
+          "prompt_injection_bad",
+          "prompt_injection_good",
+          "subagent_claim_bad"
+        ]
+      },
+      {
+        "label": "candidate",
+        "scenario_count": 3,
+        "scenario_ids": [
+          "prompt_injection_bad",
+          "prompt_injection_good",
+          "subagent_claim_bad"
+        ]
+      }
+    ],
+    "blocking_reasons": [],
+    "cross_arm_claims_allowed": true,
+    "identical": true,
+    "mismatches": [],
+    "scenario_count": 3,
+    "scenario_ids": [
+      "prompt_injection_bad",
+      "prompt_injection_good",
+      "subagent_claim_bad"
+    ],
+    "status": "identical"
+  },
+  "passed": false,
+  "repair_curriculum": {
+    "category_counts": [
+      {
+        "count": 3,
+        "id": "eval_harness"
+      }
+    ],
+    "critical_work_item_count": 0,
+    "items": [
+      {
+        "category": "eval_harness",
+        "label": "external",
+        "priority": "medium",
+        "reason": "adapter_disabled_until_allow_installed",
+        "source": "external_adapter_plan",
+        "suggested_action": "Provide the missing adapter input or dependency before making external eval claims.",
+        "summary": "External adapter plan external is blocked by adapter_disabled_until_allow_installed.",
+        "work_item_id": "eval-49240959d265ca33"
+      },
+      {
+        "category": "eval_harness",
+        "label": "external",
+        "priority": "medium",
+        "reason": "dependencies_missing",
+        "source": "external_adapter_plan",
+        "suggested_action": "Provide the missing adapter input or dependency before making external eval claims.",
+        "summary": "External adapter plan external is blocked by dependencies_missing.",
+        "work_item_id": "eval-c63f82976c55456a"
+      },
+      {
+        "category": "eval_harness",
+        "label": "external",
+        "priority": "medium",
+        "reason": "no_ready_external_adapters",
+        "source": "external_adapter_plan",
+        "suggested_action": "Provide the missing adapter input or dependency before making external eval claims.",
+        "summary": "External adapter plan external is blocked by no_ready_external_adapters.",
+        "work_item_id": "eval-4f98e605337eb986"
+      }
+    ],
+    "notes": [
+      "Repair/curriculum items are derived from eval artifacts; they do not approve promotion.",
+      "Use these items to route scenario repair, candidate repair, curriculum generation, or eval-harness follow-up."
+    ],
+    "priority_counts": [
+      {
+        "count": 3,
+        "id": "medium"
+      }
+    ],
+    "work_item_count": 3
+  },
+  "risks": [
+    {
+      "label": "external",
+      "reason": "no_ready_external_adapters",
+      "source": "external_adapter_plan"
+    },
+    {
+      "label": "external",
+      "reason": "adapter_disabled_until_allow_installed",
+      "source": "external_adapter_plan"
+    },
+    {
+      "label": "external",
+      "reason": "dependencies_missing",
+      "source": "external_adapter_plan"
+    }
+  ],
+  "schema_version": "hfr.eval_summary.v1",
+  "serving_preflight": {
+    "attached_count": 0,
+    "blocking_reasons": [],
+    "duplicate_labels": [],
+    "input_count": 0,
+    "required": false,
+    "unmatched_labels": []
+  }
+}

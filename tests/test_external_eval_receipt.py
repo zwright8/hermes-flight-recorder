@@ -20,6 +20,32 @@ def run_cli(args):
 
 
 class ExternalEvalReceiptTests(unittest.TestCase):
+    def test_committed_agentic_training_external_eval_receipt_is_fail_closed(self):
+        eval_root = ROOT / "examples" / "agentic_training" / "heldout_eval"
+        plan_path = eval_root / "external_eval_plan.json"
+        receipt_path = eval_root / "external_eval_receipt.json"
+        plan = _read_json(plan_path)
+        receipt = _read_json(receipt_path)
+
+        self.assertEqual(set(plan["selected_adapters"]), set(adapter_choices()))
+        self.assertFalse(plan["ready"])
+        self.assertEqual(plan["ready_adapter_count"], 0)
+        self.assertEqual(
+            set(plan["blocking_reasons"]),
+            {"no_ready_external_adapters", "adapter_disabled_until_allow_installed", "dependencies_missing"},
+        )
+        self.assertFalse(receipt["passed"])
+        self.assertEqual(receipt["readiness"], "blocked")
+        self.assertEqual(receipt["launch"]["mode"], "dry_run")
+        self.assertFalse(receipt["launch"]["live_benchmarks_started"])
+        self.assertFalse(receipt["launch"]["provider_api_called"])
+        self.assertFalse(receipt["launch"]["model_downloads_started"])
+        self.assertEqual(receipt["launch"]["cost_incurred_usd"], 0)
+        self.assertFalse(receipt["execution_boundary"]["credential_values_recorded"])
+        self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
+        self.assertEqual(run_cli(["validate", "--external-eval-plan", str(plan_path), "--strict"]), 0)
+        self.assertEqual(run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"]), 0)
+
     def test_committed_example_external_eval_receipt_covers_fail_closed_adapters(self):
         receipt_path = ROOT / "examples" / "external_eval" / "external_eval_receipt.json"
         receipt = _read_json(receipt_path)

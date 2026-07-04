@@ -36,6 +36,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         provider_registry_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "provider_registry.json"
         cloud_preflight_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "preflight.json"
         cloud_launch_receipt_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "launch_receipt.json"
+        heldout_manifest_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "heldout_manifest.json"
+        external_eval_plan_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "external_eval_plan.json"
+        external_eval_receipt_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "external_eval_receipt.json"
+        eval_summary_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "eval_summary.json"
         model_grader_gate_path = ROOT / "examples" / "agentic_training" / "model_grader" / "passing_gate.json"
         action_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "action_ledger.json"
         improvement_ledger_path = ROOT / "examples" / "agentic_training" / "iteration_ledgers" / "improvement_ledger.json"
@@ -52,6 +56,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "cloud_training_provider_registry": ("cloud_training/provider_registry.json", provider_registry_path),
             "cloud_training_preflight": ("cloud_training/preflight.json", cloud_preflight_path),
             "cloud_training_launch_receipt": ("cloud_training/launch_receipt.json", cloud_launch_receipt_path),
+            "heldout_manifest": ("heldout_eval/heldout_manifest.json", heldout_manifest_path),
+            "external_eval_plan": ("heldout_eval/external_eval_plan.json", external_eval_plan_path),
+            "external_eval_receipt": ("heldout_eval/external_eval_receipt.json", external_eval_receipt_path),
+            "eval_summary": ("heldout_eval/eval_summary.json", eval_summary_path),
             "model_grader_gate": ("model_grader/passing_gate.json", model_grader_gate_path),
             "action_ledger": ("iteration_ledgers/action_ledger.json", action_ledger_path),
             "improvement_ledger": ("iteration_ledgers/improvement_ledger.json", improvement_ledger_path),
@@ -63,7 +71,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertFalse(plan["passed"])
         self.assertEqual(plan["readiness"], "planned_fail_closed")
-        self.assertEqual(plan["artifact_count"], 26)
+        self.assertEqual(plan["artifact_count"], 30)
         self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
         self.assertNotIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
         self.assertNotIn("reviewed_gate", plan["missing_phase_inputs"])
@@ -72,6 +80,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertNotIn("training_export", plan["missing_phase_inputs"])
         self.assertNotIn("trainer_preflight", plan["missing_phase_inputs"])
         self.assertNotIn("trainer_launch_check", plan["missing_phase_inputs"])
+        self.assertNotIn("heldout_manifest", plan["missing_phase_inputs"])
+        self.assertNotIn("external_eval_plan", plan["missing_phase_inputs"])
+        self.assertNotIn("external_eval_receipt", plan["missing_phase_inputs"])
+        self.assertNotIn("eval_summary", plan["missing_phase_inputs"])
         self.assertNotIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("dataset_curation_receipt_required_for_trainer_handoff", {check["id"] for check in plan["checks"] if not check["passed"]})
@@ -94,6 +106,8 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertEqual(phases["external_trainer_execution"]["status"], "ready")
         self.assertIn("trainer_preflight", phases["external_trainer_execution"]["present_required_artifacts"])
         self.assertIn("trainer_launch_check", phases["external_trainer_execution"]["present_required_artifacts"])
+        self.assertEqual(phases["heldout_eval"]["status"], "ready")
+        self.assertEqual(phases["heldout_eval"]["missing_required_artifacts"], [])
         self.assertEqual(phases["improvement_planning"]["status"], "ready")
         self.assertEqual(phases["next_iteration"]["status"], "ready")
         self.assertFalse(plan["cloud_training"]["cloud_jobs_started"])
@@ -102,6 +116,12 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertEqual(plan["cloud_training_lineage"]["missing_link_count"], 0)
         self.assertTrue(plan["cloud_training_receipt_state"]["fail_closed"])
         self.assertEqual(plan["cloud_training_receipt_state"]["cost_incurred_usd"], 0)
+        self.assertEqual(plan["external_eval_receipt_state"]["adapter_count"], 4)
+        self.assertEqual(plan["external_eval_receipt_state"]["ready_adapter_count"], 0)
+        self.assertFalse(plan["external_eval_receipt_state"]["receipts_passed"])
+        self.assertTrue(plan["external_eval_receipt_state"]["fail_closed"])
+        self.assertFalse(plan["external_eval_receipt_state"]["live_benchmarks_started"])
+        self.assertFalse(plan["external_eval_receipt_state"]["provider_api_calls_started"])
         self.assertFalse(plan["execution_boundary"]["cloud_jobs_started"])
         self.assertFalse(plan["execution_boundary"]["paid_model_grader_calls_started"])
         self.assertFalse(plan["execution_boundary"]["weights_updated_by_flight_recorder"])

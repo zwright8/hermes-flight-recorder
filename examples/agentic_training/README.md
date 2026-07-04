@@ -218,6 +218,46 @@ flightrecorder cloud-training status \
   --out examples/agentic_training/cloud_training/status_receipt.json
 ```
 
+Seed the held-out eval lane with fail-closed external adapter receipts:
+the committed `baseline_suite_summary.json` and `candidate_suite_summary.json`
+cover the held-out scenario IDs excluded from the training export.
+
+```bash
+flightrecorder heldout-manifest \
+  --suite-summary baseline=examples/agentic_training/heldout_eval/baseline_suite_summary.json \
+  --suite-summary candidate=examples/agentic_training/heldout_eval/candidate_suite_summary.json \
+  --out examples/agentic_training/heldout_eval/heldout_manifest.json
+
+flightrecorder external-eval-plan \
+  --scenario-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
+  --model-endpoint local/mock-candidate \
+  --model local/mock-candidate \
+  --tool-schema-set mock-tool-schema-set \
+  --inspect-task-set agentic-heldout-inspect \
+  --lm-eval-task agentic_heldout \
+  --swe-bench-task-set agentic-heldout-swebench \
+  --sandbox-policy locked-network \
+  --out examples/agentic_training/heldout_eval/external_eval_plan.json
+
+flightrecorder external-eval-receipt \
+  --plan examples/agentic_training/heldout_eval/external_eval_plan.json \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/heldout_eval/external_eval_receipt.json
+
+flightrecorder eval-summary \
+  --suite-summary baseline=examples/agentic_training/heldout_eval/baseline_suite_summary.json \
+  --suite-summary candidate=examples/agentic_training/heldout_eval/candidate_suite_summary.json \
+  --external-adapter-plan external=examples/agentic_training/heldout_eval/external_eval_plan.json \
+  --out examples/agentic_training/heldout_eval/eval_summary.json \
+  --markdown-out examples/agentic_training/heldout_eval/eval_summary.md
+```
+
+The external-eval plan, receipt, and eval summary exit nonzero in this fixture
+because optional BFCL, Inspect AI, lm-eval-harness, and SWE-bench dependencies
+are not enabled. They still write schema-checkable artifacts with zero provider
+API calls, model downloads, benchmark launches, credential recording, cost, or
+weight updates.
+
 Bind the example receipts into a fail-closed loop contract:
 
 ```bash
@@ -250,6 +290,10 @@ flightrecorder agentic-loop plan \
   --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
   --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
+  --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
+  --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
+  --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
   --rubric-spec examples/agentic_training/model_grader/rubric.json \
   --model-grader-dry-run examples/agentic_training/model_grader/dry_run.json \
   --model-grader-disagreement-queue examples/agentic_training/model_grader/disagreement_queue.json \
@@ -263,12 +307,13 @@ flightrecorder agentic-loop plan \
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include harness results, evidence bundles, serving, held-out eval, or
-promotion receipts. It does bind loop-local rollout plan and mock receipt,
-nested model-grader review, rejection-sampling, dataset-curation,
-training-export, trainer-preflight, trainer-launch-check, cloud-training,
+does not include harness results, evidence bundles, serving, or promotion
+receipts, and because external adapter dependencies are intentionally not
+enabled. It does bind loop-local rollout plan and mock receipt, nested
+model-grader review, rejection-sampling, dataset-curation, training-export,
+trainer-preflight, trainer-launch-check, cloud-training, held-out eval,
 action-ledger, and improvement-ledger receipts without provider, dataset-write,
-or scheduler side effects. The
+benchmark-launch, or scheduler side effects. The
 `cloud_training_receipt_state` block is derived from the referenced launch and
 status receipts, so forged loop summaries cannot hide provider API calls, cloud
 jobs, cancellation calls, or incurred cost. The `cloud_training_lineage` block
@@ -303,6 +348,10 @@ flightrecorder validate \
   --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
   --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
+  --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
+  --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
+  --eval-summary examples/agentic_training/heldout_eval/eval_summary.json \
   --agentic-loop-plan examples/agentic_training/loop_plan.json \
   --strict
 

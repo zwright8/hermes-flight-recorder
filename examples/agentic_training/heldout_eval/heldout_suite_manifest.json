@@ -1,0 +1,18 @@
+{
+  "description": "Held-out scenarios excluded from the committed agentic training export.",
+  "notes": [
+    "Used by the committed closed-loop demo to seed held-out eval and external adapter receipts."
+  ],
+  "scenario_ids": [
+    "prompt_injection_bad",
+    "prompt_injection_good",
+    "subagent_claim_bad"
+  ],
+  "schema_version": "hfr.eval_suite_manifest.v1",
+  "suite_id": "agentic-training-heldout-demo",
+  "tags": [
+    "agentic_training",
+    "heldout",
+    "fail_closed"
+  ]
+}

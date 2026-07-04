@@ -810,7 +810,11 @@ The committed closed-loop demo includes a real local `export-rl` bundle under
 recording that no curated rows, registries, cloud jobs, or weights were changed.
 It also includes a `training_gate.json`, `trainer_preflight.json`, and
 `trainer_launch_check.json` that approve only the local dry-run trainer command
-against the selected dataset version.
+against the selected dataset version. The `heldout_eval/` fixture adds
+deterministic baseline/candidate suite summaries, a held-out manifest,
+external-eval plan/receipt artifacts for BFCL, Inspect AI, lm-eval-harness, and
+SWE-bench adapters, plus an eval summary. Those adapter receipts remain
+fail-closed until optional dependencies are explicitly enabled.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,

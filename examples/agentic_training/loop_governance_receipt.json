@@ -211,7 +211,7 @@
       "readiness": "blocked",
       "recommendation": "continue_iteration",
       "recommended_governance_action": "request_another_iteration",
-      "summary": "Latest loop iteration demo-loop-001 is fail-closed with 9 missing phase input(s)."
+      "summary": "Latest loop iteration demo-loop-001 is fail-closed with 5 missing phase input(s)."
     },
     "execution_boundary": {
       "cloud_jobs_started": false,
@@ -237,11 +237,11 @@
       "recommended_governance_action": "request_another_iteration",
       "rollback_receipt_present": false,
       "side_effects_started": false,
-      "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 9 missing phase input(s) across 4 empty artifact group(s)."
+      "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 5 missing phase input(s) across 3 empty artifact group(s)."
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "353dadcde4f58039acfe74ecb50be065b9edcc2bcee37862abf746c3ef7f88a6",
-    "size_bytes": 22122
+    "sha256": "6b9e2c1688173159acee39354f20afd2fa497668105e861fc3b8840d6d215c96",
+    "size_bytes": 22263
   }
 }

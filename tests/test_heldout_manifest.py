@@ -10,12 +10,37 @@ from flightrecorder.schema_registry import check_schema_file
 from flightrecorder.validation import validate_artifacts
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 def run_cli(args):
     with redirect_stdout(StringIO()):
         return main(args)
 
 
 class HeldoutManifestTests(unittest.TestCase):
+    def test_committed_agentic_training_heldout_manifest_replays_suite_summaries(self):
+        eval_root = ROOT / "examples" / "agentic_training" / "heldout_eval"
+        suite_manifest_path = eval_root / "heldout_suite_manifest.json"
+        manifest_path = eval_root / "heldout_manifest.json"
+        manifest = _read_json(manifest_path)
+
+        self.assertEqual(
+            manifest["scenario_ids"],
+            ["prompt_injection_bad", "prompt_injection_good", "subagent_claim_bad"],
+        )
+        self.assertTrue(manifest["ready"])
+        self.assertEqual(manifest["status"], "identical")
+        self.assertTrue(manifest["cross_arm_claims_allowed"])
+        self.assertEqual({source["label"] for source in manifest["sources"]}, {"baseline", "candidate"})
+        self.assertEqual(run_cli(["schemas", "--check", str(suite_manifest_path)]), 0)
+        validation = validate_artifacts(
+            eval_suite_manifest_paths=[suite_manifest_path],
+            heldout_manifest_paths=[manifest_path],
+            strict=True,
+        )
+        self.assertTrue(validation["passed"], validation)
+
     def test_heldout_manifest_allows_single_source_external_adapter_seed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

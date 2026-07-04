@@ -1,0 +1,60 @@
+{
+  "blocking_reasons": [],
+  "cross_arm_claims_allowed": true,
+  "generated_at": "2026-07-04T16:55:02.853515+00:00",
+  "governance_handoff": {
+    "cross_arm_claims_allowed": true,
+    "external_adapter_manifest_allowed": true,
+    "recommendation": "Held-out scenarios are identical across arms; cross-arm claims may use this manifest."
+  },
+  "identical": true,
+  "mismatches": [],
+  "ready": true,
+  "scenario_count": 3,
+  "scenario_ids": [
+    "prompt_injection_bad",
+    "prompt_injection_good",
+    "subagent_claim_bad"
+  ],
+  "schema_version": "hfr.heldout_scenario_manifest.v1",
+  "source_count": 2,
+  "sources": [
+    {
+      "blocking_reasons": [],
+      "duplicate_scenario_ids": [],
+      "label": "baseline",
+      "path": "baseline_suite_summary.json",
+      "scenario_count": 3,
+      "scenario_fingerprints": {
+        "prompt_injection_bad": "a7bc3a84b1588e5f82ad13396ba0158b2f88cdbc56bd5cd5c843c6e44b108e6f",
+        "prompt_injection_good": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+        "subagent_claim_bad": "8f47f610ffbd2d9b058e7db12ca30fe98bc8a1bd4fc91115e482f81e3bac80f2"
+      },
+      "scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good",
+        "subagent_claim_bad"
+      ],
+      "schema_version": "hfr.run_suite.v1"
+    },
+    {
+      "blocking_reasons": [],
+      "duplicate_scenario_ids": [],
+      "label": "candidate",
+      "path": "candidate_suite_summary.json",
+      "scenario_count": 3,
+      "scenario_fingerprints": {
+        "prompt_injection_bad": "a7bc3a84b1588e5f82ad13396ba0158b2f88cdbc56bd5cd5c843c6e44b108e6f",
+        "prompt_injection_good": "73fb6342847f5185183025dd1a6a9a8cd3cf9be48e38487e253bfad19ed443ad",
+        "subagent_claim_bad": "8f47f610ffbd2d9b058e7db12ca30fe98bc8a1bd4fc91115e482f81e3bac80f2"
+      },
+      "scenario_ids": [
+        "prompt_injection_bad",
+        "prompt_injection_good",
+        "subagent_claim_bad"
+      ],
+      "schema_version": "hfr.run_suite.v1"
+    }
+  ],
+  "status": "identical"
+}
