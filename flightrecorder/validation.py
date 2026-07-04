@@ -25107,6 +25107,7 @@ def _list_present(value: Any) -> bool:
 
 def _validate_replay_bundle(manifest: dict[str, Any], bundle_dir: Path, target: ValidationTarget) -> None:
     _require_equal(manifest, "schema_version", REPLAY_BUNDLE_SCHEMA_VERSION, target, prefix="replay_bundle.")
+    _warn_absolute_public_path(target, "replay_bundle.source_lineage", manifest.get("source_lineage"))
     lineage_name = manifest.get("lineage")
     if not isinstance(lineage_name, str) or not lineage_name:
         target.errors.append("replay_bundle.lineage must be a non-empty string.")
@@ -25151,6 +25152,7 @@ def _validate_replay_bundle(manifest: dict[str, Any], bundle_dir: Path, target: 
     else:
         if argv[:4] != ["python", "-m", "flightrecorder", "run"]:
             target.errors.append("replay_bundle.replay.argv must start with python -m flightrecorder run.")
+        _warn_replay_metadata_public_paths(replay, target, "replay_bundle.replay")
         _validate_replay_bundle_argv_inputs(argv, input_records, target)
     if not isinstance(replay.get("command"), str) or not replay.get("command"):
         target.errors.append("replay_bundle.replay.command must be a non-empty string.")
@@ -25178,6 +25180,11 @@ def _validate_replay_bundle_lineage(
         target.errors.append("artifact_lineage.portable_replay_bundle must be an object.")
         portable = {}
     _require_equal(portable, "schema_version", REPLAY_BUNDLE_SCHEMA_VERSION, target, prefix="artifact_lineage.portable_replay_bundle.")
+    _warn_absolute_public_path(
+        target,
+        "artifact_lineage.portable_replay_bundle.source_lineage",
+        portable.get("source_lineage"),
+    )
     if portable.get("input_count") != manifest.get("input_count"):
         target.errors.append("artifact_lineage.portable_replay_bundle.input_count must match replay_bundle.input_count.")
     replay = lineage.get("replay")
@@ -25191,6 +25198,7 @@ def _validate_replay_bundle_lineage(
         target.errors.append("artifact_lineage.replay.argv must match replay_bundle.replay.argv.")
     if replay.get("command") != manifest_replay.get("command"):
         target.errors.append("artifact_lineage.replay.command must match replay_bundle.replay.command.")
+    _warn_replay_metadata_public_paths(replay, target, "artifact_lineage.replay")
 
     inputs = _lineage_records(lineage.get("inputs"), target, "artifact_lineage.inputs")
     fingerprints = replay.get("input_fingerprints") if isinstance(replay.get("input_fingerprints"), dict) else {}
@@ -25240,8 +25248,11 @@ def _validate_replay_bundle_input_record(record: dict[str, Any], bundle_dir: Pat
         target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
     elif _sha256(file_path) != record.get("sha256"):
         target.errors.append(f"{label}.sha256 does not match the bundled file.")
-    if "source_path" in record and not isinstance(record.get("source_path"), str):
-        target.errors.append(f"{label}.source_path must be a string when present.")
+    if "source_path" in record:
+        if not isinstance(record.get("source_path"), str):
+            target.errors.append(f"{label}.source_path must be a string when present.")
+        else:
+            _warn_absolute_public_path(target, f"{label}.source_path", record.get("source_path"))
 
 
 def _validate_replay_bundle_argv_inputs(argv: list[str], inputs: dict[str, dict[str, Any]], target: ValidationTarget) -> None:

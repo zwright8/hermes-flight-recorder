@@ -79,6 +79,8 @@ evidence.
   run-artifact paths warn under strict validation.
 - Validate run lineage before public handoff so preserved output paths, replay
   args, commands, and input fingerprint paths warn under strict validation.
+- Validate replay bundles before public handoff so preserved source lineage and
+  copied-input source display paths warn under strict validation.
 - Validate trainer preflights before public use so preserved trainer-command
   raw or argv tokens warn under strict validation.
 - Validate trainer launch checks before public use so preserved approved-command

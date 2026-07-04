@@ -1338,7 +1338,9 @@ evidence. Validation checks both manifest inputs and copied lineage inputs
 against the bundled files, including recorded sizes and SHA-256 fingerprints.
 Use `--preserve-paths` only for private runs when absolute replay
 commands are acceptable; strict validation warns when `artifact_lineage.json`
-publishes absolute output paths, replay args, commands, or input fingerprint paths. Harness
+publishes absolute output paths, replay args, commands, or input fingerprint
+paths, and when replay-bundle metadata preserves absolute source lineage or
+copied-input source display paths. Harness
 replay receipts must point at the replayed
 `scorecard.json`, and validation rejects receipts whose `passed` flag does not
 match that scorecard.

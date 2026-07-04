@@ -377,6 +377,50 @@ class ValidationTests(unittest.TestCase):
             self.assertIn("artifact_lineage.replay.argv[", warnings)
             self.assertIn("artifact_lineage.replay.command[", warnings)
 
+    def test_strict_validate_warns_on_absolute_replay_bundle_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            bundle_dir = Path(tmp) / "bundle"
+            validation = Path(tmp) / "validation.json"
+            strict_validation = Path(tmp) / "strict_validation.json"
+            run_cli(
+                [
+                    "run",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                    "--out",
+                    str(run_dir),
+                    "--preserve-paths",
+                ]
+            )
+            run_cli(
+                [
+                    "replay-bundle",
+                    "--lineage",
+                    str(run_dir / "artifact_lineage.json"),
+                    "--out",
+                    str(bundle_dir),
+                    "--preserve-paths",
+                ]
+            )
+            manifest = json.loads((bundle_dir / "replay_bundle.json").read_text(encoding="utf-8"))
+            lineage = json.loads((bundle_dir / "artifact_lineage.json").read_text(encoding="utf-8"))
+
+            self.assertTrue(Path(manifest["source_lineage"]).is_absolute())
+            self.assertTrue(any(Path(record["source_path"]).is_absolute() for record in manifest["inputs"]))
+            self.assertTrue(Path(lineage["portable_replay_bundle"]["source_lineage"]).is_absolute())
+            self.assertFalse(any(Path(item).is_absolute() for item in manifest["replay"]["argv"]))
+            self.assertEqual(run_cli(["validate", "--replay-bundle", str(bundle_dir), "--out", str(validation)]), 0)
+            self.assertEqual(run_cli(["validate", "--replay-bundle", str(bundle_dir), "--strict", "--out", str(strict_validation)]), 1)
+            summary = json.loads(strict_validation.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("replay_bundle.source_lineage is absolute", warnings)
+            self.assertIn("replay_bundle.inputs[", warnings)
+            self.assertIn(".source_path is absolute", warnings)
+            self.assertIn("artifact_lineage.portable_replay_bundle.source_lineage is absolute", warnings)
+            self.assertNotIn("replay_bundle.replay.argv[", warnings)
+            self.assertNotIn("replay_bundle.replay.command[", warnings)
+
     def test_validate_rejects_broken_preference_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
