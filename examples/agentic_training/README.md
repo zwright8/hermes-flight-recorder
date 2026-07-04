@@ -133,4 +133,39 @@ flightrecorder agentic-loop governance \
 flightrecorder validate \
   --agentic-loop-governance-receipt examples/agentic_training/loop_governance_receipt.json \
   --strict
+
+(cd examples/agentic_training/iteration_ledgers && \
+  flightrecorder evidence-bundle \
+    --runs runs \
+    --gate failed_gate.json \
+    --out evidence_bundle.json || test $? -eq 1)
+
+(cd examples/agentic_training/iteration_ledgers && \
+  flightrecorder action-ledger \
+    --bundle evidence_bundle.json \
+    --out action_ledger.json)
+
+(cd examples/agentic_training/iteration_ledgers && \
+  flightrecorder improvement-plan \
+    --evidence-bundle evidence_bundle.json \
+    --out improvement_plan.json)
+
+(cd examples/agentic_training/iteration_ledgers && \
+  flightrecorder improvement-ledger \
+    --plan improvement_plan.json \
+    --out improvement_ledger.json)
+
+flightrecorder next-iteration-schedule \
+  --loop-ledger examples/agentic_training/loop_ledger.json \
+  --action-ledger examples/agentic_training/iteration_ledgers/action_ledger.json \
+  --improvement-ledger examples/agentic_training/iteration_ledgers/improvement_ledger.json \
+  --next-iteration-id demo-loop-002 \
+  --objective "Collect missing closed-loop receipts and resolve ledgered repair pressure." \
+  --schedule cadence=\"manual\" \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/next_iteration_schedule.json
+
+flightrecorder validate \
+  --next-iteration-schedule examples/agentic_training/next_iteration_schedule.json \
+  --strict
 ```

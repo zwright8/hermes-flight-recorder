@@ -1,0 +1,166 @@
+{
+  "decision": {
+    "critical_or_high_count": 2,
+    "readiness": "blocked",
+    "recommendation": "fix_handoff",
+    "source_bundle_next_action_count": 2,
+    "source_bundle_recommendation": "block_handoff",
+    "summary": "Evidence handoff is blocked; fix bundle checks or gates before using this plan for promotion.",
+    "top_work_items": [
+      {
+        "category": "bundle_action",
+        "item_id": "bundle_action:2b6c12924b902d17",
+        "priority": "critical",
+        "rule_id": null,
+        "scenario_id": null,
+        "summary": "Fix 1 failed gate(s) before promoting this evidence package."
+      },
+      {
+        "category": "bundle_action",
+        "item_id": "bundle_action:7284a2f35a283649",
+        "priority": "critical",
+        "rule_id": null,
+        "scenario_id": null,
+        "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff."
+      }
+    ],
+    "work_item_count": 2
+  },
+  "metrics": {
+    "bundle_action_count": 2,
+    "category_counts": [
+      {
+        "count": 2,
+        "id": "bundle_action"
+      }
+    ],
+    "curriculum_backed_count": 0,
+    "digest_backed_count": 0,
+    "evidence_ref_count": 0,
+    "priority_counts": [
+      {
+        "count": 2,
+        "id": "critical"
+      }
+    ],
+    "repair_backed_count": 0,
+    "rule_count": 0,
+    "rule_counts": [],
+    "rules": [],
+    "scenario_count": 0,
+    "scenarios": [],
+    "task_families": [],
+    "task_family_count": 0,
+    "task_family_counts": [],
+    "work_item_count": 2
+  },
+  "notes": [
+    "Improvement plans summarize existing evidence; they do not execute repairs, train models, or approve promotion.",
+    "Use item fingerprints and routing keys to deduplicate work across repeated evidence bundles.",
+    "Treat curriculum and reward hints as prioritization evidence, not as an online reward function."
+  ],
+  "passed": true,
+  "plan_path": "improvement_plan.json",
+  "readiness": "blocked",
+  "schema_version": "hfr.improvement_plan.v1",
+  "source_artifacts": {
+    "evidence_bundle": {
+      "exists": true,
+      "kind": "file",
+      "passed": false,
+      "path": "evidence_bundle.json",
+      "schema_version": "hfr.evidence_bundle.v1",
+      "sha256": "d477c84f0641821b30c7d647981e86c29036ce896bd033d55e734234e264aa63",
+      "size_bytes": 5888
+    }
+  },
+  "work_item_count": 2,
+  "work_items": [
+    {
+      "category": "bundle_action",
+      "evidence_refs": [],
+      "evidence_snippets": [],
+      "fingerprint": "2b6c12924b902d174b82b5d58d312882121b430485169fc5ea9983ec579d08a9",
+      "item_id": "bundle_action:2b6c12924b902d17",
+      "priority": "critical",
+      "priority_rank": 0,
+      "replay": {},
+      "routing_key": "bundle_action:critical:2b6c12924b90",
+      "rule_id": null,
+      "rule_name": null,
+      "scenario_id": null,
+      "score": null,
+      "source_artifacts": {},
+      "sources": {
+        "bundle_action": {
+          "action_fingerprint": "be641b8a9ee8edae61ce74b7a06387a020c5b997800fc5be26f746ea5f9a5504",
+          "artifact": "gates",
+          "evidence": {
+            "blocking_gates": [
+              {
+                "id": "test_gate",
+                "path": "failed_gate.json"
+              }
+            ]
+          },
+          "id": "fix_failed_gates",
+          "routing_key": "gates:fix_failed_gates:be641b8a9ee8"
+        },
+        "bundle_action_ids": [
+          "fix_failed_gates"
+        ],
+        "curriculum_priorities": [],
+        "repair_item_ids": [],
+        "run_digest": null
+      },
+      "suggested_action": "Use the referenced bundle evidence to decide the next repair, review, or handoff step.",
+      "summary": "Fix 1 failed gate(s) before promoting this evidence package.",
+      "task_completion_status": null,
+      "task_family": null
+    },
+    {
+      "category": "bundle_action",
+      "evidence_refs": [],
+      "evidence_snippets": [],
+      "fingerprint": "7284a2f35a283649b1cfe9fe0d760c8fe9ceb26e83386a681cfc8afb14fafa14",
+      "item_id": "bundle_action:7284a2f35a283649",
+      "priority": "critical",
+      "priority_rank": 0,
+      "replay": {},
+      "routing_key": "bundle_action:critical:7284a2f35a28",
+      "rule_id": null,
+      "rule_name": null,
+      "scenario_id": null,
+      "score": null,
+      "source_artifacts": {},
+      "sources": {
+        "bundle_action": {
+          "action_fingerprint": "6d8a5816656ace2ad1709d4747231980c3ae37a0d65782e42a37c60ecbe48bfa",
+          "artifact": "evidence_bundle",
+          "evidence": {
+            "blocking_check_count": 2,
+            "first_blocking_check": {
+              "id": "gate_passed",
+              "scope": {
+                "gate": "test_gate"
+              },
+              "summary": "gate_passed: passed=False"
+            }
+          },
+          "id": "resolve_blocking_checks",
+          "routing_key": "evidence_bundle:resolve_blocking_checks:6d8a5816656a"
+        },
+        "bundle_action_ids": [
+          "resolve_blocking_checks"
+        ],
+        "curriculum_priorities": [],
+        "repair_item_ids": [],
+        "run_digest": null
+      },
+      "suggested_action": "Use the referenced bundle evidence to decide the next repair, review, or handoff step.",
+      "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff.",
+      "task_completion_status": null,
+      "task_family": null
+    }
+  ]
+}

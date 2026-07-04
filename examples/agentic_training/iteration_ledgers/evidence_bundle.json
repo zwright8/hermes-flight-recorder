@@ -1,0 +1,220 @@
+{
+  "artifacts": {
+    "gate_1": {
+      "exists": true,
+      "kind": "file",
+      "passed": false,
+      "path": "failed_gate.json",
+      "schema_version": "hfr.test_gate.v1",
+      "sha256": "150c0bbf1664e809e07247be81aed8d99f3be36291582f6c6a12bc4142bdba48",
+      "size_bytes": 62
+    },
+    "runs_dir": {
+      "entry_count": 0,
+      "exists": true,
+      "kind": "directory",
+      "path": "runs"
+    }
+  },
+  "bundle_path": "evidence_bundle.json",
+  "check_count": 4,
+  "checks": [
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "runs_dir_exists",
+      "passed": true,
+      "scope": {
+        "artifact": "runs_dir"
+      },
+      "summary": "runs_dir_exists: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "run_digest_coverage_complete",
+      "passed": true,
+      "scope": {
+        "artifact": "runs_dir",
+        "completed_runs": "0",
+        "invalid_digest_count": "0",
+        "missing_digest_count": "0"
+      },
+      "summary": "run_digest_coverage_complete: passed=True"
+    },
+    {
+      "actual": {
+        "passed": false
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "gate_passed",
+      "passed": false,
+      "scope": {
+        "gate": "test_gate"
+      },
+      "summary": "gate_passed: passed=False"
+    },
+    {
+      "actual": {
+        "passed": false
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "gate_contract_valid",
+      "passed": false,
+      "scope": {
+        "contract_available": "false",
+        "contract_errors": "failed_check_count must match failed checks; decision must be an object",
+        "gate": "test_gate"
+      },
+      "summary": "gate_contract_valid: passed=False"
+    }
+  ],
+  "decision": {
+    "blocking_check_count": 2,
+    "blocking_checks": [
+      {
+        "id": "gate_passed",
+        "scope": {
+          "gate": "test_gate"
+        },
+        "summary": "gate_passed: passed=False"
+      },
+      {
+        "id": "gate_contract_valid",
+        "scope": {
+          "contract_available": "false",
+          "contract_errors": "failed_check_count must match failed checks; decision must be an object",
+          "gate": "test_gate"
+        },
+        "summary": "gate_contract_valid: passed=False"
+      }
+    ],
+    "blocking_gates": [
+      {
+        "id": "test_gate",
+        "path": "failed_gate.json"
+      }
+    ],
+    "evidence_artifacts": [
+      "gate_1",
+      "runs_dir"
+    ],
+    "gate_count": 1,
+    "key_metrics": {
+      "gates": {
+        "failed": 1,
+        "passed": 0,
+        "total": 1
+      },
+      "run_digest_coverage": {
+        "digest_count": 0,
+        "digest_coverage_rate": 1.0,
+        "failed_digest_count": 0,
+        "invalid_digest_count": 0,
+        "missing_digest_count": 0,
+        "passed_digest_count": 0,
+        "recommended_action_counts": [],
+        "run_count": 0,
+        "task_completion_status_counts": []
+      }
+    },
+    "next_action_count": 2,
+    "next_actions": [
+      {
+        "action_fingerprint": "6d8a5816656ace2ad1709d4747231980c3ae37a0d65782e42a37c60ecbe48bfa",
+        "artifact": "evidence_bundle",
+        "evidence": {
+          "blocking_check_count": 2,
+          "first_blocking_check": {
+            "id": "gate_passed",
+            "scope": {
+              "gate": "test_gate"
+            },
+            "summary": "gate_passed: passed=False"
+          }
+        },
+        "id": "resolve_blocking_checks",
+        "priority": "critical",
+        "routing_key": "evidence_bundle:resolve_blocking_checks:6d8a5816656a",
+        "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff."
+      },
+      {
+        "action_fingerprint": "be641b8a9ee8edae61ce74b7a06387a020c5b997800fc5be26f746ea5f9a5504",
+        "artifact": "gates",
+        "evidence": {
+          "blocking_gates": [
+            {
+              "id": "test_gate",
+              "path": "failed_gate.json"
+            }
+          ]
+        },
+        "id": "fix_failed_gates",
+        "priority": "critical",
+        "routing_key": "gates:fix_failed_gates:be641b8a9ee8",
+        "summary": "Fix 1 failed gate(s) before promoting this evidence package."
+      }
+    ],
+    "passed_gate_count": 0,
+    "readiness": "blocked",
+    "recommendation": "block_handoff",
+    "summary": "Evidence handoff is blocked by 2 check(s); first failure: gate_passed: passed=False"
+  },
+  "failed_check_count": 2,
+  "metrics": {
+    "gates": [
+      {
+        "contract": {
+          "available": false,
+          "blocking_check_count": 0,
+          "errors": [
+            "failed_check_count must match failed checks",
+            "decision must be an object"
+          ],
+          "failed_check_count": 0,
+          "next_action_count": 0,
+          "readiness": "",
+          "recommendation": "",
+          "valid": false
+        },
+        "id": "test_gate",
+        "passed": false,
+        "path": "failed_gate.json",
+        "schema_version": "hfr.test_gate.v1"
+      }
+    ],
+    "run_digest_coverage": {
+      "digest_count": 0,
+      "digest_coverage_rate": 1.0,
+      "failed_digest_count": 0,
+      "invalid_digest_count": 0,
+      "invalid_digest_scenarios": [],
+      "missing_digest_count": 0,
+      "missing_digest_scenarios": [],
+      "passed_digest_count": 0,
+      "recommended_action_counts": [],
+      "run_count": 0,
+      "runs_dir": "runs",
+      "task_completion_status_counts": []
+    }
+  },
+  "notes": [
+    "Evidence bundles summarize existing artifacts; they do not rescore traces or mutate outputs.",
+    "A ready bundle means included gates and readiness artifacts passed, not that the agent is sandboxed or trained."
+  ],
+  "passed": false,
+  "readiness": "blocked",
+  "schema_version": "hfr.evidence_bundle.v1"
+}

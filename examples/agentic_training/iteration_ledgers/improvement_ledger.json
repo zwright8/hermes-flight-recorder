@@ -1,0 +1,186 @@
+{
+  "decision": {
+    "critical_or_high_open_count": 2,
+    "latest_plan_index": 0,
+    "latest_plan_recommendation": "fix_handoff",
+    "open_work_item_count": 2,
+    "readiness": "blocked",
+    "recommendation": "fix_handoff",
+    "resolved_work_item_count": 0,
+    "summary": "Latest improvement plan is blocked; fix handoff evidence before using longitudinal pressure.",
+    "top_open_work_items": [
+      {
+        "category": "bundle_action",
+        "priority": "critical",
+        "rule_id": null,
+        "scenario_id": null,
+        "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff.",
+        "work_key": "bundle_action:evidence_bundle:resolve_blocking_checks"
+      },
+      {
+        "category": "bundle_action",
+        "priority": "critical",
+        "rule_id": null,
+        "scenario_id": null,
+        "summary": "Fix 1 failed gate(s) before promoting this evidence package.",
+        "work_key": "bundle_action:gates:fix_failed_gates"
+      }
+    ]
+  },
+  "entries": [
+    {
+      "category": "bundle_action",
+      "evidence_ref_count": 0,
+      "first_seen_index": 0,
+      "first_seen_path": "improvement_plan.json",
+      "last_seen_index": 0,
+      "last_seen_path": "improvement_plan.json",
+      "latest_fingerprint": "7284a2f35a283649b1cfe9fe0d760c8fe9ceb26e83386a681cfc8afb14fafa14",
+      "latest_item_id": "bundle_action:7284a2f35a283649",
+      "latest_routing_key": "bundle_action:critical:7284a2f35a28",
+      "occurrence_count": 1,
+      "occurrences": [
+        {
+          "category": "bundle_action",
+          "fingerprint": "7284a2f35a283649b1cfe9fe0d760c8fe9ceb26e83386a681cfc8afb14fafa14",
+          "item_id": "bundle_action:7284a2f35a283649",
+          "plan_index": 0,
+          "plan_path": "improvement_plan.json",
+          "priority": "critical",
+          "routing_key": "bundle_action:critical:7284a2f35a28",
+          "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff."
+        }
+      ],
+      "open": true,
+      "plan_indexes": [
+        0
+      ],
+      "priority": "critical",
+      "rule_id": null,
+      "rule_name": null,
+      "scenario_id": null,
+      "score": null,
+      "status": "new",
+      "suggested_action": "Use the referenced bundle evidence to decide the next repair, review, or handoff step.",
+      "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff.",
+      "task_completion_status": null,
+      "task_family": null,
+      "work_key": "bundle_action:evidence_bundle:resolve_blocking_checks"
+    },
+    {
+      "category": "bundle_action",
+      "evidence_ref_count": 0,
+      "first_seen_index": 0,
+      "first_seen_path": "improvement_plan.json",
+      "last_seen_index": 0,
+      "last_seen_path": "improvement_plan.json",
+      "latest_fingerprint": "2b6c12924b902d174b82b5d58d312882121b430485169fc5ea9983ec579d08a9",
+      "latest_item_id": "bundle_action:2b6c12924b902d17",
+      "latest_routing_key": "bundle_action:critical:2b6c12924b90",
+      "occurrence_count": 1,
+      "occurrences": [
+        {
+          "category": "bundle_action",
+          "fingerprint": "2b6c12924b902d174b82b5d58d312882121b430485169fc5ea9983ec579d08a9",
+          "item_id": "bundle_action:2b6c12924b902d17",
+          "plan_index": 0,
+          "plan_path": "improvement_plan.json",
+          "priority": "critical",
+          "routing_key": "bundle_action:critical:2b6c12924b90",
+          "summary": "Fix 1 failed gate(s) before promoting this evidence package."
+        }
+      ],
+      "open": true,
+      "plan_indexes": [
+        0
+      ],
+      "priority": "critical",
+      "rule_id": null,
+      "rule_name": null,
+      "scenario_id": null,
+      "score": null,
+      "status": "new",
+      "suggested_action": "Use the referenced bundle evidence to decide the next repair, review, or handoff step.",
+      "summary": "Fix 1 failed gate(s) before promoting this evidence package.",
+      "task_completion_status": null,
+      "task_family": null,
+      "work_key": "bundle_action:gates:fix_failed_gates"
+    }
+  ],
+  "ledger_path": "improvement_ledger.json",
+  "metrics": {
+    "category_counts": [
+      {
+        "count": 2,
+        "id": "bundle_action"
+      }
+    ],
+    "critical_open_work_item_count": 2,
+    "high_open_work_item_count": 0,
+    "new_work_item_count": 2,
+    "open_category_counts": [
+      {
+        "count": 2,
+        "id": "bundle_action"
+      }
+    ],
+    "open_priority_counts": [
+      {
+        "count": 2,
+        "id": "critical"
+      }
+    ],
+    "open_work_item_count": 2,
+    "plan_count": 1,
+    "plan_work_item_counts": [
+      {
+        "index": 0,
+        "path": "improvement_plan.json",
+        "work_item_count": 2
+      }
+    ],
+    "priority_counts": [
+      {
+        "count": 2,
+        "id": "critical"
+      }
+    ],
+    "recurring_work_item_count": 0,
+    "resolved_work_item_count": 0,
+    "rule_counts": [],
+    "status_counts": [
+      {
+        "count": 2,
+        "id": "new"
+      }
+    ],
+    "task_family_counts": [],
+    "unique_work_item_count": 2,
+    "work_item_count": 2
+  },
+  "notes": [
+    "Improvement ledgers summarize improvement-plan work items across iterations; they do not execute repairs.",
+    "Status is computed relative to the latest plan: new and recurring work is open, resolved work is absent from the latest plan.",
+    "Work items are grouped by stable scenario/rule/category keys so evidence-text changes do not hide recurring repair pressure."
+  ],
+  "passed": true,
+  "plan_count": 1,
+  "plans": [
+    {
+      "critical_or_high_count": 2,
+      "exists": true,
+      "index": 0,
+      "passed": true,
+      "path": "improvement_plan.json",
+      "readiness": "blocked",
+      "recommendation": "fix_handoff",
+      "schema_version": "hfr.improvement_plan.v1",
+      "sha256": "ebe4afc592c097e77cffd66eb9fe9478314401371cfc8e24959ee7a21886a5ff",
+      "size_bytes": 5355,
+      "work_item_count": 2
+    }
+  ],
+  "schema_version": "hfr.improvement_ledger.v1",
+  "unique_work_item_count": 2,
+  "work_item_count": 2
+}

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import sys
@@ -13,7 +14,60 @@ from flightrecorder.validation import validate_artifacts
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 class NextIterationScheduleTests(unittest.TestCase):
+    def test_committed_example_schedule_replays_ledgers_without_side_effects(self):
+        example_root = ROOT / "examples" / "agentic_training"
+        schedule_path = example_root / "next_iteration_schedule.json"
+        bundle_path = example_root / "iteration_ledgers" / "evidence_bundle.json"
+        action_path = example_root / "iteration_ledgers" / "action_ledger.json"
+        improvement_plan_path = example_root / "iteration_ledgers" / "improvement_plan.json"
+        improvement_path = example_root / "iteration_ledgers" / "improvement_ledger.json"
+        loop_path = example_root / "loop_ledger.json"
+        schedule = json.loads(schedule_path.read_text(encoding="utf-8"))
+
+        source_paths = {
+            "agentic_loop_ledger": loop_path,
+            "action_ledger": action_path,
+            "improvement_ledger": improvement_path,
+        }
+        expected_display_paths = {
+            "agentic_loop_ledger": "loop_ledger.json",
+            "action_ledger": "iteration_ledgers/action_ledger.json",
+            "improvement_ledger": "iteration_ledgers/improvement_ledger.json",
+        }
+        for role, source_path in source_paths.items():
+            ref = schedule["source_ledgers"][role][0]
+            self.assertEqual(ref["path"], expected_display_paths[role])
+            self.assertEqual(ref["size_bytes"], source_path.stat().st_size)
+            self.assertEqual(ref["sha256"], sha256_file(source_path))
+        self.assertTrue(schedule["passed"], schedule["blocked_reasons"])
+        self.assertEqual(schedule["recommendation"], "create_next_loop_plan")
+        self.assertEqual(schedule["next_iteration"]["iteration_id"], "demo-loop-002")
+        self.assertFalse(schedule["next_iteration"]["scheduled"])
+        self.assertEqual(schedule["pressure"]["total_open_signal_count"], 26)
+        self.assertFalse(schedule["execution_boundary"]["automations_created"])
+        self.assertFalse(schedule["execution_boundary"]["codex_threads_created"])
+        self.assertFalse(schedule["execution_boundary"]["calendar_events_created"])
+        self.assertFalse(schedule["execution_boundary"]["cloud_jobs_started"])
+        self.assertFalse(schedule["execution_boundary"]["weights_updated_by_flight_recorder"])
+
+        for path in (bundle_path, action_path, improvement_plan_path, improvement_path, schedule_path):
+            schema = check_schema_file(path)
+            self.assertTrue(schema["passed"], schema["errors"])
+        validation = validate_artifacts(
+            evidence_bundle_paths=[bundle_path],
+            action_ledger_paths=[action_path],
+            improvement_plan_paths=[improvement_plan_path],
+            improvement_ledger_paths=[improvement_path],
+            next_iteration_schedule_paths=[schedule_path],
+            strict=True,
+        )
+        self.assertTrue(validation["passed"], validation)
+
     def test_schedule_proposes_next_iteration_without_side_effects(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

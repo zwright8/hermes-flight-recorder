@@ -1,0 +1,186 @@
+{
+  "blocked_reasons": [],
+  "check_count": 5,
+  "checks": [
+    {
+      "actual": {
+        "exists": true,
+        "passed": true,
+        "schema_version": "hfr.agentic_loop_ledger.v1"
+      },
+      "expected": {
+        "exists": true,
+        "passed": true,
+        "schema_version": "hfr.agentic_loop_ledger.v1"
+      },
+      "id": "loop_ledger_present",
+      "passed": true,
+      "summary": "loop_ledger_present: passed=True"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "passed": true,
+        "schema_version": "hfr.action_ledger.v1"
+      },
+      "expected": {
+        "exists": true,
+        "passed": true,
+        "schema_version": "hfr.action_ledger.v1"
+      },
+      "id": "action_ledger_present",
+      "passed": true,
+      "summary": "action_ledger_present: passed=True"
+    },
+    {
+      "actual": {
+        "exists": true,
+        "passed": true,
+        "schema_version": "hfr.improvement_ledger.v1"
+      },
+      "expected": {
+        "exists": true,
+        "passed": true,
+        "schema_version": "hfr.improvement_ledger.v1"
+      },
+      "id": "improvement_ledger_present",
+      "passed": true,
+      "summary": "improvement_ledger_present: passed=True"
+    },
+    {
+      "actual": {
+        "next_iteration_id": "demo-loop-002"
+      },
+      "expected": {
+        "next_iteration_id": "non_empty"
+      },
+      "id": "next_iteration_id_present",
+      "passed": true,
+      "summary": "next_iteration_id_present: passed=True"
+    },
+    {
+      "actual": {
+        "automations_created": false,
+        "calendar_events_created": false,
+        "cloud_jobs_started": false,
+        "codex_threads_created": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "expected": {
+        "automations_created": false,
+        "calendar_events_created": false,
+        "cloud_jobs_started": false,
+        "codex_threads_created": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "id": "flight_recorder_did_not_create_scheduler_side_effects",
+      "passed": true,
+      "summary": "flight_recorder_did_not_create_scheduler_side_effects: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "automations_created": false,
+    "calendar_events_created": false,
+    "cloud_jobs_started": false,
+    "codex_threads_created": false,
+    "credential_values_recorded": false,
+    "schedule_only": true,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "next_iteration": {
+    "iteration_id": "demo-loop-002",
+    "latest_iteration_id": "demo-loop-001",
+    "objective": "Collect missing closed-loop receipts and resolve ledgered repair pressure.",
+    "reason": "critical_work_items_remain_open",
+    "schedule": {
+      "cadence": "manual"
+    },
+    "scheduled": false,
+    "trigger": "manual_or_external_scheduler"
+  },
+  "notes": [
+    "This receipt proposes the next loop iteration; it does not create automations, threads, calendar events, or cloud jobs.",
+    "Use the proposed iteration id and objective as inputs to a subsequent agentic-loop plan after governance review."
+  ],
+  "passed": true,
+  "pressure": {
+    "critical_open_work_item_count": 2,
+    "high_open_work_item_count": 0,
+    "latest_loop_readiness": "planned_fail_closed",
+    "latest_missing_phase_input_count": 22,
+    "open_action_count": 2,
+    "open_work_item_count": 2,
+    "recurring_action_count": 0,
+    "total_open_signal_count": 26
+  },
+  "readiness": "ready_to_schedule",
+  "recommendation": "create_next_loop_plan",
+  "schedule_path": "examples/agentic_training/next_iteration_schedule.json",
+  "schema_version": "hfr.next_iteration_schedule.v1",
+  "source_ledgers": {
+    "action_ledger": [
+      {
+        "exists": true,
+        "kind": "file",
+        "metrics": {
+          "new_action_count": 2,
+          "open_action_count": 2,
+          "recurring_action_count": 0
+        },
+        "passed": true,
+        "path": "iteration_ledgers/action_ledger.json",
+        "role": "action_ledger",
+        "schema_version": "hfr.action_ledger.v1",
+        "sha256": "326140dbe3e5f542e58a1a5a7dba94e8a3dcfd39759d8f8eb2de1c273176d90b",
+        "size_bytes": 3791
+      }
+    ],
+    "agentic_loop_ledger": [
+      {
+        "decision": {
+          "readiness": "blocked",
+          "recommendation": "continue_iteration",
+          "summary": "Latest loop iteration demo-loop-001 is fail-closed with 22 missing phase input(s)."
+        },
+        "exists": true,
+        "kind": "file",
+        "metrics": {
+          "latest_iteration_id": "demo-loop-001",
+          "latest_missing_phase_input_count": 22,
+          "latest_readiness": "planned_fail_closed"
+        },
+        "passed": true,
+        "path": "loop_ledger.json",
+        "role": "agentic_loop_ledger",
+        "schema_version": "hfr.agentic_loop_ledger.v1",
+        "sha256": "6ee6bc7a9e63f9dfc1a9779ba021fbfcbf63ec889980c2a6ad50629d2981722a",
+        "size_bytes": 21407
+      }
+    ],
+    "improvement_ledger": [
+      {
+        "decision": {
+          "readiness": "blocked",
+          "recommendation": "fix_handoff",
+          "summary": "Latest improvement plan is blocked; fix handoff evidence before using longitudinal pressure."
+        },
+        "exists": true,
+        "kind": "file",
+        "metrics": {
+          "critical_open_work_item_count": 2,
+          "high_open_work_item_count": 0,
+          "open_work_item_count": 2,
+          "resolved_work_item_count": 0
+        },
+        "passed": true,
+        "path": "iteration_ledgers/improvement_ledger.json",
+        "role": "improvement_ledger",
+        "schema_version": "hfr.improvement_ledger.v1",
+        "sha256": "5d85365c5b9f1452d0766ac5cabff3e5c19df925c16965ea6f1b395229daad0c",
+        "size_bytes": 6059
+      }
+    ]
+  }
+}

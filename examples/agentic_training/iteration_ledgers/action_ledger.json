@@ -1,0 +1,138 @@
+{
+  "action_count": 2,
+  "bundle_count": 1,
+  "bundles": [
+    {
+      "action_count": 2,
+      "exists": true,
+      "index": 0,
+      "passed": false,
+      "path": "evidence_bundle.json",
+      "readiness": "blocked",
+      "recommendation": "block_handoff",
+      "schema_version": "hfr.evidence_bundle.v1",
+      "sha256": "d477c84f0641821b30c7d647981e86c29036ce896bd033d55e734234e264aa63",
+      "size_bytes": 5888
+    }
+  ],
+  "entries": [
+    {
+      "action_fingerprint": "6d8a5816656ace2ad1709d4747231980c3ae37a0d65782e42a37c60ecbe48bfa",
+      "artifact": "evidence_bundle",
+      "bundle_indexes": [
+        0
+      ],
+      "evidence": {
+        "blocking_check_count": 2,
+        "first_blocking_check": {
+          "id": "gate_passed",
+          "scope": {
+            "gate": "test_gate"
+          },
+          "summary": "gate_passed: passed=False"
+        }
+      },
+      "first_seen_index": 0,
+      "first_seen_path": "evidence_bundle.json",
+      "id": "resolve_blocking_checks",
+      "last_seen_index": 0,
+      "last_seen_path": "evidence_bundle.json",
+      "occurrence_count": 1,
+      "occurrences": [
+        {
+          "artifact": "evidence_bundle",
+          "bundle_index": 0,
+          "bundle_path": "evidence_bundle.json",
+          "priority": "critical",
+          "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff."
+        }
+      ],
+      "open": true,
+      "priority": "critical",
+      "routing_key": "evidence_bundle:resolve_blocking_checks:6d8a5816656a",
+      "status": "new",
+      "summary": "Resolve 2 blocking bundle check(s) before relying on this handoff."
+    },
+    {
+      "action_fingerprint": "be641b8a9ee8edae61ce74b7a06387a020c5b997800fc5be26f746ea5f9a5504",
+      "artifact": "gates",
+      "bundle_indexes": [
+        0
+      ],
+      "evidence": {
+        "blocking_gates": [
+          {
+            "id": "test_gate",
+            "path": "failed_gate.json"
+          }
+        ]
+      },
+      "first_seen_index": 0,
+      "first_seen_path": "evidence_bundle.json",
+      "id": "fix_failed_gates",
+      "last_seen_index": 0,
+      "last_seen_path": "evidence_bundle.json",
+      "occurrence_count": 1,
+      "occurrences": [
+        {
+          "artifact": "gates",
+          "bundle_index": 0,
+          "bundle_path": "evidence_bundle.json",
+          "priority": "critical",
+          "summary": "Fix 1 failed gate(s) before promoting this evidence package."
+        }
+      ],
+      "open": true,
+      "priority": "critical",
+      "routing_key": "gates:fix_failed_gates:be641b8a9ee8",
+      "status": "new",
+      "summary": "Fix 1 failed gate(s) before promoting this evidence package."
+    }
+  ],
+  "ledger_path": "action_ledger.json",
+  "metrics": {
+    "action_count": 2,
+    "artifact_counts": [
+      {
+        "count": 1,
+        "id": "evidence_bundle"
+      },
+      {
+        "count": 1,
+        "id": "gates"
+      }
+    ],
+    "bundle_action_counts": [
+      {
+        "action_count": 2,
+        "index": 0,
+        "path": "evidence_bundle.json"
+      }
+    ],
+    "bundle_count": 1,
+    "new_action_count": 2,
+    "open_action_count": 2,
+    "priority_counts": [
+      {
+        "count": 2,
+        "id": "critical"
+      }
+    ],
+    "recurring_action_count": 0,
+    "resolved_action_count": 0,
+    "status_counts": [
+      {
+        "count": 2,
+        "id": "new"
+      }
+    ],
+    "unique_action_count": 2
+  },
+  "notes": [
+    "Action ledgers summarize evidence-bundle next_actions across iterations; they do not execute repairs.",
+    "Status is computed relative to the latest bundle: new and recurring actions are open, resolved actions are absent from the latest bundle."
+  ],
+  "passed": true,
+  "schema_version": "hfr.action_ledger.v1",
+  "unique_action_count": 2
+}

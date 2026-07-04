@@ -954,6 +954,10 @@ public-safe by default: unsafe absolute/traversal paths are redacted, and source
 ledgers that cannot be represented as safe relative paths block scheduling. When
 a schedule source-ledger ref is replayable, validation requires it to resolve to
 a regular non-symlink file before trusting its size, hash, metrics, or decision.
+The committed `examples/agentic_training/next_iteration_schedule.json` fixture
+ties the demo loop ledger to generated action/improvement ledgers and records a
+manual `demo-loop-002` proposal while keeping scheduler, automation/thread,
+calendar, cloud, credential, and weight-update side effects false.
 
 Cloud trainer integrations use the same fail-closed receipt pattern. The
 `flightrecorder cloud-training` namespace currently emits provider registry,
