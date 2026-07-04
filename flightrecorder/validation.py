@@ -5470,6 +5470,57 @@ def _safe_non_negative_number(value: Any) -> int | float:
 
 
 _CLOUD_TRAINING_RECEIPT_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_CLOUD_TRAINING_LAUNCH_PLAN_KEYS = {
+    "schema_version",
+    "created_at",
+    "provider",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "provider_chain",
+    "launch",
+    "execution_boundary",
+    "handoff_contract",
+}
+_CLOUD_TRAINING_PROVIDER_KEYS = {
+    "id",
+    "display_name",
+    "credential_env_vars",
+    "regions",
+    "gpu_classes",
+    "job_modes",
+    "artifact_protocols",
+    "client_import_names",
+    "live_status",
+    "default_live_execution_allowed",
+    "adapter_contract",
+}
+_CLOUD_TRAINING_ADAPTER_CONTRACT_KEYS = {
+    "schema_version",
+    "adapter_id",
+    "provider_id",
+    "receipt_types",
+    "dry_run_transport",
+    "live_preflight_transport",
+    "live_preflight_supported",
+    "live_launch_supported",
+    "status_cancel_receipts_supported",
+    "provider_api_called_by_flight_recorder",
+    "client_modules_imported_by_flight_recorder",
+    "credential_values_recorded",
+    "cloud_cost_incurred_usd",
+    "model_downloads_started",
+    "weights_updated_by_flight_recorder",
+    "requires_explicit_live_opt_in",
+    "requires_environment_credentials_for_live",
+    "requires_cost_limit",
+    "requires_region_and_gpu_constraints",
+}
 _CLOUD_TRAINING_SOURCE_ARTIFACT_KEYS = {
     "role",
     "path",
@@ -5502,6 +5553,30 @@ _CLOUD_TRAINING_LAUNCH_KEYS = {
     "provider_api_called",
     "cost_incurred_usd",
 }
+_CLOUD_TRAINING_LAUNCH_PLAN_LAUNCH_KEYS = {
+    "mode",
+    "live_launch_supported",
+    "provider_api_call_planned",
+    "command",
+}
+_CLOUD_TRAINING_LAUNCH_PLAN_PROVIDER_CHAIN_KEYS = {
+    "preflight_provider_id",
+    "artifact_manifest_provider_id",
+    "artifact_manifest_required",
+    "provider_consistent",
+    "mismatched_provider_ids",
+}
+_CLOUD_TRAINING_HANDOFF_CONTRACT_KEYS = {
+    "default_live_execution_allowed",
+    "requires_explicit_live_opt_in",
+    "requires_environment_credentials_for_live",
+    "requires_cost_limit",
+    "requires_region_and_gpu_constraints",
+    "requires_artifact_upload_manifest",
+    "requires_status_and_cancel_receipts",
+    "flight_recorder_controls_preflight_only",
+    "external_provider_owns_execution",
+}
 _CLOUD_TRAINING_STATUS_KEYS = {
     "provider_status",
     "terminal",
@@ -5528,6 +5603,7 @@ def _validate_cloud_training_contract(
             checks = []
         failed_checks = _validate_gate_like_checks(checks, target, f"{target.target_type}.checks")
         if expected_schema_version in {
+            CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
             CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
         }:
@@ -5545,6 +5621,7 @@ def _validate_cloud_training_contract(
         target.errors.append(f"{target.target_type}.execution_boundary must be an object.")
     else:
         if expected_schema_version in {
+            CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
             CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
         }:
@@ -5602,6 +5679,12 @@ def _validate_cloud_training_contract(
             target,
         )
         _validate_cloud_training_launch_plan_provider_matches_chain(payload.get("provider"), expected_provider_chain, target)
+        _validate_cloud_training_launch_plan_launch(payload.get("launch"), target)
+        _validate_cloud_training_handoff_contract(
+            payload.get("handoff_contract"),
+            target,
+            "cloud_training_launch_plan.handoff_contract",
+        )
         _validate_cloud_training_launch_plan_readiness(
             payload,
             checks if isinstance(checks, list) else [],
@@ -5674,6 +5757,8 @@ def _validate_cloud_training_receipt_allowed_keys(
         "source_artifacts",
         "execution_boundary",
     }
+    if expected_schema_version == CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION:
+        _validate_allowed_keys(payload, common | {"provider", "provider_chain", "launch", "handoff_contract"}, target, "cloud_training_launch_plan")
     if expected_schema_version == CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION:
         _validate_allowed_keys(payload, common | {"launch"}, target, "cloud_training_launch_receipt")
     if expected_schema_version == CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION:
@@ -5690,6 +5775,7 @@ def _validate_cloud_training_provider_record(record: Any, target: ValidationTarg
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(record, _CLOUD_TRAINING_PROVIDER_KEYS, target, label)
     provider_id = record.get("id")
     if not isinstance(provider_id, str) or not provider_id:
         target.errors.append(f"{label}.id must be a non-empty string.")
@@ -5704,6 +5790,7 @@ def _validate_cloud_training_adapter_contract(contract: Any, target: ValidationT
     if not isinstance(contract, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(contract, _CLOUD_TRAINING_ADAPTER_CONTRACT_KEYS, target, label)
     if contract.get("schema_version") != CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION:
         target.errors.append(f"{label}.schema_version must be {CLOUD_TRAINING_PROVIDER_ADAPTER_CONTRACT_VERSION!r}.")
     if contract.get("provider_id") != provider_id:
@@ -5862,6 +5949,43 @@ def _validate_cloud_training_transfer_plan(
             target.errors.append(f"{label}.{field_name} must be false.")
 
 
+def _validate_cloud_training_launch_plan_launch(value: Any, target: ValidationTarget) -> None:
+    label = "cloud_training_launch_plan.launch"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _CLOUD_TRAINING_LAUNCH_PLAN_LAUNCH_KEYS, target, label)
+    if value.get("mode") != "dry_run":
+        target.errors.append(f"{label}.mode must be dry_run.")
+    if value.get("live_launch_supported") is not False:
+        target.errors.append(f"{label}.live_launch_supported must be false.")
+    if value.get("provider_api_call_planned") is not False:
+        target.errors.append(f"{label}.provider_api_call_planned must be false.")
+    if not _is_string_list(value.get("command")):
+        target.errors.append(f"{label}.command must be a list of strings.")
+
+
+def _validate_cloud_training_handoff_contract(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _CLOUD_TRAINING_HANDOFF_CONTRACT_KEYS, target, label)
+    for field_name in (
+        "requires_explicit_live_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_cost_limit",
+        "requires_region_and_gpu_constraints",
+        "requires_artifact_upload_manifest",
+        "requires_status_and_cancel_receipts",
+        "flight_recorder_controls_preflight_only",
+        "external_provider_owns_execution",
+    ):
+        if value.get(field_name) is not True:
+            target.errors.append(f"{label}.{field_name} must be true.")
+    if value.get("default_live_execution_allowed") is not False:
+        target.errors.append(f"{label}.default_live_execution_allowed must be false.")
+
+
 def _validate_cloud_training_launch_plan_provider_chain(
     value: Any,
     expected: dict[str, Any],
@@ -5871,6 +5995,7 @@ def _validate_cloud_training_launch_plan_provider_chain(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _CLOUD_TRAINING_LAUNCH_PLAN_PROVIDER_CHAIN_KEYS, target, label)
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match launch-plan source providers.")

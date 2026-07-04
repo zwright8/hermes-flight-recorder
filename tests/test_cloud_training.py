@@ -344,6 +344,85 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("cloud_training_status_receipt.checks.status_check_did_not_call_provider.passed must match source readiness.", errors)
             status_receipt.write_text(json.dumps(status_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    def test_launch_plan_rejects_unknown_side_effect_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_source = root / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+            preflight = root / "preflight.json"
+            launch_plan = root / "launch_plan.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "preflight",
+                        "--provider",
+                        "modal",
+                        "--agentic-training-plan",
+                        str(plan_source),
+                        "--region",
+                        "provider_default",
+                        "--gpu-class",
+                        "a100",
+                        "--max-cost-usd",
+                        "0",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(run_cli(["cloud-training", "plan", "--preflight", str(preflight), "--out", str(launch_plan)]), 1)
+            self.assert_schema_and_validate(launch_plan, "cloud_training_launch_plan")
+
+            payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            payload["provider_console_url"] = "redacted-provider-console"
+            payload["checks"][0]["provider_call"] = "forged"
+            payload["source_artifacts"]["provider_receipt"] = {"path": "redacted-provider-receipt"}
+            payload["source_artifacts"]["preflight"]["credential_hint"] = "redacted"
+            payload["provider"]["provider_signed_url"] = "redacted-provider-url"
+            payload["provider"]["adapter_contract"]["provider_invoice_id"] = "redacted-invoice"
+            payload["provider_chain"]["provider_job_id"] = "job-123"
+            payload["launch"]["provider_job_id"] = "job-123"
+            payload["execution_boundary"]["cloud_scheduler_receipt"] = "not-created"
+            payload["handoff_contract"]["live_launch_allowed"] = True
+            launch_plan.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(launch_plan)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_launch_plan contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("cloud_training_launch_plan.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn(
+                "cloud_training_launch_plan.source_artifacts contains unknown field(s): ['provider_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.source_artifacts.preflight contains unknown field(s): ['credential_hint'].",
+                errors,
+            )
+            self.assertIn("cloud_training_launch_plan.provider contains unknown field(s): ['provider_signed_url'].", errors)
+            self.assertIn(
+                "cloud_training_launch_plan.provider.adapter_contract contains unknown field(s): ['provider_invoice_id'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.provider_chain contains unknown field(s): ['provider_job_id'].",
+                errors,
+            )
+            self.assertIn("cloud_training_launch_plan.launch contains unknown field(s): ['provider_job_id'].", errors)
+            self.assertIn(
+                "cloud_training_launch_plan.execution_boundary contains unknown field(s): ['cloud_scheduler_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.handoff_contract contains unknown field(s): ['live_launch_allowed'].",
+                errors,
+            )
+
     def test_launch_and_status_receipts_reject_unknown_side_effect_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

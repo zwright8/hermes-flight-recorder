@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_launch_plan.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Dry-run cloud training launch plan.",
   "properties": {
     "blocked_reasons": {
@@ -15,7 +15,7 @@
     },
     "checks": {
       "items": {
-        "type": "object"
+        "$ref": "#/$defs/check"
       },
       "type": "array"
     },
@@ -23,17 +23,23 @@
       "type": "string"
     },
     "execution_boundary": {
-      "type": "object"
+      "$ref": "#/$defs/boundary"
     },
     "failed_check_count": {
       "type": "integer"
     },
     "handoff_contract": {
-      "type": "object"
+      "$ref": "#/$defs/handoffContract"
     },
     "launch": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "live_launch_supported": {
           "const": false
         },
@@ -47,7 +53,8 @@
       "required": [
         "mode",
         "live_launch_supported",
-        "provider_api_call_planned"
+        "provider_api_call_planned",
+        "command"
       ],
       "type": "object"
     },
@@ -58,7 +65,7 @@
       "type": "object"
     },
     "provider_chain": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "artifact_manifest_provider_id": {
           "type": "string"
@@ -104,8 +111,14 @@
       "const": "hfr.cloud_training_launch_plan.v1"
     },
     "source_artifacts": {
-      "additionalProperties": {
-        "$ref": "#/$defs/sourceArtifact"
+      "additionalProperties": false,
+      "properties": {
+        "artifact_manifest": {
+          "$ref": "#/$defs/sourceArtifact"
+        },
+        "preflight": {
+          "$ref": "#/$defs/sourceArtifact"
+        }
       },
       "required": [
         "preflight",
@@ -134,8 +147,130 @@
   "title": "Hermes Flight Recorder Cloud Training Launch Plan",
   "type": "object",
   "$defs": {
+    "boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_live": {
+          "const": false
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "cloud_job_started": {
+          "const": false
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "live_preflight_requested": {
+          "const": false
+        },
+        "live_requested": {
+          "const": false
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "live_preflight_requested",
+        "live_requested",
+        "allow_live",
+        "provider_api_called",
+        "cloud_job_started",
+        "cloud_cost_incurred_usd",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "handoffContract": {
+      "additionalProperties": false,
+      "properties": {
+        "default_live_execution_allowed": {
+          "const": false
+        },
+        "external_provider_owns_execution": {
+          "const": true
+        },
+        "flight_recorder_controls_preflight_only": {
+          "const": true
+        },
+        "requires_artifact_upload_manifest": {
+          "const": true
+        },
+        "requires_cost_limit": {
+          "const": true
+        },
+        "requires_environment_credentials_for_live": {
+          "const": true
+        },
+        "requires_explicit_live_opt_in": {
+          "const": true
+        },
+        "requires_region_and_gpu_constraints": {
+          "const": true
+        },
+        "requires_status_and_cancel_receipts": {
+          "const": true
+        }
+      },
+      "required": [
+        "default_live_execution_allowed",
+        "requires_explicit_live_opt_in",
+        "requires_environment_credentials_for_live",
+        "requires_cost_limit",
+        "requires_region_and_gpu_constraints",
+        "requires_artifact_upload_manifest",
+        "requires_status_and_cancel_receipts",
+        "flight_recorder_controls_preflight_only",
+        "external_provider_owns_execution"
+      ],
+      "type": "object"
+    },
     "sourceArtifact": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": { "type": "boolean" },
         "path": { "type": "string" },
