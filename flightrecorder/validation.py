@@ -6379,7 +6379,26 @@ _MODEL_GRADER_DRY_RUN_KEYS = {
     "execution_boundary",
     "notes",
 }
+_MODEL_GRADER_OVERRIDE_RECEIPT_KEYS = {
+    "schema_version",
+    "created_at",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "queue",
+    "overrides",
+    "metrics",
+    "training_admission",
+    "execution_boundary",
+    "notes",
+}
 _MODEL_GRADER_DRY_RUN_SOURCE_KEYS = {"review_export", "rubric_spec"}
+_MODEL_GRADER_OVERRIDE_SOURCE_KEYS = {"dry_run_receipt", "override_rows"}
 _MODEL_GRADER_REVIEW_EXPORT_KEYS = {"path", "manifest", "review_items"}
 _MODEL_GRADER_GRADER_KEYS = {
     "provider",
@@ -6421,6 +6440,33 @@ _MODEL_GRADER_DISAGREEMENT_KEYS = {
     "reason",
     "source_report",
 }
+_MODEL_GRADER_OVERRIDE_QUEUE_KEYS = {
+    "dry_run_disagreement_queue_count",
+    "required_review_item_ids",
+    "resolved_review_item_ids",
+    "unresolved_review_item_ids",
+}
+_MODEL_GRADER_OVERRIDE_ROW_KEYS = {
+    "index",
+    "review_item_id",
+    "review_item_sha256",
+    "human_label",
+    "reviewer_confidence",
+    "reviewer",
+    "reviewed_at",
+    "notes",
+    "resolves_queue_item",
+    "accepted",
+    "errors",
+    "override_sha256",
+}
+_MODEL_GRADER_OVERRIDE_METRICS_KEYS = {
+    "override_row_count",
+    "resolved_queue_count",
+    "unresolved_queue_count",
+    "unmatched_override_count",
+    "invalid_override_count",
+}
 _MODEL_GRADER_DRY_RUN_HUMAN_REVIEW_OVERRIDES_KEYS = {
     "required_before_training_admission",
     "override_queue_path",
@@ -6431,6 +6477,11 @@ _MODEL_GRADER_DRY_RUN_TRAINING_ADMISSION_KEYS = {
     "labels_allowed_for_training",
     "labels_admitted_count",
     "requires_calibrated_gate",
+}
+_MODEL_GRADER_OVERRIDE_TRAINING_ADMISSION_KEYS = {
+    "labels_allowed_for_training",
+    "labels_admitted_count",
+    "requires_model_grader_gate",
 }
 _MODEL_GRADER_FILE_REF_KEYS = {
     "role",
@@ -6590,6 +6641,7 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
 
 
 def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(receipt, _MODEL_GRADER_OVERRIDE_RECEIPT_KEYS, target, "model_grader_override_receipt")
     _require_equal(
         receipt,
         "schema_version",
@@ -6598,6 +6650,7 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
         prefix="model_grader_override_receipt.",
     )
     failed_checks = _validate_model_grader_checked_artifact(receipt, target, "model_grader_override_receipt")
+    _validate_model_grader_check_keys(receipt.get("checks"), target, "model_grader_override_receipt.checks")
     _validate_model_grader_override_sources(receipt.get("source_artifacts"), target, source_path)
     expected_readiness = "ready_for_model_grader_gate" if failed_checks == 0 else "blocked"
     if receipt.get("readiness") != expected_readiness:
@@ -6605,6 +6658,8 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
             f"model_grader_override_receipt.readiness expected {expected_readiness!r}, got {receipt.get('readiness')!r}."
         )
     queue = receipt.get("queue") if isinstance(receipt.get("queue"), dict) else {}
+    if isinstance(receipt.get("queue"), dict):
+        _validate_allowed_keys(queue, _MODEL_GRADER_OVERRIDE_QUEUE_KEYS, target, "model_grader_override_receipt.queue")
     for field_name in ("required_review_item_ids", "resolved_review_item_ids", "unresolved_review_item_ids"):
         if not _is_string_list(queue.get(field_name)):
             target.errors.append(f"model_grader_override_receipt.queue.{field_name} must be a list of strings.")
@@ -6629,6 +6684,7 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _MODEL_GRADER_OVERRIDE_ROW_KEYS, target, label)
         for field_name in ("review_item_id", "human_label", "reviewer_confidence", "reviewer", "reviewed_at", "notes"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
@@ -6656,6 +6712,8 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
         elif override_hash != _model_grader_override_sha256(row):
             target.errors.append(f"{label}.override_sha256 does not match override contents.")
     metrics = receipt.get("metrics") if isinstance(receipt.get("metrics"), dict) else {}
+    if isinstance(receipt.get("metrics"), dict):
+        _validate_allowed_keys(metrics, _MODEL_GRADER_OVERRIDE_METRICS_KEYS, target, "model_grader_override_receipt.metrics")
     for field_name in (
         "override_row_count",
         "resolved_queue_count",
@@ -6676,6 +6734,13 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
     if failed_checks == 0 and accepted_count != len(required_ids):
         target.errors.append("model_grader_override_receipt accepted overrides must cover all required queue ids when passed.")
     admission = receipt.get("training_admission") if isinstance(receipt.get("training_admission"), dict) else {}
+    if isinstance(receipt.get("training_admission"), dict):
+        _validate_allowed_keys(
+            admission,
+            _MODEL_GRADER_OVERRIDE_TRAINING_ADMISSION_KEYS,
+            target,
+            "model_grader_override_receipt.training_admission",
+        )
     if admission.get("labels_allowed_for_training") is not False:
         target.errors.append("model_grader_override_receipt.training_admission.labels_allowed_for_training must be false.")
     if admission.get("labels_admitted_count") != 0:
@@ -7009,6 +7074,7 @@ def _validate_model_grader_override_sources(value: Any, target: ValidationTarget
     if not isinstance(value, dict):
         target.errors.append("model_grader_override_receipt.source_artifacts must be an object.")
         return
+    _validate_allowed_keys(value, _MODEL_GRADER_OVERRIDE_SOURCE_KEYS, target, "model_grader_override_receipt.source_artifacts")
     _validate_model_grader_referenced_artifact(
         value.get("dry_run_receipt"),
         target,

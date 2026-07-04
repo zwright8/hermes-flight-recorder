@@ -728,6 +728,51 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(override_payload["metrics"]["unresolved_queue_count"], 0)
             self.assert_schema_and_validate(override_receipt, "model_grader_override_receipt")
 
+            forged_override_payload = json.loads(json.dumps(override_payload))
+            forged_override_payload["trainer_handoff_url"] = "redacted-trainer-handoff"
+            forged_override_payload["checks"][0]["provider_call"] = "forged"
+            forged_override_payload["source_artifacts"]["unexpected_provider_receipt"] = {"path": "redacted-provider-receipt"}
+            forged_override_payload["source_artifacts"]["dry_run_receipt"]["provider_job_id"] = "redacted-provider-job"
+            forged_override_payload["source_artifacts"]["override_rows"]["signed_url"] = "redacted-signed-url"
+            forged_override_payload["queue"]["provider_queue_id"] = "redacted-provider-queue"
+            forged_override_payload["overrides"][0]["provider_review_url"] = "redacted-provider-review"
+            forged_override_payload["metrics"]["provider_override_count"] = 1
+            forged_override_payload["training_admission"]["trainer_dataset_id"] = "redacted-trainer-dataset"
+            forged_override_payload["execution_boundary"]["labels_written_to_dataset"] = True
+            override_receipt.write_text(json.dumps(forged_override_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(override_receipt)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(model_grader_override_receipt_paths=[override_receipt], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("model_grader_override_receipt contains unknown field(s): ['trainer_handoff_url'].", errors)
+            self.assertIn("model_grader_override_receipt.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn(
+                "model_grader_override_receipt.source_artifacts contains unknown field(s): ['unexpected_provider_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_override_receipt.source_artifacts.dry_run_receipt contains unknown field(s): ['provider_job_id'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_override_receipt.source_artifacts.override_rows contains unknown field(s): ['signed_url'].",
+                errors,
+            )
+            self.assertIn("model_grader_override_receipt.queue contains unknown field(s): ['provider_queue_id'].", errors)
+            self.assertIn("model_grader_override_receipt.overrides[0] contains unknown field(s): ['provider_review_url'].", errors)
+            self.assertIn("model_grader_override_receipt.metrics contains unknown field(s): ['provider_override_count'].", errors)
+            self.assertIn(
+                "model_grader_override_receipt.training_admission contains unknown field(s): ['trainer_dataset_id'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_override_receipt.execution_boundary contains unknown field(s): ['labels_written_to_dataset'].",
+                errors,
+            )
+            override_receipt.write_text(json.dumps(override_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
             stale_override_hash_receipt = root / "stale_override_hash_receipt.json"
             stale_override_hash_payload = json.loads(json.dumps(override_payload))
             stale_override_hash_payload["overrides"][0]["override_sha256"] = "0" * 64
