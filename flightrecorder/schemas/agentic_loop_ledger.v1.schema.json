@@ -1,11 +1,11 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_ledger.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Longitudinal ledger over closed-loop agentic training iteration plans.",
   "properties": {
     "decision": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "blocked_iteration_count": { "minimum": 0, "type": "integer" },
         "governance_action_count": { "minimum": 0, "type": "integer" },
@@ -37,7 +37,7 @@
       "type": "object"
     },
     "execution_boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": { "const": false },
         "credential_values_recorded": { "const": false },
@@ -129,14 +129,14 @@
       "type": "array"
     },
     "ledger_path": { "type": "string" },
-    "metrics": { "type": "object" },
+    "metrics": { "$ref": "#/$defs/metrics" },
     "notes": {
       "items": { "type": "string" },
       "type": "array"
     },
     "passed": { "type": "boolean" },
     "readiness_digest": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "Operator-facing latest-iteration readiness summary derived from the ledger only.",
       "properties": {
         "blocked_reason_count": { "minimum": 0, "type": "integer" },
@@ -288,8 +288,55 @@
       ],
       "type": "object"
     },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_group_totals": {
+          "items": { "$ref": "#/$defs/group_count" },
+          "type": "array"
+        },
+        "blocked_iteration_count": { "minimum": 0, "type": "integer" },
+        "iteration_count": { "minimum": 1, "type": "integer" },
+        "latest_iteration_id": { "type": "string" },
+        "latest_missing_phase_input_count": { "minimum": 0, "type": "integer" },
+        "latest_readiness": { "type": "string" },
+        "latest_recommendation": { "type": "string" },
+        "promotion_ready_count": { "minimum": 0, "type": "integer" },
+        "readiness_counts": {
+          "items": { "$ref": "#/$defs/id_count" },
+          "type": "array"
+        },
+        "ready_iteration_count": { "minimum": 0, "type": "integer" },
+        "recommendation_counts": {
+          "items": { "$ref": "#/$defs/id_count" },
+          "type": "array"
+        },
+        "rollback_receipt_count": { "minimum": 0, "type": "integer" },
+        "scheduled_next_iteration_count": { "minimum": 0, "type": "integer" },
+        "total_max_cloud_cost_usd": { "minimum": 0, "type": "number" },
+        "total_max_gpu_hours": { "minimum": 0, "type": "number" }
+      },
+      "required": [
+        "iteration_count",
+        "ready_iteration_count",
+        "blocked_iteration_count",
+        "latest_iteration_id",
+        "latest_readiness",
+        "latest_recommendation",
+        "latest_missing_phase_input_count",
+        "scheduled_next_iteration_count",
+        "promotion_ready_count",
+        "rollback_receipt_count",
+        "total_max_cloud_cost_usd",
+        "total_max_gpu_hours",
+        "readiness_counts",
+        "recommendation_counts",
+        "artifact_group_totals"
+      ],
+      "type": "object"
+    },
     "cloud_training_lineage_link": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "id": { "minLength": 1, "type": "string" },
         "passed": { "type": "boolean" },
@@ -321,7 +368,7 @@
       "type": "object"
     },
     "cloud_training_lineage_provider": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "pipeline_provider_id": { "type": "string" },
         "pipeline_provider_ids": {
@@ -350,7 +397,7 @@
       "type": "object"
     },
     "cloud_training_receipt_state": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": { "type": "boolean" },
         "cost_incurred_usd": { "minimum": 0, "type": "number" },
@@ -398,7 +445,7 @@
       "type": "object"
     },
     "group_count": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "count": { "minimum": 0, "type": "integer" },
         "group": { "minLength": 1, "type": "string" }
@@ -407,7 +454,7 @@
       "type": "object"
     },
     "governance_action": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "action": {
           "enum": ["approve", "reject", "rollback", "request_another_iteration"],
@@ -467,7 +514,7 @@
       "type": "object"
     },
     "id_count": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "count": { "minimum": 0, "type": "integer" },
         "id": { "minLength": 1, "type": "string" }
@@ -476,7 +523,7 @@
       "type": "object"
     },
     "role_count": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "count": { "minimum": 0, "type": "integer" },
         "role": { "minLength": 1, "type": "string" }

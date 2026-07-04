@@ -323,6 +323,42 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertIn("agentic_loop_ledger.decision.summary must match latest iteration state.", errors)
             self.assertIn("agentic_loop_ledger.readiness_digest.summary must match latest iteration readiness.", errors)
 
+    def test_validate_and_schema_reject_unknown_agentic_loop_ledger_fields(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            blocked_plan = self.write_loop_plan(root / "plans" / "blocked.json", "loop-001", {})
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["cloud_job_id"] = "job_live"
+            payload["metrics"]["provider_invoice_id"] = "invoice_live"
+            payload["metrics"]["readiness_counts"][0]["private_metric"] = "hidden"
+            payload["decision"]["approval_token"] = "token_redacted"
+            payload["decision"]["governance_actions"][0]["signed_url"] = "https://example.invalid/action"
+            payload["readiness_digest"]["promotion_alias_moved"] = True
+            payload["execution_boundary"]["cloud_job_id"] = "job_live"
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 1)
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("agentic_loop_ledger contains unknown field(s): ['cloud_job_id'].", errors)
+            self.assertIn("agentic_loop_ledger.metrics contains unknown field(s): ['provider_invoice_id'].", errors)
+            self.assertIn(
+                "agentic_loop_ledger.metrics.readiness_counts[0] contains unknown field(s): ['private_metric'].",
+                errors,
+            )
+            self.assertIn("agentic_loop_ledger.decision contains unknown field(s): ['approval_token'].", errors)
+            self.assertIn(
+                "agentic_loop_ledger.decision.governance_actions[0] contains unknown field(s): ['signed_url'].",
+                errors,
+            )
+            self.assertIn("agentic_loop_ledger.readiness_digest contains unknown field(s): ['promotion_alias_moved'].", errors)
+            self.assertIn("agentic_loop_ledger.execution_boundary contains unknown field(s): ['cloud_job_id'].", errors)
+
     def test_agentic_loop_governance_receipt_records_reject_without_side_effects(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
             root = Path(tmp)

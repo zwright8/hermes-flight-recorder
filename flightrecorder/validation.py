@@ -3792,7 +3792,100 @@ def _read_json_object_silent(path: Path | None) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+_AGENTIC_LOOP_LEDGER_KEYS = {
+    "schema_version",
+    "ledger_path",
+    "passed",
+    "iteration_count",
+    "iterations",
+    "metrics",
+    "decision",
+    "readiness_digest",
+    "execution_boundary",
+    "notes",
+}
+_AGENTIC_LOOP_LEDGER_METRICS_KEYS = {
+    "iteration_count",
+    "ready_iteration_count",
+    "blocked_iteration_count",
+    "latest_iteration_id",
+    "latest_readiness",
+    "latest_recommendation",
+    "latest_missing_phase_input_count",
+    "scheduled_next_iteration_count",
+    "promotion_ready_count",
+    "rollback_receipt_count",
+    "total_max_cloud_cost_usd",
+    "total_max_gpu_hours",
+    "readiness_counts",
+    "recommendation_counts",
+    "artifact_group_totals",
+}
+_AGENTIC_LOOP_LEDGER_DECISION_KEYS = {
+    "readiness",
+    "recommendation",
+    "recommended_governance_action",
+    "governance_action_count",
+    "governance_actions",
+    "summary",
+    "latest_iteration_index",
+    "latest_iteration_id",
+    "blocked_iteration_count",
+}
+_AGENTIC_LOOP_LEDGER_GOVERNANCE_ACTION_KEYS = {
+    "action",
+    "available",
+    "blocked_reason_count",
+    "blocked_reasons",
+    "summary",
+}
+_AGENTIC_LOOP_LEDGER_DIGEST_KEYS = {
+    "latest_iteration_index",
+    "latest_iteration_id",
+    "readiness",
+    "recommendation",
+    "decision_readiness",
+    "decision_recommendation",
+    "recommended_governance_action",
+    "ready_for_governance_review",
+    "missing_phase_input_count",
+    "missing_phase_inputs",
+    "missing_artifact_group_count",
+    "missing_artifact_groups",
+    "blocked_reason_count",
+    "cloud_training_ambiguous_link_count",
+    "cloud_training_duplicate_role_count",
+    "cloud_training_lineage_bound",
+    "cloud_training_receipts_fail_closed",
+    "cloud_training_live_launch_requested",
+    "cloud_training_cost_incurred_usd",
+    "cloud_training_launch_mode",
+    "cloud_training_status_provider_status",
+    "cloud_training_provider_id",
+    "cloud_training_missing_link_count",
+    "cloud_training_mismatched_link_count",
+    "next_action_scheduled",
+    "next_action_recommendation",
+    "requires_governance_decision",
+    "promotion_decision_present",
+    "rollback_receipt_present",
+    "live_spend_allowed",
+    "side_effects_started",
+    "summary",
+}
+_AGENTIC_LOOP_LEDGER_BOUNDARY_KEYS = {
+    "ledger_only",
+    "cloud_jobs_started",
+    "paid_model_grader_calls_started",
+    "live_benchmarks_started",
+    "model_downloads_started",
+    "weights_updated_by_flight_recorder",
+    "credential_values_recorded",
+}
+
+
 def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarget, ledger_path: Path) -> None:
+    _validate_allowed_keys(ledger, _AGENTIC_LOOP_LEDGER_KEYS, target, "agentic_loop_ledger")
     _require_equal(ledger, "schema_version", AGENTIC_LOOP_LEDGER_SCHEMA_VERSION, target, prefix="agentic_loop_ledger.")
     if ledger.get("passed") is not True:
         target.errors.append("agentic_loop_ledger.passed must be true.")
@@ -3846,12 +3939,17 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
     if not isinstance(metrics, dict):
         target.errors.append("agentic_loop_ledger.metrics must be an object.")
         metrics = {}
+    else:
+        _validate_allowed_keys(metrics, _AGENTIC_LOOP_LEDGER_METRICS_KEYS, target, "agentic_loop_ledger.metrics")
     if metrics.get("iteration_count") != len(iterations):
         target.errors.append("agentic_loop_ledger.metrics.iteration_count must match iteration_count.")
     if metrics.get("ready_iteration_count") != ready_count:
         target.errors.append("agentic_loop_ledger.metrics.ready_iteration_count does not match iterations.")
     if metrics.get("blocked_iteration_count") != blocked_count:
         target.errors.append("agentic_loop_ledger.metrics.blocked_iteration_count does not match iterations.")
+    _validate_agentic_loop_ledger_counts(metrics.get("readiness_counts"), target, "agentic_loop_ledger.metrics.readiness_counts", "id")
+    _validate_agentic_loop_ledger_counts(metrics.get("recommendation_counts"), target, "agentic_loop_ledger.metrics.recommendation_counts", "id")
+    _validate_agentic_loop_ledger_counts(metrics.get("artifact_group_totals"), target, "agentic_loop_ledger.metrics.artifact_group_totals", "group")
     expected_decision = _build_agentic_loop_ledger_decision(iterations, metrics)
     expected_digest = _build_agentic_loop_ledger_readiness_digest(iterations, expected_decision)
     _validate_agentic_loop_ledger_decision(ledger.get("decision"), expected_decision, target)
@@ -3860,6 +3958,7 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
     if not isinstance(boundary, dict):
         target.errors.append("agentic_loop_ledger.execution_boundary must be an object.")
     else:
+        _validate_allowed_keys(boundary, _AGENTIC_LOOP_LEDGER_BOUNDARY_KEYS, target, "agentic_loop_ledger.execution_boundary")
         if boundary.get("ledger_only") is not True:
             target.errors.append("agentic_loop_ledger.execution_boundary.ledger_only must be true.")
         for field_name in (
@@ -3872,6 +3971,8 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
         ):
             if boundary.get(field_name) is not False:
                 target.errors.append(f"agentic_loop_ledger.execution_boundary.{field_name} must be false.")
+    if not _is_string_list(ledger.get("notes")):
+        target.errors.append("agentic_loop_ledger.notes must be a list of strings.")
     target.details.update(
         {
             "iteration_count": len(iterations),
@@ -3892,6 +3993,7 @@ def _validate_agentic_loop_ledger_digest(
     if not isinstance(digest, dict):
         target.errors.append("agentic_loop_ledger.readiness_digest must be an object.")
         return
+    _validate_allowed_keys(digest, _AGENTIC_LOOP_LEDGER_DIGEST_KEYS, target, "agentic_loop_ledger.readiness_digest")
     latest = iterations[-1] if iterations and isinstance(iterations[-1], dict) else {}
     missing_phase_inputs = digest.get("missing_phase_inputs")
     if not _is_string_list(missing_phase_inputs):
@@ -3987,6 +4089,17 @@ def _validate_agentic_loop_ledger_decision(
     if not isinstance(decision, dict):
         target.errors.append("agentic_loop_ledger.decision must be an object.")
         return
+    _validate_allowed_keys(decision, _AGENTIC_LOOP_LEDGER_DECISION_KEYS, target, "agentic_loop_ledger.decision")
+    actions = decision.get("governance_actions")
+    if isinstance(actions, list):
+        for index, action in enumerate(actions):
+            if isinstance(action, dict):
+                _validate_allowed_keys(
+                    action,
+                    _AGENTIC_LOOP_LEDGER_GOVERNANCE_ACTION_KEYS,
+                    target,
+                    f"agentic_loop_ledger.decision.governance_actions[{index}]",
+                )
     for field_name in (
         "readiness",
         "recommendation",
@@ -4530,6 +4643,7 @@ def _validate_agentic_loop_ledger_counts(value: Any, target: ValidationTarget, l
         if not isinstance(row, dict):
             target.errors.append(f"{row_label} must be an object.")
             continue
+        _validate_allowed_keys(row, {key_name, "count"}, target, row_label)
         key = row.get(key_name)
         if not isinstance(key, str) or not key:
             target.errors.append(f"{row_label}.{key_name} must be a non-empty string.")
