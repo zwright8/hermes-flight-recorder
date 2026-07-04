@@ -3882,6 +3882,49 @@ _AGENTIC_LOOP_LEDGER_BOUNDARY_KEYS = {
     "weights_updated_by_flight_recorder",
     "credential_values_recorded",
 }
+_AGENTIC_LOOP_LEDGER_ITERATION_KEYS = {
+    "index",
+    "path",
+    "exists",
+    "schema_version",
+    "iteration_id",
+    "passed",
+    "readiness",
+    "recommendation",
+    "missing_phase_inputs",
+    "blocked_reason_count",
+    "artifact_count",
+    "phase_status_counts",
+    "artifact_group_counts",
+    "artifact_role_counts",
+    "cloud_training",
+    "cloud_training_receipt_state",
+    "cloud_training_lineage",
+    "cost_estimate",
+    "serving",
+    "evals",
+    "training_outputs",
+    "governance",
+    "next_actions",
+    "size_bytes",
+    "sha256",
+}
+_AGENTIC_LOOP_LEDGER_COST_KEYS = {"max_cloud_cost_usd", "max_gpu_hours", "live_spend_allowed"}
+_AGENTIC_LOOP_LEDGER_BASIC_GROUP_KEYS = {"group", "artifact_count", "roles_present", "roles_missing"}
+_AGENTIC_LOOP_LEDGER_GOVERNANCE_KEYS = _AGENTIC_LOOP_LEDGER_BASIC_GROUP_KEYS | {
+    "promotion_decision_present",
+    "promotion_ledger_present",
+    "rollback_receipt_present",
+    "cloud_jobs_started",
+    "paid_model_grader_calls_started",
+    "weights_updated_by_flight_recorder",
+}
+_AGENTIC_LOOP_LEDGER_NEXT_ACTION_KEYS = {
+    "scheduled",
+    "requires_governance_decision",
+    "recommendation",
+    "schedule",
+}
 
 
 def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarget, ledger_path: Path) -> None:
@@ -3902,6 +3945,7 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _AGENTIC_LOOP_LEDGER_ITERATION_KEYS, target, label)
         if row.get("index") != index:
             target.errors.append(f"{label}.index expected {index}, got {row.get('index')!r}.")
         if row.get("schema_version") != AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION:
@@ -3922,10 +3966,19 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
         _validate_agentic_loop_ledger_counts(row.get("artifact_group_counts"), target, f"{label}.artifact_group_counts", "group")
         _validate_agentic_loop_ledger_counts(row.get("artifact_role_counts"), target, f"{label}.artifact_role_counts", "role")
         _validate_agentic_loop_ledger_source(row, target, ledger_path, label)
+        _validate_agentic_loop_ledger_cost_estimate(row.get("cost_estimate"), target, f"{label}.cost_estimate")
+        _validate_agentic_loop_ledger_basic_group(row.get("serving"), target, f"{label}.serving")
+        _validate_agentic_loop_ledger_basic_group(row.get("evals"), target, f"{label}.evals")
+        _validate_agentic_loop_ledger_basic_group(row.get("training_outputs"), target, f"{label}.training_outputs")
         governance = row.get("governance") if isinstance(row.get("governance"), dict) else {}
+        if isinstance(row.get("governance"), dict):
+            _validate_allowed_keys(governance, _AGENTIC_LOOP_LEDGER_GOVERNANCE_KEYS, target, f"{label}.governance")
+        else:
+            target.errors.append(f"{label}.governance must be an object.")
         for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder"):
             if governance.get(field_name) is not False:
                 target.errors.append(f"{label}.governance.{field_name} must be false.")
+        _validate_agentic_loop_ledger_next_actions(row.get("next_actions"), target, f"{label}.next_actions")
         _validate_agentic_loop_ledger_cloud_training(row.get("cloud_training"), row, target, f"{label}.cloud_training")
         _validate_agentic_loop_ledger_cloud_training_receipt_state(
             row.get("cloud_training_receipt_state"),
@@ -4547,6 +4600,47 @@ def _validate_agentic_loop_governance_unreplayable_source_state(
     )
     if receipt.get("decision") != expected["decision"]:
         target.errors.append("agentic_loop_governance_receipt.decision must match fail-closed source-ledger checks.")
+
+
+def _validate_agentic_loop_ledger_cost_estimate(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _AGENTIC_LOOP_LEDGER_COST_KEYS, target, label)
+    for field_name in ("max_cloud_cost_usd", "max_gpu_hours"):
+        metric = value.get(field_name)
+        if metric is not None and (not isinstance(metric, (int, float)) or isinstance(metric, bool) or metric < 0):
+            target.errors.append(f"{label}.{field_name} must be a non-negative number or null.")
+    if not isinstance(value.get("live_spend_allowed"), bool):
+        target.errors.append(f"{label}.live_spend_allowed must be a boolean.")
+
+
+def _validate_agentic_loop_ledger_basic_group(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _AGENTIC_LOOP_LEDGER_BASIC_GROUP_KEYS, target, label)
+    if not isinstance(value.get("group"), str) or not value.get("group"):
+        target.errors.append(f"{label}.group must be a non-empty string.")
+    if not _is_non_negative_int(value.get("artifact_count")):
+        target.errors.append(f"{label}.artifact_count must be a non-negative integer.")
+    for field_name in ("roles_present", "roles_missing"):
+        if not _is_string_list(value.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a list of strings.")
+
+
+def _validate_agentic_loop_ledger_next_actions(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _AGENTIC_LOOP_LEDGER_NEXT_ACTION_KEYS, target, label)
+    for field_name in ("scheduled", "requires_governance_decision"):
+        if not isinstance(value.get(field_name), bool):
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if not isinstance(value.get("recommendation"), str):
+        target.errors.append(f"{label}.recommendation must be a string.")
+    if not isinstance(value.get("schedule"), dict):
+        target.errors.append(f"{label}.schedule must be an object.")
 
 
 def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any], target: ValidationTarget, label: str) -> None:

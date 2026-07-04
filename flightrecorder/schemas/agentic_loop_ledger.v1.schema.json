@@ -61,28 +61,32 @@
     "iteration_count": { "minimum": 1, "type": "integer" },
     "iterations": {
       "items": {
-        "additionalProperties": true,
+        "additionalProperties": false,
         "properties": {
           "artifact_count": { "minimum": 0, "type": "integer" },
           "artifact_group_counts": {
             "items": { "$ref": "#/$defs/group_count" },
             "type": "array"
           },
+          "artifact_role_counts": {
+            "items": { "$ref": "#/$defs/role_count" },
+            "type": "array"
+          },
           "blocked_reason_count": { "minimum": 0, "type": "integer" },
           "cloud_training": { "$ref": "#/$defs/group_summary" },
           "cloud_training_receipt_state": { "$ref": "#/$defs/cloud_training_receipt_state" },
           "cloud_training_lineage": { "$ref": "#/$defs/cloud_training_lineage" },
-          "cost_estimate": { "type": "object" },
-          "evals": { "type": "object" },
+          "cost_estimate": { "$ref": "#/$defs/cost_estimate" },
+          "evals": { "$ref": "#/$defs/basic_group_summary" },
           "exists": { "const": true },
-          "governance": { "type": "object" },
+          "governance": { "$ref": "#/$defs/governance_summary" },
           "index": { "minimum": 0, "type": "integer" },
           "iteration_id": { "minLength": 1, "type": "string" },
           "missing_phase_inputs": {
             "items": { "type": "string" },
             "type": "array"
           },
-          "next_actions": { "type": "object" },
+          "next_actions": { "$ref": "#/$defs/next_actions" },
           "passed": { "type": "boolean" },
           "path": { "minLength": 1, "type": "string" },
           "phase_status_counts": {
@@ -92,10 +96,10 @@
           "readiness": { "minLength": 1, "type": "string" },
           "recommendation": { "minLength": 1, "type": "string" },
           "schema_version": { "const": "hfr.agentic_training_loop_plan.v1" },
-          "serving": { "type": "object" },
+          "serving": { "$ref": "#/$defs/basic_group_summary" },
           "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
           "size_bytes": { "minimum": 0, "type": "integer" },
-          "training_outputs": { "type": "object" }
+          "training_outputs": { "$ref": "#/$defs/basic_group_summary" }
         },
         "required": [
           "index",
@@ -234,6 +238,23 @@
   "title": "Hermes Flight Recorder Agentic Loop Ledger",
   "type": "object",
   "$defs": {
+    "basic_group_summary": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_count": { "minimum": 0, "type": "integer" },
+        "group": { "minLength": 1, "type": "string" },
+        "roles_missing": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "roles_present": {
+          "items": { "type": "string" },
+          "type": "array"
+        }
+      },
+      "required": ["group", "artifact_count", "roles_present", "roles_missing"],
+      "type": "object"
+    },
     "cloud_training_lineage": {
       "additionalProperties": true,
       "properties": {
@@ -444,6 +465,16 @@
       ],
       "type": "object"
     },
+    "cost_estimate": {
+      "additionalProperties": false,
+      "properties": {
+        "live_spend_allowed": { "type": "boolean" },
+        "max_cloud_cost_usd": { "minimum": 0, "type": ["number", "null"] },
+        "max_gpu_hours": { "minimum": 0, "type": ["number", "null"] }
+      },
+      "required": ["max_cloud_cost_usd", "max_gpu_hours", "live_spend_allowed"],
+      "type": "object"
+    },
     "group_count": {
       "additionalProperties": false,
       "properties": {
@@ -513,6 +544,40 @@
       ],
       "type": "object"
     },
+    "governance_summary": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_count": { "minimum": 0, "type": "integer" },
+        "cloud_jobs_started": { "type": "boolean" },
+        "group": { "const": "governance" },
+        "paid_model_grader_calls_started": { "type": "boolean" },
+        "promotion_decision_present": { "type": "boolean" },
+        "promotion_ledger_present": { "type": "boolean" },
+        "rollback_receipt_present": { "type": "boolean" },
+        "roles_missing": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "roles_present": {
+          "items": { "type": "string" },
+          "type": "array"
+        },
+        "weights_updated_by_flight_recorder": { "type": "boolean" }
+      },
+      "required": [
+        "group",
+        "artifact_count",
+        "roles_present",
+        "roles_missing",
+        "promotion_decision_present",
+        "promotion_ledger_present",
+        "rollback_receipt_present",
+        "cloud_jobs_started",
+        "paid_model_grader_calls_started",
+        "weights_updated_by_flight_recorder"
+      ],
+      "type": "object"
+    },
     "id_count": {
       "additionalProperties": false,
       "properties": {
@@ -520,6 +585,17 @@
         "id": { "minLength": 1, "type": "string" }
       },
       "required": ["id", "count"],
+      "type": "object"
+    },
+    "next_actions": {
+      "additionalProperties": false,
+      "properties": {
+        "recommendation": { "type": "string" },
+        "requires_governance_decision": { "type": "boolean" },
+        "schedule": { "type": "object" },
+        "scheduled": { "type": "boolean" }
+      },
+      "required": ["scheduled", "requires_governance_decision", "recommendation", "schedule"],
       "type": "object"
     },
     "role_count": {
