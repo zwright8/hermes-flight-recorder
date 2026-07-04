@@ -31,6 +31,35 @@ def write_minimal_improvement_plan(path):
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def write_work_item_improvement_plan(path):
+    payload = {
+        "schema_version": "hfr.improvement_plan.v1",
+        "passed": True,
+        "readiness": "ready",
+        "work_item_count": 1,
+        "decision": {
+            "recommendation": "run_improvement_iteration",
+            "critical_or_high_count": 1,
+        },
+        "work_items": [
+            {
+                "category": "repair",
+                "priority": "high",
+                "summary": "Repair prompt-injection evidence coverage.",
+                "suggested_action": "Add targeted repair evidence before promotion.",
+                "scenario_id": "prompt_injection_bad",
+                "task_family": "prompt_injection",
+                "rule_id": "forbidden_actions",
+                "rule_name": "Forbidden actions",
+                "score": 0,
+                "task_completion_status": "failed",
+                "evidence_refs": [],
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 class ImprovementLedgerTests(unittest.TestCase):
     def test_improvement_ledger_plan_records_include_current_size(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -45,6 +74,47 @@ class ImprovementLedgerTests(unittest.TestCase):
 
             payload = json.loads(ledger.read_text(encoding="utf-8"))
             self.assertEqual(payload["plans"][0]["size_bytes"], plan.stat().st_size)
+
+    def test_strict_validate_rejects_absolute_improvement_ledger_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = root / "improvement_plan.json"
+            ledger = root / "improvement_ledger.json"
+            summary = root / "validation.json"
+            strict_summary = root / "strict_validation.json"
+            write_work_item_improvement_plan(plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            absolute_plan_path = str(plan)
+            payload["ledger_path"] = str(ledger)
+            payload["plans"][0]["path"] = absolute_plan_path
+            payload["metrics"]["plan_work_item_counts"][0]["path"] = absolute_plan_path
+            for entry in payload["entries"]:
+                entry["first_seen_path"] = absolute_plan_path
+                entry["last_seen_path"] = absolute_plan_path
+                for occurrence in entry["occurrences"]:
+                    occurrence["plan_path"] = absolute_plan_path
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-ledger", str(ledger), "--out", str(summary)])
+            strict_code = run_cli(["validate", "--improvement-ledger", str(ledger), "--strict", "--out", str(strict_summary)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            validation = json.loads(summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            for expected in (
+                "improvement_ledger.ledger_path is absolute",
+                "improvement_ledger.plans[0].path is absolute",
+                "improvement_ledger.metrics.plan_work_item_counts[0].path is absolute",
+                "improvement_ledger.entries[0].first_seen_path is absolute",
+                "improvement_ledger.entries[0].last_seen_path is absolute",
+                "improvement_ledger.entries[0].occurrences[0].plan_path is absolute",
+            ):
+                self.assertIn(expected, warnings)
+            strict_validation = json.loads(strict_summary.read_text(encoding="utf-8"))
+            strict_warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
+            self.assertIn("improvement_ledger.ledger_path is absolute", strict_warnings)
 
     def test_validate_rejects_unbound_plan_fingerprints(self):
         with tempfile.TemporaryDirectory() as tmp:

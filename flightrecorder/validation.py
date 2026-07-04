@@ -15157,6 +15157,8 @@ def _validate_improvement_ledger(ledger: dict[str, Any], target: ValidationTarge
     _require_equal(ledger, "schema_version", IMPROVEMENT_LEDGER_SCHEMA_VERSION, target)
     if not isinstance(ledger.get("ledger_path"), str):
         target.errors.append("improvement_ledger.ledger_path must be a string.")
+    else:
+        _warn_absolute_public_path(target, "improvement_ledger.ledger_path", ledger.get("ledger_path"))
     if ledger.get("passed") is not True:
         target.errors.append("improvement_ledger.passed must be true.")
 
@@ -15252,6 +15254,8 @@ def _validate_improvement_ledger_plan(
     for field_name in ("path", "schema_version", "readiness", "recommendation"):
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
+    if isinstance(value.get("path"), str):
+        _warn_absolute_public_path(target, f"{label}.path", value.get("path"))
     if value.get("schema_version") != IMPROVEMENT_PLAN_SCHEMA_VERSION:
         target.errors.append(f"{label}.schema_version must be {IMPROVEMENT_PLAN_SCHEMA_VERSION}.")
     if value.get("readiness") not in {"ready", "blocked"}:
@@ -15316,6 +15320,9 @@ def _validate_improvement_ledger_entry(
     for field_name in ("summary", "suggested_action", "first_seen_path", "last_seen_path", "latest_item_id", "latest_routing_key", "latest_fingerprint"):
         if not isinstance(entry.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
+    for field_name in ("first_seen_path", "last_seen_path"):
+        if isinstance(entry.get(field_name), str):
+            _warn_absolute_public_path(target, f"{label}.{field_name}", entry.get(field_name))
     for field_name in ("scenario_id", "task_family", "rule_id", "rule_name", "task_completion_status"):
         if entry.get(field_name) is not None and not isinstance(entry.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string or null.")
@@ -15410,6 +15417,8 @@ def _validate_improvement_ledger_occurrence(
     for field_name in ("plan_path", "item_id", "routing_key", "fingerprint", "priority", "category", "summary"):
         if not isinstance(occurrence.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
+    if isinstance(occurrence.get("plan_path"), str):
+        _warn_absolute_public_path(target, f"{label}.plan_path", occurrence.get("plan_path"))
     if occurrence.get("category") != expected_category:
         target.errors.append(f"{label}.category must match entry category.")
     if occurrence.get("priority") != expected_priority:
@@ -15464,6 +15473,10 @@ def _validate_improvement_ledger_metrics(
         for plan in plans
         if isinstance(plan, dict)
     ]
+    if isinstance(plan_counts, list):
+        for index, row in enumerate(plan_counts):
+            if isinstance(row, dict) and isinstance(row.get("path"), str):
+                _warn_absolute_public_path(target, f"improvement_ledger.metrics.plan_work_item_counts[{index}].path", row.get("path"))
     if plan_counts != expected_counts:
         target.errors.append("improvement_ledger.metrics.plan_work_item_counts does not match plans.")
 
