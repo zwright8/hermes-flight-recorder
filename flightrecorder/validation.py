@@ -5660,8 +5660,11 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
             accepted_count += 1
         if not isinstance(row.get("errors"), list) or not all(isinstance(item, str) for item in row.get("errors", [])):
             target.errors.append(f"{label}.errors must be a list of strings.")
-        if not _is_sha256(row.get("override_sha256")):
+        override_hash = row.get("override_sha256")
+        if not _is_sha256(override_hash):
             target.errors.append(f"{label}.override_sha256 must be a sha256 hex digest.")
+        elif override_hash != _model_grader_override_sha256(row):
+            target.errors.append(f"{label}.override_sha256 does not match override contents.")
     metrics = receipt.get("metrics") if isinstance(receipt.get("metrics"), dict) else {}
     for field_name in (
         "override_row_count",
@@ -5791,6 +5794,16 @@ def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget,
 
 
 def _model_grader_label_sha256(row: dict[str, Any]) -> str:
+    return _model_grader_row_sha256(row)
+
+
+def _model_grader_override_sha256(row: dict[str, Any]) -> str:
+    payload = dict(row)
+    payload["override_sha256"] = ""
+    return _model_grader_row_sha256(payload)
+
+
+def _model_grader_row_sha256(row: dict[str, Any]) -> str:
     payload = {key: item for key, item in row.items() if key != "label_sha256"}
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()

@@ -543,6 +543,19 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(override_payload["metrics"]["unresolved_queue_count"], 0)
             self.assert_schema_and_validate(override_receipt, "model_grader_override_receipt")
 
+            stale_override_hash_receipt = root / "stale_override_hash_receipt.json"
+            stale_override_hash_payload = json.loads(json.dumps(override_payload))
+            stale_override_hash_payload["overrides"][0]["override_sha256"] = "0" * 64
+            stale_override_hash_receipt.write_text(
+                json.dumps(stale_override_hash_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                stale_override_hash_receipt,
+                "model_grader_override_receipt",
+                "override_sha256 does not match override contents",
+            )
+
             try:
                 override_rows_link = root / "overrides_link.jsonl"
                 override_rows_link.symlink_to(overrides)
