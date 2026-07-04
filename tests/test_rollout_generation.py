@@ -236,6 +236,43 @@ class RolloutGenerationTests(unittest.TestCase):
             validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path], strict=True)
             self.assertTrue(validation["passed"], validation)
 
+    def test_rollout_plan_validation_rejects_symlink_source_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios, verifier = copy_rollout_inputs(root, SCENARIO)
+            scenario_link = scenarios[0].with_name("prompt_injection_link.json")
+            verifier_link = verifier.with_name("sqlite_task_state-link.verifier.json")
+            try:
+                scenario_link.symlink_to(scenarios[0].name)
+                verifier_link.symlink_to(verifier.name)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            plan_path = root / "rollout_plan.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="rollout-symlink-refs",
+                scenario_paths=scenarios,
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                verifier_paths=[verifier],
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_rollout_plan(plan_path, plan)
+            forged = json.loads(plan_path.read_text(encoding="utf-8"))
+            forged["scenarios"][0]["path"] = f"scenarios/{scenario_link.name}"
+            forged["environment"]["external_state_verifiers"][0]["path"] = f"verifiers/{verifier_link.name}"
+            plan_path.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_rollout_plan.scenarios[0].path must resolve to a regular non-symlink scenario file.", errors)
+            self.assertIn(
+                "agentic_rollout_plan.environment.external_state_verifiers[0].path must resolve to a regular non-symlink verifier config file.",
+                errors,
+            )
+
     def test_rollout_receipt_records_mock_rows_without_side_effects(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -348,6 +385,45 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertTrue(schema["passed"], schema["errors"])
             validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_rollout_receipt_validation_rejects_symlink_source_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios, _ = copy_rollout_inputs(root, SCENARIO)
+            plan_path = root / "rollout_plan.json"
+            plan_link = root / "rollout_plan-link.json"
+            receipt_path = root / "rollout_receipt.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="rollout-symlink-source-plan",
+                scenario_paths=scenarios,
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_rollout_plan(plan_path, plan)
+            receipt = build_agentic_rollout_receipt(
+                plan_path=plan_path,
+                out_path=receipt_path,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_rollout_receipt(receipt_path, receipt)
+            try:
+                plan_link.symlink_to(plan_path.name)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            forged = json.loads(receipt_path.read_text(encoding="utf-8"))
+            forged["source_plan"]["path"] = plan_link.name
+            receipt_path.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_rollout_receipt.source_plan.path must resolve to a regular non-symlink agentic rollout plan file.",
+                errors,
+            )
 
     def test_rollout_receipt_validation_rejects_live_side_effect_claims(self):
         with tempfile.TemporaryDirectory() as tmp:

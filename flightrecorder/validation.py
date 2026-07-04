@@ -8560,6 +8560,9 @@ def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, 
                 target.errors.append(f"{ref_label}.path must be relative to the rollout artifact when exists is true.")
                 continue
             verifier_path = _agentic_rollout_reference_path(path_value, source_path)
+            if _path_has_symlink_component(verifier_path, include_leaf=True):
+                target.errors.append(f"{ref_label}.path must resolve to a regular non-symlink verifier config file.")
+                continue
             if not verifier_path.is_file():
                 target.errors.append(f"{ref_label}.path does not resolve to a verifier config file.")
                 continue
@@ -8617,6 +8620,9 @@ def _validate_agentic_rollout_receipt_source_plan(source_plan: dict[str, Any], t
         target.errors.append(f"{label}.path must be relative to the agentic rollout receipt.")
         return
     plan_path = _agentic_rollout_reference_path(path_value, source_path)
+    if _path_has_symlink_component(plan_path, include_leaf=True):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink agentic rollout plan file.")
+        return
     if not plan_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an agentic rollout plan file.")
         return
@@ -8699,6 +8705,9 @@ def _validate_agentic_rollout_scenarios(value: Any, target: ValidationTarget, so
                 target.errors.append(f"{label}.path must be relative to the agentic rollout plan when exists is true.")
                 continue
             scenario_path = _agentic_rollout_reference_path(path_value, source_path)
+            if _path_has_symlink_component(scenario_path, include_leaf=True):
+                target.errors.append(f"{label}.path must resolve to a regular non-symlink scenario file.")
+                continue
             if not scenario_path.is_file():
                 target.errors.append(f"{label}.path does not resolve to a scenario file.")
                 continue
