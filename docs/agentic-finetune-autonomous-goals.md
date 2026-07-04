@@ -709,6 +709,8 @@ card, and dataset card decisions.
   target, and detects missing duplicate output-artifact links.
 - Agentic training plans and runtime preflights also bind registered manifests
   and selected trainer views to SHA-256 plus byte-size evidence.
+- Runtime-preflight generation rejects symlinked plan inputs and blocks selected
+  trainer views that resolve through symlinks without hashing those views.
 - Trainer archive checks reject passed external-code file checks that omit
   SHA-256 or byte-size evidence while preserving missing-code diagnostics.
 - Trainer archive checks reject passed trainer-input checks that omit SHA-256,

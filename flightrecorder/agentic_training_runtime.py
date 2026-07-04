@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .schema_registry import SchemaRegistryError, check_schema_file, check_schema_jsonl_file
 
 AGENTIC_TRAINING_RUNTIME_PREFLIGHT_SCHEMA_VERSION = "hfr.agentic_training_runtime_preflight.v1"
@@ -54,6 +55,7 @@ def build_agentic_training_runtime_preflight(
 ) -> dict[str, Any]:
     """Build a side-effect-free runtime readiness artifact for a training plan."""
     plan_file = Path(plan_path)
+    _reject_symlinked_plan_input(plan_file)
     plan_payload, plan_read_errors = _read_json_object(plan_file)
     plan_schema_check = _json_schema_record(plan_file, "agentic_training_plan")
     trainer_plan = plan_payload.get("trainer_plan") if isinstance(plan_payload.get("trainer_plan"), dict) else {}
@@ -222,6 +224,15 @@ def write_agentic_training_runtime_preflight(path: str | Path, preflight: dict[s
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _reject_symlinked_plan_input(path: Path) -> None:
+    if path.is_symlink():
+        raise AgenticTrainingRuntimePreflightError(f"agentic_training_runtime_preflight.plan_path must not be a symlink: {path}")
+    if _path_has_symlink_component(path, include_leaf=False):
+        raise AgenticTrainingRuntimePreflightError(
+            f"agentic_training_runtime_preflight.plan_path must not traverse symlinked components: {path}"
+        )
 
 
 def _read_json_object(path: Path) -> tuple[dict[str, Any], list[str]]:
@@ -445,7 +456,8 @@ def _view_checks(plan: dict[str, Any], plan_path: Path) -> list[dict[str, Any]]:
         declared_schema = str(raw_view.get("schema_version") or "")
         schema_name = declared_schema or VIEW_SCHEMA_DEFAULTS.get(name, "")
         resolved_path = _resolve_view_path(raw_path, plan, plan_path)
-        regular_file = resolved_path.is_file()
+        symlinked_path = resolved_path.is_symlink() or _path_has_symlink_component(resolved_path, include_leaf=False)
+        regular_file = resolved_path.is_file() and not symlinked_path
         schema_record = _jsonl_schema_record(resolved_path, schema_name) if regular_file and schema_name else {}
         observed_rows = _int_value(schema_record.get("row_count")) if schema_record else 0
         row_count_matches = expected_rows == 0 or observed_rows == expected_rows
@@ -454,7 +466,9 @@ def _view_checks(plan: dict[str, Any], plan_path: Path) -> list[dict[str, Any]]:
             errors.append("view path is empty")
         if not schema_name:
             errors.append(f"no bundled schema mapping for view {name!r}")
-        if not regular_file:
+        if symlinked_path:
+            errors.append("view path must not be a symlink or traverse symlinked components")
+        elif not regular_file:
             errors.append("view path is not a regular file")
         errors.extend(str(error) for error in schema_record.get("errors", []) if isinstance(error, str))
         if schema_record and not row_count_matches:
@@ -473,8 +487,8 @@ def _view_checks(plan: dict[str, Any], plan_path: Path) -> list[dict[str, Any]]:
                 "expected_row_count": expected_rows,
                 "observed_row_count": observed_rows,
                 "row_count_matches_manifest": row_count_matches,
-                "sha256": _sha256_or_none(resolved_path),
-                "size_bytes": _size_or_none(resolved_path),
+                "sha256": _sha256_or_none(resolved_path) if regular_file else None,
+                "size_bytes": _size_or_none(resolved_path) if regular_file else None,
                 "passed": passed,
                 "error_count": len(errors),
                 "errors": errors[:20],

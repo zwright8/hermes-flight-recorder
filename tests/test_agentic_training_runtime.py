@@ -7,7 +7,10 @@ import unittest
 from pathlib import Path
 
 from flightrecorder.agentic_training_plan import build_agentic_training_plan
-from flightrecorder.agentic_training_runtime import build_agentic_training_runtime_preflight
+from flightrecorder.agentic_training_runtime import (
+    AgenticTrainingRuntimePreflightError,
+    build_agentic_training_runtime_preflight,
+)
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file, list_schema_records
 
 
@@ -84,6 +87,73 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
             failed_views = [view for view in preflight["view_checks"] if not view["passed"]]
             self.assertEqual(failed_views[0]["name"], "sft")
             self.assertIn("view path is not a regular file", failed_views[0]["errors"])
+            schema = check_schema_contract(preflight)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_symlinked_plan_input_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            local_plan = root / EXAMPLE_PLAN.name
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
+            linked_parent = root / "linked_plans"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            with self.assertRaisesRegex(
+                AgenticTrainingRuntimePreflightError,
+                "agentic_training_runtime_preflight.plan_path must not traverse symlinked components",
+            ):
+                build_agentic_training_runtime_preflight(
+                    plan_path=linked_parent / local_plan.name,
+                    require_modules=["json"],
+                    skip_default_modules=True,
+                    created_at="2026-07-02T00:00:00+00:00",
+                )
+
+    def test_symlinked_selected_view_parent_blocks_without_hashing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_dir = root / "data"
+            data_dir.mkdir()
+            (data_dir / "sft.jsonl").write_text(
+                (ROOT / "examples" / "agentic_training" / "data" / "sft.jsonl").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            linked_data = root / "linked_data"
+            try:
+                linked_data.symlink_to(data_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            plan = json.loads(EXAMPLE_PLAN.read_text(encoding="utf-8"))
+            plan["selected_views"] = [
+                {
+                    "name": "sft",
+                    "path": "linked_data/sft.jsonl",
+                    "row_count": 2,
+                    "schema_version": "hfr.rl.sft.v1",
+                }
+            ]
+            plan_path = root / "plan-with-linked-view.json"
+            plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            preflight = build_agentic_training_runtime_preflight(
+                plan_path=plan_path,
+                require_modules=["json"],
+                skip_default_modules=True,
+                created_at="2026-07-02T00:00:00+00:00",
+            )
+
+            self.assertFalse(preflight["passed"])
+            self.assertEqual(preflight["recommendation"], "block_tiny_smoke_launch")
+            view = preflight["view_checks"][0]
+            self.assertFalse(view["passed"])
+            self.assertFalse(view["regular_file"])
+            self.assertIsNone(view["sha256"])
+            self.assertIsNone(view["size_bytes"])
+            self.assertIn("view path must not be a symlink or traverse symlinked components", view["errors"])
+            self.assertIn("selected_views_schema_passed", {check["id"] for check in preflight["checks"] if not check["passed"]})
             schema = check_schema_contract(preflight)
             self.assertTrue(schema["passed"], schema["errors"])
 
