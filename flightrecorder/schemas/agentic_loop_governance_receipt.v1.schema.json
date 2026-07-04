@@ -31,13 +31,13 @@
     "source_execution_boundary": {
       "additionalProperties": false,
       "properties": {
-        "cloud_jobs_started": { "type": "boolean" },
-        "credential_values_recorded": { "type": "boolean" },
+        "cloud_jobs_started": { "const": false },
+        "credential_values_recorded": { "const": false },
         "ledger_only": { "type": "boolean" },
-        "live_benchmarks_started": { "type": "boolean" },
-        "model_downloads_started": { "type": "boolean" },
-        "paid_model_grader_calls_started": { "type": "boolean" },
-        "weights_updated_by_flight_recorder": { "type": "boolean" }
+        "live_benchmarks_started": { "const": false },
+        "model_downloads_started": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
       },
       "type": "object"
     },

@@ -1024,6 +1024,28 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             )
             self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 1)
 
+    def test_governance_receipt_schema_rejects_forged_source_ledger_side_effects(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            blocked_plan = self.write_loop_plan(root / "plans" / "blocked.json", "loop-001", {})
+            ledger = root / "ledger.json"
+            receipt = root / "governance_reject.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["agentic-loop", "governance", "--ledger", str(ledger), "--action", "reject", "--out", str(receipt)]), 0)
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["source_ledger"]["execution_boundary"]["cloud_jobs_started"] = True
+            payload["source_ledger"]["execution_boundary"]["model_downloads_started"] = True
+            payload["source_ledger"]["execution_boundary"]["weights_updated_by_flight_recorder"] = True
+            receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation_code = run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--out", str(summary)])
+
+            self.assertEqual(validation_code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("agentic_loop_governance_receipt.source_ledger.execution_boundary must match the current source ledger.", errors)
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 1)
+
     def test_validate_rejects_governance_receipt_numeric_type_coercions(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
             root = Path(tmp)

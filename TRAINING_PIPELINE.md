@@ -889,7 +889,8 @@ validation. The `agentic-loop governance` command also replays the source
 ledger before writing, so stale source plans or forged ledger action rows are
 recorded as blocked receipts rather than successful approvals. It remains
 receipt-only: actual promotion, rollback, or alias updates must still be
-archived as their own governed receipts.
+archived as their own governed receipts. The source-ledger execution-boundary
+snapshot inside the governance receipt is schema-pinned to no side effects.
 The digest includes cloud-training lineage posture as well: a latest iteration
 is not ready unless the provider id is consistent and every cloud handoff
 receipt points to its required upstream receipt by SHA-256. It also carries

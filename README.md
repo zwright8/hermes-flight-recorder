@@ -390,9 +390,10 @@ command validates and replays the source ledger before writing, so stale source
 plans or forged ledger action rows produce blocked receipts instead of approvals.
 The receipt still does not move aliases, apply rollback, launch cloud jobs, call
 paid graders, or update weights. Promotion, rollback, and alias movement remain
-separate governed receipts. Next-iteration schedules are also replayable:
-validation reopens the referenced loop, action, and improvement ledgers from the
-schedule file, compares SHA-256/size and compact metrics, and recomputes
+separate governed receipts. The source-ledger execution-boundary snapshot is
+schema-pinned to no side effects as well. Next-iteration schedules are also
+replayable: validation reopens the referenced loop, action, and improvement
+ledgers from the schedule file, compares SHA-256/size and compact metrics, and recomputes
 pressure before accepting the proposed next iteration. Schedule paths and
 source-ledger paths must be safe relative paths or redacted placeholders; an
 external source that cannot be represented safely blocks the schedule.
