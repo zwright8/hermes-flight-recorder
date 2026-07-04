@@ -654,16 +654,17 @@ class ValidationTests(unittest.TestCase):
             non_strict = run_cli(["validate", "--training-export", str(export), "--out", str(summary_path)])
             strict = run_cli(["validate", "--training-export", str(export), "--strict"])
 
-            self.assertEqual(non_strict, 0)
+            self.assertEqual(non_strict, 1)
             self.assertEqual(strict, 1)
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("sft.jsonl is missing", warnings)
             self.assertIn("manifest.sft_count is missing", warnings)
             self.assertIn("dataset_metrics.json is missing", warnings)
             self.assertIn("dataset_splits.json is missing", warnings)
             self.assertIn("manifest.quality_flag_count is missing", warnings)
-            self.assertIn("manifest.artifact_fingerprints is missing", warnings)
+            self.assertIn("manifest.artifact_fingerprints is missing", errors)
 
     def test_validate_accepts_suite_summary_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:

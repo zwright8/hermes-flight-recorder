@@ -7,6 +7,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.review import _reviewed_dataset_version_id
 from flightrecorder.schema_registry import check_schema_contract, check_schema_file
 
 
@@ -95,6 +96,102 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(manifest["failed_count"], 1)
             self.assertFalse(items[0]["scorecard"]["passed"])
 
+    def test_export_review_rejects_symlinked_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            real_out = Path(tmp) / "redirected_review"
+            linked_out = Path(tmp) / "review_output_link"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            real_out.mkdir()
+            try:
+                linked_out.symlink_to(real_out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-review", "--runs", str(runs), "--out", str(linked_out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("review export output must resolve to a regular non-symlink directory", stderr.getvalue())
+
+    def test_export_review_rejects_symlinked_output_leaf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            redirected = Path(tmp) / "redirected_review_items.jsonl"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            out.mkdir()
+            redirected.write_text("", encoding="utf-8")
+            try:
+                (out / "review_items.jsonl").symlink_to(redirected)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-review", "--runs", str(runs), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("review output file must resolve to a regular non-symlink file", stderr.getvalue())
+
+    def test_export_review_rejects_symlinked_runs_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            linked_runs = Path(tmp) / "runs_link"
+            out = Path(tmp) / "review"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            try:
+                linked_runs.symlink_to(runs, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-review", "--runs", str(linked_runs), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("Runs directory must resolve to a regular non-symlink directory", stderr.getvalue())
+
+    def test_export_review_rejects_symlinked_child_run_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            try:
+                (runs / "linked_bad").symlink_to(runs / "bad", target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-review", "--runs", str(runs), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("Run directory linked_bad must resolve to a regular non-symlink directory", stderr.getvalue())
+
+    def test_export_review_rejects_symlinked_run_source_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            run_dir = runs / "bad"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(run_dir)])
+            trace_path = run_dir / "normalized_trace.json"
+            redirected_trace = Path(tmp) / "redirected_trace.json"
+            redirected_trace.write_text(trace_path.read_text(encoding="utf-8"), encoding="utf-8")
+            trace_path.unlink()
+            try:
+                trace_path.symlink_to(redirected_trace)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-review", "--runs", str(runs), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("normalized_trace.json must resolve to a regular non-symlink file", stderr.getvalue())
+
     def test_validate_review_export_rejects_broken_label_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -152,6 +249,114 @@ class ReviewExportTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("manifest.confidence_options must be", errors)
+
+    def test_validate_review_export_rejects_symlinked_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            linked = Path(tmp) / "review_link"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(out)])
+            try:
+                linked.symlink_to(out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--review-export", str(linked), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("Review export path must resolve to a regular non-symlink directory", errors)
+
+    def test_validate_review_export_rejects_symlinked_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(out)])
+            manifest_path = out / "manifest.json"
+            manifest_target = Path(tmp) / "manifest_target.json"
+            manifest_target.write_text(manifest_path.read_text(encoding="utf-8"), encoding="utf-8")
+            manifest_path.unlink()
+            try:
+                manifest_path.symlink_to(manifest_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--review-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("manifest.json must resolve to a regular non-symlink file", errors)
+
+    def test_validate_review_export_rejects_missing_artifact_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(out)])
+            manifest_path = out / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest.pop("artifact_fingerprints", None)
+            manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--review-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("manifest.artifact_fingerprints is missing", errors)
+
+    def test_validate_review_export_rejects_symlinked_review_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(out)])
+            item_path = out / "review_items.jsonl"
+            item_target = Path(tmp) / "review_items_target.jsonl"
+            item_target.write_text(item_path.read_text(encoding="utf-8"), encoding="utf-8")
+            item_path.unlink()
+            try:
+                item_path.symlink_to(item_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--review-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("review_items.jsonl must resolve to a regular non-symlink file", errors)
+
+    def test_validate_review_export_rejects_symlinked_label_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "review"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(out)])
+            label_path = out / "label_template.jsonl"
+            label_target = Path(tmp) / "label_template_target.jsonl"
+            label_target.write_text(label_path.read_text(encoding="utf-8"), encoding="utf-8")
+            label_path.unlink()
+            try:
+                label_path.symlink_to(label_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--review-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("label_template.jsonl must resolve to a regular non-symlink file", errors)
 
     def test_apply_review_writes_reviewed_training_views(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -236,6 +441,116 @@ class ReviewExportTests(unittest.TestCase):
             self.assertFalse(bad_schema["passed"])
             self.assertIn("expected exactly one matching schema from oneOf, got 0", "\n".join(bad_schema["errors"]))
 
+    def test_reviewed_dataset_version_ignores_fingerprint_display_paths(self):
+        artifacts = {
+            "reviewed_labels": {
+                "path": "reviewed/reviewed_labels.jsonl",
+                "exists": True,
+                "regular_file": True,
+                "symlink": False,
+                "size_bytes": 17,
+                "sha256": "a" * 64,
+            }
+        }
+        source = {
+            "review_items": {
+                "path": "review/review_items.jsonl",
+                "exists": True,
+                "regular_file": True,
+                "symlink": False,
+                "size_bytes": 31,
+                "sha256": "b" * 64,
+            }
+        }
+        labels = {
+            "path": "completed_labels.jsonl",
+            "exists": True,
+            "regular_file": True,
+            "symlink": False,
+            "size_bytes": 23,
+            "sha256": "c" * 64,
+        }
+        moved_artifacts = json.loads(json.dumps(artifacts))
+        moved_source = json.loads(json.dumps(source))
+        moved_labels = json.loads(json.dumps(labels))
+        moved_artifacts["reviewed_labels"]["path"] = "moved/reviewed_labels.jsonl"
+        moved_source["review_items"]["path"] = "<redacted:review_items.jsonl>"
+        moved_labels["path"] = "labels/completed_labels.jsonl"
+
+        self.assertEqual(
+            _reviewed_dataset_version_id(artifacts, source, labels),
+            _reviewed_dataset_version_id(moved_artifacts, moved_source, moved_labels),
+        )
+
+    def test_apply_review_rejects_symlinked_review_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            linked = Path(tmp) / "review_link"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            try:
+                linked.symlink_to(review, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["apply-review", "--review-export", str(linked), "--labels", str(labels_path), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("review export must resolve to a regular non-symlink directory", stderr.getvalue())
+
+    def test_apply_review_rejects_symlinked_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            real_out = Path(tmp) / "redirected_reviewed"
+            linked_out = Path(tmp) / "reviewed_output_link"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            real_out.mkdir()
+            try:
+                linked_out.symlink_to(real_out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(linked_out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("reviewed export output must resolve to a regular non-symlink directory", stderr.getvalue())
+
+    def test_apply_review_rejects_symlinked_output_leaf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            redirected = Path(tmp) / "redirected_reviewed_labels.jsonl"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_bad.json"), "--out", str(runs / "bad")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            out.mkdir()
+            redirected.write_text("", encoding="utf-8")
+            try:
+                (out / "reviewed_labels.jsonl").symlink_to(redirected)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("review output file must resolve to a regular non-symlink file", stderr.getvalue())
+
     def test_validate_reviewed_export_rejects_dataset_registry_hash_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -258,6 +573,111 @@ class ReviewExportTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("dataset_registry.manifest_sha256 must match manifest.json contents", errors)
+
+    def test_validate_reviewed_export_rejects_symlinked_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            linked = Path(tmp) / "reviewed_link"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+            try:
+                linked.symlink_to(out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--reviewed-export", str(linked), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("Reviewed export path must resolve to a regular non-symlink directory", errors)
+
+    def test_validate_reviewed_export_rejects_symlinked_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+            manifest_path = out / "manifest.json"
+            manifest_target = Path(tmp) / "reviewed_manifest_target.json"
+            manifest_target.write_text(manifest_path.read_text(encoding="utf-8"), encoding="utf-8")
+            manifest_path.unlink()
+            try:
+                manifest_path.symlink_to(manifest_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--reviewed-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("manifest.json must resolve to a regular non-symlink file", errors)
+
+    def test_validate_reviewed_export_rejects_symlinked_reviewed_labels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+            reviewed_labels_path = out / "reviewed_labels.jsonl"
+            reviewed_labels_target = Path(tmp) / "reviewed_labels_target.jsonl"
+            reviewed_labels_target.write_text(reviewed_labels_path.read_text(encoding="utf-8"), encoding="utf-8")
+            reviewed_labels_path.unlink()
+            try:
+                reviewed_labels_path.symlink_to(reviewed_labels_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--reviewed-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("reviewed_labels.jsonl must resolve to a regular non-symlink file", errors)
+
+    def test_validate_reviewed_export_rejects_symlinked_dataset_registry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            review = Path(tmp) / "review"
+            labels_path = Path(tmp) / "completed_labels.jsonl"
+            out = Path(tmp) / "reviewed"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "prompt_injection_good")])
+            run_cli(["export-review", "--runs", str(runs), "--out", str(review)])
+            write_completed_labels(review, labels_path)
+            run_cli(["apply-review", "--review-export", str(review), "--labels", str(labels_path), "--out", str(out)])
+            registry_path = out / "dataset_registry.json"
+            registry_target = Path(tmp) / "dataset_registry_target.json"
+            registry_target.write_text(registry_path.read_text(encoding="utf-8"), encoding="utf-8")
+            registry_path.unlink()
+            try:
+                registry_path.symlink_to(registry_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--reviewed-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("dataset_registry.json must resolve to a regular non-symlink file", errors)
 
     def test_validate_reviewed_export_rejects_trainer_view_drift(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -108,6 +108,43 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(rubric_payload["review_export"]["manifest"]["path"], "../../review/manifest.json")
             self.assert_schema_and_validate(rubric, "rubric_spec")
 
+            redirected_rubric = artifact_dir / "redirected_rubric.json"
+            redirected_rubric.write_text("{}\n", encoding="utf-8")
+            rubric_output_link = artifact_dir / "rubric_output_link.json"
+            try:
+                rubric_output_link.symlink_to(redirected_rubric)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            self.assert_cli_error(
+                [
+                    "model-grader",
+                    "rubric",
+                    "--review-export",
+                    str(review),
+                    "--rubric-id",
+                    "prompt-injection-rubric",
+                    "--out",
+                    str(rubric_output_link),
+                ],
+                "model-grader artifact output must resolve to a regular non-symlink file",
+            )
+
+            review_link = artifact_dir / "review_link"
+            review_link.symlink_to(review, target_is_directory=True)
+            self.assert_cli_error(
+                [
+                    "model-grader",
+                    "rubric",
+                    "--review-export",
+                    str(review_link),
+                    "--rubric-id",
+                    "prompt-injection-rubric",
+                    "--out",
+                    str(artifact_dir / "rubric_from_symlinked_review.json"),
+                ],
+                "review export must resolve to a regular non-symlink directory",
+            )
+
             self.assertEqual(
                 run_cli(
                     [
@@ -139,6 +176,29 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(dry_payload["source_artifacts"]["rubric_spec"]["path"], "rubric.json")
             self.assertTrue(all(len(row["label_sha256"]) == 64 for row in dry_payload["grader_labels"]))
             self.assert_schema_and_validate(dry_run, "model_grader_dry_run")
+
+            rubric_link = artifact_dir / "rubric_link.json"
+            rubric_link.symlink_to(rubric)
+            self.assert_validation_error(
+                rubric_link,
+                "rubric_spec",
+                "rubric_spec.path must resolve to a regular non-symlink file",
+            )
+            self.assert_cli_error(
+                [
+                    "model-grader",
+                    "dry-run",
+                    "--review-export",
+                    str(review),
+                    "--rubric",
+                    str(rubric_link),
+                    "--grader-id",
+                    "mock-grader-v1",
+                    "--out",
+                    str(artifact_dir / "dry_run_from_symlinked_rubric.json"),
+                ],
+                "rubric spec must resolve to a regular non-symlink file",
+            )
 
             self.assertEqual(
                 run_cli(
@@ -199,6 +259,29 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(passing_payload["source_artifacts"]["review_calibration"]["path"], "../../review_calibration.json")
             self.assert_schema_and_validate(passing_gate, "model_grader_gate")
 
+            calibration_link = artifact_dir / "review_calibration_link.json"
+            calibration_link.symlink_to(calibration)
+            self.assert_validation_error(
+                calibration_link,
+                "review_calibration",
+                "review_calibration.path must resolve to a regular non-symlink file",
+            )
+            self.assert_cli_error(
+                [
+                    "model-grader",
+                    "gate",
+                    "--dry-run",
+                    str(dry_run),
+                    "--rubric",
+                    str(rubric),
+                    "--review-calibration",
+                    str(calibration_link),
+                    "--out",
+                    str(artifact_dir / "gate_from_symlinked_calibration.json"),
+                ],
+                "review calibration must resolve to a regular non-symlink file",
+            )
+
             stale_rubric = artifact_dir / "stale_rubric.json"
             stale_rubric_payload = dict(rubric_payload)
             stale_rubric_payload["review_export"] = dict(rubric_payload["review_export"])
@@ -225,6 +308,103 @@ class ModelGraderTests(unittest.TestCase):
                 stale_gate,
                 "model_grader_gate",
                 "dry_run_receipt.sha256 does not match the current file",
+            )
+
+            symlink_dry_run = artifact_dir / "symlink_dry_run.json"
+            symlink_dry_payload = dict(dry_payload)
+            symlink_dry_payload["source_artifacts"] = dict(dry_payload["source_artifacts"])
+            symlink_dry_payload["source_artifacts"]["rubric_spec"] = dict(dry_payload["source_artifacts"]["rubric_spec"])
+            symlink_dry_payload["source_artifacts"]["rubric_spec"]["path"] = rubric_link.name
+            symlink_dry_run.write_text(json.dumps(symlink_dry_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(
+                symlink_dry_run,
+                "model_grader_dry_run",
+                "rubric_spec.path must resolve to a regular non-symlink file",
+            )
+
+            broken_symlink_dry_run = artifact_dir / "broken_symlink_dry_run.json"
+            broken_symlink_dry_payload = dict(dry_payload)
+            broken_symlink_dry_payload["source_artifacts"] = dict(dry_payload["source_artifacts"])
+            broken_symlink_dry_payload["source_artifacts"]["rubric_spec"] = dict(dry_payload["source_artifacts"]["rubric_spec"])
+            broken_rubric_link = artifact_dir / "broken_rubric_link.json"
+            broken_rubric_link.symlink_to(artifact_dir / "missing_rubric.json")
+            broken_symlink_dry_payload["source_artifacts"]["rubric_spec"]["path"] = broken_rubric_link.name
+            broken_symlink_dry_run.write_text(json.dumps(broken_symlink_dry_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(
+                broken_symlink_dry_run,
+                "model_grader_dry_run",
+                "rubric_spec.path must resolve to a regular non-symlink file",
+            )
+
+            symlink_parent_gate = artifact_dir / "symlink_parent_gate.json"
+            symlink_parent_gate_payload = dict(passing_payload)
+            symlink_parent_gate_payload["source_artifacts"] = dict(passing_payload["source_artifacts"])
+            symlink_parent_gate_payload["source_artifacts"]["dry_run_receipt"] = dict(passing_payload["source_artifacts"]["dry_run_receipt"])
+            linked_target = artifact_dir / "linked_target"
+            linked_target.mkdir()
+            (linked_target / dry_run.name).write_text(dry_run.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = artifact_dir / "linked_artifacts"
+            linked_parent.symlink_to(linked_target, target_is_directory=True)
+            symlink_parent_gate_payload["source_artifacts"]["dry_run_receipt"]["path"] = str(Path(linked_parent.name) / dry_run.name)
+            symlink_parent_gate.write_text(json.dumps(symlink_parent_gate_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(
+                symlink_parent_gate,
+                "model_grader_gate",
+                "dry_run_receipt.path must resolve to a regular non-symlink file",
+            )
+
+            optional_calibration_gate = artifact_dir / "optional_calibration_symlink_gate.json"
+            optional_calibration_payload = dict(passing_payload)
+            optional_calibration_payload["source_artifacts"] = dict(passing_payload["source_artifacts"])
+            optional_calibration_payload["source_artifacts"]["review_calibration"] = dict(
+                passing_payload["source_artifacts"]["review_calibration"]
+            )
+            optional_calibration_payload["source_artifacts"]["review_calibration"]["exists"] = False
+            optional_calibration_payload["source_artifacts"]["review_calibration"]["path"] = calibration_link.name
+            optional_calibration_gate.write_text(
+                json.dumps(optional_calibration_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                optional_calibration_gate,
+                "model_grader_gate",
+                "review_calibration.path must resolve to a regular non-symlink file",
+            )
+
+            optional_override_gate = artifact_dir / "optional_override_symlink_gate.json"
+            optional_override_payload = dict(passing_payload)
+            optional_override_payload["source_artifacts"] = dict(passing_payload["source_artifacts"])
+            optional_override_payload["source_artifacts"]["model_grader_override_receipt"] = dict(
+                passing_payload["source_artifacts"]["model_grader_override_receipt"]
+            )
+            override_receipt_link = artifact_dir / "model_grader_override_receipt_link.json"
+            override_receipt_link.symlink_to(dry_run)
+            optional_override_payload["source_artifacts"]["model_grader_override_receipt"]["exists"] = False
+            optional_override_payload["source_artifacts"]["model_grader_override_receipt"]["path"] = override_receipt_link.name
+            optional_override_gate.write_text(
+                json.dumps(optional_override_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                optional_override_gate,
+                "model_grader_gate",
+                "model_grader_override_receipt.path must resolve to a regular non-symlink file",
+            )
+
+            dry_run_link = artifact_dir / "dry_run_link.json"
+            dry_run_link.symlink_to(dry_run)
+            self.assert_validation_error(
+                dry_run_link,
+                "model_grader_dry_run",
+                "model_grader_dry_run.path must resolve to a regular non-symlink file",
+            )
+
+            gate_link = artifact_dir / "passing_gate_link.json"
+            gate_link.symlink_to(passing_gate)
+            self.assert_validation_error(
+                gate_link,
+                "model_grader_gate",
+                "model_grader_gate.path must resolve to a regular non-symlink file",
             )
 
     def test_gate_blocks_unresolved_model_grader_disagreement_queue(self):
@@ -353,6 +533,50 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(override_payload["metrics"]["unresolved_queue_count"], 0)
             self.assert_schema_and_validate(override_receipt, "model_grader_override_receipt")
 
+            try:
+                override_rows_link = root / "overrides_link.jsonl"
+                override_rows_link.symlink_to(overrides)
+                override_receipt_link = root / "override_receipt_link.json"
+                override_receipt_link.symlink_to(override_receipt)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            symlink_override_receipt = root / "symlink_override_receipt.json"
+            symlink_override_payload = dict(override_payload)
+            symlink_override_payload["source_artifacts"] = dict(override_payload["source_artifacts"])
+            symlink_override_payload["source_artifacts"]["override_rows"] = dict(
+                override_payload["source_artifacts"]["override_rows"]
+            )
+            symlink_override_payload["source_artifacts"]["override_rows"]["path"] = override_rows_link.name
+            symlink_override_receipt.write_text(
+                json.dumps(symlink_override_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                symlink_override_receipt,
+                "model_grader_override_receipt",
+                "override_rows.path must resolve to a regular non-symlink file",
+            )
+
+            self.assert_validation_error(
+                override_receipt_link,
+                "model_grader_override_receipt",
+                "model_grader_override_receipt.path must resolve to a regular non-symlink file",
+            )
+            self.assert_cli_error(
+                [
+                    "model-grader",
+                    "override-receipt",
+                    "--dry-run",
+                    str(dry_run),
+                    "--overrides",
+                    str(override_rows_link),
+                    "--out",
+                    str(root / "override_from_symlinked_rows.json"),
+                ],
+                "model-grader override rows must resolve to a regular non-symlink file",
+            )
+
             self.assertEqual(
                 run_cli(
                     [
@@ -386,6 +610,23 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(resolved_payload["metrics"]["human_override_resolved_count"], 1)
             self.assertEqual(resolved_payload["metrics"]["human_override_unresolved_count"], 0)
             self.assert_schema_and_validate(resolved_gate, "model_grader_gate")
+            self.assert_cli_error(
+                [
+                    "model-grader",
+                    "gate",
+                    "--dry-run",
+                    str(dry_run),
+                    "--rubric",
+                    str(rubric),
+                    "--review-calibration",
+                    str(calibration),
+                    "--override-receipt",
+                    str(override_receipt_link),
+                    "--out",
+                    str(root / "gate_from_symlinked_override.json"),
+                ],
+                "model-grader override receipt must resolve to a regular non-symlink file",
+            )
 
     def test_schema_names_are_registered(self):
         names = {record["name"] for record in list_schema_records()}
@@ -426,6 +667,13 @@ class ModelGraderTests(unittest.TestCase):
             for error in target["errors"]
         ]
         self.assertTrue(any(expected in error for error in errors), errors)
+
+    def assert_cli_error(self, args: list[str], expected: str) -> None:
+        stderr = StringIO()
+        with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+            main(args)
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn(expected, stderr.getvalue())
 
 
 if __name__ == "__main__":

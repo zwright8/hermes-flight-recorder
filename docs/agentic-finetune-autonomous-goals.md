@@ -697,10 +697,17 @@ card, and dataset card decisions.
 - Repair queue items include source artifact fingerprints for normalized
   traces, scorecards, and reports; validation reopens those refs from the queue
   location and rejects stale or moved repair evidence before work dispatch.
-- Model-grader rubric, dry-run, and gate artifacts emit output-relative source
-  refs with SHA-256 plus byte-size evidence; validation reopens those refs from
-  the artifact location and rejects stale review, rubric, dry-run, or
-  calibration evidence before labels can be trusted.
+- Model-grader rubric, dry-run, override, and gate artifacts emit
+  output-relative source refs with SHA-256 plus byte-size evidence; validation
+  reopens those refs from the artifact location while training, review,
+  reviewed, rubric, and calibration entrypoints reject symlinked roots or
+  top-level files, and producer commands reject symlinked output destinations,
+  so optional refs, top-level receipts, missing fingerprint blocks, anchor
+  manifests or registries, stale source artifacts, or redirected generated
+  evidence are blocked before labels can be trusted.
+- Training and reviewed dataset selection keys hash pathless fingerprint
+  identity while manifests keep display paths as provenance, so registry keys
+  remain stable across cwd and path-redaction presentation changes.
 - Agentic training flow receipts reopen plan, runtime-preflight, and trainer
   consumer-plan refs from the flow artifact location and reject missing,
   non-regular, symlinked, stale SHA-256, or stale byte-size source evidence

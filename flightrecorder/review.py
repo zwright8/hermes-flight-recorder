@@ -9,12 +9,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .training import (
     RL_DATASET_REGISTRY_SCHEMA_VERSION,
     RL_LABEL_PROVENANCE_SCHEMA_VERSION,
     RL_TRAINER_VIEWS_CONTRACT_VERSION,
     RunRecord,
     TrainingExportError,
+    _fingerprint_identity,
     build_redaction_status,
     load_run_records,
     redaction_scan_artifacts,
@@ -49,6 +51,7 @@ def export_review_queue(
     """Export run evidence as a queue for human labeling and curation."""
     source = Path(runs_dir)
     target = Path(out_dir)
+    _require_output_dir(target, "review export output")
     try:
         records = load_run_records(source)
     except TrainingExportError as exc:
@@ -111,6 +114,8 @@ def apply_review_labels(
     source = Path(review_export_dir)
     target = Path(out_dir)
     label_file = Path(labels_path) if labels_path is not None else source / "label_template.jsonl"
+    _require_output_dir(target, "reviewed export output")
+    _require_regular_dir(source, "review export")
     _require_regular_file(source / "review_items.jsonl", "review_items.jsonl")
     _require_regular_file(label_file, "review labels")
     items = _review_items_by_id(source / "review_items.jsonl")
@@ -690,7 +695,12 @@ def _reviewed_dataset_version_id(
     source_review_artifacts: dict[str, Any],
     labels_artifact: dict[str, Any],
 ) -> str:
-    return f"hfrds-{_canonical_sha256({'artifacts': artifact_fingerprints, 'labels': labels_artifact, 'source': source_review_artifacts})[:16]}"
+    identity = {
+        "artifacts": _fingerprint_identity(artifact_fingerprints),
+        "labels": _fingerprint_identity(labels_artifact),
+        "source": _fingerprint_identity(source_review_artifacts),
+    }
+    return f"hfrds-{_canonical_sha256(identity)[:16]}"
 
 
 def _reviewed_trainer_views(
@@ -806,6 +816,7 @@ def _reviewed_dataset_registry_record(manifest: dict[str, Any], paths: dict[str,
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    _require_output_file(path, "review output file")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -840,20 +851,45 @@ def _canonical_sha256(value: Any) -> str:
 
 
 def _require_regular_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ReviewExportError(f"{label} must resolve to a regular non-symlink file: {path}")
     if not path.exists():
         raise ReviewExportError(f"{label} not found: {path}")
-    if path.is_symlink():
-        raise ReviewExportError(f"{label} must be a regular file, not a symlink: {path}")
     if not path.is_file():
         raise ReviewExportError(f"{label} must be a file: {path}")
 
 
+def _require_regular_dir(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ReviewExportError(f"{label} must resolve to a regular non-symlink directory: {path}")
+    if not path.exists():
+        raise ReviewExportError(f"{label} directory not found: {path}")
+    if not path.is_dir():
+        raise ReviewExportError(f"{label} path is not a directory: {path}")
+
+
+def _require_output_dir(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ReviewExportError(f"{label} must resolve to a regular non-symlink directory: {path}")
+    if path.exists() and not path.is_dir():
+        raise ReviewExportError(f"{label} path is not a directory: {path}")
+
+
+def _require_output_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ReviewExportError(f"{label} must resolve to a regular non-symlink file: {path}")
+    if path.exists() and not path.is_file():
+        raise ReviewExportError(f"{label} must be a file: {path}")
+
+
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    _require_output_file(path, "review output file")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
 
 
 def _write_text(path: Path, value: str) -> None:
+    _require_output_file(path, "review output file")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(value, encoding="utf-8")
 
@@ -868,12 +904,13 @@ def _artifact_fingerprints(paths: dict[str, Path], preserve_paths: bool, *, excl
 
 
 def _file_fingerprint(path: Path, preserve_paths: bool) -> dict[str, Any]:
-    regular_file = path.exists() and path.is_file() and not path.is_symlink()
+    symlinked = _path_has_symlink_component(path, include_leaf=True)
+    regular_file = path.exists() and path.is_file() and not symlinked
     record: dict[str, Any] = {
         "path": _display_path(path, preserve_paths),
         "exists": path.exists(),
         "regular_file": regular_file,
-        "symlink": path.is_symlink(),
+        "symlink": symlinked,
     }
     if regular_file:
         stat = path.stat()

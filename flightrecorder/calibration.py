@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .review import REVIEW_LABELS, TRAINING_NEGATIVE_LABELS
 
 REVIEW_CALIBRATION_SCHEMA_VERSION = "hfr.review_calibration.v1"
@@ -32,12 +33,9 @@ def build_review_calibration(
 ) -> dict[str, Any]:
     """Compare reviewed human labels with deterministic scorecard outcomes."""
     export_dir = Path(reviewed_export_dir)
-    if not export_dir.exists():
-        raise ReviewCalibrationError(f"Reviewed export directory not found: {export_dir}")
-    if not export_dir.is_dir():
-        raise ReviewCalibrationError(f"Reviewed export path is not a directory: {export_dir}")
-
+    _require_regular_dir(export_dir, "reviewed export")
     labels_path = export_dir / "reviewed_labels.jsonl"
+    _require_regular_file(labels_path, "reviewed_labels.jsonl")
     rows = _read_jsonl(labels_path, "reviewed_labels.jsonl")
     metrics, disagreements = _calibration_metrics(rows)
     metrics["validation"] = _validation_metrics(validation_summary)
@@ -75,6 +73,14 @@ def build_review_calibration(
             "Rows labeled needs_review are tracked but excluded from agreement-rate denominators.",
         ],
     }
+
+
+def write_review_calibration(path: str | Path, payload: dict[str, Any]) -> None:
+    """Write a review-calibration report without following symlinked outputs."""
+    out_path = Path(path)
+    _require_output_file(out_path, "review calibration output")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _calibration_metrics(rows: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -256,6 +262,31 @@ def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
             raise ReviewCalibrationError(f"{label}:{line_number} must contain a JSON object")
         rows.append(value)
     return rows
+
+
+def _require_regular_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ReviewCalibrationError(f"{label} must resolve to a regular non-symlink file: {path}")
+    if not path.exists():
+        raise ReviewCalibrationError(f"{label} not found: {path}")
+    if not path.is_file():
+        raise ReviewCalibrationError(f"{label} must be a file: {path}")
+
+
+def _require_regular_dir(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ReviewCalibrationError(f"{label} must resolve to a regular non-symlink directory: {path}")
+    if not path.exists():
+        raise ReviewCalibrationError(f"{label} directory not found: {path}")
+    if not path.is_dir():
+        raise ReviewCalibrationError(f"{label} path is not a directory: {path}")
+
+
+def _require_output_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ReviewCalibrationError(f"{label} must resolve to a regular non-symlink file: {path}")
+    if path.exists() and not path.is_file():
+        raise ReviewCalibrationError(f"{label} must be a file: {path}")
 
 
 def _score(row: dict[str, Any]) -> int:

@@ -46,7 +46,7 @@ from .bundle import (
     EvidenceBundleError,
     build_evidence_bundle,
 )
-from .calibration import ReviewCalibrationError, build_review_calibration
+from .calibration import ReviewCalibrationError, build_review_calibration, write_review_calibration
 from .cloud_training import (
     CloudTrainingError,
     build_cloud_training_artifact_manifest,
@@ -2269,7 +2269,7 @@ def cmd_review_calibration(args: argparse.Namespace) -> int:
         require_valid_export=not args.skip_validation,
         preserve_paths=args.preserve_paths,
     )
-    _write_json(Path(args.out), calibration)
+    write_review_calibration(args.out, calibration)
     metrics = calibration["metrics"]
     print(
         "wrote review calibration "

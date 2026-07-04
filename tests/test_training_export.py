@@ -11,6 +11,7 @@ from flightrecorder.training import (
     DATASET_SPLIT_ARTIFACTS,
     DATASET_SPLIT_NAMES,
     TrainingExportError,
+    _dataset_version_id,
     export_rl_dataset,
     redaction_scan_artifacts,
 )
@@ -315,6 +316,27 @@ class TrainingExportTests(unittest.TestCase):
 
         self.assertEqual(redaction_scan_artifacts(rows), [])
 
+    def test_dataset_version_ignores_fingerprint_display_paths(self):
+        fingerprints = {
+            "episodes": {
+                "path": "training/episodes.jsonl",
+                "exists": True,
+                "size_bytes": 12,
+                "sha256": "a" * 64,
+            },
+            "rewards": {
+                "path": "training/rewards.jsonl",
+                "exists": True,
+                "size_bytes": 8,
+                "sha256": "b" * 64,
+            },
+        }
+        moved = json.loads(json.dumps(fingerprints))
+        moved["episodes"]["path"] = "moved/episodes.jsonl"
+        moved["rewards"]["path"] = "<redacted:rewards.jsonl>"
+
+        self.assertEqual(_dataset_version_id(fingerprints), _dataset_version_id(moved))
+
     def test_export_rl_blocks_standalone_credential_like_trace_value(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"
@@ -468,6 +490,128 @@ class TrainingExportTests(unittest.TestCase):
             self.assertIn("## Experiment Metadata", dataset_card)
             self.assertIn("`agent`", dataset_card)
             self.assertEqual(run_cli(["validate", "--training-export", str(out), "--strict"]), 0)
+
+    def test_export_rl_rejects_symlinked_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            real_out = Path(tmp) / "redirected_training"
+            linked_out = Path(tmp) / "training_link"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            real_out.mkdir()
+            try:
+                linked_out.symlink_to(real_out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-rl", "--runs", str(runs), "--out", str(linked_out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("training export output must resolve to a regular non-symlink directory", stderr.getvalue())
+
+    def test_export_rl_rejects_symlinked_output_leaf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "training"
+            redirected = Path(tmp) / "redirected_episodes.jsonl"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            out.mkdir()
+            redirected.write_text("", encoding="utf-8")
+            try:
+                (out / "episodes.jsonl").symlink_to(redirected)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-rl", "--runs", str(runs), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("training output file must resolve to a regular non-symlink file", stderr.getvalue())
+
+    def test_export_rl_rejects_nested_symlink_output_parent_before_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "training"
+            redirected_splits = Path(tmp) / "redirected_splits"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            out.mkdir()
+            redirected_splits.mkdir()
+            try:
+                (out / "splits").symlink_to(redirected_splits, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-rl", "--runs", str(runs), "--out", str(out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("training output file must resolve to a regular non-symlink file", stderr.getvalue())
+            self.assertFalse((out / "episodes.jsonl").exists())
+            self.assertFalse((redirected_splits / "train").exists())
+
+    def test_validate_training_export_rejects_symlinked_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "training"
+            linked = Path(tmp) / "training_link"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(out)])
+            try:
+                linked.symlink_to(out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--training-export", str(linked), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("Training export path must resolve to a regular non-symlink directory", errors)
+
+    def test_validate_training_export_rejects_symlinked_episodes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(out)])
+            episodes_path = out / "episodes.jsonl"
+            episodes_target = Path(tmp) / "episodes_target.jsonl"
+            episodes_target.write_text(episodes_path.read_text(encoding="utf-8"), encoding="utf-8")
+            episodes_path.unlink()
+            try:
+                episodes_path.symlink_to(episodes_target)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--training-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("episodes.jsonl must resolve to a regular non-symlink file", errors)
+
+    def test_validate_training_export_rejects_non_file_episodes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            out = Path(tmp) / "training"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["run", "--scenario", str(ROOT / "scenarios" / "prompt_injection_good.json"), "--out", str(runs / "good")])
+            run_cli(["export-rl", "--runs", str(runs), "--out", str(out)])
+            episodes_path = out / "episodes.jsonl"
+            episodes_path.unlink()
+            episodes_path.mkdir()
+
+            code = run_cli(["validate", "--training-export", str(out), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("episodes.jsonl must be a file", errors)
 
     def test_run_suite_metadata_flows_to_summary_and_training_export(self):
         with tempfile.TemporaryDirectory() as tmp:

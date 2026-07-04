@@ -12,6 +12,7 @@ from typing import Any
 
 from .artifacts import CONTRACT_SCOPES, compare_scorecards
 from .compare_gate import compare_movement_summary
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .scorers import TASK_COMPLETION_SCHEMA_VERSION
 from .trace_observability import build_trace_signal
 
@@ -95,6 +96,7 @@ def export_rl_dataset(
     target = Path(out_dir)
     export_metadata = _metadata(metadata)
     records = load_run_records(source)
+    _require_output_dir(target, "training export output")
     target.mkdir(parents=True, exist_ok=True)
 
     episodes = [_episode_record(record, reward_scale, preserve_paths) for record in records]
@@ -162,6 +164,7 @@ def export_rl_dataset(
     for split_name in DATASET_SPLIT_NAMES:
         for artifact_name in DATASET_SPLIT_ARTIFACTS:
             paths[f"{split_name}_{artifact_name}"] = target / "splits" / split_name / f"{artifact_name}.jsonl"
+    _preflight_output_files(paths, "training output file")
     _write_jsonl(paths["episodes"], episodes)
     _write_jsonl(paths["rewards"], rewards)
     _write_jsonl(paths["step_rewards"], step_rewards)
@@ -270,6 +273,7 @@ def export_compare_rl_dataset(
     export_metadata = _metadata(metadata)
     baseline = _records_by_scenario(load_run_records(baseline_root), "baseline")
     candidate = _records_by_scenario(load_run_records(candidate_root), "candidate")
+    _require_output_dir(target, "comparison export output")
     target.mkdir(parents=True, exist_ok=True)
 
     pairs: list[dict[str, Any]] = []
@@ -328,6 +332,7 @@ def export_compare_rl_dataset(
         "manifest": target / "manifest.json",
         "improvement_card": target / "IMPROVEMENT_CARD.md",
     }
+    _preflight_output_files(paths, "comparison output file")
     candidate_win_count = sum(1 for pair in pairs if pair.get("chosen_side") == "candidate")
     baseline_win_count = sum(1 for pair in pairs if pair.get("chosen_side") == "baseline")
     contract_drift_count = sum(1 for pair in pairs if pair.get("contract_fingerprint_status") == "drifted")
@@ -387,30 +392,38 @@ def export_compare_rl_dataset(
 def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
     """Load run directories that contain normalized traces and scorecards."""
     root = Path(runs_dir)
-    if not root.exists():
-        raise TrainingExportError(f"Runs directory not found: {root}")
-    if not root.is_dir():
-        raise TrainingExportError(f"Runs path is not a directory: {root}")
+    _require_evidence_dir(root, "Runs directory")
 
     records: list[RunRecord] = []
-    for run_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+    for run_dir in sorted(root.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        _require_evidence_dir(run_dir, f"Run directory {run_dir.name}")
         trace_path = run_dir / "normalized_trace.json"
         score_path = run_dir / "scorecard.json"
         lineage_path = run_dir / "artifact_lineage.json"
         state_diff_path = run_dir / "state_diff.json"
+        _reject_symlinked_evidence_file(trace_path, "normalized_trace.json")
+        _reject_symlinked_evidence_file(score_path, "scorecard.json")
+        _reject_symlinked_evidence_file(lineage_path, "artifact_lineage.json")
+        _reject_symlinked_evidence_file(state_diff_path, "state_diff.json")
         if not trace_path.exists() or not score_path.exists():
             continue
+        _require_evidence_file(trace_path, "normalized_trace.json")
+        _require_evidence_file(score_path, "scorecard.json")
         trace = _read_json(trace_path)
         scorecard = _read_json(score_path)
         if not isinstance(trace, dict) or not isinstance(scorecard, dict):
             raise TrainingExportError(f"Run {run_dir} must contain JSON objects")
         lineage: dict[str, Any] | None = None
         if lineage_path.exists():
+            _require_evidence_file(lineage_path, "artifact_lineage.json")
             raw_lineage = _read_json(lineage_path)
             if isinstance(raw_lineage, dict):
                 lineage = raw_lineage
         state_diff: dict[str, Any] | None = None
         if state_diff_path.exists():
+            _require_evidence_file(state_diff_path, "state_diff.json")
             raw_state_diff = _read_json(state_diff_path)
             if not isinstance(raw_state_diff, dict):
                 raise TrainingExportError(f"Run {run_dir} state_diff.json must contain a JSON object")
@@ -430,6 +443,43 @@ def load_run_records(runs_dir: str | Path) -> list[RunRecord]:
     if not records:
         raise TrainingExportError(f"No completed Flight Recorder runs found in {root}")
     return records
+
+
+def _require_evidence_dir(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise TrainingExportError(f"{label} must resolve to a regular non-symlink directory: {path}")
+    if not path.exists():
+        raise TrainingExportError(f"{label} not found: {path}")
+    if not path.is_dir():
+        raise TrainingExportError(f"{label} is not a directory: {path}")
+
+
+def _require_evidence_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise TrainingExportError(f"{label} must resolve to a regular non-symlink file: {path}")
+    if not path.exists():
+        raise TrainingExportError(f"{label} not found: {path}")
+    if not path.is_file():
+        raise TrainingExportError(f"{label} must be a file: {path}")
+
+
+def _reject_symlinked_evidence_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise TrainingExportError(f"{label} must resolve to a regular non-symlink file: {path}")
+
+
+def _require_output_dir(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise TrainingExportError(f"{label} must resolve to a regular non-symlink directory: {path}")
+    if path.exists() and not path.is_dir():
+        raise TrainingExportError(f"{label} is not a directory: {path}")
+
+
+def _require_output_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise TrainingExportError(f"{label} must resolve to a regular non-symlink file: {path}")
+    if path.exists() and not path.is_file():
+        raise TrainingExportError(f"{label} must be a file: {path}")
 
 
 def _episode_record(record: RunRecord, reward_scale: str, preserve_paths: bool) -> dict[str, Any]:
@@ -2520,7 +2570,7 @@ def _walk_strings(value: Any, path: str = "$") -> list[tuple[str, str]]:
 
 
 def _dataset_version_id(artifact_fingerprints: dict[str, Any]) -> str:
-    return f"hfrds-{_canonical_sha256(artifact_fingerprints)[:16]}"
+    return f"hfrds-{_canonical_sha256(_fingerprint_identity(artifact_fingerprints))[:16]}"
 
 
 def _manifest_registry_record(
@@ -2613,6 +2663,14 @@ def _canonical_sha256(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _fingerprint_identity(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _fingerprint_identity(child) for key, child in value.items() if key != "path"}
+    if isinstance(value, list):
+        return [_fingerprint_identity(child) for child in value]
+    return value
+
+
 def _display_path(path: Path, preserve_paths: bool) -> str:
     if preserve_paths:
         return str(path)
@@ -2657,6 +2715,11 @@ def _artifact_fingerprints(paths: dict[str, Path], preserve_paths: bool, *, excl
     return fingerprints
 
 
+def _preflight_output_files(paths: dict[str, Path], label: str) -> None:
+    for path in paths.values():
+        _require_output_file(path, label)
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -2666,11 +2729,13 @@ def _sha256_file(path: Path) -> str:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    _require_output_file(path, "training output file")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    _require_output_file(path, "training output file")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
@@ -2678,5 +2743,6 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _write_text(path: Path, payload: str) -> None:
+    _require_output_file(path, "training output file")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(payload.rstrip() + "\n", encoding="utf-8")

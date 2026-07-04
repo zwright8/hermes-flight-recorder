@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -95,6 +95,43 @@ class CompareRlExportTests(unittest.TestCase):
             self.assertNotIn("tool_result gmail_send ok", dpo[0]["rejected"])
             self.assertNotEqual(dpo[0]["chosen"], dpo[0]["rejected"])
             self.assertIn("# Flight Recorder Improvement Pair Card", card)
+
+    def test_export_compare_rl_rejects_symlinked_output_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            real_out = Path(tmp) / "redirected_compare_rl"
+            linked_out = Path(tmp) / "compare_rl_link"
+            real_out.mkdir()
+            try:
+                linked_out.symlink_to(real_out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["export-compare-rl", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(linked_out)])
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("comparison export output must resolve to a regular non-symlink directory", stderr.getvalue())
+
+    def test_validate_compare_rl_rejects_symlinked_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            baseline, candidate = self._paired_email_dirs(Path(tmp))
+            out = Path(tmp) / "compare_rl"
+            linked = Path(tmp) / "compare_rl_link"
+            summary_path = Path(tmp) / "validation.json"
+            run_cli(["export-compare-rl", "--baseline", str(baseline), "--candidate", str(candidate), "--out", str(out)])
+            try:
+                linked.symlink_to(out, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(["validate", "--compare-export", str(linked), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("Compare export path must resolve to a regular non-symlink directory", errors)
 
     def test_export_compare_rl_writes_baseline_regression_movement(self):
         with tempfile.TemporaryDirectory() as tmp:

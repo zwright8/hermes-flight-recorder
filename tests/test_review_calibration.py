@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -88,6 +88,27 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertEqual(calibration["disagreements"], [])
             self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
+
+            linked = Path(tmp) / "reviewed_link"
+            try:
+                linked.symlink_to(reviewed, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["review-calibration", "--reviewed-export", str(linked), "--out", str(Path(tmp) / "linked_calibration.json")])
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("reviewed export must resolve to a regular non-symlink directory", stderr.getvalue())
+
+            redirected = Path(tmp) / "redirected_calibration.json"
+            redirected.write_text("{}\n", encoding="utf-8")
+            output_link = Path(tmp) / "calibration_output_link.json"
+            output_link.symlink_to(redirected)
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stdout(StringIO()), redirect_stderr(stderr):
+                main(["review-calibration", "--reviewed-export", str(reviewed), "--out", str(output_link)])
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("review calibration output must resolve to a regular non-symlink file", stderr.getvalue())
 
     def test_review_calibration_blocks_scorecard_human_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:

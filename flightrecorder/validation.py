@@ -149,6 +149,7 @@ from .review import (
     REVIEWED_SFT_SCHEMA_VERSION,
 )
 from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
@@ -589,6 +590,8 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
     """Validate an RL/training export directory."""
     export_dir = Path(path)
     target = ValidationTarget("training_export", str(export_dir))
+    if _reject_symlinked_validation_path(export_dir, target, "Training export path", "directory"):
+        return target
     if not export_dir.exists():
         target.errors.append(f"Training export directory not found: {export_dir}")
         return target
@@ -596,7 +599,12 @@ def validate_training_export(path: str | Path) -> ValidationTarget:
         target.errors.append(f"Training export path is not a directory: {export_dir}")
         return target
 
-    manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
+    manifest_path = export_dir / "manifest.json"
+    manifest = (
+        None
+        if _reject_symlinked_validation_path(manifest_path, target, "manifest.json", "file")
+        else _read_object(manifest_path, target, "manifest.json")
+    )
     episodes = _read_jsonl_objects(export_dir / "episodes.jsonl", target, "episodes.jsonl")
     rewards = _read_jsonl_objects(export_dir / "rewards.jsonl", target, "rewards.jsonl")
     step_rewards = _read_jsonl_objects_optional(export_dir / "step_rewards.jsonl", target, "step_rewards.jsonl")
@@ -752,6 +760,8 @@ def validate_compare_export(path: str | Path) -> ValidationTarget:
     """Validate an export-compare-rl output directory."""
     export_dir = Path(path)
     target = ValidationTarget("compare_export", str(export_dir))
+    if _reject_symlinked_validation_path(export_dir, target, "Compare export path", "directory"):
+        return target
     if not export_dir.exists():
         target.errors.append(f"Compare export directory not found: {export_dir}")
         return target
@@ -759,7 +769,12 @@ def validate_compare_export(path: str | Path) -> ValidationTarget:
         target.errors.append(f"Compare export path is not a directory: {export_dir}")
         return target
 
-    manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
+    manifest_path = export_dir / "manifest.json"
+    manifest = (
+        None
+        if _reject_symlinked_validation_path(manifest_path, target, "manifest.json", "file")
+        else _read_object(manifest_path, target, "manifest.json")
+    )
     pairs = _read_jsonl_objects(export_dir / "improvement_pairs.jsonl", target, "improvement_pairs.jsonl")
     dpo = _read_jsonl_objects(export_dir / "improvement_dpo.jsonl", target, "improvement_dpo.jsonl")
     card_path = export_dir / "IMPROVEMENT_CARD.md"
@@ -786,6 +801,8 @@ def validate_review_export(path: str | Path) -> ValidationTarget:
     """Validate a human-review export directory."""
     export_dir = Path(path)
     target = ValidationTarget("review_export", str(export_dir))
+    if _reject_symlinked_validation_path(export_dir, target, "Review export path", "directory"):
+        return target
     if not export_dir.exists():
         target.errors.append(f"Review export directory not found: {export_dir}")
         return target
@@ -793,7 +810,12 @@ def validate_review_export(path: str | Path) -> ValidationTarget:
         target.errors.append(f"Review export path is not a directory: {export_dir}")
         return target
 
-    manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
+    manifest_path = export_dir / "manifest.json"
+    manifest = (
+        None
+        if _reject_symlinked_validation_path(manifest_path, target, "manifest.json", "file")
+        else _read_object(manifest_path, target, "manifest.json")
+    )
     items = _read_jsonl_objects(export_dir / "review_items.jsonl", target, "review_items.jsonl")
     labels = _read_jsonl_objects(export_dir / "label_template.jsonl", target, "label_template.jsonl")
     if not (export_dir / "REVIEW_INSTRUCTIONS.md").exists():
@@ -816,6 +838,8 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
     """Validate an apply-review output directory."""
     export_dir = Path(path)
     target = ValidationTarget("reviewed_export", str(export_dir))
+    if _reject_symlinked_validation_path(export_dir, target, "Reviewed export path", "directory"):
+        return target
     if not export_dir.exists():
         target.errors.append(f"Reviewed export directory not found: {export_dir}")
         return target
@@ -823,17 +847,27 @@ def validate_reviewed_export(path: str | Path) -> ValidationTarget:
         target.errors.append(f"Reviewed export path is not a directory: {export_dir}")
         return target
 
-    manifest = _read_object(export_dir / "manifest.json", target, "manifest.json")
+    manifest_path = export_dir / "manifest.json"
+    manifest = (
+        None
+        if _reject_symlinked_validation_path(manifest_path, target, "manifest.json", "file")
+        else _read_object(manifest_path, target, "manifest.json")
+    )
     labels = _read_jsonl_objects(export_dir / "reviewed_labels.jsonl", target, "reviewed_labels.jsonl")
     sft = _read_jsonl_objects(export_dir / "reviewed_sft.jsonl", target, "reviewed_sft.jsonl")
     reward_model = _read_jsonl_objects(export_dir / "reviewed_reward_model.jsonl", target, "reviewed_reward_model.jsonl")
     preferences = _read_jsonl_objects(export_dir / "reviewed_preferences.jsonl", target, "reviewed_preferences.jsonl")
     dpo = _read_jsonl_objects(export_dir / "reviewed_dpo.jsonl", target, "reviewed_dpo.jsonl")
-    dataset_registry = _read_object_optional(
-        export_dir / "dataset_registry.json",
-        target,
-        "dataset_registry.json",
-        "rerun apply-review to emit a selectable reviewed dataset registry",
+    dataset_registry_path = export_dir / "dataset_registry.json"
+    dataset_registry = (
+        None
+        if _reject_symlinked_validation_path(dataset_registry_path, target, "dataset_registry.json", "file")
+        else _read_object_optional(
+            dataset_registry_path,
+            target,
+            "dataset_registry.json",
+            "rerun apply-review to emit a selectable reviewed dataset registry",
+        )
     )
     rows_by_artifact = {
         "reviewed_labels": labels,
@@ -1482,6 +1516,8 @@ def validate_rubric_spec(path: str | Path) -> ValidationTarget:
     """Validate a rubric spec artifact."""
     rubric_path = Path(path)
     target = ValidationTarget("rubric_spec", str(rubric_path))
+    if _reject_symlinked_validation_path(rubric_path, target, "rubric_spec.path", "file"):
+        return target
     rubric = _read_object(rubric_path, target, "rubric_spec.json")
     if rubric is not None:
         _validate_rubric_spec(rubric, target, rubric_path)
@@ -1492,6 +1528,8 @@ def validate_model_grader_dry_run(path: str | Path) -> ValidationTarget:
     """Validate a dry-run model-grader receipt."""
     receipt_path = Path(path)
     target = ValidationTarget("model_grader_dry_run", str(receipt_path))
+    if _reject_symlinked_validation_path(receipt_path, target, "model_grader_dry_run.path", "file"):
+        return target
     receipt = _read_object(receipt_path, target, "model_grader_dry_run.json")
     if receipt is not None:
         _validate_model_grader_dry_run(receipt, target, receipt_path)
@@ -1502,6 +1540,8 @@ def validate_model_grader_override_receipt(path: str | Path) -> ValidationTarget
     """Validate a human override receipt for model-grader dry-run queue items."""
     receipt_path = Path(path)
     target = ValidationTarget("model_grader_override_receipt", str(receipt_path))
+    if _reject_symlinked_validation_path(receipt_path, target, "model_grader_override_receipt.path", "file"):
+        return target
     receipt = _read_object(receipt_path, target, "model_grader_override_receipt.json")
     if receipt is not None:
         _validate_model_grader_override_receipt(receipt, target, receipt_path)
@@ -1512,10 +1552,19 @@ def validate_model_grader_gate(path: str | Path) -> ValidationTarget:
     """Validate a model-grader training-admission gate."""
     gate_path = Path(path)
     target = ValidationTarget("model_grader_gate", str(gate_path))
+    if _reject_symlinked_validation_path(gate_path, target, "model_grader_gate.path", "file"):
+        return target
     gate = _read_object(gate_path, target, "model_grader_gate.json")
     if gate is not None:
         _validate_model_grader_gate(gate, target, gate_path)
     return target
+
+
+def _reject_symlinked_validation_path(path: Path, target: ValidationTarget, label: str, kind: str) -> bool:
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append(f"{label} must resolve to a regular non-symlink {kind}.")
+        return True
+    return False
 
 
 def validate_live_smoke_summary(path: str | Path) -> ValidationTarget:
@@ -1633,6 +1682,8 @@ def validate_review_calibration(path: str | Path) -> ValidationTarget:
     """Validate a review-calibration report."""
     calibration_path = Path(path)
     target = ValidationTarget("review_calibration", str(calibration_path))
+    if _reject_symlinked_validation_path(calibration_path, target, "review_calibration.path", "file"):
+        return target
     calibration = _read_object(calibration_path, target, "review_calibration.json")
     if calibration is not None:
         _validate_review_calibration(calibration, target)
@@ -5841,26 +5892,29 @@ def _validate_model_grader_source_file_ref(
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return None
+    path_value = record.get("path")
+    artifact_path: Path | None = None
+    if isinstance(path_value, str) and path_value:
+        artifact_path = _resolve_model_grader_source_path(path_value, source_path)
+        if artifact_path is None:
+            target.errors.append(f"{label}.path must resolve from the model-grader artifact location.")
+            return None
+        if _path_has_symlink_component(artifact_path, include_leaf=True):
+            target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+            return None
     exists = record.get("exists")
     if exists is not True:
         if allow_missing and exists is False:
             return None
         target.errors.append(f"{label}.exists must be true.")
         return None
-    if not isinstance(record.get("path"), str) or not record.get("path"):
+    if artifact_path is None:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
         return None
     if not _is_non_negative_int(record.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
     if not _is_lowercase_sha256(record.get("sha256")):
         target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string when exists is true.")
-    artifact_path = _resolve_model_grader_source_path(record.get("path"), source_path)
-    if artifact_path is None:
-        target.errors.append(f"{label}.path must resolve from the model-grader artifact location.")
-        return None
-    if artifact_path.is_symlink():
-        target.errors.append(f"{label}.path must not resolve to a symlink.")
-        return None
     if not artifact_path.exists() or not artifact_path.is_file():
         target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
         return None
@@ -7531,7 +7585,7 @@ def _validate_manifest_artifact_fingerprints(
     expected_paths: dict[str, Path],
 ) -> None:
     if value is None:
-        target.warnings.append(f"{label} is missing; rerun the export to emit artifact integrity hashes.")
+        target.errors.append(f"{label} is missing; rerun the export to emit artifact integrity hashes.")
         return
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
@@ -9308,10 +9362,12 @@ def _validate_training_view_common(
 
 def _validate_training_view_task_completion(
     sample: dict[str, Any],
-    episode: dict[str, Any],
+    episode: dict[str, Any] | None,
     target: ValidationTarget,
     label: str,
 ) -> None:
+    if not isinstance(episode, dict):
+        return
     task = episode.get("task_completion") if isinstance(episode.get("task_completion"), dict) else {}
     if "task_completion_status" in sample and sample.get("task_completion_status") != task.get("status"):
         target.errors.append(f"{label}.task_completion_status does not match episode task_completion.status.")
@@ -15362,28 +15418,6 @@ def _promotion_artifact_path_uses_symlink_ancestor(value: Any, source_path: Path
     return current_path is not None and _path_has_symlink_component(current_path, include_leaf=False)
 
 
-def _path_has_symlink_component(path: Path, *, include_leaf: bool) -> bool:
-    parts = [part for part in path.parts if part not in {"", "."}]
-    if not parts:
-        return False
-    current = Path(path.anchor) if path.is_absolute() else Path()
-    walk_parts = parts[1:] if path.is_absolute() else parts
-    for index, part in enumerate(walk_parts):
-        if not include_leaf and index == len(walk_parts) - 1:
-            break
-        current = current.parent if part == ".." else current / part
-        if current.is_symlink():
-            if _is_root_level_path(current):
-                current = current.resolve(strict=False)
-                continue
-            return True
-    return False
-
-
-def _is_root_level_path(path: Path) -> bool:
-    return path.is_absolute() and path.parent == Path(path.anchor)
-
-
 def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: ValidationTarget, policy: Any) -> None:
     if not isinstance(value, dict):
         target.errors.append("promotion_decision.metrics must be an object.")
@@ -20733,8 +20767,14 @@ def _run_digest_rule_ref_count(rules: list[dict[str, Any]]) -> int:
 
 
 def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, Any] | None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append(f"{label} must resolve to a regular non-symlink file.")
+        return None
     if not path.exists():
         target.errors.append(f"{label} is missing.")
+        return None
+    if not path.is_file():
+        target.errors.append(f"{label} must be a file.")
         return None
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -20748,6 +20788,9 @@ def _read_object(path: Path, target: ValidationTarget, label: str) -> dict[str, 
 
 
 def _read_object_optional(path: Path, target: ValidationTarget, label: str, refresh_message: str) -> dict[str, Any] | None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append(f"{label} must resolve to a regular non-symlink file.")
+        return None
     if not path.exists():
         target.warnings.append(f"{label} is missing; {refresh_message}.")
         return None
@@ -20755,8 +20798,14 @@ def _read_object_optional(path: Path, target: ValidationTarget, label: str, refr
 
 
 def _read_jsonl_objects(path: Path, target: ValidationTarget, label: str) -> list[dict[str, Any]]:
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append(f"{label} must resolve to a regular non-symlink file.")
+        return []
     if not path.exists():
         target.errors.append(f"{label} is missing.")
+        return []
+    if not path.is_file():
+        target.errors.append(f"{label} must be a file.")
         return []
     rows: list[dict[str, Any]] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -20780,6 +20829,9 @@ def _read_jsonl_objects_optional(
     label: str,
     refresh_message: str = "rerun export-rl to emit step-level reward attribution",
 ) -> list[dict[str, Any]]:
+    if _path_has_symlink_component(path, include_leaf=True):
+        target.errors.append(f"{label} must resolve to a regular non-symlink file.")
+        return []
     if not path.exists():
         target.warnings.append(f"{label} is missing; {refresh_message}.")
         return []

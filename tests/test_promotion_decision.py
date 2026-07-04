@@ -1133,7 +1133,7 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(code, 1)
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
-            self.assertIn("promotion_cards.artifacts.model_card.path must not resolve through a symlink", errors)
+            self.assertIn("promotion_cards.json must resolve to a regular non-symlink file", errors)
 
     def test_promotion_cards_writes_output_relative_artifact_paths(self):
         with tempfile.TemporaryDirectory() as tmp:

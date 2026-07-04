@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .review import REVIEW_LABELS, review_item_sha256
 from .schema_registry import SchemaRegistryError, check_schema_file
 
@@ -34,6 +35,7 @@ def build_rubric_spec(
     """Build a schema-checkable rubric bound to a human-review queue."""
     review_dir = Path(review_export_dir)
     output_path = Path(out_path) if out_path is not None else None
+    _require_evidence_dir(review_dir, "review export")
     items = _read_review_items(review_dir)
     criterion_rows = _criterion_rows(criteria)
     item_fingerprints = [_item_fingerprint(row) for row in items]
@@ -75,6 +77,8 @@ def build_model_grader_dry_run(
     review_dir = Path(review_export_dir)
     rubric_file = Path(rubric_path)
     output_path = Path(out_path) if out_path is not None else None
+    _require_evidence_dir(review_dir, "review export")
+    _require_evidence_file(rubric_file, "rubric spec")
     items = _read_review_items(review_dir)
     labels = [_mock_label(item, grader_id, provider) for item in items]
     label_counts = _label_counts(labels)
@@ -146,18 +150,28 @@ def build_model_grader_gate(
 ) -> dict[str, Any]:
     """Gate model-grader labels before trainer-facing data admission."""
     output_path = Path(out_path) if out_path is not None else None
+    dry_file = Path(dry_run_path)
+    rubric_file = Path(rubric_path)
+    calibration_file = Path(calibration_path) if calibration_path else None
+    override_receipt_file = Path(override_receipt_path) if override_receipt_path else None
+    _require_evidence_file(dry_file, "model-grader dry-run receipt")
+    _require_evidence_file(rubric_file, "rubric spec")
+    if calibration_file is not None:
+        _require_evidence_file(calibration_file, "review calibration")
+    if override_receipt_file is not None:
+        _require_evidence_file(override_receipt_file, "model-grader override receipt")
     dry_ref = _json_artifact_ref(
         "model_grader_dry_run",
-        Path(dry_run_path),
+        dry_file,
         "model_grader_dry_run",
         preserve_paths,
         output_path,
     )
-    rubric_ref = _json_artifact_ref("rubric_spec", Path(rubric_path), "rubric_spec", preserve_paths, output_path)
+    rubric_ref = _json_artifact_ref("rubric_spec", rubric_file, "rubric_spec", preserve_paths, output_path)
     override_ref = (
         _json_artifact_ref(
             "model_grader_override_receipt",
-            Path(override_receipt_path),
+            override_receipt_file,
             "model_grader_override_receipt",
             preserve_paths,
             output_path,
@@ -168,7 +182,7 @@ def build_model_grader_gate(
     calibration_ref = (
         _json_artifact_ref(
             "review_calibration",
-            Path(calibration_path),
+            calibration_file,
             "review_calibration",
             preserve_paths,
             output_path,
@@ -176,9 +190,9 @@ def build_model_grader_gate(
         if calibration_path
         else _missing_ref("review_calibration")
     )
-    dry_run = _read_json(Path(dry_run_path))
-    override_receipt = _read_json(Path(override_receipt_path)) if override_receipt_path else {}
-    calibration = _read_json(Path(calibration_path)) if calibration_path else {}
+    dry_run = _read_json(dry_file)
+    override_receipt = _read_json(override_receipt_file) if override_receipt_file is not None else {}
+    calibration = _read_json(calibration_file) if calibration_file is not None else {}
     labels_requiring_human_review = _labels_requiring_human_review_count(dry_run)
     dry_run_disagreement_queue_count = _dry_run_disagreement_queue_count(dry_run)
     overrides_required = labels_requiring_human_review > 0 or dry_run_disagreement_queue_count > 0
@@ -308,6 +322,8 @@ def build_model_grader_override_receipt(
     dry_file = Path(dry_run_path)
     override_file = Path(overrides_path)
     output_path = Path(out_path) if out_path is not None else None
+    _require_evidence_file(dry_file, "model-grader dry-run receipt")
+    _require_evidence_file(override_file, "model-grader override rows")
     dry_ref = _json_artifact_ref("model_grader_dry_run", dry_file, "model_grader_dry_run", preserve_paths, output_path)
     dry_run = _read_json(dry_file)
     queue = [item for item in dry_run.get("disagreement_queue", []) if isinstance(item, dict)] if isinstance(dry_run, dict) else []
@@ -402,18 +418,43 @@ def build_model_grader_override_receipt(
 def write_model_grader_artifact(path: str | Path, payload: dict[str, Any]) -> None:
     """Write stable JSON for any model-grader contract."""
     out_path = Path(path)
+    _require_output_file(out_path, "model-grader artifact output")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _read_review_items(review_export_dir: Path) -> list[dict[str, Any]]:
     path = review_export_dir / "review_items.jsonl"
-    if not path.exists():
-        raise ModelGraderError(f"review_items.jsonl not found: {path}")
+    _require_evidence_file(path, "review_items.jsonl")
     rows = _read_jsonl(path, "review_items.jsonl")
     if not rows:
         raise ModelGraderError(f"review_items.jsonl contains no review items: {path}")
     return rows
+
+
+def _require_evidence_dir(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ModelGraderError(f"{label} must resolve to a regular non-symlink directory: {path}")
+    if not path.exists():
+        raise ModelGraderError(f"{label} directory not found: {path}")
+    if not path.is_dir():
+        raise ModelGraderError(f"{label} path is not a directory: {path}")
+
+
+def _require_evidence_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ModelGraderError(f"{label} must resolve to a regular non-symlink file: {path}")
+    if not path.exists():
+        raise ModelGraderError(f"{label} not found: {path}")
+    if not path.is_file():
+        raise ModelGraderError(f"{label} must be a file: {path}")
+
+
+def _require_output_file(path: Path, label: str) -> None:
+    if _path_has_symlink_component(path, include_leaf=True):
+        raise ModelGraderError(f"{label} must resolve to a regular non-symlink file: {path}")
+    if path.exists() and not path.is_file():
+        raise ModelGraderError(f"{label} must be a file: {path}")
 
 
 def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:
@@ -542,7 +583,7 @@ def _json_artifact_ref(
 
 
 def _file_ref(role: str, path: Path, preserve_paths: bool, output_path: Path | None = None) -> dict[str, Any]:
-    exists = path.exists() and path.is_file()
+    exists = path.exists() and path.is_file() and not _path_has_symlink_component(path, include_leaf=True)
     return {
         "role": role,
         "path": _display_path(path, preserve_paths, output_path),
