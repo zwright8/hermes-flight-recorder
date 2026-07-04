@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from flightrecorder.agentic_training_loop_plan import build_agentic_training_loop_plan, write_agentic_training_loop_plan
+from flightrecorder.agentic_loop_governance import build_agentic_loop_governance_receipt
 from flightrecorder.cli import main
 from flightrecorder.external_eval import (
     build_external_eval_plan,
@@ -689,6 +690,89 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertIn("missing_promotion_ledger", payload["requested_action"]["blocked_reasons"])
             self.assertEqual(run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 0)
+
+    def test_agentic_loop_governance_receipt_blocks_forged_ledger_approval(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            blocked_plan = self.write_loop_plan(root / "plans" / "blocked.json", "loop-001", {})
+            ledger = root / "ledger.json"
+            receipt = root / "governance_approve.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            payload["decision"]["recommended_governance_action"] = "approve"
+            for row in payload["decision"]["governance_actions"]:
+                if row["action"] == "approve":
+                    row["available"] = True
+                    row["blocked_reasons"] = []
+                    row["blocked_reason_count"] = 0
+                    row["summary"] = "forged approval"
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["agentic-loop", "governance", "--ledger", str(ledger), "--action", "approve", "--out", str(receipt)])
+
+            self.assertEqual(code, 1)
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            checks = {row["id"]: row for row in receipt_payload["checks"]}
+            self.assertFalse(receipt_payload["passed"])
+            self.assertFalse(receipt_payload["source_ledger"]["passed"])
+            self.assertTrue(receipt_payload["requested_action"]["available"])
+            self.assertFalse(checks["source_ledger_passed"]["passed"])
+            self.assertEqual(run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--out", str(summary)]), 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("agentic_loop_ledger.decision.recommended_governance_action must match latest iteration state.", errors)
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 0)
+
+    def test_agentic_loop_governance_receipt_blocks_stale_source_plan(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            receipt = root / "governance_approve.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
+            plan_payload = json.loads(plan.read_text(encoding="utf-8"))
+            plan_payload["objective"] = "tampered after ledger creation"
+            plan.write_text(json.dumps(plan_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["agentic-loop", "governance", "--ledger", str(ledger), "--action", "approve", "--out", str(receipt)])
+
+            self.assertEqual(code, 1)
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            checks = {row["id"]: row for row in receipt_payload["checks"]}
+            self.assertFalse(receipt_payload["passed"])
+            self.assertFalse(receipt_payload["source_ledger"]["passed"])
+            self.assertTrue(receipt_payload["requested_action"]["available"])
+            self.assertFalse(checks["source_ledger_passed"]["passed"])
+            self.assertEqual(run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--out", str(summary)]), 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("sha256 does not match the current file", errors)
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 0)
+
+    def test_direct_governance_receipt_builder_requires_source_ledger_replay_proof(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            plan_payload = json.loads(plan.read_text(encoding="utf-8"))
+            plan_payload["objective"] = "tampered before direct receipt build"
+            plan.write_text(json.dumps(plan_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            receipt = build_agentic_loop_governance_receipt(
+                ledger_path=ledger,
+                action="approve",
+                out_path=root / "governance_approve.json",
+            )
+
+            checks = {row["id"]: row for row in receipt["checks"]}
+            self.assertFalse(receipt["passed"])
+            self.assertFalse(receipt["source_ledger"]["passed"])
+            self.assertTrue(receipt["requested_action"]["available"])
+            self.assertFalse(checks["source_ledger_passed"]["passed"])
 
     def test_validate_rejects_tampered_governance_receipt_action(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:

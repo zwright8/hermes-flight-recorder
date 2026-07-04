@@ -6045,8 +6045,14 @@ def _validate_agentic_loop_governance_source_ledger(
     if not ledger_payload:
         target.errors.append(f"{label}.path must resolve to a JSON object.")
         return None
+    ledger_errors_before = len(target.errors)
     _validate_agentic_loop_ledger(ledger_payload, target, ledger_path)
-    expected = _build_agentic_loop_governance_ledger_ref(ledger_path, preserve_paths=False)
+    ledger_replay_passed = len(target.errors) == ledger_errors_before
+    expected = _build_agentic_loop_governance_ledger_ref(
+        ledger_path,
+        preserve_paths=False,
+        source_ledger_replay_passed=ledger_replay_passed,
+    )
     for field_name in ("schema_version", "passed", "decision", "readiness_digest", "execution_boundary"):
         if value.get(field_name) != expected.get(field_name):
             target.errors.append(f"{label}.{field_name} must match the current source ledger.")

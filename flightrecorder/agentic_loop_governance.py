@@ -9,6 +9,13 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .agentic_loop_ledger import (
+    AGENTIC_LOOP_LEDGER_SCHEMA_VERSION,
+    _decision as _ledger_decision,
+    _metrics as _ledger_metrics,
+    _readiness_digest as _ledger_readiness_digest,
+)
+
 AGENTIC_LOOP_GOVERNANCE_RECEIPT_SCHEMA_VERSION = "hfr.agentic_loop_governance_receipt.v1"
 
 GOVERNANCE_ACTIONS = ("approve", "reject", "rollback", "request_another_iteration")
@@ -33,12 +40,13 @@ def build_agentic_loop_governance_receipt(
     out_path: str | Path | None = None,
     preserve_paths: bool = False,
     created_at: str | None = None,
+    source_ledger_replay_passed: bool | None = None,
 ) -> dict[str, Any]:
     """Record a governance action over the latest loop-ledger decision without applying it."""
     if action not in GOVERNANCE_ACTIONS:
         raise AgenticLoopGovernanceReceiptError(f"action must be one of {sorted(GOVERNANCE_ACTIONS)}")
     output_path = Path(out_path) if out_path is not None else None
-    ledger_ref = _source_ledger_ref(Path(ledger_path), preserve_paths, output_path)
+    ledger_ref = _source_ledger_ref(Path(ledger_path), preserve_paths, output_path, source_ledger_replay_passed)
     projection = _receipt_projection(ledger_ref, action)
     requested_action = dict(projection["requested_action"])
     requested_action["requested_by"] = requested_by or "unspecified"
@@ -94,7 +102,12 @@ def _receipt_projection(ledger_ref: dict[str, Any], action: str) -> dict[str, An
     }
 
 
-def _source_ledger_ref(path: Path, preserve_paths: bool, output_path: Path | None = None) -> dict[str, Any]:
+def _source_ledger_ref(
+    path: Path,
+    preserve_paths: bool,
+    output_path: Path | None = None,
+    source_ledger_replay_passed: bool | None = None,
+) -> dict[str, Any]:
     payload = _read_json(path)
     decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
     digest = payload.get("readiness_digest") if isinstance(payload.get("readiness_digest"), dict) else {}
@@ -102,6 +115,7 @@ def _source_ledger_ref(path: Path, preserve_paths: bool, output_path: Path | Non
     exists = path.exists() and path.is_file()
     display_path, replayable = _source_display_path(path, output_path, preserve_paths)
     public_exists = exists and replayable
+    raw_passed = payload.get("passed") if isinstance(payload.get("passed"), bool) else None
     return {
         "role": "agentic_loop_ledger",
         "path": display_path,
@@ -110,7 +124,7 @@ def _source_ledger_ref(path: Path, preserve_paths: bool, output_path: Path | Non
         "sha256": _sha256(path) if public_exists else None,
         "size_bytes": path.stat().st_size if public_exists else None,
         "schema_version": str(payload.get("schema_version") or ""),
-        "passed": payload.get("passed") if isinstance(payload.get("passed"), bool) else None,
+        "passed": _source_ledger_passed(payload, public_exists, raw_passed, source_ledger_replay_passed),
         "decision": _compact_ledger_decision(decision),
         "readiness_digest": _compact_readiness_digest(digest),
         "execution_boundary": {
@@ -122,6 +136,51 @@ def _source_ledger_ref(path: Path, preserve_paths: bool, output_path: Path | Non
             "weights_updated_by_flight_recorder": boundary.get("weights_updated_by_flight_recorder") is True,
             "credential_values_recorded": boundary.get("credential_values_recorded") is True,
         },
+    }
+
+
+def _source_ledger_passed(
+    payload: dict[str, Any],
+    public_exists: bool,
+    raw_passed: bool | None,
+    source_ledger_replay_passed: bool | None,
+) -> bool | None:
+    if raw_passed is not True:
+        return raw_passed
+    if not public_exists:
+        return raw_passed
+    return _source_ledger_self_check_passed(payload) and source_ledger_replay_passed is True
+
+
+def _source_ledger_self_check_passed(payload: dict[str, Any]) -> bool:
+    if payload.get("schema_version") != AGENTIC_LOOP_LEDGER_SCHEMA_VERSION:
+        return False
+    if payload.get("passed") is not True:
+        return False
+    iterations = payload.get("iterations")
+    if not isinstance(iterations, list) or not iterations or not all(isinstance(row, dict) for row in iterations):
+        return False
+    if payload.get("iteration_count") != len(iterations):
+        return False
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, dict):
+        return False
+    expected_metrics = _ledger_metrics(iterations)
+    if metrics != expected_metrics:
+        return False
+    expected_decision = _ledger_decision(iterations, expected_metrics)
+    if payload.get("decision") != expected_decision:
+        return False
+    if payload.get("readiness_digest") != _ledger_readiness_digest(iterations, expected_decision):
+        return False
+    return payload.get("execution_boundary") == {
+        "ledger_only": True,
+        "cloud_jobs_started": False,
+        "paid_model_grader_calls_started": False,
+        "live_benchmarks_started": False,
+        "model_downloads_started": False,
+        "weights_updated_by_flight_recorder": False,
+        "credential_values_recorded": False,
     }
 
 

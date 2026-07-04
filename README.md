@@ -374,7 +374,9 @@ available from the latest iteration:
 `approve`, `reject`, `rollback`, and `request_another_iteration`. Those options
 are advisory and ledger-only. Use `flightrecorder agentic-loop governance` to
 record one selected action as `hfr.agentic_loop_governance_receipt.v1`; the
-receipt still does not move aliases, apply rollback, launch cloud jobs, call
+command validates and replays the source ledger before writing, so stale source
+plans or forged ledger action rows produce blocked receipts instead of approvals.
+The receipt still does not move aliases, apply rollback, launch cloud jobs, call
 paid graders, or update weights. Promotion, rollback, and alias movement remain
 separate governed receipts. Next-iteration schedules are also replayable:
 validation reopens the referenced loop, action, and improvement ledgers from the

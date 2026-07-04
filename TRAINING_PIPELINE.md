@@ -842,8 +842,11 @@ approve, reject, rollback, or request another iteration. These action rows are
 strictly ledger recommendations; approval remains blocked until both promotion
 decision and promotion ledger receipts are present. `hfr.agentic_loop_governance_receipt.v1`
 records the selected governance action and replays the ledger action row during
-validation, but it remains receipt-only: actual promotion, rollback, or alias
-updates must still be archived as their own governed receipts.
+validation. The `agentic-loop governance` command also replays the source
+ledger before writing, so stale source plans or forged ledger action rows are
+recorded as blocked receipts rather than successful approvals. It remains
+receipt-only: actual promotion, rollback, or alias updates must still be
+archived as their own governed receipts.
 The digest includes cloud-training lineage posture as well: a latest iteration
 is not ready unless the provider id is consistent and every cloud handoff
 receipt points to its required upstream receipt by SHA-256. It also carries

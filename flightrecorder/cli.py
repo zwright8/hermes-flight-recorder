@@ -1570,6 +1570,7 @@ def cmd_agentic_loop_ledger(args: argparse.Namespace) -> int:
 
 
 def cmd_agentic_loop_governance(args: argparse.Namespace) -> int:
+    ledger_validation = validate_artifacts(agentic_loop_ledger_paths=[args.ledger], strict=True)
     receipt = build_agentic_loop_governance_receipt(
         ledger_path=args.ledger,
         action=args.action,
@@ -1578,6 +1579,7 @@ def cmd_agentic_loop_governance(args: argparse.Namespace) -> int:
         out_path=args.out,
         preserve_paths=args.preserve_paths,
         created_at=args.created_at,
+        source_ledger_replay_passed=ledger_validation.get("passed") is True,
     )
     if args.out:
         write_agentic_loop_governance_receipt(args.out, receipt)
