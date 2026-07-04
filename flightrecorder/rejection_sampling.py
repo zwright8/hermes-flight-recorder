@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 REJECTION_SAMPLING_GATE_SCHEMA_VERSION = "hfr.rejection_sampling_gate.v1"
@@ -27,11 +27,14 @@ def build_rejection_sampling_gate(
     created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic admission gate without selecting or writing rows."""
+    output_dir = Path(out_path).parent if out_path else None
     refs = {
-        "agentic_rollout_receipt": [_artifact_ref(path, "agentic_rollout_receipt", preserve_paths) for path in rollout_receipt_paths],
-        "model_grader_gate": [_artifact_ref(path, "model_grader_gate", preserve_paths) for path in model_grader_gate_paths],
-        "review_calibration": [_artifact_ref(path, "review_calibration", preserve_paths) for path in review_calibration_paths],
-        "reviewed_gate": [_artifact_ref(path, "reviewed_gate", preserve_paths) for path in reviewed_gate_paths],
+        "agentic_rollout_receipt": [
+            _artifact_ref(path, "agentic_rollout_receipt", preserve_paths, output_dir) for path in rollout_receipt_paths
+        ],
+        "model_grader_gate": [_artifact_ref(path, "model_grader_gate", preserve_paths, output_dir) for path in model_grader_gate_paths],
+        "review_calibration": [_artifact_ref(path, "review_calibration", preserve_paths, output_dir) for path in review_calibration_paths],
+        "reviewed_gate": [_artifact_ref(path, "reviewed_gate", preserve_paths, output_dir) for path in reviewed_gate_paths],
     }
     rollout_refs = refs["agentic_rollout_receipt"]
     mock_rollout_count = sum(_non_negative_int(ref.get("mock_rollout_count")) for ref in rollout_refs)
@@ -89,7 +92,7 @@ def build_rejection_sampling_gate(
     return {
         "schema_version": REJECTION_SAMPLING_GATE_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
-        "gate_path": _display_path(Path(out_path), preserve_paths) if out_path else "",
+        "gate_path": _display_path(Path(out_path), preserve_paths, output_dir) if out_path else "",
         "passed": not failed,
         "readiness": "ready_for_dataset_curation" if not failed else "blocked",
         "recommendation": "curate_accepted_training_rows" if not failed else "collect_calibrated_reviews_before_sampling",
@@ -139,17 +142,19 @@ def write_rejection_sampling_gate(path: str | Path, gate: dict[str, Any]) -> Non
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool) -> dict[str, Any]:
+def _artifact_ref(path_value: str | Path, role: str, preserve_paths: bool, output_dir: Path | None = None) -> dict[str, Any]:
     path = Path(path_value)
-    payload = _read_json(path)
+    displayed_path = _display_path(path, preserve_paths, output_dir)
+    exists = _is_public_rejection_sampling_ref_path(displayed_path) and path.exists()
+    payload = _read_json(path) if exists and path.is_file() else {}
     boundary = payload.get("execution_boundary") if isinstance(payload.get("execution_boundary"), dict) else {}
     ref = {
         "role": role,
-        "path": _display_path(path, preserve_paths),
-        "kind": "directory" if path.exists() and path.is_dir() else "file",
-        "exists": path.exists(),
-        "sha256": _sha256(path) if path.exists() and path.is_file() else None,
-        "size_bytes": path.stat().st_size if path.exists() and path.is_file() else None,
+        "path": displayed_path,
+        "kind": "directory" if exists and path.is_dir() else "file",
+        "exists": exists,
+        "sha256": _sha256(path) if exists and path.is_file() else None,
+        "size_bytes": path.stat().st_size if exists and path.is_file() else None,
         "schema_version": str(payload.get("schema_version") or ""),
         "passed": payload.get("passed") if isinstance(payload.get("passed"), bool) else None,
         "readiness": str(payload.get("readiness") or ""),
@@ -198,26 +203,61 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _display_path(path: Path, preserve_paths: bool) -> str:
+def _display_path(path: Path, preserve_paths: bool, output_dir: Path | None = None) -> str:
+    raw = str(path)
+    if output_dir is not None:
+        try:
+            relative = os.path.relpath(path.resolve(), output_dir.resolve())
+        except OSError:
+            return f"<redacted:{_basename(raw)}>"
+        return relative if _is_public_rejection_sampling_ref_path(relative) else f"<redacted:{_basename(raw)}>"
     if preserve_paths:
-        return str(path)
+        return raw if _is_public_rejection_sampling_ref_path(raw) else f"<redacted:{_basename(raw)}>"
     if not path.is_absolute():
-        return str(path)
+        return raw if _is_public_rejection_sampling_ref_path(raw) else f"<redacted:{_basename(raw)}>"
     try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
+        relative = str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
-        return str(path)
+        return f"<redacted:{_basename(raw)}>"
+    return relative if _is_public_rejection_sampling_ref_path(relative) else f"<redacted:{_basename(raw)}>"
 
 
 def _output_relative_path(value: Any, output_dir: Path) -> Any:
     if not isinstance(value, str) or not value:
         return value
+    if value.startswith("<redacted:"):
+        return value
     path = Path(value)
     if not path.is_absolute():
+        if not _is_public_rejection_sampling_ref_path(value):
+            return f"<redacted:{_basename(value)}>"
         if not path.exists():
             return value
         path = path.resolve()
-    return os.path.relpath(path.resolve(), output_dir.resolve())
+    try:
+        relative = os.path.relpath(path.resolve(), output_dir.resolve())
+    except OSError:
+        return f"<redacted:{_basename(value)}>"
+    return relative if _is_public_rejection_sampling_ref_path(relative) else f"<redacted:{_basename(value)}>"
+
+
+def _is_public_rejection_sampling_ref_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
 
 
 def _sha256(path: Path) -> str:

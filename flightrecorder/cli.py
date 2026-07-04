@@ -3708,7 +3708,7 @@ def _parser() -> argparse.ArgumentParser:
     rejection_sampling_gate.add_argument("--reviewed-gate", action="append", required=True, help="reviewed_gate artifact; may be repeated")
     rejection_sampling_gate.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     rejection_sampling_gate.add_argument("--out", required=True, help="Write hfr.rejection_sampling_gate.v1 JSON to this path")
-    rejection_sampling_gate.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in gate refs")
+    rejection_sampling_gate.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in gate refs; unsafe absolute or traversal refs remain redacted")
     rejection_sampling_gate.set_defaults(func=cmd_rejection_sampling_gate)
 
     dataset_curation_receipt = subparsers.add_parser("dataset-curation-receipt", help="Write a side-effect-free dataset curation receipt")

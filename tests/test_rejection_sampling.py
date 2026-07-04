@@ -53,6 +53,23 @@ class RejectionSamplingGateTests(unittest.TestCase):
             self.assertFalse(payload["execution_boundary"]["dataset_rows_written"])
             self.assertFalse(payload["admission_policy"]["accepts_uncalibrated_labels"])
 
+            preserved_out = root / "preserved_rejection_sampling_gate.json"
+            preserved_gate = build_rejection_sampling_gate(
+                rollout_receipt_paths=[rollout_receipt],
+                model_grader_gate_paths=[model_grader_gate],
+                review_calibration_paths=[review_calibration],
+                reviewed_gate_paths=[reviewed_gate],
+                out_path=preserved_out,
+                preserve_paths=True,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_rejection_sampling_gate(preserved_out, preserved_gate)
+            preserved_payload = json.loads(preserved_out.read_text(encoding="utf-8"))
+            self.assertNotIn(str(root), json.dumps(preserved_payload, sort_keys=True))
+            self.assertEqual(preserved_payload["input_artifacts"]["model_grader_gate"][0]["path"], "model_grader_gate.json")
+            preserved_validation = validate_artifacts(rejection_sampling_gate_paths=[preserved_out], strict=True)
+            self.assertTrue(preserved_validation["passed"], preserved_validation)
+
     def test_cli_writes_valid_rejection_sampling_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -92,7 +109,7 @@ class RejectionSamplingGateTests(unittest.TestCase):
             validation = validate_artifacts(rejection_sampling_gate_paths=[out], strict=True)
             self.assertTrue(validation["passed"], validation)
 
-    def test_strict_validation_rejects_absolute_rejection_sampling_gate_paths(self):
+    def test_validation_rejects_absolute_rejection_sampling_gate_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             rollout_receipt = self.write_rollout_receipt(root)
@@ -115,13 +132,41 @@ class RejectionSamplingGateTests(unittest.TestCase):
             out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             validation = validate_artifacts(rejection_sampling_gate_paths=[out])
-            strict_validation = validate_artifacts(rejection_sampling_gate_paths=[out], strict=True)
 
-            self.assertTrue(validation["passed"], validation)
-            self.assertFalse(strict_validation["passed"], strict_validation)
-            warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
-            self.assertIn("rejection_sampling_gate.gate_path is absolute", warnings)
-            self.assertIn("rejection_sampling_gate.input_artifacts.model_grader_gate[0].path is absolute", warnings)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("rejection_sampling_gate.gate_path must be a safe relative path or redacted placeholder", errors)
+            self.assertIn(
+                "rejection_sampling_gate.input_artifacts.model_grader_gate[0].path must be a safe relative path or redacted placeholder",
+                errors,
+            )
+
+    def test_validation_rejects_stale_rejection_sampling_input_ref(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rollout_receipt = self.write_rollout_receipt(root)
+            model_grader_gate = self.write_json(root / "model_grader_gate.json", "hfr.model_grader_gate.v1")
+            review_calibration = self.write_json(root / "review_calibration.json", "hfr.review_calibration.v1")
+            reviewed_gate = self.write_json(root / "reviewed_gate.json", "hfr.reviewed_gate.v1")
+            out = root / "rejection_sampling_gate.json"
+            gate = build_rejection_sampling_gate(
+                rollout_receipt_paths=[rollout_receipt],
+                model_grader_gate_paths=[model_grader_gate],
+                review_calibration_paths=[review_calibration],
+                reviewed_gate_paths=[reviewed_gate],
+                out_path=out,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_rejection_sampling_gate(out, gate)
+            self.write_json(model_grader_gate, "hfr.model_grader_gate.v1")
+            with model_grader_gate.open("a", encoding="utf-8") as handle:
+                handle.write("\n")
+
+            validation = validate_artifacts(rejection_sampling_gate_paths=[out], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("rejection_sampling_gate.input_artifacts.model_grader_gate[0].size_bytes does not match", errors)
+            self.assertIn("rejection_sampling_gate.input_artifacts.model_grader_gate[0].sha256 does not match", errors)
 
     def test_gate_blocks_uncalibrated_or_missing_review_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:

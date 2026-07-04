@@ -735,6 +735,11 @@ flightrecorder validate \
   --strict
 ```
 
+Rejection-sampling gate refs are public-safe by default: generated artifacts
+write paths relative to the gate output directory, redact absolute or traversal
+refs that cannot be replayed from there, and validation rejects hand-authored
+unsafe refs before curation can proceed.
+
 Archive a curation receipt after rejection-sampling admission and before
 trainer preflight. It binds existing training exports to the admission gate and
 records that Flight Recorder did not write new curated rows or update dataset

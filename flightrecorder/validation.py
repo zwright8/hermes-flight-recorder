@@ -1043,7 +1043,7 @@ def validate_rejection_sampling_gate(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("rejection_sampling_gate", str(gate_path))
     gate = _read_object(gate_path, target, "rejection_sampling_gate.json")
     if gate is not None:
-        _validate_rejection_sampling_gate(gate, target)
+        _validate_rejection_sampling_gate(gate, target, gate_path)
     return target
 
 
@@ -8743,13 +8743,13 @@ _DATASET_CURATION_BOUNDARY_KEYS = {
 }
 
 
-def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _validate_allowed_keys(gate, _REJECTION_SAMPLING_GATE_KEYS, target, "rejection_sampling_gate")
     _require_equal(gate, "schema_version", REJECTION_SAMPLING_GATE_SCHEMA_VERSION, target, prefix="rejection_sampling_gate.")
     if not isinstance(gate.get("gate_path"), str):
         target.errors.append("rejection_sampling_gate.gate_path must be a string.")
-    elif gate.get("gate_path"):
-        _warn_absolute_public_path(target, "rejection_sampling_gate.gate_path", gate.get("gate_path"))
+    elif gate.get("gate_path") and not _is_public_rejection_sampling_ref_path(gate.get("gate_path")):
+        target.errors.append("rejection_sampling_gate.gate_path must be a safe relative path or redacted placeholder.")
     checks = gate.get("checks")
     if not isinstance(checks, list):
         target.errors.append("rejection_sampling_gate.checks must be a list.")
@@ -8793,7 +8793,14 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
             target.errors.append(f"rejection_sampling_gate.input_artifacts.{role} must contain at least one artifact ref.")
             continue
         for index, row in enumerate(rows):
-            _validate_rejection_sampling_gate_ref(row, target, f"rejection_sampling_gate.input_artifacts.{role}[{index}]", role, schema_version)
+            _validate_rejection_sampling_gate_ref(
+                row,
+                target,
+                f"rejection_sampling_gate.input_artifacts.{role}[{index}]",
+                role,
+                schema_version,
+                source_path,
+            )
 
     summary = gate.get("rollout_summary")
     if not isinstance(summary, dict):
@@ -8849,7 +8856,14 @@ def _validate_rejection_sampling_gate(gate: dict[str, Any], target: ValidationTa
     )
 
 
-def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, label: str, role: str, schema_version: str) -> None:
+def _validate_rejection_sampling_gate_ref(
+    row: Any,
+    target: ValidationTarget,
+    label: str,
+    role: str,
+    schema_version: str,
+    source_path: Path,
+) -> None:
     if not isinstance(row, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -8859,7 +8873,11 @@ def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, la
         if not isinstance(row.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
     if isinstance(row.get("path"), str) and row.get("path"):
-        _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
+        if row["path"].startswith("<redacted:"):
+            if row.get("exists") is True:
+                target.errors.append(f"{label}.path cannot be redacted when exists is true.")
+        elif not _is_public_rejection_sampling_ref_path(row["path"]):
+            target.errors.append(f"{label}.path must be a safe relative path or redacted placeholder.")
     if row.get("role") != role:
         target.errors.append(f"{label}.role must be {role!r}.")
     if row.get("kind") not in {"file", "directory"}:
@@ -8875,6 +8893,7 @@ def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, la
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string for file refs.")
         if not _is_non_negative_int(row.get("size_bytes")):
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for file refs.")
+        _validate_rejection_sampling_gate_file_ref(row, target, label, source_path)
     if row.get("role") == "agentic_rollout_receipt":
         if row.get("readiness") != "mock_rollouts_recorded":
             target.errors.append(f"{label}.readiness must be 'mock_rollouts_recorded'.")
@@ -8886,6 +8905,49 @@ def _validate_rejection_sampling_gate_ref(row: Any, target: ValidationTarget, la
             target.errors.append(f"{label}.live_rollouts_started must be false.")
         if row.get("dataset_rows_written") is not False:
             target.errors.append(f"{label}.dataset_rows_written must be false.")
+
+
+def _validate_rejection_sampling_gate_file_ref(
+    row: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> None:
+    if row.get("exists") is not True:
+        return
+    file_path = _resolve_rejection_sampling_gate_ref_path(row.get("path"), source_path)
+    if file_path is None:
+        return
+    if _path_has_symlink_component(file_path, include_leaf=True):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path must resolve to an existing file.")
+        return
+    if _is_non_negative_int(row.get("size_bytes")) and file_path.stat().st_size != row.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_sha256(row.get("sha256")) and _sha256(file_path) != row.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+
+
+def _resolve_rejection_sampling_gate_ref_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or value.startswith("<redacted:") or not _is_public_rejection_sampling_ref_path(value):
+        return None
+    return source_path.parent / value
+
+
+def _is_public_rejection_sampling_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and (value.startswith("<redacted:") or not path.is_absolute())
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
 
 
 def _validate_dataset_curation_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
