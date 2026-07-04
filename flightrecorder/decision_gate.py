@@ -6,6 +6,8 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
+
 DECISION_GATE_SCHEMA_VERSION = "hfr.decision_gate.v1"
 
 
@@ -28,6 +30,7 @@ def evaluate_decision_gate(
         raise DecisionGateError("Decision gate input must be a JSON object.")
     if not expect_recommendation:
         raise DecisionGateError("--expect-recommendation must be non-empty.")
+    reject_symlinked_decision_artifact_input(Path(artifact_path))
     source_artifact = _source_artifact_record(Path(artifact_path), preserve_paths, artifact_display_path)
     decision = artifact.get("decision") if isinstance(artifact.get("decision"), dict) else {}
     source_passed = artifact.get("passed") if isinstance(artifact.get("passed"), bool) else None
@@ -101,10 +104,15 @@ def _source_artifact_record(path: Path, preserve_paths: bool, display_path: str 
         "kind": "file",
         "exists": path.exists(),
     }
-    if path.exists() and path.is_file():
+    if path.exists() and path.is_file() and not path.is_symlink() and not _path_has_symlink_component(path, include_leaf=False):
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
     return record
+
+
+def reject_symlinked_decision_artifact_input(path: Path) -> None:
+    if path.is_symlink() or _path_has_symlink_component(path, include_leaf=False):
+        raise DecisionGateError(f"decision_gate.artifact_path must not traverse symlinked components: {path}")
 
 
 def _display_path(path: Path, preserve_paths: bool) -> str:

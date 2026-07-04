@@ -160,6 +160,8 @@ evidence.
   reject symlinked source plan parents before reading or validating those refs.
 - Action, improvement, and promotion ledger gates reject symlinked source
   ledger paths before replaying metrics, checks, or decisions.
+- Decision gates reject symlinked source artifacts before trusting
+  `source_artifact` fingerprints or replayed source decisions.
 - Next-iteration schedules reject symlinked source ledger paths before trusting
   source ledger size, hash, metrics, or decision snapshots.
 - Governance receipts reject symlinked source loop ledger paths before trusting

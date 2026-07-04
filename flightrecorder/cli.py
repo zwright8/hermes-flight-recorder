@@ -69,7 +69,7 @@ from .compare_gate import (
     evaluate_compare_gate,
     load_compare_gate_policy,
 )
-from .decision_gate import DecisionGateError, evaluate_decision_gate
+from .decision_gate import DecisionGateError, evaluate_decision_gate, reject_symlinked_decision_artifact_input
 from .dataset_curation import DatasetCurationReceiptError, build_dataset_curation_receipt, write_dataset_curation_receipt
 from .digest import RunDigestError, build_run_digest, render_run_digest_markdown
 from .evidence import EvidenceCoverageError, build_evidence_coverage
@@ -2653,13 +2653,15 @@ def cmd_gate_promotion_ledger(args: argparse.Namespace) -> int:
 
 
 def cmd_gate_decision(args: argparse.Namespace) -> int:
-    artifact = _read_json(Path(args.artifact))
+    artifact_path = Path(args.artifact)
+    reject_symlinked_decision_artifact_input(artifact_path)
+    artifact = _read_json(artifact_path)
     output_path = Path(args.out) if args.out else None
     result = evaluate_decision_gate(
         artifact,
-        artifact_path=Path(args.artifact),
+        artifact_path=artifact_path,
         artifact_display_path=_display_path_for_output_source(
-            Path(args.artifact),
+            artifact_path,
             output_path,
             args.preserve_paths,
         ),

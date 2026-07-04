@@ -355,15 +355,18 @@ handoff jobs. The generated `decision_gate.json` carries
 `source_artifact.sha256`, tying the promotion decision to the exact source gate
 artifact it consumed. When that source path is available, validation also
 checks that the embedded `source_decision` still matches the source artifact's
-current decision block. Use `flightrecorder promotion-ledger` to preserve the
-history of those allow/block artifacts across iterations. The promotion ledger
-records latest recommendation, allowed/blocked counts, consecutive block or
-allow streaks, and source-artifact fingerprints, giving an external trainer
-launcher a stable "how did we get here?" artifact before it consumes the final
-decision gate. Use `flightrecorder gate-promotion-ledger` when trainer or CI
-automation needs a policy decision over that history, such as requiring a clean
-latest allow decision, capping blocked-rate or blocked streaks, and forbidding
-source `block_iteration` recommendations before launch. Validation rejects
+current decision block. Gate-decision generation and validation reject source
+artifacts that are symlinks or traverse symlinked parent directories before
+emitting or trusting those hashes. Use `flightrecorder promotion-ledger` to
+preserve the history of those allow/block artifacts across iterations. The
+promotion ledger records latest recommendation, allowed/blocked counts,
+consecutive block or allow streaks, and source-artifact fingerprints, giving an
+external trainer launcher a stable "how did we get here?" artifact before it
+consumes the final decision gate. Use `flightrecorder gate-promotion-ledger`
+when trainer or CI automation needs a policy decision over that history, such
+as requiring a clean latest allow decision, capping blocked-rate or blocked
+streaks, and forbidding source `block_iteration` recommendations before launch.
+Validation rejects
 symlinked source promotion-ledger paths before replaying gate metrics, checks,
 or decisions. Use
 `flightrecorder promotion-archive` at the artifact-upload boundary: it copies

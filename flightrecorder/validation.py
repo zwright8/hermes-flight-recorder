@@ -19736,6 +19736,9 @@ def _validate_decision_gate_source_artifact_hash(record: dict[str, Any], target:
     if file_path.is_symlink():
         target.errors.append("decision_gate.source_artifact.path must not resolve to a symlink.")
         return
+    if _path_has_symlink_component(file_path, include_leaf=False):
+        target.errors.append("decision_gate.source_artifact.path must not traverse symlinked components.")
+        return
     if not file_path.exists() or not file_path.is_file():
         target.errors.append("decision_gate.source_artifact.path does not resolve to an existing file.")
         return
@@ -19753,6 +19756,8 @@ def _validate_decision_gate_source_decision_matches_artifact(
 ) -> None:
     file_path = _resolve_gate_source_path(source_artifact.get("path"), source_path)
     if file_path is None or not file_path.exists() or not file_path.is_file():
+        return
+    if file_path.is_symlink() or _path_has_symlink_component(file_path, include_leaf=False):
         return
     try:
         artifact = json.loads(file_path.read_text(encoding="utf-8"))

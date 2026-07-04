@@ -202,6 +202,39 @@ class DecisionGateTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertEqual(errors, "")
 
+    def test_gate_decision_rejects_symlinked_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            source_dir.mkdir()
+            source = source_dir / "action_ledger_gate.json"
+            linked_parent = root / "linked_source"
+            decision_gate = root / "decision_gate.json"
+            _write_source_decision(source)
+            try:
+                linked_parent.symlink_to(source_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            with self.assertRaises(SystemExit) as raised:
+                run_cli(
+                    [
+                        "gate-decision",
+                        "--artifact",
+                        str(linked_parent / source.name),
+                        "--expect-recommendation",
+                        "promote_iteration",
+                        "--expect-readiness",
+                        "ready",
+                        "--require-passed",
+                        "--out",
+                        str(decision_gate),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertFalse(decision_gate.exists())
+
     def test_validate_rejects_decision_gate_missing_source_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -353,6 +386,52 @@ class DecisionGateTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("decision_gate.source_artifact.regular_file must be true when present", errors)
             self.assertIn("decision_gate.source_artifact.path must not resolve to a symlink", errors)
+
+    def test_validate_rejects_decision_gate_parent_symlink_source_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            source_dir.mkdir()
+            source = source_dir / "action_ledger_gate.json"
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            linked_source = linked_target / source.name
+            linked_parent = root / "linked_source"
+            decision_gate = root / "decision_gate.json"
+            summary_path = root / "validation.json"
+            _write_source_decision(source)
+            _write_source_decision(linked_source, passed=False, recommendation="block_iteration", readiness="blocked")
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            code = run_cli(
+                [
+                    "gate-decision",
+                    "--artifact",
+                    str(source),
+                    "--expect-recommendation",
+                    "promote_iteration",
+                    "--expect-readiness",
+                    "ready",
+                    "--require-passed",
+                    "--out",
+                    str(decision_gate),
+                ]
+            )
+            self.assertEqual(code, 0)
+            gate = json.loads(decision_gate.read_text(encoding="utf-8"))
+            gate["artifact"] = str(Path(linked_parent.name) / source.name)
+            gate["source_artifact"]["path"] = str(Path(linked_parent.name) / source.name)
+            decision_gate.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--decision-gate", str(decision_gate), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision_gate.source_artifact.path must not traverse symlinked components", errors)
+            self.assertNotIn("decision_gate.source_decision.", errors)
 
 
 if __name__ == "__main__":
