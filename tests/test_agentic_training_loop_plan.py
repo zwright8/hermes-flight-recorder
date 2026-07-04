@@ -24,6 +24,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class AgenticTrainingLoopPlanTests(unittest.TestCase):
+    def test_committed_example_loop_plan_replays_fail_closed_sources(self):
+        plan_path = ROOT / "examples" / "agentic_training" / "loop_plan.json"
+        provider_registry_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "provider_registry.json"
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        provider_registry_ref = plan["source_artifacts"]["cloud_training_provider_registry"][0]
+        self.assertEqual(provider_registry_ref["path"], "cloud_training/provider_registry.json")
+        self.assertEqual(provider_registry_ref["size_bytes"], provider_registry_path.stat().st_size)
+        self.assertEqual(provider_registry_ref["sha256"], hashlib.sha256(provider_registry_path.read_bytes()).hexdigest())
+        self.assertFalse(plan["passed"])
+        self.assertEqual(plan["readiness"], "planned_fail_closed")
+        self.assertFalse(plan["cloud_training"]["cloud_jobs_started"])
+        self.assertFalse(plan["cloud_training"]["provider_api_calls_started"])
+        self.assertTrue(plan["cloud_training_receipt_state"]["fail_closed"])
+        self.assertEqual(plan["cloud_training_receipt_state"]["cost_incurred_usd"], 0)
+        self.assertFalse(plan["execution_boundary"]["cloud_jobs_started"])
+        self.assertFalse(plan["execution_boundary"]["paid_model_grader_calls_started"])
+        self.assertFalse(plan["execution_boundary"]["weights_updated_by_flight_recorder"])
+        schema = check_schema_file(plan_path)
+        self.assertTrue(schema["passed"], schema["errors"])
+        validation = validate_artifacts(agentic_training_loop_plan_paths=[plan_path], strict=True)
+        self.assertTrue(validation["passed"], validation)
+
     def test_complete_receipt_set_is_ready_for_governance_review(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

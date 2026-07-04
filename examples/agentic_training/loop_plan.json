@@ -382,8 +382,20 @@
             "provider_consistent": true,
             "registry_contains_pipeline_provider": true,
             "registry_provider_ids": [
+              "aws_sagemaker",
+              "azure_ml",
+              "brev",
+              "coreweave",
+              "databricks_mosaic",
+              "fireworks",
+              "gcp_vertex_ai",
               "huggingface_jobs",
-              "modal"
+              "lambda_labs",
+              "modal",
+              "nvidia_dgx_cloud",
+              "replicate",
+              "runpod",
+              "together"
             ]
           },
           "required_link_count": 7,
@@ -643,8 +655,20 @@
       "provider_consistent": true,
       "registry_contains_pipeline_provider": true,
       "registry_provider_ids": [
+        "aws_sagemaker",
+        "azure_ml",
+        "brev",
+        "coreweave",
+        "databricks_mosaic",
+        "fireworks",
+        "gcp_vertex_ai",
         "huggingface_jobs",
-        "modal"
+        "lambda_labs",
+        "modal",
+        "nvidia_dgx_cloud",
+        "replicate",
+        "runpod",
+        "together"
       ]
     },
     "required_link_count": 7,
@@ -788,7 +812,7 @@
     "Missing phase inputs keep the loop fail-closed while preserving a schema-checkable plan for orchestration.",
     "Use dry-run/mock provider receipts first; live provider launches must be explicit, credentialed, and separately archived."
   ],
-  "objective": "Demonstrate a fail-closed external trainer handoff loop.",
+  "objective": "Demonstrate a fail-closed closed-loop agentic training iteration contract.",
   "participants": {
     "baseline_policy": "local/mock-baseline",
     "candidate_policy": "local/mock-candidate",
@@ -1191,8 +1215,8 @@
         "readiness": "",
         "role": "cloud_training_provider_registry",
         "schema_version": "hfr.cloud_training_provider_registry.v1",
-        "sha256": "a81f9e839efa1999dafce33b0bef2eb66d3aed6b89424d434822dd7b8219072d",
-        "size_bytes": 4662
+        "sha256": "6755474055340f997d7a057ebc7e7a24bbc3d0d4233dba1a64fdbf4782ad3905",
+        "size_bytes": 27413
       }
     ],
     "cloud_training_status_receipt": [

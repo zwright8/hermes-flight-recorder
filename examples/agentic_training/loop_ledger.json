@@ -297,8 +297,20 @@
           "provider_consistent": true,
           "registry_contains_pipeline_provider": true,
           "registry_provider_ids": [
+            "aws_sagemaker",
+            "azure_ml",
+            "brev",
+            "coreweave",
+            "databricks_mosaic",
+            "fireworks",
+            "gcp_vertex_ai",
             "huggingface_jobs",
-            "modal"
+            "lambda_labs",
+            "modal",
+            "nvidia_dgx_cloud",
+            "replicate",
+            "runpod",
+            "together"
           ]
         },
         "required_link_count": 7,
@@ -474,8 +486,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "f27136be11f6df7b6173e9d31fe892d2a08218ceb1527ec1377efdb5cd7ab026",
-      "size_bytes": 40535,
+      "sha256": "05dacff784ea044ac4a4eb889ecfef216e0b4533e434e825e4eea6de2095bd3a",
+      "size_bytes": 41160,
       "training_outputs": {
         "artifact_count": 4,
         "group": "training",

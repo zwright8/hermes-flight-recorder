@@ -25,7 +25,50 @@ def run_cli(args):
         return main(args)
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 class AgenticLoopLedgerTests(unittest.TestCase):
+    def test_committed_example_loop_ledger_replays_loop_plan(self):
+        ledger_path = ROOT / "examples" / "agentic_training" / "loop_ledger.json"
+        loop_plan_path = ROOT / "examples" / "agentic_training" / "loop_plan.json"
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+
+        iteration = ledger["iterations"][0]
+        self.assertEqual(iteration["path"], "loop_plan.json")
+        self.assertEqual(iteration["size_bytes"], loop_plan_path.stat().st_size)
+        self.assertEqual(iteration["sha256"], hashlib.sha256(loop_plan_path.read_bytes()).hexdigest())
+        self.assertTrue(ledger["passed"])
+        self.assertEqual(ledger["decision"]["recommended_governance_action"], "request_another_iteration")
+        self.assertFalse(ledger["readiness_digest"]["ready_for_governance_review"])
+        self.assertTrue(ledger["readiness_digest"]["cloud_training_receipts_fail_closed"])
+        self.assertEqual(ledger["readiness_digest"]["cloud_training_cost_incurred_usd"], 0)
+        self.assertFalse(ledger["execution_boundary"]["cloud_jobs_started"])
+        self.assertFalse(ledger["execution_boundary"]["paid_model_grader_calls_started"])
+        self.assertFalse(ledger["execution_boundary"]["weights_updated_by_flight_recorder"])
+        self.assertEqual(run_cli(["schemas", "--check", str(ledger_path)]), 0)
+        self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger_path), "--strict"]), 0)
+
+    def test_committed_example_governance_receipt_replays_ledger(self):
+        receipt_path = ROOT / "examples" / "agentic_training" / "loop_governance_receipt.json"
+        ledger_path = ROOT / "examples" / "agentic_training" / "loop_ledger.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+
+        source_ledger = receipt["source_ledger"]
+        self.assertEqual(source_ledger["path"], "loop_ledger.json")
+        self.assertEqual(source_ledger["size_bytes"], ledger_path.stat().st_size)
+        self.assertEqual(source_ledger["sha256"], hashlib.sha256(ledger_path.read_bytes()).hexdigest())
+        self.assertTrue(receipt["passed"])
+        self.assertEqual(receipt["requested_action"]["action"], "request_another_iteration")
+        self.assertTrue(receipt["requested_action"]["available"])
+        self.assertEqual(receipt["decision"]["recommendation"], "record_next_iteration_request")
+        self.assertFalse(receipt["execution_boundary"]["cloud_jobs_started"])
+        self.assertFalse(receipt["execution_boundary"]["promotion_alias_moved"])
+        self.assertFalse(receipt["execution_boundary"]["rollback_applied"])
+        self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
+        self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
+        self.assertEqual(run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt_path), "--strict"]), 0)
+
     def test_agentic_loop_ledger_tracks_blocked_and_ready_iterations(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

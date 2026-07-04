@@ -76,6 +76,7 @@ flightrecorder agentic-loop plan \
   --budget max_gpu_hours=0 \
   --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
   --agentic-training-runtime-preflight examples/agentic_training/runtime_preflight/ready.json \
+  --agentic-training-flow examples/agentic_training/agentic_training_flow.json \
   --agentic-training-result examples/agentic_training/completed_result.json \
   --cloud-training-provider-registry examples/agentic_training/cloud_training/provider_registry.json \
   --cloud-training-preflight examples/agentic_training/cloud_training/preflight.json \
