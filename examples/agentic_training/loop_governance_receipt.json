@@ -235,7 +235,7 @@
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "3de86368ea0e9e99d7c012d9838eadcc3f68cdd76d4d94af039bb82c10125c52",
+    "sha256": "ba9cecc7d0c79948fee96a09a71db0d9dac42542bbd6af3b50aeac891de48d40",
     "size_bytes": 22362
   }
 }

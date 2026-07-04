@@ -551,14 +551,18 @@ def _artifact_ref(role: str, path: Path, preserve_paths: bool, output_path: Path
     exists = path.exists()
     is_file = path.is_file()
     is_dir = path.is_dir()
+    directory_fingerprint = _directory_tree_fingerprint(path) if is_dir else {}
+    directory_contains_symlinks = _directory_contains_symlink(path) if is_dir else None
     payload = _read_json(path) if is_file and path.suffix == ".json" else {}
     return {
         "role": role,
         "path": _display_source_path(path, output_path, preserve_paths),
         "kind": "directory" if is_dir else "file",
         "exists": exists,
-        "sha256": _sha256(path) if is_file else None,
-        "size_bytes": path.stat().st_size if is_file else None,
+        "sha256": _sha256(path) if is_file else directory_fingerprint.get("sha256"),
+        "size_bytes": path.stat().st_size if is_file else directory_fingerprint.get("size_bytes"),
+        "file_count": directory_fingerprint.get("file_count") if is_dir else None,
+        "contains_symlinks": directory_contains_symlinks,
         "schema_version": str(payload.get("schema_version") or "") if payload else "",
         "passed": payload.get("passed") if isinstance(payload.get("passed"), bool) else None,
         "readiness": str(payload.get("readiness") or payload.get("status") or ""),
@@ -1270,6 +1274,28 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _directory_tree_fingerprint(path: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    file_count = 0
+    size_bytes = 0
+    for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file() and not candidate.is_symlink()):
+        relative = item.relative_to(path)
+        size = item.stat().st_size
+        digest.update(str(relative).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(size).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(_sha256(item).encode("ascii"))
+        digest.update(b"\0")
+        file_count += 1
+        size_bytes += size
+    return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
+
+
+def _directory_contains_symlink(path: Path) -> bool:
+    return any(item.is_symlink() for item in path.rglob("*"))
 
 
 def _non_negative_or_none(value: Any) -> int | None:

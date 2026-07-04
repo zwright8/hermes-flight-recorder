@@ -1199,7 +1199,9 @@
   "source_artifacts": {
     "action_ledger": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "iteration_ledgers/action_ledger.json",
@@ -1212,7 +1214,9 @@
     ],
     "agentic_rollout_plan": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "rollouts/rollout_plan.json",
@@ -1225,7 +1229,9 @@
     ],
     "agentic_rollout_receipt": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "rollouts/rollout_receipt.json",
@@ -1238,7 +1244,9 @@
     ],
     "agentic_training_flow": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "agentic_training_flow.json",
@@ -1251,7 +1259,9 @@
     ],
     "agentic_training_plan": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "plans/sft_then_dpo_plan.json",
@@ -1264,7 +1274,9 @@
     ],
     "agentic_training_result": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "completed_result.json",
@@ -1277,7 +1289,9 @@
     ],
     "agentic_training_runtime_preflight": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "runtime_preflight/ready.json",
@@ -1290,7 +1304,9 @@
     ],
     "cloud_training_artifact_manifest": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "cloud_training/artifact_manifest.json",
@@ -1303,7 +1319,9 @@
     ],
     "cloud_training_launch_plan": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "cloud_training/launch_plan.json",
@@ -1316,7 +1334,9 @@
     ],
     "cloud_training_launch_receipt": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "cloud_training/launch_receipt.json",
@@ -1329,7 +1349,9 @@
     ],
     "cloud_training_preflight": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "cloud_training/preflight.json",
@@ -1342,7 +1364,9 @@
     ],
     "cloud_training_provider_registry": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": null,
         "path": "cloud_training/provider_registry.json",
@@ -1355,7 +1379,9 @@
     ],
     "cloud_training_status_receipt": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "cloud_training/status_receipt.json",
@@ -1368,7 +1394,9 @@
     ],
     "dataset_curation_receipt": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "dataset_curation_receipt.json",
@@ -1381,7 +1409,9 @@
     ],
     "eval_summary": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "heldout_eval/eval_summary.json",
@@ -1394,7 +1424,9 @@
     ],
     "evidence_bundle": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "evidence_handoff/evidence_bundle.json",
@@ -1407,7 +1439,9 @@
     ],
     "external_eval_plan": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": null,
         "path": "heldout_eval/external_eval_plan.json",
@@ -1420,7 +1454,9 @@
     ],
     "external_eval_receipt": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "heldout_eval/external_eval_receipt.json",
@@ -1433,7 +1469,9 @@
     ],
     "harness_result": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": null,
         "path": "evidence_handoff/harness_handoff/harness_result.json",
@@ -1446,7 +1484,9 @@
     ],
     "heldout_manifest": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": null,
         "path": "heldout_eval/heldout_manifest.json",
@@ -1459,7 +1499,9 @@
     ],
     "improvement_ledger": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "iteration_ledgers/improvement_ledger.json",
@@ -1472,7 +1514,9 @@
     ],
     "improvement_plan": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "iteration_ledgers/improvement_plan.json",
@@ -1485,7 +1529,9 @@
     ],
     "model_grader_disagreement_queue": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "model_grader/disagreement_queue.json",
@@ -1498,7 +1544,9 @@
     ],
     "model_grader_dry_run": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "model_grader/dry_run.json",
@@ -1511,7 +1559,9 @@
     ],
     "model_grader_gate": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "model_grader/passing_gate.json",
@@ -1524,7 +1574,9 @@
     ],
     "promotion_alias_apply": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "promotion_governance/promotion_alias_apply.json",
@@ -1537,33 +1589,39 @@
     ],
     "promotion_archive": [
       {
+        "contains_symlinks": false,
         "exists": true,
+        "file_count": 8,
         "kind": "directory",
         "passed": null,
         "path": "promotion_governance/promotion_archive",
         "readiness": "",
         "role": "promotion_archive",
         "schema_version": "",
-        "sha256": null,
-        "size_bytes": null
+        "sha256": "eac0a7122bc9078472da8f071559e3fdec6150c4f9903959af5b03c6186cbed5",
+        "size_bytes": 86802
       }
     ],
     "promotion_cards": [
       {
+        "contains_symlinks": false,
         "exists": true,
+        "file_count": 3,
         "kind": "directory",
         "passed": null,
         "path": "promotion_governance/promotion_cards",
         "readiness": "",
         "role": "promotion_cards",
         "schema_version": "",
-        "sha256": null,
-        "size_bytes": null
+        "sha256": "33f50eb55a4fbd862889ff78bc4654eeafeb6b54e99cde3c4713d097fa2af9c0",
+        "size_bytes": 9912
       }
     ],
     "promotion_decision": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "promotion_governance/promotion_decision.json",
@@ -1576,7 +1634,9 @@
     ],
     "promotion_ledger": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "promotion_governance/promotion_ledger.json",
@@ -1589,7 +1649,9 @@
     ],
     "promotion_release_record": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "promotion_governance/promotion_release_record.json",
@@ -1602,7 +1664,9 @@
     ],
     "promotion_rollback_receipt": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "promotion_governance/promotion_rollback_receipt.json",
@@ -1615,7 +1679,9 @@
     ],
     "rejection_sampling_gate": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "rejection_sampling_gate.json",
@@ -1628,7 +1694,9 @@
     ],
     "review_calibration": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "model_grader/review_calibration.json",
@@ -1641,7 +1709,9 @@
     ],
     "reviewed_gate": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "model_grader/reviewed_gate.json",
@@ -1654,7 +1724,9 @@
     ],
     "rubric_spec": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": null,
         "path": "model_grader/rubric.json",
@@ -1667,7 +1739,9 @@
     ],
     "serving_lifecycle": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "serving_lifecycle/managed_mock/serving_lifecycle.json",
@@ -1680,7 +1754,9 @@
     ],
     "trainer_launch_check": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "trainer_launch_check.json",
@@ -1693,7 +1769,9 @@
     ],
     "trainer_preflight": [
       {
+        "contains_symlinks": null,
         "exists": true,
+        "file_count": null,
         "kind": "file",
         "passed": true,
         "path": "trainer_preflight.json",
@@ -1706,15 +1784,17 @@
     ],
     "training_export": [
       {
+        "contains_symlinks": false,
         "exists": true,
+        "file_count": 38,
         "kind": "directory",
         "passed": null,
         "path": "training_export",
         "readiness": "",
         "role": "training_export",
         "schema_version": "",
-        "sha256": null,
-        "size_bytes": null
+        "sha256": "a6bb01cba41f40d381848512b603b93400ec7d079f84b75000e39477a6239451",
+        "size_bytes": 508903
       }
     ]
   }

@@ -4366,6 +4366,8 @@ _AGENTIC_TRAINING_LOOP_ARTIFACT_REF_KEYS = {
     "exists",
     "sha256",
     "size_bytes",
+    "file_count",
+    "contains_symlinks",
     "schema_version",
     "passed",
     "readiness",
@@ -4815,11 +4817,20 @@ def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget,
         target.errors.append(f"{label}.kind must be 'file' or 'directory'.")
     if not isinstance(ref.get("exists"), bool):
         target.errors.append(f"{label}.exists must be a boolean.")
+    if ref.get("exists") is False:
+        for field_name in ("sha256", "size_bytes", "file_count", "contains_symlinks"):
+            if ref.get(field_name) is not None:
+                target.errors.append(f"{label}.{field_name} must be null when the source artifact is missing.")
+        return
     if ref.get("kind") == "file" and ref.get("exists") is True:
         if not isinstance(ref.get("sha256"), str) or len(ref.get("sha256", "")) != 64:
             target.errors.append(f"{label}.sha256 must be a SHA-256 string for existing files.")
         if not isinstance(ref.get("size_bytes"), int) or ref.get("size_bytes") < 0:
             target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing files.")
+        if ref.get("file_count") is not None:
+            target.errors.append(f"{label}.file_count must be null for file artifacts.")
+        if ref.get("contains_symlinks") is not None:
+            target.errors.append(f"{label}.contains_symlinks must be null for file artifacts.")
         file_path = _resolve_agentic_training_loop_plan_ref_path(path_value, source_path)
         if file_path is not None and _path_has_symlink_component(file_path, include_leaf=True):
             target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
@@ -4831,6 +4842,32 @@ def _validate_agentic_training_loop_plan_ref(ref: Any, target: ValidationTarget,
             target.errors.append(f"{label}.size_bytes does not match the current file.")
         if isinstance(ref.get("sha256"), str) and len(ref.get("sha256", "")) == 64 and _sha256(file_path) != ref.get("sha256"):
             target.errors.append(f"{label}.sha256 does not match the current file.")
+    if ref.get("kind") == "directory" and ref.get("exists") is True:
+        if not isinstance(ref.get("sha256"), str) or len(ref.get("sha256", "")) != 64:
+            target.errors.append(f"{label}.sha256 must be a SHA-256 string for existing directories.")
+        if not isinstance(ref.get("size_bytes"), int) or ref.get("size_bytes") < 0:
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer for existing directories.")
+        if not isinstance(ref.get("file_count"), int) or ref.get("file_count") < 0:
+            target.errors.append(f"{label}.file_count must be a non-negative integer for existing directories.")
+        if ref.get("contains_symlinks") is not False:
+            target.errors.append(f"{label}.contains_symlinks must be false for existing directories.")
+        directory_path = _resolve_agentic_training_loop_plan_ref_path(path_value, source_path)
+        if directory_path is not None and _path_has_symlink_component(directory_path, include_leaf=True):
+            target.errors.append(f"{label}.path must resolve to a regular non-symlink directory.")
+            return
+        if directory_path is None or not directory_path.exists() or not directory_path.is_dir():
+            target.errors.append(f"{label}.path does not resolve to an existing directory.")
+            return
+        if _directory_contains_symlink(directory_path):
+            target.errors.append(f"{label}.path must not contain symlink descendants.")
+            return
+        tree = _directory_tree_fingerprint(directory_path)
+        if isinstance(ref.get("file_count"), int) and ref.get("file_count") >= 0 and tree["file_count"] != ref.get("file_count"):
+            target.errors.append(f"{label}.file_count does not match the current directory.")
+        if isinstance(ref.get("size_bytes"), int) and ref.get("size_bytes") >= 0 and tree["size_bytes"] != ref.get("size_bytes"):
+            target.errors.append(f"{label}.size_bytes does not match the current directory.")
+        if isinstance(ref.get("sha256"), str) and len(ref.get("sha256", "")) == 64 and tree["sha256"] != ref.get("sha256"):
+            target.errors.append(f"{label}.sha256 does not match the current directory.")
 
 
 def _agentic_training_loop_source_validation_state(
@@ -28149,6 +28186,10 @@ def _directory_tree_fingerprint(path: Path) -> dict[str, Any]:
         file_count += 1
         size_bytes += size
     return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
+
+
+def _directory_contains_symlink(path: Path) -> bool:
+    return any(item.is_symlink() for item in path.rglob("*"))
 
 
 def _score_value(value: Any) -> int:

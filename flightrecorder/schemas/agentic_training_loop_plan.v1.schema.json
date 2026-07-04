@@ -170,6 +170,19 @@
             "directory"
           ]
         },
+        "file_count": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "contains_symlinks": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "passed": {
           "type": [
             "boolean",

@@ -23,6 +23,24 @@ from tests.agentic_loop_fixtures import write_eval_summary, write_valid_promotio
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def directory_tree_fingerprint(path: Path) -> dict[str, int | str]:
+    digest = hashlib.sha256()
+    file_count = 0
+    size_bytes = 0
+    for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file() and not candidate.is_symlink()):
+        relative = item.relative_to(path)
+        size = item.stat().st_size
+        digest.update(str(relative).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(size).encode("ascii"))
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(item.read_bytes()).hexdigest().encode("ascii"))
+        digest.update(b"\0")
+        file_count += 1
+        size_bytes += size
+    return {"sha256": digest.hexdigest(), "file_count": file_count, "size_bytes": size_bytes}
+
+
 class AgenticTrainingLoopPlanTests(unittest.TestCase):
     def test_committed_example_loop_plan_replays_fail_closed_sources(self):
         plan_path = ROOT / "examples" / "agentic_training" / "loop_plan.json"
@@ -98,10 +116,16 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             ref = plan["source_artifacts"][role][0]
             self.assertEqual(ref["path"], expected_path)
             if source_path.is_dir():
+                expected_tree = directory_tree_fingerprint(source_path)
                 self.assertEqual(ref["kind"], "directory")
                 self.assertTrue(ref["exists"])
-                self.assertIsNone(ref["sha256"])
+                self.assertEqual(ref["file_count"], expected_tree["file_count"])
+                self.assertEqual(ref["size_bytes"], expected_tree["size_bytes"])
+                self.assertEqual(ref["sha256"], expected_tree["sha256"])
+                self.assertFalse(ref["contains_symlinks"])
             else:
+                self.assertIsNone(ref.get("file_count"))
+                self.assertIsNone(ref.get("contains_symlinks"))
                 self.assertEqual(ref["size_bytes"], source_path.stat().st_size)
                 self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertTrue(plan["passed"])
@@ -801,6 +825,72 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             stale_errors = "\n".join(error for target in stale_validation["targets"] for error in target["errors"])
             self.assertIn("agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].size_bytes does not match the current file.", stale_errors)
             self.assertIn("agentic_training_loop_plan.source_artifacts.agentic_training_plan[0].sha256 does not match the current file.", stale_errors)
+
+    def test_validate_rejects_stale_loop_plan_directory_source_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            training_export = root / "training_export"
+            (training_export / "data").mkdir(parents=True)
+            (training_export / "README.md").write_text("trainer export\n", encoding="utf-8")
+            (training_export / "data" / "episodes.jsonl").write_text('{"id":"one"}\n', encoding="utf-8")
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-stale-directory-source",
+                artifact_paths={"training_export": [training_export]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            ref = plan["source_artifacts"]["training_export"][0]
+            expected_tree = directory_tree_fingerprint(training_export)
+            self.assertEqual(ref["kind"], "directory")
+            self.assertEqual(ref["file_count"], expected_tree["file_count"])
+            self.assertEqual(ref["size_bytes"], expected_tree["size_bytes"])
+            self.assertEqual(ref["sha256"], expected_tree["sha256"])
+            self.assertFalse(ref["contains_symlinks"])
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
+            (training_export / "data" / "episodes.jsonl").write_text('{"id":"one"}\n{"id":"two"}\n', encoding="utf-8")
+            (training_export / "data" / "metadata.json").write_text("{}\n", encoding="utf-8")
+            stale_validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertFalse(stale_validation["passed"])
+            stale_errors = "\n".join(error for target in stale_validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_training_loop_plan.source_artifacts.training_export[0].file_count does not match the current directory.", stale_errors)
+            self.assertIn("agentic_training_loop_plan.source_artifacts.training_export[0].size_bytes does not match the current directory.", stale_errors)
+            self.assertIn("agentic_training_loop_plan.source_artifacts.training_export[0].sha256 does not match the current directory.", stale_errors)
+
+    def test_validate_rejects_symlink_descendants_in_loop_plan_directory_source_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            training_export = root / "training_export"
+            training_export.mkdir()
+            source_file = training_export / "episodes.jsonl"
+            source_file.write_text('{"id":"one"}\n', encoding="utf-8")
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-directory-symlink-source",
+                artifact_paths={"training_export": [training_export]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
+            symlink_path = training_export / "episodes-link.jsonl"
+            try:
+                symlink_path.symlink_to(source_file)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            stale_validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertFalse(stale_validation["passed"])
+            stale_errors = "\n".join(error for target in stale_validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.source_artifacts.training_export[0].path must not contain symlink descendants.",
+                stale_errors,
+            )
 
     def test_validate_rejects_symlink_loop_plan_source_ref(self):
         with tempfile.TemporaryDirectory() as tmp:
