@@ -1125,6 +1125,9 @@ flightrecorder model-grader dry-run \
 
 The dry-run receipt records `provider_api_called: false`,
 `paid_model_grader_calls_started: false`, and `labels_admitted_count: 0`.
+Model-grader `--preserve-paths` keeps only public-safe relative refs; absolute
+local refs are redacted when written and validation rejects any hand-authored
+absolute source refs before labels can reach a gate.
 `model-grader gate` is the training-admission boundary: without a passing
 `review-calibration` artifact it stays blocked and routes labels to human
 review or calibration. With a passing calibration artifact it can mark labels

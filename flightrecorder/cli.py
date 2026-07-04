@@ -3727,7 +3727,7 @@ def _parser() -> argparse.ArgumentParser:
     model_grader_rubric.add_argument("--criterion", action="append", default=[], help="Rubric criterion text; may be repeated")
     model_grader_rubric.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     model_grader_rubric.add_argument("--out", required=True, help="Write hfr.rubric_spec.v1 JSON to this path")
-    model_grader_rubric.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rubric refs")
+    model_grader_rubric.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in rubric refs; unsafe absolute refs remain redacted")
     model_grader_rubric.set_defaults(func=cmd_model_grader_rubric)
 
     model_grader_dry_run = model_grader_subparsers.add_parser("dry-run", help="Write a mock model-grader dry-run receipt")
@@ -3737,7 +3737,7 @@ def _parser() -> argparse.ArgumentParser:
     model_grader_dry_run.add_argument("--provider", default="mock", help="Provider id recorded in the dry-run receipt")
     model_grader_dry_run.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     model_grader_dry_run.add_argument("--out", required=True, help="Write hfr.model_grader_dry_run.v1 JSON to this path")
-    model_grader_dry_run.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in dry-run refs")
+    model_grader_dry_run.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in dry-run refs; unsafe absolute refs remain redacted")
     model_grader_dry_run.set_defaults(func=cmd_model_grader_dry_run)
 
     model_grader_queue = model_grader_subparsers.add_parser(
@@ -3747,7 +3747,7 @@ def _parser() -> argparse.ArgumentParser:
     model_grader_queue.add_argument("--dry-run", required=True, help="model_grader_dry_run artifact")
     model_grader_queue.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     model_grader_queue.add_argument("--out", required=True, help="Write hfr.model_grader_disagreement_queue.v1 JSON to this path")
-    model_grader_queue.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in queue refs")
+    model_grader_queue.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in queue refs; unsafe absolute refs remain redacted")
     model_grader_queue.set_defaults(func=cmd_model_grader_disagreement_queue)
 
     model_grader_override = model_grader_subparsers.add_parser(
@@ -3758,7 +3758,7 @@ def _parser() -> argparse.ArgumentParser:
     model_grader_override.add_argument("--overrides", required=True, help="JSONL human override rows")
     model_grader_override.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     model_grader_override.add_argument("--out", required=True, help="Write hfr.model_grader_override_receipt.v1 JSON to this path")
-    model_grader_override.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in override refs")
+    model_grader_override.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in override refs; unsafe absolute refs remain redacted")
     model_grader_override.set_defaults(func=cmd_model_grader_override_receipt)
 
     model_grader_gate = model_grader_subparsers.add_parser("gate", help="Gate model-grader labels before training admission")
@@ -3770,7 +3770,7 @@ def _parser() -> argparse.ArgumentParser:
     model_grader_gate.add_argument("--max-disagreements", type=_non_negative_int_arg)
     model_grader_gate.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     model_grader_gate.add_argument("--out", required=True, help="Write hfr.model_grader_gate.v1 JSON to this path")
-    model_grader_gate.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in gate refs")
+    model_grader_gate.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in gate refs; unsafe absolute refs remain redacted")
     model_grader_gate.set_defaults(func=cmd_model_grader_gate)
 
     eval_summary = subparsers.add_parser("eval-summary", help="Build a governance-ready held-out eval summary")

@@ -449,6 +449,9 @@ dry-run control plane. `model-grader rubric` binds review items to a rubric,
 `model-grader disagreement-queue` writes portable human-review work items, and
 `model-grader gate` blocks those labels from training until calibration passes
 and the queue is resolved.
+When `--preserve-paths` is used, model-grader commands preserve only public-safe
+relative refs; absolute local refs are redacted at write time and rejected during
+validation if hand-authored into artifacts.
 
 ```bash
 flightrecorder model-grader rubric \

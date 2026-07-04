@@ -10180,14 +10180,23 @@ def _validate_model_grader_source_file_ref(
     path_value = record.get("path")
     artifact_path: Path | None = None
     if isinstance(path_value, str) and path_value:
-        _warn_absolute_public_path(target, f"{label}.path", path_value)
-        artifact_path = _resolve_model_grader_source_path(path_value, source_path)
-        if artifact_path is None:
-            target.errors.append(f"{label}.path must resolve from the model-grader artifact location.")
+        if path_value.startswith("<redacted:"):
+            if record.get("exists") is True:
+                target.errors.append(f"{label}.path cannot be redacted when exists is true.")
+                return None
+            if allow_missing and record.get("exists") is False:
+                return None
+        elif not _is_public_model_grader_ref_path(path_value):
+            target.errors.append(f"{label}.path must be a relative path or redacted placeholder.")
             return None
-        if _path_has_symlink_component(artifact_path, include_leaf=True):
-            target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
-            return None
+        else:
+            artifact_path = _resolve_model_grader_source_path(path_value, source_path)
+            if artifact_path is None:
+                target.errors.append(f"{label}.path must resolve from the model-grader artifact location.")
+                return None
+            if _path_has_symlink_component(artifact_path, include_leaf=True):
+                target.errors.append(f"{label}.path must resolve to a regular non-symlink file.")
+                return None
     exists = record.get("exists")
     if exists is not True:
         if allow_missing and exists is False:
@@ -10214,12 +10223,23 @@ def _validate_model_grader_source_file_ref(
 def _resolve_model_grader_source_path(value: Any, source_path: Path) -> Path | None:
     if not isinstance(value, str) or not value:
         return None
-    path = Path(value)
-    if path.is_absolute():
-        return path
-    if _is_windows_absolute(value):
+    if value.startswith("<redacted:") or not _is_public_model_grader_ref_path(value):
         return None
+    path = Path(value)
     return source_path.parent / path
+
+
+def _is_public_model_grader_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+    )
 
 
 def _same_model_grader_source_file(left: Path, right: Path) -> bool:

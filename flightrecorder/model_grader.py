@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
@@ -651,7 +651,7 @@ def _json_artifact_ref(
 ) -> dict[str, Any]:
     ref = _file_ref(role, path, preserve_paths, output_path)
     schema = _schema_check(path, schema_name) if ref["exists"] else {"passed": False, "error_count": 1, "errors": ["artifact not found"]}
-    payload = _read_json(path)
+    payload = _read_json(path) if ref["exists"] else {}
     ref.update(
         {
             "schema_name": schema_name,
@@ -666,10 +666,16 @@ def _json_artifact_ref(
 
 
 def _file_ref(role: str, path: Path, preserve_paths: bool, output_path: Path | None = None) -> dict[str, Any]:
-    exists = path.exists() and path.is_file() and not _path_has_symlink_component(path, include_leaf=True)
+    displayed_path = _display_path(path, preserve_paths, output_path)
+    exists = (
+        _is_public_model_grader_ref_path(displayed_path)
+        and path.exists()
+        and path.is_file()
+        and not _path_has_symlink_component(path, include_leaf=True)
+    )
     return {
         "role": role,
-        "path": _display_path(path, preserve_paths, output_path),
+        "path": displayed_path,
         "exists": exists,
         "sha256": _sha256(path) if exists else None,
         "size_bytes": path.stat().st_size if exists else None,
@@ -854,9 +860,34 @@ def _stable_sha(value: dict[str, Any]) -> str:
 
 
 def _display_path(path: Path, preserve_paths: bool, output_path: Path | None = None) -> str:
-    if preserve_paths or output_path is None:
-        return str(path) if preserve_paths else path.name
-    return os.path.relpath(path.resolve(), output_path.parent.resolve())
+    raw = str(path)
+    if output_path is not None:
+        try:
+            relative = os.path.relpath(path.resolve(), output_path.parent.resolve())
+        except OSError:
+            return f"<redacted:{_basename(raw)}>"
+        return relative if _is_public_model_grader_ref_path(relative) else f"<redacted:{_basename(raw)}>"
+    if preserve_paths:
+        return raw if _is_public_model_grader_ref_path(raw) else f"<redacted:{_basename(raw)}>"
+    return path.name if _is_public_model_grader_ref_path(path.name) else f"<redacted:{_basename(raw)}>"
+
+
+def _is_public_model_grader_ref_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+    )
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
 
 
 def _now() -> str:
