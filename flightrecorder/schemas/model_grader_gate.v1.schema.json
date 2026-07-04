@@ -1,16 +1,25 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/model_grader_gate.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Gate deciding whether model-grader labels may enter curated training data.",
   "properties": {
     "admission": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "human_override_required_for_disagreements": { "const": true },
-        "labels_admitted_count": { "minimum": 0, "type": "integer" },
-        "labels_allowed_for_training": { "type": "boolean" },
-        "uncalibrated_labels_admitted": { "const": 0 }
+        "human_override_required_for_disagreements": {
+          "const": true
+        },
+        "labels_admitted_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "labels_allowed_for_training": {
+          "type": "boolean"
+        },
+        "uncalibrated_labels_admitted": {
+          "const": 0
+        }
       },
       "required": [
         "labels_allowed_for_training",
@@ -21,28 +30,66 @@
       "type": "object"
     },
     "blocked_reasons": {
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "type": "array"
     },
-    "check_count": { "minimum": 0, "type": "integer" },
+    "check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
     "checks": {
-      "items": { "$ref": "#/$defs/check" },
+      "items": {
+        "$ref": "#/$defs/check"
+      },
       "type": "array"
     },
-    "created_at": { "type": "string" },
-    "execution_boundary": { "$ref": "#/$defs/boundary" },
-    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "created_at": {
+      "type": "string"
+    },
+    "execution_boundary": {
+      "$ref": "#/$defs/boundary"
+    },
+    "failed_check_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "agreement_rate": { "maximum": 1, "minimum": 0, "type": "number" },
-        "calibration_disagreement_count": { "minimum": 0, "type": "integer" },
-        "dry_run_disagreement_queue_count": { "minimum": 0, "type": "integer" },
-        "dry_run_labels_requiring_human_review_count": { "minimum": 0, "type": "integer" },
-        "graded_item_count": { "minimum": 0, "type": "integer" },
-        "human_override_receipt_present": { "type": "boolean" },
-        "human_override_resolved_count": { "minimum": 0, "type": "integer" },
-        "human_override_unresolved_count": { "minimum": 0, "type": "integer" }
+        "agreement_rate": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "calibration_disagreement_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dry_run_disagreement_queue_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dry_run_labels_requiring_human_review_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "graded_item_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "human_override_receipt_present": {
+          "type": "boolean"
+        },
+        "human_override_resolved_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "human_override_unresolved_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
       },
       "required": [
         "graded_item_count",
@@ -57,14 +104,55 @@
       "type": "object"
     },
     "notes": {
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "type": "array"
     },
-    "passed": { "type": "boolean" },
-    "readiness": { "enum": ["labels_calibrated_for_curated_handoff", "blocked"], "type": "string" },
-    "recommendation": { "enum": ["allow_curated_grader_labels", "route_to_human_review_or_calibration"], "type": "string" },
-    "schema_version": { "const": "hfr.model_grader_gate.v1" },
-    "source_artifacts": { "type": "object" }
+    "passed": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "enum": [
+        "labels_calibrated_for_curated_handoff",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "recommendation": {
+      "enum": [
+        "allow_curated_grader_labels",
+        "route_to_human_review_or_calibration"
+      ],
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "hfr.model_grader_gate.v1"
+    },
+    "source_artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run_receipt": {
+          "$ref": "#/$defs/sourceArtifact"
+        },
+        "model_grader_override_receipt": {
+          "$ref": "#/$defs/sourceArtifact"
+        },
+        "review_calibration": {
+          "$ref": "#/$defs/sourceArtifact"
+        },
+        "rubric_spec": {
+          "$ref": "#/$defs/sourceArtifact"
+        }
+      },
+      "required": [
+        "dry_run_receipt",
+        "rubric_spec",
+        "review_calibration",
+        "model_grader_override_receipt"
+      ],
+      "type": "object"
+    }
   },
   "required": [
     "schema_version",
@@ -86,15 +174,29 @@
   "type": "object",
   "$defs": {
     "boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "cloud_cost_incurred_usd": { "const": 0 },
-        "credential_values_recorded": { "const": false },
-        "dry_run_only": { "const": true },
-        "labels_admitted_to_training": { "const": false },
-        "paid_model_grader_calls_started": { "const": false },
-        "provider_api_called": { "const": false },
-        "weights_updated_by_flight_recorder": { "const": false }
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "labels_admitted_to_training": {
+          "const": false
+        },
+        "paid_model_grader_calls_started": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
       },
       "required": [
         "dry_run_only",
@@ -108,15 +210,104 @@
       "type": "object"
     },
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "actual": {},
-        "expected": { "type": "object" },
-        "id": { "minLength": 1, "type": "string" },
-        "passed": { "type": "boolean" },
-        "summary": { "minLength": 1, "type": "string" }
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
       },
-      "required": ["id", "passed", "actual", "expected", "summary"],
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "sourceArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema_errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "schema_name": {
+          "type": "string"
+        },
+        "schema_passed": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "source_recommendation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "sha256",
+        "size_bytes",
+        "schema_name",
+        "schema_passed",
+        "schema_error_count",
+        "schema_errors",
+        "source_passed",
+        "source_recommendation"
+      ],
       "type": "object"
     }
   }

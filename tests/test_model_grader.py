@@ -269,6 +269,38 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(passing_payload["source_artifacts"]["review_calibration"]["path"], "../../review_calibration.json")
             self.assert_schema_and_validate(passing_gate, "model_grader_gate")
 
+            forged_gate_payload = json.loads(json.dumps(passing_payload))
+            forged_gate_payload["trainer_handoff_url"] = "redacted-trainer-handoff"
+            forged_gate_payload["checks"][0]["admitted_label_source"] = "forged"
+            forged_gate_payload["source_artifacts"]["dry_run_receipt"]["provider_job_id"] = "redacted-provider-job"
+            forged_gate_payload["source_artifacts"]["unexpected_trainer_receipt"] = json.loads(
+                json.dumps(forged_gate_payload["source_artifacts"]["dry_run_receipt"])
+            )
+            forged_gate_payload["admission"]["uncalibrated_label_source"] = "forged"
+            forged_gate_payload["metrics"]["uncalibrated_label_count"] = 1
+            forged_gate_payload["execution_boundary"]["labels_written_to_dataset"] = True
+            passing_gate.write_text(json.dumps(forged_gate_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(passing_gate)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(model_grader_gate_paths=[passing_gate], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("model_grader_gate contains unknown field(s): ['trainer_handoff_url'].", errors)
+            self.assertIn("model_grader_gate.checks[0] contains unknown field(s): ['admitted_label_source'].", errors)
+            self.assertIn("model_grader_gate.source_artifacts contains unknown field(s): ['unexpected_trainer_receipt'].", errors)
+            self.assertIn(
+                "model_grader_gate.source_artifacts.dry_run_receipt contains unknown field(s): ['provider_job_id'].",
+                errors,
+            )
+            self.assertIn("model_grader_gate.admission contains unknown field(s): ['uncalibrated_label_source'].", errors)
+            self.assertIn("model_grader_gate.metrics contains unknown field(s): ['uncalibrated_label_count'].", errors)
+            self.assertIn(
+                "model_grader_gate.execution_boundary contains unknown field(s): ['labels_written_to_dataset'].",
+                errors,
+            )
+            passing_gate.write_text(json.dumps(passing_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
             calibration_link = artifact_dir / "review_calibration_link.json"
             calibration_link.symlink_to(calibration)
             self.assert_validation_error(

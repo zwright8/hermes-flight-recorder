@@ -6341,6 +6341,69 @@ def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, sour
     )
 
 
+_MODEL_GRADER_GATE_KEYS = {
+    "schema_version",
+    "created_at",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "admission",
+    "metrics",
+    "execution_boundary",
+    "notes",
+}
+_MODEL_GRADER_GATE_SOURCE_KEYS = {
+    "dry_run_receipt",
+    "rubric_spec",
+    "review_calibration",
+    "model_grader_override_receipt",
+}
+_MODEL_GRADER_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_MODEL_GRADER_FILE_REF_KEYS = {
+    "role",
+    "path",
+    "exists",
+    "sha256",
+    "size_bytes",
+    "schema_name",
+    "schema_passed",
+    "schema_error_count",
+    "schema_errors",
+    "source_passed",
+    "source_recommendation",
+}
+_MODEL_GRADER_GATE_ADMISSION_KEYS = {
+    "labels_allowed_for_training",
+    "labels_admitted_count",
+    "uncalibrated_labels_admitted",
+    "human_override_required_for_disagreements",
+}
+_MODEL_GRADER_GATE_METRICS_KEYS = {
+    "graded_item_count",
+    "agreement_rate",
+    "calibration_disagreement_count",
+    "dry_run_disagreement_queue_count",
+    "dry_run_labels_requiring_human_review_count",
+    "human_override_receipt_present",
+    "human_override_resolved_count",
+    "human_override_unresolved_count",
+}
+_MODEL_GRADER_BOUNDARY_KEYS = {
+    "dry_run_only",
+    "provider_api_called",
+    "paid_model_grader_calls_started",
+    "cloud_cost_incurred_usd",
+    "credential_values_recorded",
+    "labels_admitted_to_training",
+    "weights_updated_by_flight_recorder",
+}
+
+
 def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(receipt, "schema_version", MODEL_GRADER_DRY_RUN_SCHEMA_VERSION, target, prefix="model_grader_dry_run.")
     _validate_model_grader_checked_artifact(receipt, target, "model_grader_dry_run")
@@ -6536,13 +6599,17 @@ def _validate_model_grader_override_receipt(receipt: dict[str, Any], target: Val
     )
 
 def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(gate, _MODEL_GRADER_GATE_KEYS, target, "model_grader_gate")
     _require_equal(gate, "schema_version", MODEL_GRADER_GATE_SCHEMA_VERSION, target, prefix="model_grader_gate.")
     failed_checks = _validate_model_grader_checked_artifact(gate, target, "model_grader_gate")
+    _validate_model_grader_check_keys(gate.get("checks"), target, "model_grader_gate.checks")
     _validate_model_grader_gate_sources(gate.get("source_artifacts"), target, source_path)
     expected_readiness = "labels_calibrated_for_curated_handoff" if failed_checks == 0 else "blocked"
     if gate.get("readiness") != expected_readiness:
         target.errors.append(f"model_grader_gate.readiness expected {expected_readiness!r}, got {gate.get('readiness')!r}.")
     admission = gate.get("admission") if isinstance(gate.get("admission"), dict) else {}
+    if isinstance(gate.get("admission"), dict):
+        _validate_allowed_keys(admission, _MODEL_GRADER_GATE_ADMISSION_KEYS, target, "model_grader_gate.admission")
     labels_allowed = admission.get("labels_allowed_for_training")
     if labels_allowed != (failed_checks == 0):
         target.errors.append("model_grader_gate.admission.labels_allowed_for_training must match gate pass/fail.")
@@ -6580,6 +6647,8 @@ def _validate_model_grader_gate(gate: dict[str, Any], target: ValidationTarget, 
                 target.errors.append("model_grader_gate.metrics.human_override_unresolved_count must be 0 when passed.")
             if metrics.get("human_override_resolved_count", 0) < unresolved_source_count:
                 target.errors.append("model_grader_gate.metrics.human_override_resolved_count must cover queued labels when passed.")
+    if isinstance(gate.get("metrics"), dict):
+        _validate_allowed_keys(metrics, _MODEL_GRADER_GATE_METRICS_KEYS, target, "model_grader_gate.metrics")
     _validate_model_grader_boundary(gate.get("execution_boundary"), target, "model_grader_gate")
     target.details.update(
         {
@@ -6605,6 +6674,14 @@ def _validate_model_grader_checked_artifact(payload: dict[str, Any], target: Val
     if not isinstance(payload.get("blocked_reasons"), list) or not all(isinstance(item, str) for item in payload.get("blocked_reasons", [])):
         target.errors.append(f"{label}.blocked_reasons must be a list of strings.")
     return failed_checks
+
+
+def _validate_model_grader_check_keys(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, list):
+        return
+    for index, check in enumerate(value):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _MODEL_GRADER_CHECK_KEYS, target, f"{label}[{index}]")
 
 
 def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget, source_path: Path) -> dict[str, Path]:
@@ -6798,6 +6875,7 @@ def _validate_model_grader_gate_sources(value: Any, target: ValidationTarget, so
     if not isinstance(value, dict):
         target.errors.append("model_grader_gate.source_artifacts must be an object.")
         return
+    _validate_allowed_keys(value, _MODEL_GRADER_GATE_SOURCE_KEYS, target, "model_grader_gate.source_artifacts")
     _validate_model_grader_referenced_artifact(
         value.get("dry_run_receipt"),
         target,
@@ -6917,6 +6995,7 @@ def _validate_model_grader_source_file_ref(
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return None
+    _validate_allowed_keys(record, _MODEL_GRADER_FILE_REF_KEYS, target, label)
     path_value = record.get("path")
     artifact_path: Path | None = None
     if isinstance(path_value, str) and path_value:
@@ -6976,6 +7055,7 @@ def _validate_model_grader_boundary(value: Any, target: ValidationTarget, label:
     if not isinstance(value, dict):
         target.errors.append(f"{label}.execution_boundary must be an object.")
         return
+    _validate_allowed_keys(value, _MODEL_GRADER_BOUNDARY_KEYS, target, f"{label}.execution_boundary")
     true_fields = ("dry_run_only",)
     false_fields = (
         "provider_api_called",
