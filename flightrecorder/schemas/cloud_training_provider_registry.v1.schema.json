@@ -199,9 +199,19 @@
         },
         "receipt_types": {
           "items": {
+            "enum": [
+              "hfr.cloud_training_artifact_manifest.v1",
+              "hfr.cloud_training_launch_plan.v1",
+              "hfr.cloud_training_launch_receipt.v1",
+              "hfr.cloud_training_preflight.v1",
+              "hfr.cloud_training_provider_registry.v1",
+              "hfr.cloud_training_status_receipt.v1"
+            ],
             "type": "string"
           },
           "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
           "type": "array"
         },
         "requires_cost_limit": {

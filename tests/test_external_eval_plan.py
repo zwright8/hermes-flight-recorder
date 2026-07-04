@@ -46,7 +46,7 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertEqual(contract["dry_run_transport"], "plan_and_receipt_only")
             self.assertFalse(contract["live_benchmark_supported"])
             self.assertFalse(contract["provider_api_called_by_flight_recorder"])
-            self.assertTrue(set(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES).issubset(set(contract["receipt_types"])))
+            self.assertEqual(sorted(contract["receipt_types"]), sorted(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES))
 
     def test_external_eval_plan_ready_path_with_mocked_dependency(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -383,14 +383,18 @@ class ExternalEvalPlanTests(unittest.TestCase):
             out = root / "external_eval_plan.json"
             validation = root / "validation.json"
             plan = build_external_eval_plan(adapters=["bfcl"], scenario_manifest=manifest)
+            plan["adapters"][0]["adapter_contract"]["receipt_types"].append("hfr.external_eval_live_provider_receipt.v1")
             plan["adapters"][0]["adapter_contract"]["live_benchmark_supported"] = True
             plan["adapters"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"] = True
             write_external_eval_plan(plan, out)
 
+            schema_result = check_schema_file(out)
             code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
 
+            self.assertFalse(schema_result["passed"], schema_result)
             self.assertEqual(code, 1)
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("adapter_contract.receipt_types contains unsupported receipt types", errors)
             self.assertIn("adapter_contract.live_benchmark_supported must be false", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 

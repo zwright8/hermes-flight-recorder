@@ -105,8 +105,13 @@
         "model_downloads_started_by_flight_recorder": { "const": false },
         "provider_api_called_by_flight_recorder": { "const": false },
         "receipt_types": {
-          "items": { "type": "string" },
+          "items": {
+            "enum": ["hfr.external_eval_adapters.v1", "hfr.external_eval_receipt.v1"],
+            "type": "string"
+          },
           "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
           "type": "array"
         },
         "requires_dependency_probe_before_live": { "const": true },

@@ -7445,6 +7445,9 @@ def _validate_cloud_training_adapter_contract(contract: Any, target: ValidationT
     missing_receipts = sorted(set(PROVIDER_ADAPTER_RECEIPT_TYPES) - set(receipt_types))
     if missing_receipts:
         target.errors.append(f"{label}.receipt_types missing required receipt types: {', '.join(missing_receipts)}.")
+    unsupported_receipts = sorted(set(receipt_types) - set(PROVIDER_ADAPTER_RECEIPT_TYPES))
+    if unsupported_receipts:
+        target.errors.append(f"{label}.receipt_types contains unsupported receipt types: {', '.join(unsupported_receipts)}.")
     if len(set(receipt_types)) != len(receipt_types):
         target.errors.append(f"{label}.receipt_types must not contain duplicates.")
     if contract.get("dry_run_transport") != "mock_receipts":
@@ -17112,6 +17115,9 @@ def _validate_external_eval_adapter_contract(contract: Any, target: ValidationTa
     missing_receipts = sorted(set(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES) - set(receipt_types))
     if missing_receipts:
         target.errors.append(f"{label}.receipt_types missing required receipt types: {', '.join(missing_receipts)}.")
+    unsupported_receipts = sorted(set(receipt_types) - set(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES))
+    if unsupported_receipts:
+        target.errors.append(f"{label}.receipt_types contains unsupported receipt types: {', '.join(unsupported_receipts)}.")
     if len(set(receipt_types)) != len(receipt_types):
         target.errors.append(f"{label}.receipt_types must not contain duplicates.")
     if contract.get("dry_run_transport") != "plan_and_receipt_only":

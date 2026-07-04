@@ -268,14 +268,18 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
             run_cli(["external-eval-receipt", "--plan", str(plan_path), "--out", str(receipt_path)])
             receipt = _read_json(receipt_path)
+            receipt["adapter_receipts"][0]["adapter_contract"]["receipt_types"].append("hfr.external_eval_provider_receipt.v1")
             receipt["adapter_receipts"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"] = True
             receipt["adapter_receipts"][0]["model_downloads_started"] = True
             receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+            schema_result = check_schema_file(receipt_path)
             code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--out", str(validation), "--strict"])
 
+            self.assertFalse(schema_result["passed"], schema_result)
             self.assertEqual(code, 1)
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("adapter_contract.receipt_types contains unsupported receipt types", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
             self.assertIn("model_downloads_started must be false", errors)
 

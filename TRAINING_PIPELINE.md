@@ -845,6 +845,8 @@ job was started by Flight Recorder:
 External eval plan and receipt adapter rows include an `adapter_contract` that
 keeps live benchmark support disabled and records zero provider API calls, model
 downloads, credential values, cloud spend, or weight updates.
+Their receipt type lists are exact allowlists for the plan and receipt schemas;
+unsupported live/provider receipt names fail schema and strict validation.
 Strict receipt validation replays the current source plan, selected adapters,
 and dry-run/live mode so stale or forged benchmark receipts cannot promote
 external-eval claims. Receipt source-plan refs that cannot be replayed from the
@@ -993,6 +995,8 @@ transport, disabled live launch support, and zero provider API calls.
 Each provider record is also schema- and validator-pinned to
 `live_status: preflight_only`, so adding live launch support requires an
 intentional contract migration rather than a data-only registry edit.
+Adapter `receipt_types` are exact schema and validator allowlists, which blocks
+forged provider/live receipt names from becoming accepted handoff metadata.
 Artifact manifests also carry a derived `transfer_plan` that must match the
 upload/download rows and provider protocols while proving Flight Recorder did
 not upload artifacts, download outputs, record credentials, or call provider

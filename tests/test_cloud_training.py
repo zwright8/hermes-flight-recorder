@@ -73,6 +73,7 @@ class CloudTrainingTests(unittest.TestCase):
             registry_path = root / "providers.json"
             registry = build_cloud_training_provider_registry(["modal"], created_at="2026-07-03T00:00:00+00:00")
             registry["providers"][0]["live_status"] = "launch_enabled"
+            registry["providers"][0]["adapter_contract"]["receipt_types"].append("hfr.cloud_training_live_provider_receipt.v1")
             registry["providers"][0]["adapter_contract"]["live_launch_supported"] = True
             registry["providers"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"] = True
             registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -85,6 +86,7 @@ class CloudTrainingTests(unittest.TestCase):
             errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
             self.assertIn("live_status", "\n".join(schema["errors"]))
             self.assertIn("cloud_training_provider_registry.providers[0].live_status must be preflight_only.", errors)
+            self.assertIn("adapter_contract.receipt_types contains unsupported receipt types", errors)
             self.assertIn("adapter_contract.live_launch_supported must be false", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 
@@ -1273,6 +1275,7 @@ class CloudTrainingTests(unittest.TestCase):
             manifest["provider_console_url"] = "redacted-provider-console"
             manifest["checks"][0]["provider_call"] = "forged"
             manifest["provider"]["provider_signed_url"] = "redacted-provider-url"
+            manifest["provider"]["adapter_contract"]["receipt_types"].append("hfr.cloud_training_upload_provider_receipt.v1")
             manifest["provider"]["adapter_contract"]["provider_invoice_id"] = "redacted-invoice"
             manifest["upload_artifacts"][0]["upload_receipt_url"] = "redacted-upload-receipt"
             manifest["expected_download_artifacts"][0]["downloaded_to"] = "redacted-download-path"
@@ -1299,6 +1302,10 @@ class CloudTrainingTests(unittest.TestCase):
             )
             self.assertIn(
                 "cloud_training_artifact_manifest.provider.adapter_contract contains unknown field(s): ['provider_invoice_id'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_artifact_manifest.provider.adapter_contract.receipt_types contains unsupported receipt types",
                 errors,
             )
             self.assertIn(
