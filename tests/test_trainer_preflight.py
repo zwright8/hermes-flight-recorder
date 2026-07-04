@@ -5,7 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -346,6 +346,36 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertFalse(Path(plan["execution"]["archive_root"]).is_absolute())
             self.assertFalse(Path(plan["execution"]["external_code_root"]).is_absolute())
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan)]), 0)
+
+    def test_trainer_consumer_plan_rejects_symlinked_archive_check_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            archive_check = linked_target / "trainer_archive_check.json"
+            archive_check.write_text("{}\n", encoding="utf-8")
+            linked_parent = root / "linked_archive_checks"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            consumer_plan = root / "trainer_consumer_plan.json"
+            stderr = StringIO()
+            with self.assertRaises(SystemExit) as raised, redirect_stderr(stderr):
+                run_cli(
+                    [
+                        "trainer-consumer-plan",
+                        "--archive-check",
+                        str(linked_parent / archive_check.name),
+                        "--out",
+                        str(consumer_plan),
+                    ]
+                )
+
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("trainer_consumer_plan.archive_check_path must not traverse symlinked components", stderr.getvalue())
+            self.assertFalse(consumer_plan.exists())
 
     def test_trainer_archive_validation_rejects_symlinked_artifact_parent(self):
         with tempfile.TemporaryDirectory() as tmp:

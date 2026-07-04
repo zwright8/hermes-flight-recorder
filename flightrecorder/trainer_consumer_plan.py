@@ -7,6 +7,7 @@ import shlex
 from pathlib import Path
 from typing import Any
 
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .trainer_archive_check import TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION
 
 TRAINER_CONSUMER_PLAN_SCHEMA_VERSION = "hfr.trainer_consumer_plan.v1"
@@ -25,6 +26,7 @@ def build_trainer_consumer_plan(
     preserve_paths: bool = False,
 ) -> dict[str, Any]:
     """Build a deterministic trainer handoff plan without executing training."""
+    reject_symlinked_archive_check_input(Path(archive_check_path))
     if not isinstance(archive_check, dict):
         raise TrainerConsumerPlanError(f"trainer archive check must contain a JSON object: {archive_check_path}")
     if archive_check.get("schema_version") != TRAINER_ARCHIVE_CHECK_SCHEMA_VERSION:
@@ -143,10 +145,20 @@ def _source_record(path: Path, archive_check: dict[str, Any], preserve_paths: bo
         "readiness": str(archive_check.get("readiness") or ""),
         "recommendation": str(archive_check.get("recommendation") or ""),
     }
-    if path.exists() and path.is_file() and not path.is_symlink():
+    if (
+        path.exists()
+        and path.is_file()
+        and not path.is_symlink()
+        and not _path_has_symlink_component(path, include_leaf=False)
+    ):
         record["size_bytes"] = path.stat().st_size
         record["sha256"] = _sha256(path)
     return record
+
+
+def reject_symlinked_archive_check_input(path: Path) -> None:
+    if path.is_symlink() or _path_has_symlink_component(path, include_leaf=False):
+        raise TrainerConsumerPlanError(f"trainer_consumer_plan.archive_check_path must not traverse symlinked components: {path}")
 
 
 def _external_code_files(value: Any) -> list[dict[str, Any]]:

@@ -592,9 +592,11 @@ can reject forged redacted receipts without needing the original producer's
 local paths.
 `trainer-consumer-plan` then records the exact approved command argv, archive
 root, external code file hashes, trainer input hashes, and launcher invariants
-that the external wrapper should require. It preserves the expected trainer
-input hash and size payloads through the wrapper dry run. It is still a plan,
-not a runner.
+that the external wrapper should require. It rejects archive-check source
+inputs that are symlinks or traverse symlinked parent directories before
+reading them or emitting source-archive-check fingerprints. It preserves the
+expected trainer input hash and size payloads through the wrapper dry run. It
+is still a plan, not a runner.
 Validation summaries embedded in the archive check, consumer plan, and wrapper
 dry-run receipts must include targets and internally consistent pass/error/
 warning counts, so a ready handoff cannot hide failed validation behind a

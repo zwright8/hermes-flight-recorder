@@ -188,7 +188,11 @@ from .suite_gate import SUITE_GATE_POLICY_SCHEMA_VERSION, SuiteGatePolicyError, 
 from .trace_observability import TraceObservabilityError, build_trace_observability
 from .trainer_archive import TrainerArchiveError, build_trainer_archive
 from .trainer_archive_check import TrainerArchiveCheckError, build_trainer_archive_check
-from .trainer_consumer_plan import TrainerConsumerPlanError, build_trainer_consumer_plan
+from .trainer_consumer_plan import (
+    TrainerConsumerPlanError,
+    build_trainer_consumer_plan,
+    reject_symlinked_archive_check_input,
+)
 from .training import TrainingExportError, export_compare_rl_dataset, export_rl_dataset
 from .training_gate import (
     TRAINING_GATE_POLICY_SCHEMA_VERSION,
@@ -2246,6 +2250,7 @@ def cmd_trainer_archive_check(args: argparse.Namespace) -> int:
 
 def cmd_trainer_consumer_plan(args: argparse.Namespace) -> int:
     archive_check_path = Path(args.archive_check)
+    reject_symlinked_archive_check_input(archive_check_path)
     archive_check = _read_json(archive_check_path)
     validation_summary = validate_artifacts(trainer_archive_check_paths=[archive_check_path], strict=args.strict)
     plan = build_trainer_consumer_plan(

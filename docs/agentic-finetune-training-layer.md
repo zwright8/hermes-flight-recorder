@@ -235,6 +235,8 @@ the portable archive and expose it as a runner input. None of these commands
 execute the trainer command. Agentic training plans bind model and dataset
 manifest refs to SHA-256 plus byte-size evidence, and runtime preflight view
 checks carry the same byte-size evidence for selected trainer views.
+`trainer-consumer-plan` rejects symlinked archive-check source inputs before it
+reads them or emits source-archive-check fingerprints.
 
 ## Verification
 

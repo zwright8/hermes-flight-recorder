@@ -713,6 +713,8 @@ card, and dataset card decisions.
   trainer views that resolve through symlinks without hashing those views.
 - Delegated-flow generation rejects symlinked plan, runtime-preflight, or
   trainer-consumer-plan source inputs before emitting source-artifact hashes.
+- Trainer-consumer-plan generation rejects symlinked archive-check source
+  inputs before reading them or emitting source-archive-check hashes.
 - Trainer archive checks reject passed external-code file checks that omit
   SHA-256 or byte-size evidence while preserving missing-code diagnostics.
 - Trainer archive checks reject passed trainer-input checks that omit SHA-256,
