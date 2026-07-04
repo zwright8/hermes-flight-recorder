@@ -25296,6 +25296,9 @@ def _validate_preflight_file_hash(
     if file_path.is_symlink():
         target.errors.append(f"{label}.path must not resolve to a symlink.")
         return
+    if _path_has_symlink_component(file_path, include_leaf=False):
+        target.errors.append(f"{label}.path must not resolve through a symlink.")
+        return
     if not file_path.exists() or not file_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an existing file.")
         return
@@ -25330,6 +25333,9 @@ def _validate_preflight_directory_hash(
         return
     if directory_path.is_symlink():
         target.errors.append(f"{label}.path must not resolve to a symlink.")
+        return
+    if _path_has_symlink_component(directory_path, include_leaf=False):
+        target.errors.append(f"{label}.path must not resolve through a symlink.")
         return
     if not directory_path.exists() or not directory_path.is_dir():
         target.errors.append(f"{label}.path does not resolve to an existing directory.")
