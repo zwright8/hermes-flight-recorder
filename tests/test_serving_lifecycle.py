@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flightrecorder.cli import main as flightrecorder_main
 from flightrecorder.schema_registry import check_schema_file
+from flightrecorder.validation import validate_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,6 +122,31 @@ class ServingLifecycleTests(unittest.TestCase):
             self.assertIn("serving_lifecycle.passed", errors)
             self.assertIn("serving_lifecycle.ready", errors)
             self.assertIn("serving_lifecycle.readiness expected 'blocked'", errors)
+
+    def test_validate_lifecycle_rejects_unknown_control_plane_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lifecycle_path = root / "serving_lifecycle.json"
+            lifecycle = _blocked_lifecycle()
+            lifecycle["provider_console_url"] = "https://example.invalid/job"
+            lifecycle["readiness_probe"]["provider_call"] = {"url": "https://example.invalid/ready"}
+            lifecycle["smoke_check"]["signed_url"] = "https://example.invalid/smoke"
+            lifecycle["teardown"]["provider_call"] = {"url": "https://example.invalid/teardown"}
+            _write_json(lifecycle_path, lifecycle)
+
+            schema_result = check_schema_file(lifecycle_path)
+            self.assertFalse(schema_result["passed"], schema_result)
+            validation = validate_artifacts(serving_lifecycle_paths=[lifecycle_path], strict=True)
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("serving_lifecycle contains unknown field(s): ['provider_console_url']", errors)
+            self.assertIn(
+                "serving_lifecycle.readiness_probe contains unknown field(s): ['provider_call']",
+                errors,
+            )
+            self.assertIn("serving_lifecycle.smoke_check contains unknown field(s): ['signed_url']", errors)
+            self.assertIn("serving_lifecycle.teardown contains unknown field(s): ['provider_call']", errors)
 
     def test_lifecycle_records_blocked_when_process_exits_before_ready(self):
         manage_openai_serving = _load_script(LIFECYCLE_SCRIPT, "manage_openai_serving_failure")

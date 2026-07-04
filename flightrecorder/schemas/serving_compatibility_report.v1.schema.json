@@ -1,11 +1,27 @@
 {
   "$defs": {
     "capability_check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
+        "done_seen": {
+          "type": "boolean"
+        },
         "error": {
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "event_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "json_parse_passed": {
+          "type": "boolean"
+        },
+        "parsed": {
+          "type": [
+            "object",
             "null"
           ]
         },
@@ -17,6 +33,19 @@
             "supported",
             "not_verified"
           ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "tool_call_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_calls": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -28,10 +57,11 @@
   },
   "$id": "https://schemas.hermes-flight-recorder.dev/serving_compatibility_report.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "OpenAI-compatible serving capability report for streaming, tool-call, and structured-output smoke checks.",
   "properties": {
     "checks": {
+      "additionalProperties": false,
       "properties": {
         "openai_core": {
           "additionalProperties": {

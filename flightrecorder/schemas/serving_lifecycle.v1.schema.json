@@ -1,21 +1,65 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/serving_lifecycle.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Managed OpenAI-compatible serving process lifecycle check.",
   "properties": {
-    "artifacts": {
-      "type": "object"
+    "adapter": {
+      "type": "string"
     },
     "adapter_strategy": {
       "type": "object"
     },
+    "arm": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "object"
+    },
+    "artifacts_root": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "duration_ms": {
+      "minimum": 0,
+      "type": "integer"
+    },
     "endpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "host": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "port": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
       "type": "object"
     },
     "engine": {
       "minLength": 1,
       "type": "string"
+    },
+    "environment": {
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "python_version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
     },
     "errors": {
       "items": {
@@ -34,6 +78,18 @@
     "launch": {
       "type": "object"
     },
+    "logs": {
+      "additionalProperties": false,
+      "properties": {
+        "stderr_tail": {
+          "type": "string"
+        },
+        "stdout_tail": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "model": {
       "minLength": 1,
       "type": "string"
@@ -44,6 +100,14 @@
     "process": {
       "type": "object"
     },
+    "profile": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "provider": {
+      "minLength": 1,
+      "type": "string"
+    },
     "readiness": {
       "enum": [
         "ready",
@@ -51,6 +115,7 @@
       ]
     },
     "readiness_probe": {
+      "additionalProperties": false,
       "properties": {
         "attempts": {
           "items": {
@@ -58,10 +123,21 @@
           },
           "type": "array"
         },
+        "exit_code": {
+          "type": "integer"
+        },
         "ready": {
           "type": "boolean"
         },
         "summary": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "timeout_s": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "url": {
           "minLength": 1,
           "type": "string"
         }
@@ -79,18 +155,76 @@
     "schema_version": {
       "const": "hfr.serving_lifecycle.v1"
     },
+    "served_model_name": {
+      "minLength": 1,
+      "type": "string"
+    },
     "smoke_check": {
+      "additionalProperties": false,
+      "properties": {
+        "artifacts": {
+          "type": "object"
+        },
+        "attempted": {
+          "type": "boolean"
+        },
+        "failed_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "readiness": {
+          "enum": [
+            "ready",
+            "blocked"
+          ]
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "teardown": {
+      "additionalProperties": false,
       "properties": {
+        "already_exited": {
+          "type": "boolean"
+        },
         "attempted": {
           "type": "boolean"
         },
         "clean": {
           "type": "boolean"
         },
+        "exit_code_after_teardown": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "exit_code_before_teardown": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "killed": {
+          "type": "boolean"
+        },
         "running_after_teardown": {
+          "type": "boolean"
+        },
+        "started_at": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "terminated": {
           "type": "boolean"
         }
       },
@@ -106,12 +240,19 @@
     "schema_version",
     "generated_at",
     "finished_at",
+    "duration_ms",
     "profile",
     "engine",
+    "arm",
+    "provider",
     "model",
+    "served_model_name",
+    "adapter",
     "endpoint",
     "launch",
     "process",
+    "environment",
+    "artifacts_root",
     "readiness_probe",
     "smoke_check",
     "teardown",
@@ -119,7 +260,8 @@
     "readiness",
     "passed",
     "artifacts",
-    "errors"
+    "errors",
+    "logs"
   ],
   "title": "Hermes Flight Recorder Serving Lifecycle",
   "type": "object"

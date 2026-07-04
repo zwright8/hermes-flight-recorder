@@ -13193,7 +13193,138 @@ def _resolve_suite_summary_ref_path(value: Any, source_path: Path | None) -> Pat
     return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
 
 
+_SERVING_PROFILE_KEYS = {
+    "schema_version",
+    "generated_at",
+    "profile_id",
+    "arm",
+    "provider",
+    "engine",
+    "endpoint",
+    "model_identity",
+    "capabilities",
+    "artifacts",
+    "eval_preflight",
+    "environment",
+    "adapter_strategy",
+}
+_SERVING_PROFILE_ENDPOINT_KEYS = {"base_url", "models_url", "chat_completions_url"}
+_SERVING_PROFILE_IDENTITY_KEYS = {
+    "requested_model",
+    "served_model_id",
+    "observed_model_ids",
+    "metadata_model",
+    "chat_response_model",
+    "adapter",
+    "adapter_strategy",
+}
+_SERVING_PROFILE_CAPABILITY_KEYS = {
+    "health",
+    "models",
+    "model_metadata",
+    "chat_completions",
+    "streaming",
+    "tool_calls",
+    "structured_outputs",
+}
+_SERVING_READINESS_KEYS = {"ready", "readiness", "failed_checks"}
+_SERVING_COMPATIBILITY_REPORT_KEYS = {
+    "schema_version",
+    "generated_at",
+    "profile_id",
+    "model",
+    "served_model_id",
+    "engine",
+    "checks",
+}
+_SERVING_COMPATIBILITY_CHECKS_KEYS = {"openai_core", "streaming", "tool_calls", "structured_outputs"}
+_SERVING_CAPABILITY_CHECK_KEYS = {
+    "status",
+    "response_ok",
+    "error",
+    "event_count",
+    "done_seen",
+    "text",
+    "tool_call_count",
+    "tool_calls",
+    "json_parse_passed",
+    "parsed",
+}
+_SERVING_ENDPOINT_CHECK_KEYS = {
+    "schema_version",
+    "generated_at",
+    "passed",
+    "readiness",
+    "profile_id",
+    "arm",
+    "model",
+    "served_model_id",
+    "base_url",
+    "checks",
+    "failed_checks",
+    "artifacts",
+    "adapter_strategy",
+}
+_SERVING_ENDPOINT_CHECK_ROW_KEYS = {"id", "passed", "details"}
+_SERVING_LIFECYCLE_KEYS = {
+    "schema_version",
+    "generated_at",
+    "finished_at",
+    "duration_ms",
+    "profile",
+    "engine",
+    "arm",
+    "provider",
+    "model",
+    "served_model_name",
+    "adapter",
+    "adapter_strategy",
+    "endpoint",
+    "launch",
+    "process",
+    "environment",
+    "artifacts_root",
+    "readiness_probe",
+    "smoke_check",
+    "teardown",
+    "ready",
+    "readiness",
+    "passed",
+    "artifacts",
+    "errors",
+    "logs",
+}
+_SERVING_LIFECYCLE_ENDPOINT_KEYS = {"base_url", "host", "port"}
+_SERVING_LIFECYCLE_ENVIRONMENT_KEYS = {"python_version", "platform"}
+_SERVING_LIFECYCLE_LOG_KEYS = {"stdout_tail", "stderr_tail"}
+_SERVING_LIFECYCLE_READINESS_PROBE_KEYS = {"ready", "summary", "attempts", "url", "exit_code", "timeout_s"}
+_SERVING_LIFECYCLE_SMOKE_CHECK_KEYS = {"attempted", "passed", "summary", "readiness", "failed_checks", "artifacts"}
+_SERVING_LIFECYCLE_TEARDOWN_KEYS = {
+    "attempted",
+    "started_at",
+    "already_exited",
+    "exit_code_before_teardown",
+    "exit_code_after_teardown",
+    "terminated",
+    "killed",
+    "clean",
+    "running_after_teardown",
+}
+_SERVING_DEMO_RUN_KEYS = {
+    "schema_version",
+    "generated_at",
+    "candidate_arm",
+    "same_scenario_ids",
+    "scenario_sets",
+    "arms",
+    "claims",
+    "comparisons",
+    "scenarios",
+}
+
+
 def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(profile, _SERVING_PROFILE_KEYS, target, "serving_profile")
     _require_equal(profile, "schema_version", SERVING_PROFILE_SCHEMA_VERSION, target, prefix="serving_profile.")
     for field_name in ("generated_at", "profile_id", "arm"):
         if not isinstance(profile.get(field_name), str) or not profile.get(field_name):
@@ -13202,6 +13333,8 @@ def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget)
     endpoint = profile.get("endpoint") if isinstance(profile.get("endpoint"), dict) else {}
     if not endpoint:
         target.errors.append("serving_profile.endpoint must be an object.")
+    if endpoint:
+        _validate_allowed_keys(endpoint, _SERVING_PROFILE_ENDPOINT_KEYS, target, "serving_profile.endpoint")
     for field_name in ("base_url", "models_url", "chat_completions_url"):
         if field_name in endpoint and (not isinstance(endpoint.get(field_name), str) or not endpoint.get(field_name)):
             target.errors.append(f"serving_profile.endpoint.{field_name} must be a non-empty string when present.")
@@ -13209,6 +13342,8 @@ def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget)
     identity = profile.get("model_identity") if isinstance(profile.get("model_identity"), dict) else {}
     if not identity:
         target.errors.append("serving_profile.model_identity must be an object.")
+    if identity:
+        _validate_allowed_keys(identity, _SERVING_PROFILE_IDENTITY_KEYS, target, "serving_profile.model_identity")
     for field_name in ("requested_model", "served_model_id"):
         if field_name in identity and (not isinstance(identity.get(field_name), str) or not identity.get(field_name)):
             target.errors.append(f"serving_profile.model_identity.{field_name} must be a non-empty string when present.")
@@ -13219,6 +13354,8 @@ def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget)
     capabilities = profile.get("capabilities") if isinstance(profile.get("capabilities"), dict) else {}
     if not capabilities:
         target.errors.append("serving_profile.capabilities must be an object.")
+    if capabilities:
+        _validate_allowed_keys(capabilities, _SERVING_PROFILE_CAPABILITY_KEYS, target, "serving_profile.capabilities")
     for field_name in ("health", "models", "model_metadata", "chat_completions"):
         if field_name in capabilities and not isinstance(capabilities.get(field_name), bool):
             target.errors.append(f"serving_profile.capabilities.{field_name} must be a boolean when present.")
@@ -13229,6 +13366,8 @@ def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget)
     eval_preflight = profile.get("eval_preflight") if isinstance(profile.get("eval_preflight"), dict) else {}
     if not eval_preflight:
         target.errors.append("serving_profile.eval_preflight must be an object.")
+    if eval_preflight:
+        _validate_allowed_keys(eval_preflight, _SERVING_READINESS_KEYS, target, "serving_profile.eval_preflight")
     _validate_serving_readiness(
         eval_preflight,
         target,
@@ -13250,6 +13389,12 @@ def _validate_serving_profile(profile: dict[str, Any], target: ValidationTarget)
 
 
 def _validate_serving_compatibility_report(report: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(
+        report,
+        _SERVING_COMPATIBILITY_REPORT_KEYS,
+        target,
+        "serving_compatibility_report",
+    )
     _require_equal(
         report,
         "schema_version",
@@ -13264,6 +13409,13 @@ def _validate_serving_compatibility_report(report: dict[str, Any], target: Valid
     checks = report.get("checks") if isinstance(report.get("checks"), dict) else {}
     if not checks:
         target.errors.append("serving_compatibility_report.checks must be an object.")
+    if checks:
+        _validate_allowed_keys(
+            checks,
+            _SERVING_COMPATIBILITY_CHECKS_KEYS,
+            target,
+            "serving_compatibility_report.checks",
+        )
     openai_core = checks.get("openai_core") if isinstance(checks.get("openai_core"), dict) else {}
     if not openai_core:
         target.errors.append("serving_compatibility_report.checks.openai_core must be a non-empty object.")
@@ -13292,6 +13444,7 @@ def _validate_serving_compatibility_report(report: dict[str, Any], target: Valid
 
 
 def _validate_serving_endpoint_check(check: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(check, _SERVING_ENDPOINT_CHECK_KEYS, target, "serving_endpoint_check")
     _require_equal(check, "schema_version", SERVING_ENDPOINT_CHECK_SCHEMA_VERSION, target, prefix="serving_endpoint_check.")
     for field_name in ("generated_at", "profile_id", "arm", "model", "served_model_id", "base_url"):
         if not isinstance(check.get(field_name), str) or not check.get(field_name):
@@ -13308,6 +13461,7 @@ def _validate_serving_endpoint_check(check: dict[str, Any], target: ValidationTa
         if not isinstance(item, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(item, _SERVING_ENDPOINT_CHECK_ROW_KEYS, target, label)
         check_id = item.get("id")
         if not isinstance(check_id, str) or not check_id:
             target.errors.append(f"{label}.id must be a non-empty string.")
@@ -13351,6 +13505,7 @@ def _validate_serving_endpoint_check(check: dict[str, Any], target: ValidationTa
 
 
 def _validate_serving_lifecycle(lifecycle: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(lifecycle, _SERVING_LIFECYCLE_KEYS, target, "serving_lifecycle")
     _require_equal(lifecycle, "schema_version", SERVING_LIFECYCLE_SCHEMA_VERSION, target, prefix="serving_lifecycle.")
     for field_name in ("generated_at", "finished_at", "profile", "engine", "model"):
         if not isinstance(lifecycle.get(field_name), str) or not lifecycle.get(field_name):
@@ -13361,6 +13516,20 @@ def _validate_serving_lifecycle(lifecycle: dict[str, Any], target: ValidationTar
     for field_name in ("endpoint", "launch", "process", "adapter_strategy"):
         if not isinstance(lifecycle.get(field_name), dict):
             target.errors.append(f"serving_lifecycle.{field_name} must be an object.")
+    endpoint = lifecycle.get("endpoint") if isinstance(lifecycle.get("endpoint"), dict) else {}
+    if endpoint:
+        _validate_allowed_keys(endpoint, _SERVING_LIFECYCLE_ENDPOINT_KEYS, target, "serving_lifecycle.endpoint")
+    environment = lifecycle.get("environment") if isinstance(lifecycle.get("environment"), dict) else {}
+    if environment:
+        _validate_allowed_keys(
+            environment,
+            _SERVING_LIFECYCLE_ENVIRONMENT_KEYS,
+            target,
+            "serving_lifecycle.environment",
+        )
+    logs = lifecycle.get("logs") if isinstance(lifecycle.get("logs"), dict) else {}
+    if logs:
+        _validate_allowed_keys(logs, _SERVING_LIFECYCLE_LOG_KEYS, target, "serving_lifecycle.logs")
     if not isinstance(lifecycle.get("passed"), bool):
         target.errors.append("serving_lifecycle.passed must be a boolean.")
     if not isinstance(lifecycle.get("ready"), bool):
@@ -13416,6 +13585,8 @@ def _validate_serving_lifecycle(lifecycle: dict[str, Any], target: ValidationTar
 
 def _validate_serving_lifecycle_readiness_probe(value: dict[str, Any], target: ValidationTarget) -> None:
     label = "serving_lifecycle.readiness_probe"
+    if value:
+        _validate_allowed_keys(value, _SERVING_LIFECYCLE_READINESS_PROBE_KEYS, target, label)
     if value and not isinstance(value.get("ready"), bool):
         target.errors.append(f"{label}.ready must be a boolean.")
     if value and (not isinstance(value.get("summary"), str) or not value.get("summary")):
@@ -13430,6 +13601,8 @@ def _validate_serving_lifecycle_readiness_probe(value: dict[str, Any], target: V
 
 def _validate_serving_lifecycle_smoke_check(value: dict[str, Any], target: ValidationTarget) -> None:
     label = "serving_lifecycle.smoke_check"
+    if value:
+        _validate_allowed_keys(value, _SERVING_LIFECYCLE_SMOKE_CHECK_KEYS, target, label)
     if value and not isinstance(value.get("attempted"), bool):
         target.errors.append(f"{label}.attempted must be a boolean.")
     if value and not isinstance(value.get("passed"), bool):
@@ -13445,6 +13618,8 @@ def _validate_serving_lifecycle_smoke_check(value: dict[str, Any], target: Valid
 
 def _validate_serving_lifecycle_teardown(value: dict[str, Any], target: ValidationTarget) -> None:
     label = "serving_lifecycle.teardown"
+    if value:
+        _validate_allowed_keys(value, _SERVING_LIFECYCLE_TEARDOWN_KEYS, target, label)
     for field_name in ("attempted", "clean", "running_after_teardown"):
         if value and not isinstance(value.get(field_name), bool):
             target.errors.append(f"{label}.{field_name} must be a boolean.")
@@ -13482,6 +13657,7 @@ def _resolve_serving_lifecycle_artifact_path(value: Any, source_path: Path) -> P
 
 
 def _validate_serving_demo_run(demo: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(demo, _SERVING_DEMO_RUN_KEYS, target, "serving_demo_run")
     _require_equal(demo, "schema_version", SERVING_DEMO_RUN_SCHEMA_VERSION, target, prefix="serving_demo_run.")
     candidate_arm = demo.get("candidate_arm")
     if not isinstance(candidate_arm, str) or not candidate_arm:
@@ -13610,6 +13786,7 @@ def _validate_serving_capability_check(value: Any, target: ValidationTarget, lab
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _SERVING_CAPABILITY_CHECK_KEYS, target, label)
     if value.get("status") not in SERVING_CAPABILITY_STATUSES:
         target.errors.append(f"{label}.status must be supported or not_verified.")
     if not isinstance(value.get("response_ok"), bool):

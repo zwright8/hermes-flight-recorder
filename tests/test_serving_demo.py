@@ -90,6 +90,68 @@ class ServingDemoTests(unittest.TestCase):
                 ["serving_profile", "serving_compatibility_report", "serving_endpoint_check"],
             )
 
+    def test_validate_rejects_serving_artifacts_with_unknown_control_plane_fields(self):
+        check_openai_serving = _load_script(SERVING_SCRIPT, "check_openai_serving_unknown_fields")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with redirect_stdout(StringIO()):
+                code = check_openai_serving.main(
+                    [
+                        "--out",
+                        str(root / "serving"),
+                        "--model",
+                        "hfr-mock-model",
+                        "--arm",
+                        "flightrecorder",
+                        "--mock-response",
+                        "hfr serving smoke ok",
+                        "--require-streaming",
+                        "--require-tool-call",
+                        "--require-structured-output",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            out = root / "serving"
+
+            profile = _read_json(out / "serving_profile.json")
+            profile["provider_console_url"] = "https://example.invalid/job"
+            profile["endpoint"]["signed_url"] = "https://example.invalid/signed"
+            forged_profile = root / "forged_profile.json"
+            _write_json(forged_profile, profile)
+
+            compatibility = _read_json(out / "compatibility_report.json")
+            compatibility["checks"]["streaming"]["provider_call"] = {"url": "https://example.invalid/grader"}
+            forged_compatibility = root / "forged_compatibility.json"
+            _write_json(forged_compatibility, compatibility)
+
+            endpoint = _read_json(out / "serving_check.json")
+            endpoint["provider_endpoint"] = "https://example.invalid/endpoint"
+            endpoint["checks"][0]["provider_call"] = {"url": "https://example.invalid/check"}
+            forged_endpoint = root / "forged_endpoint.json"
+            _write_json(forged_endpoint, endpoint)
+
+            for path in (forged_profile, forged_compatibility, forged_endpoint):
+                schema_result = check_schema_file(path)
+                self.assertFalse(schema_result["passed"], schema_result)
+
+            validation = validate_artifacts(
+                serving_profile_paths=[forged_profile],
+                serving_compatibility_report_paths=[forged_compatibility],
+                serving_endpoint_check_paths=[forged_endpoint],
+                strict=True,
+            )
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("serving_profile contains unknown field(s): ['provider_console_url']", errors)
+            self.assertIn("serving_profile.endpoint contains unknown field(s): ['signed_url']", errors)
+            self.assertIn(
+                "serving_compatibility_report.checks.streaming contains unknown field(s): ['provider_call']",
+                errors,
+            )
+            self.assertIn("serving_endpoint_check contains unknown field(s): ['provider_endpoint']", errors)
+            self.assertIn("serving_endpoint_check.checks[0] contains unknown field(s): ['provider_call']", errors)
+
     def test_demo_report_links_claims_to_replay_artifacts(self):
         build_serving_demo_report = _load_script(DEMO_SCRIPT, "build_serving_demo_report")
         with tempfile.TemporaryDirectory() as tmp:
@@ -138,6 +200,41 @@ class ServingDemoTests(unittest.TestCase):
             self.assertIn("live_observer.jsonl", report)
             validation = validate_artifacts(serving_demo_run_paths=[demo_json], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_validate_rejects_demo_run_with_unknown_control_plane_fields(self):
+        build_serving_demo_report = _load_script(DEMO_SCRIPT, "build_serving_demo_report_unknown_fields")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline_eval = _write_eval_arm(root, "baseline", "hfr-base", passed=False, score=50)
+            candidate_eval = _write_eval_arm(root, "flightrecorder", "hfr-base+adapter", passed=True, score=100)
+            demo_json = root / "demo_run.json"
+            report_md = root / "DEMO_REPORT.md"
+
+            with redirect_stdout(StringIO()):
+                code = build_serving_demo_report.main(
+                    [
+                        "--arm",
+                        f"baseline={baseline_eval}",
+                        "--arm",
+                        f"flightrecorder={candidate_eval}",
+                        "--out",
+                        str(demo_json),
+                        "--report",
+                        str(report_md),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            demo = _read_json(demo_json)
+            demo["automation_thread_ref"] = "redacted-thread"
+            _write_json(demo_json, demo)
+
+            schema_result = check_schema_file(demo_json)
+            self.assertFalse(schema_result["passed"], schema_result)
+            validation = validate_artifacts(serving_demo_run_paths=[demo_json], strict=True)
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("serving_demo_run contains unknown field(s): ['automation_thread_ref']", errors)
 
     def test_validate_rejects_demo_run_with_inconsistent_arm_metrics(self):
         build_serving_demo_report = _load_script(DEMO_SCRIPT, "build_serving_demo_report_metrics_validation")
@@ -250,6 +347,10 @@ class ServingDemoTests(unittest.TestCase):
 
 def _read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, value: dict):
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _write_eval_arm(root: Path, arm: str, model: str, *, passed: bool, score: int) -> Path:

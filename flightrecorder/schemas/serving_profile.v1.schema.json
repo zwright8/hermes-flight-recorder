@@ -1,20 +1,79 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/serving_profile.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "OpenAI-compatible serving endpoint readiness profile.",
   "properties": {
     "arm": {
       "minLength": 1,
       "type": "string"
     },
-    "capabilities": {
+    "adapter_strategy": {
       "type": "object"
     },
+    "artifacts": {
+      "type": "object"
+    },
+    "capabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "chat_completions": {
+          "type": "boolean"
+        },
+        "health": {
+          "type": "boolean"
+        },
+        "model_metadata": {
+          "type": "boolean"
+        },
+        "models": {
+          "type": "boolean"
+        },
+        "streaming": {
+          "enum": [
+            "supported",
+            "not_verified"
+          ]
+        },
+        "structured_outputs": {
+          "enum": [
+            "supported",
+            "not_verified"
+          ]
+        },
+        "tool_calls": {
+          "enum": [
+            "supported",
+            "not_verified"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "engine": {
+      "minLength": 1,
+      "type": "string"
+    },
     "endpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "chat_completions_url": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "models_url": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "eval_preflight": {
+      "additionalProperties": false,
       "properties": {
         "failed_checks": {
           "items": {
@@ -43,10 +102,57 @@
       "minLength": 1,
       "type": "string"
     },
+    "environment": {
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "python_version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "model_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "type": "object"
+        },
+        "adapter_strategy": {
+          "type": "object"
+        },
+        "chat_response_model": {
+          "type": "string"
+        },
+        "metadata_model": {
+          "type": "string"
+        },
+        "observed_model_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requested_model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "served_model_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "profile_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "provider": {
       "minLength": 1,
       "type": "string"
     },

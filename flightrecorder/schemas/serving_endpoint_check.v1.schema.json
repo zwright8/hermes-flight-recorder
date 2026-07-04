@@ -1,12 +1,15 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/serving_endpoint_check.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "OpenAI-compatible serving endpoint preflight summary for automation gates.",
   "properties": {
     "arm": {
       "minLength": 1,
       "type": "string"
+    },
+    "adapter_strategy": {
+      "type": "object"
     },
     "artifacts": {
       "type": "object"
@@ -17,6 +20,7 @@
     },
     "checks": {
       "items": {
+        "additionalProperties": false,
         "properties": {
           "details": {
             "type": "object"
