@@ -4845,7 +4845,12 @@ def _agentic_training_loop_source_validation_state(
             passed = False
             continue
         ref_path = _resolve_agentic_training_loop_plan_ref_path(ref.get("path"), source_path)
-        if ref_path is None or not ref_path.exists() or not ref_path.is_file():
+        if (
+            ref_path is None
+            or not ref_path.exists()
+            or _path_has_symlink_component(ref_path, include_leaf=True)
+            or not ref_path.is_file()
+        ):
             valid = False
             passed = False
             continue
@@ -5409,7 +5414,14 @@ def _agentic_training_loop_payload_records(source_artifacts: dict[str, Any], rol
         if not isinstance(row, dict):
             continue
         path = _resolve_agentic_training_loop_plan_ref_path(row.get("path"), source_path)
-        payload = _read_json_object_silent(path) if path is not None else {}
+        if (
+            path is None
+            or not path.exists()
+            or _path_has_symlink_component(path, include_leaf=True)
+            or not path.is_file()
+        ):
+            continue
+        payload = _read_json_object_silent(path)
         if payload:
             records.append({"path": path, "payload": payload})
     return records

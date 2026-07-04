@@ -668,6 +668,41 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 errors,
             )
 
+    def test_loop_plan_source_payload_readers_skip_symlinked_parent_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-symlink-payload-reader",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            launch_receipt = artifacts["cloud_training_launch_receipt"][0]
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(launch_receipt.parent, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            plan["source_artifacts"]["cloud_training_launch_receipt"][0]["path"] = str(
+                Path("linked_artifacts") / launch_receipt.name
+            )
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.source_artifacts.cloud_training_launch_receipt[0].path must resolve to a regular non-symlink file.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.cloud_training_receipt_state.launch_receipt_count must match cloud training receipt artifacts.",
+                errors,
+            )
+
     def test_loop_plan_refs_are_relative_to_output_directory_for_validation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

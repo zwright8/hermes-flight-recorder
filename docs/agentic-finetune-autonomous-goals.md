@@ -151,6 +151,8 @@ evidence.
 - Evidence bundles and improvement plans reject existing file artifacts that
   omit SHA-256 or byte-size evidence at the schema boundary, and validation
   rejects symlinked source paths before trusting those fingerprints.
+- Agentic training loop plans skip symlinked source artifact payloads before
+  deriving receipt state, lineage, or source-validation snapshots.
 - Agentic loop ledgers reject symlinked source loop plan paths before trusting
   plan size, hash, artifact lineage, or receipt-state snapshots.
 - Improvement ledgers bind each source improvement plan to SHA-256 plus byte

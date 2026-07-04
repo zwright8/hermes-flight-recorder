@@ -914,6 +914,10 @@ ledger creation instead of producing a public artifact that cannot validate.
 Source loop plans must resolve to regular non-symlink files before ledger
 creation or validation trusts their size, hash, artifacts, lineage, or
 receipt-state snapshots.
+Loop-plan validation also ignores source artifact payloads whose path traverses
+symlinked components before deriving receipt state, lineage, or source
+validation snapshots, so a redirected source artifact cannot quietly satisfy
+downstream evidence counts.
 Validation also reopens the referenced `eval_summary`, `promotion_decision`,
 and `promotion_ledger` artifacts before trusting held-out eval or governance
 readiness, and readiness-bearing sources with public-unsafe absolute paths do
