@@ -147,11 +147,14 @@ def _compact_readiness_digest(digest: dict[str, Any]) -> dict[str, Any]:
         "ready_for_governance_review",
         "recommended_governance_action",
         "promotion_decision_present",
+        "promotion_ledger_present",
         "rollback_receipt_present",
         "side_effects_started",
         "summary",
     )
-    return {field: digest.get(field) for field in fields if field in digest}
+    compact = {field: digest.get(field) for field in fields if field in digest}
+    compact.setdefault("promotion_ledger_present", False)
+    return compact
 
 
 def _ledger_action_row(ledger_ref: dict[str, Any], action: str) -> dict[str, Any] | None:

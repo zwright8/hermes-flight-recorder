@@ -6,12 +6,13 @@
       {
         "action": "approve",
         "available": false,
-        "blocked_reason_count": 2,
+        "blocked_reason_count": 3,
         "blocked_reasons": [
           "latest_iteration_not_ready_for_governance_review",
-          "missing_promotion_decision"
+          "missing_promotion_decision",
+          "missing_promotion_ledger"
         ],
-        "summary": "Approve the iteration for promotion review when all readiness and promotion-decision receipts are present."
+        "summary": "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present."
       },
       {
         "action": "reject",
@@ -383,6 +384,7 @@
         "promotion_decision_present": false,
         "promotion_ledger_present": false,
         "roles_missing": [
+          "agentic_loop_governance_receipt",
           "promotion_decision",
           "promotion_ledger",
           "promotion_alias_apply",
@@ -449,8 +451,8 @@
         ],
         "roles_present": []
       },
-      "sha256": "ad94b01935a7e704b8115438018d996173f5d2bc7791ba22e4abb3b1874cbb3d",
-      "size_bytes": 38616,
+      "sha256": "078b3f41976313bc664dc3bb2a2a315fe3a775ba085e9f8d91dfba6c11051c61",
+      "size_bytes": 38693,
       "training_outputs": {
         "artifact_count": 3,
         "group": "training",
@@ -604,6 +606,7 @@
     "next_action_recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
     "next_action_scheduled": false,
     "promotion_decision_present": false,
+    "promotion_ledger_present": false,
     "readiness": "planned_fail_closed",
     "ready_for_governance_review": false,
     "recommendation": "collect_missing_receipts_before_live_execution",

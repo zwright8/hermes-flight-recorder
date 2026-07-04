@@ -77,6 +77,7 @@
         "latest_iteration_id": { "type": "string" },
         "latest_iteration_index": { "type": ["integer", "null"] },
         "promotion_decision_present": { "type": "boolean" },
+        "promotion_ledger_present": { "type": "boolean" },
         "readiness": { "type": "string" },
         "ready_for_governance_review": { "type": "boolean" },
         "recommendation": { "type": "string" },
@@ -85,6 +86,7 @@
         "side_effects_started": { "type": "boolean" },
         "summary": { "type": "string" }
       },
+      "required": ["promotion_ledger_present"],
       "type": "object"
     }
   },

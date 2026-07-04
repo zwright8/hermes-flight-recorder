@@ -5119,6 +5119,7 @@ _AGENTIC_LOOP_LEDGER_DIGEST_KEYS = {
     "next_action_recommendation",
     "requires_governance_decision",
     "promotion_decision_present",
+    "promotion_ledger_present",
     "rollback_receipt_present",
     "live_spend_allowed",
     "side_effects_started",
@@ -5347,6 +5348,13 @@ def _validate_agentic_loop_ledger_digest(
             target.errors.append("agentic_loop_ledger.readiness_digest.recommendation must match the latest iteration.")
         if digest.get("recommended_governance_action") != decision.get("recommended_governance_action"):
             target.errors.append("agentic_loop_ledger.readiness_digest.recommended_governance_action must match decision.")
+        latest_governance = latest.get("governance") if isinstance(latest.get("governance"), dict) else {}
+        if digest.get("promotion_decision_present") != (latest_governance.get("promotion_decision_present") is True):
+            target.errors.append("agentic_loop_ledger.readiness_digest.promotion_decision_present must match the latest iteration.")
+        if digest.get("promotion_ledger_present") != (latest_governance.get("promotion_ledger_present") is True):
+            target.errors.append("agentic_loop_ledger.readiness_digest.promotion_ledger_present must match the latest iteration.")
+        if digest.get("rollback_receipt_present") != (latest_governance.get("rollback_receipt_present") is True):
+            target.errors.append("agentic_loop_ledger.readiness_digest.rollback_receipt_present must match the latest iteration.")
         if missing_phase_inputs != latest_missing_phase_inputs:
             target.errors.append("agentic_loop_ledger.readiness_digest.missing_phase_inputs must match the latest iteration.")
         if missing_groups != latest_missing_groups:
@@ -5659,6 +5667,7 @@ def _validate_agentic_loop_governance_source_snapshots(value: dict[str, Any], ta
                 "ready_for_governance_review",
                 "recommended_governance_action",
                 "promotion_decision_present",
+                "promotion_ledger_present",
                 "rollback_receipt_present",
                 "side_effects_started",
                 "summary",

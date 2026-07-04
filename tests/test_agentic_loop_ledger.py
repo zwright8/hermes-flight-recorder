@@ -47,6 +47,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(digest["latest_iteration_id"], "loop-002")
             self.assertTrue(digest["ready_for_governance_review"])
             self.assertEqual(digest["recommended_governance_action"], "approve")
+            self.assertTrue(digest["promotion_ledger_present"])
             self.assertEqual(digest["missing_phase_input_count"], 0)
             self.assertEqual(digest["missing_artifact_group_count"], 0)
             self.assertFalse(digest["side_effects_started"])
@@ -101,12 +102,42 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertFalse(actions["approve"]["available"])
             self.assertIn("latest_iteration_not_ready_for_governance_review", actions["approve"]["blocked_reasons"])
             self.assertIn("missing_promotion_decision", actions["approve"]["blocked_reasons"])
+            self.assertIn("missing_promotion_ledger", actions["approve"]["blocked_reasons"])
             self.assertTrue(actions["reject"]["available"])
             self.assertFalse(actions["rollback"]["available"])
             self.assertTrue(actions["request_another_iteration"]["available"])
             self.assertEqual(payload["readiness_digest"]["recommended_governance_action"], "request_another_iteration")
             self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 0)
+
+    def test_approval_requires_promotion_ledger_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            ready_artifacts.pop("promotion_ledger")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            actions = {row["action"]: row for row in payload["decision"]["governance_actions"]}
+            self.assertFalse(actions["approve"]["available"])
+            self.assertIn("missing_promotion_ledger", actions["approve"]["blocked_reasons"])
+            self.assertFalse(payload["readiness_digest"]["promotion_ledger_present"])
+            self.assertTrue(payload["readiness_digest"]["promotion_decision_present"])
+            self.assertEqual(payload["decision"]["recommended_governance_action"], "request_another_iteration")
+            self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
+            self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 0)
+
+            payload["readiness_digest"]["promotion_ledger_present"] = True
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("readiness_digest.promotion_ledger_present must match the latest iteration", errors)
 
     def test_governance_actions_mark_rollback_available_when_receipt_is_present(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -485,6 +516,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertFalse(payload["requested_action"]["available"])
             self.assertIn("latest_iteration_not_ready_for_governance_review", payload["requested_action"]["blocked_reasons"])
             self.assertIn("missing_promotion_decision", payload["requested_action"]["blocked_reasons"])
+            self.assertIn("missing_promotion_ledger", payload["requested_action"]["blocked_reasons"])
             self.assertEqual(run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 0)
 
@@ -787,6 +819,26 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertIn("agentic_loop_governance_receipt.source_ledger.readiness_digest must be an object.", errors)
             self.assertIn("agentic_loop_governance_receipt.source_ledger.execution_boundary must be an object.", errors)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 1)
+
+    def test_schema_rejects_missing_governance_source_promotion_ledger_digest(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            blocked_plan = self.write_loop_plan(root / "plans" / "blocked.json", "loop-001", {})
+            ledger = root / "ledger.json"
+            receipt = root / "governance_reject.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(blocked_plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["agentic-loop", "governance", "--ledger", str(ledger), "--action", "reject", "--out", str(receipt)]), 0)
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            del payload["source_ledger"]["readiness_digest"]["promotion_ledger_present"]
+            receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt)]), 1)
+            code = run_cli(["validate", "--agentic-loop-governance-receipt", str(receipt), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn("agentic_loop_governance_receipt.source_ledger.readiness_digest must match the current source ledger.", errors)
 
     def test_governance_receipt_preserve_paths_keeps_receipt_path_valid(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:

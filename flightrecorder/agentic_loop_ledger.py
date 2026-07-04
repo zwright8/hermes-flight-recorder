@@ -245,6 +245,8 @@ def _governance_actions(latest: dict[str, Any], ready_for_review: bool) -> list[
         approve_blockers.append("latest_iteration_not_ready_for_governance_review")
     if governance.get("promotion_decision_present") is not True:
         approve_blockers.append("missing_promotion_decision")
+    if governance.get("promotion_ledger_present") is not True:
+        approve_blockers.append("missing_promotion_ledger")
     rollback_blockers = [] if governance.get("rollback_receipt_present") is True else ["missing_rollback_receipt"]
     request_summary = "Governance can request another iteration."
     if next_actions.get("scheduled") is True:
@@ -254,7 +256,7 @@ def _governance_actions(latest: dict[str, Any], ready_for_review: bool) -> list[
             "approve",
             not approve_blockers,
             approve_blockers,
-            "Approve the iteration for promotion review when all readiness and promotion-decision receipts are present.",
+            "Approve the iteration for promotion review when readiness, promotion-decision, and promotion-ledger receipts are present.",
         ),
         _governance_action(
             "reject",
@@ -354,6 +356,7 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         "next_action_recommendation": str(next_actions.get("recommendation") or ""),
         "requires_governance_decision": next_actions.get("requires_governance_decision") is not False,
         "promotion_decision_present": governance.get("promotion_decision_present") is True,
+        "promotion_ledger_present": governance.get("promotion_ledger_present") is True,
         "rollback_receipt_present": governance.get("rollback_receipt_present") is True,
         "live_spend_allowed": cost_estimate.get("live_spend_allowed") is True,
         "side_effects_started": side_effects_started,
