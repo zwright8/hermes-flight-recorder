@@ -328,7 +328,7 @@ class TrainerPreflightTests(unittest.TestCase):
             plan = json.loads(consumer_plan.read_text(encoding="utf-8"))
             self.assertTrue(plan["passed"])
             self.assertIn("agentic_training_plan", {item["artifact_name"] for item in plan["execution"]["trainer_inputs"]})
-            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan)]), 0)
 
     def test_trainer_preflight_writes_output_relative_source_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1253,6 +1253,48 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["schemas", "--check", str(consumer_plan)]), 0)
             schema = check_schema_contract(plan, name_or_id="trainer_consumer_plan")
             self.assertTrue(schema["passed"], schema["errors"])
+
+            absolute_command_plan = Path(tmp) / "trainer_consumer_plan_absolute_command.json"
+            absolute_command_summary = Path(tmp) / "trainer_consumer_plan_absolute_command_summary.json"
+            forged = json.loads(json.dumps(plan))
+            execution = forged["execution"]
+            execution["archive_root"] = "/opt/hermes/archive"
+            execution["external_code_root"] = "/opt/hermes/trainer-code"
+            execution["command_argv"] = [
+                "python",
+                "/opt/hermes/trainer-code/train.py",
+                "--plan=/opt/hermes/archive/agentic_training_plan.json",
+                "--dry-run",
+            ]
+            execution["command_shell"] = shlex.join(execution["command_argv"])
+            absolute_command_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(absolute_command_plan)]), 0)
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-consumer-plan",
+                    str(absolute_command_plan),
+                    "--strict",
+                    "--out",
+                    str(absolute_command_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(absolute_command_summary.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("trainer_consumer_plan.execution.archive_root is absolute", warnings)
+            self.assertIn("trainer_consumer_plan.execution.external_code_root is absolute", warnings)
+            self.assertIn("trainer_consumer_plan.execution.command_argv[1] is absolute", warnings)
+            self.assertIn("trainer_consumer_plan.execution.command_argv[2] contains absolute path", warnings)
+            self.assertIn("trainer_consumer_plan.execution.command_shell[1] is absolute", warnings)
+            self.assertIn("trainer_consumer_plan.execution.command_shell[2] contains absolute path", warnings)
+
+            plan["execution"]["archive_root"] = "trainer_archive"
+            plan["execution"]["external_code_root"] = "trainer-code"
+            plan["execution"]["command_argv"] = ["python", "train.py", "--dataset", "artifacts/training_export"]
+            plan["execution"]["command_shell"] = shlex.join(plan["execution"]["command_argv"])
+            consumer_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
             forged = json.loads(json.dumps(plan))
             forged["provider_console_url"] = "redacted-provider-console"
             forged["checks"][0]["provider_call"] = "forged"
@@ -1898,7 +1940,7 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertFalse(blocked["passed"])
             self.assertEqual(blocked["recommendation"], "block_external_trainer")
             self.assertIn("archive_check_passed: passed=False", blocked["blocked_reasons"])
-            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(blocked_plan), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(blocked_plan)]), 0)
 
             result["portable_command"]["argv"][-1] = "stale/training_export"
             result["portable_command"]["shell"] = "python train.py --dataset stale/training_export"

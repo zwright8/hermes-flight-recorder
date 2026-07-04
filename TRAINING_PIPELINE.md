@@ -544,8 +544,11 @@ trainer. They do not execute the command or update weights. `trainer-preflight`
 creates the signed-off evidence contract; `trainer-launch-check` is the
 consumer-side check an external training launcher can call immediately before it
 runs. It re-validates the preflight hashes and prints the approved command only
-when the launch contract still passes. Trainer-facing export files must be
-regular files at preflight time; symlinked JSONL, JSON, Markdown artifacts, or
+when the launch contract still passes. Before public handoff, strict trainer
+consumer-plan validation warns if the archived command still carries absolute
+archive roots, external code roots, argv paths, or shell tokens.
+Trainer-facing export files must be regular files at preflight time; symlinked
+JSONL, JSON, Markdown artifacts, or
 split artifacts block launch even if their targets contain matching bytes.
 `trainer-archive` is the portable handoff after those checks pass: it copies
 the preflight, launch check, gates, validation summaries, trainer-facing

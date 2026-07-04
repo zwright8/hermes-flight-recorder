@@ -22938,31 +22938,39 @@ def _validate_trainer_consumer_plan_execution(value: Any, target: ValidationTarg
     if not isinstance(value, dict):
         target.errors.append("trainer_consumer_plan.execution must be an object.")
         return counts
-    _validate_allowed_keys(value, _TRAINER_CONSUMER_PLAN_EXECUTION_KEYS, target, "trainer_consumer_plan.execution")
+    label = "trainer_consumer_plan.execution"
+    _validate_allowed_keys(value, _TRAINER_CONSUMER_PLAN_EXECUTION_KEYS, target, label)
     for field_name in ("execution_cwd", "archive_root", "external_code_root", "command_shell"):
         if not isinstance(value.get(field_name), str):
-            target.errors.append(f"trainer_consumer_plan.execution.{field_name} must be a string.")
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    for field_name in ("archive_root", "external_code_root"):
+        _warn_absolute_public_path(target, f"{label}.{field_name}", value.get(field_name))
     if value.get("execution_cwd") != "archive_root":
-        target.errors.append("trainer_consumer_plan.execution.execution_cwd must be archive_root.")
+        target.errors.append(f"{label}.execution_cwd must be archive_root.")
     for field_name in ("command_approved", "command_available"):
         if not isinstance(value.get(field_name), bool):
-            target.errors.append(f"trainer_consumer_plan.execution.{field_name} must be a boolean.")
+            target.errors.append(f"{label}.{field_name} must be a boolean.")
     argv = value.get("command_argv")
     if not _is_string_list(argv):
-        target.errors.append("trainer_consumer_plan.execution.command_argv must be a list of strings.")
+        target.errors.append(f"{label}.command_argv must be a list of strings.")
         argv = []
     clean_argv = [item for item in argv if isinstance(item, str)]
+    for index, item in enumerate(clean_argv):
+        _warn_command_token_public_path(target, f"{label}.command_argv[{index}]", item)
     counts["command_arg_count"] = len(clean_argv)
     expected_shell = shlex.join(clean_argv) if clean_argv else ""
     if value.get("command_shell") != expected_shell:
-        target.errors.append("trainer_consumer_plan.execution.command_shell must match command_argv.")
+        target.errors.append(f"{label}.command_shell must match command_argv.")
+    command_shell = value.get("command_shell")
+    if isinstance(command_shell, str) and command_shell:
+        _warn_shell_tokens_public_paths(command_shell, target, f"{label}.command_shell")
     external_code_files = value.get("external_code_files")
     if not isinstance(external_code_files, list):
-        target.errors.append("trainer_consumer_plan.execution.external_code_files must be a list.")
+        target.errors.append(f"{label}.external_code_files must be a list.")
         external_code_files = []
     trainer_inputs = value.get("trainer_inputs")
     if not isinstance(trainer_inputs, list):
-        target.errors.append("trainer_consumer_plan.execution.trainer_inputs must be a list.")
+        target.errors.append(f"{label}.trainer_inputs must be a list.")
         trainer_inputs = []
     counts["external_code_file_count"] = len([item for item in external_code_files if isinstance(item, dict)])
     counts["trainer_input_count"] = len([item for item in trainer_inputs if isinstance(item, dict)])
