@@ -1162,7 +1162,7 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertNotIn("cloud_training_artifact_manifest.upload_artifacts[0].path must resolve to an existing file", errors)
             self.assertNotIn("cloud_training_preflight.source_artifacts.agentic_training_plan.path must resolve to an existing file", errors)
 
-    def test_launch_plan_strict_warns_on_absolute_command_tokens(self):
+    def test_launch_plan_validation_rejects_absolute_command_tokens(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             plan_source = root / "agentic_training_plan.json"
@@ -1196,13 +1196,17 @@ class CloudTrainingTests(unittest.TestCase):
             payload["launch"]["command"] = [str(root / "private_runner.py"), "--dry-run"]
             launch_plan.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-            non_strict = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan])
-            self.assertTrue(non_strict["passed"], non_strict)
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan])
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_launch_plan.launch.command[0] must use a relative command token or redacted placeholder.",
+                errors,
+            )
 
-            strict = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
-            self.assertFalse(strict["passed"], strict)
-            warnings = "\n".join(warning for target in strict["targets"] for warning in target["warnings"])
-            self.assertIn("cloud_training_launch_plan.launch.command[0] is absolute", warnings)
+            payload["launch"]["command"] = ["runner=relative_runner.py", "--dry-run"]
+            launch_plan.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertTrue(validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)["passed"])
 
     def test_validate_rejects_forged_cloud_training_transfer_plan(self):
         with tempfile.TemporaryDirectory() as tmp:

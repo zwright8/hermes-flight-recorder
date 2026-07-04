@@ -7557,7 +7557,18 @@ def _validate_cloud_training_launch_plan_launch(value: Any, target: ValidationTa
         target.errors.append(f"{label}.command must be a list of strings.")
     else:
         for index, item in enumerate(command):
-            _warn_command_token_public_path(target, f"{label}.command[{index}]", item)
+            _validate_cloud_training_command_token_public_path(target, f"{label}.command[{index}]", item)
+
+
+def _validate_cloud_training_command_token_public_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _looks_absolute(value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
+        return
+    _, separator, token_value = value.partition("=")
+    if separator and _looks_absolute(token_value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
 
 
 def _validate_cloud_training_handoff_contract(value: Any, target: ValidationTarget, label: str) -> None:
