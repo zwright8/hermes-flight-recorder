@@ -678,6 +678,10 @@ providers or writing dataset rows:
 Declared external-state verifier refs are summarized by an
 `external_state_verifier_gate`; missing verifier configs block rollout planning,
 and receipts preserve the same gate without starting verifier side effects.
+Scenario, verifier, and source-plan refs are considered public only when they
+replay from the rollout artifact's output directory without absolute paths or
+`..` traversal. Unsafe refs are written as redacted missing inputs, do not
+contribute harness batches or mock rows, and keep the artifact blocked.
 
 ```bash
 flightrecorder agentic-rollout-plan \

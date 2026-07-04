@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,35 +21,56 @@ SCENARIO = ROOT / "scenarios" / "prompt_injection_good.json"
 VERIFIER = ROOT / "examples" / "external_verification" / "sqlite_task_state.verifier.json"
 
 
+def copy_rollout_inputs(root: Path, *scenario_sources: Path) -> tuple[list[Path], Path]:
+    scenario_dir = root / "scenarios"
+    verifier_dir = root / "verifiers"
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+    verifier_dir.mkdir(parents=True, exist_ok=True)
+    scenarios = []
+    for source in scenario_sources or (SCENARIO,):
+        copied = scenario_dir / source.name
+        shutil.copyfile(source, copied)
+        scenarios.append(copied)
+    verifier = verifier_dir / VERIFIER.name
+    shutil.copyfile(VERIFIER, verifier)
+    return scenarios, verifier
+
+
 class RolloutGenerationTests(unittest.TestCase):
     def test_rollout_plan_builds_policy_scenario_matrix_without_running(self):
-        plan = build_agentic_rollout_plan(
-            out_path="runs/rollout_plan.json",
-            iteration_id="rollout-001",
-            scenario_paths=[SCENARIO],
-            policies={"baseline": "local/base", "candidate": "local/candidate", "teacher": "local/teacher"},
-            max_rollouts=3,
-            verifier_paths=[VERIFIER],
-            created_at="2026-07-03T00:00:00+00:00",
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios, verifier = copy_rollout_inputs(root, SCENARIO)
+            plan = build_agentic_rollout_plan(
+                out_path=root / "rollout_plan.json",
+                iteration_id="rollout-001",
+                scenario_paths=scenarios,
+                policies={"baseline": "local/base", "candidate": "local/candidate", "teacher": "local/teacher"},
+                max_rollouts=3,
+                verifier_paths=[verifier],
+                created_at="2026-07-03T00:00:00+00:00",
+            )
 
-        self.assertTrue(plan["passed"], plan["blocked_reasons"])
-        self.assertEqual(plan["budget"]["planned_rollouts"], 3)
-        verifier_gate = plan["environment"]["external_state_verifier_gate"]
-        self.assertEqual(verifier_gate["declared_count"], 1)
-        self.assertEqual(verifier_gate["resolved_count"], 1)
-        self.assertTrue(verifier_gate["all_declared_verifiers_resolved"])
-        self.assertFalse(verifier_gate["verification_side_effects_started"])
-        self.assertFalse(plan["execution_boundary"]["rollouts_started"])
-        self.assertFalse(plan["execution_boundary"]["dataset_rows_written"])
-        self.assertTrue(plan["rejection_sampling"]["requires_review_calibration_before_training"])
-        schema = check_schema_contract(plan)
-        self.assertTrue(schema["passed"], schema["errors"])
+            self.assertTrue(plan["passed"], plan["blocked_reasons"])
+            self.assertEqual(plan["budget"]["planned_rollouts"], 3)
+            self.assertEqual(plan["scenarios"][0]["path"], "scenarios/prompt_injection_good.json")
+            verifier_gate = plan["environment"]["external_state_verifier_gate"]
+            self.assertEqual(verifier_gate["declared_count"], 1)
+            self.assertEqual(verifier_gate["resolved_count"], 1)
+            self.assertTrue(verifier_gate["all_declared_verifiers_resolved"])
+            self.assertFalse(verifier_gate["verification_side_effects_started"])
+            self.assertFalse(plan["execution_boundary"]["rollouts_started"])
+            self.assertFalse(plan["execution_boundary"]["dataset_rows_written"])
+            self.assertTrue(plan["rejection_sampling"]["requires_review_calibration_before_training"])
+            schema = check_schema_contract(plan)
+            self.assertTrue(schema["passed"], schema["errors"])
 
     def test_cli_writes_schema_checkable_validatable_rollout_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "rollout_plan.json"
-            receipt_out = Path(tmp) / "rollout_receipt.json"
+            root = Path(tmp)
+            scenarios, verifier = copy_rollout_inputs(root, SCENARIO)
+            out = root / "rollout_plan.json"
+            receipt_out = root / "rollout_receipt.json"
             completed = subprocess.run(
                 [
                     sys.executable,
@@ -58,7 +80,7 @@ class RolloutGenerationTests(unittest.TestCase):
                     "--iteration-id",
                     "rollout-cli",
                     "--scenario",
-                    str(SCENARIO),
+                    str(scenarios[0]),
                     "--policy",
                     "baseline=local/base",
                     "--policy",
@@ -66,7 +88,7 @@ class RolloutGenerationTests(unittest.TestCase):
                     "--max-rollouts",
                     "2",
                     "--verifier",
-                    str(VERIFIER),
+                    str(verifier),
                     "--created-at",
                     "2026-07-03T00:00:00+00:00",
                     "--out",
@@ -118,48 +140,63 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertFalse(receipt["execution_boundary"]["model_provider_calls_started"])
             self.assertFalse(receipt["lineage"]["dataset_rows_created"])
 
-    def test_strict_validate_warns_on_absolute_rollout_plan_refs(self):
+    def test_rollout_plan_redacts_unreplayable_source_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            plan_path = root / "rollout_plan.json"
+            inputs = root / "inputs"
+            reports = root / "reports"
+            inputs.mkdir()
+            reports.mkdir()
+            scenario_path = inputs / "private_scenario.json"
+            verifier_path = inputs / "private.verifier.json"
+            scenario_path.write_text(
+                json.dumps({"id": "private-scenario", "schema_version": "PRIVATE_SENTINEL"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            verifier_path.write_text(
+                json.dumps({"schema_version": "hfr.verifier_config.v1", "private": "PRIVATE_SENTINEL"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            plan_path = reports / "rollout_plan.json"
             plan = build_agentic_rollout_plan(
                 out_path=plan_path,
-                iteration_id="rollout-preserved-plan",
-                scenario_paths=[SCENARIO],
+                iteration_id="rollout-redacted-plan",
+                scenario_paths=[scenario_path],
                 policies={"baseline": "local/base"},
                 max_rollouts=1,
-                verifier_paths=[VERIFIER],
+                verifier_paths=[verifier_path],
                 preserve_paths=True,
                 created_at="2026-07-03T00:00:00+00:00",
             )
             write_agentic_rollout_plan(plan_path, plan)
 
-            validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path])
-            strict_validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path], strict=True)
+            payload = json.loads(plan_path.read_text(encoding="utf-8"))
+            rendered = json.dumps(payload, sort_keys=True)
+            self.assertFalse(payload["passed"])
+            self.assertEqual(payload["budget"]["planned_rollouts"], 0)
+            self.assertEqual(payload["scenarios"][0]["path"], "<redacted:private_scenario.json>")
+            self.assertFalse(payload["scenarios"][0]["exists"])
+            self.assertEqual(payload["environment"]["external_state_verifiers"][0]["path"], "<redacted:private.verifier.json>")
+            self.assertFalse(payload["environment"]["external_state_verifier_gate"]["all_declared_verifiers_resolved"])
+            self.assertNotIn(str(inputs), rendered)
+            self.assertNotIn("PRIVATE_SENTINEL", rendered)
 
+            validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path], strict=True)
             self.assertTrue(validation["passed"], validation)
-            self.assertFalse(strict_validation["passed"], strict_validation)
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            strict_warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
-            for expected in (
-                "agentic_rollout_plan.plan_path is absolute",
-                "agentic_rollout_plan.scenarios[0].path is absolute",
-                "agentic_rollout_plan.environment.external_state_verifiers[0].path is absolute",
-            ):
-                self.assertIn(expected, warnings)
-                self.assertIn(expected, strict_warnings)
 
     def test_rollout_receipt_records_mock_rows_without_side_effects(self):
         with tempfile.TemporaryDirectory() as tmp:
-            plan_path = Path(tmp) / "rollout_plan.json"
-            receipt_path = Path(tmp) / "rollout_receipt.json"
+            root = Path(tmp)
+            scenarios, verifier = copy_rollout_inputs(root, SCENARIO)
+            plan_path = root / "rollout_plan.json"
+            receipt_path = root / "rollout_receipt.json"
             plan = build_agentic_rollout_plan(
                 out_path=plan_path,
                 iteration_id="rollout-receipt",
-                scenario_paths=[SCENARIO],
+                scenario_paths=scenarios,
                 policies={"baseline": "local/base", "candidate": "local/candidate"},
                 max_rollouts=2,
-                verifier_paths=[VERIFIER],
+                verifier_paths=[verifier],
                 created_at="2026-07-03T00:00:00+00:00",
             )
             write_agentic_rollout_plan(plan_path, plan)
@@ -184,15 +221,18 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertFalse(any(row["dataset_row_written"] for row in payload["mock_rollouts"]))
             self.assertTrue(payload["environment"]["external_state_verifier_gate"]["all_declared_verifiers_resolved"])
 
-    def test_strict_validate_warns_on_absolute_rollout_receipt_source_plan_path(self):
+    def test_rollout_receipt_writer_redacts_unreplayable_source_plan_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            scenarios, _ = copy_rollout_inputs(root, SCENARIO)
             plan_path = root / "rollout_plan.json"
-            receipt_path = root / "rollout_receipt.json"
+            reports = root / "reports"
+            reports.mkdir()
+            receipt_path = reports / "rollout_receipt.json"
             plan = build_agentic_rollout_plan(
                 out_path=plan_path,
-                iteration_id="rollout-preserved-source",
-                scenario_paths=[SCENARIO],
+                iteration_id="rollout-redacted-source",
+                scenario_paths=scenarios,
                 policies={"baseline": "local/base"},
                 max_rollouts=1,
                 created_at="2026-07-03T00:00:00+00:00",
@@ -201,30 +241,72 @@ class RolloutGenerationTests(unittest.TestCase):
             receipt = build_agentic_rollout_receipt(
                 plan_path=plan_path,
                 out_path=receipt_path,
-                preserve_paths=True,
                 created_at="2026-07-03T00:00:00+00:00",
             )
-            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            receipt["source_plan"]["path"] = str(plan_path)
+            write_agentic_rollout_receipt(receipt_path, receipt)
 
-            validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path])
-            strict_validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
+            payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+            rendered = json.dumps(payload, sort_keys=True)
+            self.assertFalse(payload["passed"])
+            self.assertEqual(payload["source_plan"]["path"], "<redacted:rollout_plan.json>")
+            self.assertFalse(payload["source_plan"]["exists"])
+            self.assertIsNone(payload["source_plan"]["sha256"])
+            self.assertEqual(payload["mock_rollout_count"], 0)
+            self.assertNotIn(str(root), rendered)
 
+            validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
             self.assertTrue(validation["passed"], validation)
-            self.assertFalse(strict_validation["passed"], strict_validation)
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            strict_warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
-            expected = "agentic_rollout_receipt.source_plan.path is absolute"
-            self.assertIn(expected, warnings)
-            self.assertIn(expected, strict_warnings)
+
+    def test_rollout_receipt_redacts_external_source_plan_without_reading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inputs = root / "inputs"
+            reports = root / "reports"
+            inputs.mkdir()
+            reports.mkdir()
+            plan_path = inputs / "private_rollout_plan.json"
+            receipt_path = reports / "rollout_receipt.json"
+            plan_path.write_text(
+                json.dumps({"schema_version": "PRIVATE_SENTINEL", "iteration_id": "PRIVATE_SENTINEL"}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            receipt = build_agentic_rollout_receipt(
+                plan_path=plan_path,
+                out_path=receipt_path,
+                preserve_paths=True,
+                output_base_dir=reports,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_rollout_receipt(receipt_path, receipt)
+
+            payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+            rendered = json.dumps(payload, sort_keys=True)
+            self.assertFalse(payload["passed"])
+            self.assertEqual(payload["source_plan"]["path"], "<redacted:private_rollout_plan.json>")
+            self.assertFalse(payload["source_plan"]["exists"])
+            self.assertIsNone(payload["source_plan"]["passed"])
+            self.assertEqual(payload["source_plan"]["readiness"], "")
+            self.assertEqual(payload["environment"]["id"], "offline_mock")
+            self.assertNotIn(str(inputs), rendered)
+            self.assertNotIn("PRIVATE_SENTINEL", rendered)
+
+            schema = check_schema_file(receipt_path)
+            self.assertTrue(schema["passed"], schema["errors"])
+            validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
+            self.assertTrue(validation["passed"], validation)
 
     def test_rollout_receipt_validation_rejects_live_side_effect_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
-            plan_path = Path(tmp) / "rollout_plan.json"
-            receipt_path = Path(tmp) / "rollout_receipt.json"
+            root = Path(tmp)
+            scenarios, _ = copy_rollout_inputs(root, SCENARIO)
+            plan_path = root / "rollout_plan.json"
+            receipt_path = root / "rollout_receipt.json"
             plan = build_agentic_rollout_plan(
                 out_path=plan_path,
                 iteration_id="rollout-forged",
-                scenario_paths=[SCENARIO],
+                scenario_paths=scenarios,
                 policies={"baseline": "local/base"},
                 max_rollouts=1,
                 created_at="2026-07-03T00:00:00+00:00",
@@ -247,14 +329,16 @@ class RolloutGenerationTests(unittest.TestCase):
 
     def test_rollout_plan_validation_rejects_forged_live_provider_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
-            plan_path = Path(tmp) / "rollout_plan.json"
+            root = Path(tmp)
+            scenarios, verifier = copy_rollout_inputs(root, SCENARIO)
+            plan_path = root / "rollout_plan.json"
             plan = build_agentic_rollout_plan(
                 out_path=plan_path,
                 iteration_id="rollout-forged-provider",
-                scenario_paths=[SCENARIO],
+                scenario_paths=scenarios,
                 policies={"baseline": "local/base", "candidate": "local/candidate"},
                 max_rollouts=2,
-                verifier_paths=[VERIFIER],
+                verifier_paths=[verifier],
                 created_at="2026-07-03T00:00:00+00:00",
             )
             plan["provider_job_id"] = "job_live"
@@ -284,15 +368,17 @@ class RolloutGenerationTests(unittest.TestCase):
 
     def test_rollout_receipt_validation_rejects_forged_live_provider_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
-            plan_path = Path(tmp) / "rollout_plan.json"
-            receipt_path = Path(tmp) / "rollout_receipt.json"
+            root = Path(tmp)
+            scenarios, verifier = copy_rollout_inputs(root, SCENARIO)
+            plan_path = root / "rollout_plan.json"
+            receipt_path = root / "rollout_receipt.json"
             plan = build_agentic_rollout_plan(
                 out_path=plan_path,
                 iteration_id="rollout-receipt-forged-provider",
-                scenario_paths=[SCENARIO],
+                scenario_paths=scenarios,
                 policies={"baseline": "local/base"},
                 max_rollouts=1,
-                verifier_paths=[VERIFIER],
+                verifier_paths=[verifier],
                 created_at="2026-07-03T00:00:00+00:00",
             )
             write_agentic_rollout_plan(plan_path, plan)
@@ -325,11 +411,13 @@ class RolloutGenerationTests(unittest.TestCase):
 
     def test_rollout_plan_blocks_missing_verifier_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
-            missing_verifier = Path(tmp) / "missing.verifier.json"
+            root = Path(tmp)
+            scenarios, _ = copy_rollout_inputs(root, SCENARIO)
+            missing_verifier = root / "missing.verifier.json"
             plan = build_agentic_rollout_plan(
-                out_path=Path(tmp) / "rollout_plan.json",
+                out_path=root / "rollout_plan.json",
                 iteration_id="rollout-missing-verifier",
-                scenario_paths=[SCENARIO],
+                scenario_paths=scenarios,
                 policies={"baseline": "local/base"},
                 max_rollouts=1,
                 verifier_paths=[missing_verifier],

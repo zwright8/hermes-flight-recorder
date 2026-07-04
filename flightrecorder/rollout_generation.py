@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION = "hfr.agentic_rollout_plan.v1"
@@ -36,15 +37,16 @@ def build_agentic_rollout_plan(
         raise RolloutGenerationError("iteration_id is required")
     if max_rollouts <= 0:
         raise RolloutGenerationError("max_rollouts must be positive")
-    scenarios = [_scenario_ref(Path(path), preserve_paths) for path in scenario_paths]
+    output_dir = Path(out_path).parent
+    scenarios = [_scenario_ref(Path(path), preserve_paths, output_dir) for path in scenario_paths]
     if not scenarios:
         raise RolloutGenerationError("at least one scenario path is required")
     policy_rows = [_policy_ref(role, policies.get(role, "")) for role in POLICY_ROLES if policies.get(role)]
     if not policy_rows:
         raise RolloutGenerationError("at least one policy id is required")
-    verifier_refs = [_file_ref("verifier_config", Path(path), preserve_paths) for path in verifier_paths or []]
+    verifier_refs = [_file_ref("verifier_config", Path(path), preserve_paths, output_dir) for path in verifier_paths or []]
     verifier_gate = _external_state_verifier_gate(verifier_refs)
-    batches = _batches(scenarios, policy_rows, max_rollouts)
+    batches = _batches([scenario for scenario in scenarios if scenario.get("exists") is True], policy_rows, max_rollouts)
     checks: list[dict[str, Any]] = []
     _add_check(checks, "scenario_inputs_exist", all(row["exists"] for row in scenarios), {"scenarios": scenarios}, {"all_scenarios_exist": True})
     _add_check(checks, "rollout_budget_positive", max_rollouts > 0, {"max_rollouts": max_rollouts}, {"max_rollouts": ">0"})
@@ -63,7 +65,7 @@ def build_agentic_rollout_plan(
         "schema_version": AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
         "iteration_id": iteration_id,
-        "plan_path": _display_path(Path(out_path), preserve_paths),
+        "plan_path": _display_path(Path(out_path), preserve_paths, output_dir),
         "passed": not failed,
         "readiness": "ready_for_harness_batch" if not failed else "blocked",
         "recommendation": "run_mock_or_opted_in_harness_batch" if not failed else "fix_rollout_plan_inputs",
@@ -115,7 +117,8 @@ def build_agentic_rollout_plan(
 def write_agentic_rollout_plan(path: str | Path, plan: dict[str, Any]) -> None:
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    payload = _plan_for_write(plan, out_path)
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def build_agentic_rollout_receipt(
@@ -124,10 +127,13 @@ def build_agentic_rollout_receipt(
     out_path: str | Path | None = None,
     preserve_paths: bool = False,
     created_at: str | None = None,
+    output_base_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic mock rollout receipt from a rollout plan."""
     path = Path(plan_path)
-    plan = _read_required_json(path, "agentic rollout plan")
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else (Path(out_path).parent if out_path else None)
+    source_path, source_replayable = _source_display_path(path, preserve_paths, display_base_dir)
+    plan = _read_required_json(path, "agentic rollout plan") if source_replayable and path.is_file() else {}
     batches = plan.get("harness_batches") if isinstance(plan.get("harness_batches"), list) else []
     checks: list[dict[str, Any]] = []
     _add_check(
@@ -164,7 +170,7 @@ def build_agentic_rollout_receipt(
     return {
         "schema_version": AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION,
         "created_at": created_at or datetime.now(timezone.utc).isoformat(),
-        "receipt_path": _display_path(Path(out_path), preserve_paths) if out_path else "",
+        "receipt_path": _display_path(Path(out_path), preserve_paths, Path(out_path).parent) if out_path else "",
         "passed": not failed,
         "readiness": "mock_rollouts_recorded" if not failed else "blocked",
         "recommendation": "score_and_review_mock_rollouts" if not failed else "fix_rollout_plan_before_mock_execution",
@@ -173,16 +179,16 @@ def build_agentic_rollout_receipt(
         "checks": checks,
         "blocked_reasons": [check["summary"] for check in failed],
         "source_plan": {
-            "path": _display_path(path, preserve_paths),
-            "exists": path.exists() and path.is_file(),
-            "sha256": _sha256(path) if path.exists() and path.is_file() else None,
-            "size_bytes": path.stat().st_size if path.exists() and path.is_file() else None,
-            "schema_version": plan.get("schema_version"),
+            "path": source_path,
+            "exists": source_replayable and path.exists() and path.is_file(),
+            "sha256": _sha256(path) if source_replayable and path.exists() and path.is_file() else None,
+            "size_bytes": path.stat().st_size if source_replayable and path.exists() and path.is_file() else None,
+            "schema_version": plan.get("schema_version") if plan else AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
             "passed": plan.get("passed") if isinstance(plan.get("passed"), bool) else None,
             "readiness": plan.get("readiness") if isinstance(plan.get("readiness"), str) else "",
         },
         "iteration_id": str(plan.get("iteration_id") or ""),
-        "environment": plan.get("environment") if isinstance(plan.get("environment"), dict) else {},
+        "environment": plan.get("environment") if isinstance(plan.get("environment"), dict) else _default_environment(),
         "mock_rollout_count": len(records),
         "mock_rollouts": records,
         "lineage": {
@@ -209,12 +215,7 @@ def build_agentic_rollout_receipt(
 def write_agentic_rollout_receipt(path: str | Path, receipt: dict[str, Any]) -> None:
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = dict(receipt)
-    source_plan = payload.get("source_plan") if isinstance(payload.get("source_plan"), dict) else None
-    if source_plan:
-        source_plan = dict(source_plan)
-        source_plan["path"] = _output_relative_path(source_plan.get("path"), out_path.parent)
-        payload["source_plan"] = source_plan
+    payload = _receipt_for_write(receipt, out_path)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -238,13 +239,17 @@ def _batches(scenarios: list[dict[str, Any]], policies: list[dict[str, Any]], ma
     return rows
 
 
-def _scenario_ref(path: Path, preserve_paths: bool) -> dict[str, Any]:
-    payload = _read_json(path)
+def _scenario_ref(path: Path, preserve_paths: bool, output_dir: Path) -> dict[str, Any]:
+    displayed, replayable = _source_display_path(path, preserve_paths, output_dir)
+    if not replayable:
+        return _missing_scenario_ref(path, displayed)
+    exists = path.exists() and path.is_file()
+    payload = _read_json(path) if exists else {}
     return {
         "id": str(payload.get("id") or path.stem),
-        "path": _display_path(path, preserve_paths),
-        "exists": path.exists() and path.is_file(),
-        "sha256": _sha256(path) if path.exists() and path.is_file() else None,
+        "path": displayed,
+        "exists": exists,
+        "sha256": _sha256(path) if exists else None,
         "schema_version": str(payload.get("schema_version") or ""),
     }
 
@@ -253,11 +258,14 @@ def _policy_ref(role: str, policy_id: str) -> dict[str, Any]:
     return {"role": role, "id": policy_id, "live_calls_allowed": False}
 
 
-def _file_ref(role: str, path: Path, preserve_paths: bool) -> dict[str, Any]:
+def _file_ref(role: str, path: Path, preserve_paths: bool, output_dir: Path) -> dict[str, Any]:
+    displayed, replayable = _source_display_path(path, preserve_paths, output_dir)
+    if not replayable:
+        return _missing_file_ref(role, displayed)
     exists = path.exists() and path.is_file()
     return {
         "role": role,
-        "path": _display_path(path, preserve_paths),
+        "path": displayed,
         "exists": exists,
         "sha256": _sha256(path) if exists else None,
         "size_bytes": path.stat().st_size if exists else None,
@@ -273,6 +281,17 @@ def _external_state_verifier_gate(verifier_refs: list[dict[str, Any]]) -> dict[s
         "required_for_external_state_checks": bool(verifier_refs),
         "verification_side_effects_started": False,
         "credential_values_recorded": False,
+    }
+
+
+def _default_environment() -> dict[str, Any]:
+    verifier_refs: list[dict[str, Any]] = []
+    return {
+        "id": "offline_mock",
+        "replayable": True,
+        "network_default": "disabled",
+        "external_state_verifiers": verifier_refs,
+        "external_state_verifier_gate": _external_state_verifier_gate(verifier_refs),
     }
 
 
@@ -313,26 +332,259 @@ def _mock_rollout_record(batch: dict[str, Any], index: int) -> dict[str, Any]:
     }
 
 
-def _output_relative_path(value: Any, output_dir: Path) -> Any:
+def _plan_for_write(plan: dict[str, Any], out_path: Path) -> dict[str, Any]:
+    payload = copy.deepcopy(plan)
+    payload["plan_path"] = _display_path(out_path, False, out_path.parent)
+    changed = False
+    scenarios = payload.get("scenarios") if isinstance(payload.get("scenarios"), list) else []
+    for scenario in scenarios:
+        if isinstance(scenario, dict) and _rewrite_source_ref_for_output(scenario, out_path.parent, scenario_role="scenario"):
+            changed = True
+    environment = payload.get("environment") if isinstance(payload.get("environment"), dict) else {}
+    verifiers = environment.get("external_state_verifiers") if isinstance(environment.get("external_state_verifiers"), list) else []
+    for verifier in verifiers:
+        if isinstance(verifier, dict) and _rewrite_source_ref_for_output(verifier, out_path.parent, scenario_role=None):
+            changed = True
+    if isinstance(environment, dict):
+        environment["external_state_verifier_gate"] = _external_state_verifier_gate(
+            [verifier for verifier in verifiers if isinstance(verifier, dict)]
+        )
+    if changed:
+        _refresh_plan_readiness(payload)
+    return payload
+
+
+def _receipt_for_write(receipt: dict[str, Any], out_path: Path) -> dict[str, Any]:
+    payload = copy.deepcopy(receipt)
+    payload["receipt_path"] = _display_path(out_path, False, out_path.parent)
+    source_plan = payload.get("source_plan") if isinstance(payload.get("source_plan"), dict) else None
+    if isinstance(source_plan, dict) and _rewrite_source_plan_for_output(source_plan, out_path.parent):
+        _block_receipt_for_unreplayable_source_plan(payload, source_plan.get("path"))
+    return payload
+
+
+def _rewrite_source_ref_for_output(row: dict[str, Any], output_dir: Path, *, scenario_role: str | None) -> bool:
+    value = row.get("path")
     if not isinstance(value, str) or not value:
-        return value
+        return False
+    if value.startswith("<redacted:"):
+        return _mark_missing_ref(row, value, scenario_role=scenario_role)
+    if _is_safe_public_path(value):
+        candidate = output_dir / value
+        if row.get("exists") is not True or candidate.is_file():
+            return False
+        path = Path(value)
+        if path.exists():
+            relative = _safe_output_relative_path(path, output_dir)
+            if relative is not None:
+                row["path"] = relative
+                return False
+        return _mark_missing_ref(row, f"<redacted:{_basename(value)}>", scenario_role=scenario_role)
     path = Path(value)
-    if not path.is_absolute():
-        if not path.exists():
-            return value
-        path = path.resolve()
-    return os.path.relpath(path.resolve(), output_dir.resolve())
+    relative = _safe_output_relative_path(path, output_dir) if path.is_absolute() or path.exists() else None
+    if relative is not None:
+        row["path"] = relative
+        return False
+    return _mark_missing_ref(row, f"<redacted:{_basename(value)}>", scenario_role=scenario_role)
 
 
-def _display_path(path: Path, preserve_paths: bool) -> str:
+def _rewrite_source_plan_for_output(source_plan: dict[str, Any], output_dir: Path) -> bool:
+    value = source_plan.get("path")
+    if not isinstance(value, str) or not value:
+        return False
+    if value.startswith("<redacted:"):
+        return _mark_source_plan_missing(source_plan, value)
+    if _is_safe_public_path(value):
+        if source_plan.get("exists") is not True or (output_dir / value).is_file():
+            return False
+        path = Path(value)
+        if path.exists():
+            relative = _safe_output_relative_path(path, output_dir)
+            if relative is not None:
+                source_plan["path"] = relative
+                return False
+        return _mark_source_plan_missing(source_plan, f"<redacted:{_basename(value)}>")
+    path = Path(value)
+    relative = _safe_output_relative_path(path, output_dir) if path.is_absolute() or path.exists() else None
+    if relative is not None:
+        source_plan["path"] = relative
+        return False
+    return _mark_source_plan_missing(source_plan, f"<redacted:{_basename(value)}>")
+
+
+def _mark_missing_ref(row: dict[str, Any], displayed: str, *, scenario_role: str | None) -> bool:
+    row["path"] = displayed
+    row["exists"] = False
+    row["sha256"] = None
+    if scenario_role == "scenario":
+        row["schema_version"] = ""
+    else:
+        row["size_bytes"] = None
+    return True
+
+
+def _mark_source_plan_missing(source_plan: dict[str, Any], displayed: str) -> bool:
+    source_plan.update(
+        {
+            "path": displayed,
+            "exists": False,
+            "sha256": None,
+            "size_bytes": None,
+            "schema_version": AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION,
+            "passed": None,
+            "readiness": "",
+        }
+    )
+    return True
+
+
+def _refresh_plan_readiness(plan: dict[str, Any]) -> None:
+    scenarios = plan.get("scenarios") if isinstance(plan.get("scenarios"), list) else []
+    policies = plan.get("policies") if isinstance(plan.get("policies"), list) else []
+    budget = plan.get("budget") if isinstance(plan.get("budget"), dict) else {}
+    max_rollouts = budget.get("max_rollouts") if isinstance(budget.get("max_rollouts"), int) else 0
+    batches = _batches(
+        [scenario for scenario in scenarios if isinstance(scenario, dict) and scenario.get("exists") is True],
+        [policy for policy in policies if isinstance(policy, dict)],
+        max_rollouts,
+    )
+    plan["harness_batches"] = batches
+    budget["planned_rollouts"] = len(batches)
+    budget["live_provider_calls_allowed"] = False
+    environment = plan.get("environment") if isinstance(plan.get("environment"), dict) else {}
+    verifier_refs = environment.get("external_state_verifiers") if isinstance(environment.get("external_state_verifiers"), list) else []
+    verifier_gate = _external_state_verifier_gate([ref for ref in verifier_refs if isinstance(ref, dict)])
+    environment["external_state_verifier_gate"] = verifier_gate
+    checks: list[dict[str, Any]] = []
+    _add_check(checks, "scenario_inputs_exist", all(isinstance(row, dict) and row.get("exists") is True for row in scenarios), {"scenarios": scenarios}, {"all_scenarios_exist": True})
+    _add_check(checks, "rollout_budget_positive", max_rollouts > 0, {"max_rollouts": max_rollouts}, {"max_rollouts": ">0"})
+    _add_check(checks, "rollout_budget_not_exceeded", len(batches) <= max_rollouts, {"planned_rollouts": len(batches)}, {"max_rollouts": max_rollouts})
+    _add_check(checks, "at_least_one_policy_configured", bool(policies), {"policy_count": len(policies)}, {"policy_count": ">=1"})
+    _add_check(
+        checks,
+        "external_state_verifiers_resolved",
+        verifier_gate["all_declared_verifiers_resolved"],
+        {"external_state_verifier_gate": verifier_gate},
+        {"all_declared_verifiers_resolved": True},
+    )
+    _add_check(checks, "flight_recorder_did_not_run_rollouts", True, {"rollouts_started": False}, {"rollouts_started": False})
+    failed = [check for check in checks if not check["passed"]]
+    plan["checks"] = checks
+    plan["check_count"] = len(checks)
+    plan["failed_check_count"] = len(failed)
+    plan["passed"] = not failed
+    plan["readiness"] = "ready_for_harness_batch" if not failed else "blocked"
+    plan["recommendation"] = "run_mock_or_opted_in_harness_batch" if not failed else "fix_rollout_plan_inputs"
+    plan["blocked_reasons"] = [check["summary"] for check in failed]
+
+
+def _block_receipt_for_unreplayable_source_plan(receipt: dict[str, Any], path_value: Any) -> None:
+    checks = receipt.get("checks") if isinstance(receipt.get("checks"), list) else []
+    checks = [check for check in checks if not (isinstance(check, dict) and check.get("id") == "source_plan_replayable_from_receipt")]
+    _add_check(
+        checks,
+        "source_plan_replayable_from_receipt",
+        False,
+        {"path": path_value, "exists": False},
+        {"exists": True, "path": "safe relative path from receipt"},
+    )
+    failed = [check for check in checks if isinstance(check, dict) and check.get("passed") is False]
+    receipt["checks"] = checks
+    receipt["check_count"] = len(checks)
+    receipt["failed_check_count"] = len(failed)
+    receipt["passed"] = False
+    receipt["readiness"] = "blocked"
+    receipt["recommendation"] = "fix_rollout_plan_before_mock_execution"
+    receipt["blocked_reasons"] = [str(check.get("summary") or "") for check in failed]
+    receipt["mock_rollouts"] = []
+    receipt["mock_rollout_count"] = 0
+    lineage = receipt.get("lineage") if isinstance(receipt.get("lineage"), dict) else {}
+    lineage["ready_for_rejection_sampling"] = False
+    receipt["lineage"] = lineage
+    boundary = receipt.get("execution_boundary") if isinstance(receipt.get("execution_boundary"), dict) else {}
+    boundary["mock_rollouts_recorded"] = False
+    receipt["execution_boundary"] = boundary
+
+
+def _missing_scenario_ref(path: Path, displayed: str) -> dict[str, Any]:
+    return {
+        "id": path.stem or "scenario",
+        "path": displayed,
+        "exists": False,
+        "sha256": None,
+        "schema_version": "",
+    }
+
+
+def _missing_file_ref(role: str, displayed: str) -> dict[str, Any]:
+    return {
+        "role": role,
+        "path": displayed,
+        "exists": False,
+        "sha256": None,
+        "size_bytes": None,
+    }
+
+
+def _source_display_path(path: Path, preserve_paths: bool, output_dir: Path | None = None) -> tuple[str, bool]:
+    displayed = _source_ref_display_path(path, preserve_paths, output_dir)
+    return displayed, _is_safe_public_path(displayed)
+
+
+def _source_ref_display_path(path: Path, preserve_paths: bool, output_dir: Path | None = None) -> str:
+    raw = str(path)
+    if output_dir is not None:
+        relative = _safe_output_relative_path(path, output_dir)
+        return relative if relative is not None else f"<redacted:{_basename(raw)}>"
     if preserve_paths:
-        return str(path)
+        return raw if _is_safe_public_path(raw) else f"<redacted:{_basename(raw)}>"
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
     if not path.is_absolute():
-        return str(path)
+        return raw if _is_safe_public_path(raw) else f"<redacted:{_basename(raw)}>"
     try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
+        relative = str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
-        return path.name
+        return f"<redacted:{path.name}>"
+    return relative if _is_safe_public_path(relative) else f"<redacted:{path.name}>"
+
+
+def _safe_output_relative_path(path: Path, output_dir: Path) -> str | None:
+    if _is_windows_absolute(str(path)):
+        return None
+    try:
+        relative = os.path.relpath(path.resolve(), output_dir.resolve())
+    except OSError:
+        return None
+    return relative if _is_safe_public_path(relative) else None
+
+
+def _display_path(path: Path, preserve_paths: bool, output_dir: Path | None = None) -> str:
+    return _source_ref_display_path(path, preserve_paths, output_dir)
+
+
+def _is_safe_public_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
+
+
+def _is_windows_absolute(value: str) -> bool:
+    normalized = value.replace("/", "\\")
+    return (len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()) or normalized.startswith("\\\\")
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
 
 
 def _sha256(path: Path) -> str:

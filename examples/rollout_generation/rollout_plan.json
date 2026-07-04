@@ -109,7 +109,7 @@
     "external_state_verifiers": [
       {
         "exists": true,
-        "path": "examples/external_verification/sqlite_task_state.verifier.json",
+        "path": "verifiers/sqlite_task_state.verifier.json",
         "role": "verifier_config",
         "sha256": "227b94fe9110506542142dcc577982ee598a766923a38681ce8b7b98718c223e",
         "size_bytes": 399
@@ -200,7 +200,7 @@
     "External-state verifier configs are referenced by hash so rollout receipts can prove which checks were expected."
   ],
   "passed": true,
-  "plan_path": "examples/rollout_generation/rollout_plan.json",
+  "plan_path": "rollout_plan.json",
   "policies": [
     {
       "id": "local/mock-baseline",

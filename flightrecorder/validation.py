@@ -1579,7 +1579,7 @@ def validate_agentic_rollout_plan(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("agentic_rollout_plan", str(plan_path))
     plan = _read_object(plan_path, target, "agentic_rollout_plan.json")
     if plan is not None:
-        _validate_agentic_rollout_plan(plan, target)
+        _validate_agentic_rollout_plan(plan, target, plan_path)
     return target
 
 
@@ -8205,7 +8205,7 @@ _AGENTIC_ROLLOUT_RECEIPT_BOUNDARY_KEYS = {
 }
 
 
-def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _validate_allowed_keys(plan, _AGENTIC_ROLLOUT_PLAN_KEYS, target, "agentic_rollout_plan")
     _require_equal(plan, "schema_version", AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, target, prefix="agentic_rollout_plan.")
     checks = plan.get("checks")
@@ -8232,8 +8232,8 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
         target.errors.append("agentic_rollout_plan.blocked_reasons must be a list of strings.")
     if not isinstance(plan.get("plan_path"), str) or not plan.get("plan_path"):
         target.errors.append("agentic_rollout_plan.plan_path must be a non-empty string.")
-    else:
-        _warn_absolute_public_path(target, "agentic_rollout_plan.plan_path", plan.get("plan_path"))
+    elif not _is_safe_or_redacted_agentic_rollout_ref_path(plan.get("plan_path")):
+        target.errors.append("agentic_rollout_plan.plan_path must be a safe relative path or redacted placeholder.")
     budget = plan.get("budget") if isinstance(plan.get("budget"), dict) else {}
     if isinstance(plan.get("budget"), dict):
         _validate_allowed_keys(budget, _AGENTIC_ROLLOUT_PLAN_BUDGET_KEYS, target, "agentic_rollout_plan.budget")
@@ -8249,7 +8249,7 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
     if budget.get("live_provider_calls_allowed") is not False:
         target.errors.append("agentic_rollout_plan.budget.live_provider_calls_allowed must be false.")
     _validate_agentic_rollout_policies(plan.get("policies"), target)
-    _validate_agentic_rollout_scenarios(plan.get("scenarios"), target)
+    _validate_agentic_rollout_scenarios(plan.get("scenarios"), target, source_path)
     for index, batch in enumerate(batches):
         _validate_agentic_rollout_batch(batch, index, target)
     _validate_agentic_rollout_rejection_sampling(plan.get("rejection_sampling"), target)
@@ -8264,7 +8264,7 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
             target.errors.append("agentic_rollout_plan.lineage.expected_trace_artifacts must be a list of strings.")
         if lineage.get("preserve_source_hashes") is not True:
             target.errors.append("agentic_rollout_plan.lineage.preserve_source_hashes must be true.")
-    _validate_agentic_rollout_environment(plan.get("environment"), target, "agentic_rollout_plan.environment")
+    _validate_agentic_rollout_environment(plan.get("environment"), target, "agentic_rollout_plan.environment", source_path)
     boundary = plan.get("execution_boundary")
     if not isinstance(boundary, dict):
         target.errors.append("agentic_rollout_plan.execution_boundary must be an object.")
@@ -8323,7 +8323,7 @@ def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: Validatio
     else:
         _validate_agentic_rollout_receipt_source_plan(source_plan, target, source_path)
 
-    _validate_agentic_rollout_environment(receipt.get("environment"), target, "agentic_rollout_receipt.environment")
+    _validate_agentic_rollout_environment(receipt.get("environment"), target, "agentic_rollout_receipt.environment", source_path)
 
     rollouts = receipt.get("mock_rollouts")
     if not isinstance(rollouts, list):
@@ -8376,7 +8376,7 @@ def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: Validatio
     )
 
 
-def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, label: str) -> None:
+def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
@@ -8402,16 +8402,28 @@ def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, 
             target.errors.append(f"{ref_label}.role must be verifier_config.")
         if not isinstance(ref.get("path"), str) or not ref.get("path"):
             target.errors.append(f"{ref_label}.path must be a non-empty string.")
-        else:
-            _warn_absolute_public_path(target, f"{ref_label}.path", ref.get("path"))
+        elif not _is_safe_or_redacted_agentic_rollout_ref_path(ref.get("path")):
+            target.errors.append(f"{ref_label}.path must be relative to the rollout artifact.")
         if not isinstance(ref.get("exists"), bool):
             target.errors.append(f"{ref_label}.exists must be a boolean.")
         elif ref.get("exists") is True:
             resolved_count += 1
+            path_value = ref.get("path")
+            if not isinstance(path_value, str) or not _is_replayable_agentic_rollout_ref_path(path_value):
+                target.errors.append(f"{ref_label}.path must be relative to the rollout artifact when exists is true.")
+                continue
+            verifier_path = _agentic_rollout_reference_path(path_value, source_path)
+            if not verifier_path.is_file():
+                target.errors.append(f"{ref_label}.path does not resolve to a verifier config file.")
+                continue
             if not _is_sha256(ref.get("sha256")):
                 target.errors.append(f"{ref_label}.sha256 must be a SHA-256 hex string when exists is true.")
+            elif _sha256(verifier_path) != ref.get("sha256"):
+                target.errors.append(f"{ref_label}.sha256 does not match the current file.")
             if not _is_non_negative_int(ref.get("size_bytes")):
                 target.errors.append(f"{ref_label}.size_bytes must be a non-negative integer when exists is true.")
+            elif verifier_path.stat().st_size != ref.get("size_bytes"):
+                target.errors.append(f"{ref_label}.size_bytes does not match the current file.")
         else:
             if ref.get("sha256") is not None:
                 target.errors.append(f"{ref_label}.sha256 must be null when exists is false.")
@@ -8441,14 +8453,23 @@ def _validate_agentic_rollout_receipt_source_plan(source_plan: dict[str, Any], t
     if source_plan.get("schema_version") != AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION:
         target.errors.append(f"{label}.schema_version must be {AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION!r}.")
     if source_plan.get("exists") is not True:
-        target.errors.append(f"{label}.exists must be true.")
+        if source_plan.get("sha256") is not None:
+            target.errors.append(f"{label}.sha256 must be null when exists is false.")
+        if source_plan.get("size_bytes") is not None:
+            target.errors.append(f"{label}.size_bytes must be null when exists is false.")
+        if source_plan.get("passed") is not None:
+            target.errors.append(f"{label}.passed must be null when exists is false.")
+        if source_plan.get("readiness") not in ("", None):
+            target.errors.append(f"{label}.readiness must be empty when exists is false.")
         return
     path_value = source_plan.get("path")
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
         return
-    _warn_absolute_public_path(target, f"{label}.path", path_value)
-    plan_path = _external_eval_reference_path(path_value, source_path)
+    if not _is_replayable_agentic_rollout_ref_path(path_value):
+        target.errors.append(f"{label}.path must be relative to the agentic rollout receipt.")
+        return
+    plan_path = _agentic_rollout_reference_path(path_value, source_path)
     if not plan_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an agentic rollout plan file.")
         return
@@ -8508,7 +8529,7 @@ def _validate_agentic_rollout_policies(value: Any, target: ValidationTarget) -> 
             target.errors.append(f"{label}.live_calls_allowed must be false.")
 
 
-def _validate_agentic_rollout_scenarios(value: Any, target: ValidationTarget) -> None:
+def _validate_agentic_rollout_scenarios(value: Any, target: ValidationTarget, source_path: Path) -> None:
     if not isinstance(value, list) or not value:
         target.errors.append("agentic_rollout_plan.scenarios must be a non-empty list.")
         return
@@ -8521,12 +8542,23 @@ def _validate_agentic_rollout_scenarios(value: Any, target: ValidationTarget) ->
         for field_name in ("id", "path", "schema_version"):
             if not isinstance(row.get(field_name), str):
                 target.errors.append(f"{label}.{field_name} must be a string.")
-        if isinstance(row.get("path"), str):
-            _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
+        path_value = row.get("path")
+        if isinstance(path_value, str) and path_value and not _is_safe_or_redacted_agentic_rollout_ref_path(path_value):
+            target.errors.append(f"{label}.path must be relative to the agentic rollout plan.")
         if not isinstance(row.get("exists"), bool):
             target.errors.append(f"{label}.exists must be a boolean.")
-        elif row.get("exists") is True and not _is_sha256(row.get("sha256")):
-            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+        elif row.get("exists") is True:
+            if not isinstance(path_value, str) or not _is_replayable_agentic_rollout_ref_path(path_value):
+                target.errors.append(f"{label}.path must be relative to the agentic rollout plan when exists is true.")
+                continue
+            scenario_path = _agentic_rollout_reference_path(path_value, source_path)
+            if not scenario_path.is_file():
+                target.errors.append(f"{label}.path does not resolve to a scenario file.")
+                continue
+            if not _is_sha256(row.get("sha256")):
+                target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+            elif _sha256(scenario_path) != row.get("sha256"):
+                target.errors.append(f"{label}.sha256 does not match the current file.")
         elif row.get("exists") is False and row.get("sha256") is not None:
             target.errors.append(f"{label}.sha256 must be null when exists is false.")
 
@@ -8548,6 +8580,34 @@ def _validate_agentic_rollout_batch(row: Any, index: int, target: ValidationTarg
         target.errors.append(f"{label}.harness_mode must be offline_mock.")
     if row.get("status") != "planned":
         target.errors.append(f"{label}.status must be planned.")
+
+
+def _is_safe_or_redacted_agentic_rollout_ref_path(value: str) -> bool:
+    if value.startswith("<redacted:") and value.endswith(">"):
+        basename = value.removeprefix("<redacted:").removesuffix(">")
+        return bool(basename) and "/" not in basename and "\\" not in basename and ".." not in basename and "~" not in basename
+    return _is_replayable_agentic_rollout_ref_path(value)
+
+
+def _is_replayable_agentic_rollout_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
+
+
+def _agentic_rollout_reference_path(value: str, source_path: Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return source_path.parent / path
 
 
 def _validate_agentic_rollout_rejection_sampling(value: Any, target: ValidationTarget) -> None:

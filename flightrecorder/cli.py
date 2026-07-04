@@ -1715,6 +1715,7 @@ def cmd_agentic_rollout_receipt(args: argparse.Namespace) -> int:
         plan_path=args.plan,
         out_path=args.out,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
         created_at=args.created_at,
     )
     write_agentic_rollout_receipt(args.out, receipt)
@@ -3690,14 +3691,14 @@ def _parser() -> argparse.ArgumentParser:
     agentic_rollout_plan.add_argument("--environment-id", default="offline_mock", help="Replayable environment descriptor id")
     agentic_rollout_plan.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     agentic_rollout_plan.add_argument("--out", required=True, help="Write hfr.agentic_rollout_plan.v1 JSON to this path")
-    agentic_rollout_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rollout plan")
+    agentic_rollout_plan.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in rollout plan; unsafe absolute or traversal refs remain redacted")
     agentic_rollout_plan.set_defaults(func=cmd_agentic_rollout_plan)
 
     agentic_rollout_receipt = subparsers.add_parser("agentic-rollout-receipt", help="Write a fail-closed mock rollout receipt")
     agentic_rollout_receipt.add_argument("--plan", required=True, help="hfr.agentic_rollout_plan.v1 JSON path")
     agentic_rollout_receipt.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     agentic_rollout_receipt.add_argument("--out", required=True, help="Write hfr.agentic_rollout_receipt.v1 JSON to this path")
-    agentic_rollout_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in rollout receipt")
+    agentic_rollout_receipt.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in rollout receipt; unsafe absolute or traversal refs remain redacted")
     agentic_rollout_receipt.set_defaults(func=cmd_agentic_rollout_receipt)
 
     rejection_sampling_gate = subparsers.add_parser("rejection-sampling-gate", help="Write a fail-closed rejection sampling admission gate")

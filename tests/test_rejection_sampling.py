@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -206,12 +207,16 @@ class RejectionSamplingGateTests(unittest.TestCase):
         self.assertIn("rejection_sampling_gate", names)
 
     def write_rollout_receipt(self, root: Path) -> Path:
+        scenario_dir = root / "scenarios"
+        scenario_dir.mkdir(parents=True, exist_ok=True)
+        scenario = scenario_dir / SCENARIO.name
+        shutil.copyfile(SCENARIO, scenario)
         plan_path = root / "rollout_plan.json"
         receipt_path = root / "rollout_receipt.json"
         plan = build_agentic_rollout_plan(
             out_path=plan_path,
             iteration_id="reject-sample",
-            scenario_paths=[SCENARIO],
+            scenario_paths=[scenario],
             policies={"baseline": "local/base"},
             max_rollouts=1,
             created_at="2026-07-03T00:00:00+00:00",
