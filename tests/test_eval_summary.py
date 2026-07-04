@@ -645,6 +645,77 @@ class EvalSummaryTests(unittest.TestCase):
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("repair_curriculum.work_item_count expected", errors)
 
+    def test_validate_rejects_eval_summary_with_unknown_control_plane_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            compare_export = _compare_export(
+                root / "compare_rl",
+                candidate_wins=[],
+                baseline_wins=["email_reply_completion"],
+            )
+            out = root / "eval_summary.json"
+            validation = root / "validation.json"
+            run_cli(
+                [
+                    "eval-summary",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--compare-export",
+                    f"candidate={compare_export}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            summary = _read_json(out)
+            summary["provider_console_url"] = "https://example.invalid/eval"
+            summary["arms"][0]["provider_job_id"] = "job-redacted"
+            summary["arms"][0]["operational_metrics"]["cost"]["provider_cost_url"] = "https://example.invalid/cost"
+            summary["heldout_scenarios"]["automation_thread_ref"] = "redacted-thread"
+            summary["comparisons"][0]["raw_movement"]["provider_delta_url"] = "https://example.invalid/delta"
+            summary["comparisons"][0]["governance_claims"]["unreviewed_claim_url"] = "https://example.invalid/claim"
+            summary["repair_curriculum"]["provider_queue_url"] = "https://example.invalid/queue"
+            summary["repair_curriculum"]["items"][0]["automation_thread_ref"] = "redacted-thread"
+            summary["risks"][0]["live_receipt_url"] = "https://example.invalid/receipt"
+            out.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema_result = check_schema_file(out)
+            code = run_cli(["validate", "--eval-summary", str(out), "--out", str(validation)])
+
+            self.assertFalse(schema_result["passed"], schema_result)
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("eval_summary contains unknown field(s): ['provider_console_url']", errors)
+            self.assertIn("eval_summary.arms[0] contains unknown field(s): ['provider_job_id']", errors)
+            self.assertIn(
+                "eval_summary.arms[0].operational_metrics.cost contains unknown field(s): ['provider_cost_url']",
+                errors,
+            )
+            self.assertIn(
+                "eval_summary.heldout_scenarios contains unknown field(s): ['automation_thread_ref']",
+                errors,
+            )
+            self.assertIn(
+                "eval_summary.comparisons[0].raw_movement contains unknown field(s): ['provider_delta_url']",
+                errors,
+            )
+            self.assertIn(
+                "eval_summary.comparisons[0].governance_claims contains unknown field(s): ['unreviewed_claim_url']",
+                errors,
+            )
+            self.assertIn(
+                "eval_summary.repair_curriculum contains unknown field(s): ['provider_queue_url']",
+                errors,
+            )
+            self.assertIn(
+                "eval_summary.repair_curriculum.items[0] contains unknown field(s): ['automation_thread_ref']",
+                errors,
+            )
+            self.assertIn("eval_summary.risks[0] contains unknown field(s): ['live_receipt_url']", errors)
+
 
 def _suite_summary(path: Path, scenario_ids: list[str], run_overrides=None) -> Path:
     runs = [

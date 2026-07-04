@@ -14016,7 +14016,190 @@ def _validate_serving_demo_scenario(
                 target.errors.append(f"{run_label}.{field_name} must be a string when present.")
 
 
+_EVAL_SUMMARY_KEYS = {
+    "schema_version",
+    "generated_at",
+    "passed",
+    "governance_ready",
+    "arm_count",
+    "comparison_count",
+    "gate_count",
+    "external_adapter_plan_count",
+    "heldout_scenarios",
+    "arms",
+    "comparisons",
+    "compare_gates",
+    "external_adapter_plans",
+    "repair_curriculum",
+    "serving_preflight",
+    "risks",
+    "conclusion",
+}
+_EVAL_SUMMARY_ARM_KEYS = {
+    "label",
+    "path",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "scenario_count",
+    "scenario_ids",
+    "total",
+    "passed",
+    "failed",
+    "error_count",
+    "pass_rate",
+    "average_score",
+    "failed_rule_counts",
+    "critical_failure_counts",
+    "operational_metrics",
+    "serving_preflight",
+    "validation",
+    "blocking_reasons",
+}
+_EVAL_SUMMARY_OPERATIONAL_KEYS = {"cost", "latency", "tokens", "task_completion"}
+_EVAL_SUMMARY_METRIC_BASE_KEYS = {"source", "known_run_count", "missing_run_count"}
+_EVAL_SUMMARY_COST_KEYS = _EVAL_SUMMARY_METRIC_BASE_KEYS | {"total_usd"}
+_EVAL_SUMMARY_LATENCY_KEYS = _EVAL_SUMMARY_METRIC_BASE_KEYS | {"average_ms", "p50_ms", "p95_ms", "max_ms"}
+_EVAL_SUMMARY_TOKENS_KEYS = _EVAL_SUMMARY_METRIC_BASE_KEYS | {"prompt_tokens", "completion_tokens", "total_tokens"}
+_EVAL_SUMMARY_TASK_COMPLETION_KEYS = {
+    "source",
+    "configured_count",
+    "complete_count",
+    "incomplete_count",
+    "not_applicable_count",
+    "unknown_count",
+    "passed_count",
+    "failed_count",
+    "pass_rate",
+}
+_EVAL_SUMMARY_HELDOUT_KEYS = {
+    "status",
+    "identical",
+    "cross_arm_claims_allowed",
+    "scenario_count",
+    "scenario_ids",
+    "arms",
+    "mismatches",
+    "blocking_reasons",
+}
+_EVAL_SUMMARY_HELDOUT_ARM_KEYS = {"label", "scenario_ids", "scenario_count"}
+_EVAL_SUMMARY_HELDOUT_MISMATCH_KEYS = {"label", "missing_from_arm", "extra_in_arm"}
+_EVAL_SUMMARY_COMPARISON_KEYS = {
+    "label",
+    "path",
+    "manifest",
+    "manifest_sha256",
+    "manifest_size_bytes",
+    "schema_version",
+    "claims_allowed",
+    "passed",
+    "blocking_reasons",
+    "raw_movement",
+    "governance_claims",
+}
+_EVAL_SUMMARY_RAW_MOVEMENT_KEYS = {
+    "pair_count",
+    "candidate_win_count",
+    "baseline_win_count",
+    "candidate_win_scenarios",
+    "baseline_win_scenarios",
+    "task_completion_improvement_count",
+    "task_completion_regression_count",
+    "task_completion_improvement_scenarios",
+    "task_completion_regression_scenarios",
+    "fixed_rule_counts",
+    "regressed_rule_counts",
+    "new_critical_failure_counts",
+    "contract_drift_count",
+    "unverified_contract_count",
+    "skipped_pair_count",
+    "missing_in_candidate",
+    "new_in_candidate",
+}
+_EVAL_SUMMARY_GOVERNANCE_CLAIMS_KEYS = {
+    "candidate_win_count",
+    "candidate_win_scenarios",
+    "task_completion_improvement_count",
+    "task_completion_improvement_scenarios",
+    "suppressed_raw_claims",
+    "suppression_reasons",
+}
+_EVAL_SUMMARY_GATE_KEYS = {
+    "label",
+    "path",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "passed",
+    "check_count",
+    "failed_check_count",
+    "failed_checks",
+    "blocking_reasons",
+}
+_EVAL_SUMMARY_GATE_FAILED_CHECK_KEYS = {"id", "summary", "scope"}
+_EVAL_SUMMARY_EXTERNAL_ADAPTER_KEYS = {
+    "label",
+    "path",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "ready",
+    "adapter_count",
+    "ready_adapter_count",
+    "blocking_reasons",
+}
+_EVAL_SUMMARY_REPAIR_KEYS = {
+    "work_item_count",
+    "critical_work_item_count",
+    "priority_counts",
+    "category_counts",
+    "items",
+    "notes",
+}
+_EVAL_SUMMARY_WORK_ITEM_KEYS = {
+    "work_item_id",
+    "category",
+    "priority",
+    "source",
+    "label",
+    "reason",
+    "summary",
+    "suggested_action",
+    "scenario_id",
+    "rule_id",
+    "count",
+}
+_EVAL_SUMMARY_RISK_KEYS = {"source", "label", "reason"}
+_EVAL_SUMMARY_CONCLUSION_KEYS = {"status", "recommendation", "risk_count"}
+_EVAL_SUMMARY_SERVING_PREFLIGHT_KEYS = {
+    "provided",
+    "required",
+    "path",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "passed",
+    "readiness",
+    "profile_id",
+    "model",
+    "served_model_id",
+    "base_url",
+    "failed_checks",
+    "artifacts",
+    "blocking_reasons",
+}
+_EVAL_SUMMARY_SERVING_PREFLIGHT_SUMMARY_KEYS = {
+    "required",
+    "input_count",
+    "attached_count",
+    "unmatched_labels",
+    "duplicate_labels",
+    "blocking_reasons",
+}
+
+
 def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *, source_path: Path | None = None) -> None:
+    _validate_allowed_keys(summary, _EVAL_SUMMARY_KEYS, target, "eval_summary")
     _require_equal(summary, "schema_version", EVAL_SUMMARY_SCHEMA_VERSION, target)
     source_dir = source_path.parent if source_path is not None else None
     for field_name in ("passed", "governance_ready"):
@@ -14055,6 +14238,12 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
         if serving_preflight is None:
             target.errors.append("eval_summary.serving_preflight must be an object.")
         else:
+            _validate_allowed_keys(
+                serving_preflight,
+                _EVAL_SUMMARY_SERVING_PREFLIGHT_SUMMARY_KEYS,
+                target,
+                "eval_summary.serving_preflight",
+            )
             serving_required = serving_preflight.get("required") is True
             _validate_eval_summary_serving_preflight_summary(serving_preflight, target)
 
@@ -14089,6 +14278,7 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
         if not isinstance(risk, dict):
             target.errors.append(f"eval_summary.risks[{index}] must be an object.")
             continue
+        _validate_allowed_keys(risk, _EVAL_SUMMARY_RISK_KEYS, target, f"eval_summary.risks[{index}]")
         for field_name in ("source", "reason"):
             if not isinstance(risk.get(field_name), str) or not risk.get(field_name):
                 target.errors.append(f"eval_summary.risks[{index}].{field_name} must be a non-empty string.")
@@ -14107,6 +14297,8 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
         target.errors.append("eval_summary.conclusion must be an object.")
     elif conclusion.get("status") not in {"ready", "blocked"}:
         target.errors.append("eval_summary.conclusion.status must be 'ready' or 'blocked'.")
+    else:
+        _validate_allowed_keys(conclusion, _EVAL_SUMMARY_CONCLUSION_KEYS, target, "eval_summary.conclusion")
 
     target.details.update(
         {
@@ -14121,6 +14313,7 @@ def _validate_eval_summary(summary: dict[str, Any], target: ValidationTarget, *,
 
 
 def _validate_eval_summary_heldout(heldout: dict[str, Any], target: ValidationTarget, has_comparisons: bool) -> None:
+    _validate_allowed_keys(heldout, _EVAL_SUMMARY_HELDOUT_KEYS, target, "eval_summary.heldout_scenarios")
     if heldout.get("status") not in {"missing_suite_summaries", "single_arm", "identical", "mismatched", "empty"}:
         target.errors.append("eval_summary.heldout_scenarios.status has an unsupported value.")
     for field_name in ("identical", "cross_arm_claims_allowed"):
@@ -14132,8 +14325,26 @@ def _validate_eval_summary_heldout(heldout: dict[str, Any], target: ValidationTa
         target.errors.append("eval_summary.heldout_scenarios.scenario_ids must be a list of strings.")
     if not isinstance(heldout.get("arms"), list):
         target.errors.append("eval_summary.heldout_scenarios.arms must be a list.")
+    else:
+        for index, arm in enumerate(heldout["arms"]):
+            if isinstance(arm, dict):
+                _validate_allowed_keys(
+                    arm,
+                    _EVAL_SUMMARY_HELDOUT_ARM_KEYS,
+                    target,
+                    f"eval_summary.heldout_scenarios.arms[{index}]",
+                )
     if not isinstance(heldout.get("mismatches"), list):
         target.errors.append("eval_summary.heldout_scenarios.mismatches must be a list.")
+    else:
+        for index, mismatch in enumerate(heldout["mismatches"]):
+            if isinstance(mismatch, dict):
+                _validate_allowed_keys(
+                    mismatch,
+                    _EVAL_SUMMARY_HELDOUT_MISMATCH_KEYS,
+                    target,
+                    f"eval_summary.heldout_scenarios.mismatches[{index}]",
+                )
     if not _is_string_list(heldout.get("blocking_reasons")):
         target.errors.append("eval_summary.heldout_scenarios.blocking_reasons must be a list of strings.")
     if heldout.get("cross_arm_claims_allowed") is True and heldout.get("status") != "identical":
@@ -14154,6 +14365,7 @@ def _validate_eval_summary_arm(
         target.errors.append(f"eval_summary.arms[{index}] must be an object.")
         return
     label = f"eval_summary.arms[{index}]"
+    _validate_allowed_keys(arm, _EVAL_SUMMARY_ARM_KEYS, target, label)
     for field_name in ("label", "path"):
         if not isinstance(arm.get(field_name), str) or not arm.get(field_name):
             target.errors.append(f"eval_summary.arms[{index}].{field_name} must be a non-empty string.")
@@ -14298,6 +14510,7 @@ def _validate_eval_summary_arm_serving_preflight(
     if not isinstance(serving, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(serving, _EVAL_SUMMARY_SERVING_PREFLIGHT_KEYS, target, label)
     for field_name in ("provided", "required", "passed"):
         if not isinstance(serving.get(field_name), bool):
             target.errors.append(f"{label}.{field_name} must be a boolean.")
@@ -14342,17 +14555,22 @@ def _validate_eval_summary_operational_metrics(value: Any, index: int, target: V
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _EVAL_SUMMARY_OPERATIONAL_KEYS, target, label)
     for section_name in ("cost", "latency", "tokens", "task_completion"):
         if not isinstance(value.get(section_name), dict):
             target.errors.append(f"{label}.{section_name} must be an object.")
 
     cost = value.get("cost") if isinstance(value.get("cost"), dict) else {}
+    if cost:
+        _validate_allowed_keys(cost, _EVAL_SUMMARY_COST_KEYS, target, f"{label}.cost")
     _validate_metric_source(cost, f"{label}.cost", target)
     _validate_metric_count_fields(cost, f"{label}.cost", target)
     if not _is_optional_non_negative_number(cost.get("total_usd")):
         target.errors.append(f"{label}.cost.total_usd must be null or a non-negative number.")
 
     latency = value.get("latency") if isinstance(value.get("latency"), dict) else {}
+    if latency:
+        _validate_allowed_keys(latency, _EVAL_SUMMARY_LATENCY_KEYS, target, f"{label}.latency")
     _validate_metric_source(latency, f"{label}.latency", target)
     _validate_metric_count_fields(latency, f"{label}.latency", target)
     for field_name in ("average_ms", "p50_ms", "p95_ms", "max_ms"):
@@ -14360,6 +14578,8 @@ def _validate_eval_summary_operational_metrics(value: Any, index: int, target: V
             target.errors.append(f"{label}.latency.{field_name} must be null or a non-negative number.")
 
     tokens = value.get("tokens") if isinstance(value.get("tokens"), dict) else {}
+    if tokens:
+        _validate_allowed_keys(tokens, _EVAL_SUMMARY_TOKENS_KEYS, target, f"{label}.tokens")
     _validate_metric_source(tokens, f"{label}.tokens", target)
     _validate_metric_count_fields(tokens, f"{label}.tokens", target)
     for field_name in ("prompt_tokens", "completion_tokens", "total_tokens"):
@@ -14367,6 +14587,8 @@ def _validate_eval_summary_operational_metrics(value: Any, index: int, target: V
             target.errors.append(f"{label}.tokens.{field_name} must be null or a non-negative integer.")
 
     task = value.get("task_completion") if isinstance(value.get("task_completion"), dict) else {}
+    if task:
+        _validate_allowed_keys(task, _EVAL_SUMMARY_TASK_COMPLETION_KEYS, target, f"{label}.task_completion")
     _validate_metric_source(task, f"{label}.task_completion", target)
     for field_name in (
         "configured_count",
@@ -14395,6 +14617,7 @@ def _validate_eval_summary_comparison(
         target.errors.append(f"eval_summary.comparisons[{index}] must be an object.")
         return
     label = f"eval_summary.comparisons[{index}]"
+    _validate_allowed_keys(comparison, _EVAL_SUMMARY_COMPARISON_KEYS, target, label)
     for field_name in ("label", "path", "manifest"):
         if not isinstance(comparison.get(field_name), str) or not comparison.get(field_name):
             target.errors.append(f"eval_summary.comparisons[{index}].{field_name} must be a non-empty string.")
@@ -14416,6 +14639,8 @@ def _validate_eval_summary_comparison(
     if not isinstance(raw, dict):
         target.errors.append(f"eval_summary.comparisons[{index}].raw_movement must be an object.")
         raw = {}
+    elif raw:
+        _validate_allowed_keys(raw, _EVAL_SUMMARY_RAW_MOVEMENT_KEYS, target, f"{label}.raw_movement")
     for field_name in (
         "pair_count",
         "candidate_win_count",
@@ -14432,6 +14657,8 @@ def _validate_eval_summary_comparison(
     if not isinstance(claims, dict):
         target.errors.append(f"eval_summary.comparisons[{index}].governance_claims must be an object.")
         claims = {}
+    elif claims:
+        _validate_allowed_keys(claims, _EVAL_SUMMARY_GOVERNANCE_CLAIMS_KEYS, target, f"{label}.governance_claims")
     if comparison.get("claims_allowed") is True and heldout.get("cross_arm_claims_allowed") is not True:
         target.errors.append(f"eval_summary.comparisons[{index}].claims_allowed requires identical held-out scenarios.")
     if comparison.get("claims_allowed") is False:
@@ -14458,6 +14685,7 @@ def _validate_eval_summary_gate(gate: Any, index: int, target: ValidationTarget,
         target.errors.append(f"eval_summary.compare_gates[{index}] must be an object.")
         return
     label = f"eval_summary.compare_gates[{index}]"
+    _validate_allowed_keys(gate, _EVAL_SUMMARY_GATE_KEYS, target, label)
     _validate_eval_summary_source_file_ref(gate, "path", "sha256", "size_bytes", target, label, source_dir)
     if not isinstance(gate.get("passed"), bool):
         target.errors.append(f"eval_summary.compare_gates[{index}].passed must be a boolean.")
@@ -14465,6 +14693,15 @@ def _validate_eval_summary_gate(gate: Any, index: int, target: ValidationTarget,
         target.errors.append(f"eval_summary.compare_gates[{index}].blocking_reasons must be a list of strings.")
     if gate.get("passed") is False and "compare_gate_failed" not in gate.get("blocking_reasons", []):
         target.errors.append(f"eval_summary.compare_gates[{index}].blocking_reasons must include compare_gate_failed when failed.")
+    failed_checks = gate.get("failed_checks") if isinstance(gate.get("failed_checks"), list) else []
+    for failed_index, failed_check in enumerate(failed_checks):
+        if isinstance(failed_check, dict):
+            _validate_allowed_keys(
+                failed_check,
+                _EVAL_SUMMARY_GATE_FAILED_CHECK_KEYS,
+                target,
+                f"{label}.failed_checks[{failed_index}]",
+            )
 
 
 def _validate_eval_summary_external_adapter(
@@ -14478,6 +14715,7 @@ def _validate_eval_summary_external_adapter(
         target.errors.append(f"eval_summary.external_adapter_plans[{index}] must be an object.")
         return
     label = f"eval_summary.external_adapter_plans[{index}]"
+    _validate_allowed_keys(adapter, _EVAL_SUMMARY_EXTERNAL_ADAPTER_KEYS, target, label)
     _validate_eval_summary_source_file_ref(adapter, "path", "sha256", "size_bytes", target, label, source_dir)
     if not isinstance(adapter.get("ready"), bool):
         target.errors.append(f"eval_summary.external_adapter_plans[{index}].ready must be a boolean.")
@@ -14491,6 +14729,7 @@ def _validate_eval_summary_external_adapter(
 
 
 def _validate_eval_summary_repair_curriculum(value: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(value, _EVAL_SUMMARY_REPAIR_KEYS, target, "eval_summary.repair_curriculum")
     items = value.get("items")
     if not isinstance(items, list):
         target.errors.append("eval_summary.repair_curriculum.items must be a list.")
@@ -14524,6 +14763,7 @@ def _validate_eval_summary_work_item(item: Any, index: int, target: ValidationTa
     if not isinstance(item, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(item, _EVAL_SUMMARY_WORK_ITEM_KEYS, target, label)
     for field_name in ("work_item_id", "category", "priority", "source", "label", "reason", "summary", "suggested_action"):
         if not isinstance(item.get(field_name), str) or not item.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -15193,7 +15433,41 @@ def _external_eval_reference_path(value: str, source_path: Path) -> Path:
     return source_path.parent / path
 
 
+_HELDOUT_MANIFEST_KEYS = {
+    "schema_version",
+    "generated_at",
+    "ready",
+    "status",
+    "identical",
+    "cross_arm_claims_allowed",
+    "source_count",
+    "scenario_count",
+    "scenario_ids",
+    "sources",
+    "mismatches",
+    "blocking_reasons",
+    "governance_handoff",
+}
+_HELDOUT_MANIFEST_GOVERNANCE_KEYS = {
+    "external_adapter_manifest_allowed",
+    "cross_arm_claims_allowed",
+    "recommendation",
+}
+_HELDOUT_MANIFEST_SOURCE_KEYS = {
+    "label",
+    "path",
+    "schema_version",
+    "scenario_count",
+    "scenario_ids",
+    "scenario_fingerprints",
+    "duplicate_scenario_ids",
+    "blocking_reasons",
+}
+_HELDOUT_MANIFEST_MISMATCH_KEYS = {"label", "missing_from_source", "extra_in_source"}
+
+
 def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(manifest, _HELDOUT_MANIFEST_KEYS, target, "heldout_manifest")
     _require_equal(manifest, "schema_version", HELDOUT_MANIFEST_SCHEMA_VERSION, target)
     if manifest.get("status") not in {"single_source", "identical", "mismatched", "empty", "blocked"}:
         target.errors.append("heldout_manifest.status has an unsupported value.")
@@ -15249,6 +15523,12 @@ def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarge
     if not isinstance(handoff, dict):
         target.errors.append("heldout_manifest.governance_handoff must be an object.")
     else:
+        _validate_allowed_keys(
+            handoff,
+            _HELDOUT_MANIFEST_GOVERNANCE_KEYS,
+            target,
+            "heldout_manifest.governance_handoff",
+        )
         if handoff.get("external_adapter_manifest_allowed") != manifest.get("ready"):
             target.errors.append("heldout_manifest.governance_handoff.external_adapter_manifest_allowed must match ready.")
         if handoff.get("cross_arm_claims_allowed") != manifest.get("cross_arm_claims_allowed"):
@@ -15271,6 +15551,7 @@ def _validate_heldout_manifest_source(source: Any, index: int, target: Validatio
         target.errors.append(f"heldout_manifest.sources[{index}] must be an object.")
         return
     label = f"heldout_manifest.sources[{index}]"
+    _validate_allowed_keys(source, _HELDOUT_MANIFEST_SOURCE_KEYS, target, label)
     for field_name in ("label", "path"):
         if not isinstance(source.get(field_name), str) or not source.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -15372,6 +15653,7 @@ def _validate_heldout_manifest_mismatch(mismatch: Any, index: int, target: Valid
     if not isinstance(mismatch, dict):
         target.errors.append(f"heldout_manifest.mismatches[{index}] must be an object.")
         return
+    _validate_allowed_keys(mismatch, _HELDOUT_MANIFEST_MISMATCH_KEYS, target, f"heldout_manifest.mismatches[{index}]")
     if not isinstance(mismatch.get("label"), str) or not mismatch.get("label"):
         target.errors.append(f"heldout_manifest.mismatches[{index}].label must be a non-empty string.")
     for field_name in ("missing_from_source", "extra_in_source"):

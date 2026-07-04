@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/eval_summary.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Governance-facing held-out evaluation summary across suite, comparison, gate, and external-adapter artifacts.",
   "properties": {
     "arm_count": { "minimum": 0, "type": "integer" },
@@ -59,11 +59,14 @@
   "type": "object",
   "$defs": {
     "arm": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
+        "average_score": { "type": ["number", "null"] },
         "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
+        "critical_failure_counts": { "items": { "type": "object" }, "type": "array" },
         "error_count": { "minimum": 0, "type": "integer" },
         "failed": { "minimum": 0, "type": "integer" },
+        "failed_rule_counts": { "items": { "type": "object" }, "type": "array" },
         "label": { "minLength": 1, "type": "string" },
         "operational_metrics": { "type": "object" },
         "pass_rate": { "type": ["number", "null"] },
@@ -75,31 +78,37 @@
         "serving_preflight": { "$ref": "#/$defs/serving_preflight" },
         "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
         "size_bytes": { "minimum": 0, "type": "integer" },
-        "total": { "minimum": 0, "type": "integer" }
+        "total": { "minimum": 0, "type": "integer" },
+        "validation": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
       },
       "required": ["label", "path", "sha256", "size_bytes", "scenario_count", "scenario_ids", "total", "passed", "failed", "error_count", "blocking_reasons"],
       "type": "object"
     },
     "comparison": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
         "claims_allowed": { "type": "boolean" },
-        "governance_claims": { "type": "object" },
+        "governance_claims": { "$ref": "#/$defs/governance_claims" },
         "label": { "minLength": 1, "type": "string" },
         "manifest": { "minLength": 1, "type": "string" },
         "manifest_sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
         "manifest_size_bytes": { "minimum": 0, "type": "integer" },
         "passed": { "type": "boolean" },
         "path": { "minLength": 1, "type": "string" },
-        "raw_movement": { "type": "object" },
+        "raw_movement": { "$ref": "#/$defs/raw_movement" },
         "schema_version": { "type": ["string", "null"] }
       },
       "required": ["label", "path", "manifest", "manifest_sha256", "manifest_size_bytes", "claims_allowed", "passed", "blocking_reasons", "raw_movement", "governance_claims"],
       "type": "object"
     },
     "conclusion": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "recommendation": { "minLength": 1, "type": "string" },
         "risk_count": { "minimum": 0, "type": "integer" },
@@ -109,7 +118,7 @@
       "type": "object"
     },
     "external_adapter_plan": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "adapter_count": { "minimum": 0, "type": "integer" },
         "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
@@ -125,7 +134,7 @@
       "type": "object"
     },
     "gate": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
         "check_count": { "minimum": 0, "type": "integer" },
@@ -142,7 +151,7 @@
       "type": "object"
     },
     "heldout_scenarios": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "arms": { "items": { "type": "object" }, "type": "array" },
         "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
@@ -159,8 +168,70 @@
       "required": ["status", "identical", "cross_arm_claims_allowed", "scenario_count", "scenario_ids", "arms", "mismatches", "blocking_reasons"],
       "type": "object"
     },
+    "governance_claims": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_win_count": { "minimum": 0, "type": "integer" },
+        "candidate_win_scenarios": { "items": { "type": "string" }, "type": "array" },
+        "suppressed_raw_claims": { "type": "boolean" },
+        "suppression_reasons": { "items": { "type": "string" }, "type": "array" },
+        "task_completion_improvement_count": { "minimum": 0, "type": "integer" },
+        "task_completion_improvement_scenarios": { "items": { "type": "string" }, "type": "array" }
+      },
+      "required": [
+        "candidate_win_count",
+        "candidate_win_scenarios",
+        "task_completion_improvement_count",
+        "task_completion_improvement_scenarios",
+        "suppressed_raw_claims",
+        "suppression_reasons"
+      ],
+      "type": "object"
+    },
+    "raw_movement": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_win_count": { "minimum": 0, "type": "integer" },
+        "baseline_win_scenarios": { "items": { "type": "string" }, "type": "array" },
+        "candidate_win_count": { "minimum": 0, "type": "integer" },
+        "candidate_win_scenarios": { "items": { "type": "string" }, "type": "array" },
+        "contract_drift_count": { "minimum": 0, "type": "integer" },
+        "fixed_rule_counts": { "additionalProperties": { "minimum": 0, "type": "integer" }, "type": "object" },
+        "missing_in_candidate": { "items": { "type": "string" }, "type": "array" },
+        "new_critical_failure_counts": { "additionalProperties": { "minimum": 0, "type": "integer" }, "type": "object" },
+        "new_in_candidate": { "items": { "type": "string" }, "type": "array" },
+        "pair_count": { "minimum": 0, "type": "integer" },
+        "regressed_rule_counts": { "additionalProperties": { "minimum": 0, "type": "integer" }, "type": "object" },
+        "skipped_pair_count": { "minimum": 0, "type": "integer" },
+        "task_completion_improvement_count": { "minimum": 0, "type": "integer" },
+        "task_completion_improvement_scenarios": { "items": { "type": "string" }, "type": "array" },
+        "task_completion_regression_count": { "minimum": 0, "type": "integer" },
+        "task_completion_regression_scenarios": { "items": { "type": "string" }, "type": "array" },
+        "unverified_contract_count": { "minimum": 0, "type": "integer" }
+      },
+      "required": [
+        "pair_count",
+        "candidate_win_count",
+        "baseline_win_count",
+        "candidate_win_scenarios",
+        "baseline_win_scenarios",
+        "task_completion_improvement_count",
+        "task_completion_regression_count",
+        "task_completion_improvement_scenarios",
+        "task_completion_regression_scenarios",
+        "fixed_rule_counts",
+        "regressed_rule_counts",
+        "new_critical_failure_counts",
+        "contract_drift_count",
+        "unverified_contract_count",
+        "skipped_pair_count",
+        "missing_in_candidate",
+        "new_in_candidate"
+      ],
+      "type": "object"
+    },
     "repair_curriculum": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "category_counts": { "items": { "type": "object" }, "type": "array" },
         "critical_work_item_count": { "minimum": 0, "type": "integer" },
@@ -173,7 +244,7 @@
       "type": "object"
     },
     "risk": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "label": { "type": "string" },
         "reason": { "minLength": 1, "type": "string" },
@@ -183,7 +254,7 @@
       "type": "object"
     },
     "serving_preflight": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "if": {
@@ -216,7 +287,7 @@
       "type": "object"
     },
     "serving_preflight_summary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "attached_count": { "minimum": 0, "type": "integer" },
         "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
@@ -229,13 +300,14 @@
       "type": "object"
     },
     "work_item": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "category": { "enum": ["repair", "curriculum", "eval_gate", "eval_harness"], "type": "string" },
         "count": { "minimum": 0, "type": "integer" },
         "label": { "minLength": 1, "type": "string" },
         "priority": { "enum": ["critical", "high", "medium", "low"], "type": "string" },
         "reason": { "minLength": 1, "type": "string" },
+        "rule_id": { "type": "string" },
         "scenario_id": { "type": "string" },
         "source": { "minLength": 1, "type": "string" },
         "suggested_action": { "minLength": 1, "type": "string" },

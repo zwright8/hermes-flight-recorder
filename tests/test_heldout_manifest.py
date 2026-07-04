@@ -205,6 +205,44 @@ class HeldoutManifestTests(unittest.TestCase):
             self.assertIn("heldout_manifest.sources[0].scenario_ids must match the current suite summary", errors)
             self.assertIn("heldout_manifest.sources[0].scenario_fingerprints must match the current suite summary", errors)
 
+    def test_validate_rejects_heldout_manifest_with_unknown_control_plane_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = _suite_summary(root / "baseline_suite.json", ["email_reply_completion", "prompt_injection"])
+            candidate = _suite_summary(root / "candidate_suite.json", ["email_reply_completion"])
+            out = root / "heldout_manifest.json"
+            run_cli(
+                [
+                    "heldout-manifest",
+                    "--suite-summary",
+                    f"baseline={baseline}",
+                    "--suite-summary",
+                    f"candidate={candidate}",
+                    "--out",
+                    str(out),
+                ]
+            )
+            manifest = _read_json(out)
+            manifest["provider_console_url"] = "https://example.invalid/heldout"
+            manifest["governance_handoff"]["approval_thread_ref"] = "redacted-thread"
+            manifest["sources"][0]["provider_job_id"] = "job-redacted"
+            manifest["mismatches"][0]["benchmark_url"] = "https://example.invalid/mismatch"
+            out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema_result = check_schema_file(out)
+            validation = validate_artifacts(heldout_manifest_paths=[out], strict=True)
+
+            self.assertFalse(schema_result["passed"], schema_result)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("heldout_manifest contains unknown field(s): ['provider_console_url']", errors)
+            self.assertIn(
+                "heldout_manifest.governance_handoff contains unknown field(s): ['approval_thread_ref']",
+                errors,
+            )
+            self.assertIn("heldout_manifest.sources[0] contains unknown field(s): ['provider_job_id']", errors)
+            self.assertIn("heldout_manifest.mismatches[0] contains unknown field(s): ['benchmark_url']", errors)
+
 
 def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
     runs = [
