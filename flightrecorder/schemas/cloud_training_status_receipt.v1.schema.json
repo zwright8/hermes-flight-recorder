@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_status_receipt.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Dry-run cloud training status and cancellation receipt.",
   "properties": {
     "blocked_reasons": {
@@ -11,11 +11,12 @@
       "type": "array"
     },
     "check_count": {
+      "minimum": 0,
       "type": "integer"
     },
     "checks": {
       "items": {
-        "type": "object"
+        "$ref": "#/$defs/check"
       },
       "type": "array"
     },
@@ -23,9 +24,10 @@
       "type": "string"
     },
     "execution_boundary": {
-      "type": "object"
+      "$ref": "#/$defs/executionBoundary"
     },
     "failed_check_count": {
+      "minimum": 0,
       "type": "integer"
     },
     "passed": {
@@ -47,8 +49,11 @@
       "const": "hfr.cloud_training_status_receipt.v1"
     },
     "source_artifacts": {
-      "additionalProperties": {
-        "$ref": "#/$defs/sourceArtifact"
+      "additionalProperties": false,
+      "properties": {
+        "launch_receipt": {
+          "$ref": "#/$defs/sourceArtifact"
+        }
       },
       "required": [
         "launch_receipt"
@@ -56,8 +61,11 @@
       "type": "object"
     },
     "status": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
+        "cancel_requested": {
+          "type": "boolean"
+        },
         "cost_incurred_usd": {
           "const": 0
         },
@@ -77,6 +85,7 @@
       "required": [
         "provider_status",
         "terminal",
+        "cancel_requested",
         "provider_cancel_called",
         "provider_api_called",
         "cost_incurred_usd"
@@ -101,25 +110,150 @@
   "title": "Hermes Flight Recorder Cloud Training Status Receipt",
   "type": "object",
   "$defs": {
-    "sourceArtifact": {
-      "additionalProperties": true,
+    "check": {
+      "additionalProperties": false,
       "properties": {
-        "exists": { "type": "boolean" },
-        "path": { "type": "string" },
-        "role": { "type": "string" },
-        "schema_error_count": { "minimum": 0, "type": "integer" },
-        "schema_errors": { "items": { "type": "string" }, "type": "array" },
-        "schema_name": { "type": "string" },
-        "schema_passed": { "type": "boolean" },
+        "actual": {
+          "type": "object"
+        },
+        "expected": {
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "actual",
+        "expected",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_live": {
+          "const": false
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "cloud_job_started": {
+          "const": false
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "live_preflight_requested": {
+          "type": "boolean"
+        },
+        "live_requested": {
+          "type": "boolean"
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "live_preflight_requested",
+        "live_requested",
+        "allow_live",
+        "provider_api_called",
+        "cloud_job_started",
+        "cloud_cost_incurred_usd",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "sourceArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_error_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "schema_errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "schema_name": {
+          "type": "string"
+        },
+        "schema_passed": {
+          "type": "boolean"
+        },
         "sha256": {
           "pattern": "^[0-9a-f]{64}$",
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        "size_bytes": { "minimum": 0, "type": ["integer", "null"] },
-        "source_passed": { "type": ["boolean", "null"] },
-        "source_recommendation": { "type": "string" }
+        "size_bytes": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_passed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "source_recommendation": {
+          "type": "string"
+        }
       },
-      "required": ["role", "path", "exists", "sha256", "size_bytes"],
+      "required": [
+        "role",
+        "path",
+        "exists",
+        "sha256",
+        "size_bytes",
+        "schema_name",
+        "schema_passed",
+        "schema_error_count",
+        "schema_errors",
+        "source_passed",
+        "source_recommendation"
+      ],
       "type": "object"
     }
   }

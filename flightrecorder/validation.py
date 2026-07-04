@@ -4969,6 +4969,49 @@ def _safe_non_negative_number(value: Any) -> int | float:
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else 0
 
 
+_CLOUD_TRAINING_RECEIPT_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_CLOUD_TRAINING_SOURCE_ARTIFACT_KEYS = {
+    "role",
+    "path",
+    "exists",
+    "sha256",
+    "size_bytes",
+    "schema_name",
+    "schema_passed",
+    "schema_error_count",
+    "schema_errors",
+    "source_passed",
+    "source_recommendation",
+}
+_CLOUD_TRAINING_EXECUTION_BOUNDARY_KEYS = {
+    "dry_run_only",
+    "live_preflight_requested",
+    "live_requested",
+    "allow_live",
+    "provider_api_called",
+    "cloud_job_started",
+    "cloud_cost_incurred_usd",
+    "model_downloads_started",
+    "weights_updated_by_flight_recorder",
+    "credential_values_recorded",
+}
+_CLOUD_TRAINING_LAUNCH_KEYS = {
+    "mode",
+    "cloud_job_started",
+    "provider_job_id",
+    "provider_api_called",
+    "cost_incurred_usd",
+}
+_CLOUD_TRAINING_STATUS_KEYS = {
+    "provider_status",
+    "terminal",
+    "cancel_requested",
+    "provider_cancel_called",
+    "provider_api_called",
+    "cost_incurred_usd",
+}
+
+
 def _validate_cloud_training_contract(
     payload: dict[str, Any],
     target: ValidationTarget,
@@ -4976,6 +5019,7 @@ def _validate_cloud_training_contract(
     *,
     source_path: Path | None = None,
 ) -> None:
+    _validate_cloud_training_receipt_allowed_keys(payload, target, expected_schema_version)
     _require_equal(payload, "schema_version", expected_schema_version, target, prefix=f"{target.target_type}.")
     checks = payload.get("checks")
     if checks is not None:
@@ -4983,6 +5027,11 @@ def _validate_cloud_training_contract(
             target.errors.append(f"{target.target_type}.checks must be a list.")
             checks = []
         failed_checks = _validate_gate_like_checks(checks, target, f"{target.target_type}.checks")
+        if expected_schema_version in {
+            CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
+            CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
+        }:
+            _validate_cloud_training_receipt_checks(checks, target, f"{target.target_type}.checks")
         if payload.get("check_count") != len(checks):
             target.errors.append(f"{target.target_type}.check_count expected {len(checks)}, got {payload.get('check_count')!r}.")
         if payload.get("failed_check_count") != failed_checks:
@@ -4995,10 +5044,24 @@ def _validate_cloud_training_contract(
     if not isinstance(boundary, dict):
         target.errors.append(f"{target.target_type}.execution_boundary must be an object.")
     else:
+        if expected_schema_version in {
+            CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
+            CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
+        }:
+            _validate_allowed_keys(
+                boundary,
+                _CLOUD_TRAINING_EXECUTION_BOUNDARY_KEYS,
+                target,
+                f"{target.target_type}.execution_boundary",
+            )
+        if boundary.get("dry_run_only") is not True:
+            target.errors.append(f"{target.target_type}.execution_boundary.dry_run_only must be true.")
         if boundary.get("provider_api_called") is not False:
             target.errors.append(f"{target.target_type}.execution_boundary.provider_api_called must be false.")
         if boundary.get("cloud_job_started") is not False:
             target.errors.append(f"{target.target_type}.execution_boundary.cloud_job_started must be false.")
+        if boundary.get("model_downloads_started") is not False:
+            target.errors.append(f"{target.target_type}.execution_boundary.model_downloads_started must be false.")
         if boundary.get("credential_values_recorded") is not False:
             target.errors.append(f"{target.target_type}.execution_boundary.credential_values_recorded must be false.")
         if boundary.get("weights_updated_by_flight_recorder") is not False:
@@ -5093,6 +5156,36 @@ def _validate_cloud_training_contract(
     )
 
 
+def _validate_cloud_training_receipt_allowed_keys(
+    payload: dict[str, Any],
+    target: ValidationTarget,
+    expected_schema_version: str,
+) -> None:
+    common = {
+        "schema_version",
+        "created_at",
+        "passed",
+        "readiness",
+        "recommendation",
+        "check_count",
+        "failed_check_count",
+        "checks",
+        "blocked_reasons",
+        "source_artifacts",
+        "execution_boundary",
+    }
+    if expected_schema_version == CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION:
+        _validate_allowed_keys(payload, common | {"launch"}, target, "cloud_training_launch_receipt")
+    if expected_schema_version == CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION:
+        _validate_allowed_keys(payload, common | {"status"}, target, "cloud_training_status_receipt")
+
+
+def _validate_cloud_training_receipt_checks(checks: list[Any], target: ValidationTarget, label: str) -> None:
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _CLOUD_TRAINING_RECEIPT_CHECK_KEYS, target, f"{label}[{index}]")
+
+
 def _validate_cloud_training_provider_record(record: Any, target: ValidationTarget, label: str) -> None:
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
@@ -5164,6 +5257,7 @@ def _validate_cloud_training_source_artifacts(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, set(required_names), target, label)
     for name in required_names:
         if name not in value:
             target.errors.append(f"{label}.{name} is required.")
@@ -5358,6 +5452,8 @@ def _validate_cloud_training_launch_receipt_readiness(
     launch = payload.get("launch") if isinstance(payload.get("launch"), dict) else {}
     if not isinstance(payload.get("launch"), dict):
         target.errors.append("cloud_training_launch_receipt.launch must be an object.")
+    else:
+        _validate_allowed_keys(launch, _CLOUD_TRAINING_LAUNCH_KEYS, target, "cloud_training_launch_receipt.launch")
     live_requested = launch.get("mode") == "live"
     if launch.get("mode") not in {"dry_run", "live"}:
         target.errors.append("cloud_training_launch_receipt.launch.mode must be dry_run or live.")
@@ -5420,6 +5516,8 @@ def _validate_cloud_training_status_receipt_readiness(
     status = payload.get("status") if isinstance(payload.get("status"), dict) else {}
     if not isinstance(payload.get("status"), dict):
         target.errors.append("cloud_training_status_receipt.status must be an object.")
+    else:
+        _validate_allowed_keys(status, _CLOUD_TRAINING_STATUS_KEYS, target, "cloud_training_status_receipt.status")
     if status.get("provider_status") != "not_started":
         target.errors.append("cloud_training_status_receipt.status.provider_status must be not_started.")
     if status.get("terminal") is not True:
@@ -5583,6 +5681,7 @@ def _validate_cloud_training_artifact_ref(record: Any, target: ValidationTarget,
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(record, _CLOUD_TRAINING_SOURCE_ARTIFACT_KEYS, target, label)
     if not isinstance(record.get("role"), str) or not record.get("role"):
         target.errors.append(f"{label}.role must be a non-empty string.")
     if not isinstance(record.get("exists"), bool):

@@ -344,6 +344,97 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("cloud_training_status_receipt.checks.status_check_did_not_call_provider.passed must match source readiness.", errors)
             status_receipt.write_text(json.dumps(status_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    def test_launch_and_status_receipts_reject_unknown_side_effect_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_source = root / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+            preflight = root / "preflight.json"
+            launch_plan = root / "launch_plan.json"
+            launch_receipt = root / "launch_receipt.json"
+            status_receipt = root / "status_receipt.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "preflight",
+                        "--provider",
+                        "modal",
+                        "--agentic-training-plan",
+                        str(plan_source),
+                        "--region",
+                        "provider_default",
+                        "--gpu-class",
+                        "a100",
+                        "--max-cost-usd",
+                        "0",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(run_cli(["cloud-training", "plan", "--preflight", str(preflight), "--out", str(launch_plan)]), 1)
+            self.assertEqual(run_cli(["cloud-training", "launch", "--launch-plan", str(launch_plan), "--out", str(launch_receipt)]), 1)
+            self.assertEqual(run_cli(["cloud-training", "status", "--launch-receipt", str(launch_receipt), "--out", str(status_receipt)]), 0)
+            self.assert_schema_and_validate(launch_receipt, "cloud_training_launch_receipt")
+            self.assert_schema_and_validate(status_receipt, "cloud_training_status_receipt")
+
+            launch_payload = json.loads(launch_receipt.read_text(encoding="utf-8"))
+            status_payload = json.loads(status_receipt.read_text(encoding="utf-8"))
+
+            forged_launch = json.loads(json.dumps(launch_payload))
+            forged_launch["provider_console_url"] = "redacted-provider-console"
+            forged_launch["checks"][0]["provider_call"] = "forged"
+            forged_launch["source_artifacts"]["launch_plan"]["credential_hint"] = "redacted"
+            forged_launch["launch"]["provider_console_url"] = "redacted-provider-console"
+            forged_launch["execution_boundary"]["cloud_scheduler_receipt"] = "not-created"
+            launch_receipt.write_text(json.dumps(forged_launch, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(launch_receipt)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_launch_receipt_paths=[launch_receipt], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_launch_receipt contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("cloud_training_launch_receipt.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn(
+                "cloud_training_launch_receipt.source_artifacts.launch_plan contains unknown field(s): ['credential_hint'].",
+                errors,
+            )
+            self.assertIn("cloud_training_launch_receipt.launch contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn(
+                "cloud_training_launch_receipt.execution_boundary contains unknown field(s): ['cloud_scheduler_receipt'].",
+                errors,
+            )
+            launch_receipt.write_text(json.dumps(launch_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            forged_status = json.loads(json.dumps(status_payload))
+            forged_status["provider_poll_url"] = "redacted-provider-poll"
+            forged_status["checks"][0]["provider_poll"] = "forged"
+            forged_status["source_artifacts"]["launch_receipt"]["credential_hint"] = "redacted"
+            forged_status["status"]["provider_status_url"] = "redacted-provider-poll"
+            forged_status["execution_boundary"]["cancel_receipt"] = "not-created"
+            status_receipt.write_text(json.dumps(forged_status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(status_receipt)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_status_receipt_paths=[status_receipt], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_status_receipt contains unknown field(s): ['provider_poll_url'].", errors)
+            self.assertIn("cloud_training_status_receipt.checks[0] contains unknown field(s): ['provider_poll'].", errors)
+            self.assertIn(
+                "cloud_training_status_receipt.source_artifacts.launch_receipt contains unknown field(s): ['credential_hint'].",
+                errors,
+            )
+            self.assertIn("cloud_training_status_receipt.status contains unknown field(s): ['provider_status_url'].", errors)
+            self.assertIn(
+                "cloud_training_status_receipt.execution_boundary contains unknown field(s): ['cancel_receipt'].",
+                errors,
+            )
+
     def test_cloud_training_source_refs_are_output_relative_and_reject_stale_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
