@@ -13274,6 +13274,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
 
     failed_checks = _validate_evidence_bundle_checks(checks, target)
     blocking_check_rows = _evidence_bundle_blocking_check_rows(checks)
+    blocking_gate_rows = _evidence_bundle_blocking_gate_rows(metrics)
     if bundle.get("check_count") != len(checks):
         target.errors.append(f"evidence_bundle.check_count expected {len(checks)}, got {bundle.get('check_count')!r}.")
     if bundle.get("failed_check_count") != failed_checks:
@@ -13292,6 +13293,7 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
             expected_readiness,
             failed_checks,
             blocking_check_rows,
+            blocking_gate_rows,
             artifacts,
             metrics,
             target,
@@ -19691,11 +19693,21 @@ def _evidence_bundle_blocking_check_rows(checks: list[Any]) -> list[dict[str, An
     ]
 
 
+def _evidence_bundle_blocking_gate_rows(metrics: dict[str, Any]) -> list[dict[str, str]]:
+    gates = metrics.get("gates") if isinstance(metrics.get("gates"), list) else []
+    return [
+        {"id": str(gate.get("id") or "unknown"), "path": str(gate.get("path") or "")}
+        for gate in gates
+        if isinstance(gate, dict) and gate.get("passed") is False
+    ]
+
+
 def _validate_evidence_bundle_decision(
     decision: Any,
     expected_readiness: str,
     failed_checks: int,
     blocking_check_rows: list[dict[str, Any]],
+    blocking_gate_rows: list[dict[str, str]],
     artifacts: dict[str, Any],
     metrics: dict[str, Any],
     target: ValidationTarget,
@@ -19753,6 +19765,8 @@ def _validate_evidence_bundle_decision(
                 if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
                     target.errors.append(f"{label}.{field_name} must be a non-empty string.")
             _warn_absolute_public_path(target, f"{label}.path", gate.get("path"))
+        if blocking_gates != blocking_gate_rows:
+            target.errors.append("evidence_bundle.decision.blocking_gates must match failed evidence_bundle.metrics.gates.")
     next_actions = decision.get("next_actions")
     if not isinstance(next_actions, list):
         target.errors.append("evidence_bundle.decision.next_actions must be a list.")

@@ -685,9 +685,10 @@ card, and dataset card decisions.
   paths are expected to exist during validation; decision next-actions must
   also reference declared bundle artifacts, metrics, or the bundle itself
   before handoff instructions are trusted.
-- Evidence-bundle decisions must mirror the failed bundle checks they summarize,
-  so blocking-check rows cannot be stale, renamed, or substituted while keeping
-  only the aggregate blocker count correct.
+- Evidence-bundle decisions must mirror the failed bundle checks and gate
+  metrics they summarize, so blocking-check and blocking-gate rows cannot be
+  stale, renamed, or substituted while keeping only aggregate blocker counts
+  correct.
 - Eval summaries bind suite, compare-manifest, compare-gate,
   external-adapter, and serving-preflight source refs to SHA-256 and byte-size
   evidence, and validation rejects stale source artifacts before Governance

@@ -1559,6 +1559,30 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("decision.blocking_checks must match failed evidence_bundle.checks", errors)
 
+    def test_validate_rejects_stale_bundle_decision_blocking_gates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            gate_path = root / "failed_gate.json"
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            gate_path.write_text(
+                json.dumps({"schema_version": "hfr.test_gate.v1", "passed": False}, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            run_cli(["evidence-bundle", "--runs", str(runs), "--gate", str(gate_path), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["decision"]["blocking_gates"][0]["id"] = "stale_gate_id"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("decision.blocking_gates must match failed evidence_bundle.metrics.gates", errors)
+
     def test_strict_validate_rejects_absolute_bundle_artifact_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1636,9 +1660,9 @@ class EvidenceBundleTests(unittest.TestCase):
                 "hermes_root": f"{absolute_root}/hermes-agent",
                 "flight_recorder_root": f"{absolute_root}/hermes-flight-recorder",
             }
-            bundle["metrics"]["gates"] = [{"id": "forged_gate", "path": f"{absolute_root}/gate.json", "passed": True}]
+            bundle["metrics"]["gates"] = [{"id": "forged_gate", "path": f"{absolute_root}/gate.json", "passed": False}]
             bundle["decision"]["gate_count"] = 1
-            bundle["decision"]["passed_gate_count"] = 1
+            bundle["decision"]["passed_gate_count"] = 0
             bundle["decision"]["blocking_gates"] = [{"id": "forged_gate", "path": f"{absolute_root}/gate.json"}]
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
