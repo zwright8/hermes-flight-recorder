@@ -5,9 +5,16 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from flightrecorder.agentic_training_loop_plan import build_agentic_training_loop_plan, write_agentic_training_loop_plan
 from flightrecorder.cli import main
+from flightrecorder.external_eval import (
+    build_external_eval_plan,
+    build_external_eval_receipt,
+    write_external_eval_plan,
+    write_external_eval_receipt,
+)
 from flightrecorder.schema_registry import list_schema_records
 
 
@@ -286,6 +293,32 @@ class AgenticLoopLedgerTests(unittest.TestCase):
                 "readiness_digest.external_eval_live_benchmark_requested must match the latest iteration",
                 errors,
             )
+
+    def test_forged_external_eval_receipt_keeps_ledger_state_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            receipt_path = ready_artifacts["external_eval_receipt"][0]
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["source_plan"]["sha256"] = "0" * 64
+            receipt["passed"] = True
+            receipt["readiness"] = "dry_run_recorded"
+            receipt["recommendation"] = "archive_external_eval_dry_run"
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+            self.assertFalse(payload["iterations"][0]["external_eval_receipt_state"]["receipts_passed"])
+            self.assertEqual(payload["iterations"][0]["external_eval_receipt_state"]["receipt_passed_count"], 0)
+            self.assertFalse(payload["readiness_digest"]["external_eval_receipts_passed"])
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary), "--strict"])
+            receipt_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(receipt_code, 1)
 
     def test_duplicate_receipt_side_effects_flow_into_ledger_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1103,6 +1136,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "hfr.cloud_training_status_receipt.v1",
             {"launch_receipt": self.artifact_ref(cloud_launch_receipt, "cloud_training_launch_receipt")},
         )
+        heldout_manifest, external_eval_plan, external_eval_receipt = self.write_external_eval_artifacts(root)
         return {
             "agentic_rollout_plan": [self.write_json(root / "agentic_rollout_plan.json", "hfr.agentic_rollout_plan.v1")],
             "agentic_rollout_receipt": [self.write_json(root / "agentic_rollout_receipt.json", "hfr.agentic_rollout_receipt.v1")],
@@ -1135,9 +1169,9 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "trainer_preflight": [trainer_preflight],
             "trainer_launch_check": [trainer_launch_check],
             "serving_lifecycle": [self.write_json(root / "serving_lifecycle.json", "hfr.serving_lifecycle.v1")],
-            "heldout_manifest": [self.write_json(root / "heldout_manifest.json", "hfr.heldout_scenario_manifest.v1")],
-            "external_eval_plan": [self.write_json(root / "external_eval_plan.json", "hfr.external_eval_adapters.v1")],
-            "external_eval_receipt": [self.write_json(root / "external_eval_receipt.json", "hfr.external_eval_receipt.v1")],
+            "heldout_manifest": [heldout_manifest],
+            "external_eval_plan": [external_eval_plan],
+            "external_eval_receipt": [external_eval_receipt],
             "eval_summary": [self.write_json(root / "eval_summary.json", "hfr.eval_summary.v1")],
             "improvement_plan": [self.write_json(root / "improvement_plan.json", "hfr.improvement_plan.v1")],
             "promotion_decision": [self.write_json(root / "promotion_decision.json", "hfr.promotion_decision.v1")],
@@ -1188,31 +1222,41 @@ class AgenticLoopLedgerTests(unittest.TestCase):
                     "execution_boundary": {"credential_values_recorded": False},
                 }
             )
-        if schema_version == "hfr.external_eval_receipt.v1":
-            payload.update(
-                {
-                    "readiness": "dry_run_recorded",
-                    "recommendation": "archive_external_eval_dry_run",
-                    "adapter_count": 1,
-                    "ready_adapter_count": 1,
-                    "launch": {
-                        "mode": "dry_run",
-                        "live_benchmarks_started": False,
-                        "provider_api_called": False,
-                        "model_downloads_started": False,
-                        "cost_incurred_usd": 0,
-                    },
-                    "execution_boundary": {
-                        "dry_run_only": True,
-                        "live_benchmarks_started": False,
-                        "provider_api_called": False,
-                        "model_downloads_started": False,
-                        "cloud_cost_incurred_usd": 0,
-                        "credential_values_recorded": False,
-                        "weights_updated_by_flight_recorder": False,
-                    },
-                }
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return path
+
+    def write_external_eval_artifacts(self, root: Path) -> tuple[Path, Path, Path]:
+        heldout_manifest = self.write_heldout_manifest(root / "heldout_manifest.json")
+        external_eval_plan = root / "external_eval_plan.json"
+        external_eval_receipt = root / "external_eval_receipt.json"
+        with patch(
+            "flightrecorder.external_eval._dependency_status",
+            return_value={"available": True, "imports": {"inspect_ai": True}, "commands": {"inspect": True}},
+        ):
+            plan = build_external_eval_plan(
+                adapters=["inspect_ai"],
+                scenario_manifest=heldout_manifest,
+                model_endpoint="http://127.0.0.1:8000/v1",
+                inspect_task_set="heldout-inspect",
+                sandbox_policy="locked-network",
+                allow_installed=True,
             )
+        write_external_eval_plan(plan, external_eval_plan)
+        receipt = build_external_eval_receipt(
+            plan_path=external_eval_plan,
+            adapters=["inspect_ai"],
+            created_at="2026-07-03T00:00:00+00:00",
+        )
+        write_external_eval_receipt(receipt, external_eval_receipt)
+        return heldout_manifest, external_eval_plan, external_eval_receipt
+
+    def write_heldout_manifest(self, path: Path) -> Path:
+        payload = {
+            "schema_version": "hfr.heldout_scenario_manifest.v1",
+            "ready": True,
+            "scenario_count": 1,
+            "scenario_ids": ["email_reply_completion"],
+        }
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return path
 

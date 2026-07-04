@@ -362,7 +362,10 @@ side-effect status without walking every receipt. The digest includes
 `external_eval_receipt_state`, so dry-run external benchmark receipts must have
 passed and must show no live benchmark request, provider API call, model
 download, credential recording, or non-zero cost before governance readiness can
-be claimed. The ledger `decision` also lists the explicit governance actions
+be claimed. Strict loop-plan and ledger validation also replays each external
+eval receipt against its current source plan before counting it as passed, so a
+forged receipt cannot satisfy held-out eval readiness by self-asserting
+`passed: true`. The ledger `decision` also lists the explicit governance actions
 available from the latest iteration:
 `approve`, `reject`, `rollback`, and `request_another_iteration`. Those options
 are advisory and ledger-only. Use `flightrecorder agentic-loop governance` to

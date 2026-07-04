@@ -38,6 +38,7 @@ from .agentic_training_loop_plan import (
     AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION,
     CLOUD_TRAINING_LINEAGE_ARTIFACT_ROLES,
     CLOUD_TRAINING_LINEAGE_LINKS,
+    _external_eval_receipt_semantic_passed as _loop_external_eval_receipt_semantic_passed,
 )
 from .agentic_loop_ledger import (
     AGENTIC_LOOP_LEDGER_SCHEMA_VERSION,
@@ -5023,7 +5024,8 @@ def _expected_agentic_training_loop_external_eval_receipt_state(
     source_artifacts: dict[str, Any],
     source_path: Path,
 ) -> dict[str, Any]:
-    payloads = _agentic_training_loop_payloads(source_artifacts, "external_eval_receipt", source_path)
+    records = _agentic_training_loop_payload_records(source_artifacts, "external_eval_receipt", source_path)
+    payloads = [record["payload"] for record in records]
     first_payload = payloads[0] if payloads else {}
     first_launch = _agentic_training_loop_external_eval_launch(first_payload)
     adapter_rows = [row for payload in payloads for row in _agentic_training_loop_external_eval_adapter_receipts(payload)]
@@ -5072,7 +5074,12 @@ def _expected_agentic_training_loop_external_eval_receipt_state(
     dry_run_only = bool(payloads) and all(
         _agentic_training_loop_external_eval_boundary(payload).get("dry_run_only") is not False for payload in payloads
     )
-    receipt_passed_count = sum(1 for payload in payloads if payload.get("passed") is True)
+    receipt_passed_count = sum(
+        1
+        for record in records
+        if record["payload"].get("passed") is True
+        and _loop_external_eval_receipt_semantic_passed(record["path"], record["payload"])
+    )
     fail_closed = (
         live_benchmark_requested is False
         and live_benchmarks_started is False
@@ -5229,17 +5236,26 @@ def _agentic_training_loop_first_ref(source_artifacts: dict[str, Any], role: str
     return rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
 
 
-def _agentic_training_loop_payloads(source_artifacts: dict[str, Any], role: str, source_path: Path) -> list[dict[str, Any]]:
-    payloads: list[dict[str, Any]] = []
+def _agentic_training_loop_payload_records(source_artifacts: dict[str, Any], role: str, source_path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     rows = source_artifacts.get(role)
     if not isinstance(rows, list):
-        return payloads
+        return records
     for row in rows:
         if not isinstance(row, dict):
             continue
         path = _resolve_agentic_training_loop_plan_ref_path(row.get("path"), source_path)
         payload = _read_json_object_silent(path) if path is not None else {}
         if payload:
+            records.append({"path": path, "payload": payload})
+    return records
+
+
+def _agentic_training_loop_payloads(source_artifacts: dict[str, Any], role: str, source_path: Path) -> list[dict[str, Any]]:
+    payloads: list[dict[str, Any]] = []
+    for record in _agentic_training_loop_payload_records(source_artifacts, role, source_path):
+        payload = record.get("payload")
+        if isinstance(payload, dict):
             payloads.append(payload)
     return payloads
 

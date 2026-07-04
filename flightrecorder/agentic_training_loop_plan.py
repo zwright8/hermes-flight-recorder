@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .external_eval import ExternalEvalPlanError, build_external_eval_receipt
+
 AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION = "hfr.agentic_training_loop_plan.v1"
 
 CLOUD_TRAINING_LINEAGE_LINKS: tuple[dict[str, str], ...] = (
@@ -688,7 +690,8 @@ def _cloud_training_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict
 
 
 def _external_eval_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
-    payloads = _payloads(artifact_paths, "external_eval_receipt")
+    records = _payload_records(artifact_paths, "external_eval_receipt")
+    payloads = [record["payload"] for record in records]
     first_payload = payloads[0] if payloads else {}
     first_launch = _external_eval_launch(first_payload)
     adapter_rows = [row for payload in payloads for row in _external_eval_adapter_receipts(payload)]
@@ -731,7 +734,12 @@ def _external_eval_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[
         + sum(_non_negative_number_or_zero(contract.get("cost_incurred_usd")) for contract in adapter_contracts)
     )
     dry_run_only = bool(payloads) and all(_external_eval_boundary(payload).get("dry_run_only") is not False for payload in payloads)
-    receipt_passed_count = sum(1 for payload in payloads if payload.get("passed") is True)
+    receipt_passed_count = sum(
+        1
+        for record in records
+        if record["payload"].get("passed") is True
+        and _external_eval_receipt_semantic_passed(record["path"], record["payload"])
+    )
     fail_closed = (
         live_benchmark_requested is False
         and live_benchmarks_started is False
@@ -914,7 +922,94 @@ def _first_payload(artifact_paths: dict[str, list[Path]], role: str) -> dict[str
 
 
 def _payloads(artifact_paths: dict[str, list[Path]], role: str) -> list[dict[str, Any]]:
-    return [_read_json(path) for path in artifact_paths.get(role, [])]
+    return [record["payload"] for record in _payload_records(artifact_paths, role)]
+
+
+def _payload_records(artifact_paths: dict[str, list[Path]], role: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for path in artifact_paths.get(role, []):
+        payload = _read_json(path)
+        if payload:
+            records.append({"path": path, "payload": payload})
+    return records
+
+
+def _external_eval_receipt_semantic_passed(receipt_path: Path, receipt: dict[str, Any]) -> bool:
+    source_plan_path = _external_eval_receipt_source_plan_path(receipt_path, receipt)
+    if source_plan_path is None:
+        return False
+    source_plan = receipt.get("source_plan")
+    if not isinstance(source_plan, dict) or not _external_eval_receipt_source_plan_matches(source_plan_path, source_plan):
+        return False
+    launch = _external_eval_launch(receipt)
+    mode = launch.get("mode")
+    if mode not in {"dry_run", "live"}:
+        return False
+    adapter_rows = _external_eval_adapter_receipts(receipt)
+    adapter_ids = [str(row.get("id")) for row in adapter_rows if isinstance(row.get("id"), str) and row.get("id")]
+    if len(adapter_ids) != len(adapter_rows) or len(adapter_ids) != len(set(adapter_ids)):
+        return False
+    source_plan_payload = _read_json(source_plan_path)
+    selected_adapters = source_plan_payload.get("selected_adapters")
+    if not isinstance(selected_adapters, list) or not all(isinstance(adapter, str) for adapter in selected_adapters):
+        return False
+    if sorted(adapter_ids) != sorted(selected_adapters):
+        return False
+    try:
+        expected = build_external_eval_receipt(
+            plan_path=source_plan_path,
+            adapters=selected_adapters,
+            live=mode == "live",
+            created_at=receipt.get("created_at") if isinstance(receipt.get("created_at"), str) else None,
+        )
+    except ExternalEvalPlanError:
+        return False
+    for field_name in (
+        "passed",
+        "readiness",
+        "recommendation",
+        "check_count",
+        "failed_check_count",
+        "checks",
+        "blocked_reasons",
+        "adapter_count",
+        "ready_adapter_count",
+        "adapter_receipts",
+        "launch",
+        "execution_boundary",
+    ):
+        if receipt.get(field_name) != expected.get(field_name):
+            return False
+    return True
+
+
+def _external_eval_receipt_source_plan_path(receipt_path: Path, receipt: dict[str, Any]) -> Path | None:
+    source_plan = receipt.get("source_plan")
+    if not isinstance(source_plan, dict):
+        return None
+    value = source_plan.get("path")
+    if not isinstance(value, str) or not value:
+        return None
+    path = Path(value)
+    return path if path.is_absolute() else receipt_path.parent / path
+
+
+def _external_eval_receipt_source_plan_matches(plan_path: Path, source_plan: dict[str, Any]) -> bool:
+    if source_plan.get("exists") is not True or not plan_path.is_file():
+        return False
+    size_bytes = source_plan.get("size_bytes")
+    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
+        return False
+    if size_bytes != plan_path.stat().st_size:
+        return False
+    expected_sha = source_plan.get("sha256")
+    if not isinstance(expected_sha, str) or expected_sha != _sha256(plan_path):
+        return False
+    plan = _read_json(plan_path)
+    for field_name in ("schema_version", "ready", "adapter_count"):
+        if source_plan.get(field_name) != plan.get(field_name):
+            return False
+    return True
 
 
 def _cloud_training_launch(payload: dict[str, Any]) -> dict[str, Any]:
