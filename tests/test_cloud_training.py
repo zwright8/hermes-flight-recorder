@@ -1034,6 +1034,88 @@ class CloudTrainingTests(unittest.TestCase):
                 errors,
             )
 
+    def test_cloud_training_source_state_skips_symlinked_parent_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            sources = reports / "sources"
+            reports.mkdir()
+            sources.mkdir()
+            plan_source = sources / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+            artifact_manifest = reports / "artifacts.json"
+            preflight = reports / "preflight.json"
+            launch_plan = reports / "launch_plan.json"
+
+            self.assertEqual(
+                run_cli(["cloud-training", "artifacts", "--provider", "modal", "--upload", str(plan_source), "--out", str(artifact_manifest)]),
+                0,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "preflight",
+                        "--provider",
+                        "modal",
+                        "--agentic-training-plan",
+                        str(plan_source),
+                        "--region",
+                        "provider_default",
+                        "--gpu-class",
+                        "a100",
+                        "--max-cost-usd",
+                        "0",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "plan",
+                        "--preflight",
+                        str(preflight),
+                        "--artifact-manifest",
+                        str(artifact_manifest),
+                        "--out",
+                        str(launch_plan),
+                    ]
+                ),
+                1,
+            )
+
+            linked_parent = reports / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(reports, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            _set_cloud_training_ref_path(launch_plan, ("source_artifacts", "preflight"), str(Path(linked_parent.name) / preflight.name))
+
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "cloud_training_launch_plan.source_artifacts.preflight.path must resolve to a regular non-symlink file when exists is true.",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.source_artifacts.preflight.schema_passed must match the referenced source artifact.",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.source_artifacts.preflight.source_passed must match the referenced source artifact.",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_launch_plan.provider_chain.preflight_provider_id must match launch-plan source providers.",
+                errors,
+            )
+
     def test_validate_rejects_cloud_training_artifacts_missing_required_source_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

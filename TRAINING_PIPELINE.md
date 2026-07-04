@@ -955,6 +955,8 @@ SageMaker, GCP Vertex AI, Azure ML, Databricks/Mosaic, NVIDIA DGX Cloud, and Bre
 Cloud-training source refs and upload refs are public-safe by default. Unsafe
 absolute or traversal paths are redacted and treated as missing, which keeps
 the cloud receipt blocked rather than publishing local filesystem details.
+Validation requires those refs to resolve to regular non-symlink files before
+using referenced payloads to derive source readiness or provider-chain state.
 
 ```bash
 flightrecorder cloud-training providers \

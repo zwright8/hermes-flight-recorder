@@ -7916,7 +7916,7 @@ def _validate_cloud_training_source_state(label: str, state: dict[str, Any], tar
 def _cloud_training_source_state(record: Any, source_path: Path | None, schema_name: str) -> dict[str, Any]:
     state = {
         "ref": record,
-        "ref_exists": isinstance(record, dict) and record.get("exists") is True,
+        "ref_exists": False,
         "schema_name": schema_name,
         "schema_passed": False,
         "source_passed": None,
@@ -7925,12 +7925,15 @@ def _cloud_training_source_state(record: Any, source_path: Path | None, schema_n
     }
     if not isinstance(record, dict) or record.get("exists") is not True:
         return state
-    artifact_path = _resolve_cloud_training_artifact_path(record.get("path"), source_path)
+    artifact_path = _resolve_regular_cloud_training_artifact_path(record.get("path"), source_path)
+    if artifact_path is None:
+        return state
     payload = _read_json_object_silent(artifact_path)
     schema_passed = _cloud_training_schema_check_passed(artifact_path, schema_name)
     source_passed = payload.get("passed") if isinstance(payload.get("passed"), bool) else None
     state.update(
         {
+            "ref_exists": True,
             "schema_passed": schema_passed,
             "source_passed": source_passed,
             "source_recommendation": str(payload.get("recommendation") or ""),
@@ -7991,7 +7994,7 @@ def _expected_cloud_training_launch_plan_provider_chain(source_artifacts: Any, s
 def _cloud_training_provider_id_from_source_ref(record: Any, source_path: Path | None) -> str:
     if not isinstance(record, dict) or record.get("exists") is not True:
         return ""
-    artifact_path = _resolve_cloud_training_artifact_path(record.get("path"), source_path)
+    artifact_path = _resolve_regular_cloud_training_artifact_path(record.get("path"), source_path)
     payload = _read_json_object_silent(artifact_path)
     provider = payload.get("provider") if isinstance(payload.get("provider"), dict) else {}
     return str(provider.get("id") or "") if isinstance(provider, dict) else ""
@@ -8065,6 +8068,18 @@ def _resolve_cloud_training_artifact_path(value: Any, source_path: Path | None) 
     if source_path is None:
         return None
     return source_path.parent / path
+
+
+def _resolve_regular_cloud_training_artifact_path(value: Any, source_path: Path | None) -> Path | None:
+    artifact_path = _resolve_cloud_training_artifact_path(value, source_path)
+    if (
+        artifact_path is None
+        or not artifact_path.exists()
+        or _path_has_symlink_component(artifact_path, include_leaf=True)
+        or not artifact_path.is_file()
+    ):
+        return None
+    return artifact_path
 
 
 def _is_safe_or_redacted_cloud_training_ref_path(value: str) -> bool:
