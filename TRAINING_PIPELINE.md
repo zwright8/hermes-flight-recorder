@@ -97,16 +97,19 @@ block with the suite summary path, selected passing scenario, and pass/fail
 counts; evidence bundles surface this as `harness_handoff` metrics and block
 run-suite pairs that omit or forge that lineage. Bundles also verify the
 referenced harness trace, scorecard, digest, report, and replay-lineage files
-exist before counting a harness pair as artifact-valid. Live-smoke environment
-root paths are redacted in bundle metrics by default; use `--preserve-paths`
-only for private local debugging. Strict evidence-bundle validation rejects
-unredacted absolute artifact paths, including nested harness, trainer, gate,
-digest, and live-smoke metric paths, so public bundles should carry relative
-paths or `<redacted:...>` placeholders. Validation summaries included in
-evidence bundles must have at least one target and counts that match their
-`passed` and `strict` flags. Run-digest coverage metrics are also checked for
-consistent digest, outcome, and task-status counts, so forged summary totals
-cannot hide low-signal or malformed per-run digests.
+exist before counting a harness pair as artifact-valid. Strict harness
+manifest/result validation warns before preserved scenario, sandbox, trace,
+scorecard, report, lineage, or run-artifact paths are published; generate
+public harness packets with relative paths. Live-smoke environment root paths
+are redacted in bundle metrics by default; use `--preserve-paths` only for
+private local debugging. Strict evidence-bundle validation rejects unredacted
+absolute artifact paths, including nested harness, trainer, gate, digest, and
+live-smoke metric paths, so public bundles should carry relative paths or
+`<redacted:...>` markers. Validation summaries included in evidence
+bundles must have at least one target and counts that match their `passed` and
+`strict` flags. Run-digest coverage metrics are also checked for consistent
+digest, outcome, and task-status counts, so forged summary totals cannot hide
+low-signal or malformed per-run digests.
 `flightrecorder compare-suite` carries this metadata into its JSON and HTML
 outputs so baseline/candidate comparisons remain tied to the evaluated configs.
 It also emits aggregate failed-rule and critical-failure deltas across paired

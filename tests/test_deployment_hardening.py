@@ -133,7 +133,7 @@ class DeploymentHardeningTests(unittest.TestCase):
                 mock_response="mock harness complete with auditable evidence",
             )
 
-            result = run_scenario(manifest)
+            result = run_scenario(manifest, preserve_paths=False)
 
             self.assertEqual(result["schema_version"], HARNESS_RUN_RESULT_SCHEMA_VERSION)
             self.assertTrue(result["scorecard"]["passed"])

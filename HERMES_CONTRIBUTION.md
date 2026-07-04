@@ -512,6 +512,11 @@ evidence. I also run `flightrecorder validate --scenario-check ... --strict`
 before publishing the receipt so preserved local source paths stay out of
 public handoffs.
 
+For harness packets, I publish with relative paths before strict validation.
+Strict harness manifest/result validation warns if preserved scenario, sandbox,
+trace, scorecard, report, lineage, or run-artifact paths would leak local
+machine coordinates into public handoffs.
+
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards, step-level attribution rows, chosen/rejected pairs,
 trainer-ready SFT/DPO/reward-model rows, failure-mode rows, and curriculum

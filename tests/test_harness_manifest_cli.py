@@ -61,6 +61,97 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertEqual(result["scenario_id"], "harness_manifest_cli_good")
             self.assertTrue(result["scorecard"]["passed"])
 
+    def test_strict_validate_warns_on_absolute_harness_run_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenario_path = root / "scenario.json"
+            out = root / "run"
+            validation = root / "validation.json"
+            strict_validation = root / "strict_validation.json"
+            scenario_path.write_text(json.dumps(_scenario(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            rc, stdout = _run_harness(
+                [
+                    "run",
+                    "--scenario",
+                    str(scenario_path),
+                    "--out",
+                    str(out),
+                    "--mock-response",
+                    "manifest cli complete with auditable evidence",
+                ]
+            )
+
+            self.assertEqual(rc, 0, stdout)
+            manifest = json.loads((out / "harness_manifest.json").read_text(encoding="utf-8"))
+            result = json.loads((out / "harness_result.json").read_text(encoding="utf-8"))
+            manifest["source_trace"] = {"path": result["trace"]["path"]}
+            (out / "harness_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertTrue(Path(manifest["scenario"]["path"]).is_absolute())
+            self.assertTrue(Path(manifest["source_trace"]["path"]).is_absolute())
+            self.assertTrue(Path(result["trace"]["path"]).is_absolute())
+            self.assertTrue(Path(result["artifacts"]["report"]).is_absolute())
+            args = [
+                "validate",
+                "--harness-manifest",
+                str(out / "harness_manifest.json"),
+                "--harness-result",
+                str(out / "harness_result.json"),
+            ]
+            self.assertEqual(_run_flightrecorder([*args, "--out", str(validation)])[0], 0)
+            self.assertEqual(_run_flightrecorder([*args, "--strict", "--out", str(strict_validation)])[0], 1)
+            warnings = [
+                warning
+                for target in json.loads(strict_validation.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            self.assertTrue(any("harness_manifest.scenario.path is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_manifest.source_trace.path is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_result.trace.path is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_result.artifacts.report is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_result.replay.lineage is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(
+                any("harness_result.fake_secret_canary_check.checked_artifacts[0].path is absolute" in warning for warning in warnings),
+                warnings,
+            )
+
+            leak_out = root / "leaking_run"
+            leak_validation = root / "leaking_validation.json"
+            leak_strict_validation = root / "leaking_strict_validation.json"
+            leak_rc, leak_stdout = _run_harness(
+                [
+                    "run",
+                    "--scenario",
+                    str(scenario_path),
+                    "--out",
+                    str(leak_out),
+                    "--mock-response",
+                    f"manifest cli complete with auditable evidence {DEFAULT_FAKE_SECRET_CANARIES['HFR_FAKE_API_KEY']}",
+                ]
+            )
+            self.assertEqual(leak_rc, 1, leak_stdout)
+            leak_result = json.loads((leak_out / "harness_result.json").read_text(encoding="utf-8"))
+            self.assertFalse(leak_result["fake_secret_canary_check"]["passed"])
+            self.assertTrue(leak_result["fake_secret_canary_check"]["leaked_artifacts"])
+            leak_args = [
+                "validate",
+                "--harness-manifest",
+                str(leak_out / "harness_manifest.json"),
+                "--harness-result",
+                str(leak_out / "harness_result.json"),
+            ]
+            self.assertEqual(_run_flightrecorder([*leak_args, "--out", str(leak_validation)])[0], 0)
+            self.assertEqual(_run_flightrecorder([*leak_args, "--strict", "--out", str(leak_strict_validation)])[0], 1)
+            leak_warnings = [
+                warning
+                for target in json.loads(leak_strict_validation.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            self.assertTrue(
+                any("harness_result.fake_secret_canary_check.leaked_artifacts[0].path is absolute" in warning for warning in leak_warnings),
+                leak_warnings,
+            )
+
     def test_mock_run_suite_and_probe_model_write_harness_receipts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -76,8 +167,9 @@ class HarnessManifestCliTests(unittest.TestCase):
                 scenarios_dir=scenarios,
                 out_dir=root / "suite",
                 mock_response="suite complete with auditable evidence",
+                preserve_paths=False,
             )
-            probe = probe_model(out_dir=root / "probe", model="hfr-mock")
+            probe = probe_model(out_dir=root / "probe", model="hfr-mock", preserve_paths=False)
 
             self.assertEqual(suite["schema_version"], HARNESS_SUITE_RESULT_SCHEMA_VERSION)
             self.assertEqual(suite["total"], 2)
@@ -91,8 +183,8 @@ class HarnessManifestCliTests(unittest.TestCase):
                 ["validate", "--harness-suite-result", str(root / "suite" / "harness_suite_result.json"), "--strict"]
             )
             for run in suite["runs"]:
-                manifest_path = Path(run["manifest"])
-                result_path = Path(run["result"])
+                manifest_path = root / "suite" / run["manifest"]
+                result_path = root / "suite" / run["result"]
                 self.assertTrue(manifest_path.exists())
                 self.assertTrue(result_path.exists())
                 self.assertEqual(run["manifest_sha256"], _sha256_file(manifest_path))
@@ -103,9 +195,9 @@ class HarnessManifestCliTests(unittest.TestCase):
                     [
                         "validate",
                         "--harness-manifest",
-                        run["manifest"],
+                        str(manifest_path),
                         "--harness-result",
-                        run["result"],
+                        str(result_path),
                         "--strict",
                     ]
                 )
@@ -319,15 +411,15 @@ class HarnessManifestCliTests(unittest.TestCase):
             manifest_path = manifest_dir / "mock_manifest.json"
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-            rc, stdout = _run_harness(["run-scenario", "--manifest", str(manifest_path)])
+            rc, stdout = _run_harness(["run-scenario", "--manifest", str(manifest_path), "--relative-paths"])
 
             self.assertEqual(rc, 0, stdout)
             result = _json_from_stdout(stdout)
             self.assertTrue(result["scorecard"]["passed"])
             self.assertEqual(result["scenario_id"], "harness_manifest_cli_good")
             written_manifest = json.loads((run_dir / "harness_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(written_manifest["scenario"]["path"], str(scenario_path.resolve()))
-            self.assertEqual(written_manifest["outputs"]["run_dir"], str(run_dir.resolve()))
+            self.assertEqual(written_manifest["scenario"]["path"], "inputs/scenario.json")
+            self.assertEqual(written_manifest["outputs"]["run_dir"], ".")
             self.assertTrue((run_dir / "sandbox" / "home" / ".hermes" / ".env").exists())
 
             self._assert_flightrecorder_ok(

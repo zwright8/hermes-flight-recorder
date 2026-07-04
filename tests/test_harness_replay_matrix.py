@@ -249,6 +249,7 @@ class HarnessReplayMatrixTests(unittest.TestCase):
             fake_secret_files=fake_secret_files,
             process={"exit_code": 0},
             metadata={"source": "tests/test_harness_replay_matrix.py", "fixture_backed": True},
+            preserve_paths=False,
         )
 
     def _assert_harness_artifacts_validate(self, out_dir: Path) -> None:

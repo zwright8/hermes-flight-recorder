@@ -1788,6 +1788,7 @@ def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationT
         target.errors.append(
             f"harness_manifest.schema_version must be {HARNESS_RUN_MANIFEST_SCHEMA_VERSION!r}, got {manifest.get('schema_version')!r}."
         )
+    _warn_absolute_public_path(target, "harness_manifest.manifest_path", manifest.get("manifest_path"))
     for field_name in ("runner", "provider"):
         if not isinstance(manifest.get(field_name), str) or not manifest.get(field_name):
             target.errors.append(f"harness_manifest.{field_name} must be a non-empty string.")
@@ -1801,14 +1802,19 @@ def _validate_harness_run_manifest(manifest: dict[str, Any], target: ValidationT
     for field_name in ("id", "path"):
         if not isinstance(scenario.get(field_name), str) or not scenario.get(field_name):
             target.errors.append(f"harness_manifest.scenario.{field_name} must be a non-empty string.")
+    _warn_absolute_public_path(target, "harness_manifest.scenario.path", scenario.get("path"))
+    source_trace = manifest.get("source_trace") if isinstance(manifest.get("source_trace"), dict) else {}
+    _warn_absolute_public_path(target, "harness_manifest.source_trace.path", source_trace.get("path"))
     outputs = manifest.get("outputs") if isinstance(manifest.get("outputs"), dict) else {}
     for field_name in ("run_dir", "manifest", "result"):
         if not isinstance(outputs.get(field_name), str) or not outputs.get(field_name):
             target.errors.append(f"harness_manifest.outputs.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"harness_manifest.outputs.{field_name}", outputs.get(field_name))
     sandbox = manifest.get("sandbox") if isinstance(manifest.get("sandbox"), dict) else {}
     for field_name in ("root", "home", "workspace", "events"):
         if not isinstance(sandbox.get(field_name), str) or not sandbox.get(field_name):
             target.errors.append(f"harness_manifest.sandbox.{field_name} must be a non-empty string.")
+    _warn_harness_sandbox_public_paths(sandbox, target, "harness_manifest.sandbox")
     canaries = sandbox.get("fake_secret_canaries")
     if not isinstance(canaries, list) or not canaries:
         target.errors.append("harness_manifest.sandbox.fake_secret_canaries must be a non-empty list.")
@@ -1890,7 +1896,20 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
     )
     if not isinstance(replay.get("self_contained"), bool):
         target.errors.append("harness_result.replay.self_contained must be a boolean.")
+    manifest = result.get("manifest") if isinstance(result.get("manifest"), dict) else {}
+    _warn_absolute_public_path(target, "harness_result.manifest.path", manifest.get("path"))
+    sandbox = result.get("sandbox") if isinstance(result.get("sandbox"), dict) else {}
+    _warn_harness_sandbox_public_paths(sandbox, target, "harness_result.sandbox")
     _validate_harness_tool_policy(result.get("tool_policy"), target, "harness_result.tool_policy")
+
+
+def _warn_harness_sandbox_public_paths(sandbox: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    for field_name in ("root", "home", "workspace", "events"):
+        _warn_absolute_public_path(target, f"{label}.{field_name}", sandbox.get(field_name))
+    fake_secret_files = sandbox.get("fake_secret_files")
+    if isinstance(fake_secret_files, list):
+        for index, path_value in enumerate(fake_secret_files):
+            _warn_absolute_public_path(target, f"{label}.fake_secret_files[{index}]", path_value)
 
 
 def _validate_harness_named_file_ref(
@@ -1903,6 +1922,7 @@ def _validate_harness_named_file_ref(
     source_dir: Path | None,
 ) -> Path | None:
     path_label = f"{label}.{path_field}"
+    _warn_absolute_public_path(target, path_label, value.get(path_field))
     path = _resolve_harness_artifact_path(value.get(path_field), source_dir)
     if path is None:
         target.errors.append(f"{path_label} must be a non-empty path.")
@@ -2132,6 +2152,7 @@ def _validate_harness_canary_artifact_record(value: Any, target: ValidationTarge
     for field_name in ("artifact", "path"):
         if not isinstance(value.get(field_name), str) or not value.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    _warn_absolute_public_path(target, f"{label}.path", value.get("path"))
     if not isinstance(value.get("exists"), bool):
         target.errors.append(f"{label}.exists must be a boolean.")
     if value.get("exists") is True:

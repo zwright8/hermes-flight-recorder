@@ -59,7 +59,7 @@ class HarnessToolPolicyTests(unittest.TestCase):
                 },
             )
 
-            result = run_scenario(manifest)
+            result = run_scenario(manifest, preserve_paths=False)
 
             self.assertFalse(result["scorecard"]["passed"])
             self.assertEqual(
