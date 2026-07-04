@@ -5799,13 +5799,146 @@ def _validate_cloud_training_live_preflight(value: Any, target: ValidationTarget
         target.errors.append(f"{label}.credential_present_count must not exceed credential_required_count.")
 
 
+_AGENTIC_ROLLOUT_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_AGENTIC_ROLLOUT_PLAN_KEYS = {
+    "schema_version",
+    "created_at",
+    "iteration_id",
+    "plan_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "environment",
+    "budget",
+    "policies",
+    "scenarios",
+    "harness_batches",
+    "rejection_sampling",
+    "lineage",
+    "execution_boundary",
+    "notes",
+}
+_AGENTIC_ROLLOUT_PLAN_BUDGET_KEYS = {"max_rollouts", "planned_rollouts", "live_provider_calls_allowed"}
+_AGENTIC_ROLLOUT_POLICY_KEYS = {"role", "id", "live_calls_allowed"}
+_AGENTIC_ROLLOUT_SCENARIO_KEYS = {"id", "path", "exists", "sha256", "schema_version"}
+_AGENTIC_ROLLOUT_BATCH_KEYS = {
+    "batch_id",
+    "scenario_id",
+    "scenario_sha256",
+    "policy_role",
+    "policy_id",
+    "harness_mode",
+    "status",
+}
+_AGENTIC_ROLLOUT_REJECTION_SAMPLING_KEYS = {
+    "enabled",
+    "requires_scorecard",
+    "requires_task_completion",
+    "requires_review_calibration_before_training",
+    "accepted_dataset_roles",
+}
+_AGENTIC_ROLLOUT_PLAN_LINEAGE_KEYS = {
+    "dataset_rows_created",
+    "expected_trace_artifacts",
+    "preserve_source_hashes",
+}
+_AGENTIC_ROLLOUT_PLAN_BOUNDARY_KEYS = {
+    "plan_only",
+    "rollouts_started",
+    "model_provider_calls_started",
+    "paid_model_grader_calls_started",
+    "dataset_rows_written",
+}
+_AGENTIC_ROLLOUT_ENVIRONMENT_KEYS = {
+    "id",
+    "replayable",
+    "network_default",
+    "external_state_verifiers",
+    "external_state_verifier_gate",
+}
+_AGENTIC_ROLLOUT_VERIFIER_REF_KEYS = {"role", "path", "exists", "sha256", "size_bytes"}
+_AGENTIC_ROLLOUT_VERIFIER_GATE_KEYS = {
+    "declared_count",
+    "resolved_count",
+    "all_declared_verifiers_resolved",
+    "required_for_external_state_checks",
+    "verification_side_effects_started",
+    "credential_values_recorded",
+}
+_AGENTIC_ROLLOUT_RECEIPT_KEYS = {
+    "schema_version",
+    "created_at",
+    "receipt_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_plan",
+    "iteration_id",
+    "environment",
+    "mock_rollout_count",
+    "mock_rollouts",
+    "lineage",
+    "execution_boundary",
+    "notes",
+}
+_AGENTIC_ROLLOUT_RECEIPT_SOURCE_PLAN_KEYS = {
+    "path",
+    "exists",
+    "sha256",
+    "size_bytes",
+    "schema_version",
+    "passed",
+    "readiness",
+}
+_AGENTIC_ROLLOUT_MOCK_ROW_KEYS = {
+    "rollout_id",
+    "batch_id",
+    "scenario_id",
+    "scenario_sha256",
+    "policy_role",
+    "policy_id",
+    "harness_mode",
+    "status",
+    "model_provider_called",
+    "trace_written",
+    "scorecard_written",
+    "dataset_row_written",
+}
+_AGENTIC_ROLLOUT_RECEIPT_LINEAGE_KEYS = {
+    "dataset_rows_created",
+    "trace_files_written",
+    "scorecards_written",
+    "ready_for_rejection_sampling",
+}
+_AGENTIC_ROLLOUT_RECEIPT_BOUNDARY_KEYS = {
+    "mock_receipt_only",
+    "mock_rollouts_recorded",
+    "live_rollouts_started",
+    "model_provider_calls_started",
+    "paid_model_grader_calls_started",
+    "dataset_rows_written",
+}
+
+
 def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(plan, _AGENTIC_ROLLOUT_PLAN_KEYS, target, "agentic_rollout_plan")
     _require_equal(plan, "schema_version", AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, target, prefix="agentic_rollout_plan.")
     checks = plan.get("checks")
     if not isinstance(checks, list):
         target.errors.append("agentic_rollout_plan.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "agentic_rollout_plan.checks")
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _AGENTIC_ROLLOUT_CHECK_KEYS, target, f"agentic_rollout_plan.checks[{index}]")
     if plan.get("check_count") != len(checks):
         target.errors.append(f"agentic_rollout_plan.check_count expected {len(checks)}, got {plan.get('check_count')!r}.")
     if plan.get("failed_check_count") != failed_checks:
@@ -5815,23 +5948,55 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
     expected_readiness = "ready_for_harness_batch" if failed_checks == 0 else "blocked"
     if plan.get("readiness") != expected_readiness:
         target.errors.append(f"agentic_rollout_plan.readiness expected {expected_readiness!r}, got {plan.get('readiness')!r}.")
+    expected_recommendation = "run_mock_or_opted_in_harness_batch" if failed_checks == 0 else "fix_rollout_plan_inputs"
+    if plan.get("recommendation") != expected_recommendation:
+        target.errors.append(f"agentic_rollout_plan.recommendation expected {expected_recommendation!r}, got {plan.get('recommendation')!r}.")
+    if not _is_string_list(plan.get("blocked_reasons")):
+        target.errors.append("agentic_rollout_plan.blocked_reasons must be a list of strings.")
     budget = plan.get("budget") if isinstance(plan.get("budget"), dict) else {}
+    if isinstance(plan.get("budget"), dict):
+        _validate_allowed_keys(budget, _AGENTIC_ROLLOUT_PLAN_BUDGET_KEYS, target, "agentic_rollout_plan.budget")
+    else:
+        target.errors.append("agentic_rollout_plan.budget must be an object.")
     batches = plan.get("harness_batches") if isinstance(plan.get("harness_batches"), list) else []
+    if not isinstance(plan.get("harness_batches"), list):
+        target.errors.append("agentic_rollout_plan.harness_batches must be a list.")
+    if not _is_non_negative_int(budget.get("max_rollouts")) or budget.get("max_rollouts") <= 0:
+        target.errors.append("agentic_rollout_plan.budget.max_rollouts must be positive.")
     if budget.get("planned_rollouts") != len(batches):
         target.errors.append(f"agentic_rollout_plan.budget.planned_rollouts expected {len(batches)}, got {budget.get('planned_rollouts')!r}.")
     if budget.get("live_provider_calls_allowed") is not False:
         target.errors.append("agentic_rollout_plan.budget.live_provider_calls_allowed must be false.")
+    _validate_agentic_rollout_policies(plan.get("policies"), target)
+    _validate_agentic_rollout_scenarios(plan.get("scenarios"), target)
+    for index, batch in enumerate(batches):
+        _validate_agentic_rollout_batch(batch, index, target)
+    _validate_agentic_rollout_rejection_sampling(plan.get("rejection_sampling"), target)
+    lineage = plan.get("lineage")
+    if not isinstance(lineage, dict):
+        target.errors.append("agentic_rollout_plan.lineage must be an object.")
+    else:
+        _validate_allowed_keys(lineage, _AGENTIC_ROLLOUT_PLAN_LINEAGE_KEYS, target, "agentic_rollout_plan.lineage")
+        if lineage.get("dataset_rows_created") is not False:
+            target.errors.append("agentic_rollout_plan.lineage.dataset_rows_created must be false.")
+        if not _is_string_list(lineage.get("expected_trace_artifacts")):
+            target.errors.append("agentic_rollout_plan.lineage.expected_trace_artifacts must be a list of strings.")
+        if lineage.get("preserve_source_hashes") is not True:
+            target.errors.append("agentic_rollout_plan.lineage.preserve_source_hashes must be true.")
     _validate_agentic_rollout_environment(plan.get("environment"), target, "agentic_rollout_plan.environment")
     boundary = plan.get("execution_boundary")
     if not isinstance(boundary, dict):
         target.errors.append("agentic_rollout_plan.execution_boundary must be an object.")
     else:
+        _validate_allowed_keys(boundary, _AGENTIC_ROLLOUT_PLAN_BOUNDARY_KEYS, target, "agentic_rollout_plan.execution_boundary")
         for field_name in ("plan_only",):
             if boundary.get(field_name) is not True:
                 target.errors.append(f"agentic_rollout_plan.execution_boundary.{field_name} must be true.")
         for field_name in ("rollouts_started", "model_provider_calls_started", "paid_model_grader_calls_started", "dataset_rows_written"):
             if boundary.get(field_name) is not False:
                 target.errors.append(f"agentic_rollout_plan.execution_boundary.{field_name} must be false.")
+    if not _is_string_list(plan.get("notes")):
+        target.errors.append("agentic_rollout_plan.notes must be a list of strings.")
     target.details.update(
         {
             "iteration_id": plan.get("iteration_id"),
@@ -5842,12 +6007,16 @@ def _validate_agentic_rollout_plan(plan: dict[str, Any], target: ValidationTarge
 
 
 def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(receipt, _AGENTIC_ROLLOUT_RECEIPT_KEYS, target, "agentic_rollout_receipt")
     _require_equal(receipt, "schema_version", AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION, target, prefix="agentic_rollout_receipt.")
     checks = receipt.get("checks")
     if not isinstance(checks, list):
         target.errors.append("agentic_rollout_receipt.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "agentic_rollout_receipt.checks")
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _AGENTIC_ROLLOUT_CHECK_KEYS, target, f"agentic_rollout_receipt.checks[{index}]")
     if receipt.get("check_count") != len(checks):
         target.errors.append(f"agentic_rollout_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
     if receipt.get("failed_check_count") != failed_checks:
@@ -5890,6 +6059,7 @@ def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: Validatio
     if not isinstance(lineage, dict):
         target.errors.append("agentic_rollout_receipt.lineage must be an object.")
     else:
+        _validate_allowed_keys(lineage, _AGENTIC_ROLLOUT_RECEIPT_LINEAGE_KEYS, target, "agentic_rollout_receipt.lineage")
         for field_name in ("dataset_rows_created", "trace_files_written", "scorecards_written"):
             if lineage.get(field_name) is not False:
                 target.errors.append(f"agentic_rollout_receipt.lineage.{field_name} must be false.")
@@ -5900,6 +6070,7 @@ def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: Validatio
     if not isinstance(boundary, dict):
         target.errors.append("agentic_rollout_receipt.execution_boundary must be an object.")
     else:
+        _validate_allowed_keys(boundary, _AGENTIC_ROLLOUT_RECEIPT_BOUNDARY_KEYS, target, "agentic_rollout_receipt.execution_boundary")
         if boundary.get("mock_receipt_only") is not True:
             target.errors.append("agentic_rollout_receipt.execution_boundary.mock_receipt_only must be true.")
         if boundary.get("mock_rollouts_recorded") != bool(rollouts):
@@ -5912,6 +6083,8 @@ def _validate_agentic_rollout_receipt(receipt: dict[str, Any], target: Validatio
         ):
             if boundary.get(field_name) is not False:
                 target.errors.append(f"agentic_rollout_receipt.execution_boundary.{field_name} must be false.")
+    if not _is_string_list(receipt.get("notes")):
+        target.errors.append("agentic_rollout_receipt.notes must be a list of strings.")
 
     target.details.update(
         {
@@ -5926,6 +6099,7 @@ def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, 
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _AGENTIC_ROLLOUT_ENVIRONMENT_KEYS, target, label)
     if not isinstance(value.get("id"), str) or not value.get("id"):
         target.errors.append(f"{label}.id must be a non-empty string.")
     if value.get("replayable") is not True:
@@ -5942,6 +6116,7 @@ def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, 
         if not isinstance(ref, dict):
             target.errors.append(f"{ref_label} must be an object.")
             continue
+        _validate_allowed_keys(ref, _AGENTIC_ROLLOUT_VERIFIER_REF_KEYS, target, ref_label)
         if ref.get("role") != "verifier_config":
             target.errors.append(f"{ref_label}.role must be verifier_config.")
         if not isinstance(ref.get("path"), str) or not ref.get("path"):
@@ -5963,6 +6138,7 @@ def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, 
     if not isinstance(gate, dict):
         target.errors.append(f"{label}.external_state_verifier_gate must be an object.")
         return
+    _validate_allowed_keys(gate, _AGENTIC_ROLLOUT_VERIFIER_GATE_KEYS, target, f"{label}.external_state_verifier_gate")
     if gate.get("declared_count") != len(verifier_refs):
         target.errors.append(f"{label}.external_state_verifier_gate.declared_count must match external_state_verifiers.")
     if gate.get("resolved_count") != resolved_count:
@@ -5978,6 +6154,7 @@ def _validate_agentic_rollout_environment(value: Any, target: ValidationTarget, 
 
 def _validate_agentic_rollout_receipt_source_plan(source_plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     label = "agentic_rollout_receipt.source_plan"
+    _validate_allowed_keys(source_plan, _AGENTIC_ROLLOUT_RECEIPT_SOURCE_PLAN_KEYS, target, label)
     if source_plan.get("schema_version") != AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION:
         target.errors.append(f"{label}.schema_version must be {AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION!r}.")
     if source_plan.get("exists") is not True:
@@ -6014,6 +6191,7 @@ def _validate_agentic_mock_rollout(row: Any, index: int, target: ValidationTarge
     if not isinstance(row, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(row, _AGENTIC_ROLLOUT_MOCK_ROW_KEYS, target, label)
     for field_name in ("rollout_id", "batch_id", "scenario_id", "policy_role", "policy_id"):
         if not isinstance(row.get(field_name), str) or not row.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -6026,6 +6204,76 @@ def _validate_agentic_mock_rollout(row: Any, index: int, target: ValidationTarge
     for field_name in ("model_provider_called", "trace_written", "scorecard_written", "dataset_row_written"):
         if row.get(field_name) is not False:
             target.errors.append(f"{label}.{field_name} must be false.")
+
+
+def _validate_agentic_rollout_policies(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, list) or not value:
+        target.errors.append("agentic_rollout_plan.policies must be a non-empty list.")
+        return
+    for index, row in enumerate(value):
+        label = f"agentic_rollout_plan.policies[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        _validate_allowed_keys(row, _AGENTIC_ROLLOUT_POLICY_KEYS, target, label)
+        if row.get("role") not in {"baseline", "candidate", "teacher"}:
+            target.errors.append(f"{label}.role must be baseline, candidate, or teacher.")
+        if not isinstance(row.get("id"), str) or not row.get("id"):
+            target.errors.append(f"{label}.id must be a non-empty string.")
+        if row.get("live_calls_allowed") is not False:
+            target.errors.append(f"{label}.live_calls_allowed must be false.")
+
+
+def _validate_agentic_rollout_scenarios(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, list) or not value:
+        target.errors.append("agentic_rollout_plan.scenarios must be a non-empty list.")
+        return
+    for index, row in enumerate(value):
+        label = f"agentic_rollout_plan.scenarios[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        _validate_allowed_keys(row, _AGENTIC_ROLLOUT_SCENARIO_KEYS, target, label)
+        for field_name in ("id", "path", "schema_version"):
+            if not isinstance(row.get(field_name), str):
+                target.errors.append(f"{label}.{field_name} must be a string.")
+        if not isinstance(row.get("exists"), bool):
+            target.errors.append(f"{label}.exists must be a boolean.")
+        elif row.get("exists") is True and not _is_sha256(row.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+        elif row.get("exists") is False and row.get("sha256") is not None:
+            target.errors.append(f"{label}.sha256 must be null when exists is false.")
+
+
+def _validate_agentic_rollout_batch(row: Any, index: int, target: ValidationTarget) -> None:
+    label = f"agentic_rollout_plan.harness_batches[{index}]"
+    if not isinstance(row, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(row, _AGENTIC_ROLLOUT_BATCH_KEYS, target, label)
+    for field_name in ("batch_id", "scenario_id", "policy_role", "policy_id"):
+        if not isinstance(row.get(field_name), str) or not row.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if row.get("scenario_sha256") is not None and not _is_sha256(row.get("scenario_sha256")):
+        target.errors.append(f"{label}.scenario_sha256 must be a SHA-256 hex string or null.")
+    if row.get("policy_role") not in {"baseline", "candidate", "teacher"}:
+        target.errors.append(f"{label}.policy_role must be baseline, candidate, or teacher.")
+    if row.get("harness_mode") != "offline_mock":
+        target.errors.append(f"{label}.harness_mode must be offline_mock.")
+    if row.get("status") != "planned":
+        target.errors.append(f"{label}.status must be planned.")
+
+
+def _validate_agentic_rollout_rejection_sampling(value: Any, target: ValidationTarget) -> None:
+    if not isinstance(value, dict):
+        target.errors.append("agentic_rollout_plan.rejection_sampling must be an object.")
+        return
+    _validate_allowed_keys(value, _AGENTIC_ROLLOUT_REJECTION_SAMPLING_KEYS, target, "agentic_rollout_plan.rejection_sampling")
+    for field_name in ("enabled", "requires_scorecard", "requires_task_completion", "requires_review_calibration_before_training"):
+        if value.get(field_name) is not True:
+            target.errors.append(f"agentic_rollout_plan.rejection_sampling.{field_name} must be true.")
+    if not _is_string_list(value.get("accepted_dataset_roles")):
+        target.errors.append("agentic_rollout_plan.rejection_sampling.accepted_dataset_roles must be a list of strings.")
 
 
 _REJECTION_DATASET_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}

@@ -1,17 +1,60 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_rollout_plan.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
-  "description": "Fail-closed rollout generation plan for agentic training loops.",
-  "properties": {
-    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
-    "budget": { "type": "object" },
-    "check_count": { "minimum": 0, "type": "integer" },
-    "checks": { "items": { "type": "object" }, "type": "array" },
-    "created_at": { "type": "string" },
-    "environment": { "$ref": "#/$defs/environment" },
-    "execution_boundary": {
-      "additionalProperties": true,
+  "$defs": {
+    "batch": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": { "minLength": 1, "type": "string" },
+        "harness_mode": { "const": "offline_mock" },
+        "policy_id": { "minLength": 1, "type": "string" },
+        "policy_role": { "enum": ["baseline", "candidate", "teacher"] },
+        "scenario_id": { "minLength": 1, "type": "string" },
+        "scenario_sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "status": { "const": "planned" }
+      },
+      "required": ["batch_id", "scenario_id", "scenario_sha256", "policy_role", "policy_id", "harness_mode", "status"],
+      "type": "object"
+    },
+    "budget": {
+      "additionalProperties": false,
+      "properties": {
+        "live_provider_calls_allowed": { "const": false },
+        "max_rollouts": { "minimum": 1, "type": "integer" },
+        "planned_rollouts": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["max_rollouts", "planned_rollouts", "live_provider_calls_allowed"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": {},
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "environment": {
+      "additionalProperties": false,
+      "properties": {
+        "external_state_verifier_gate": { "$ref": "#/$defs/externalStateVerifierGate" },
+        "external_state_verifiers": {
+          "items": { "$ref": "#/$defs/verifierRef" },
+          "type": "array"
+        },
+        "id": { "minLength": 1, "type": "string" },
+        "network_default": { "const": "disabled" },
+        "replayable": { "const": true }
+      },
+      "required": ["id", "replayable", "network_default", "external_state_verifiers", "external_state_verifier_gate"],
+      "type": "object"
+    },
+    "executionBoundary": {
+      "additionalProperties": false,
       "properties": {
         "dataset_rows_written": { "const": false },
         "model_provider_calls_started": { "const": false },
@@ -22,18 +65,111 @@
       "required": ["plan_only", "rollouts_started", "model_provider_calls_started", "paid_model_grader_calls_started", "dataset_rows_written"],
       "type": "object"
     },
+    "externalStateVerifierGate": {
+      "additionalProperties": false,
+      "properties": {
+        "all_declared_verifiers_resolved": { "type": "boolean" },
+        "credential_values_recorded": { "const": false },
+        "declared_count": { "minimum": 0, "type": "integer" },
+        "required_for_external_state_checks": { "type": "boolean" },
+        "resolved_count": { "minimum": 0, "type": "integer" },
+        "verification_side_effects_started": { "const": false }
+      },
+      "required": [
+        "declared_count",
+        "resolved_count",
+        "all_declared_verifiers_resolved",
+        "required_for_external_state_checks",
+        "verification_side_effects_started",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "lineage": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_rows_created": { "const": false },
+        "expected_trace_artifacts": { "items": { "type": "string" }, "type": "array" },
+        "preserve_source_hashes": { "const": true }
+      },
+      "required": ["dataset_rows_created", "expected_trace_artifacts", "preserve_source_hashes"],
+      "type": "object"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "live_calls_allowed": { "const": false },
+        "role": { "enum": ["baseline", "candidate", "teacher"] }
+      },
+      "required": ["role", "id", "live_calls_allowed"],
+      "type": "object"
+    },
+    "rejectionSampling": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_dataset_roles": { "items": { "type": "string" }, "type": "array" },
+        "enabled": { "const": true },
+        "requires_review_calibration_before_training": { "const": true },
+        "requires_scorecard": { "const": true },
+        "requires_task_completion": { "const": true }
+      },
+      "required": [
+        "enabled",
+        "requires_scorecard",
+        "requires_task_completion",
+        "requires_review_calibration_before_training",
+        "accepted_dataset_roles"
+      ],
+      "type": "object"
+    },
+    "scenario": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "id": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "schema_version": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] }
+      },
+      "required": ["id", "path", "exists", "sha256", "schema_version"],
+      "type": "object"
+    },
+    "verifierRef": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "path": { "minLength": 1, "type": "string" },
+        "role": { "const": "verifier_config" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["role", "path", "exists", "sha256", "size_bytes"],
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Fail-closed rollout generation plan for agentic training loops.",
+  "properties": {
+    "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "execution_boundary": { "$ref": "#/$defs/executionBoundary" },
     "failed_check_count": { "minimum": 0, "type": "integer" },
-    "harness_batches": { "items": { "type": "object" }, "type": "array" },
+    "harness_batches": { "items": { "$ref": "#/$defs/batch" }, "type": "array" },
     "iteration_id": { "minLength": 1, "type": "string" },
-    "lineage": { "type": "object" },
+    "lineage": { "$ref": "#/$defs/lineage" },
     "notes": { "items": { "type": "string" }, "type": "array" },
     "passed": { "type": "boolean" },
     "plan_path": { "minLength": 1, "type": "string" },
-    "policies": { "items": { "type": "object" }, "type": "array" },
+    "policies": { "items": { "$ref": "#/$defs/policy" }, "type": "array" },
     "readiness": { "enum": ["ready_for_harness_batch", "blocked"] },
     "recommendation": { "enum": ["run_mock_or_opted_in_harness_batch", "fix_rollout_plan_inputs"] },
-    "rejection_sampling": { "type": "object" },
-    "scenarios": { "items": { "type": "object" }, "type": "array" },
+    "rejection_sampling": { "$ref": "#/$defs/rejectionSampling" },
+    "scenarios": { "items": { "$ref": "#/$defs/scenario" }, "type": "array" },
     "schema_version": { "const": "hfr.agentic_rollout_plan.v1" }
   },
   "required": [
@@ -59,42 +195,5 @@
     "notes"
   ],
   "title": "Hermes Flight Recorder Agentic Rollout Plan",
-  "type": "object",
-  "$defs": {
-    "environment": {
-      "additionalProperties": true,
-      "properties": {
-        "external_state_verifier_gate": { "$ref": "#/$defs/externalStateVerifierGate" },
-        "external_state_verifiers": {
-          "items": { "type": "object" },
-          "type": "array"
-        },
-        "id": { "minLength": 1, "type": "string" },
-        "network_default": { "const": "disabled" },
-        "replayable": { "const": true }
-      },
-      "required": ["id", "replayable", "network_default", "external_state_verifiers", "external_state_verifier_gate"],
-      "type": "object"
-    },
-    "externalStateVerifierGate": {
-      "additionalProperties": true,
-      "properties": {
-        "all_declared_verifiers_resolved": { "type": "boolean" },
-        "credential_values_recorded": { "const": false },
-        "declared_count": { "minimum": 0, "type": "integer" },
-        "required_for_external_state_checks": { "type": "boolean" },
-        "resolved_count": { "minimum": 0, "type": "integer" },
-        "verification_side_effects_started": { "const": false }
-      },
-      "required": [
-        "declared_count",
-        "resolved_count",
-        "all_declared_verifiers_resolved",
-        "required_for_external_state_checks",
-        "verification_side_effects_started",
-        "credential_values_recorded"
-      ],
-      "type": "object"
-    }
-  }
+  "type": "object"
 }

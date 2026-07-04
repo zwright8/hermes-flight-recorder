@@ -181,6 +181,84 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertIn("execution_boundary.model_provider_calls_started must be false", errors)
             self.assertIn("external_state_verifier_gate.verification_side_effects_started must be false", errors)
 
+    def test_rollout_plan_validation_rejects_forged_live_provider_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "rollout_plan.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="rollout-forged-provider",
+                scenario_paths=[SCENARIO],
+                policies={"baseline": "local/base", "candidate": "local/candidate"},
+                max_rollouts=2,
+                verifier_paths=[VERIFIER],
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            plan["provider_job_id"] = "job_live"
+            plan["checks"][0]["provider_trace_id"] = "trace_live"
+            plan["budget"]["cloud_budget_usd"] = 20
+            plan["environment"]["provider_region"] = "us-east-1"
+            plan["environment"]["external_state_verifiers"][0]["credential_value"] = "redacted"
+            plan["environment"]["external_state_verifier_gate"]["credential_secret_ref"] = "HFR_VERIFIER_TOKEN"
+            plan["policies"][0]["provider_api_key_env"] = "MODEL_PROVIDER_KEY"
+            plan["scenarios"][0]["signed_url"] = "https://example.invalid/scenario.json"
+            plan["harness_batches"][0]["live_provider_job_id"] = "job_live"
+            plan["rejection_sampling"]["provider_dataset_uri"] = "s3://example-bucket/rollouts.jsonl"
+            plan["lineage"]["trace_signed_url"] = "https://example.invalid/trace.jsonl"
+            plan["execution_boundary"]["live_endpoint_url"] = "https://example.invalid/run"
+            write_agentic_rollout_plan(plan_path, plan)
+
+            schema = check_schema_file(plan_path)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_rollout_plan contains unknown field", errors)
+            self.assertIn("agentic_rollout_plan.checks[0] contains unknown field", errors)
+            self.assertIn("agentic_rollout_plan.environment contains unknown field", errors)
+            self.assertIn("agentic_rollout_plan.harness_batches[0] contains unknown field", errors)
+            self.assertIn("agentic_rollout_plan.execution_boundary contains unknown field", errors)
+
+    def test_rollout_receipt_validation_rejects_forged_live_provider_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "rollout_plan.json"
+            receipt_path = Path(tmp) / "rollout_receipt.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="rollout-receipt-forged-provider",
+                scenario_paths=[SCENARIO],
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                verifier_paths=[VERIFIER],
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_rollout_plan(plan_path, plan)
+            receipt = build_agentic_rollout_receipt(
+                plan_path=plan_path,
+                out_path=receipt_path,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            receipt["provider_job_id"] = "job_live"
+            receipt["checks"][0]["provider_trace_id"] = "trace_live"
+            receipt["source_plan"]["signed_url"] = "https://example.invalid/rollout-plan.json"
+            receipt["environment"]["provider_region"] = "us-east-1"
+            receipt["environment"]["external_state_verifiers"][0]["credential_value"] = "redacted"
+            receipt["environment"]["external_state_verifier_gate"]["credential_secret_ref"] = "HFR_VERIFIER_TOKEN"
+            receipt["mock_rollouts"][0]["provider_completion_id"] = "completion_live"
+            receipt["lineage"]["trace_path"] = "traces/live.jsonl"
+            receipt["execution_boundary"]["live_endpoint_url"] = "https://example.invalid/run"
+            write_agentic_rollout_receipt(receipt_path, receipt)
+
+            schema = check_schema_file(receipt_path)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("agentic_rollout_receipt contains unknown field", errors)
+            self.assertIn("agentic_rollout_receipt.checks[0] contains unknown field", errors)
+            self.assertIn("agentic_rollout_receipt.source_plan contains unknown field", errors)
+            self.assertIn("agentic_rollout_receipt.mock_rollouts[0] contains unknown field", errors)
+            self.assertIn("agentic_rollout_receipt.execution_boundary contains unknown field", errors)
+
     def test_rollout_plan_blocks_missing_verifier_refs(self):
         with tempfile.TemporaryDirectory() as tmp:
             missing_verifier = Path(tmp) / "missing.verifier.json"
