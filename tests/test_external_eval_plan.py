@@ -380,6 +380,31 @@ class ExternalEvalPlanTests(unittest.TestCase):
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("external_eval_plan.inputs.scenario_manifest.path does not resolve to a manifest file.", errors)
 
+    def test_validate_rejects_symlink_scenario_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            symlink = root / "heldout-link.json"
+            try:
+                symlink.symlink_to(manifest.name)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
+            plan = _read_json(out)
+            plan["inputs"]["scenario_manifest"]["path"] = symlink.name
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn(
+                "external_eval_plan.inputs.scenario_manifest.path must resolve to a regular non-symlink manifest file.",
+                errors,
+            )
+
     def test_validate_rejects_wrong_scenario_manifest_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

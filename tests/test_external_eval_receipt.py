@@ -430,6 +430,33 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertIn("external_eval_receipt.checks must match current source plan replay.", errors)
             self.assertIn("external_eval_receipt.adapter_receipts must match current source plan replay.", errors)
 
+    def test_validate_rejects_symlink_source_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            symlink = root / "external_eval_plan-link.json"
+            receipt_path = root / "external_eval_receipt.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
+            run_cli(["external-eval-receipt", "--plan", str(plan_path), "--out", str(receipt_path)])
+            try:
+                symlink.symlink_to(plan_path.name)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+            receipt = _read_json(receipt_path)
+            receipt["source_plan"]["path"] = symlink.name
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--out", str(validation), "--strict"])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn(
+                "external_eval_receipt.source_plan.path must resolve to a regular non-symlink external eval plan file.",
+                errors,
+            )
+
     def test_validate_and_schema_reject_unknown_external_eval_receipt_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
