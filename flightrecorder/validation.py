@@ -21423,8 +21423,141 @@ def _increment(counts: dict[str, int], value: Any) -> None:
         counts[value] = counts.get(value, 0) + 1
 
 
+_TRAINER_PREFLIGHT_KEYS = {
+    "schema_version",
+    "preflight_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "gate_count",
+    "passed_gate_count",
+    "required_gates",
+    "required_dataset_versions",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "gates",
+    "validation_summaries",
+    "schema_contracts",
+    "artifacts",
+    "dataset_selection",
+    "trainer_command",
+    "metadata",
+    "notes",
+}
+_TRAINER_PREFLIGHT_CHECK_KEYS = {"id", "passed", "actual", "expected", "scope", "summary"}
+_TRAINER_PREFLIGHT_GATE_KEYS = {
+    "id",
+    "path",
+    "exists",
+    "schema_version",
+    "passed",
+    "size_bytes",
+    "sha256",
+    "validation",
+}
+_TRAINER_PREFLIGHT_GATE_VALIDATION_KEYS = {
+    "available",
+    "passed",
+    "strict",
+    "error_count",
+    "warning_count",
+    "source",
+    "target_type",
+    "summary_passed",
+}
+_TRAINER_PREFLIGHT_ARTIFACT_KEYS = {
+    "path",
+    "exists",
+    "kind",
+    "regular_file",
+    "regular_directory",
+    "symlink",
+    "entry_count",
+    "file_count",
+    "size_bytes",
+    "sha256",
+    "tree_hash_algorithm",
+}
+_TRAINER_PREFLIGHT_SCHEMA_CONTRACT_KEYS = {
+    "path",
+    "exists",
+    "kind",
+    "schema_name",
+    "regular_file",
+    "symlink",
+    "passed",
+    "error_count",
+    "errors",
+    "row_count",
+    "row_schema_counts",
+    "size_bytes",
+    "sha256",
+}
+_TRAINER_PREFLIGHT_ROW_SCHEMA_COUNT_KEYS = {"name", "count"}
+_TRAINER_PREFLIGHT_VALIDATION_SUMMARY_KEYS = {
+    "path",
+    "exists",
+    "kind",
+    "regular_file",
+    "symlink",
+    "schema_version",
+    "passed",
+    "strict",
+    "target_count",
+    "error_count",
+    "warning_count",
+    "targets",
+    "size_bytes",
+    "sha256",
+}
+_TRAINER_PREFLIGHT_VALIDATION_TARGET_KEYS = {
+    "type",
+    "path",
+    "passed",
+    "error_count",
+    "warning_count",
+}
+_TRAINER_PREFLIGHT_DATASET_SELECTION_KEYS = {
+    "artifact",
+    "root",
+    "manifest_path",
+    "manifest_sha256",
+    "registry_path",
+    "registry_sha256",
+    "dataset_version",
+    "required_dataset_versions",
+    "matches_required",
+    "registry_dataset_version",
+    "registry_selection_key",
+    "registry_manifest_sha256",
+    "redaction_passed",
+    "trainer_views",
+    "trainer_modes",
+    "heldout_scenario_exclusive",
+    "heldout_scenario_ids",
+}
+_TRAINER_PREFLIGHT_TRAINER_VIEWS_KEYS = {"contract_version", "mode_to_view", "root_views", "views", "notes"}
+_TRAINER_PREFLIGHT_TRAINER_VIEW_KEYS = {
+    "view_id",
+    "training_modes",
+    "artifact",
+    "artifact_path",
+    "artifact_format",
+    "schema_version",
+    "row_count",
+    "source_artifacts",
+    "label_policy",
+    "available",
+    "split_paths",
+    "notes",
+}
+_TRAINER_PREFLIGHT_TRAINER_COMMAND_KEYS = {"provided", "raw", "argv", "parseable"}
+
+
 def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(preflight, "schema_version", TRAINER_PREFLIGHT_SCHEMA_VERSION, target)
+    _validate_allowed_keys(preflight, _TRAINER_PREFLIGHT_KEYS, target, "trainer_preflight")
     if not isinstance(preflight.get("preflight_path"), str) or not preflight.get("preflight_path"):
         target.errors.append("trainer_preflight.preflight_path must be a non-empty string.")
     if not isinstance(preflight.get("passed"), bool):
@@ -21458,6 +21591,9 @@ def _validate_trainer_preflight(preflight: dict[str, Any], target: ValidationTar
     validation_summaries = preflight.get("validation_summaries", [])
     _validate_trainer_preflight_validation_summaries(validation_summaries, target, source_path)
 
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _TRAINER_PREFLIGHT_CHECK_KEYS, target, f"trainer_preflight.checks[{index}]")
     failed_checks = _validate_handoff_checks(checks, target, "trainer_preflight.checks")
     if preflight.get("check_count") != len(checks):
         target.errors.append(f"trainer_preflight.check_count expected {len(checks)}, got {preflight.get('check_count')!r}.")
@@ -21658,6 +21794,7 @@ def _validate_trainer_preflight_gate(gate: Any, target: ValidationTarget, label:
     if not isinstance(gate, dict):
         target.errors.append(f"{label} must be an object.")
         return False
+    _validate_allowed_keys(gate, _TRAINER_PREFLIGHT_GATE_KEYS, target, label)
     for field_name in ("id", "path", "schema_version"):
         if not isinstance(gate.get(field_name), str) or not gate.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -21671,6 +21808,7 @@ def _validate_trainer_preflight_gate(gate: Any, target: ValidationTarget, label:
         if not isinstance(validation, dict):
             target.errors.append(f"{label}.validation must be an object when present.")
         else:
+            _validate_allowed_keys(validation, _TRAINER_PREFLIGHT_GATE_VALIDATION_KEYS, target, f"{label}.validation")
             for field_name in ("available", "passed", "strict"):
                 if not isinstance(validation.get(field_name), bool):
                     target.errors.append(f"{label}.validation.{field_name} must be a boolean.")
@@ -21689,6 +21827,7 @@ def _validate_trainer_preflight_validation_summaries(value: Any, target: Validat
         if not isinstance(summary, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(summary, _TRAINER_PREFLIGHT_VALIDATION_SUMMARY_KEYS, target, label)
         for field_name in ("path", "schema_version"):
             if not isinstance(summary.get(field_name), str) or not summary.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -21712,6 +21851,7 @@ def _validate_trainer_preflight_validation_summaries(value: Any, target: Validat
             if not isinstance(summary_target, dict):
                 target.errors.append(f"{target_label} must be an object.")
                 continue
+            _validate_allowed_keys(summary_target, _TRAINER_PREFLIGHT_VALIDATION_TARGET_KEYS, target, target_label)
             for field_name in ("type", "path"):
                 if not isinstance(summary_target.get(field_name), str) or not summary_target.get(field_name):
                     target.errors.append(f"{target_label}.{field_name} must be a non-empty string.")
@@ -21729,6 +21869,7 @@ def _validate_trainer_preflight_schema_contract_record(name: Any, record: Any, t
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(record, _TRAINER_PREFLIGHT_SCHEMA_CONTRACT_KEYS, target, label)
     for field_name in ("path", "schema_name"):
         if not isinstance(record.get(field_name), str) or not record.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -21755,6 +21896,7 @@ def _validate_trainer_preflight_schema_contract_record(name: Any, record: Any, t
                 if not isinstance(row_count, dict):
                     target.errors.append(f"{row_label} must be an object.")
                     continue
+                _validate_allowed_keys(row_count, _TRAINER_PREFLIGHT_ROW_SCHEMA_COUNT_KEYS, target, row_label)
                 if not isinstance(row_count.get("name"), str) or not row_count.get("name"):
                     target.errors.append(f"{row_label}.name must be a non-empty string.")
                 if not _is_non_negative_int(row_count.get("count")):
@@ -21769,6 +21911,7 @@ def _validate_trainer_preflight_artifact_record(name: Any, record: Any, target: 
     if not isinstance(record, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(record, _TRAINER_PREFLIGHT_ARTIFACT_KEYS, target, label)
     if not isinstance(record.get("path"), str) or not record.get("path"):
         target.errors.append(f"{label}.path must be a non-empty string.")
     if not isinstance(record.get("exists"), bool):
@@ -21796,6 +21939,7 @@ def _validate_trainer_preflight_dataset_selection(value: Any, target: Validation
         if not isinstance(record, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(record, _TRAINER_PREFLIGHT_DATASET_SELECTION_KEYS, target, label)
         if record.get("artifact") not in {"training_export", "reviewed_export"}:
             target.errors.append(f"{label}.artifact must be training_export or reviewed_export.")
         if not _is_dataset_version(record.get("dataset_version")):
@@ -21819,6 +21963,51 @@ def _validate_trainer_preflight_dataset_selection(value: Any, target: Validation
             target.errors.append(f"{label}.heldout_scenario_exclusive must be true for training exports.")
         if not _is_string_list(record.get("required_dataset_versions")):
             target.errors.append(f"{label}.required_dataset_versions must be a list of strings.")
+        _validate_trainer_preflight_trainer_views(record.get("trainer_views"), target, f"{label}.trainer_views")
+        if not _is_string_list(record.get("trainer_modes")):
+            target.errors.append(f"{label}.trainer_modes must be a list of strings.")
+
+
+def _validate_trainer_preflight_trainer_views(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _TRAINER_PREFLIGHT_TRAINER_VIEWS_KEYS, target, label)
+    if "contract_version" in value and not isinstance(value.get("contract_version"), str):
+        target.errors.append(f"{label}.contract_version must be a string when present.")
+    if "notes" in value and not _is_string_list(value.get("notes")):
+        target.errors.append(f"{label}.notes must be a list of strings when present.")
+    mode_to_view = value.get("mode_to_view", {})
+    if not isinstance(mode_to_view, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in mode_to_view.items()):
+        target.errors.append(f"{label}.mode_to_view must be an object of string values when present.")
+    if "root_views" in value and not _is_string_list(value.get("root_views")):
+        target.errors.append(f"{label}.root_views must be a list of strings when present.")
+    views = value.get("views", [])
+    if "views" in value and not isinstance(views, list):
+        target.errors.append(f"{label}.views must be a list when present.")
+        return
+    for index, view in enumerate(views if isinstance(views, list) else []):
+        view_label = f"{label}.views[{index}]"
+        if not isinstance(view, dict):
+            target.errors.append(f"{view_label} must be an object.")
+            continue
+        _validate_allowed_keys(view, _TRAINER_PREFLIGHT_TRAINER_VIEW_KEYS, target, view_label)
+        for field_name in ("view_id", "artifact", "artifact_path", "artifact_format", "schema_version", "label_policy"):
+            if not isinstance(view.get(field_name), str):
+                target.errors.append(f"{view_label}.{field_name} must be a string.")
+        if not _is_string_list(view.get("training_modes")):
+            target.errors.append(f"{view_label}.training_modes must be a list of strings.")
+        if not _is_non_negative_int(view.get("row_count")):
+            target.errors.append(f"{view_label}.row_count must be a non-negative integer.")
+        if not _is_string_list(view.get("source_artifacts")):
+            target.errors.append(f"{view_label}.source_artifacts must be a list of strings.")
+        if not isinstance(view.get("available"), bool):
+            target.errors.append(f"{view_label}.available must be a boolean.")
+        split_paths = view.get("split_paths")
+        if not isinstance(split_paths, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in split_paths.items()):
+            target.errors.append(f"{view_label}.split_paths must be an object of string values.")
+        if not _is_string_list(view.get("notes")):
+            target.errors.append(f"{view_label}.notes must be a list of strings.")
 
 
 def _validate_preflight_file_hash(
@@ -21910,6 +22099,7 @@ def _validate_trainer_command(command: Any, target: ValidationTarget) -> None:
     if not isinstance(command, dict):
         target.errors.append("trainer_preflight.trainer_command must be an object.")
         return
+    _validate_allowed_keys(command, _TRAINER_PREFLIGHT_TRAINER_COMMAND_KEYS, target, "trainer_preflight.trainer_command")
     if not isinstance(command.get("provided"), bool):
         target.errors.append("trainer_preflight.trainer_command.provided must be a boolean.")
     if not isinstance(command.get("raw"), str):

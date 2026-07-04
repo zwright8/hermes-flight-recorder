@@ -719,6 +719,69 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertGreaterEqual(result["schema_contracts"]["training_export_sft_jsonl"]["row_count"], 1)
             schema = check_schema_contract(result, name_or_id="trainer_preflight")
             self.assertTrue(schema["passed"], schema["errors"])
+            forged = json.loads(json.dumps(result))
+            forged["provider_console_url"] = "redacted-provider-console"
+            forged["checks"][0]["provider_call"] = "forged"
+            forged["gates"][0]["cloud_job_url"] = "redacted-cloud-job-url"
+            forged["gates"][0]["validation"]["credential_hint"] = "redacted"
+            forged["artifacts"]["training_export"]["upload_receipt"] = "not-created"
+            forged["schema_contracts"]["training_export_sft_jsonl"]["download_url"] = "redacted-download-url"
+            forged["schema_contracts"]["training_export_sft_jsonl"]["row_schema_counts"][0]["sample_payload"] = "redacted"
+            forged["dataset_selection"][0]["trainer_secret"] = "redacted"
+            forged["dataset_selection"][0]["trainer_views"]["provider_endpoint"] = "redacted-provider-endpoint"
+            forged["trainer_command"]["trainer_process_pid"] = 123
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_preflight")
+            self.assertFalse(forged_schema["passed"])
+            schema_errors = "\n".join(forged_schema["errors"])
+            for field_name in (
+                "provider_console_url",
+                "provider_call",
+                "cloud_job_url",
+                "credential_hint",
+                "upload_receipt",
+                "download_url",
+                "sample_payload",
+                "trainer_secret",
+                "provider_endpoint",
+                "trainer_process_pid",
+            ):
+                self.assertIn(field_name, schema_errors)
+            forged_preflight = Path(tmp) / "trainer_preflight_forged_side_effect_fields.json"
+            forged_summary = Path(tmp) / "trainer_preflight_forged_side_effect_fields_summary.json"
+            forged_preflight.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-preflight",
+                    str(forged_preflight),
+                    "--strict",
+                    "--out",
+                    str(forged_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_preflight contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("trainer_preflight.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn("trainer_preflight.gates[0] contains unknown field(s): ['cloud_job_url'].", errors)
+            self.assertIn("trainer_preflight.gates[0].validation contains unknown field(s): ['credential_hint'].", errors)
+            self.assertIn("trainer_preflight.artifacts.training_export contains unknown field(s): ['upload_receipt'].", errors)
+            self.assertIn(
+                "trainer_preflight.schema_contracts.training_export_sft_jsonl contains unknown field(s): ['download_url'].",
+                errors,
+            )
+            self.assertIn(
+                "trainer_preflight.schema_contracts.training_export_sft_jsonl.row_schema_counts[0] "
+                "contains unknown field(s): ['sample_payload'].",
+                errors,
+            )
+            self.assertIn("trainer_preflight.dataset_selection[0] contains unknown field(s): ['trainer_secret'].", errors)
+            self.assertIn(
+                "trainer_preflight.dataset_selection[0].trainer_views contains unknown field(s): ['provider_endpoint'].",
+                errors,
+            )
+            self.assertIn("trainer_preflight.trainer_command contains unknown field(s): ['trainer_process_pid'].", errors)
             for field_name in ("sha256", "size_bytes"):
                 forged = json.loads(json.dumps(result))
                 forged["artifacts"]["training_export_sft_jsonl"].pop(field_name)
