@@ -790,6 +790,32 @@ class PromotionLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertEqual(errors, "")
 
+    def test_strict_validate_rejects_absolute_promotion_ledger_gate_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(root)
+            summary_path = root / "validation.json"
+            strict_summary_path = root / "strict_validation.json"
+            self.assertEqual(code, 0)
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["promotion_ledger"] = str(ledger_path)
+            payload["policy"] = {
+                "schema_version": "hfr.promotion_ledger_gate.policy.v1",
+                "path": str(ROOT / "examples" / "promotion_ledger_gate_policy.demo.json"),
+                "effective": {},
+            }
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--out", str(summary_path)])
+            strict_code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(strict_summary_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            summary = json.loads(strict_summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("promotion_ledger_gate.promotion_ledger is absolute", warnings)
+            self.assertIn("promotion_ledger_gate.policy.path is absolute", warnings)
+
     def test_validate_rejects_promotion_ledger_gate_non_utf8_source_ledger_without_crashing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

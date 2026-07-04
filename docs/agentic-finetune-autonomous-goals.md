@@ -776,6 +776,9 @@ card, and dataset card decisions.
 - Promotion-ledger gate validation reopens the referenced promotion ledger,
   replays gate evaluation, and rejects stale metrics, checks, decisions, or
   omitted policy checks.
+- Promotion-ledger gate strict validation now warns on absolute source ledger
+  and policy paths, catching preserved local promotion coordinates before
+  public release decisions are accepted.
 - Promotion cards, promotion decisions, alias receipts, rollback receipts, and
   release records write referenced artifacts relative to their own output files;
   validation reopens those references from the source file location and rejects
