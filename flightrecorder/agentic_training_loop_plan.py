@@ -249,6 +249,7 @@ def build_agentic_training_loop_plan(
     normalized_artifact_paths = _normalized_artifact_paths(artifact_paths or {})
     refs = _artifact_refs(normalized_artifact_paths, preserve_paths, output_path)
     cloud_training_receipt_state = _cloud_training_receipt_state(normalized_artifact_paths)
+    external_eval_receipt_state = _external_eval_receipt_state(normalized_artifact_paths)
     cloud_training = _cloud_training_summary(refs, cloud_training_receipt_state)
     cloud_training_lineage = _cloud_training_lineage(refs, normalized_artifact_paths)
     phases = [_phase_row(spec, refs) for spec in PHASES]
@@ -381,18 +382,36 @@ def build_agentic_training_loop_plan(
         "heldout_manifest" in refs
         and "external_eval_plan" in refs
         and "external_eval_receipt" in refs
-        and "eval_summary" in refs,
+        and "eval_summary" in refs
+        and external_eval_receipt_state["receipts_passed"]
+        and external_eval_receipt_state["fail_closed"],
         {
             "heldout_manifest_present": "heldout_manifest" in refs,
             "external_eval_plan_present": "external_eval_plan" in refs,
             "external_eval_receipt_present": "external_eval_receipt" in refs,
             "eval_summary_present": "eval_summary" in refs,
+            "external_eval_receipts_passed": external_eval_receipt_state["receipts_passed"],
+            "external_eval_receipts_fail_closed": external_eval_receipt_state["fail_closed"],
+            "live_benchmark_requested": external_eval_receipt_state["live_benchmark_requested"],
+            "live_benchmarks_started": external_eval_receipt_state["live_benchmarks_started"],
+            "provider_api_calls_started": external_eval_receipt_state["provider_api_calls_started"],
+            "model_downloads_started": external_eval_receipt_state["model_downloads_started"],
+            "credential_values_recorded": external_eval_receipt_state["credential_values_recorded"],
+            "cost_incurred_usd": external_eval_receipt_state["cost_incurred_usd"],
         },
         {
             "heldout_manifest_present": True,
             "external_eval_plan_present": True,
             "external_eval_receipt_present": True,
             "eval_summary_present": True,
+            "external_eval_receipts_passed": True,
+            "external_eval_receipts_fail_closed": True,
+            "live_benchmark_requested": False,
+            "live_benchmarks_started": False,
+            "provider_api_calls_started": False,
+            "model_downloads_started": False,
+            "credential_values_recorded": False,
+            "cost_incurred_usd": 0,
         },
     )
     _add_check(
@@ -435,6 +454,7 @@ def build_agentic_training_loop_plan(
         "cloud_training": cloud_training,
         "cloud_training_receipt_state": cloud_training_receipt_state,
         "cloud_training_lineage": cloud_training_lineage,
+        "external_eval_receipt_state": external_eval_receipt_state,
         "execution_boundary": {
             "dry_run_plan_only": True,
             "cloud_jobs_started": False,
@@ -667,6 +687,102 @@ def _cloud_training_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict
     }
 
 
+def _external_eval_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
+    payloads = _payloads(artifact_paths, "external_eval_receipt")
+    first_payload = payloads[0] if payloads else {}
+    first_launch = _external_eval_launch(first_payload)
+    adapter_rows = [row for payload in payloads for row in _external_eval_adapter_receipts(payload)]
+    adapter_contracts = [_external_eval_adapter_contract(row) for row in adapter_rows]
+    live_benchmark_requested = any(_external_eval_launch(payload).get("mode") == "live" for payload in payloads)
+    live_benchmarks_started = any(
+        _external_eval_launch(payload).get("live_benchmarks_started") is True
+        or _external_eval_boundary(payload).get("live_benchmarks_started") is True
+        for payload in payloads
+    ) or any(row.get("live_benchmark_started") is True for row in adapter_rows)
+    provider_api_calls_started = any(
+        _external_eval_launch(payload).get("provider_api_called") is True
+        or _external_eval_boundary(payload).get("provider_api_called") is True
+        for payload in payloads
+    ) or any(row.get("provider_api_called") is True for row in adapter_rows) or any(
+        contract.get("provider_api_called_by_flight_recorder") is True for contract in adapter_contracts
+    )
+    model_downloads_started = any(
+        _external_eval_launch(payload).get("model_downloads_started") is True
+        or _external_eval_boundary(payload).get("model_downloads_started") is True
+        for payload in payloads
+    ) or any(row.get("model_downloads_started") is True for row in adapter_rows) or any(
+        contract.get("model_downloads_started_by_flight_recorder") is True for contract in adapter_contracts
+    )
+    credential_values_recorded = any(
+        _external_eval_boundary(payload).get("credential_values_recorded") is True for payload in payloads
+    ) or any(row.get("credential_values_recorded") is True for row in adapter_rows) or any(
+        contract.get("credential_values_recorded") is True for contract in adapter_contracts
+    )
+    weights_updated_by_flight_recorder = any(
+        _external_eval_boundary(payload).get("weights_updated_by_flight_recorder") is True for payload in payloads
+    )
+    cost_incurred_usd = (
+        sum(_non_negative_number_or_zero(_external_eval_launch(payload).get("cost_incurred_usd")) for payload in payloads)
+        + sum(
+            _non_negative_number_or_zero(_external_eval_boundary(payload).get("cloud_cost_incurred_usd"))
+            for payload in payloads
+        )
+        + sum(_non_negative_number_or_zero(row.get("cost_incurred_usd")) for row in adapter_rows)
+        + sum(_non_negative_number_or_zero(contract.get("cost_incurred_usd")) for contract in adapter_contracts)
+    )
+    dry_run_only = bool(payloads) and all(_external_eval_boundary(payload).get("dry_run_only") is not False for payload in payloads)
+    receipt_passed_count = sum(1 for payload in payloads if payload.get("passed") is True)
+    fail_closed = (
+        live_benchmark_requested is False
+        and live_benchmarks_started is False
+        and provider_api_calls_started is False
+        and model_downloads_started is False
+        and credential_values_recorded is False
+        and weights_updated_by_flight_recorder is False
+        and cost_incurred_usd == 0
+        and (not payloads or dry_run_only)
+    )
+    return {
+        "receipt_count": len(payloads),
+        "receipt_passed_count": receipt_passed_count,
+        "receipts_passed": bool(payloads) and receipt_passed_count == len(payloads),
+        "launch_mode": str(first_launch.get("mode") or ""),
+        "readiness": str(first_payload.get("readiness") or ""),
+        "recommendation": str(first_payload.get("recommendation") or ""),
+        "adapter_count": sum(_non_negative_int_or_zero(payload.get("adapter_count")) for payload in payloads),
+        "ready_adapter_count": sum(_non_negative_int_or_zero(payload.get("ready_adapter_count")) for payload in payloads),
+        "dry_run_only": dry_run_only,
+        "live_benchmark_requested": live_benchmark_requested,
+        "live_benchmarks_started": live_benchmarks_started,
+        "provider_api_calls_started": provider_api_calls_started,
+        "model_downloads_started": model_downloads_started,
+        "credential_values_recorded": credential_values_recorded,
+        "weights_updated_by_flight_recorder": weights_updated_by_flight_recorder,
+        "cost_incurred_usd": cost_incurred_usd,
+        "fail_closed": fail_closed,
+    }
+
+
+def _external_eval_launch(payload: dict[str, Any]) -> dict[str, Any]:
+    launch = payload.get("launch")
+    return launch if isinstance(launch, dict) else {}
+
+
+def _external_eval_boundary(payload: dict[str, Any]) -> dict[str, Any]:
+    boundary = payload.get("execution_boundary")
+    return boundary if isinstance(boundary, dict) else {}
+
+
+def _external_eval_adapter_receipts(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = payload.get("adapter_receipts")
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+def _external_eval_adapter_contract(row: dict[str, Any]) -> dict[str, Any]:
+    contract = row.get("adapter_contract")
+    return contract if isinstance(contract, dict) else {}
+
+
 def _cloud_training_lineage(refs: dict[str, list[dict[str, Any]]], artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
     provider = _cloud_training_provider_lineage(artifact_paths)
     links = [_cloud_training_lineage_link(refs, artifact_paths, spec) for spec in CLOUD_TRAINING_LINEAGE_LINKS]
@@ -832,6 +948,10 @@ def _provider_id_from_payload(payload: dict[str, Any]) -> str:
 
 def _non_negative_number_or_zero(value: Any) -> int | float:
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _non_negative_int_or_zero(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
 def _refs_are_safe(refs: dict[str, list[dict[str, Any]]]) -> bool:

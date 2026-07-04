@@ -71,6 +71,9 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(ready_record["cloud_training_lineage"]["provider"]["pipeline_provider_id"], "modal")
             self.assertFalse(ready_record["cloud_training"]["provider_api_calls_started"])
             self.assertIn("external_eval_receipt", ready_record["evals"]["roles_present"])
+            self.assertTrue(ready_record["external_eval_receipt_state"]["receipts_passed"])
+            self.assertTrue(ready_record["external_eval_receipt_state"]["fail_closed"])
+            self.assertEqual(ready_record["external_eval_receipt_state"]["launch_mode"], "dry_run")
             self.assertTrue(ready_record["governance"]["promotion_decision_present"])
             self.assertFalse(ready_record["governance"]["weights_updated_by_flight_recorder"])
             self.assertTrue(digest["cloud_training_lineage_bound"])
@@ -84,6 +87,18 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertEqual(digest["cloud_training_mismatched_link_count"], 0)
             self.assertEqual(digest["cloud_training_ambiguous_link_count"], 0)
             self.assertEqual(digest["cloud_training_duplicate_role_count"], 0)
+            self.assertTrue(digest["external_eval_receipts_passed"])
+            self.assertTrue(digest["external_eval_receipts_fail_closed"])
+            self.assertFalse(digest["external_eval_live_benchmark_requested"])
+            self.assertFalse(digest["external_eval_live_benchmarks_started"])
+            self.assertFalse(digest["external_eval_provider_api_calls_started"])
+            self.assertFalse(digest["external_eval_model_downloads_started"])
+            self.assertFalse(digest["external_eval_credential_values_recorded"])
+            self.assertEqual(digest["external_eval_cost_incurred_usd"], 0)
+            self.assertEqual(digest["external_eval_launch_mode"], "dry_run")
+            self.assertEqual(digest["external_eval_receipt_count"], 1)
+            self.assertEqual(digest["external_eval_adapter_count"], 1)
+            self.assertEqual(digest["external_eval_ready_adapter_count"], 1)
             self.assertEqual(run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(ledger)]), 0)
 
@@ -209,6 +224,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             payload["iterations"][0]["cloud_training"]["cloud_jobs_started"] = True
             payload["iterations"][0]["cloud_training_receipt_state"]["fail_closed"] = False
             payload["iterations"][0]["cloud_training_lineage"]["matched_link_count"] = 0
+            payload["iterations"][0]["external_eval_receipt_state"]["fail_closed"] = False
             ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
@@ -219,6 +235,57 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertIn("cloud_training.cloud_jobs_started must match ledger cloud training role counts", errors)
             self.assertIn("cloud_training_receipt_state.fail_closed must match source loop plan cloud training receipt artifacts", errors)
             self.assertIn("cloud_training_lineage must match the source loop plan cloud_training_lineage", errors)
+            self.assertIn(
+                "external_eval_receipt_state.fail_closed must match source loop plan external eval receipt artifacts",
+                errors,
+            )
+
+    def test_external_eval_side_effects_flow_into_ledger_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ready_artifacts = self.write_ready_artifacts(root / "ready")
+            receipt = ready_artifacts["external_eval_receipt"][0]
+            receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+            receipt_payload["passed"] = False
+            receipt_payload["readiness"] = "blocked"
+            receipt_payload["recommendation"] = "keep_external_eval_claims_disabled"
+            receipt_payload["launch"]["mode"] = "live"
+            receipt_payload["launch"]["live_benchmarks_started"] = True
+            receipt_payload["launch"]["provider_api_called"] = True
+            receipt_payload["launch"]["model_downloads_started"] = True
+            receipt_payload["launch"]["cost_incurred_usd"] = 5
+            receipt.write_text(json.dumps(receipt_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", ready_artifacts)
+            ledger = root / "ledger.json"
+            summary = root / "summary.json"
+            self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            payload = json.loads(ledger.read_text(encoding="utf-8"))
+
+            self.assertFalse(payload["iterations"][0]["external_eval_receipt_state"]["fail_closed"])
+            self.assertFalse(payload["iterations"][0]["external_eval_receipt_state"]["receipts_passed"])
+            self.assertTrue(payload["iterations"][0]["external_eval_receipt_state"]["live_benchmark_requested"])
+            self.assertTrue(payload["iterations"][0]["external_eval_receipt_state"]["provider_api_calls_started"])
+            self.assertEqual(payload["readiness_digest"]["external_eval_cost_incurred_usd"], 5)
+            self.assertFalse(payload["readiness_digest"]["external_eval_receipts_fail_closed"])
+            self.assertTrue(payload["readiness_digest"]["external_eval_live_benchmark_requested"])
+
+            payload["readiness_digest"]["external_eval_receipts_fail_closed"] = True
+            payload["readiness_digest"]["external_eval_live_benchmark_requested"] = False
+            payload["readiness_digest"]["external_eval_cost_incurred_usd"] = 0
+            ledger.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
+
+            self.assertEqual(code, 1)
+            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
+            self.assertIn(
+                "readiness_digest.external_eval_receipts_fail_closed must match the latest iteration",
+                errors,
+            )
+            self.assertIn(
+                "readiness_digest.external_eval_live_benchmark_requested must match the latest iteration",
+                errors,
+            )
 
     def test_duplicate_receipt_side_effects_flow_into_ledger_digest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -407,6 +474,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             iteration["cloud_training_lineage"]["provider_trace_url"] = "https://example.invalid/trace"
             iteration["serving"]["live_endpoint_url"] = "https://example.invalid/serve"
             iteration["evals"]["benchmark_job_id"] = "bench_live"
+            iteration["external_eval_receipt_state"]["benchmark_job_id"] = "bench_live"
             iteration["training_outputs"]["model_download_path"] = "/redacted/model"
             iteration["governance"]["promotion_alias_moved"] = True
             iteration["next_actions"]["automation_thread_id"] = "thread_redacted"
@@ -436,6 +504,10 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             )
             self.assertIn("agentic_loop_ledger.iterations[0].serving contains unknown field(s): ['live_endpoint_url'].", errors)
             self.assertIn("agentic_loop_ledger.iterations[0].evals contains unknown field(s): ['benchmark_job_id'].", errors)
+            self.assertIn(
+                "agentic_loop_ledger.iterations[0].external_eval_receipt_state contains unknown field(s): ['benchmark_job_id'].",
+                errors,
+            )
             self.assertIn(
                 "agentic_loop_ledger.iterations[0].training_outputs contains unknown field(s): ['model_download_path'].",
                 errors,
@@ -1114,6 +1186,31 @@ class AgenticLoopLedgerTests(unittest.TestCase):
                         "cost_incurred_usd": 0,
                     },
                     "execution_boundary": {"credential_values_recorded": False},
+                }
+            )
+        if schema_version == "hfr.external_eval_receipt.v1":
+            payload.update(
+                {
+                    "readiness": "dry_run_recorded",
+                    "recommendation": "archive_external_eval_dry_run",
+                    "adapter_count": 1,
+                    "ready_adapter_count": 1,
+                    "launch": {
+                        "mode": "dry_run",
+                        "live_benchmarks_started": False,
+                        "provider_api_called": False,
+                        "model_downloads_started": False,
+                        "cost_incurred_usd": 0,
+                    },
+                    "execution_boundary": {
+                        "dry_run_only": True,
+                        "live_benchmarks_started": False,
+                        "provider_api_called": False,
+                        "model_downloads_started": False,
+                        "cloud_cost_incurred_usd": 0,
+                        "credential_values_recorded": False,
+                        "weights_updated_by_flight_recorder": False,
+                    },
                 }
             )
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

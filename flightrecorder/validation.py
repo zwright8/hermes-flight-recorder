@@ -4273,6 +4273,7 @@ _AGENTIC_TRAINING_LOOP_PLAN_KEYS = {
     "cloud_training",
     "cloud_training_receipt_state",
     "cloud_training_lineage",
+    "external_eval_receipt_state",
     "execution_boundary",
     "handoff_contract",
     "next_iteration",
@@ -4341,6 +4342,25 @@ _AGENTIC_TRAINING_LOOP_CLOUD_RECEIPT_STATE_KEYS = {
     "cloud_jobs_started",
     "provider_cancel_called",
     "credential_values_recorded",
+    "cost_incurred_usd",
+    "fail_closed",
+}
+_AGENTIC_TRAINING_LOOP_EXTERNAL_EVAL_RECEIPT_STATE_KEYS = {
+    "receipt_count",
+    "receipt_passed_count",
+    "receipts_passed",
+    "launch_mode",
+    "readiness",
+    "recommendation",
+    "adapter_count",
+    "ready_adapter_count",
+    "dry_run_only",
+    "live_benchmark_requested",
+    "live_benchmarks_started",
+    "provider_api_calls_started",
+    "model_downloads_started",
+    "credential_values_recorded",
+    "weights_updated_by_flight_recorder",
     "cost_incurred_usd",
     "fail_closed",
 }
@@ -4542,6 +4562,16 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         "agentic_training_loop_plan.cloud_training_lineage",
         source_path,
     )
+    external_eval_receipt_state = _expected_agentic_training_loop_external_eval_receipt_state(
+        source_artifacts,
+        source_path,
+    )
+    _validate_agentic_training_loop_external_eval_receipt_state(
+        plan.get("external_eval_receipt_state"),
+        external_eval_receipt_state,
+        target,
+        "agentic_training_loop_plan.external_eval_receipt_state",
+    )
     check = _cloud_training_check_by_id(
         checks,
         "cloud_training_receipts_are_side_effect_free",
@@ -4552,6 +4582,22 @@ def _validate_agentic_training_loop_plan(plan: dict[str, Any], target: Validatio
         target.errors.append(
             "agentic_training_loop_plan.checks.cloud_training_receipts_are_side_effect_free.passed must match receipt state."
         )
+    heldout_eval_check = _cloud_training_check_by_id(
+        checks,
+        "heldout_eval_is_fail_closed",
+        target,
+        "agentic_training_loop_plan.checks",
+    )
+    expected_heldout_eval_passed = (
+        "heldout_manifest" in source_artifacts
+        and "external_eval_plan" in source_artifacts
+        and "external_eval_receipt" in source_artifacts
+        and "eval_summary" in source_artifacts
+        and external_eval_receipt_state["receipts_passed"]
+        and external_eval_receipt_state["fail_closed"]
+    )
+    if heldout_eval_check is not None and heldout_eval_check.get("passed") != expected_heldout_eval_passed:
+        target.errors.append("agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt state.")
 
     phases = plan.get("phases")
     if not isinstance(phases, list) or not phases:
@@ -4755,6 +4801,21 @@ def _validate_agentic_training_loop_cloud_training_receipt_state(
             target.errors.append(f"{label}.{field_name} must match cloud training receipt artifacts.")
 
 
+def _validate_agentic_training_loop_external_eval_receipt_state(
+    value: Any,
+    expected: dict[str, Any],
+    target: ValidationTarget,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_EXTERNAL_EVAL_RECEIPT_STATE_KEYS, target, label)
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match external eval receipt artifacts.")
+
+
 def _validate_agentic_training_loop_cloud_training_lineage(
     value: Any,
     source_artifacts: dict[str, Any],
@@ -4935,6 +4996,91 @@ def _expected_agentic_training_loop_cloud_training_receipt_state(
     }
 
 
+def _expected_agentic_training_loop_external_eval_receipt_state(
+    source_artifacts: dict[str, Any],
+    source_path: Path,
+) -> dict[str, Any]:
+    payloads = _agentic_training_loop_payloads(source_artifacts, "external_eval_receipt", source_path)
+    first_payload = payloads[0] if payloads else {}
+    first_launch = _agentic_training_loop_external_eval_launch(first_payload)
+    adapter_rows = [row for payload in payloads for row in _agentic_training_loop_external_eval_adapter_receipts(payload)]
+    adapter_contracts = [_agentic_training_loop_external_eval_adapter_contract(row) for row in adapter_rows]
+    live_benchmark_requested = any(
+        _agentic_training_loop_external_eval_launch(payload).get("mode") == "live" for payload in payloads
+    )
+    live_benchmarks_started = any(
+        _agentic_training_loop_external_eval_launch(payload).get("live_benchmarks_started") is True
+        or _agentic_training_loop_external_eval_boundary(payload).get("live_benchmarks_started") is True
+        for payload in payloads
+    ) or any(row.get("live_benchmark_started") is True for row in adapter_rows)
+    provider_api_calls_started = any(
+        _agentic_training_loop_external_eval_launch(payload).get("provider_api_called") is True
+        or _agentic_training_loop_external_eval_boundary(payload).get("provider_api_called") is True
+        for payload in payloads
+    ) or any(row.get("provider_api_called") is True for row in adapter_rows) or any(
+        contract.get("provider_api_called_by_flight_recorder") is True for contract in adapter_contracts
+    )
+    model_downloads_started = any(
+        _agentic_training_loop_external_eval_launch(payload).get("model_downloads_started") is True
+        or _agentic_training_loop_external_eval_boundary(payload).get("model_downloads_started") is True
+        for payload in payloads
+    ) or any(row.get("model_downloads_started") is True for row in adapter_rows) or any(
+        contract.get("model_downloads_started_by_flight_recorder") is True for contract in adapter_contracts
+    )
+    credential_values_recorded = any(
+        _agentic_training_loop_external_eval_boundary(payload).get("credential_values_recorded") is True
+        for payload in payloads
+    ) or any(row.get("credential_values_recorded") is True for row in adapter_rows) or any(
+        contract.get("credential_values_recorded") is True for contract in adapter_contracts
+    )
+    weights_updated_by_flight_recorder = any(
+        _agentic_training_loop_external_eval_boundary(payload).get("weights_updated_by_flight_recorder") is True
+        for payload in payloads
+    )
+    cost_incurred_usd = (
+        sum(_safe_non_negative_number(_agentic_training_loop_external_eval_launch(payload).get("cost_incurred_usd")) for payload in payloads)
+        + sum(
+            _safe_non_negative_number(_agentic_training_loop_external_eval_boundary(payload).get("cloud_cost_incurred_usd"))
+            for payload in payloads
+        )
+        + sum(_safe_non_negative_number(row.get("cost_incurred_usd")) for row in adapter_rows)
+        + sum(_safe_non_negative_number(contract.get("cost_incurred_usd")) for contract in adapter_contracts)
+    )
+    dry_run_only = bool(payloads) and all(
+        _agentic_training_loop_external_eval_boundary(payload).get("dry_run_only") is not False for payload in payloads
+    )
+    receipt_passed_count = sum(1 for payload in payloads if payload.get("passed") is True)
+    fail_closed = (
+        live_benchmark_requested is False
+        and live_benchmarks_started is False
+        and provider_api_calls_started is False
+        and model_downloads_started is False
+        and credential_values_recorded is False
+        and weights_updated_by_flight_recorder is False
+        and cost_incurred_usd == 0
+        and (not payloads or dry_run_only)
+    )
+    return {
+        "receipt_count": len(payloads),
+        "receipt_passed_count": receipt_passed_count,
+        "receipts_passed": bool(payloads) and receipt_passed_count == len(payloads),
+        "launch_mode": str(first_launch.get("mode") or ""),
+        "readiness": str(first_payload.get("readiness") or ""),
+        "recommendation": str(first_payload.get("recommendation") or ""),
+        "adapter_count": sum(_safe_non_negative_int(payload.get("adapter_count")) for payload in payloads),
+        "ready_adapter_count": sum(_safe_non_negative_int(payload.get("ready_adapter_count")) for payload in payloads),
+        "dry_run_only": dry_run_only,
+        "live_benchmark_requested": live_benchmark_requested,
+        "live_benchmarks_started": live_benchmarks_started,
+        "provider_api_calls_started": provider_api_calls_started,
+        "model_downloads_started": model_downloads_started,
+        "credential_values_recorded": credential_values_recorded,
+        "weights_updated_by_flight_recorder": weights_updated_by_flight_recorder,
+        "cost_incurred_usd": cost_incurred_usd,
+        "fail_closed": fail_closed,
+    }
+
+
 def _agentic_training_loop_cloud_training_launch(payload: dict[str, Any]) -> dict[str, Any]:
     launch = payload.get("launch")
     return launch if isinstance(launch, dict) else {}
@@ -4948,6 +5094,26 @@ def _agentic_training_loop_cloud_training_status(payload: dict[str, Any]) -> dic
 def _agentic_training_loop_cloud_training_boundary(payload: dict[str, Any]) -> dict[str, Any]:
     boundary = payload.get("execution_boundary")
     return boundary if isinstance(boundary, dict) else {}
+
+
+def _agentic_training_loop_external_eval_launch(payload: dict[str, Any]) -> dict[str, Any]:
+    launch = payload.get("launch")
+    return launch if isinstance(launch, dict) else {}
+
+
+def _agentic_training_loop_external_eval_boundary(payload: dict[str, Any]) -> dict[str, Any]:
+    boundary = payload.get("execution_boundary")
+    return boundary if isinstance(boundary, dict) else {}
+
+
+def _agentic_training_loop_external_eval_adapter_receipts(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = payload.get("adapter_receipts")
+    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+def _agentic_training_loop_external_eval_adapter_contract(row: dict[str, Any]) -> dict[str, Any]:
+    contract = row.get("adapter_contract")
+    return contract if isinstance(contract, dict) else {}
 
 
 def _expected_agentic_training_loop_cloud_training_provider_lineage(
@@ -5156,6 +5322,18 @@ _AGENTIC_LOOP_LEDGER_DIGEST_KEYS = {
     "cloud_training_provider_id",
     "cloud_training_missing_link_count",
     "cloud_training_mismatched_link_count",
+    "external_eval_receipt_count",
+    "external_eval_adapter_count",
+    "external_eval_ready_adapter_count",
+    "external_eval_receipts_passed",
+    "external_eval_receipts_fail_closed",
+    "external_eval_live_benchmark_requested",
+    "external_eval_live_benchmarks_started",
+    "external_eval_provider_api_calls_started",
+    "external_eval_model_downloads_started",
+    "external_eval_credential_values_recorded",
+    "external_eval_cost_incurred_usd",
+    "external_eval_launch_mode",
     "next_action_scheduled",
     "next_action_recommendation",
     "requires_governance_decision",
@@ -5196,6 +5374,7 @@ _AGENTIC_LOOP_LEDGER_ITERATION_KEYS = {
     "cost_estimate",
     "serving",
     "evals",
+    "external_eval_receipt_state",
     "training_outputs",
     "governance",
     "next_actions",
@@ -5291,6 +5470,13 @@ def _validate_agentic_loop_ledger(ledger: dict[str, Any], target: ValidationTarg
             target,
             ledger_path,
             f"{label}.cloud_training_receipt_state",
+        )
+        _validate_agentic_loop_ledger_external_eval_receipt_state(
+            row.get("external_eval_receipt_state"),
+            row,
+            target,
+            ledger_path,
+            f"{label}.external_eval_receipt_state",
         )
         _validate_agentic_loop_ledger_cloud_training_lineage(row.get("cloud_training_lineage"), row, target, ledger_path, label)
     metrics = ledger.get("metrics")
@@ -5405,11 +5591,16 @@ def _validate_agentic_loop_ledger_digest(
         latest_receipt_state = (
             latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
         )
+        latest_external_eval_receipt_state = (
+            latest.get("external_eval_receipt_state") if isinstance(latest.get("external_eval_receipt_state"), dict) else {}
+        )
         expected_ready = (
             latest.get("readiness") == "ready_for_governance_review"
             and not latest_missing_phase_inputs
             and latest_lineage.get("passed") is True
             and latest_receipt_state.get("fail_closed") is True
+            and latest_external_eval_receipt_state.get("fail_closed") is True
+            and latest_external_eval_receipt_state.get("receipts_passed") is True
         )
         if digest.get("ready_for_governance_review") != expected_ready:
             target.errors.append("agentic_loop_ledger.readiness_digest.ready_for_governance_review must match latest iteration readiness.")
@@ -5439,6 +5630,44 @@ def _validate_agentic_loop_ledger_digest(
             target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_ambiguous_link_count must match the latest iteration.")
         if digest.get("cloud_training_duplicate_role_count") != _safe_non_negative_int(latest_lineage.get("duplicate_role_count")):
             target.errors.append("agentic_loop_ledger.readiness_digest.cloud_training_duplicate_role_count must match the latest iteration.")
+        if digest.get("external_eval_receipt_count") != _safe_non_negative_int(latest_external_eval_receipt_state.get("receipt_count")):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_receipt_count must match the latest iteration.")
+        if digest.get("external_eval_adapter_count") != _safe_non_negative_int(latest_external_eval_receipt_state.get("adapter_count")):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_adapter_count must match the latest iteration.")
+        if digest.get("external_eval_ready_adapter_count") != _safe_non_negative_int(
+            latest_external_eval_receipt_state.get("ready_adapter_count")
+        ):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_ready_adapter_count must match the latest iteration.")
+        if digest.get("external_eval_receipts_passed") != (latest_external_eval_receipt_state.get("receipts_passed") is True):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_receipts_passed must match the latest iteration.")
+        if digest.get("external_eval_receipts_fail_closed") != (latest_external_eval_receipt_state.get("fail_closed") is True):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_receipts_fail_closed must match the latest iteration.")
+        if digest.get("external_eval_live_benchmark_requested") != (
+            latest_external_eval_receipt_state.get("live_benchmark_requested") is True
+        ):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_live_benchmark_requested must match the latest iteration.")
+        if digest.get("external_eval_live_benchmarks_started") != (
+            latest_external_eval_receipt_state.get("live_benchmarks_started") is True
+        ):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_live_benchmarks_started must match the latest iteration.")
+        if digest.get("external_eval_provider_api_calls_started") != (
+            latest_external_eval_receipt_state.get("provider_api_calls_started") is True
+        ):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_provider_api_calls_started must match the latest iteration.")
+        if digest.get("external_eval_model_downloads_started") != (
+            latest_external_eval_receipt_state.get("model_downloads_started") is True
+        ):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_model_downloads_started must match the latest iteration.")
+        if digest.get("external_eval_credential_values_recorded") != (
+            latest_external_eval_receipt_state.get("credential_values_recorded") is True
+        ):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_credential_values_recorded must match the latest iteration.")
+        if digest.get("external_eval_cost_incurred_usd") != _safe_non_negative_number(
+            latest_external_eval_receipt_state.get("cost_incurred_usd")
+        ):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_cost_incurred_usd must match the latest iteration.")
+        if digest.get("external_eval_launch_mode") != str(latest_external_eval_receipt_state.get("launch_mode") or ""):
+            target.errors.append("agentic_loop_ledger.readiness_digest.external_eval_launch_mode must match the latest iteration.")
         expected_summary = str(expected_digest.get("summary") or "")
         if digest.get("summary") != expected_summary:
             target.errors.append("agentic_loop_ledger.readiness_digest.summary must match latest iteration readiness.")
@@ -6004,6 +6233,28 @@ def _validate_agentic_loop_ledger_cloud_training_receipt_state(
     for field_name, expected_value in expected.items():
         if value.get(field_name) != expected_value:
             target.errors.append(f"{label}.{field_name} must match source loop plan cloud training receipt artifacts.")
+
+
+def _validate_agentic_loop_ledger_external_eval_receipt_state(
+    value: Any,
+    row: dict[str, Any],
+    target: ValidationTarget,
+    ledger_path: Path,
+    label: str,
+) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _AGENTIC_TRAINING_LOOP_EXTERNAL_EVAL_RECEIPT_STATE_KEYS, target, label)
+    source_path = _resolve_agentic_loop_ledger_source_path(row, ledger_path)
+    if source_path is None or not source_path.exists() or not source_path.is_file():
+        return
+    source_plan = _read_json_object_silent(source_path)
+    source_artifacts = source_plan.get("source_artifacts") if isinstance(source_plan.get("source_artifacts"), dict) else {}
+    expected = _expected_agentic_training_loop_external_eval_receipt_state(source_artifacts, source_path)
+    for field_name, expected_value in expected.items():
+        if value.get(field_name) != expected_value:
+            target.errors.append(f"{label}.{field_name} must match source loop plan external eval receipt artifacts.")
 
 
 def _validate_agentic_loop_ledger_cloud_training_lineage(

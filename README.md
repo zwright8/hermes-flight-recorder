@@ -358,8 +358,12 @@ weight updates. Missing phase receipts produce a schema-checkable
 `planned_fail_closed` contract rather than a live launch.
 Loop ledgers add a `readiness_digest` over the latest iteration so review can
 spot missing phase inputs, empty artifact groups, next-action posture, and
-side-effect status without walking every receipt. The ledger `decision` also
-lists the explicit governance actions available from the latest iteration:
+side-effect status without walking every receipt. The digest includes
+`external_eval_receipt_state`, so dry-run external benchmark receipts must have
+passed and must show no live benchmark request, provider API call, model
+download, credential recording, or non-zero cost before governance readiness can
+be claimed. The ledger `decision` also lists the explicit governance actions
+available from the latest iteration:
 `approve`, `reject`, `rollback`, and `request_another_iteration`. Those options
 are advisory and ledger-only. Use `flightrecorder agentic-loop governance` to
 record one selected action as `hfr.agentic_loop_governance_receipt.v1`; the

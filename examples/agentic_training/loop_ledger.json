@@ -57,7 +57,7 @@
   "iteration_count": 1,
   "iterations": [
     {
-      "artifact_count": 9,
+      "artifact_count": 10,
       "artifact_group_counts": [
         {
           "count": 6,
@@ -100,11 +100,15 @@
           "group": "serving"
         },
         {
-          "count": 3,
+          "count": 4,
           "group": "training"
         }
       ],
       "artifact_role_counts": [
+        {
+          "count": 1,
+          "role": "agentic_training_flow"
+        },
         {
           "count": 1,
           "role": "agentic_training_plan"
@@ -376,6 +380,25 @@
         "roles_present": []
       },
       "exists": true,
+      "external_eval_receipt_state": {
+        "adapter_count": 0,
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_only": false,
+        "fail_closed": true,
+        "launch_mode": "",
+        "live_benchmark_requested": false,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "provider_api_calls_started": false,
+        "readiness": "",
+        "ready_adapter_count": 0,
+        "receipt_count": 0,
+        "receipt_passed_count": 0,
+        "receipts_passed": false,
+        "recommendation": "",
+        "weights_updated_by_flight_recorder": false
+      },
       "governance": {
         "artifact_count": 0,
         "cloud_jobs_started": false,
@@ -451,19 +474,19 @@
         ],
         "roles_present": []
       },
-      "sha256": "078b3f41976313bc664dc3bb2a2a315fe3a775ba085e9f8d91dfba6c11051c61",
-      "size_bytes": 38693,
+      "sha256": "f27136be11f6df7b6173e9d31fe892d2a08218ceb1527ec1377efdb5cd7ab026",
+      "size_bytes": 40535,
       "training_outputs": {
-        "artifact_count": 3,
+        "artifact_count": 4,
         "group": "training",
         "roles_missing": [
-          "agentic_training_flow",
           "trainer_preflight",
           "trainer_launch_check"
         ],
         "roles_present": [
           "agentic_training_plan",
           "agentic_training_runtime_preflight",
+          "agentic_training_flow",
           "agentic_training_result"
         ]
       }
@@ -513,7 +536,7 @@
         "group": "serving"
       },
       {
-        "count": 3,
+        "count": 4,
         "group": "training"
       }
     ],
@@ -563,6 +586,18 @@
     "cloud_training_status_provider_status": "not_started",
     "decision_readiness": "blocked",
     "decision_recommendation": "continue_iteration",
+    "external_eval_adapter_count": 0,
+    "external_eval_cost_incurred_usd": 0,
+    "external_eval_credential_values_recorded": false,
+    "external_eval_launch_mode": "",
+    "external_eval_live_benchmark_requested": false,
+    "external_eval_live_benchmarks_started": false,
+    "external_eval_model_downloads_started": false,
+    "external_eval_provider_api_calls_started": false,
+    "external_eval_ready_adapter_count": 0,
+    "external_eval_receipt_count": 0,
+    "external_eval_receipts_fail_closed": true,
+    "external_eval_receipts_passed": false,
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "live_spend_allowed": false,

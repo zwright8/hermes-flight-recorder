@@ -154,6 +154,7 @@ def _iteration_record(
         },
         "serving": _group_summary(source_artifacts, "serving"),
         "evals": _group_summary(source_artifacts, "eval"),
+        "external_eval_receipt_state": _external_eval_receipt_state(plan),
         "cloud_training": _cloud_training_summary(source_artifacts, plan),
         "cloud_training_receipt_state": _cloud_training_receipt_state(plan),
         "cloud_training_lineage": _cloud_training_lineage(plan),
@@ -229,12 +230,21 @@ def _latest_ready_for_governance_review(latest: dict[str, Any]) -> bool:
         return False
     lineage = latest.get("cloud_training_lineage") if isinstance(latest.get("cloud_training_lineage"), dict) else {}
     receipt_state = latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
+    external_eval_receipt_state = (
+        latest.get("external_eval_receipt_state") if isinstance(latest.get("external_eval_receipt_state"), dict) else {}
+    )
     governance = latest.get("governance") if isinstance(latest.get("governance"), dict) else {}
     side_effects_started = any(
         governance.get(field_name) is True
         for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder")
     )
-    return lineage.get("passed") is True and receipt_state.get("fail_closed") is True and not side_effects_started
+    return (
+        lineage.get("passed") is True
+        and receipt_state.get("fail_closed") is True
+        and external_eval_receipt_state.get("fail_closed") is True
+        and external_eval_receipt_state.get("receipts_passed") is True
+        and not side_effects_started
+    )
 
 
 def _governance_actions(latest: dict[str, Any], ready_for_review: bool) -> list[dict[str, Any]]:
@@ -318,18 +328,25 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
     cloud_training_receipt_state = (
         latest.get("cloud_training_receipt_state") if isinstance(latest.get("cloud_training_receipt_state"), dict) else {}
     )
+    external_eval_receipt_state = (
+        latest.get("external_eval_receipt_state") if isinstance(latest.get("external_eval_receipt_state"), dict) else {}
+    )
     side_effects_started = any(
         governance.get(field_name) is True
         for field_name in ("cloud_jobs_started", "paid_model_grader_calls_started", "weights_updated_by_flight_recorder")
     )
     lineage_bound = cloud_training_lineage.get("passed") is True
     receipt_state_fail_closed = cloud_training_receipt_state.get("fail_closed") is True
+    external_eval_receipt_state_fail_closed = external_eval_receipt_state.get("fail_closed") is True
+    external_eval_receipts_passed = external_eval_receipt_state.get("receipts_passed") is True
     ready = (
         latest.get("readiness") == "ready_for_governance_review"
         and not missing_phase_inputs
         and not side_effects_started
         and lineage_bound
         and receipt_state_fail_closed
+        and external_eval_receipt_state_fail_closed
+        and external_eval_receipts_passed
     )
     if ready:
         summary = f"Latest loop iteration {latest.get('iteration_id')} is ready for governance review."
@@ -371,6 +388,18 @@ def _readiness_digest(iterations: list[dict[str, Any]], decision: dict[str, Any]
         "cloud_training_mismatched_link_count": _non_negative_int(cloud_training_lineage.get("mismatched_link_count")),
         "cloud_training_ambiguous_link_count": _non_negative_int(cloud_training_lineage.get("ambiguous_link_count")),
         "cloud_training_duplicate_role_count": _non_negative_int(cloud_training_lineage.get("duplicate_role_count")),
+        "external_eval_receipt_count": _non_negative_int(external_eval_receipt_state.get("receipt_count")),
+        "external_eval_adapter_count": _non_negative_int(external_eval_receipt_state.get("adapter_count")),
+        "external_eval_ready_adapter_count": _non_negative_int(external_eval_receipt_state.get("ready_adapter_count")),
+        "external_eval_receipts_passed": external_eval_receipts_passed,
+        "external_eval_receipts_fail_closed": external_eval_receipt_state_fail_closed,
+        "external_eval_live_benchmark_requested": external_eval_receipt_state.get("live_benchmark_requested") is True,
+        "external_eval_live_benchmarks_started": external_eval_receipt_state.get("live_benchmarks_started") is True,
+        "external_eval_provider_api_calls_started": external_eval_receipt_state.get("provider_api_calls_started") is True,
+        "external_eval_model_downloads_started": external_eval_receipt_state.get("model_downloads_started") is True,
+        "external_eval_credential_values_recorded": external_eval_receipt_state.get("credential_values_recorded") is True,
+        "external_eval_cost_incurred_usd": _number_or_zero(external_eval_receipt_state.get("cost_incurred_usd")),
+        "external_eval_launch_mode": str(external_eval_receipt_state.get("launch_mode") or ""),
         "summary": summary,
     }
 
@@ -416,6 +445,11 @@ def _cloud_training_lineage(plan: dict[str, Any]) -> dict[str, Any]:
 
 def _cloud_training_receipt_state(plan: dict[str, Any]) -> dict[str, Any]:
     state = plan.get("cloud_training_receipt_state")
+    return state if isinstance(state, dict) else {}
+
+
+def _external_eval_receipt_state(plan: dict[str, Any]) -> dict[str, Any]:
+    state = plan.get("external_eval_receipt_state")
     return state if isinstance(state, dict) else {}
 
 

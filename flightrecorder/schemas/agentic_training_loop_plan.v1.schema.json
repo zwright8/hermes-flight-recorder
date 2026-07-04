@@ -42,6 +42,9 @@
     "cloud_training_lineage": {
       "$ref": "#/$defs/cloudTrainingLineage"
     },
+    "external_eval_receipt_state": {
+      "$ref": "#/$defs/externalEvalReceiptState"
+    },
     "created_at": {
       "minLength": 1,
       "type": "string"
@@ -146,6 +149,7 @@
     "cloud_training",
     "cloud_training_receipt_state",
     "cloud_training_lineage",
+    "external_eval_receipt_state",
     "execution_boundary",
     "handoff_contract",
     "next_iteration",
@@ -530,6 +534,87 @@
         "cloud_jobs_started",
         "provider_cancel_called",
         "credential_values_recorded",
+        "cost_incurred_usd",
+        "fail_closed"
+      ],
+      "type": "object"
+    },
+    "externalEvalReceiptState": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cost_incurred_usd": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "credential_values_recorded": {
+          "type": "boolean"
+        },
+        "dry_run_only": {
+          "type": "boolean"
+        },
+        "fail_closed": {
+          "type": "boolean"
+        },
+        "launch_mode": {
+          "type": "string"
+        },
+        "live_benchmark_requested": {
+          "type": "boolean"
+        },
+        "live_benchmarks_started": {
+          "type": "boolean"
+        },
+        "model_downloads_started": {
+          "type": "boolean"
+        },
+        "provider_api_calls_started": {
+          "type": "boolean"
+        },
+        "readiness": {
+          "type": "string"
+        },
+        "ready_adapter_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "receipt_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "receipt_passed_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "receipts_passed": {
+          "type": "boolean"
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "weights_updated_by_flight_recorder": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "receipt_count",
+        "receipt_passed_count",
+        "receipts_passed",
+        "launch_mode",
+        "readiness",
+        "recommendation",
+        "adapter_count",
+        "ready_adapter_count",
+        "dry_run_only",
+        "live_benchmark_requested",
+        "live_benchmarks_started",
+        "provider_api_calls_started",
+        "model_downloads_started",
+        "credential_values_recorded",
+        "weights_updated_by_flight_recorder",
         "cost_incurred_usd",
         "fail_closed"
       ],

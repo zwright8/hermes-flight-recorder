@@ -1,6 +1,10 @@
 {
-  "artifact_count": 9,
+  "artifact_count": 10,
   "artifact_role_counts": [
+    {
+      "count": 1,
+      "role": "agentic_training_flow"
+    },
     {
       "count": 1,
       "role": "agentic_training_plan"
@@ -437,16 +441,32 @@
     },
     {
       "actual": {
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
         "eval_summary_present": false,
         "external_eval_plan_present": false,
         "external_eval_receipt_present": false,
-        "heldout_manifest_present": false
+        "external_eval_receipts_fail_closed": true,
+        "external_eval_receipts_passed": false,
+        "heldout_manifest_present": false,
+        "live_benchmark_requested": false,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "provider_api_calls_started": false
       },
       "expected": {
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
         "eval_summary_present": true,
         "external_eval_plan_present": true,
         "external_eval_receipt_present": true,
-        "heldout_manifest_present": true
+        "external_eval_receipts_fail_closed": true,
+        "external_eval_receipts_passed": true,
+        "heldout_manifest_present": true,
+        "live_benchmark_requested": false,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "provider_api_calls_started": false
       },
       "id": "heldout_eval_is_fail_closed",
       "passed": false,
@@ -700,6 +720,25 @@
     "public_artifact_paths_redacted": true,
     "weights_updated_by_flight_recorder": false
   },
+  "external_eval_receipt_state": {
+    "adapter_count": 0,
+    "cost_incurred_usd": 0,
+    "credential_values_recorded": false,
+    "dry_run_only": false,
+    "fail_closed": true,
+    "launch_mode": "",
+    "live_benchmark_requested": false,
+    "live_benchmarks_started": false,
+    "model_downloads_started": false,
+    "provider_api_calls_started": false,
+    "readiness": "",
+    "ready_adapter_count": 0,
+    "receipt_count": 0,
+    "receipt_passed_count": 0,
+    "receipts_passed": false,
+    "recommendation": "",
+    "weights_updated_by_flight_recorder": false
+  },
   "failed_check_count": 7,
   "handoff_contract": {
     "default_live_execution_allowed": false,
@@ -823,6 +862,7 @@
       "produces": [
         "review_manifest",
         "model_grader_dry_run",
+        "model_grader_disagreement_queue",
         "model_grader_override_receipt",
         "reviewed_manifest"
       ],
@@ -975,6 +1015,7 @@
       "name": "Governance decision",
       "present_required_artifacts": [],
       "produces": [
+        "agentic_loop_governance_receipt",
         "promotion_cards",
         "promotion_release_record"
       ],
@@ -1037,6 +1078,19 @@
   "recommendation": "collect_missing_receipts_before_live_execution",
   "schema_version": "hfr.agentic_training_loop_plan.v1",
   "source_artifacts": {
+    "agentic_training_flow": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "agentic_training_flow.json",
+        "readiness": "ready",
+        "role": "agentic_training_flow",
+        "schema_version": "hfr.agentic_training_flow.v1",
+        "sha256": "d4c863daec5ad0871043484a9fd5c6b7c2b6f9e5a79157eed758cf5f5d47dd3c",
+        "size_bytes": 12997
+      }
+    ],
     "agentic_training_plan": [
       {
         "exists": true,

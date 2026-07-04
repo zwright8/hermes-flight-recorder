@@ -47,6 +47,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertTrue(plan["cloud_training_receipt_state"]["fail_closed"])
             self.assertEqual(plan["cloud_training_receipt_state"]["launch_mode"], "dry_run")
             self.assertEqual(plan["cloud_training_receipt_state"]["status_provider_status"], "not_started")
+            self.assertTrue(plan["external_eval_receipt_state"]["receipts_passed"])
+            self.assertTrue(plan["external_eval_receipt_state"]["fail_closed"])
+            self.assertEqual(plan["external_eval_receipt_state"]["launch_mode"], "dry_run")
+            self.assertEqual(plan["external_eval_receipt_state"]["adapter_count"], 1)
             self.assertEqual(plan["missing_phase_inputs"], [])
             self.assertTrue(all(phase["status"] != "blocked" for phase in plan["phases"]))
             self.assertEqual(plan["artifact_count"], sum(len(paths) for paths in artifacts.values()))
@@ -108,6 +112,101 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
             self.assertTrue(validation["passed"], validation)
+
+    def test_blocked_external_eval_receipt_keeps_loop_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            receipt = artifacts["external_eval_receipt"][0]
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["passed"] = False
+            payload["readiness"] = "blocked"
+            payload["recommendation"] = "keep_external_eval_claims_disabled"
+            payload["ready_adapter_count"] = 0
+            receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="loop-blocked-external-eval",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertFalse(plan["external_eval_receipt_state"]["receipts_passed"])
+            self.assertTrue(plan["external_eval_receipt_state"]["fail_closed"])
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertFalse(heldout_check["passed"])
+            self.assertFalse(heldout_check["actual"]["external_eval_receipts_passed"])
+            schema = check_schema_contract(plan)
+            self.assertTrue(schema["passed"], schema["errors"])
+
+    def test_external_eval_receipt_side_effects_keep_loop_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            receipt = artifacts["external_eval_receipt"][0]
+            payload = json.loads(receipt.read_text(encoding="utf-8"))
+            payload["launch"]["live_benchmarks_started"] = True
+            payload["launch"]["provider_api_called"] = True
+            payload["launch"]["model_downloads_started"] = True
+            payload["launch"]["cost_incurred_usd"] = 2
+            payload["execution_boundary"]["credential_values_recorded"] = True
+            receipt.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            loop_plan = root / "loop.json"
+            plan = build_agentic_training_loop_plan(
+                out_path=loop_plan,
+                iteration_id="loop-external-eval-side-effects",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertFalse(plan["external_eval_receipt_state"]["fail_closed"])
+            self.assertTrue(plan["external_eval_receipt_state"]["live_benchmarks_started"])
+            self.assertTrue(plan["external_eval_receipt_state"]["provider_api_calls_started"])
+            self.assertTrue(plan["external_eval_receipt_state"]["model_downloads_started"])
+            self.assertTrue(plan["external_eval_receipt_state"]["credential_values_recorded"])
+            self.assertEqual(plan["external_eval_receipt_state"]["cost_incurred_usd"], 2)
+            self.assertIn(
+                "heldout_eval_is_fail_closed",
+                {check["id"] for check in plan["checks"] if not check["passed"]},
+            )
+
+            forged = json.loads(json.dumps(plan))
+            forged["external_eval_receipt_state"]["fail_closed"] = True
+            forged["external_eval_receipt_state"]["live_benchmarks_started"] = False
+            forged["external_eval_receipt_state"]["provider_api_calls_started"] = False
+            forged["external_eval_receipt_state"]["model_downloads_started"] = False
+            forged["external_eval_receipt_state"]["credential_values_recorded"] = False
+            forged["external_eval_receipt_state"]["cost_incurred_usd"] = 0
+            for check in forged["checks"]:
+                if check["id"] == "heldout_eval_is_fail_closed":
+                    check["passed"] = True
+            loop_plan.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn(
+                "agentic_training_loop_plan.external_eval_receipt_state.live_benchmarks_started must match external eval receipt artifacts.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.external_eval_receipt_state.provider_api_calls_started must match external eval receipt artifacts.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.external_eval_receipt_state.cost_incurred_usd must match external eval receipt artifacts.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt state.",
+                errors,
+            )
 
     def test_cli_writes_schema_checkable_and_validatable_loop_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -233,6 +332,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             forged["cloud_training_lineage"]["provider"]["credential_value"] = "redacted-secret"
             forged["cloud_training_lineage"]["role_counts"][0]["provider_call"] = "forged"
             forged["cloud_training_lineage"]["links"][0]["provider_trace_url"] = "redacted-trace-url"
+            forged["external_eval_receipt_state"]["benchmark_job_id"] = "bench-live"
             forged["execution_boundary"]["provider_console_url"] = "redacted-provider-console"
             forged["handoff_contract"]["credential_hint"] = "redacted-secret"
             forged["next_iteration"]["auto_schedule_started"] = True
@@ -252,6 +352,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 "provider_call_receipt",
                 "provider_console_url",
                 "provider_trace_url",
+                "benchmark_job_id",
                 "credential_hint",
                 "auto_schedule_started",
             ):
@@ -288,6 +389,10 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             )
             self.assertIn(
                 "agentic_training_loop_plan.cloud_training_lineage.links[0] contains unknown field(s): ['provider_trace_url'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_loop_plan.external_eval_receipt_state contains unknown field(s): ['benchmark_job_id'].",
                 errors,
             )
             self.assertIn(
@@ -777,6 +882,31 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                         "cost_incurred_usd": 0,
                     },
                     "execution_boundary": {"credential_values_recorded": False},
+                }
+            )
+        if schema_version == "hfr.external_eval_receipt.v1":
+            payload.update(
+                {
+                    "readiness": "dry_run_recorded",
+                    "recommendation": "archive_external_eval_dry_run",
+                    "adapter_count": 1,
+                    "ready_adapter_count": 1,
+                    "launch": {
+                        "mode": "dry_run",
+                        "live_benchmarks_started": False,
+                        "provider_api_called": False,
+                        "model_downloads_started": False,
+                        "cost_incurred_usd": 0,
+                    },
+                    "execution_boundary": {
+                        "dry_run_only": True,
+                        "live_benchmarks_started": False,
+                        "provider_api_called": False,
+                        "model_downloads_started": False,
+                        "cloud_cost_incurred_usd": 0,
+                        "credential_values_recorded": False,
+                        "weights_updated_by_flight_recorder": False,
+                    },
                 }
             )
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
