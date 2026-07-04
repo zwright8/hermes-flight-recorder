@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.cli import main
+from flightrecorder.review import review_item_sha256
 from flightrecorder.schema_registry import check_schema_file, list_schema_records
 from flightrecorder.validation import validate_artifacts
 
@@ -38,6 +39,7 @@ def mark_first_review_item_needs_review(review_dir: Path) -> None:
     rows = read_jsonl(items_path)
     rows[0]["suggested_human_label"] = "needs_review"
     rows[0]["notes"] = "Fixture forces a model-grader disagreement queue item."
+    rows[0]["review_item_sha256"] = review_item_sha256(rows[0])
     items_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
 
 
@@ -289,6 +291,19 @@ class ModelGraderTests(unittest.TestCase):
             stale_rubric_payload["review_export"]["review_items"]["sha256"] = "0" * 64
             stale_rubric.write_text(json.dumps(stale_rubric_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             self.assert_validation_error(stale_rubric, "rubric_spec", "review_items.sha256 does not match the current file")
+
+            stale_rubric_fingerprint = artifact_dir / "stale_rubric_fingerprint.json"
+            stale_rubric_fingerprint_payload = json.loads(json.dumps(rubric_payload))
+            stale_rubric_fingerprint_payload["review_item_fingerprints"][0]["review_item_sha256"] = "0" * 64
+            stale_rubric_fingerprint.write_text(
+                json.dumps(stale_rubric_fingerprint_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assert_validation_error(
+                stale_rubric_fingerprint,
+                "rubric_spec",
+                "review_item_fingerprints must match review_export.review_items",
+            )
 
             stale_dry_run = artifact_dir / "stale_dry_run.json"
             stale_dry_payload = dict(dry_payload)

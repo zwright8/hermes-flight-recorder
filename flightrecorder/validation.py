@@ -5459,7 +5459,7 @@ def _validate_dataset_curation_ref(row: Any, target: ValidationTarget, label: st
 
 def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(rubric, "schema_version", RUBRIC_SPEC_SCHEMA_VERSION, target, prefix="rubric_spec.")
-    _validate_model_grader_review_export_ref(
+    review_export_paths = _validate_model_grader_review_export_ref(
         rubric.get("review_export"),
         target,
         "rubric_spec.review_export",
@@ -5505,6 +5505,11 @@ def _validate_rubric_spec(rubric: dict[str, Any], target: ValidationTarget, sour
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not _is_sha256(row.get("review_item_sha256")):
             target.errors.append(f"{label}.review_item_sha256 must be a sha256 hex digest.")
+    _validate_rubric_review_item_fingerprints(
+        fingerprints,
+        review_export_paths.get("review_items"),
+        target,
+    )
     requirements = rubric.get("calibration_requirements") if isinstance(rubric.get("calibration_requirements"), dict) else {}
     if requirements.get("required_before_training_admission") is not True:
         target.errors.append("rubric_spec.calibration_requirements.required_before_training_admission must be true.")
@@ -5793,6 +5798,31 @@ def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget,
     )
 
 
+def _validate_rubric_review_item_fingerprints(
+    fingerprints: list[Any],
+    review_items_path: Path | None,
+    target: ValidationTarget,
+) -> None:
+    if review_items_path is None:
+        return
+    review_items = _read_jsonl_objects(
+        review_items_path,
+        target,
+        "rubric_spec.review_export.review_items",
+    )
+    expected = [
+        {
+            "review_item_id": str(item.get("review_item_id") or ""),
+            "episode_id": str(item.get("episode_id") or ""),
+            "scenario_id": str(item.get("scenario_id") or ""),
+            "review_item_sha256": review_item_sha256(item),
+        }
+        for item in review_items
+    ]
+    if fingerprints != expected:
+        target.errors.append("rubric_spec.review_item_fingerprints must match review_export.review_items.")
+
+
 def _model_grader_label_sha256(row: dict[str, Any]) -> str:
     return _model_grader_row_sha256(row)
 
@@ -5868,20 +5898,37 @@ def _validate_model_grader_override_sources(value: Any, target: ValidationTarget
     )
 
 
-def _validate_model_grader_review_export_ref(value: Any, target: ValidationTarget, label: str, source_path: Path) -> None:
+def _validate_model_grader_review_export_ref(
+    value: Any,
+    target: ValidationTarget,
+    label: str,
+    source_path: Path,
+) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
-        return
+        return paths
     if not isinstance(value.get("path"), str) or not value.get("path"):
         target.errors.append(f"{label}.path must be a non-empty string.")
-    _validate_model_grader_source_file_ref(value.get("manifest"), target, f"{label}.manifest", source_path, allow_missing=False)
-    _validate_model_grader_source_file_ref(
+    manifest_path = _validate_model_grader_source_file_ref(
+        value.get("manifest"),
+        target,
+        f"{label}.manifest",
+        source_path,
+        allow_missing=False,
+    )
+    if manifest_path is not None:
+        paths["manifest"] = manifest_path
+    review_items_path = _validate_model_grader_source_file_ref(
         value.get("review_items"),
         target,
         f"{label}.review_items",
         source_path,
         allow_missing=False,
     )
+    if review_items_path is not None:
+        paths["review_items"] = review_items_path
+    return paths
 
 
 def _validate_model_grader_referenced_artifact(
