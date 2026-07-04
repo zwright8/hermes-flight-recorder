@@ -98,11 +98,12 @@ counts; evidence bundles surface this as `harness_handoff` metrics and block
 run-suite pairs that omit or forge that lineage. Bundles also verify the
 referenced harness trace, scorecard, digest, report, and replay-lineage files
 exist before counting a harness pair as artifact-valid. Strict harness
-manifest/result validation warns before preserved scenario, sandbox, trace,
-scorecard, report, lineage, or run-artifact paths are published; generate
-public harness packets with relative paths. Live-smoke environment root paths
-are redacted in bundle metrics by default; use `--preserve-paths` only for
-private local debugging. Strict evidence-bundle validation rejects unredacted
+manifest, result, replay, and suite validation warns before preserved scenario,
+sandbox, trace, scorecard, report, lineage, or run-artifact paths are
+published; generate public harness packets with relative paths. Live-smoke
+environment root paths are redacted in bundle metrics by default; use
+`--preserve-paths` only for private local debugging. Strict evidence-bundle
+validation rejects unredacted
 absolute artifact paths, including nested harness, trainer, gate, digest, and
 live-smoke metric paths, so public bundles should carry relative paths or
 `<redacted:...>` markers. Validation summaries included in evidence

@@ -527,7 +527,7 @@ def _policy_violation_scenario(fake_api_key: str) -> dict:
 def _replay_trace_quietly(lineage_path: Path, replay_dir: Path) -> dict:
     stdout = StringIO()
     with redirect_stdout(stdout):
-        return replay_trace(lineage_path, replay_dir)
+        return replay_trace(lineage_path, replay_dir, preserve_paths=False)
 
 
 def _write_policy_violation_harness(root: Path) -> tuple[Path, dict]:

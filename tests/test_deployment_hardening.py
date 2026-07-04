@@ -159,7 +159,7 @@ class DeploymentHardeningTests(unittest.TestCase):
                 0,
             )
 
-            replay = replay_trace(run_dir / "artifact_lineage.json", root / "replay")
+            replay = replay_trace(run_dir / "artifact_lineage.json", root / "replay", preserve_paths=False)
 
             self.assertEqual(replay["schema_version"], HARNESS_REPLAY_RESULT_SCHEMA_VERSION)
             self.assertTrue(replay["passed"])

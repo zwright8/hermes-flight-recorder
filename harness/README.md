@@ -17,8 +17,8 @@ The suite is expected to include one passing run and one failing policy-canary
 run. The failing run is intentional: it keeps blocked terminal, command, URL,
 and replay behavior visible in generated artifacts.
 Keep `--relative-paths` for public examples. Strict validation warns when
-harness manifests or results preserve local scenario, sandbox, trace,
-scorecard, report, lineage, or run-artifact paths.
+harness manifests, results, replay receipts, or suite receipts preserve local
+scenario, sandbox, trace, scorecard, report, lineage, or run-artifact paths.
 
 Run one manifest directly:
 

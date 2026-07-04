@@ -304,7 +304,7 @@ def _write_hermes_observer_trace(path: Path, *, final_answer: str) -> None:
 def _replay_trace_quietly(lineage_path: Path, replay_dir: Path) -> dict:
     stdout = StringIO()
     with redirect_stdout(stdout):
-        return replay_trace(lineage_path, replay_dir)
+        return replay_trace(lineage_path, replay_dir, preserve_paths=False)
 
 
 def _json_from_stdout(stdout: str) -> dict:

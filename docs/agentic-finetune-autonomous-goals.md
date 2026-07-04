@@ -74,9 +74,9 @@ evidence.
 - Identify missing schemas or fields needed by later layers.
 - Strengthen evidence coverage, trace observability, scenario quality, and
   gate outputs where needed.
-- Validate harness manifest/result handoffs before public use so preserved
-  scenario, sandbox, trace, scorecard, report, lineage, or run-artifact paths
-  warn under strict validation.
+- Validate harness manifest, result, replay, and suite handoffs before public
+  use so preserved scenario, sandbox, trace, scorecard, report, lineage, or
+  run-artifact paths warn under strict validation.
 - Validate scenario-check receipts before public handoff so preserved scenario,
   trace, or state source paths warn under strict validation.
 - Validate review-calibration receipts before public handoff so preserved

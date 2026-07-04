@@ -111,6 +111,14 @@ class HarnessManifestCliTests(unittest.TestCase):
             self.assertTrue(any("harness_result.artifacts.report is absolute" in warning for warning in warnings), warnings)
             self.assertTrue(any("harness_result.replay.lineage is absolute" in warning for warning in warnings), warnings)
             self.assertTrue(
+                any("harness_result.replay.argv[" in warning and " is absolute" in warning for warning in warnings),
+                warnings,
+            )
+            self.assertTrue(
+                any("harness_result.replay.command[" in warning and " is absolute" in warning for warning in warnings),
+                warnings,
+            )
+            self.assertTrue(
                 any("harness_result.fake_secret_canary_check.checked_artifacts[0].path is absolute" in warning for warning in warnings),
                 warnings,
             )
@@ -151,6 +159,101 @@ class HarnessManifestCliTests(unittest.TestCase):
                 any("harness_result.fake_secret_canary_check.leaked_artifacts[0].path is absolute" in warning for warning in leak_warnings),
                 leak_warnings,
             )
+
+    def test_strict_validate_warns_on_absolute_harness_suite_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenarios = root / "scenarios"
+            scenarios.mkdir()
+            (scenarios / "harness_suite_one.json").write_text(
+                json.dumps(_scenario(scenario_id="harness_suite_one", final_text="suite complete"), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            suite = run_suite(
+                scenarios_dir=scenarios,
+                out_dir=root / "suite",
+                mock_response="suite complete with auditable evidence",
+            )
+            summary_path = root / "suite" / "harness_suite_result.json"
+            validation = root / "suite" / "validation.json"
+            strict_validation = root / "suite" / "strict_validation.json"
+            suite["errors"] = [{"scenario_path": str(scenarios / "missing.json"), "error": "scenario could not be read"}]
+            suite["error_count"] = len(suite["errors"])
+            summary_path.write_text(json.dumps(suite, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertTrue(Path(suite["scenarios_dir"]).is_absolute())
+            self.assertTrue(Path(suite["errors"][0]["scenario_path"]).is_absolute())
+            self.assertTrue(Path(suite["runs"][0]["manifest"]).is_absolute())
+            self.assertTrue(Path(suite["runs"][0]["trace"]["path"]).is_absolute())
+            self.assertTrue(any(Path(item).is_absolute() for item in suite["runs"][0]["replay"]["argv"]))
+            self.assertIn(str(scenarios / "harness_suite_one.json"), suite["runs"][0]["replay"]["command"])
+            self.assertEqual(_run_flightrecorder(["validate", "--harness-suite-result", str(summary_path), "--out", str(validation)])[0], 0)
+            self.assertEqual(
+                _run_flightrecorder(["validate", "--harness-suite-result", str(summary_path), "--strict", "--out", str(strict_validation)])[0],
+                1,
+            )
+            warnings = [
+                warning
+                for target in json.loads(strict_validation.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            self.assertTrue(any("harness_suite_result.scenarios_dir is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_suite_result.errors[0].scenario_path is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_suite_result.runs[0].manifest is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_suite_result.runs[0].trace.path is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_suite_result.runs[0].replay.lineage is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(
+                any("harness_suite_result.runs[0].replay.argv[" in warning and " is absolute" in warning for warning in warnings),
+                warnings,
+            )
+            self.assertTrue(
+                any("harness_suite_result.runs[0].replay.command[" in warning and " is absolute" in warning for warning in warnings),
+                warnings,
+            )
+
+    def test_strict_validate_warns_on_absolute_harness_replay_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scenario_path = root / "scenario.json"
+            out = root / "run"
+            replay = root / "replay"
+            validation = root / "validation.json"
+            strict_validation = root / "strict_validation.json"
+            scenario_path.write_text(json.dumps(_scenario(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            rc, stdout = _run_harness(
+                [
+                    "run",
+                    "--scenario",
+                    str(scenario_path),
+                    "--out",
+                    str(out),
+                    "--mock-response",
+                    "manifest cli complete with auditable evidence",
+                ]
+            )
+            self.assertEqual(rc, 0, stdout)
+
+            replay_rc, replay_stdout = _run_harness(["replay-trace", "--lineage", str(out / "artifact_lineage.json"), "--out", str(replay)])
+
+            self.assertEqual(replay_rc, 0, replay_stdout)
+            replay_result = _json_from_stdout(replay_stdout)
+            self.assertTrue(Path(replay_result["lineage"]).is_absolute())
+            self.assertTrue(Path(replay_result["out_dir"]).is_absolute())
+            self.assertTrue(Path(replay_result["scorecard"]).is_absolute())
+            replay_path = replay / "harness_replay_result.json"
+            self.assertEqual(_run_flightrecorder(["validate", "--harness-replay-result", str(replay_path), "--out", str(validation)])[0], 0)
+            self.assertEqual(
+                _run_flightrecorder(["validate", "--harness-replay-result", str(replay_path), "--strict", "--out", str(strict_validation)])[0],
+                1,
+            )
+            warnings = [
+                warning
+                for target in json.loads(strict_validation.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            self.assertTrue(any("harness_replay_result.lineage is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_replay_result.out_dir is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any("harness_replay_result.scorecard is absolute" in warning for warning in warnings), warnings)
 
     def test_mock_run_suite_and_probe_model_write_harness_receipts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -435,7 +538,7 @@ class HarnessManifestCliTests(unittest.TestCase):
 
             replay_dir = root / "replay"
             replay_rc, replay_stdout = _run_harness(
-                ["replay-trace", "--lineage", str(run_dir / "artifact_lineage.json"), "--out", str(replay_dir)]
+                ["replay-trace", "--lineage", str(run_dir / "artifact_lineage.json"), "--out", str(replay_dir), "--relative-paths"]
             )
 
             self.assertEqual(replay_rc, 0, replay_stdout)

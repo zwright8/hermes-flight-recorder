@@ -1896,6 +1896,7 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
         target,
         "harness_result.replay",
     )
+    _warn_harness_replay_metadata_public_paths(replay, target, "harness_result.replay")
     if not isinstance(replay.get("self_contained"), bool):
         target.errors.append("harness_result.replay.self_contained must be a boolean.")
     manifest = result.get("manifest") if isinstance(result.get("manifest"), dict) else {}
@@ -2212,6 +2213,7 @@ def _validate_harness_replay_result(
     if not isinstance(out_dir, str) or not out_dir:
         target.errors.append("harness_replay_result.out_dir must be a non-empty string.")
     else:
+        _warn_absolute_public_path(target, "harness_replay_result.out_dir", out_dir)
         out_path = Path(out_dir)
         if not out_path.is_absolute() and source_dir is not None:
             out_path = source_dir / out_path
@@ -2250,6 +2252,7 @@ def _validate_harness_replay_artifact_ref(
     source_dir: Path | None,
 ) -> Path | None:
     path_label = f"{label}.{field_name}"
+    _warn_absolute_public_path(target, path_label, result.get(field_name))
     path = _resolve_harness_replay_artifact_path(result.get(field_name), source_dir)
     if path is None:
         target.errors.append(f"{path_label} must be a non-empty path.")
@@ -2292,6 +2295,10 @@ def _validate_harness_suite_result(result: dict[str, Any], target: ValidationTar
     for field_name in ("runner_interface", "scenarios_dir", "out_dir", "pattern", "runner", "provider"):
         if not isinstance(result.get(field_name), str) or not result.get(field_name):
             target.errors.append(f"harness_suite_result.{field_name} must be a non-empty string.")
+    for field_name in ("scenarios_dir", "out_dir"):
+        _warn_absolute_public_path(target, f"harness_suite_result.{field_name}", result.get(field_name))
+    artifacts = result.get("artifacts") if isinstance(result.get("artifacts"), dict) else {}
+    _warn_absolute_public_path(target, "harness_suite_result.artifacts.suite_result", artifacts.get("suite_result"))
     if not isinstance(result.get("recursive"), bool):
         target.errors.append("harness_suite_result.recursive must be a boolean.")
     runs = result.get("runs")
@@ -2302,6 +2309,9 @@ def _validate_harness_suite_result(result: dict[str, Any], target: ValidationTar
     if not isinstance(errors, list):
         target.errors.append("harness_suite_result.errors must be a list.")
         errors = []
+    for index, error in enumerate(errors):
+        if isinstance(error, dict):
+            _warn_absolute_public_path(target, f"harness_suite_result.errors[{index}].scenario_path", error.get("scenario_path"))
     passed_count = 0
     for index, run in enumerate(runs):
         label = f"harness_suite_result.runs[{index}]"
@@ -2316,6 +2326,7 @@ def _validate_harness_suite_result(result: dict[str, Any], target: ValidationTar
             passed_count += 1
         _validate_harness_suite_artifact_ref(run, "manifest", target, label, source_dir)
         _validate_harness_suite_artifact_ref(run, "result", target, label, source_dir)
+        _warn_harness_suite_run_public_paths(run, target, label)
     _require_equal(result, "total", len(runs), target, prefix="harness_suite_result.")
     _require_equal(result, "passed", passed_count, target, prefix="harness_suite_result.")
     _require_equal(result, "failed", len(runs) - passed_count, target, prefix="harness_suite_result.")
@@ -2330,6 +2341,7 @@ def _validate_harness_suite_artifact_ref(
     source_dir: Path | None,
 ) -> None:
     path_label = f"{label}.{field_name}"
+    _warn_absolute_public_path(target, path_label, run.get(field_name))
     path = _resolve_harness_suite_artifact_path(run.get(field_name), source_dir)
     if path is None:
         target.errors.append(f"{path_label} must be a non-empty path.")
@@ -2352,6 +2364,33 @@ def _validate_harness_suite_artifact_ref(
         target.errors.append(f"{label}.{size_field} does not match the current file.")
     if _is_lowercase_sha256(expected_sha) and _sha256(path) != expected_sha:
         target.errors.append(f"{label}.{sha_field} does not match the current file.")
+
+
+def _warn_harness_suite_run_public_paths(run: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    _warn_absolute_public_path(target, f"{label}.run_dir", run.get("run_dir"))
+    trace = run.get("trace") if isinstance(run.get("trace"), dict) else {}
+    _warn_absolute_public_path(target, f"{label}.trace.path", trace.get("path"))
+    scorecard = run.get("scorecard") if isinstance(run.get("scorecard"), dict) else {}
+    _warn_absolute_public_path(target, f"{label}.scorecard.path", scorecard.get("path"))
+    replay = run.get("replay") if isinstance(run.get("replay"), dict) else {}
+    _warn_absolute_public_path(target, f"{label}.replay.lineage", replay.get("lineage"))
+    _warn_harness_replay_metadata_public_paths(replay, target, f"{label}.replay")
+
+
+def _warn_harness_replay_metadata_public_paths(replay: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    argv = replay.get("argv")
+    if isinstance(argv, list):
+        for index, item in enumerate(argv):
+            _warn_absolute_public_path(target, f"{label}.argv[{index}]", item)
+    command = replay.get("command")
+    if not isinstance(command, str) or not command:
+        return
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    for index, token in enumerate(tokens):
+        _warn_absolute_public_path(target, f"{label}.command[{index}]", token)
 
 
 def _resolve_harness_suite_artifact_path(value: Any, source_dir: Path | None) -> Path | None:
