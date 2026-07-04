@@ -20,6 +20,7 @@ from .agentic_training_runtime import (
     PLAN_READY_RECOMMENDATION,
     RUNTIME_READY_RECOMMENDATION,
 )
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .schema_registry import SchemaRegistryError, check_schema_file
 
 AGENTIC_TRAINING_RESULT_SCHEMA_VERSION = "hfr.agentic_training_result.v1"
@@ -92,6 +93,10 @@ def build_agentic_training_result(
     plan_file = Path(plan_path)
     runtime_file = Path(runtime_preflight_path)
     flow_file = _resolve_flow_path(agentic_training_flow_path, runtime_file)
+    _reject_symlinked_input_path(plan_file, "agentic_training_result.plan_path")
+    _reject_symlinked_input_path(runtime_file, "agentic_training_result.runtime_preflight_path")
+    if flow_file is not None:
+        _reject_symlinked_input_path(flow_file, "agentic_training_result.agentic_training_flow_path")
     plan_payload, plan_read_errors = _read_json_object(plan_file)
     runtime_payload, runtime_read_errors = _read_json_object(runtime_file)
     flow_payload, flow_read_errors = _read_json_object(flow_file) if flow_file is not None else ({}, ["agentic_training_flow path not provided"])
@@ -410,6 +415,13 @@ def _resolve_flow_path(path: str | Path | None, runtime_file: Path) -> Path | No
         return Path(path)
     sibling = runtime_file.with_name("agentic_training_flow.json")
     return sibling if sibling.exists() else None
+
+
+def _reject_symlinked_input_path(path: Path, label: str) -> None:
+    if path.is_symlink():
+        raise AgenticTrainingResultError(f"{label} must not be a symlink: {path}")
+    if _path_has_symlink_component(path, include_leaf=False):
+        raise AgenticTrainingResultError(f"{label} must not traverse symlinked components: {path}")
 
 
 def _flow_matches_plan_and_runtime(flow: dict[str, Any], plan_sha: str | None, runtime_sha: str | None) -> bool:

@@ -701,6 +701,8 @@ card, and dataset card decisions.
   traverse symlinked parent directories before replaying flow or plan-derived
   manifest checks, and rejects model or dataset manifest summaries that no
   longer match the verified training plan.
+- Result-receipt archiving rejects symlinked plan, runtime-preflight, or
+  delegated-flow source inputs before reading them or emitting lineage hashes.
 - Agentic training-result registry proposals include adapter/checkpoint byte
   sizes; validation rejects hashed registry links that are not backed by a
   supplied artifact ref with matching size evidence and expected registry

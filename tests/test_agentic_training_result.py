@@ -10,7 +10,11 @@ from io import StringIO
 from pathlib import Path
 
 from flightrecorder.agentic_training_flow import build_agentic_training_flow, write_agentic_training_flow
-from flightrecorder.agentic_training_result import build_agentic_training_result, write_agentic_training_result
+from flightrecorder.agentic_training_result import (
+    AgenticTrainingResultError,
+    build_agentic_training_result,
+    write_agentic_training_result,
+)
 from flightrecorder.agentic_training_runtime import (
     build_agentic_training_runtime_preflight,
     write_agentic_training_runtime_preflight,
@@ -740,6 +744,55 @@ class AgenticTrainingResultTests(unittest.TestCase):
                 "agentic_training_result.lineage.agentic_training_flow.path must not traverse symlinked components.",
                 errors,
             )
+
+    def test_result_builder_rejects_symlinked_source_input_parents(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            local_plan = root / EXAMPLE_PLAN.name
+            runtime = root / "runtime_preflight.json"
+            flow = root / "agentic_training_flow.json"
+            adapter = root / "adapter.safetensors"
+            out = root / "agentic_training_result.json"
+            local_plan.write_bytes(EXAMPLE_PLAN.read_bytes())
+            self.write_runtime_preflight(runtime, ready=True, plan_path=local_plan)
+            adapter.write_bytes(b"tiny adapter bytes")
+            linked_parent = root / "linked_artifacts"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            cases = [
+                (
+                    "plan",
+                    {"plan_path": linked_parent / local_plan.name},
+                    "agentic_training_result.plan_path must not traverse symlinked components",
+                ),
+                (
+                    "runtime preflight",
+                    {"runtime_preflight_path": linked_parent / runtime.name},
+                    "agentic_training_result.runtime_preflight_path must not traverse symlinked components",
+                ),
+                (
+                    "agentic training flow",
+                    {"agentic_training_flow_path": linked_parent / flow.name},
+                    "agentic_training_result.agentic_training_flow_path must not traverse symlinked components",
+                ),
+            ]
+            for case_name, overrides, expected_error in cases:
+                with self.subTest(case_name=case_name):
+                    kwargs = {
+                        "plan_path": local_plan,
+                        "runtime_preflight_path": runtime,
+                        "agentic_training_flow_path": flow,
+                        "out_path": out,
+                        "status": "completed",
+                        "artifacts": {"adapter": [adapter]},
+                        "created_at": "2026-07-02T00:00:00+00:00",
+                    }
+                    kwargs.update(overrides)
+                    with self.assertRaisesRegex(AgenticTrainingResultError, expected_error):
+                        build_agentic_training_result(**kwargs)
 
     def test_validate_rejects_agentic_training_result_absolute_public_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
