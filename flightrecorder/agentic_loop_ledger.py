@@ -18,6 +18,7 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "review": (
         "rubric_spec",
         "model_grader_dry_run",
+        "model_grader_disagreement_queue",
         "model_grader_override_receipt",
         "model_grader_gate",
         "review_calibration",

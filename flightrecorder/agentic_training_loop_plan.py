@@ -90,7 +90,13 @@ PHASES: tuple[dict[str, Any], ...] = (
         "id": "rubric_model_grader_review",
         "name": "Rubric and model-grader review",
         "required": ("rubric_spec", "model_grader_gate", "review_calibration"),
-        "produces": ("review_manifest", "model_grader_dry_run", "model_grader_override_receipt", "reviewed_manifest"),
+        "produces": (
+            "review_manifest",
+            "model_grader_dry_run",
+            "model_grader_disagreement_queue",
+            "model_grader_override_receipt",
+            "reviewed_manifest",
+        ),
         "gate": "model-grader labels are blocked until calibration and human override paths exist.",
     },
     {
@@ -201,6 +207,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "promotion_decision": "promotion_decision",
     "promotion_ledger": "promotion_ledger",
     "model_grader_dry_run": "model_grader_dry_run",
+    "model_grader_disagreement_queue": "model_grader_disagreement_queue",
     "model_grader_override_receipt": "model_grader_override_receipt",
     "model_grader_gate": "model_grader_gate",
     "next_iteration_schedule": "next_iteration_schedule",

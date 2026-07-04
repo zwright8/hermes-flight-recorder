@@ -60,6 +60,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             self.assertGreater(groups["eval"], 0)
             role_names = {row["role"] for row in ready_record["artifact_role_counts"]}
             self.assertIn("cloud_training_launch_receipt", role_names)
+            self.assertIn("model_grader_disagreement_queue", role_names)
             self.assertIn("model_grader_override_receipt", role_names)
             self.assertTrue(ready_record["cloud_training"]["status_receipt_present"])
             self.assertTrue(ready_record["cloud_training_receipt_state"]["fail_closed"])
@@ -985,6 +986,9 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             "evidence_bundle": [self.write_json(root / "evidence_bundle.json", "hfr.evidence_bundle.v1")],
             "rubric_spec": [self.write_json(root / "rubric_spec.json", "hfr.rubric_spec.v1")],
             "model_grader_dry_run": [self.write_json(root / "model_grader_dry_run.json", "hfr.model_grader_dry_run.v1")],
+            "model_grader_disagreement_queue": [
+                self.write_json(root / "model_grader_disagreement_queue.json", "hfr.model_grader_disagreement_queue.v1")
+            ],
             "model_grader_override_receipt": [
                 self.write_json(root / "model_grader_override_receipt.json", "hfr.model_grader_override_receipt.v1")
             ],

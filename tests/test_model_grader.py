@@ -627,6 +627,7 @@ class ModelGraderTests(unittest.TestCase):
             root = Path(tmp)
             rubric = root / "rubric.json"
             dry_run = root / "dry_run.json"
+            disagreement_queue = root / "disagreement_queue.json"
             overrides = root / "overrides.jsonl"
             override_receipt = root / "override_receipt.json"
             gate = root / "gate.json"
@@ -672,6 +673,79 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(dry_payload["disagreement_queue"][0]["mock_model_label"], "needs_review")
             self.assertEqual(sum(1 for row in dry_payload["grader_labels"] if row["requires_human_review"]), 1)
             self.assert_schema_and_validate(dry_run, "model_grader_dry_run")
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "model-grader",
+                        "disagreement-queue",
+                        "--dry-run",
+                        str(dry_run),
+                        "--created-at",
+                        "2026-07-03T00:00:00+00:00",
+                        "--out",
+                        str(disagreement_queue),
+                    ]
+                ),
+                0,
+            )
+            queue_payload = json.loads(disagreement_queue.read_text(encoding="utf-8"))
+            self.assertEqual(queue_payload["schema_version"], "hfr.model_grader_disagreement_queue.v1")
+            self.assertEqual(queue_payload["readiness"], "ready_for_human_review")
+            self.assertEqual(queue_payload["queue_count"], 1)
+            self.assertEqual(queue_payload["required_review_item_ids"], [dry_payload["disagreement_queue"][0]["review_item_id"]])
+            self.assertEqual(queue_payload["queue"], dry_payload["disagreement_queue"])
+            self.assertFalse(queue_payload["training_admission"]["labels_allowed_for_training"])
+            self.assertEqual(queue_payload["training_admission"]["labels_admitted_count"], 0)
+            self.assert_schema_and_validate(disagreement_queue, "model_grader_disagreement_queue")
+
+            forged_queue_payload = json.loads(json.dumps(queue_payload))
+            forged_queue_payload["provider_queue_url"] = "redacted-provider-queue"
+            forged_queue_payload["checks"][0]["provider_call"] = "forged"
+            forged_queue_payload["source_artifacts"]["dry_run_receipt"]["provider_job_id"] = "redacted-provider-job"
+            forged_queue_payload["queue"][0]["provider_review_url"] = "redacted-provider-review"
+            forged_queue_payload["override_requirements"]["provider_assignment_id"] = "redacted-provider-assignment"
+            forged_queue_payload["training_admission"]["trainer_dataset_id"] = "redacted-trainer-dataset"
+            forged_queue_payload["execution_boundary"]["labels_written_to_dataset"] = True
+            disagreement_queue.write_text(json.dumps(forged_queue_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            schema = check_schema_file(disagreement_queue)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(model_grader_disagreement_queue_paths=[disagreement_queue], strict=True)
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("model_grader_disagreement_queue contains unknown field(s): ['provider_queue_url'].", errors)
+            self.assertIn("model_grader_disagreement_queue.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn(
+                "model_grader_disagreement_queue.source_artifacts.dry_run_receipt contains unknown field(s): ['provider_job_id'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_disagreement_queue.queue[0] contains unknown field(s): ['provider_review_url'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_disagreement_queue.override_requirements contains unknown field(s): ['provider_assignment_id'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_disagreement_queue.training_admission contains unknown field(s): ['trainer_dataset_id'].",
+                errors,
+            )
+            self.assertIn(
+                "model_grader_disagreement_queue.execution_boundary contains unknown field(s): ['labels_written_to_dataset'].",
+                errors,
+            )
+            disagreement_queue.write_text(json.dumps(queue_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            stale_queue_artifact = root / "stale_disagreement_queue.json"
+            stale_queue_payload = json.loads(json.dumps(queue_payload))
+            stale_queue_payload["queue"][0]["review_item_sha256"] = "0" * 64
+            stale_queue_artifact.write_text(json.dumps(stale_queue_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(
+                stale_queue_artifact,
+                "model_grader_disagreement_queue",
+                "queue must match source dry-run disagreement_queue",
+            )
 
             unknown_queue_dry_run = root / "unknown_queue_dry_run.json"
             unknown_queue_payload = json.loads(json.dumps(dry_payload))
@@ -925,6 +999,7 @@ class ModelGraderTests(unittest.TestCase):
         names = {record["name"] for record in list_schema_records()}
         self.assertIn("rubric_spec", names)
         self.assertIn("model_grader_dry_run", names)
+        self.assertIn("model_grader_disagreement_queue", names)
         self.assertIn("model_grader_override_receipt", names)
         self.assertIn("model_grader_gate", names)
 
@@ -934,6 +1009,7 @@ class ModelGraderTests(unittest.TestCase):
             review_export_dir=example_dir / "review",
             rubric_spec_paths=[example_dir / "rubric.json"],
             model_grader_dry_run_paths=[example_dir / "dry_run.json"],
+            model_grader_disagreement_queue_paths=[example_dir / "disagreement_queue.json"],
             model_grader_gate_paths=[
                 example_dir / "blocked_gate.json",
                 example_dir / "passing_gate.json",

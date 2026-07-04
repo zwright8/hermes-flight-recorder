@@ -1,0 +1,118 @@
+{
+  "blocked_reasons": [],
+  "check_count": 4,
+  "checks": [
+    {
+      "actual": {
+        "artifact": {
+          "exists": true,
+          "path": "dry_run.json",
+          "role": "model_grader_dry_run",
+          "schema_error_count": 0,
+          "schema_errors": [],
+          "schema_name": "model_grader_dry_run",
+          "schema_passed": true,
+          "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
+          "size_bytes": 5601,
+          "source_passed": true,
+          "source_recommendation": "gate_before_training_admission"
+        }
+      },
+      "expected": {
+        "passed": true,
+        "schema": "model_grader_dry_run"
+      },
+      "id": "dry_run_receipt_valid",
+      "passed": true,
+      "summary": "dry_run_receipt_valid: passed"
+    },
+    {
+      "actual": {
+        "labels_requiring_human_review_count": 0,
+        "queue_count": 0
+      },
+      "expected": {
+        "queue_count": 0
+      },
+      "id": "queue_matches_dry_run_human_review_labels",
+      "passed": true,
+      "summary": "queue_matches_dry_run_human_review_labels: passed"
+    },
+    {
+      "actual": {
+        "labels_admitted_count": 0
+      },
+      "expected": {
+        "labels_admitted_count": 0
+      },
+      "id": "dry_run_labels_not_previously_admitted",
+      "passed": true,
+      "summary": "dry_run_labels_not_previously_admitted: passed"
+    },
+    {
+      "actual": {
+        "paid_model_grader_calls_started": false
+      },
+      "expected": {
+        "paid_model_grader_calls_started": false
+      },
+      "id": "paid_model_grader_not_called",
+      "passed": true,
+      "summary": "paid_model_grader_not_called: passed"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "execution_boundary": {
+    "cloud_cost_incurred_usd": 0,
+    "credential_values_recorded": false,
+    "dry_run_only": true,
+    "labels_admitted_to_training": false,
+    "paid_model_grader_calls_started": false,
+    "provider_api_called": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "notes": [
+    "Disagreement queues route dry-run model-grader labels to human review.",
+    "This artifact is derived from a dry-run receipt and does not call a provider or admit labels to training.",
+    "A model-grader override receipt and gate must resolve this queue before trainer-facing curation can consume labels."
+  ],
+  "override_requirements": {
+    "final_label_options": [
+      "accept",
+      "reject",
+      "unsafe",
+      "incomplete"
+    ],
+    "minimum_reviewer_confidence": "medium",
+    "required_before_training_admission": true,
+    "required_override_count": 0
+  },
+  "passed": true,
+  "queue": [],
+  "queue_count": 0,
+  "readiness": "queue_empty",
+  "recommendation": "no_human_override_required",
+  "required_review_item_ids": [],
+  "schema_version": "hfr.model_grader_disagreement_queue.v1",
+  "source_artifacts": {
+    "dry_run_receipt": {
+      "exists": true,
+      "path": "dry_run.json",
+      "role": "model_grader_dry_run",
+      "schema_error_count": 0,
+      "schema_errors": [],
+      "schema_name": "model_grader_dry_run",
+      "schema_passed": true,
+      "sha256": "4af7bb82403cee4a613f2d5b8d375e9169812ca51e1db8f43ebab0793262fc57",
+      "size_bytes": 5601,
+      "source_passed": true,
+      "source_recommendation": "gate_before_training_admission"
+    }
+  },
+  "training_admission": {
+    "labels_admitted_count": 0,
+    "labels_allowed_for_training": false,
+    "requires_model_grader_gate": true
+  }
+}

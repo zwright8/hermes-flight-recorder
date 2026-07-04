@@ -119,6 +119,7 @@ from .model_registry import (
 )
 from .model_grader import (
     ModelGraderError,
+    build_model_grader_disagreement_queue,
     build_model_grader_dry_run,
     build_model_grader_gate,
     build_model_grader_override_receipt,
@@ -1136,6 +1137,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         dataset_curation_receipt_paths=args.dataset_curation_receipt,
         rubric_spec_paths=args.rubric_spec,
         model_grader_dry_run_paths=args.model_grader_dry_run,
+        model_grader_disagreement_queue_paths=args.model_grader_disagreement_queue,
         model_grader_override_receipt_paths=args.model_grader_override_receipt,
         model_grader_gate_paths=args.model_grader_gate,
         repair_queue_paths=args.repair_queue,
@@ -1510,6 +1512,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "promotion_ledger": args.promotion_ledger,
         "rubric_spec": args.rubric_spec,
         "model_grader_dry_run": args.model_grader_dry_run,
+        "model_grader_disagreement_queue": args.model_grader_disagreement_queue,
         "model_grader_override_receipt": args.model_grader_override_receipt,
         "model_grader_gate": args.model_grader_gate,
         "next_iteration_schedule": args.next_iteration_schedule,
@@ -1781,6 +1784,21 @@ def cmd_model_grader_dry_run(args: argparse.Namespace) -> int:
         f"graded_items={receipt['graded_item_count']}"
     )
     return 0 if receipt["passed"] else 1
+
+
+def cmd_model_grader_disagreement_queue(args: argparse.Namespace) -> int:
+    queue = build_model_grader_disagreement_queue(
+        dry_run_path=args.dry_run,
+        created_at=args.created_at,
+        preserve_paths=args.preserve_paths,
+        out_path=args.out,
+    )
+    write_model_grader_artifact(args.out, queue)
+    print(
+        f"wrote {args.out} readiness={queue['readiness']} "
+        f"queue_items={queue['queue_count']}"
+    )
+    return 0 if queue["passed"] else 1
 
 
 def cmd_model_grader_override_receipt(args: argparse.Namespace) -> int:
@@ -3183,6 +3201,12 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--rubric-spec", action="append", default=[], help="Validate one rubric_spec artifact")
     validate.add_argument("--model-grader-dry-run", action="append", default=[], help="Validate one model_grader_dry_run receipt")
     validate.add_argument(
+        "--model-grader-disagreement-queue",
+        action="append",
+        default=[],
+        help="Validate one model_grader_disagreement_queue artifact",
+    )
+    validate.add_argument(
         "--model-grader-override-receipt",
         action="append",
         default=[],
@@ -3509,6 +3533,12 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--rubric-spec", action="append", default=[], help="rubric_spec artifact; may be repeated")
     agentic_loop_plan.add_argument("--model-grader-dry-run", action="append", default=[], help="model_grader_dry_run artifact; may be repeated")
     agentic_loop_plan.add_argument(
+        "--model-grader-disagreement-queue",
+        action="append",
+        default=[],
+        help="model_grader_disagreement_queue artifact; may be repeated",
+    )
+    agentic_loop_plan.add_argument(
         "--model-grader-override-receipt",
         action="append",
         default=[],
@@ -3689,6 +3719,16 @@ def _parser() -> argparse.ArgumentParser:
     model_grader_dry_run.add_argument("--out", required=True, help="Write hfr.model_grader_dry_run.v1 JSON to this path")
     model_grader_dry_run.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in dry-run refs")
     model_grader_dry_run.set_defaults(func=cmd_model_grader_dry_run)
+
+    model_grader_queue = model_grader_subparsers.add_parser(
+        "disagreement-queue",
+        help="Write a portable human-review queue from a model-grader dry-run receipt",
+    )
+    model_grader_queue.add_argument("--dry-run", required=True, help="model_grader_dry_run artifact")
+    model_grader_queue.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    model_grader_queue.add_argument("--out", required=True, help="Write hfr.model_grader_disagreement_queue.v1 JSON to this path")
+    model_grader_queue.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in queue refs")
+    model_grader_queue.set_defaults(func=cmd_model_grader_disagreement_queue)
 
     model_grader_override = model_grader_subparsers.add_parser(
         "override-receipt",

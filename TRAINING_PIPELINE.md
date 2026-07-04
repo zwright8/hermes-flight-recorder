@@ -31,6 +31,7 @@ flightrecorder schemas --check runs/agentic_loop_governance_receipt.json
 flightrecorder schemas --check runs/next_iteration_schedule.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
+flightrecorder schemas --check runs/model_grader_disagreement_queue.json
 flightrecorder schemas --check runs/model_grader_override_receipt.json
 flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/harness_prompt_injection_good/harness_result.json
@@ -823,10 +824,11 @@ receipt points to its required upstream receipt by SHA-256. It also carries
 `cloud_training_receipt_state`, derived from the referenced launch/status
 receipts, so provider API calls, cloud jobs, cancellation calls, credential
 recording, or non-zero cost remain visible and keep the loop fail-closed.
-Review group counts include `model_grader_override_receipt` when human override
-resolution is needed, and eval group counts include both `external_eval_plan`
-and `external_eval_receipt` so dry-run benchmark receipts are not lost between
-planning and promotion review.
+Review group counts include `model_grader_disagreement_queue` and
+`model_grader_override_receipt` when human override resolution is needed, and
+eval group counts include both `external_eval_plan` and `external_eval_receipt`
+so dry-run benchmark receipts are not lost between planning and promotion
+review.
 The loop ledger is ledger-only: it does not launch trainers, graders, cloud
 jobs, live benchmarks, downloads, promotion writes, or weight updates. The
 `hfr.next_iteration_schedule.v1` receipt proposes a next loop iteration from
@@ -1053,8 +1055,17 @@ The dry-run receipt records `provider_api_called: false`,
 `review-calibration` artifact it stays blocked and routes labels to human
 review or calibration. With a passing calibration artifact it can mark labels
 eligible for curated handoff only when the dry-run disagreement queue is empty
-and no mock label still requires human review. If the queue is non-empty,
-write a `model-grader override-receipt` from JSONL rows containing
+and no mock label still requires human review. Write the portable queue before
+human adjudication:
+
+```bash
+flightrecorder model-grader disagreement-queue \
+  --dry-run runs/model_grader/dry_run.json \
+  --out runs/model_grader/disagreement_queue.json
+```
+
+If the queue is non-empty, write a `model-grader override-receipt` from JSONL
+rows containing
 `review_item_id`, finalized `human_label`, `reviewer_confidence`, `reviewer`,
 `reviewed_at`, and `notes`, then pass it to the gate. It still records zero
 uncalibrated labels, zero credential values, zero provider calls, and zero
@@ -1078,6 +1089,7 @@ flightrecorder model-grader gate \
 flightrecorder validate \
   --rubric-spec runs/model_grader/rubric.json \
   --model-grader-dry-run runs/model_grader/dry_run.json \
+  --model-grader-disagreement-queue runs/model_grader/disagreement_queue.json \
   --model-grader-override-receipt runs/model_grader/override_receipt.json \
   --model-grader-gate runs/model_grader/gate.json \
   --strict

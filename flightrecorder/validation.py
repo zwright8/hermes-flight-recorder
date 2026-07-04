@@ -117,6 +117,7 @@ from .model_registry import (
     training_plan_errors,
 )
 from .model_grader import (
+    MODEL_GRADER_DISAGREEMENT_QUEUE_SCHEMA_VERSION,
     MODEL_GRADER_DRY_RUN_SCHEMA_VERSION,
     MODEL_GRADER_GATE_SCHEMA_VERSION,
     MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION,
@@ -301,6 +302,7 @@ def validate_artifacts(
     dataset_curation_receipt_paths: list[str | Path] | None = None,
     rubric_spec_paths: list[str | Path] | None = None,
     model_grader_dry_run_paths: list[str | Path] | None = None,
+    model_grader_disagreement_queue_paths: list[str | Path] | None = None,
     model_grader_override_receipt_paths: list[str | Path] | None = None,
     model_grader_gate_paths: list[str | Path] | None = None,
     repair_queue_paths: list[str | Path] | None = None,
@@ -443,6 +445,8 @@ def validate_artifacts(
         targets.append(validate_rubric_spec(rubric_spec_path))
     for model_grader_dry_run_path in model_grader_dry_run_paths or []:
         targets.append(validate_model_grader_dry_run(model_grader_dry_run_path))
+    for model_grader_disagreement_queue_path in model_grader_disagreement_queue_paths or []:
+        targets.append(validate_model_grader_disagreement_queue(model_grader_disagreement_queue_path))
     for model_grader_override_receipt_path in model_grader_override_receipt_paths or []:
         targets.append(validate_model_grader_override_receipt(model_grader_override_receipt_path))
     for model_grader_gate_path in model_grader_gate_paths or []:
@@ -1569,6 +1573,18 @@ def validate_model_grader_dry_run(path: str | Path) -> ValidationTarget:
     receipt = _read_object(receipt_path, target, "model_grader_dry_run.json")
     if receipt is not None:
         _validate_model_grader_dry_run(receipt, target, receipt_path)
+    return target
+
+
+def validate_model_grader_disagreement_queue(path: str | Path) -> ValidationTarget:
+    """Validate a portable human-review queue derived from a model-grader dry run."""
+    queue_path = Path(path)
+    target = ValidationTarget("model_grader_disagreement_queue", str(queue_path))
+    if _reject_symlinked_validation_path(queue_path, target, "model_grader_disagreement_queue.path", "file"):
+        return target
+    queue = _read_object(queue_path, target, "model_grader_disagreement_queue.json")
+    if queue is not None:
+        _validate_model_grader_disagreement_queue_artifact(queue, target, queue_path)
     return target
 
 
@@ -7924,6 +7940,25 @@ _MODEL_GRADER_DRY_RUN_KEYS = {
     "execution_boundary",
     "notes",
 }
+_MODEL_GRADER_DISAGREEMENT_QUEUE_KEYS = {
+    "schema_version",
+    "created_at",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "source_artifacts",
+    "queue_count",
+    "required_review_item_ids",
+    "queue",
+    "override_requirements",
+    "training_admission",
+    "execution_boundary",
+    "notes",
+}
 _MODEL_GRADER_RUBRIC_SPEC_KEYS = {
     "schema_version",
     "rubric_id",
@@ -7957,6 +7992,7 @@ _MODEL_GRADER_OVERRIDE_RECEIPT_KEYS = {
     "notes",
 }
 _MODEL_GRADER_DRY_RUN_SOURCE_KEYS = {"review_export", "rubric_spec"}
+_MODEL_GRADER_DISAGREEMENT_QUEUE_SOURCE_KEYS = {"dry_run_receipt"}
 _MODEL_GRADER_OVERRIDE_SOURCE_KEYS = {"dry_run_receipt", "override_rows"}
 _MODEL_GRADER_REVIEW_EXPORT_KEYS = {"path", "manifest", "review_items"}
 _MODEL_GRADER_GRADER_KEYS = {
@@ -8038,6 +8074,12 @@ _MODEL_GRADER_OVERRIDE_METRICS_KEYS = {
     "unresolved_queue_count",
     "unmatched_override_count",
     "invalid_override_count",
+}
+_MODEL_GRADER_DISAGREEMENT_QUEUE_OVERRIDE_REQUIREMENT_KEYS = {
+    "required_before_training_admission",
+    "required_override_count",
+    "final_label_options",
+    "minimum_reviewer_confidence",
 }
 _MODEL_GRADER_DRY_RUN_HUMAN_REVIEW_OVERRIDES_KEYS = {
     "required_before_training_admission",
@@ -8208,6 +8250,100 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
             "graded_item_count": receipt.get("graded_item_count"),
             "readiness": receipt.get("readiness"),
             "recommendation": receipt.get("recommendation"),
+        }
+    )
+
+
+def _validate_model_grader_disagreement_queue_artifact(queue: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(queue, _MODEL_GRADER_DISAGREEMENT_QUEUE_KEYS, target, "model_grader_disagreement_queue")
+    _require_equal(
+        queue,
+        "schema_version",
+        MODEL_GRADER_DISAGREEMENT_QUEUE_SCHEMA_VERSION,
+        target,
+        prefix="model_grader_disagreement_queue.",
+    )
+    failed_checks = _validate_model_grader_checked_artifact(queue, target, "model_grader_disagreement_queue")
+    _validate_model_grader_check_keys(queue.get("checks"), target, "model_grader_disagreement_queue.checks")
+    dry_run_path = _validate_model_grader_disagreement_queue_sources(queue.get("source_artifacts"), target, source_path)
+    rows = queue.get("queue")
+    if not isinstance(rows, list):
+        target.errors.append("model_grader_disagreement_queue.queue must be a list.")
+        rows = []
+    observed_queue = _validate_model_grader_disagreement_queue(rows, target, "model_grader_disagreement_queue.queue")
+    if queue.get("queue_count") != len(rows):
+        target.errors.append(f"model_grader_disagreement_queue.queue_count expected {len(rows)}, got {queue.get('queue_count')!r}.")
+    required_ids = queue.get("required_review_item_ids")
+    if not _is_string_list(required_ids):
+        target.errors.append("model_grader_disagreement_queue.required_review_item_ids must be a list of strings.")
+        required_ids = []
+    expected_ids = sorted(row["review_item_id"] for row in observed_queue if row.get("review_item_id"))
+    if required_ids != expected_ids:
+        target.errors.append("model_grader_disagreement_queue.required_review_item_ids must match queue review_item_id values.")
+    if dry_run_path is not None:
+        dry_run = _read_object(dry_run_path, target, "model_grader_disagreement_queue.source_artifacts.dry_run_receipt") or {}
+        expected_rows = dry_run.get("disagreement_queue") if isinstance(dry_run.get("disagreement_queue"), list) else []
+        expected_queue = [_model_grader_disagreement_queue_key(row) for row in expected_rows if isinstance(row, dict)]
+        if rows != expected_rows:
+            target.errors.append("model_grader_disagreement_queue.queue must match source dry-run disagreement_queue.")
+        if observed_queue != expected_queue:
+            target.errors.append("model_grader_disagreement_queue.queue keys must match source dry-run disagreement_queue.")
+    override_requirements = queue.get("override_requirements") if isinstance(queue.get("override_requirements"), dict) else {}
+    if isinstance(queue.get("override_requirements"), dict):
+        _validate_allowed_keys(
+            override_requirements,
+            _MODEL_GRADER_DISAGREEMENT_QUEUE_OVERRIDE_REQUIREMENT_KEYS,
+            target,
+            "model_grader_disagreement_queue.override_requirements",
+        )
+    else:
+        target.errors.append("model_grader_disagreement_queue.override_requirements must be an object.")
+    if override_requirements.get("required_before_training_admission") is not True:
+        target.errors.append("model_grader_disagreement_queue.override_requirements.required_before_training_admission must be true.")
+    if override_requirements.get("required_override_count") != len(rows):
+        target.errors.append("model_grader_disagreement_queue.override_requirements.required_override_count must match queue_count.")
+    final_options = override_requirements.get("final_label_options")
+    if final_options != [label for label in REVIEW_LABELS if label != "needs_review"]:
+        target.errors.append("model_grader_disagreement_queue.override_requirements.final_label_options must be finalized review labels.")
+    if override_requirements.get("minimum_reviewer_confidence") != "medium":
+        target.errors.append("model_grader_disagreement_queue.override_requirements.minimum_reviewer_confidence must be medium.")
+    admission = queue.get("training_admission") if isinstance(queue.get("training_admission"), dict) else {}
+    if isinstance(queue.get("training_admission"), dict):
+        _validate_allowed_keys(
+            admission,
+            _MODEL_GRADER_OVERRIDE_TRAINING_ADMISSION_KEYS,
+            target,
+            "model_grader_disagreement_queue.training_admission",
+        )
+    else:
+        target.errors.append("model_grader_disagreement_queue.training_admission must be an object.")
+    if admission.get("labels_allowed_for_training") is not False:
+        target.errors.append("model_grader_disagreement_queue.training_admission.labels_allowed_for_training must be false.")
+    if admission.get("labels_admitted_count") != 0:
+        target.errors.append("model_grader_disagreement_queue.training_admission.labels_admitted_count must be 0.")
+    if admission.get("requires_model_grader_gate") is not True:
+        target.errors.append("model_grader_disagreement_queue.training_admission.requires_model_grader_gate must be true.")
+    expected_readiness = "blocked"
+    expected_recommendation = "fix_dry_run_receipt"
+    if failed_checks == 0 and rows:
+        expected_readiness = "ready_for_human_review"
+        expected_recommendation = "collect_human_overrides"
+    elif failed_checks == 0:
+        expected_readiness = "queue_empty"
+        expected_recommendation = "no_human_override_required"
+    if queue.get("readiness") != expected_readiness:
+        target.errors.append(
+            f"model_grader_disagreement_queue.readiness expected {expected_readiness!r}, got {queue.get('readiness')!r}."
+        )
+    if queue.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"model_grader_disagreement_queue.recommendation expected {expected_recommendation!r}, got {queue.get('recommendation')!r}."
+        )
+    _validate_model_grader_boundary(queue.get("execution_boundary"), target, "model_grader_disagreement_queue")
+    target.details.update(
+        {
+            "readiness": queue.get("readiness"),
+            "queue_count": queue.get("queue_count"),
         }
     )
 
@@ -8442,6 +8578,26 @@ def _validate_model_grader_dry_run_sources(value: Any, target: ValidationTarget,
     return paths
 
 
+def _validate_model_grader_disagreement_queue_sources(value: Any, target: ValidationTarget, source_path: Path) -> Path | None:
+    if not isinstance(value, dict):
+        target.errors.append("model_grader_disagreement_queue.source_artifacts must be an object.")
+        return None
+    _validate_allowed_keys(
+        value,
+        _MODEL_GRADER_DISAGREEMENT_QUEUE_SOURCE_KEYS,
+        target,
+        "model_grader_disagreement_queue.source_artifacts",
+    )
+    return _validate_model_grader_referenced_artifact(
+        value.get("dry_run_receipt"),
+        target,
+        "model_grader_disagreement_queue.source_artifacts.dry_run_receipt",
+        source_path,
+        validate_model_grader_dry_run,
+        allow_missing=False,
+    )
+
+
 def _validate_rubric_review_item_fingerprints(
     fingerprints: list[Any],
     review_items_path: Path | None,
@@ -8518,10 +8674,11 @@ def _validate_model_grader_dry_run_review_export_matches_rubric(
 def _validate_model_grader_disagreement_queue(
     queue: list[Any],
     target: ValidationTarget,
+    label_prefix: str = "model_grader_dry_run.disagreement_queue",
 ) -> list[dict[str, str]]:
     observed: list[dict[str, str]] = []
     for index, row in enumerate(queue):
-        label = f"model_grader_dry_run.disagreement_queue[{index}]"
+        label = f"{label_prefix}[{index}]"
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue

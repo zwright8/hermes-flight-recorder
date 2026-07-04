@@ -63,7 +63,7 @@ and handoff receipts that make those systems auditable.
 | Harness | Run or replay tasks through mock, Hermes, OpenClaw, Coven, or Codex-style runners. | `scripts/hermes_harness.py run-scenario`, `run-suite`, `probe-model`, `replay-trace` |
 | Rollouts | Plan baseline/candidate/teacher harness batches, replayable environments, verifier gates, budgets, rejection-sampling gates, and mock rollout receipts. | `agentic-rollout-plan`, `agentic-rollout-receipt`, `validate --agentic-rollout-receipt` |
 | Data | Turn validated runs into redacted SFT/DPO/reward/review datasets and registry handoffs after rejection-sampling and curation admission. | `rejection-sampling-gate`, `dataset-curation-receipt`, `flightrecorder goal3-handoff`, `export-rl`, `export-compare-rl`, `export-review`, `apply-review` |
-| Review/grading | Bind rubrics, mock model-grader dry runs, calibration, human overrides, and training-admission gates. | `model-grader rubric`, `model-grader dry-run`, `model-grader gate` |
+| Review/grading | Bind rubrics, mock model-grader dry runs, disagreement queues, calibration, human overrides, and training-admission gates. | `model-grader rubric`, `model-grader dry-run`, `model-grader disagreement-queue`, `model-grader override-receipt`, `model-grader gate` |
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, delegated flow receipts, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `agentic-training-flow`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
@@ -417,9 +417,10 @@ environment-variable credentials.
 
 Model-grader support is currently executable as a deterministic, keyless
 dry-run control plane. `model-grader rubric` binds review items to a rubric,
-`model-grader dry-run` emits mock labels without calling a provider, and
+`model-grader dry-run` emits mock labels without calling a provider,
+`model-grader disagreement-queue` writes portable human-review work items, and
 `model-grader gate` blocks those labels from training until calibration passes
-and the dry-run disagreement queue is empty.
+and the queue is resolved.
 
 ```bash
 flightrecorder model-grader rubric \
@@ -433,6 +434,10 @@ flightrecorder model-grader dry-run \
   --grader-id mock-grader-v1 \
   --provider mock \
   --out runs/model_grader/dry_run.json
+
+flightrecorder model-grader disagreement-queue \
+  --dry-run runs/model_grader/dry_run.json \
+  --out runs/model_grader/disagreement_queue.json
 
 flightrecorder model-grader override-receipt \
   --dry-run runs/model_grader/dry_run.json \
@@ -450,10 +455,10 @@ flightrecorder model-grader gate \
 The dry-run receipt records no provider API call, no paid grader call, no
 credential values, and zero labels admitted to training. The gate admits labels
 only after a passing review-calibration artifact, zero unresolved grader
-disagreements, and zero labels requiring human review. If the dry-run queue is
-non-empty, a `model-grader override-receipt` must resolve each queued item with
-high- or medium-confidence human labels before the gate can pass. It always
-records zero uncalibrated labels.
+disagreements, and zero labels requiring human review. If the portable
+disagreement queue is non-empty, a `model-grader override-receipt` must resolve
+each queued item with high- or medium-confidence human labels before the gate can
+pass. It always records zero uncalibrated labels.
 
 ## Comparison And Improvement Loops
 
@@ -678,6 +683,7 @@ flightrecorder schemas --check runs/suite_gate.json
 flightrecorder schemas --check runs/prompt_compare.json
 flightrecorder schemas --check runs/compare_gate.json
 flightrecorder schemas --check runs/review_calibration.json
+flightrecorder schemas --check runs/model_grader_disagreement_queue.json
 flightrecorder schemas --check runs/model_grader_override_receipt.json
 flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/reviewed_gate.json

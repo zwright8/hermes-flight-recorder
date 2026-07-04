@@ -570,6 +570,14 @@
       "name": "model_grader_dry_run"
     },
     {
+      "artifact": "model_grader_disagreement_queue",
+      "artifact_schema_version": "hfr.model_grader_disagreement_queue.v1",
+      "description": "Portable human-review queue derived from a model-grader dry-run receipt.",
+      "filename": "model_grader_disagreement_queue.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/model_grader_disagreement_queue.v1.schema.json",
+      "name": "model_grader_disagreement_queue"
+    },
+    {
       "artifact": "model_grader_override_receipt",
       "artifact_schema_version": "hfr.model_grader_override_receipt.v1",
       "description": "Human override receipt resolving model-grader dry-run disagreement queue items.",

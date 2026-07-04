@@ -15,6 +15,7 @@ from .schema_registry import SchemaRegistryError, check_schema_file
 
 RUBRIC_SPEC_SCHEMA_VERSION = "hfr.rubric_spec.v1"
 MODEL_GRADER_DRY_RUN_SCHEMA_VERSION = "hfr.model_grader_dry_run.v1"
+MODEL_GRADER_DISAGREEMENT_QUEUE_SCHEMA_VERSION = "hfr.model_grader_disagreement_queue.v1"
 MODEL_GRADER_OVERRIDE_RECEIPT_SCHEMA_VERSION = "hfr.model_grader_override_receipt.v1"
 MODEL_GRADER_GATE_SCHEMA_VERSION = "hfr.model_grader_gate.v1"
 
@@ -132,6 +133,88 @@ def build_model_grader_dry_run(
             "Dry-run labels are deterministic mock labels derived from existing scorecard suggestions.",
             "The receipt does not call a model provider, paid grader, or trainer.",
             "A separate model-grader gate must pass before any downstream dataset curation may consume grader labels.",
+        ],
+    }
+
+
+def build_model_grader_disagreement_queue(
+    *,
+    dry_run_path: str | Path,
+    created_at: str | None = None,
+    preserve_paths: bool = False,
+    out_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Build a portable human-review queue from a model-grader dry-run receipt."""
+    dry_file = Path(dry_run_path)
+    output_path = Path(out_path) if out_path is not None else None
+    _require_evidence_file(dry_file, "model-grader dry-run receipt")
+    dry_ref = _json_artifact_ref("model_grader_dry_run", dry_file, "model_grader_dry_run", preserve_paths, output_path)
+    dry_run = _read_json(dry_file)
+    queue = [dict(item) for item in dry_run.get("disagreement_queue", []) if isinstance(item, dict)] if isinstance(dry_run, dict) else []
+    labels_requiring_review = _labels_requiring_human_review_count(dry_run)
+    checks: list[dict[str, Any]] = []
+    _add_check(checks, "dry_run_receipt_valid", _artifact_ready(dry_ref), {"artifact": dry_ref}, {"schema": "model_grader_dry_run", "passed": True})
+    _add_check(
+        checks,
+        "queue_matches_dry_run_human_review_labels",
+        len(queue) == labels_requiring_review,
+        {"queue_count": len(queue), "labels_requiring_human_review_count": labels_requiring_review},
+        {"queue_count": labels_requiring_review},
+    )
+    _add_check(
+        checks,
+        "dry_run_labels_not_previously_admitted",
+        _labels_admitted_count(dry_run) == 0,
+        {"labels_admitted_count": _labels_admitted_count(dry_run)},
+        {"labels_admitted_count": 0},
+    )
+    _add_check(
+        checks,
+        "paid_model_grader_not_called",
+        _paid_calls_started(dry_run) is False,
+        {"paid_model_grader_calls_started": _paid_calls_started(dry_run)},
+        {"paid_model_grader_calls_started": False},
+    )
+    failed = [check for check in checks if not check["passed"]]
+    passed = not failed
+    readiness = "blocked"
+    recommendation = "fix_dry_run_receipt"
+    if passed and queue:
+        readiness = "ready_for_human_review"
+        recommendation = "collect_human_overrides"
+    elif passed:
+        readiness = "queue_empty"
+        recommendation = "no_human_override_required"
+    return {
+        "schema_version": MODEL_GRADER_DISAGREEMENT_QUEUE_SCHEMA_VERSION,
+        "created_at": created_at or _now(),
+        "passed": passed,
+        "readiness": readiness,
+        "recommendation": recommendation,
+        "check_count": len(checks),
+        "failed_check_count": len(failed),
+        "checks": checks,
+        "blocked_reasons": [check["summary"] for check in failed],
+        "source_artifacts": {"dry_run_receipt": dry_ref},
+        "queue_count": len(queue),
+        "required_review_item_ids": sorted(str(item.get("review_item_id") or "") for item in queue if item.get("review_item_id")),
+        "queue": queue,
+        "override_requirements": {
+            "required_before_training_admission": True,
+            "required_override_count": len(queue),
+            "final_label_options": [label for label in REVIEW_LABELS if label != "needs_review"],
+            "minimum_reviewer_confidence": "medium",
+        },
+        "training_admission": {
+            "labels_allowed_for_training": False,
+            "labels_admitted_count": 0,
+            "requires_model_grader_gate": True,
+        },
+        "execution_boundary": _boundary(),
+        "notes": [
+            "Disagreement queues route dry-run model-grader labels to human review.",
+            "This artifact is derived from a dry-run receipt and does not call a provider or admit labels to training.",
+            "A model-grader override receipt and gate must resolve this queue before trainer-facing curation can consume labels.",
         ],
     }
 
