@@ -124,6 +124,7 @@ class SchemaRegistryTests(unittest.TestCase):
         self.assertIn("promotion_ledger", names)
         self.assertIn("promotion_ledger_gate", names)
         self.assertIn("promotion_policy", names)
+        self.assertIn("promotion_archive", names)
         self.assertIn("promotion_release_record", names)
         self.assertIn("promotion_rollback_receipt", names)
         self.assertIn("training_plan", names)

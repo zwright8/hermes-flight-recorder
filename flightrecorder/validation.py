@@ -16741,6 +16741,42 @@ _PROMOTION_RELEASE_RECORD_METRICS_KEYS = {
 _PROMOTION_RELEASE_RECORD_POLICY_KEYS = {"promotion_decision_policy", "release_policy"}
 _COMPACT_VALIDATION_SUMMARY_KEYS = {"passed", "target_count", "error_count", "warning_count", "targets"}
 _COMPACT_VALIDATION_TARGET_KEYS = {"type", "passed", "error_count", "warning_count"}
+_PROMOTION_ARCHIVE_KEYS = {
+    "schema_version",
+    "archive_path",
+    "manifest_path",
+    "passed",
+    "self_contained",
+    "require_self_contained",
+    "artifacts",
+    "missing",
+    "relationships",
+    "metrics",
+    "notes",
+}
+_PROMOTION_ARCHIVE_ARTIFACT_KEYS = {
+    "index",
+    "name",
+    "role",
+    "path",
+    "original_path",
+    "exists",
+    "schema_version",
+    "size_bytes",
+    "sha256",
+}
+_PROMOTION_ARCHIVE_MISSING_KEYS = {"role", "index", "reason"}
+_ARCHIVE_RELATIONSHIP_KEYS = {"from", "to", "type"}
+_PROMOTION_ARCHIVE_METRICS_KEYS = {
+    "artifact_count",
+    "decision_gate_count",
+    "promotion_release_record_count",
+    "source_artifact_count",
+    "missing_count",
+    "role_counts",
+    "missing_role_counts",
+    "unique_sha256_count",
+}
 
 
 def _validate_promotion_gate_check_keys(checks: list[Any], target: ValidationTarget, label: str) -> None:
@@ -18649,6 +18685,7 @@ def _validate_promotion_ledger_gate_policy_summary(value: Any, target: Validatio
 
 
 def _validate_promotion_archive(archive: dict[str, Any], target: ValidationTarget, archive_root: Path) -> None:
+    _validate_allowed_keys(archive, _PROMOTION_ARCHIVE_KEYS, target, "promotion_archive")
     _require_equal(archive, "schema_version", PROMOTION_ARCHIVE_SCHEMA_VERSION, target)
     for field_name in ("archive_path", "manifest_path"):
         if not isinstance(archive.get(field_name), str) or not archive.get(field_name):
@@ -18726,6 +18763,7 @@ def _validate_promotion_archive_artifact(
     if not isinstance(artifact, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(artifact, _PROMOTION_ARCHIVE_ARTIFACT_KEYS, target, label)
     if artifact.get("index") != expected_index:
         target.errors.append(f"{label}.index expected {expected_index}, got {artifact.get('index')!r}.")
     for field_name in ("name", "role", "path", "original_path", "schema_version"):
@@ -18763,6 +18801,7 @@ def _validate_promotion_archive_missing(item: Any, target: ValidationTarget, lab
     if not isinstance(item, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(item, _PROMOTION_ARCHIVE_MISSING_KEYS, target, label)
     if item.get("role") not in {"decision_gate", "source_artifact"}:
         target.errors.append(f"{label}.role must be decision_gate or source_artifact.")
     if not _is_non_negative_int(item.get("index")):
@@ -18805,6 +18844,7 @@ def _validate_archive_relationship(
     if not isinstance(relationship, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(relationship, _ARCHIVE_RELATIONSHIP_KEYS, target, label)
     for field_name in ("from", "to", "type"):
         if not isinstance(relationship.get(field_name), str) or not relationship.get(field_name):
             target.errors.append(f"{label}.{field_name} must be a non-empty string.")
@@ -18837,6 +18877,7 @@ def _validate_promotion_archive_metrics(
     missing: list[Any],
     target: ValidationTarget,
 ) -> None:
+    _validate_allowed_keys(metrics, _PROMOTION_ARCHIVE_METRICS_KEYS, target, "promotion_archive.metrics")
     valid_artifacts = [artifact for artifact in artifacts if isinstance(artifact, dict)]
     valid_missing = [item for item in missing if isinstance(item, dict)]
     expected = {

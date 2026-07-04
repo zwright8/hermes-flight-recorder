@@ -922,6 +922,14 @@
       "name": "promotion_release_record"
     },
     {
+      "artifact": "promotion_archive",
+      "artifact_schema_version": "hfr.promotion_archive.v1",
+      "description": "Portable promotion-history evidence archive manifest with copied artifact hashes and relationships.",
+      "filename": "promotion_archive.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/promotion_archive.v1.schema.json",
+      "name": "promotion_archive"
+    },
+    {
       "artifact": "promotion_rollback_receipt",
       "artifact_schema_version": "hfr.promotion_rollback_receipt.v1",
       "description": "Promotion rollback receipt proving the rollback target is registered and matches the current champion before alias movement.",

@@ -969,6 +969,66 @@ class PromotionLedgerTests(unittest.TestCase):
             release_record_path.unlink()
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 0)
 
+    def test_validate_promotion_archive_rejects_unknown_control_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            summary_path = root / "validation.json"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "promotion-archive",
+                        "--promotion-ledger",
+                        str(ledger_path),
+                        "--out",
+                        str(archive_dir),
+                        "--require-self-contained",
+                    ]
+                ),
+                0,
+            )
+            manifest_path = archive_dir / "promotion_archive.json"
+            self.assertEqual(run_cli(["schemas", "--check", str(manifest_path)]), 0)
+
+            archive = json.loads(manifest_path.read_text(encoding="utf-8"))
+            archive["cloud_publish_url"] = "https://provider.invalid/archive"
+            archive["artifacts"][0]["provider_signed_url"] = "https://provider.invalid/artifact"
+            archive["relationships"].append(
+                {
+                    "from": "promotion_ledger",
+                    "to": "promotion_ledger",
+                    "type": "gates",
+                    "credential_value": "redacted-secret",
+                }
+            )
+            archive["missing"].append(
+                {
+                    "role": "decision_gate",
+                    "index": 0,
+                    "reason": "missing for forged-field regression",
+                    "signed_url": "https://provider.invalid/missing",
+                }
+            )
+            archive["metrics"]["cloud_cost_usd"] = 5
+            manifest_path.write_text(json.dumps(archive, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(manifest_path)]), 1)
+            code = run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_archive contains unknown field(s): ['cloud_publish_url'].", errors)
+            self.assertIn("promotion_archive.artifacts[0] contains unknown field(s): ['provider_signed_url'].", errors)
+            self.assertIn("promotion_archive.relationships[0] contains unknown field(s): ['credential_value'].", errors)
+            self.assertIn("promotion_archive.missing[0] contains unknown field(s): ['signed_url'].", errors)
+            self.assertIn("promotion_archive.metrics contains unknown field(s): ['cloud_cost_usd'].", errors)
+
     def test_promotion_archive_includes_output_relative_sources_when_requested(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

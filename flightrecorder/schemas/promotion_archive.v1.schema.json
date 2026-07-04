@@ -1,0 +1,124 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/promotion_archive.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Portable promotion-history evidence archive manifest with copied artifact hashes and relationships.",
+  "properties": {
+    "archive_path": {"type": "string"},
+    "artifacts": {"items": {"$ref": "#/$defs/archiveArtifact"}, "type": "array"},
+    "manifest_path": {"type": "string"},
+    "metrics": {"$ref": "#/$defs/archiveMetrics"},
+    "missing": {"items": {"$ref": "#/$defs/missingArtifact"}, "type": "array"},
+    "notes": {"items": {"type": "string"}, "type": "array"},
+    "passed": {"type": "boolean"},
+    "relationships": {"items": {"$ref": "#/$defs/archiveRelationship"}, "type": "array"},
+    "require_self_contained": {"type": "boolean"},
+    "schema_version": {"const": "hfr.promotion_archive.v1"},
+    "self_contained": {"type": "boolean"}
+  },
+  "required": [
+    "schema_version",
+    "archive_path",
+    "manifest_path",
+    "passed",
+    "self_contained",
+    "require_self_contained",
+    "artifacts",
+    "missing",
+    "relationships",
+    "metrics",
+    "notes"
+  ],
+  "$defs": {
+    "archiveArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": "boolean"},
+        "index": {"minimum": 0, "type": "integer"},
+        "name": {"type": "string"},
+        "original_path": {"type": "string"},
+        "path": {"type": "string"},
+        "role": {
+          "enum": [
+            "promotion_ledger",
+            "promotion_ledger_gate",
+            "decision_gate",
+            "source_artifact",
+            "promotion_release_record"
+          ],
+          "type": "string"
+        },
+        "schema_version": {"type": "string"},
+        "sha256": {"type": "string"},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "index",
+        "name",
+        "role",
+        "path",
+        "original_path",
+        "exists",
+        "schema_version",
+        "size_bytes",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "archiveMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_count": {"minimum": 0, "type": "integer"},
+        "decision_gate_count": {"minimum": 0, "type": "integer"},
+        "missing_count": {"minimum": 0, "type": "integer"},
+        "missing_role_counts": {"items": {"$ref": "#/$defs/countRow"}, "type": "array"},
+        "promotion_release_record_count": {"minimum": 0, "type": "integer"},
+        "role_counts": {"items": {"$ref": "#/$defs/countRow"}, "type": "array"},
+        "source_artifact_count": {"minimum": 0, "type": "integer"},
+        "unique_sha256_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "artifact_count",
+        "decision_gate_count",
+        "promotion_release_record_count",
+        "source_artifact_count",
+        "missing_count",
+        "role_counts",
+        "missing_role_counts",
+        "unique_sha256_count"
+      ],
+      "type": "object"
+    },
+    "archiveRelationship": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {"type": "string"},
+        "to": {"type": "string"},
+        "type": {"enum": ["gates", "summarizes", "source_artifact", "release_record"], "type": "string"}
+      },
+      "required": ["from", "to", "type"],
+      "type": "object"
+    },
+    "countRow": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {"minimum": 0, "type": "integer"},
+        "id": {"type": "string"}
+      },
+      "required": ["id", "count"],
+      "type": "object"
+    },
+    "missingArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {"minimum": 0, "type": "integer"},
+        "reason": {"type": "string"},
+        "role": {"enum": ["decision_gate", "source_artifact"], "type": "string"}
+      },
+      "required": ["role", "index", "reason"],
+      "type": "object"
+    }
+  },
+  "title": "Hermes Flight Recorder Promotion Archive",
+  "type": "object"
+}
