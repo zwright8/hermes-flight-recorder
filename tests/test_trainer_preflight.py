@@ -913,9 +913,17 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertTrue(launch["approved_command"]["approved"])
             launch_schema = check_schema_contract(launch, name_or_id="trainer_launch_check")
             self.assertTrue(launch_schema["passed"], launch_schema["errors"])
+            clean_launch_check = Path(tmp) / "trainer_launch_check_relative_command.json"
+            clean_launch = json.loads(json.dumps(launch))
+            clean_approved = clean_launch["approved_command"]
+            clean_approved["argv"] = ["python", "train.py", "--dataset", "training_export"]
+            clean_approved["raw"] = shlex.join(clean_approved["argv"])
+            clean_approved["shell"] = shlex.join(clean_approved["argv"])
+            clean_launch_check.write_text(json.dumps(clean_launch, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(clean_launch_check)]), 0)
             absolute_launch_check = Path(tmp) / "trainer_launch_check_absolute_command.json"
             absolute_launch_summary = Path(tmp) / "trainer_launch_check_absolute_command_summary.json"
-            forged_launch = json.loads(json.dumps(launch))
+            forged_launch = json.loads(json.dumps(clean_launch))
             approved = forged_launch["approved_command"]
             approved["argv"] = [
                 "python",
@@ -926,28 +934,26 @@ class TrainerPreflightTests(unittest.TestCase):
             approved["raw"] = shlex.join(approved["argv"])
             approved["shell"] = shlex.join(approved["argv"])
             absolute_launch_check.write_text(json.dumps(forged_launch, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(absolute_launch_check)]), 0)
             code = run_cli(
                 [
                     "validate",
                     "--trainer-launch-check",
                     str(absolute_launch_check),
-                    "--strict",
                     "--out",
                     str(absolute_launch_summary),
                 ]
             )
             self.assertEqual(code, 1)
             validation = json.loads(absolute_launch_summary.read_text(encoding="utf-8"))
-            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
-            self.assertIn("trainer_launch_check.approved_command.argv[1] is absolute", warnings)
-            self.assertIn("trainer_launch_check.approved_command.argv[2] contains absolute path", warnings)
-            self.assertIn("trainer_launch_check.approved_command.raw[1] is absolute", warnings)
-            self.assertIn("trainer_launch_check.approved_command.raw[2] contains absolute path", warnings)
-            self.assertIn("trainer_launch_check.approved_command.shell[1] is absolute", warnings)
-            self.assertIn("trainer_launch_check.approved_command.shell[2] contains absolute path", warnings)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_launch_check.approved_command.argv[1] must use a relative command token", errors)
+            self.assertIn("trainer_launch_check.approved_command.argv[2] must use a relative command token", errors)
+            self.assertIn("trainer_launch_check.approved_command.raw[1] must use a relative command token", errors)
+            self.assertIn("trainer_launch_check.approved_command.raw[2] must use a relative command token", errors)
+            self.assertIn("trainer_launch_check.approved_command.shell[1] must use a relative command token", errors)
+            self.assertIn("trainer_launch_check.approved_command.shell[2] must use a relative command token", errors)
 
-            forged_launch = json.loads(json.dumps(launch))
+            forged_launch = json.loads(json.dumps(clean_launch))
             forged_launch["provider_console_url"] = "redacted-provider-console"
             forged_launch["checks"][0]["provider_call"] = "forged"
             forged_launch["validation"]["credential_hint"] = "redacted"
@@ -997,7 +1003,7 @@ class TrainerPreflightTests(unittest.TestCase):
                 errors,
             )
             self.assertIn("trainer_launch_check.approved_command contains unknown field(s): ['trainer_process_pid'].", errors)
-            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(launch_check)]), 0)
+            self.assertEqual(run_cli(["validate", "--trainer-launch-check", str(clean_launch_check)]), 0)
 
             archive = Path(tmp) / "trainer_archive"
             self.assertEqual(

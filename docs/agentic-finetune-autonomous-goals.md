@@ -84,7 +84,7 @@ evidence.
 - Validate trainer preflights before public use so preserved trainer-command
   raw or argv tokens warn under strict validation.
 - Validate trainer launch checks before public use so preserved approved-command
-  raw, argv, or shell tokens warn under strict validation.
+  raw, argv, or shell tokens are rejected when they carry local absolute paths.
 - Validate trainer archives before public use so preserved archive source paths,
   approved-command raw, argv, or shell tokens warn under strict validation.
 - Validate trainer archive checks before public use so preserved archive roots,

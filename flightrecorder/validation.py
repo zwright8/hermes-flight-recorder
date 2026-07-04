@@ -24810,13 +24810,33 @@ def _validate_approved_command(command: Any, target: ValidationTarget, expected_
         target.errors.append(f"{label}.argv must be a list of strings.")
         argv = []
     for index, item in enumerate(item for item in argv if isinstance(item, str)):
-        _warn_command_token_public_path(target, f"{label}.argv[{index}]", item)
+        _validate_launch_check_command_token_public_path(target, f"{label}.argv[{index}]", item)
     for field_name in ("raw", "shell"):
         value = command.get(field_name)
         if isinstance(value, str) and value:
-            _warn_shell_tokens_public_paths(value, target, f"{label}.{field_name}")
+            _validate_launch_check_command_tokens_public_paths(value, target, f"{label}.{field_name}")
     if expected_approved and not command.get("shell"):
         target.errors.append(f"{label}.shell must be non-empty when approved.")
+
+
+def _validate_launch_check_command_tokens_public_paths(command: str, target: ValidationTarget, label: str) -> None:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    for index, token in enumerate(tokens):
+        _validate_launch_check_command_token_public_path(target, f"{label}[{index}]", token)
+
+
+def _validate_launch_check_command_token_public_path(target: ValidationTarget, label: str, value: Any) -> None:
+    if not isinstance(value, str) or not value:
+        return
+    if _looks_absolute(value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
+        return
+    _, separator, token_value = value.partition("=")
+    if separator and _looks_absolute(token_value):
+        target.errors.append(f"{label} must use a relative command token or redacted placeholder.")
 
 
 def _validate_handoff_checks(checks: list[Any], target: ValidationTarget, label: str) -> int:
