@@ -709,6 +709,9 @@ card, and dataset card decisions.
   review-item fingerprints, label hashes, and override row hashes from source
   row contents, so stale or tampered grader evidence is blocked even when the
   hash still has a SHA-256 shape.
+- Model-grader dry-run validation also binds disagreement-queue rows to the
+  labels that require human review, so queued override work cannot drift from
+  the label identities that triggered review.
 - Training and reviewed dataset selection keys hash pathless fingerprint
   identity while manifests keep display paths as provenance, so registry keys
   remain stable across cwd and path-redaction presentation changes.

@@ -5547,6 +5547,7 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
             f"model_grader_dry_run.graded_item_count expected {len(labels)}, got {receipt.get('graded_item_count')!r}."
         )
     labels_requiring_review = 0
+    expected_disagreement_queue: list[dict[str, str]] = []
     label_counts = _model_grader_label_counts(receipt.get("label_counts"), target, "model_grader_dry_run.label_counts")
     expected_counts = {label: 0 for label in REVIEW_LABELS}
     for index, row in enumerate(labels):
@@ -5567,6 +5568,7 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
             target.errors.append(f"{label}.requires_human_review must be a boolean.")
         elif row.get("requires_human_review") is True:
             labels_requiring_review += 1
+            expected_disagreement_queue.append(_model_grader_disagreement_queue_key(row))
         if not _is_sha256(row.get("review_item_sha256")):
             target.errors.append(f"{label}.review_item_sha256 must be a sha256 hex digest.")
         label_hash = row.get("label_sha256")
@@ -5583,10 +5585,13 @@ def _validate_model_grader_dry_run(receipt: dict[str, Any], target: ValidationTa
     if not isinstance(disagreement_queue, list):
         target.errors.append("model_grader_dry_run.disagreement_queue must be a list.")
         disagreement_queue = []
+    observed_disagreement_queue = _validate_model_grader_disagreement_queue(disagreement_queue, target)
     if len(disagreement_queue) != labels_requiring_review:
         target.errors.append(
             "model_grader_dry_run.disagreement_queue must contain one item for each label requiring human review."
         )
+    if observed_disagreement_queue != expected_disagreement_queue:
+        target.errors.append("model_grader_dry_run.disagreement_queue must match labels requiring human review.")
     admission = receipt.get("training_admission") if isinstance(receipt.get("training_admission"), dict) else {}
     if admission.get("labels_allowed_for_training") is not False:
         target.errors.append("model_grader_dry_run.training_admission.labels_allowed_for_training must be false.")
@@ -5821,6 +5826,42 @@ def _validate_rubric_review_item_fingerprints(
     ]
     if fingerprints != expected:
         target.errors.append("rubric_spec.review_item_fingerprints must match review_export.review_items.")
+
+
+def _validate_model_grader_disagreement_queue(
+    queue: list[Any],
+    target: ValidationTarget,
+) -> list[dict[str, str]]:
+    observed: list[dict[str, str]] = []
+    for index, row in enumerate(queue):
+        label = f"model_grader_dry_run.disagreement_queue[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        for field_name in ("review_item_id", "episode_id", "scenario_id", "task_family", "review_item_sha256", "mock_model_label", "reason"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        if not _is_sha256(row.get("review_item_sha256")):
+            target.errors.append(f"{label}.review_item_sha256 must be a sha256 hex digest.")
+        if row.get("mock_model_label") not in REVIEW_LABELS:
+            target.errors.append(f"{label}.mock_model_label must be one of {list(REVIEW_LABELS)!r}.")
+        if row.get("reason") != "human_review_required_by_rubric_or_low_confidence":
+            target.errors.append(f"{label}.reason must be human_review_required_by_rubric_or_low_confidence.")
+        if row.get("source_report") is not None and not isinstance(row.get("source_report"), str):
+            target.errors.append(f"{label}.source_report must be a string or null.")
+        observed.append(_model_grader_disagreement_queue_key(row))
+    return observed
+
+
+def _model_grader_disagreement_queue_key(row: dict[str, Any]) -> dict[str, str]:
+    return {
+        "review_item_id": str(row.get("review_item_id") or ""),
+        "episode_id": str(row.get("episode_id") or ""),
+        "scenario_id": str(row.get("scenario_id") or ""),
+        "task_family": str(row.get("task_family") or ""),
+        "review_item_sha256": str(row.get("review_item_sha256") or ""),
+        "mock_model_label": str(row.get("mock_model_label") or ""),
+    }
 
 
 def _model_grader_label_sha256(row: dict[str, Any]) -> str:

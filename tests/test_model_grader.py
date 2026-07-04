@@ -485,6 +485,16 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(sum(1 for row in dry_payload["grader_labels"] if row["requires_human_review"]), 1)
             self.assert_schema_and_validate(dry_run, "model_grader_dry_run")
 
+            stale_queue_dry_run = root / "stale_queue_dry_run.json"
+            stale_queue_payload = json.loads(json.dumps(dry_payload))
+            stale_queue_payload["disagreement_queue"][0]["review_item_sha256"] = "0" * 64
+            stale_queue_dry_run.write_text(json.dumps(stale_queue_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            self.assert_validation_error(
+                stale_queue_dry_run,
+                "model_grader_dry_run",
+                "disagreement_queue must match labels requiring human review",
+            )
+
             self.assertEqual(
                 run_cli(
                     [
