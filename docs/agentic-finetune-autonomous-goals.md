@@ -738,6 +738,9 @@ card, and dataset card decisions.
   so optional refs, top-level receipts, missing fingerprint blocks, anchor
   manifests or registries, stale source artifacts, or redirected generated
   evidence are blocked before labels can be trusted.
+- Model-grader strict validation now warns on absolute source-file refs across
+  dry-run, gate, and override artifacts before public grader labels are
+  admitted to downstream curation.
 - Model-grader rubric, dry-run, and override receipt validation recompute
   review-item fingerprints, label hashes, and override row hashes from source
   row contents, so stale or tampered grader evidence is blocked even when the

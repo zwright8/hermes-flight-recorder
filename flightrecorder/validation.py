@@ -8362,6 +8362,7 @@ def _validate_model_grader_source_file_ref(
     path_value = record.get("path")
     artifact_path: Path | None = None
     if isinstance(path_value, str) and path_value:
+        _warn_absolute_public_path(target, f"{label}.path", path_value)
         artifact_path = _resolve_model_grader_source_path(path_value, source_path)
         if artifact_path is None:
             target.errors.append(f"{label}.path must resolve from the model-grader artifact location.")

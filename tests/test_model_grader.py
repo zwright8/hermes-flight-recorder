@@ -348,6 +348,16 @@ class ModelGraderTests(unittest.TestCase):
             self.assertEqual(passing_payload["source_artifacts"]["review_calibration"]["path"], "../../review_calibration.json")
             self.assert_schema_and_validate(passing_gate, "model_grader_gate")
 
+            absolute_ref_payload = json.loads(json.dumps(passing_payload))
+            absolute_ref_payload["source_artifacts"]["dry_run_receipt"]["path"] = str(dry_run)
+            passing_gate.write_text(json.dumps(absolute_ref_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(model_grader_gate_paths=[passing_gate])
+            strict_validation = validate_artifacts(model_grader_gate_paths=[passing_gate], strict=True)
+            self.assertTrue(validation["passed"], validation)
+            self.assertFalse(strict_validation["passed"], strict_validation)
+            warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
+            self.assertIn("model_grader_gate.source_artifacts.dry_run_receipt.path is absolute", warnings)
+
             forged_gate_payload = json.loads(json.dumps(passing_payload))
             forged_gate_payload["trainer_handoff_url"] = "redacted-trainer-handoff"
             forged_gate_payload["checks"][0]["admitted_label_source"] = "forged"
