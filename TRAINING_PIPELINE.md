@@ -720,6 +720,10 @@ flightrecorder validate \
   --strict
 ```
 
+The committed fixture at `examples/rollout_generation/rollout_plan.json` is a
+schema- and validation-checked plan-only rollout batch with no provider,
+verifier, grader, or dataset-write side effects.
+
 Archive a deterministic mock rollout receipt before scoring or review. This
 records one mock row per planned batch and proves Flight Recorder did not start
 live rollouts, call model providers or paid graders, write traces or scorecards,

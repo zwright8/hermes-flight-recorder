@@ -37,6 +37,29 @@ def copy_rollout_inputs(root: Path, *scenario_sources: Path) -> tuple[list[Path]
 
 
 class RolloutGenerationTests(unittest.TestCase):
+    def test_committed_example_rollout_plan_is_public_safe_and_valid(self):
+        plan_path = ROOT / "examples" / "rollout_generation" / "rollout_plan.json"
+        payload = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(payload["passed"], payload["blocked_reasons"])
+        self.assertEqual(payload["readiness"], "ready_for_harness_batch")
+        self.assertEqual(payload["budget"]["planned_rollouts"], 6)
+        self.assertFalse(payload["budget"]["live_provider_calls_allowed"])
+        self.assertEqual(payload["environment"]["external_state_verifier_gate"]["declared_count"], 1)
+        self.assertTrue(payload["environment"]["external_state_verifier_gate"]["all_declared_verifiers_resolved"])
+        self.assertFalse(payload["environment"]["external_state_verifier_gate"]["verification_side_effects_started"])
+        self.assertFalse(payload["execution_boundary"]["rollouts_started"])
+        self.assertFalse(payload["execution_boundary"]["model_provider_calls_started"])
+        self.assertFalse(payload["execution_boundary"]["dataset_rows_written"])
+        self.assertTrue(payload["rejection_sampling"]["requires_review_calibration_before_training"])
+        self.assertTrue(all(not Path(scenario["path"]).is_absolute() for scenario in payload["scenarios"]))
+
+        schema = check_schema_file(plan_path)
+        validation = validate_artifacts(agentic_rollout_plan_paths=[plan_path], strict=True)
+
+        self.assertTrue(schema["passed"], schema["errors"])
+        self.assertTrue(validation["passed"], validation)
+
     def test_rollout_plan_builds_policy_scenario_matrix_without_running(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
