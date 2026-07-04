@@ -1,0 +1,112 @@
+{
+  "adapter": "",
+  "adapter_strategy": {
+    "launch_command_applies_adapter": false,
+    "notes": [
+      "No adapter path was provided for the managed mock serving fixture."
+    ],
+    "present": false,
+    "requires_engine_args": false,
+    "resolved_strategy": "none"
+  },
+  "arm": "candidate",
+  "artifacts": {
+    "compatibility_report": "preflight/compatibility_report.json",
+    "serving_check": "preflight/serving_check.json",
+    "serving_lifecycle": "serving_lifecycle.json",
+    "serving_profile": "preflight/serving_profile.json",
+    "stderr_log": "server.stderr.log",
+    "stdout_log": "server.stdout.log"
+  },
+  "artifacts_root": ".",
+  "duration_ms": 100,
+  "endpoint": {
+    "base_url": "http://127.0.0.1:18080/v1",
+    "host": "127.0.0.1",
+    "port": 18080
+  },
+  "engine": "mock",
+  "environment": {
+    "platform": "offline-fixture",
+    "python_version": "3.11.0"
+  },
+  "errors": [],
+  "finished_at": "2026-07-03T00:00:00Z",
+  "generated_at": "2026-07-03T00:00:00Z",
+  "launch": {
+    "command": [
+      "python3",
+      "scripts/mock_openai_server.py",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "18080",
+      "--model",
+      "hfr-managed-mock",
+      "--response",
+      "hfr serving smoke ok"
+    ],
+    "command_display": "python3 scripts/mock_openai_server.py --host 127.0.0.1 --port 18080 --model hfr-managed-mock --response 'hfr serving smoke ok'",
+    "cwd": ".",
+    "env_keys": [],
+    "grace_period_s": 2.0,
+    "poll_interval_s": 0.1,
+    "startup_timeout_s": 10.0
+  },
+  "logs": {
+    "stderr_tail": "",
+    "stdout_tail": "{\"event\": \"mock_openai_server_ready\", \"base_url\": \"http://127.0.0.1:18080/v1\", \"model\": \"hfr-managed-mock\"}\n"
+  },
+  "model": "hfr-managed-mock",
+  "passed": true,
+  "process": {
+    "exit_code": -15,
+    "pid": 0,
+    "started": true
+  },
+  "profile": "mock",
+  "provider": "custom",
+  "readiness": "ready",
+  "readiness_probe": {
+    "attempts": [
+      {
+        "elapsed_ms": 0,
+        "json": {
+          "model": "hfr-managed-mock",
+          "ok": true
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18080/healthz"
+      }
+    ],
+    "ready": true,
+    "summary": "readiness_endpoint_passed",
+    "url": "http://127.0.0.1:18080/healthz"
+  },
+  "ready": true,
+  "schema_version": "hfr.serving_lifecycle.v1",
+  "served_model_name": "hfr-managed-mock",
+  "smoke_check": {
+    "artifacts": {
+      "compatibility_report": "preflight/compatibility_report.json",
+      "serving_check": "preflight/serving_check.json",
+      "serving_profile": "preflight/serving_profile.json"
+    },
+    "attempted": true,
+    "failed_checks": [],
+    "passed": true,
+    "readiness": "ready"
+  },
+  "teardown": {
+    "already_exited": false,
+    "attempted": true,
+    "clean": true,
+    "exit_code_after_teardown": -15,
+    "exit_code_before_teardown": null,
+    "killed": false,
+    "running_after_teardown": false,
+    "started_at": "2026-07-03T00:00:00Z",
+    "terminated": true
+  }
+}

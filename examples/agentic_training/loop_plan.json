@@ -1,5 +1,5 @@
 {
-  "artifact_count": 32,
+  "artifact_count": 33,
   "artifact_role_counts": [
     {
       "count": 1,
@@ -116,6 +116,10 @@
     {
       "count": 1,
       "role": "rubric_spec"
+    },
+    {
+      "count": 1,
+      "role": "serving_lifecycle"
     },
     {
       "count": 1,
@@ -856,8 +860,7 @@
   "iteration_id": "demo-loop-001",
   "missing_phase_inputs": [
     "promotion_decision",
-    "promotion_ledger",
-    "serving_lifecycle"
+    "promotion_ledger"
   ],
   "next_iteration": {
     "recommendation": "Use promotion/action/improvement ledgers to schedule the next iteration after governance decides.",
@@ -1032,11 +1035,11 @@
     {
       "gate": "trained outputs must pass serving compatibility before held-out evals or promotion.",
       "id": "serving_checks",
-      "missing_required_artifacts": [
+      "missing_required_artifacts": [],
+      "name": "Serving checks",
+      "present_required_artifacts": [
         "serving_lifecycle"
       ],
-      "name": "Serving checks",
-      "present_required_artifacts": [],
       "produces": [
         "serving_endpoint_check",
         "model_serving_probe_receipt"
@@ -1044,7 +1047,7 @@
       "required_artifacts": [
         "serving_lifecycle"
       ],
-      "status": "blocked"
+      "status": "ready"
     },
     {
       "gate": "live external benchmarks remain disabled until dependencies and held-out scenario parity pass.",
@@ -1534,6 +1537,19 @@
         "schema_version": "hfr.rubric_spec.v1",
         "sha256": "778e10040c0562dc93637b9d2b812652889243cc3a161e063a506771b7531753",
         "size_bytes": 2227
+      }
+    ],
+    "serving_lifecycle": [
+      {
+        "exists": true,
+        "kind": "file",
+        "passed": true,
+        "path": "serving_lifecycle/managed_mock/serving_lifecycle.json",
+        "readiness": "ready",
+        "role": "serving_lifecycle",
+        "schema_version": "hfr.serving_lifecycle.v1",
+        "sha256": "b2cc43ef3aea210da7920470249799f0a5b4b4caac5420babdad9ab092feafcb",
+        "size_bytes": 3012
       }
     ],
     "trainer_launch_check": [

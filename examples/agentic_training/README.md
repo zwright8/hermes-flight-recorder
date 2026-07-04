@@ -309,6 +309,7 @@ flightrecorder agentic-loop plan \
   --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
   --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --serving-lifecycle examples/agentic_training/serving_lifecycle/managed_mock/serving_lifecycle.json \
   --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
   --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \
@@ -326,9 +327,10 @@ flightrecorder agentic-loop plan \
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-does not include serving or promotion receipts, and because external adapter
-dependencies are intentionally not enabled. It does bind loop-local rollout plan
-and mock receipt, harness/evidence handoff artifacts, nested model-grader
+does not include promotion receipts, and because external adapter dependencies
+are intentionally not enabled. It does bind loop-local rollout plan and mock
+receipt, harness/evidence handoff artifacts, a managed mock serving lifecycle,
+nested model-grader
 review, rejection-sampling, dataset-curation, training-export,
 trainer-preflight, trainer-launch-check, cloud-training, held-out eval,
 action-ledger, and improvement-ledger receipts without provider, dataset-write,
@@ -369,6 +371,7 @@ flightrecorder validate \
   --cloud-training-launch-plan examples/agentic_training/cloud_training/launch_plan.json \
   --cloud-training-launch-receipt examples/agentic_training/cloud_training/launch_receipt.json \
   --cloud-training-status-receipt examples/agentic_training/cloud_training/status_receipt.json \
+  --serving-lifecycle examples/agentic_training/serving_lifecycle/managed_mock/serving_lifecycle.json \
   --heldout-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
   --external-eval-plan examples/agentic_training/heldout_eval/external_eval_plan.json \
   --external-eval-receipt examples/agentic_training/heldout_eval/external_eval_receipt.json \

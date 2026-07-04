@@ -819,7 +819,9 @@ external-eval plan/receipt artifacts for BFCL, Inspect AI, lm-eval-harness, and
 SWE-bench adapters, plus an eval summary. Those adapter receipts remain
 fail-closed until optional dependencies are explicitly enabled. The
 `evidence_handoff/` fixture records a compact passing harness result and ready
-evidence bundle for a deterministic prompt-injection scenario.
+evidence bundle for a deterministic prompt-injection scenario. The
+`serving_lifecycle/managed_mock/` fixture records a normalized mock serving
+preflight with no model download, provider call, or live endpoint exposure.
 
 Use `flightrecorder agentic-loop plan` to bind rollout, evidence, review,
 trainer, cloud-training, serving, held-out eval, improvement, governance,
@@ -846,6 +848,7 @@ flightrecorder agentic-loop plan \
   --cloud-training-launch-plan runs/cloud_launch_plan.json \
   --cloud-training-launch-receipt runs/cloud_launch_receipt.json \
   --cloud-training-status-receipt runs/cloud_status_receipt.json \
+  --serving-lifecycle runs/serving_lifecycle.json \
   --heldout-manifest runs/heldout_manifest.json \
   --external-eval-plan runs/external_eval_plan.json \
   --external-eval-receipt runs/external_eval_receipt.json \

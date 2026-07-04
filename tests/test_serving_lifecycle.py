@@ -25,6 +25,46 @@ def _load_script(path: Path, name: str):
 
 
 class ServingLifecycleTests(unittest.TestCase):
+    def test_committed_agentic_training_serving_lifecycle_is_replayable(self):
+        root = ROOT / "examples" / "agentic_training" / "serving_lifecycle" / "managed_mock"
+        lifecycle_path = root / "serving_lifecycle.json"
+        lifecycle = _read_json(lifecycle_path)
+
+        self.assertEqual(lifecycle["schema_version"], "hfr.serving_lifecycle.v1")
+        self.assertTrue(lifecycle["passed"], lifecycle)
+        self.assertTrue(lifecycle["ready"])
+        self.assertEqual(lifecycle["readiness"], "ready")
+        self.assertEqual(lifecycle["profile"], "mock")
+        self.assertEqual(lifecycle["engine"], "mock")
+        self.assertEqual(lifecycle["environment"]["platform"], "offline-fixture")
+        self.assertFalse(lifecycle["adapter_strategy"]["present"])
+        self.assertEqual(lifecycle["artifacts"]["serving_profile"], "preflight/serving_profile.json")
+        self.assertEqual(lifecycle["artifacts"]["compatibility_report"], "preflight/compatibility_report.json")
+        self.assertEqual(lifecycle["artifacts"]["serving_check"], "preflight/serving_check.json")
+        self.assertTrue(lifecycle["readiness_probe"]["ready"])
+        self.assertTrue(lifecycle["smoke_check"]["passed"])
+        self.assertTrue(lifecycle["teardown"]["clean"])
+
+        for artifact in (
+            "preflight/serving_profile.json",
+            "preflight/compatibility_report.json",
+            "preflight/serving_check.json",
+            "server.stdout.log",
+            "server.stderr.log",
+        ):
+            self.assertTrue((root / artifact).is_file(), artifact)
+        for artifact in (
+            "serving_lifecycle.json",
+            "preflight/serving_profile.json",
+            "preflight/compatibility_report.json",
+            "preflight/serving_check.json",
+        ):
+            schema_result = check_schema_file(root / artifact)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
+
+        validation = validate_artifacts(serving_lifecycle_paths=[lifecycle_path], strict=True)
+        self.assertTrue(validation["passed"], validation)
+
     def test_managed_mock_lifecycle_runs_preflight_and_tears_down(self):
         manage_openai_serving = _load_script(LIFECYCLE_SCRIPT, "manage_openai_serving_success")
         port = _free_port()

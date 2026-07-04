@@ -1,0 +1,185 @@
+{
+  "arm": "candidate",
+  "artifacts": {
+    "compatibility_report": "compatibility_report.json",
+    "serving_check": "serving_check.json",
+    "serving_profile": "serving_profile.json"
+  },
+  "base_url": "http://127.0.0.1:18080/v1",
+  "checks": [
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 0,
+            "json": {
+              "model": "hfr-managed-mock",
+              "ok": true
+            },
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:18080/healthz"
+          }
+        ],
+        "elapsed_ms": 0,
+        "json": {
+          "model": "hfr-managed-mock",
+          "ok": true
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18080/healthz"
+      },
+      "id": "health",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 0,
+        "json": {
+          "data": [
+            {
+              "id": "hfr-managed-mock",
+              "object": "model"
+            }
+          ],
+          "object": "list"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18080/v1/models"
+      },
+      "id": "models",
+      "passed": true
+    },
+    {
+      "details": {
+        "attempts": [
+          {
+            "elapsed_ms": 0,
+            "json": {
+              "id": "hfr-managed-mock",
+              "model": "hfr-managed-mock",
+              "object": "model"
+            },
+            "ok": true,
+            "status_code": 200,
+            "url": "http://127.0.0.1:18080/v1/models/hfr-managed-mock"
+          }
+        ],
+        "elapsed_ms": 0,
+        "json": {
+          "id": "hfr-managed-mock",
+          "model": "hfr-managed-mock",
+          "object": "model"
+        },
+        "ok": true,
+        "status_code": 200,
+        "url": "http://127.0.0.1:18080/v1/models/hfr-managed-mock"
+      },
+      "id": "model_metadata",
+      "passed": true
+    },
+    {
+      "details": {
+        "elapsed_ms": 0,
+        "json": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "hfr serving smoke ok",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1783094400,
+          "id": "chatcmpl-hfr-mock",
+          "model": "hfr-managed-mock",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 4,
+            "prompt_tokens": 8,
+            "total_tokens": 12
+          }
+        },
+        "ok": true,
+        "response_model": "hfr-managed-mock",
+        "status_code": 200,
+        "text": "hfr serving smoke ok",
+        "url": "http://127.0.0.1:18080/v1/chat/completions"
+      },
+      "id": "chat_completion",
+      "passed": true
+    },
+    {
+      "details": {
+        "done_seen": true,
+        "error": null,
+        "event_count": 3,
+        "response_ok": true,
+        "status": "supported",
+        "text": "hfr serving smoke ok"
+      },
+      "id": "streaming_required",
+      "passed": true
+    },
+    {
+      "details": {
+        "error": null,
+        "response_ok": true,
+        "status": "supported",
+        "tool_call_count": 1,
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{\"path\": \"demo.txt\"}",
+              "name": "read_file"
+            },
+            "id": "call_hfr_mock",
+            "type": "function"
+          }
+        ]
+      },
+      "id": "tool_call_required",
+      "passed": true
+    },
+    {
+      "details": {
+        "error": null,
+        "json_parse_passed": true,
+        "parsed": {
+          "evidence": "hfr-structured-smoke",
+          "status": "ok"
+        },
+        "response_ok": true,
+        "status": "supported",
+        "text": "{\"evidence\": \"hfr-structured-smoke\", \"status\": \"ok\"}"
+      },
+      "id": "structured_output_required",
+      "passed": true
+    },
+    {
+      "details": {
+        "chat_response_model": "hfr-managed-mock",
+        "expected": "hfr-managed-mock",
+        "metadata_model": "hfr-managed-mock",
+        "observed_model_ids": [
+          "hfr-managed-mock"
+        ],
+        "served_model_id": "hfr-managed-mock"
+      },
+      "id": "model_identity",
+      "passed": true
+    }
+  ],
+  "failed_checks": [],
+  "generated_at": "2026-07-03T00:00:00Z",
+  "model": "hfr-managed-mock",
+  "passed": true,
+  "profile_id": "candidate-openai-compatible-hfr-managed-mock",
+  "readiness": "ready",
+  "schema_version": "hfr.serving_endpoint_check.v1",
+  "served_model_id": "hfr-managed-mock"
+}

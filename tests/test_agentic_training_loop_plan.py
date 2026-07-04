@@ -38,6 +38,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         provider_registry_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "provider_registry.json"
         cloud_preflight_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "preflight.json"
         cloud_launch_receipt_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "launch_receipt.json"
+        serving_lifecycle_path = ROOT / "examples" / "agentic_training" / "serving_lifecycle" / "managed_mock" / "serving_lifecycle.json"
         heldout_manifest_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "heldout_manifest.json"
         external_eval_plan_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "external_eval_plan.json"
         external_eval_receipt_path = ROOT / "examples" / "agentic_training" / "heldout_eval" / "external_eval_receipt.json"
@@ -60,6 +61,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             "cloud_training_provider_registry": ("cloud_training/provider_registry.json", provider_registry_path),
             "cloud_training_preflight": ("cloud_training/preflight.json", cloud_preflight_path),
             "cloud_training_launch_receipt": ("cloud_training/launch_receipt.json", cloud_launch_receipt_path),
+            "serving_lifecycle": ("serving_lifecycle/managed_mock/serving_lifecycle.json", serving_lifecycle_path),
             "heldout_manifest": ("heldout_eval/heldout_manifest.json", heldout_manifest_path),
             "external_eval_plan": ("heldout_eval/external_eval_plan.json", external_eval_plan_path),
             "external_eval_receipt": ("heldout_eval/external_eval_receipt.json", external_eval_receipt_path),
@@ -75,7 +77,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             self.assertEqual(ref["sha256"], hashlib.sha256(source_path.read_bytes()).hexdigest())
         self.assertFalse(plan["passed"])
         self.assertEqual(plan["readiness"], "planned_fail_closed")
-        self.assertEqual(plan["artifact_count"], 32)
+        self.assertEqual(plan["artifact_count"], 33)
         self.assertNotIn("agentic_rollout_plan", plan["missing_phase_inputs"])
         self.assertNotIn("agentic_rollout_receipt", plan["missing_phase_inputs"])
         self.assertNotIn("harness_result", plan["missing_phase_inputs"])
@@ -90,6 +92,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertNotIn("external_eval_plan", plan["missing_phase_inputs"])
         self.assertNotIn("external_eval_receipt", plan["missing_phase_inputs"])
         self.assertNotIn("eval_summary", plan["missing_phase_inputs"])
+        self.assertNotIn("serving_lifecycle", plan["missing_phase_inputs"])
         self.assertNotIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("dataset_curation_receipt_required_for_trainer_handoff", {check["id"] for check in plan["checks"] if not check["passed"]})
@@ -117,6 +120,9 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertEqual(phases["external_trainer_execution"]["status"], "ready")
         self.assertIn("trainer_preflight", phases["external_trainer_execution"]["present_required_artifacts"])
         self.assertIn("trainer_launch_check", phases["external_trainer_execution"]["present_required_artifacts"])
+        self.assertEqual(phases["serving_checks"]["status"], "ready")
+        self.assertEqual(phases["serving_checks"]["present_required_artifacts"], ["serving_lifecycle"])
+        self.assertEqual(phases["serving_checks"]["missing_required_artifacts"], [])
         self.assertEqual(phases["heldout_eval"]["status"], "ready")
         self.assertEqual(phases["heldout_eval"]["missing_required_artifacts"], [])
         self.assertEqual(phases["improvement_planning"]["status"], "ready")
