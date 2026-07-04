@@ -153,6 +153,39 @@ class RolloutGenerationTests(unittest.TestCase):
             self.assertFalse(any(row["dataset_row_written"] for row in payload["mock_rollouts"]))
             self.assertTrue(payload["environment"]["external_state_verifier_gate"]["all_declared_verifiers_resolved"])
 
+    def test_strict_validate_warns_on_absolute_rollout_receipt_source_plan_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan_path = root / "rollout_plan.json"
+            receipt_path = root / "rollout_receipt.json"
+            plan = build_agentic_rollout_plan(
+                out_path=plan_path,
+                iteration_id="rollout-preserved-source",
+                scenario_paths=[SCENARIO],
+                policies={"baseline": "local/base"},
+                max_rollouts=1,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            write_agentic_rollout_plan(plan_path, plan)
+            receipt = build_agentic_rollout_receipt(
+                plan_path=plan_path,
+                out_path=receipt_path,
+                preserve_paths=True,
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path])
+            strict_validation = validate_artifacts(agentic_rollout_receipt_paths=[receipt_path], strict=True)
+
+            self.assertTrue(validation["passed"], validation)
+            self.assertFalse(strict_validation["passed"], strict_validation)
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            strict_warnings = "\n".join(warning for target in strict_validation["targets"] for warning in target["warnings"])
+            expected = "agentic_rollout_receipt.source_plan.path is absolute"
+            self.assertIn(expected, warnings)
+            self.assertIn(expected, strict_warnings)
+
     def test_rollout_receipt_validation_rejects_live_side_effect_claims(self):
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "rollout_plan.json"

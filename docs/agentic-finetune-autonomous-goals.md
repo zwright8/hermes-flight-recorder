@@ -723,6 +723,11 @@ card, and dataset card decisions.
 - Eval-summary strict validation now warns on absolute suite, compare-manifest,
   compare-gate, external-adapter, and serving-preflight refs before public
   governance summaries are accepted.
+- External-eval strict validation now warns on absolute heldout-manifest and
+  source-plan refs before adapter plans or dry-run receipts become public
+  governance evidence.
+- Rollout-receipt strict validation now warns on absolute source-plan refs
+  before mock rollout evidence is admitted to rejection-sampling gates.
 - Cloud-training artifact manifests, preflights, launch plans, launch receipts,
   and status receipts reopen path-backed upload/source refs from their own file
   location and reject symlinked, stale SHA-256, or byte-size evidence before

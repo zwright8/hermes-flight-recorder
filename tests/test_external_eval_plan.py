@@ -82,6 +82,29 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertEqual(written["inputs"]["scenario_manifest"]["path"], manifest.name)
             self.assertEqual(written["inputs"]["scenario_manifest"]["size_bytes"], manifest.stat().st_size)
 
+    def test_strict_validate_warns_on_absolute_scenario_manifest_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            strict_validation = root / "strict_validation.json"
+
+            code = run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--preserve-paths", "--out", str(out)])
+            non_strict_code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation)])
+            strict_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict", "--out", str(strict_validation)])
+
+            self.assertEqual(code, 1)
+            self.assertEqual(non_strict_code, 0)
+            self.assertEqual(strict_code, 1)
+            warnings = "\n".join(warning for target in _read_json(validation)["targets"] for warning in target["warnings"])
+            strict_warnings = "\n".join(
+                warning for target in _read_json(strict_validation)["targets"] for warning in target["warnings"]
+            )
+            expected = "external_eval_plan.inputs.scenario_manifest.path is absolute"
+            self.assertIn(expected, warnings)
+            self.assertIn(expected, strict_warnings)
+
     def test_eval_summary_surfaces_external_adapter_blockers(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -6928,6 +6928,7 @@ def _validate_agentic_rollout_receipt_source_plan(source_plan: dict[str, Any], t
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
         return
+    _warn_absolute_public_path(target, f"{label}.path", path_value)
     plan_path = _external_eval_reference_path(path_value, source_path)
     if not plan_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an agentic rollout plan file.")
@@ -14234,6 +14235,7 @@ def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], tar
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
         return
+    _warn_absolute_public_path(target, f"{label}.path", path_value)
     plan_path = _external_eval_reference_path(path_value, source_path)
     if not plan_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an external eval plan file.")
@@ -14632,6 +14634,7 @@ def _validate_external_eval_scenario_manifest_file(
     if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
         return
+    _warn_absolute_public_path(target, f"{label}.path", path_value)
     file_path = _external_eval_reference_path(path_value, source_path)
     if not file_path.is_file():
         target.errors.append(f"{label}.path does not resolve to a manifest file.")

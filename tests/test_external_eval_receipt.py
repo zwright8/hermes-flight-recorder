@@ -102,6 +102,31 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertFalse(receipt["execution_boundary"]["provider_api_called"])
             self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
 
+    def test_strict_validate_warns_on_absolute_source_plan_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+            validation = root / "validation.json"
+            strict_validation = root / "strict_validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
+
+            receipt_code = run_cli(["external-eval-receipt", "--plan", str(plan_path), "--preserve-paths", "--out", str(receipt_path)])
+            non_strict_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--out", str(validation)])
+            strict_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict", "--out", str(strict_validation)])
+
+            self.assertEqual(receipt_code, 1)
+            self.assertEqual(non_strict_code, 0)
+            self.assertEqual(strict_code, 1)
+            warnings = "\n".join(warning for target in _read_json(validation)["targets"] for warning in target["warnings"])
+            strict_warnings = "\n".join(
+                warning for target in _read_json(strict_validation)["targets"] for warning in target["warnings"]
+            )
+            expected = "external_eval_receipt.source_plan.path is absolute"
+            self.assertIn(expected, warnings)
+            self.assertIn(expected, strict_warnings)
+
     def test_external_eval_receipt_live_request_is_recorded_and_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
