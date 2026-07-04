@@ -257,6 +257,46 @@ class AgenticTrainingRuntimePreflightTests(unittest.TestCase):
         schema = check_schema_file(preflight_path)
         self.assertTrue(schema["passed"], schema["errors"])
 
+    def test_schema_rejects_unknown_side_effect_fields(self):
+        preflight = build_agentic_training_runtime_preflight(
+            plan_path=EXAMPLE_PLAN,
+            require_modules=["json"],
+            skip_default_modules=True,
+            created_at="2026-07-02T00:00:00+00:00",
+        )
+        preflight["provider_console_url"] = "redacted-provider-console"
+        preflight["checks"][0]["provider_call"] = "forged"
+        preflight["dependency_checks"][0]["module_imported"] = True
+        preflight["plan_check"]["credential_hint"] = "redacted"
+        preflight["mode_contract_check"]["trainer_receipt"] = "not-created"
+        preflight["mode_contract_check"]["reward_contract"]["paid_grader_receipt"] = "redacted-receipt"
+        preflight["mode_contract_check"]["side_effect_boundary"]["provider_api_called"] = True
+        preflight["mode_contract_check"]["external_runner_contract"]["runner_api_key"] = "redacted-key"
+        preflight["view_checks"][0]["absolute_source_path"] = "redacted-source-path"
+        preflight["view_checks"][0]["row_schema_counts"][0]["source_file"] = "redacted-source-file"
+        preflight["execution_boundary"]["trainer_process_pid"] = 123
+        preflight["handoff_contract"]["cloud_job_url"] = "redacted-cloud-job-url"
+
+        schema = check_schema_contract(preflight)
+
+        self.assertFalse(schema["passed"])
+        errors = "\n".join(schema["errors"])
+        for field_name in (
+            "provider_console_url",
+            "provider_call",
+            "module_imported",
+            "credential_hint",
+            "trainer_receipt",
+            "paid_grader_receipt",
+            "provider_api_called",
+            "runner_api_key",
+            "absolute_source_path",
+            "source_file",
+            "trainer_process_pid",
+            "cloud_job_url",
+        ):
+            self.assertIn(field_name, errors)
+
     def test_schema_rejects_passed_view_without_size(self):
         preflight = build_agentic_training_runtime_preflight(
             plan_path=EXAMPLE_PLAN,
