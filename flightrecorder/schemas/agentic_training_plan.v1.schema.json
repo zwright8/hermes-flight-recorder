@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/agentic_training_plan.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Registry-backed dry-run plan for agentic fine-tuning modes.",
   "properties": {
     "blocked_reasons": {
@@ -144,7 +144,7 @@
   "type": "object",
   "$defs": {
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": {
           "type": "object"
@@ -174,7 +174,7 @@
       "type": "object"
     },
     "execution": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "dry_run_only": {
           "const": true
@@ -213,7 +213,7 @@
       "type": "object"
     },
     "handoffContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "allowed_modes": {
           "items": {
@@ -221,8 +221,20 @@
           },
           "type": "array"
         },
+        "advanced_reward_modes_blocked_by_default": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "advanced_modes_require_explicit_opt_in": {
           "const": true
+        },
+        "default_executable_modes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "disallow_unredacted_traces": {
           "const": true
@@ -235,6 +247,12 @@
         },
         "future_rl_requires_explicit_opt_in": {
           "const": true
+        },
+        "future_rl_modes_blocked_by_default": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "paid_model_grader_calls_started": {
           "const": false
@@ -279,12 +297,15 @@
         "paid_model_grader_calls_started",
         "weights_updated_by_flight_recorder",
         "reward_function_owned_by_external_runner",
-        "allowed_modes"
+        "allowed_modes",
+        "default_executable_modes",
+        "advanced_reward_modes_blocked_by_default",
+        "future_rl_modes_blocked_by_default"
       ],
       "type": "object"
     },
     "inputManifests": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "dataset": {
           "$ref": "#/$defs/manifestRef"
@@ -300,16 +321,43 @@
       "type": "object"
     },
     "manifestRef": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
+        "base_model": {
+          "type": "string"
+        },
+        "candidate_id": {
+          "type": "string"
+        },
+        "compatibility_passed": {
+          "type": "boolean"
+        },
+        "contains_unredacted_traces": {
+          "type": "boolean"
+        },
         "id": {
           "type": "string"
+        },
+        "license_allow_training": {
+          "type": "boolean"
         },
         "license_allows_training": {
           "type": "boolean"
         },
+        "license_status": {
+          "type": "string"
+        },
         "path": {
           "minLength": 1,
+          "type": "string"
+        },
+        "redaction_passed": {
+          "type": "boolean"
+        },
+        "redaction_status": {
+          "type": "string"
+        },
+        "schema_version": {
           "type": "string"
         },
         "sha256": {
@@ -319,6 +367,19 @@
         "size_bytes": {
           "minimum": 0,
           "type": "integer"
+        },
+        "version": {
+          "type": "string"
+        },
+        "view_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "views": {
+          "additionalProperties": {
+            "$ref": "#/$defs/view"
+          },
+          "type": "object"
         }
       },
       "required": [
@@ -331,7 +392,7 @@
       "type": "object"
     },
     "modeContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "category": {
           "enum": [
@@ -408,7 +469,7 @@
       "type": "object"
     },
     "planningGate": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "open": {
           "type": "boolean"
@@ -432,7 +493,7 @@
       "type": "object"
     },
     "dataRequirement": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "description": {
           "minLength": 1,
@@ -484,7 +545,7 @@
       "type": "object"
     },
     "dataRequirementEvidence": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "candidate_views": {
           "items": {
@@ -512,7 +573,7 @@
       "type": "object"
     },
     "rewardContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "callable_signature": {
           "type": "string"
@@ -575,7 +636,7 @@
       "type": "object"
     },
     "sideEffectBoundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_jobs_started": {
           "const": false
@@ -611,7 +672,7 @@
       "type": "object"
     },
     "externalRunnerContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "runner_must_block_unredacted_traces": {
           "const": true
@@ -1411,7 +1472,7 @@
       "type": "object"
     },
     "trainerPlan": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "backend": {
           "minLength": 1,
@@ -1419,9 +1480,16 @@
         },
         "extension_points": {
           "items": {
-            "type": "object"
+            "$ref": "#/$defs/extensionPoint"
           },
           "type": "array"
+        },
+        "limit": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "mode_required_view_groups": {
           "items": {
@@ -1432,6 +1500,9 @@
           },
           "type": "array"
         },
+        "output_dir": {
+          "type": "string"
+        },
         "stage_sequence": {
           "items": {
             "type": "string"
@@ -1441,14 +1512,39 @@
       },
       "required": [
         "backend",
+        "output_dir",
+        "limit",
         "stage_sequence",
         "mode_required_view_groups",
         "extension_points"
       ],
       "type": "object"
     },
+    "extensionPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "scope"
+      ],
+      "type": "object"
+    },
     "view": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "name": {
           "minLength": 1,
@@ -1460,12 +1556,20 @@
         "row_count": {
           "minimum": 0,
           "type": "integer"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "split": {
+          "type": "string"
         }
       },
       "required": [
         "name",
         "path",
-        "row_count"
+        "row_count",
+        "split",
+        "schema_version"
       ],
       "type": "object"
     }

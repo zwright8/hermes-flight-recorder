@@ -283,6 +283,10 @@ python3.11 scripts/plan_agentic_training.py \
   --limit 16 \
   --out runs/agentic_training_plan.json
 
+flightrecorder validate \
+  --agentic-training-plan runs/agentic_training_plan.json \
+  --strict
+
 python3.11 scripts/preflight_agentic_training_runtime.py \
   --plan runs/agentic_training_plan.json \
   --skip-default-modules \

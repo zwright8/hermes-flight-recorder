@@ -93,6 +93,10 @@ Plans use `hfr.agentic_training_plan.v1` and record:
 
 External runners must revalidate the plan, manifests, license status, redaction
 status, and current file hashes immediately before launch.
+Run `flightrecorder validate --agentic-training-plan <plan.json>` before handing
+the artifact to a trainer. The semantic validator closes the public plan shape
+and rejects hidden provider job, credential, URL, live-training, model-download,
+or weight-mutation fields in addition to the JSON Schema check.
 For `grpo`, the reward contract is an interface record only:
 `reward_fn(prompts, completions, **kwargs) -> list[float]`. For generic `rl`,
 the recorded interface is `reward_fn(episodes, actions, **kwargs) -> list[float]`.
@@ -230,6 +234,7 @@ Focused verification for this packet:
 
 ```bash
 python3 -m unittest tests.test_agentic_training_plan
+python3 -m flightrecorder validate --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json --strict
 python3 -m unittest tests.test_agentic_training_runtime
 python3 -m unittest tests.test_schema_registry.SchemaRegistryTests.test_catalog_loads_public_artifact_contracts
 python3 -m py_compile flightrecorder/agentic_training_plan.py flightrecorder/agentic_training_runtime.py scripts/plan_agentic_training.py scripts/preflight_agentic_training_runtime.py tests/test_agentic_training_plan.py tests/test_agentic_training_runtime.py

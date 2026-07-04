@@ -1119,6 +1119,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         model_registry_entry_paths=args.model_registry_entry,
         model_registry_paths=args.model_registry,
         training_plan_paths=args.training_plan,
+        agentic_training_plan_paths=args.agentic_training_plan,
         agentic_training_flow_paths=args.agentic_training_flow,
         agentic_training_result_paths=args.agentic_training_result,
         agentic_training_loop_plan_paths=args.agentic_loop_plan,
@@ -3162,6 +3163,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     validate.add_argument("--model-registry", action="append", default=[], help="Validate one model registry JSON; may be repeated")
     validate.add_argument("--training-plan", action="append", default=[], help="Validate one dry-run training plan JSON; may be repeated")
+    validate.add_argument(
+        "--agentic-training-plan",
+        action="append",
+        default=[],
+        help="Validate one agentic_training_plan.json dry-run trainer handoff contract; may be repeated",
+    )
     validate.add_argument(
         "--agentic-training-flow",
         action="append",

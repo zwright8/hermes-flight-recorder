@@ -586,6 +586,10 @@ contract, and hard side-effect boundary. For GRPO, that contract records the
 TRL-style interface `reward_fn(prompts, completions, **kwargs) -> list[float]`
 for an external runner to supply and validate; Flight Recorder does not
 implement, import, or execute it.
+Use `flightrecorder validate --agentic-training-plan <plan.json>` before any
+handoff. The validator rejects hidden provider job fields, trainer URLs,
+credential hints, paid-grader toggles, live model downloads, and weight-mutation
+fields that are not part of the public dry-run plan contract.
 
 Pass `--agentic-training-plan <plan.json>` to `trainer-preflight` to fingerprint a
 ready plan as a trainer input before archiving or handing it to an external

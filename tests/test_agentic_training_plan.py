@@ -242,6 +242,174 @@ class AgenticTrainingPlanTests(unittest.TestCase):
             schema = check_schema_file(out)
             self.assertTrue(schema["passed"], schema["errors"])
 
+    def test_validate_cli_accepts_agentic_training_plan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "model.json"
+            dataset = root / "dataset.json"
+            out = root / "plan.json"
+            report = root / "validation.json"
+            self.write_model_manifest(model)
+            self.write_dataset_manifest(dataset)
+            plan = build_agentic_training_plan(
+                out_path=out,
+                mode="sft",
+                model_manifest_path=model,
+                dataset_manifest_path=dataset,
+            )
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "flightrecorder",
+                    "validate",
+                    "--agentic-training-plan",
+                    str(out),
+                    "--strict",
+                    "--out",
+                    str(report),
+                ],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            validation = json.loads(report.read_text(encoding="utf-8"))
+            self.assertTrue(validation["passed"], validation)
+            self.assertEqual(validation["targets"][0]["type"], "agentic_training_plan")
+
+    def test_schema_and_validate_reject_hidden_provider_plan_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = root / "model.json"
+            dataset = root / "dataset.json"
+            out = root / "forged_plan.json"
+            report = root / "validation.json"
+            self.write_model_manifest(model)
+            self.write_dataset_manifest(dataset)
+            plan = build_agentic_training_plan(
+                out_path=out,
+                mode="sft",
+                model_manifest_path=model,
+                dataset_manifest_path=dataset,
+            )
+            plan["provider_training_url"] = "redacted-provider-training"
+            plan["input_manifests"]["model"]["provider_model_id"] = "redacted-provider-model"
+            plan["input_manifests"]["dataset"]["views"]["sft"]["signed_url"] = "redacted-signed-url"
+            plan["selected_views"][0]["provider_dataset_id"] = "redacted-provider-dataset"
+            plan["mode_contract"]["provider_job_started"] = True
+            plan["mode_contract"]["planning_gate"]["provider_approval_id"] = "redacted-provider-approval"
+            plan["mode_contract"]["data_requirements"][0]["provider_dataset_ref"] = "redacted-provider-dataset"
+            plan["mode_contract"]["data_requirements"][0]["evidence"][0]["signed_url"] = "redacted-signed-url"
+            plan["mode_contract"]["reward_contract"]["secret_env"] = "TOKEN"
+            plan["mode_contract"]["side_effect_boundary"]["provider_api_called"] = False
+            plan["mode_contract"]["external_runner_contract"]["provider_console_url"] = "redacted-provider-console"
+            plan["trainer_plan"]["provider_job_id"] = "redacted-provider-job"
+            plan["trainer_plan"]["extension_points"][0]["provider_plugin_url"] = "redacted-provider-plugin"
+            plan["execution"]["provider_job_started"] = False
+            plan["handoff_contract"]["weights_mutation_allowed"] = False
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_contract(plan)
+            self.assertFalse(schema["passed"])
+            schema_errors = "\n".join(schema["errors"])
+            self.assertIn("provider_training_url", schema_errors)
+            self.assertIn("provider_job_started", schema_errors)
+            self.assertIn("signed_url", schema_errors)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "flightrecorder",
+                    "validate",
+                    "--agentic-training-plan",
+                    str(out),
+                    "--strict",
+                    "--out",
+                    str(report),
+                ],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 1, completed.stderr + completed.stdout)
+            validation = json.loads(report.read_text(encoding="utf-8"))
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(validation["targets"][0]["errors"])
+            self.assertIn("agentic_training_plan contains unknown field(s): ['provider_training_url']", errors)
+            self.assertIn("agentic_training_plan.input_manifests.model contains unknown field(s): ['provider_model_id']", errors)
+            self.assertIn("agentic_training_plan.input_manifests.dataset.views.sft contains unknown field(s): ['signed_url']", errors)
+            self.assertIn("agentic_training_plan.mode_contract.reward_contract contains unknown field(s): ['secret_env']", errors)
+            self.assertIn("agentic_training_plan.handoff_contract contains unknown field(s): ['weights_mutation_allowed']", errors)
+
+    def test_validate_rejects_missing_required_nullable_plan_fields(self):
+        cases = [
+            (
+                "missing_required_flag.json",
+                lambda plan: plan["mode_contract"]["planning_gate"].pop("required_flag"),
+                "agentic_training_plan.mode_contract.planning_gate.required_flag is missing.",
+            ),
+            (
+                "missing_limit.json",
+                lambda plan: plan["trainer_plan"].pop("limit"),
+                "agentic_training_plan.trainer_plan.limit is missing.",
+            ),
+        ]
+        for filename, mutate, expected_error in cases:
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                model = root / "model.json"
+                dataset = root / "dataset.json"
+                out = root / filename
+                report = root / "validation.json"
+                self.write_model_manifest(model)
+                self.write_dataset_manifest(dataset)
+                plan = build_agentic_training_plan(
+                    out_path=out,
+                    mode="sft",
+                    model_manifest_path=model,
+                    dataset_manifest_path=dataset,
+                )
+                mutate(plan)
+                out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+                schema = check_schema_contract(plan)
+                self.assertFalse(schema["passed"])
+                self.assertTrue(any("missing required property" in error for error in schema["errors"]), schema["errors"])
+
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "flightrecorder",
+                        "validate",
+                        "--agentic-training-plan",
+                        str(out),
+                        "--strict",
+                        "--out",
+                        str(report),
+                    ],
+                    cwd=ROOT,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
+
+                self.assertEqual(completed.returncode, 1, completed.stderr + completed.stdout)
+                validation = json.loads(report.read_text(encoding="utf-8"))
+                self.assertFalse(validation["passed"], validation)
+                self.assertIn(expected_error, "\n".join(validation["targets"][0]["errors"]))
+
     def test_cli_writes_schema_checkable_blocked_grpo_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
