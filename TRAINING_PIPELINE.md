@@ -27,6 +27,7 @@ flightrecorder schemas --check runs/agentic_rollout_receipt.json
 flightrecorder schemas --check runs/rejection_sampling_gate.json
 flightrecorder schemas --check runs/dataset_curation_receipt.json
 flightrecorder schemas --check runs/agentic_loop_ledger.json
+flightrecorder schemas --check runs/agentic_loop_governance_receipt.json
 flightrecorder schemas --check runs/next_iteration_schedule.json
 flightrecorder schemas --check runs/rubric_spec.json
 flightrecorder schemas --check runs/model_grader_dry_run.json
@@ -755,6 +756,17 @@ flightrecorder validate \
   --agentic-loop-ledger runs/agentic_loop_ledger.json \
   --strict
 
+flightrecorder agentic-loop governance \
+  --ledger runs/agentic_loop_ledger.json \
+  --action request_another_iteration \
+  --requested-by governance-review \
+  --reason "Latest loop remains fail-closed; request another evidence iteration." \
+  --out runs/agentic_loop_governance_receipt.json
+
+flightrecorder validate \
+  --agentic-loop-governance-receipt runs/agentic_loop_governance_receipt.json \
+  --strict
+
 flightrecorder next-iteration-schedule \
   --loop-ledger runs/agentic_loop_ledger.json \
   --action-ledger runs/action_ledger.json \
@@ -801,8 +813,10 @@ the missing phase inputs, empty artifact groups, governance posture, next-action
 recommendation, and side-effect boundary without parsing the full ledger. The
 top-level `decision.governance_actions` array makes governance choices explicit:
 approve, reject, rollback, or request another iteration. These action rows are
-strictly ledger recommendations; actual promotion, rollback, or alias updates
-must still be archived as their own governed receipts.
+strictly ledger recommendations. `hfr.agentic_loop_governance_receipt.v1`
+records the selected governance action and replays the ledger action row during
+validation, but it remains receipt-only: actual promotion, rollback, or alias
+updates must still be archived as their own governed receipts.
 The digest includes cloud-training lineage posture as well: a latest iteration
 is not ready unless the provider id is consistent and every cloud handoff
 receipt points to its required upstream receipt by SHA-256. It also carries

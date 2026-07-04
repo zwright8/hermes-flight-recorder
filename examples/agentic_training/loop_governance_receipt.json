@@ -1,0 +1,245 @@
+{
+  "check_count": 8,
+  "checks": [
+    {
+      "actual": {
+        "exists": true
+      },
+      "expected": {
+        "exists": true
+      },
+      "id": "source_ledger_present",
+      "passed": true,
+      "summary": "source_ledger_present: passed=True"
+    },
+    {
+      "actual": {
+        "schema_version": "hfr.agentic_loop_ledger.v1"
+      },
+      "expected": {
+        "schema_version": "hfr.agentic_loop_ledger.v1"
+      },
+      "id": "source_ledger_schema_version",
+      "passed": true,
+      "summary": "source_ledger_schema_version: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "source_ledger_passed",
+      "passed": true,
+      "summary": "source_ledger_passed: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_jobs_started": false,
+        "credential_values_recorded": false,
+        "ledger_only": true,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "paid_model_grader_calls_started": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "expected": {
+        "cloud_jobs_started": false,
+        "credential_values_recorded": false,
+        "ledger_only": true,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "paid_model_grader_calls_started": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "id": "source_ledger_fail_closed",
+      "passed": true,
+      "summary": "source_ledger_fail_closed: passed=True"
+    },
+    {
+      "actual": {
+        "action": "request_another_iteration"
+      },
+      "expected": {
+        "actions": [
+          "approve",
+          "reject",
+          "rollback",
+          "request_another_iteration"
+        ]
+      },
+      "id": "requested_action_known",
+      "passed": true,
+      "summary": "requested_action_known: passed=True"
+    },
+    {
+      "actual": {
+        "action": "request_another_iteration",
+        "listed": true
+      },
+      "expected": {
+        "listed": true
+      },
+      "id": "requested_action_listed_by_ledger",
+      "passed": true,
+      "summary": "requested_action_listed_by_ledger: passed=True"
+    },
+    {
+      "actual": {
+        "action": "request_another_iteration",
+        "available": true,
+        "blocked_reasons": []
+      },
+      "expected": {
+        "available": true,
+        "blocked_reasons": []
+      },
+      "id": "requested_action_available",
+      "passed": true,
+      "summary": "requested_action_available: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_jobs_started": false,
+        "credential_values_recorded": false,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "paid_model_grader_calls_started": false,
+        "promotion_alias_moved": false,
+        "receipt_only": true,
+        "rollback_applied": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "expected": {
+        "cloud_jobs_started": false,
+        "credential_values_recorded": false,
+        "live_benchmarks_started": false,
+        "model_downloads_started": false,
+        "paid_model_grader_calls_started": false,
+        "promotion_alias_moved": false,
+        "receipt_only": true,
+        "rollback_applied": false,
+        "weights_updated_by_flight_recorder": false
+      },
+      "id": "flight_recorder_did_not_apply_governance_side_effects",
+      "passed": true,
+      "summary": "flight_recorder_did_not_apply_governance_side_effects: passed=True"
+    }
+  ],
+  "created_at": "2026-07-03T00:00:00+00:00",
+  "decision": {
+    "blocking_check_count": 0,
+    "blocking_checks": [],
+    "latest_iteration_id": "demo-loop-001",
+    "ledger_recommended_governance_action": "request_another_iteration",
+    "readiness": "ready",
+    "recommendation": "record_next_iteration_request",
+    "selected_action": "request_another_iteration",
+    "summary": "Governance action request_another_iteration recorded without applying side effects."
+  },
+  "execution_boundary": {
+    "cloud_jobs_started": false,
+    "credential_values_recorded": false,
+    "live_benchmarks_started": false,
+    "model_downloads_started": false,
+    "paid_model_grader_calls_started": false,
+    "promotion_alias_moved": false,
+    "receipt_only": true,
+    "rollback_applied": false,
+    "weights_updated_by_flight_recorder": false
+  },
+  "failed_check_count": 0,
+  "notes": [
+    "This receipt records a governance choice over the latest agentic loop ledger; it does not move aliases, apply rollback, launch cloud jobs, or update weights.",
+    "Approval only records readiness for promotion review. Promotion, rollback, alias movement, and release publication remain separate governed receipts."
+  ],
+  "passed": true,
+  "readiness": "recorded",
+  "receipt_path": "examples/agentic_training/loop_governance_receipt.json",
+  "recommendation": "record_next_iteration_request",
+  "requested_action": {
+    "action": "request_another_iteration",
+    "available": true,
+    "blocked_reason_count": 0,
+    "blocked_reasons": [],
+    "reason": "Demo ledger is fail-closed, so governance requests another iteration.",
+    "requested_by": "example-governance",
+    "summary": "Governance can request another iteration."
+  },
+  "schema_version": "hfr.agentic_loop_governance_receipt.v1",
+  "source_ledger": {
+    "decision": {
+      "governance_actions": [
+        {
+          "action": "approve",
+          "available": false,
+          "blocked_reason_count": 2,
+          "blocked_reasons": [
+            "latest_iteration_not_ready_for_governance_review",
+            "missing_promotion_decision"
+          ],
+          "summary": "Approve the iteration for promotion review when all readiness and promotion-decision receipts are present."
+        },
+        {
+          "action": "reject",
+          "available": true,
+          "blocked_reason_count": 0,
+          "blocked_reasons": [],
+          "summary": "Reject the iteration without moving aliases or weights."
+        },
+        {
+          "action": "rollback",
+          "available": false,
+          "blocked_reason_count": 1,
+          "blocked_reasons": [
+            "missing_rollback_receipt"
+          ],
+          "summary": "Rollback is available only when a rollback receipt is present in governance artifacts."
+        },
+        {
+          "action": "request_another_iteration",
+          "available": true,
+          "blocked_reason_count": 0,
+          "blocked_reasons": [],
+          "summary": "Governance can request another iteration."
+        }
+      ],
+      "latest_iteration_id": "demo-loop-001",
+      "latest_iteration_index": 0,
+      "readiness": "blocked",
+      "recommendation": "continue_iteration",
+      "recommended_governance_action": "request_another_iteration",
+      "summary": "Latest loop iteration demo-loop-001 is fail-closed with 22 missing phase input(s)."
+    },
+    "execution_boundary": {
+      "cloud_jobs_started": false,
+      "credential_values_recorded": false,
+      "ledger_only": true,
+      "live_benchmarks_started": false,
+      "model_downloads_started": false,
+      "paid_model_grader_calls_started": false,
+      "weights_updated_by_flight_recorder": false
+    },
+    "exists": true,
+    "kind": "file",
+    "passed": true,
+    "path": "loop_ledger.json",
+    "readiness_digest": {
+      "latest_iteration_id": "demo-loop-001",
+      "latest_iteration_index": 0,
+      "promotion_decision_present": false,
+      "readiness": "planned_fail_closed",
+      "ready_for_governance_review": false,
+      "recommendation": "collect_missing_receipts_before_live_execution",
+      "recommended_governance_action": "request_another_iteration",
+      "rollback_receipt_present": false,
+      "side_effects_started": false,
+      "summary": "Latest loop iteration demo-loop-001 remains fail-closed with 22 missing phase input(s) across 9 empty artifact group(s)."
+    },
+    "role": "agentic_loop_ledger",
+    "schema_version": "hfr.agentic_loop_ledger.v1",
+    "sha256": "9110110861dbb25ea86682596243136754e8c82efc964439f13e5e4e6845ff59",
+    "size_bytes": 19661
+  }
+}

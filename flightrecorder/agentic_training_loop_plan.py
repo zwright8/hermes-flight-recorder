@@ -149,7 +149,7 @@ PHASES: tuple[dict[str, Any], ...] = (
         "id": "governance_decision",
         "name": "Governance decision",
         "required": ("promotion_decision",),
-        "produces": ("promotion_cards", "promotion_release_record"),
+        "produces": ("agentic_loop_governance_receipt", "promotion_cards", "promotion_release_record"),
         "gate": "governance must approve, reject, rollback, or request another iteration before aliases move.",
     },
     {
@@ -197,6 +197,7 @@ ARTIFACT_ROLES: dict[str, str] = {
     "heldout_manifest": "heldout_manifest",
     "improvement_ledger": "improvement_ledger",
     "improvement_plan": "improvement_plan",
+    "agentic_loop_governance_receipt": "agentic_loop_governance_receipt",
     "promotion_decision": "promotion_decision",
     "promotion_ledger": "promotion_ledger",
     "model_grader_dry_run": "model_grader_dry_run",

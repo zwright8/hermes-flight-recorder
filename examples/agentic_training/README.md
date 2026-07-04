@@ -120,4 +120,16 @@ flightrecorder agentic-loop ledger \
 flightrecorder validate \
   --agentic-loop-ledger examples/agentic_training/loop_ledger.json \
   --strict
+
+flightrecorder agentic-loop governance \
+  --ledger examples/agentic_training/loop_ledger.json \
+  --action request_another_iteration \
+  --requested-by example-governance \
+  --reason "Demo ledger is fail-closed, so governance requests another iteration." \
+  --created-at 2026-07-03T00:00:00+00:00 \
+  --out examples/agentic_training/loop_governance_receipt.json
+
+flightrecorder validate \
+  --agentic-loop-governance-receipt examples/agentic_training/loop_governance_receipt.json \
+  --strict
 ```

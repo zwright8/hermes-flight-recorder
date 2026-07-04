@@ -1,0 +1,247 @@
+{
+  "$id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_governance_receipt.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "blocking_check": {
+      "additionalProperties": false,
+      "properties": {
+        "id": { "minLength": 1, "type": "string" },
+        "scope": {
+          "additionalProperties": false,
+          "properties": {},
+          "type": "object"
+        },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "summary", "scope"],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": { "type": "object" },
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "source_execution_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "cloud_jobs_started": { "type": "boolean" },
+        "credential_values_recorded": { "type": "boolean" },
+        "ledger_only": { "type": "boolean" },
+        "live_benchmarks_started": { "type": "boolean" },
+        "model_downloads_started": { "type": "boolean" },
+        "paid_model_grader_calls_started": { "type": "boolean" },
+        "weights_updated_by_flight_recorder": { "type": "boolean" }
+      },
+      "type": "object"
+    },
+    "source_governance_action": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": ["approve", "reject", "rollback", "request_another_iteration"]
+        },
+        "available": { "type": "boolean" },
+        "blocked_reason_count": { "minimum": 0, "type": "integer" },
+        "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+        "summary": { "type": "string" }
+      },
+      "required": ["action", "available", "blocked_reason_count", "blocked_reasons", "summary"],
+      "type": "object"
+    },
+    "source_ledger_decision": {
+      "additionalProperties": false,
+      "properties": {
+        "governance_actions": {
+          "items": { "$ref": "#/$defs/source_governance_action" },
+          "type": "array"
+        },
+        "latest_iteration_id": { "type": "string" },
+        "latest_iteration_index": { "type": ["integer", "null"] },
+        "readiness": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "recommended_governance_action": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "type": "object"
+    },
+    "source_readiness_digest": {
+      "additionalProperties": false,
+      "properties": {
+        "latest_iteration_id": { "type": "string" },
+        "latest_iteration_index": { "type": ["integer", "null"] },
+        "promotion_decision_present": { "type": "boolean" },
+        "readiness": { "type": "string" },
+        "ready_for_governance_review": { "type": "boolean" },
+        "recommendation": { "type": "string" },
+        "recommended_governance_action": { "type": "string" },
+        "rollback_receipt_present": { "type": "boolean" },
+        "side_effects_started": { "type": "boolean" },
+        "summary": { "type": "string" }
+      },
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Side-effect-free governance receipt recording approve, reject, rollback, or next-iteration requests over an agentic loop ledger.",
+  "properties": {
+    "check_count": { "minimum": 0, "type": "integer" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
+    "created_at": { "type": "string" },
+    "decision": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking_check_count": { "minimum": 0, "type": "integer" },
+        "blocking_checks": { "items": { "$ref": "#/$defs/blocking_check" }, "type": "array" },
+        "latest_iteration_id": { "type": "string" },
+        "ledger_recommended_governance_action": {
+          "enum": ["approve", "reject", "rollback", "request_another_iteration", ""]
+        },
+        "readiness": { "enum": ["ready", "blocked"] },
+        "recommendation": {
+          "enum": [
+            "record_approval_for_promotion_review",
+            "record_rejection",
+            "record_rollback_request",
+            "record_next_iteration_request",
+            "fix_governance_inputs"
+          ]
+        },
+        "selected_action": {
+          "enum": ["approve", "reject", "rollback", "request_another_iteration"]
+        },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "selected_action",
+        "ledger_recommended_governance_action",
+        "latest_iteration_id",
+        "blocking_check_count",
+        "blocking_checks"
+      ],
+      "type": "object"
+    },
+    "execution_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "cloud_jobs_started": { "const": false },
+        "credential_values_recorded": { "const": false },
+        "live_benchmarks_started": { "const": false },
+        "model_downloads_started": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "promotion_alias_moved": { "const": false },
+        "receipt_only": { "const": true },
+        "rollback_applied": { "const": false },
+        "weights_updated_by_flight_recorder": { "const": false }
+      },
+      "required": [
+        "receipt_only",
+        "promotion_alias_moved",
+        "rollback_applied",
+        "cloud_jobs_started",
+        "paid_model_grader_calls_started",
+        "live_benchmarks_started",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded"
+      ],
+      "type": "object"
+    },
+    "failed_check_count": { "minimum": 0, "type": "integer" },
+    "notes": { "items": { "type": "string" }, "type": "array" },
+    "passed": { "type": "boolean" },
+    "readiness": { "enum": ["recorded", "blocked"] },
+    "receipt_path": { "type": "string" },
+    "recommendation": {
+      "enum": [
+        "record_approval_for_promotion_review",
+        "record_rejection",
+        "record_rollback_request",
+        "record_next_iteration_request",
+        "fix_governance_inputs"
+      ]
+    },
+    "requested_action": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": ["approve", "reject", "rollback", "request_another_iteration"]
+        },
+        "available": { "type": "boolean" },
+        "blocked_reason_count": { "minimum": 0, "type": "integer" },
+        "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
+        "reason": { "minLength": 1, "type": "string" },
+        "requested_by": { "minLength": 1, "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": [
+        "action",
+        "available",
+        "blocked_reason_count",
+        "blocked_reasons",
+        "summary",
+        "requested_by",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "schema_version": { "const": "hfr.agentic_loop_governance_receipt.v1" },
+    "source_ledger": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": { "$ref": "#/$defs/source_ledger_decision" },
+        "exists": { "type": "boolean" },
+        "execution_boundary": { "$ref": "#/$defs/source_execution_boundary" },
+        "kind": { "enum": ["file", "missing"] },
+        "passed": { "type": ["boolean", "null"] },
+        "path": { "type": "string" },
+        "readiness_digest": { "$ref": "#/$defs/source_readiness_digest" },
+        "role": { "const": "agentic_loop_ledger" },
+        "schema_version": { "type": "string" },
+        "sha256": { "type": ["string", "null"] },
+        "size_bytes": { "type": ["integer", "null"] }
+      },
+      "required": [
+        "role",
+        "path",
+        "kind",
+        "exists",
+        "sha256",
+        "size_bytes",
+        "schema_version",
+        "passed",
+        "decision",
+        "readiness_digest",
+        "execution_boundary"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_at",
+    "receipt_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "source_ledger",
+    "requested_action",
+    "decision",
+    "execution_boundary",
+    "notes"
+  ],
+  "title": "Hermes Flight Recorder Agentic Loop Governance Receipt",
+  "type": "object"
+}

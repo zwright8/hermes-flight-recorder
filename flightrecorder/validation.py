@@ -44,6 +44,13 @@ from .agentic_loop_ledger import (
     _decision as _build_agentic_loop_ledger_decision,
     _readiness_digest as _build_agentic_loop_ledger_readiness_digest,
 )
+from .agentic_loop_governance import (
+    AGENTIC_LOOP_GOVERNANCE_RECEIPT_SCHEMA_VERSION,
+    GOVERNANCE_ACTIONS,
+    _execution_boundary as _build_agentic_loop_governance_boundary,
+    _receipt_projection as _build_agentic_loop_governance_projection,
+    _source_ledger_ref as _build_agentic_loop_governance_ledger_ref,
+)
 from .artifacts import CONTRACT_SCOPES, SUITE_TREND_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION, HARNESS_RUN_MANIFEST_SCHEMA_VERSION, HARNESS_RUN_RESULT_SCHEMA_VERSION
 from .calibration import REVIEW_CALIBRATION_SCHEMA_VERSION
@@ -267,6 +274,7 @@ def validate_artifacts(
     agentic_training_result_paths: list[str | Path] | None = None,
     agentic_training_loop_plan_paths: list[str | Path] | None = None,
     agentic_loop_ledger_paths: list[str | Path] | None = None,
+    agentic_loop_governance_receipt_paths: list[str | Path] | None = None,
     next_iteration_schedule_paths: list[str | Path] | None = None,
     cloud_training_provider_registry_paths: list[str | Path] | None = None,
     cloud_training_preflight_paths: list[str | Path] | None = None,
@@ -393,6 +401,8 @@ def validate_artifacts(
         targets.append(validate_agentic_training_loop_plan(agentic_training_loop_plan_path))
     for agentic_loop_ledger_path in agentic_loop_ledger_paths or []:
         targets.append(validate_agentic_loop_ledger(agentic_loop_ledger_path))
+    for agentic_loop_governance_receipt_path in agentic_loop_governance_receipt_paths or []:
+        targets.append(validate_agentic_loop_governance_receipt(agentic_loop_governance_receipt_path))
     for next_iteration_schedule_path in next_iteration_schedule_paths or []:
         targets.append(validate_next_iteration_schedule(next_iteration_schedule_path))
     for cloud_training_provider_registry_path in cloud_training_provider_registry_paths or []:
@@ -1418,6 +1428,16 @@ def validate_agentic_loop_ledger(path: str | Path) -> ValidationTarget:
     ledger = _read_object(ledger_path, target, "agentic_loop_ledger.json")
     if ledger is not None:
         _validate_agentic_loop_ledger(ledger, target, ledger_path)
+    return target
+
+
+def validate_agentic_loop_governance_receipt(path: str | Path) -> ValidationTarget:
+    """Validate a side-effect-free governance receipt over an agentic-loop ledger."""
+    receipt_path = Path(path)
+    target = ValidationTarget("agentic_loop_governance_receipt", str(receipt_path))
+    receipt = _read_object(receipt_path, target, "agentic_loop_governance_receipt.json")
+    if receipt is not None:
+        _validate_agentic_loop_governance_receipt(receipt, target, receipt_path)
     return target
 
 
@@ -3973,6 +3993,439 @@ def _validate_agentic_loop_ledger_decision(
             target.errors.append(f"agentic_loop_ledger.decision.{field_name} must match latest iteration state.")
     if decision.get("governance_actions") != expected["governance_actions"]:
         target.errors.append("agentic_loop_ledger.decision.governance_actions must match latest iteration state.")
+
+
+def _validate_agentic_loop_governance_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _require_equal(
+        receipt,
+        "schema_version",
+        AGENTIC_LOOP_GOVERNANCE_RECEIPT_SCHEMA_VERSION,
+        target,
+        prefix="agentic_loop_governance_receipt.",
+    )
+    _validate_allowed_keys(
+        receipt,
+        {
+            "schema_version",
+            "created_at",
+            "receipt_path",
+            "passed",
+            "readiness",
+            "recommendation",
+            "check_count",
+            "failed_check_count",
+            "checks",
+            "source_ledger",
+            "requested_action",
+            "decision",
+            "execution_boundary",
+            "notes",
+        },
+        target,
+        "agentic_loop_governance_receipt",
+    )
+    receipt_path = receipt.get("receipt_path")
+    if not isinstance(receipt_path, str):
+        target.errors.append("agentic_loop_governance_receipt.receipt_path must be a string.")
+    elif receipt_path and not _is_safe_agentic_loop_governance_path(receipt_path):
+        target.errors.append("agentic_loop_governance_receipt.receipt_path must be a safe relative path or redacted placeholder.")
+    checks = receipt.get("checks")
+    if not isinstance(checks, list):
+        target.errors.append("agentic_loop_governance_receipt.checks must be a list.")
+        checks = []
+    _validate_agentic_loop_governance_checks(checks, target, "agentic_loop_governance_receipt.checks")
+    failed_checks = _validate_gate_like_checks(checks, target, "agentic_loop_governance_receipt.checks")
+    if not _is_non_negative_int(receipt.get("check_count")):
+        target.errors.append("agentic_loop_governance_receipt.check_count must be a non-negative integer.")
+    elif receipt.get("check_count") != len(checks):
+        target.errors.append(
+            f"agentic_loop_governance_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}."
+        )
+    if not _is_non_negative_int(receipt.get("failed_check_count")):
+        target.errors.append("agentic_loop_governance_receipt.failed_check_count must be a non-negative integer.")
+    elif receipt.get("failed_check_count") != failed_checks:
+        target.errors.append(
+            "agentic_loop_governance_receipt.failed_check_count "
+            f"expected {failed_checks}, got {receipt.get('failed_check_count')!r}."
+        )
+    if not isinstance(receipt.get("passed"), bool):
+        target.errors.append("agentic_loop_governance_receipt.passed must be a boolean.")
+    elif receipt.get("passed") != (failed_checks == 0):
+        target.errors.append("agentic_loop_governance_receipt.passed must match failed_check_count.")
+    expected_readiness_from_checks = "recorded" if failed_checks == 0 else "blocked"
+    if receipt.get("readiness") != expected_readiness_from_checks:
+        target.errors.append(
+            "agentic_loop_governance_receipt.readiness must be recorded when checks pass and blocked otherwise."
+        )
+
+    source_ledger = receipt.get("source_ledger")
+    ledger_ref = _validate_agentic_loop_governance_source_ledger(source_ledger, target, source_path)
+    requested_action = receipt.get("requested_action")
+    action = _validate_agentic_loop_governance_requested_action(requested_action, target)
+    _validate_agentic_loop_governance_decision(receipt.get("decision"), target)
+    if action in GOVERNANCE_ACTIONS and ledger_ref is not None:
+        expected = _build_agentic_loop_governance_projection(ledger_ref, action)
+        for field_name in ("passed", "readiness", "recommendation", "failed_check_count"):
+            if receipt.get(field_name) != expected.get(field_name):
+                target.errors.append(f"agentic_loop_governance_receipt.{field_name} must match current ledger action state.")
+        if receipt.get("check_count") != len(expected["checks"]):
+            target.errors.append("agentic_loop_governance_receipt.check_count must match replayed checks.")
+        if checks != expected["checks"]:
+            target.errors.append("agentic_loop_governance_receipt.checks must match current ledger action state.")
+        _validate_agentic_loop_governance_requested_action_matches(
+            requested_action,
+            expected["requested_action"],
+            target,
+        )
+        if receipt.get("decision") != expected["decision"]:
+            target.errors.append("agentic_loop_governance_receipt.decision must match current ledger action state.")
+    elif action in GOVERNANCE_ACTIONS and isinstance(source_ledger, dict):
+        target.errors.append("agentic_loop_governance_receipt.source_ledger must resolve to a replayable source ledger.")
+        expected = _build_agentic_loop_governance_projection(source_ledger, action)
+        _validate_agentic_loop_governance_unreplayable_source_state(receipt, checks, requested_action, expected, target)
+    else:
+        if receipt.get("recommendation") != "fix_governance_inputs":
+            target.errors.append("agentic_loop_governance_receipt.recommendation must be fix_governance_inputs when action or ledger is invalid.")
+
+    boundary = receipt.get("execution_boundary")
+    expected_boundary = _build_agentic_loop_governance_boundary()
+    if isinstance(boundary, dict):
+        _validate_allowed_keys(boundary, set(expected_boundary), target, "agentic_loop_governance_receipt.execution_boundary")
+    if boundary != expected_boundary:
+        target.errors.append("agentic_loop_governance_receipt.execution_boundary must remain receipt-only and fail-closed.")
+    notes = receipt.get("notes")
+    if not _is_string_list(notes):
+        target.errors.append("agentic_loop_governance_receipt.notes must be a list of strings.")
+    target.details.update(
+        {
+            "passed": receipt.get("passed"),
+            "recommendation": receipt.get("recommendation"),
+            "action": action,
+            "latest_iteration_id": (
+                ledger_ref.get("decision", {}).get("latest_iteration_id")
+                if isinstance(ledger_ref, dict) and isinstance(ledger_ref.get("decision"), dict)
+                else None
+            ),
+        }
+    )
+
+
+def _validate_agentic_loop_governance_source_ledger(
+    value: Any,
+    target: ValidationTarget,
+    source_path: Path,
+) -> dict[str, Any] | None:
+    label = "agentic_loop_governance_receipt.source_ledger"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return None
+    _validate_allowed_keys(
+        value,
+        {
+            "role",
+            "path",
+            "kind",
+            "exists",
+            "sha256",
+            "size_bytes",
+            "schema_version",
+            "passed",
+            "decision",
+            "readiness_digest",
+            "execution_boundary",
+        },
+        target,
+        label,
+    )
+    _validate_agentic_loop_governance_source_snapshots(value, target, label)
+    if value.get("role") != "agentic_loop_ledger":
+        target.errors.append(f"{label}.role must be 'agentic_loop_ledger'.")
+    if value.get("kind") not in {"file", "missing"}:
+        target.errors.append(f"{label}.kind must be file or missing.")
+    if not isinstance(value.get("exists"), bool):
+        target.errors.append(f"{label}.exists must be a boolean.")
+    if not isinstance(value.get("path"), str) or not value.get("path"):
+        target.errors.append(f"{label}.path must be a non-empty string.")
+    elif not _is_safe_agentic_loop_governance_path(value["path"]):
+        target.errors.append(f"{label}.path must be a safe relative path or redacted placeholder.")
+    ledger_path = _resolve_promotion_decision_artifact_path(value.get("path"), source_path, value.get("kind"))
+    if value.get("exists") is False and ledger_path is not None and ledger_path.exists():
+        target.errors.append(f"{label}.exists must be true when path resolves to an existing file.")
+    if value.get("exists") is True:
+        if value.get("kind") != "file":
+            target.errors.append(f"{label}.kind must be file when exists is true.")
+        if not _is_sha256(value.get("sha256")):
+            target.errors.append(f"{label}.sha256 must be a SHA-256 hex string when exists is true.")
+        if not _is_non_negative_int(value.get("size_bytes")):
+            target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
+    else:
+        if value.get("kind") != "missing":
+            target.errors.append(f"{label}.kind must be missing when exists is false.")
+        if value.get("sha256") is not None:
+            target.errors.append(f"{label}.sha256 must be null when exists is false.")
+        if value.get("size_bytes") is not None:
+            target.errors.append(f"{label}.size_bytes must be null when exists is false.")
+    _validate_promotion_decision_artifact_hash(value, target, label, source_path)
+
+    if ledger_path is None or value.get("exists") is not True:
+        return None
+    ledger_payload = _read_json_object_silent(ledger_path)
+    if not ledger_payload:
+        target.errors.append(f"{label}.path must resolve to a JSON object.")
+        return None
+    _validate_agentic_loop_ledger(ledger_payload, target, ledger_path)
+    expected = _build_agentic_loop_governance_ledger_ref(ledger_path, preserve_paths=False)
+    for field_name in ("schema_version", "passed", "decision", "readiness_digest", "execution_boundary"):
+        if value.get(field_name) != expected.get(field_name):
+            target.errors.append(f"{label}.{field_name} must match the current source ledger.")
+    return expected
+
+
+def _validate_agentic_loop_governance_source_snapshots(value: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    decision = value.get("decision")
+    if isinstance(decision, dict):
+        _validate_allowed_keys(
+            decision,
+            {
+                "readiness",
+                "recommendation",
+                "recommended_governance_action",
+                "latest_iteration_id",
+                "latest_iteration_index",
+                "summary",
+                "governance_actions",
+            },
+            target,
+            f"{label}.decision",
+        )
+        actions = decision.get("governance_actions")
+        if isinstance(actions, list):
+            for index, action in enumerate(actions):
+                action_label = f"{label}.decision.governance_actions[{index}]"
+                if isinstance(action, dict):
+                    _validate_agentic_loop_governance_source_action(action, target, action_label)
+                else:
+                    target.errors.append(f"{action_label} must be an object.")
+        elif actions is not None:
+            target.errors.append(f"{label}.decision.governance_actions must be a list.")
+    else:
+        target.errors.append(f"{label}.decision must be an object.")
+    digest = value.get("readiness_digest")
+    if isinstance(digest, dict):
+        _validate_allowed_keys(
+            digest,
+            {
+                "latest_iteration_id",
+                "latest_iteration_index",
+                "readiness",
+                "recommendation",
+                "ready_for_governance_review",
+                "recommended_governance_action",
+                "promotion_decision_present",
+                "rollback_receipt_present",
+                "side_effects_started",
+                "summary",
+            },
+            target,
+            f"{label}.readiness_digest",
+        )
+    else:
+        target.errors.append(f"{label}.readiness_digest must be an object.")
+    boundary = value.get("execution_boundary")
+    if isinstance(boundary, dict):
+        _validate_allowed_keys(
+            boundary,
+            {
+                "ledger_only",
+                "cloud_jobs_started",
+                "paid_model_grader_calls_started",
+                "live_benchmarks_started",
+                "model_downloads_started",
+                "weights_updated_by_flight_recorder",
+                "credential_values_recorded",
+            },
+            target,
+            f"{label}.execution_boundary",
+        )
+    else:
+        target.errors.append(f"{label}.execution_boundary must be an object.")
+
+
+def _validate_agentic_loop_governance_source_action(value: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    _validate_allowed_keys(
+        value,
+        {"action", "available", "blocked_reason_count", "blocked_reasons", "summary"},
+        target,
+        label,
+    )
+    if value.get("action") not in GOVERNANCE_ACTIONS:
+        target.errors.append(f"{label}.action must be one of {sorted(GOVERNANCE_ACTIONS)!r}.")
+    if not isinstance(value.get("available"), bool):
+        target.errors.append(f"{label}.available must be a boolean.")
+    blocked_reasons = value.get("blocked_reasons")
+    if not _is_string_list(blocked_reasons):
+        target.errors.append(f"{label}.blocked_reasons must be a list of strings.")
+        blocked_reasons = []
+    if not _is_non_negative_int(value.get("blocked_reason_count")):
+        target.errors.append(f"{label}.blocked_reason_count must be a non-negative integer.")
+    elif value.get("blocked_reason_count") != len(blocked_reasons):
+        target.errors.append(f"{label}.blocked_reason_count must match blocked_reasons.")
+    if not isinstance(value.get("summary"), str):
+        target.errors.append(f"{label}.summary must be a string.")
+
+
+def _is_safe_agentic_loop_governance_path(value: str) -> bool:
+    if value.startswith("<redacted:") and value.endswith(">"):
+        basename = value.removeprefix("<redacted:").removesuffix(">")
+        return bool(basename) and "/" not in basename and "\\" not in basename and ".." not in basename and "~" not in basename
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
+
+
+def _validate_agentic_loop_governance_requested_action(value: Any, target: ValidationTarget) -> str:
+    label = "agentic_loop_governance_receipt.requested_action"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return ""
+    _validate_allowed_keys(
+        value,
+        {
+            "action",
+            "available",
+            "blocked_reason_count",
+            "blocked_reasons",
+            "summary",
+            "requested_by",
+            "reason",
+        },
+        target,
+        label,
+    )
+    action = value.get("action")
+    if action not in GOVERNANCE_ACTIONS:
+        target.errors.append(f"{label}.action must be one of {sorted(GOVERNANCE_ACTIONS)!r}.")
+        action = ""
+    if not isinstance(value.get("available"), bool):
+        target.errors.append(f"{label}.available must be a boolean.")
+    reasons = value.get("blocked_reasons")
+    if not _is_string_list(reasons):
+        target.errors.append(f"{label}.blocked_reasons must be a list of strings.")
+        reasons = []
+    if not _is_non_negative_int(value.get("blocked_reason_count")):
+        target.errors.append(f"{label}.blocked_reason_count must be a non-negative integer.")
+    elif value.get("blocked_reason_count") != len(reasons):
+        target.errors.append(f"{label}.blocked_reason_count must match blocked_reasons.")
+    for field_name in ("summary", "requested_by", "reason"):
+        if not isinstance(value.get(field_name), str) or not value.get(field_name):
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    return str(action or "")
+
+
+def _validate_agentic_loop_governance_requested_action_matches(
+    actual: Any,
+    expected: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if not isinstance(actual, dict):
+        return
+    for field_name in ("action", "available", "blocked_reason_count", "blocked_reasons", "summary"):
+        if actual.get(field_name) != expected.get(field_name):
+            target.errors.append(f"agentic_loop_governance_receipt.requested_action.{field_name} must match current ledger action state.")
+
+
+def _validate_agentic_loop_governance_decision(value: Any, target: ValidationTarget) -> None:
+    label = "agentic_loop_governance_receipt.decision"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(
+        value,
+        {
+            "readiness",
+            "recommendation",
+            "summary",
+            "selected_action",
+            "ledger_recommended_governance_action",
+            "latest_iteration_id",
+            "blocking_check_count",
+            "blocking_checks",
+        },
+        target,
+        label,
+    )
+    blocking_checks = value.get("blocking_checks")
+    if not _is_non_negative_int(value.get("blocking_check_count")):
+        target.errors.append(f"{label}.blocking_check_count must be a non-negative integer.")
+    if isinstance(blocking_checks, list):
+        if _is_non_negative_int(value.get("blocking_check_count")) and value.get("blocking_check_count") != len(blocking_checks):
+            target.errors.append(f"{label}.blocking_check_count must match blocking_checks.")
+        for index, check in enumerate(blocking_checks):
+            check_label = f"{label}.blocking_checks[{index}]"
+            if isinstance(check, dict):
+                _validate_allowed_keys(check, {"id", "summary", "scope"}, target, check_label)
+                scope = check.get("scope")
+                if isinstance(scope, dict):
+                    _validate_allowed_keys(scope, set(), target, f"{check_label}.scope")
+                else:
+                    target.errors.append(f"{check_label}.scope must be an object.")
+            else:
+                target.errors.append(f"{check_label} must be an object.")
+    elif blocking_checks is not None:
+        target.errors.append(f"{label}.blocking_checks must be a list.")
+
+
+def _validate_agentic_loop_governance_checks(checks: list[Any], target: ValidationTarget, label: str) -> None:
+    for index, check in enumerate(checks):
+        check_label = f"{label}[{index}]"
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, {"id", "passed", "actual", "expected", "summary"}, target, check_label)
+        else:
+            target.errors.append(f"{check_label} must be an object.")
+
+
+def _validate_allowed_keys(value: dict[str, Any], allowed: set[str], target: ValidationTarget, label: str) -> None:
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        target.errors.append(f"{label} contains unknown field(s): {unknown!r}.")
+
+
+def _validate_agentic_loop_governance_unreplayable_source_state(
+    receipt: dict[str, Any],
+    checks: list[Any],
+    requested_action: Any,
+    expected: dict[str, Any],
+    target: ValidationTarget,
+) -> None:
+    if receipt.get("passed") is not False:
+        target.errors.append("agentic_loop_governance_receipt.passed must be false when source ledger cannot be replayed.")
+    if receipt.get("readiness") != "blocked":
+        target.errors.append("agentic_loop_governance_receipt.readiness must be blocked when source ledger cannot be replayed.")
+    if receipt.get("recommendation") != "fix_governance_inputs":
+        target.errors.append(
+            "agentic_loop_governance_receipt.recommendation must be fix_governance_inputs when source ledger cannot be replayed."
+        )
+    if not _is_non_negative_int(receipt.get("failed_check_count")) or receipt.get("failed_check_count") <= 0:
+        target.errors.append("agentic_loop_governance_receipt.failed_check_count must be positive when source ledger cannot be replayed.")
+    if receipt.get("check_count") != len(expected["checks"]):
+        target.errors.append("agentic_loop_governance_receipt.check_count must match fail-closed source-ledger checks.")
+    if checks != expected["checks"]:
+        target.errors.append("agentic_loop_governance_receipt.checks must match fail-closed source-ledger checks.")
+    _validate_agentic_loop_governance_requested_action_matches(
+        requested_action,
+        expected["requested_action"],
+        target,
+    )
+    if receipt.get("decision") != expected["decision"]:
+        target.errors.append("agentic_loop_governance_receipt.decision must match fail-closed source-ledger checks.")
 
 
 def _validate_agentic_loop_ledger_cloud_training(value: Any, row: dict[str, Any], target: ValidationTarget, label: str) -> None:

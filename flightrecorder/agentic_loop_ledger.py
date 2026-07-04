@@ -43,7 +43,13 @@ ROLE_GROUPS: dict[str, tuple[str, ...]] = {
     "serving": ("serving_lifecycle", "serving_endpoint_check", "model_serving_probe_receipt"),
     "eval": ("heldout_manifest", "external_eval_plan", "external_eval_receipt", "eval_summary"),
     "improvement": ("repair_queue", "improvement_plan", "improvement_ledger", "action_ledger"),
-    "governance": ("promotion_decision", "promotion_ledger", "promotion_alias_apply", "promotion_rollback_receipt"),
+    "governance": (
+        "agentic_loop_governance_receipt",
+        "promotion_decision",
+        "promotion_ledger",
+        "promotion_alias_apply",
+        "promotion_rollback_receipt",
+    ),
     "next_iteration": ("action_ledger", "next_iteration_schedule"),
 }
 

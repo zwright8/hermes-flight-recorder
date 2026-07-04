@@ -706,6 +706,14 @@
       "name": "agentic_loop_ledger"
     },
     {
+      "artifact": "agentic_loop_governance_receipt",
+      "artifact_schema_version": "hfr.agentic_loop_governance_receipt.v1",
+      "description": "Side-effect-free governance receipt recording approve, reject, rollback, or next-iteration requests over an agentic loop ledger.",
+      "filename": "agentic_loop_governance_receipt.v1.schema.json",
+      "id": "https://schemas.hermes-flight-recorder.dev/agentic_loop_governance_receipt.v1.schema.json",
+      "name": "agentic_loop_governance_receipt"
+    },
+    {
       "artifact": "next_iteration_schedule",
       "artifact_schema_version": "hfr.next_iteration_schedule.v1",
       "description": "Side-effect-free next-iteration schedule proposal for closed-loop agentic training.",

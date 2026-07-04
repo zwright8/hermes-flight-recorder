@@ -67,7 +67,7 @@ and handoff receipts that make those systems auditable.
 | Model | Track base candidates, license posture, compatibility, adapters, aliases, and dry-run plans. | `model-candidate`, `model-registry`, `training-plan dry-run` |
 | Training | Produce side-effect-free training plans, runtime preflights, delegated flow receipts, and result receipts. | `scripts/plan_agentic_training.py`, `preflight_agentic_training_runtime.py`, `agentic-training-flow`, `archive_agentic_training_result.py` |
 | Cloud training | Record provider capabilities, constraints, upload/download manifests, dry-run launch receipts, and status/cancel receipts. | `cloud-training providers`, `cloud-training preflight`, `cloud-training launch` |
-| Loop | Bind rollout plan/receipt, review, trainer, cloud-training, serving, eval, improvement, promotion, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `next-iteration-schedule`, `validate --agentic-loop-ledger` |
+| Loop | Bind rollout plan/receipt, review, trainer, cloud-training, serving, eval, improvement, promotion, governance-action, and next-iteration receipts into fail-closed plans and ledgers. | `agentic-loop plan`, `agentic-loop ledger`, `agentic-loop governance`, `next-iteration-schedule`, `validate --agentic-loop-governance-receipt` |
 | Eval | Require identical held-out scenarios, adapter contracts, and separate raw movement from governance claims. | `heldout-manifest`, `eval-summary`, `external-eval-plan`, `external-eval-receipt`, `compare-suite` |
 | Serving/demo | Check OpenAI-compatible endpoints, managed lifecycle runs, and replayable demo reports. | `scripts/check_openai_serving.py`, `manage_openai_serving.py`, `build_serving_demo_report.py` |
 | Governance | Decide whether a candidate can move registry aliases and publish release records. | `promotion-decision`, `promotion-cards`, `promotion-release-record`, `promotion-alias-apply` |
@@ -357,7 +357,10 @@ spot missing phase inputs, empty artifact groups, next-action posture, and
 side-effect status without walking every receipt. The ledger `decision` also
 lists the explicit governance actions available from the latest iteration:
 `approve`, `reject`, `rollback`, and `request_another_iteration`. Those options
-are advisory and ledger-only; promotion, rollback, and alias movement remain
+are advisory and ledger-only. Use `flightrecorder agentic-loop governance` to
+record one selected action as `hfr.agentic_loop_governance_receipt.v1`; the
+receipt still does not move aliases, apply rollback, launch cloud jobs, call
+paid graders, or update weights. Promotion, rollback, and alias movement remain
 separate governed receipts.
 The plan and ledger also include `cloud_training`,
 `cloud_training_receipt_state`, and `cloud_training_lineage` summaries. Presence
@@ -676,6 +679,7 @@ flightrecorder schemas --check runs/model_grader_gate.json
 flightrecorder schemas --check runs/reviewed_gate.json
 flightrecorder schemas --check runs/agentic_training_loop_plan.json
 flightrecorder schemas --check runs/agentic_loop_ledger.json
+flightrecorder schemas --check runs/agentic_loop_governance_receipt.json
 flightrecorder schemas --check runs/cloud_preflight.json
 flightrecorder schemas --check runs/suite_compare.json
 flightrecorder schemas --check runs/suite_trend.json

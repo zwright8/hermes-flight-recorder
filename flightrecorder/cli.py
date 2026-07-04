@@ -28,6 +28,12 @@ from .agentic_training_loop_plan import (
     build_agentic_training_loop_plan,
     write_agentic_training_loop_plan,
 )
+from .agentic_loop_governance import (
+    GOVERNANCE_ACTIONS,
+    AgenticLoopGovernanceReceiptError,
+    build_agentic_loop_governance_receipt,
+    write_agentic_loop_governance_receipt,
+)
 from .agentic_loop_ledger import AgenticLoopLedgerError, build_agentic_loop_ledger, write_agentic_loop_ledger
 from .artifacts import (
     ArtifactError,
@@ -263,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
         PromotionArchiveError,
         AgenticTrainingLoopPlanError,
         AgenticLoopLedgerError,
+        AgenticLoopGovernanceReceiptError,
         ModelGraderError,
         RejectionSamplingGateError,
         DatasetCurationReceiptError,
@@ -1115,6 +1122,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         agentic_training_result_paths=args.agentic_training_result,
         agentic_training_loop_plan_paths=args.agentic_loop_plan,
         agentic_loop_ledger_paths=args.agentic_loop_ledger,
+        agentic_loop_governance_receipt_paths=args.agentic_loop_governance_receipt,
         next_iteration_schedule_paths=args.next_iteration_schedule,
         cloud_training_provider_registry_paths=args.cloud_training_provider_registry,
         cloud_training_preflight_paths=args.cloud_training_preflight,
@@ -1496,6 +1504,7 @@ def cmd_agentic_loop_plan(args: argparse.Namespace) -> int:
         "heldout_manifest": args.heldout_manifest,
         "improvement_ledger": args.improvement_ledger,
         "improvement_plan": args.improvement_plan,
+        "agentic_loop_governance_receipt": args.agentic_loop_governance_receipt,
         "promotion_decision": args.promotion_decision,
         "promotion_ledger": args.promotion_ledger,
         "rubric_spec": args.rubric_spec,
@@ -1553,6 +1562,27 @@ def cmd_agentic_loop_ledger(args: argparse.Namespace) -> int:
     else:
         print(json.dumps(ledger, indent=2, sort_keys=True, ensure_ascii=False))
     return 0
+
+
+def cmd_agentic_loop_governance(args: argparse.Namespace) -> int:
+    receipt = build_agentic_loop_governance_receipt(
+        ledger_path=args.ledger,
+        action=args.action,
+        reason=args.reason,
+        requested_by=args.requested_by,
+        out_path=args.out,
+        preserve_paths=args.preserve_paths,
+        created_at=args.created_at,
+    )
+    if args.out:
+        write_agentic_loop_governance_receipt(args.out, receipt)
+        print(
+            f"wrote {args.out} action={receipt['requested_action']['action']} "
+            f"readiness={receipt['readiness']} recommendation={receipt['recommendation']}"
+        )
+    else:
+        print(json.dumps(receipt, indent=2, sort_keys=True, ensure_ascii=False))
+    return 0 if receipt["passed"] else 1
 
 
 def cmd_next_iteration_schedule(args: argparse.Namespace) -> int:
@@ -3127,6 +3157,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Validate one agentic_training_loop_plan.json contract; may be repeated",
     )
     validate.add_argument("--agentic-loop-ledger", action="append", default=[], help="Validate one agentic_loop_ledger.json; may be repeated")
+    validate.add_argument(
+        "--agentic-loop-governance-receipt",
+        action="append",
+        default=[],
+        help="Validate one agentic_loop_governance_receipt.json; may be repeated",
+    )
     validate.add_argument("--next-iteration-schedule", action="append", default=[], help="Validate one next_iteration_schedule.json; may be repeated")
     validate.add_argument("--cloud-training-provider-registry", action="append", default=[], help="Validate one cloud training provider registry")
     validate.add_argument("--cloud-training-preflight", action="append", default=[], help="Validate one cloud training preflight")
@@ -3454,6 +3490,12 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_plan.add_argument("--improvement-plan", action="append", default=[], help="improvement_plan artifact; may be repeated")
     agentic_loop_plan.add_argument("--improvement-ledger", action="append", default=[], help="improvement_ledger artifact; may be repeated")
     agentic_loop_plan.add_argument("--action-ledger", action="append", default=[], help="action_ledger artifact; may be repeated")
+    agentic_loop_plan.add_argument(
+        "--agentic-loop-governance-receipt",
+        action="append",
+        default=[],
+        help="agentic_loop_governance_receipt artifact; may be repeated",
+    )
     agentic_loop_plan.add_argument("--promotion-decision", action="append", default=[], help="promotion_decision artifact; may be repeated")
     agentic_loop_plan.add_argument("--promotion-ledger", action="append", default=[], help="promotion_ledger artifact; may be repeated")
     agentic_loop_plan.add_argument("--next-iteration-schedule", action="append", default=[], help="next_iteration_schedule artifact; may be repeated")
@@ -3474,6 +3516,28 @@ def _parser() -> argparse.ArgumentParser:
     agentic_loop_ledger.add_argument("--out", help="Write hfr.agentic_loop_ledger.v1 JSON to this path")
     agentic_loop_ledger.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in ledger output")
     agentic_loop_ledger.set_defaults(func=cmd_agentic_loop_ledger)
+
+    agentic_loop_governance = agentic_loop_subparsers.add_parser(
+        "governance",
+        help="Write a side-effect-free governance receipt over the latest loop-ledger action",
+    )
+    agentic_loop_governance.add_argument("--ledger", required=True, help="agentic_loop_ledger JSON to govern")
+    agentic_loop_governance.add_argument(
+        "--action",
+        required=True,
+        choices=GOVERNANCE_ACTIONS,
+        help="Governance action to record from the latest ledger action set",
+    )
+    agentic_loop_governance.add_argument("--reason", help="Human-readable reason for the governance action")
+    agentic_loop_governance.add_argument("--requested-by", help="Reviewer, system, or process id requesting the action")
+    agentic_loop_governance.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
+    agentic_loop_governance.add_argument("--out", help="Write hfr.agentic_loop_governance_receipt.v1 JSON to this path")
+    agentic_loop_governance.add_argument(
+        "--preserve-paths",
+        action="store_true",
+        help="Preserve source paths only when already public-safe relative; absolute source paths are redacted and fail closed",
+    )
+    agentic_loop_governance.set_defaults(func=cmd_agentic_loop_governance)
 
     next_iteration_schedule = subparsers.add_parser("next-iteration-schedule", help="Write a side-effect-free next-iteration schedule proposal")
     next_iteration_schedule.add_argument("--loop-ledger", required=True, help="agentic_loop_ledger artifact")
