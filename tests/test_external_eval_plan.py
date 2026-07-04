@@ -261,6 +261,47 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertIn("adapter_contract.live_benchmark_supported must be false", errors)
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
 
+    def test_validate_and_schema_reject_unknown_external_eval_plan_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(out)])
+            plan = _read_json(out)
+            plan["provider_job_id"] = "not-owned-by-flight-recorder"
+            plan["inputs"]["scenario_manifest"]["absolute_source"] = "<redacted:heldout.json>"
+            plan["adapters"][0]["dependency_status"]["live_probe_token"] = True
+            plan["adapters"][0]["execution_contract"]["live_benchmark_url"] = "https://example.invalid/job"
+            plan["adapters"][0]["adapter_contract"]["credential_hint"] = "redacted"
+            plan["governance_handoff"]["live_claims_exported"] = True
+            out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-plan", str(out), "--out", str(validation), "--strict"])
+            schema_result = check_schema_file(out)
+
+            self.assertEqual(code, 1)
+            self.assertFalse(schema_result["passed"], schema_result["errors"])
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_plan contains unknown field(s): ['provider_job_id'].", errors)
+            self.assertIn("external_eval_plan.inputs.scenario_manifest contains unknown field(s): ['absolute_source'].", errors)
+            self.assertIn(
+                "external_eval_plan.adapters[0].dependency_status contains unknown field(s): ['live_probe_token'].",
+                errors,
+            )
+            self.assertIn(
+                "external_eval_plan.adapters[0].execution_contract contains unknown field(s): ['live_benchmark_url'].",
+                errors,
+            )
+            self.assertIn(
+                "external_eval_plan.adapters[0].adapter_contract contains unknown field(s): ['credential_hint'].",
+                errors,
+            )
+            self.assertIn(
+                "external_eval_plan.governance_handoff contains unknown field(s): ['live_claims_exported'].",
+                errors,
+            )
+
 
 def _scenario_manifest(path: Path) -> Path:
     payload = {"schema_version": "hfr.heldout_scenario_manifest.v1", "scenario_ids": ["email_reply_completion"]}

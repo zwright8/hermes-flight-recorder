@@ -153,6 +153,40 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertIn("adapter_contract.provider_api_called_by_flight_recorder must be false", errors)
             self.assertIn("model_downloads_started must be false", errors)
 
+    def test_validate_and_schema_reject_unknown_external_eval_receipt_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+            validation = root / "validation.json"
+            run_cli(["external-eval-plan", "--scenario-manifest", str(manifest), "--out", str(plan_path)])
+            run_cli(["external-eval-receipt", "--plan", str(plan_path), "--out", str(receipt_path)])
+            receipt = _read_json(receipt_path)
+            receipt["live_runner_receipt"] = "not-yet-validated"
+            receipt["checks"][0]["provider_call"] = "forged"
+            receipt["source_plan"]["absolute_source"] = "<redacted:external_eval_plan.json>"
+            receipt["adapter_receipts"][0]["adapter_contract"]["provider_job_id"] = "job-123"
+            receipt["launch"]["benchmark_url"] = "https://example.invalid/job"
+            receipt["execution_boundary"]["live_side_effects"] = True
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--out", str(validation), "--strict"])
+            schema_result = check_schema_file(receipt_path)
+
+            self.assertEqual(code, 1)
+            self.assertFalse(schema_result["passed"], schema_result["errors"])
+            errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
+            self.assertIn("external_eval_receipt contains unknown field(s): ['live_runner_receipt'].", errors)
+            self.assertIn("external_eval_receipt.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn("external_eval_receipt.source_plan contains unknown field(s): ['absolute_source'].", errors)
+            self.assertIn(
+                "external_eval_receipt.adapter_receipts[0].adapter_contract contains unknown field(s): ['provider_job_id'].",
+                errors,
+            )
+            self.assertIn("external_eval_receipt.launch contains unknown field(s): ['benchmark_url'].", errors)
+            self.assertIn("external_eval_receipt.execution_boundary contains unknown field(s): ['live_side_effects'].", errors)
+
 
 def _scenario_manifest(path: Path) -> Path:
     payload = {

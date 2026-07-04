@@ -1,30 +1,40 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/external_eval_receipt.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Dry-run or blocked live external benchmark adapter receipt.",
   "properties": {
     "adapter_count": { "minimum": 0, "type": "integer" },
     "adapter_receipts": {
       "items": {
-        "additionalProperties": true,
+        "additionalProperties": false,
         "properties": {
           "adapter_contract": { "$ref": "#/$defs/adapterContract" },
           "blocking_reasons": { "items": { "type": "string" }, "type": "array" },
           "cost_incurred_usd": { "const": 0 },
           "credential_values_recorded": { "const": false },
+          "dependency_status": { "$ref": "#/$defs/dependencyStatus" },
+          "domain": { "minLength": 1, "type": "string" },
           "id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
           "live_benchmark_started": { "const": false },
           "model_downloads_started": { "const": false },
+          "name": { "minLength": 1, "type": "string" },
           "planned_ready": { "type": "boolean" },
+          "provided_inputs": { "items": { "type": "string" }, "type": "array" },
           "provider_api_called": { "const": false },
-          "ready": { "type": "boolean" }
+          "ready": { "type": "boolean" },
+          "required_inputs": { "items": { "type": "string" }, "type": "array" }
         },
         "required": [
           "id",
+          "name",
+          "domain",
           "ready",
           "planned_ready",
           "blocking_reasons",
+          "dependency_status",
+          "required_inputs",
+          "provided_inputs",
           "adapter_contract",
           "live_benchmark_started",
           "provider_api_called",
@@ -41,7 +51,7 @@
     "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
     "created_at": { "type": "string" },
     "execution_boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cloud_cost_incurred_usd": { "const": 0 },
         "credential_values_recorded": { "const": false },
@@ -64,7 +74,7 @@
     },
     "failed_check_count": { "minimum": 0, "type": "integer" },
     "launch": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "cost_incurred_usd": { "const": 0 },
         "live_benchmarks_started": { "const": false },
@@ -81,7 +91,7 @@
     "ready_adapter_count": { "minimum": 0, "type": "integer" },
     "recommendation": { "enum": ["archive_external_eval_dry_run", "keep_external_eval_claims_disabled"], "type": "string" },
     "schema_version": { "const": "hfr.external_eval_receipt.v1" },
-    "source_plan": { "type": "object" }
+    "source_plan": { "$ref": "#/$defs/sourcePlan" }
   },
   "required": [
     "schema_version",
@@ -105,7 +115,7 @@
   "type": "object",
   "$defs": {
     "adapterContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "adapter_id": { "minLength": 1, "type": "string" },
         "cost_incurred_usd": { "const": 0 },
@@ -145,15 +155,48 @@
       "type": "object"
     },
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "actual": {},
+        "actual": { "type": "object" },
         "expected": { "type": "object" },
         "id": { "minLength": 1, "type": "string" },
         "passed": { "type": "boolean" },
         "summary": { "minLength": 1, "type": "string" }
       },
       "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "dependencyStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "available": { "type": "boolean" },
+        "commands": {
+          "additionalProperties": { "type": "boolean" },
+          "type": "object"
+        },
+        "imports": {
+          "additionalProperties": { "type": "boolean" },
+          "type": "object"
+        }
+      },
+      "required": ["available", "imports", "commands"],
+      "type": "object"
+    },
+    "sourcePlan": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_count": { "minimum": 0, "type": ["integer", "null"] },
+        "exists": { "type": "boolean" },
+        "path": { "type": "string" },
+        "ready": { "type": ["boolean", "null"] },
+        "schema_version": { "type": ["string", "null"] },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": ["string", "null"]
+        },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["path", "exists", "sha256", "size_bytes", "schema_version", "ready", "adapter_count"],
       "type": "object"
     }
   }

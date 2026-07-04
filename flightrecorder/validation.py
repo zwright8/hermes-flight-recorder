@@ -12200,6 +12200,24 @@ def _count_eval_summary_work_item_field(items: list[Any], field_name: str) -> di
 
 def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(plan, "schema_version", EXTERNAL_EVAL_PLAN_SCHEMA_VERSION, target)
+    _validate_allowed_keys(
+        plan,
+        {
+            "schema_version",
+            "generated_at",
+            "ready",
+            "adapter_count",
+            "ready_adapter_count",
+            "selected_adapters",
+            "allow_installed",
+            "inputs",
+            "adapters",
+            "blocking_reasons",
+            "governance_handoff",
+        },
+        target,
+        "external_eval_plan",
+    )
     if not isinstance(plan.get("ready"), bool):
         target.errors.append("external_eval_plan.ready must be a boolean.")
     if not isinstance(plan.get("allow_installed"), bool):
@@ -12249,6 +12267,12 @@ def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget,
     if not isinstance(handoff, dict):
         target.errors.append("external_eval_plan.governance_handoff must be an object.")
     else:
+        _validate_allowed_keys(
+            handoff,
+            {"external_eval_claims_allowed", "requires_identical_heldout_scenarios", "recommendation"},
+            target,
+            "external_eval_plan.governance_handoff",
+        )
         if handoff.get("requires_identical_heldout_scenarios") is not True:
             target.errors.append("external_eval_plan.governance_handoff.requires_identical_heldout_scenarios must be true.")
         if handoff.get("external_eval_claims_allowed") != plan.get("ready"):
@@ -12268,11 +12292,42 @@ def _validate_external_eval_plan(plan: dict[str, Any], target: ValidationTarget,
 
 def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(receipt, "schema_version", EXTERNAL_EVAL_RECEIPT_SCHEMA_VERSION, target, prefix="external_eval_receipt.")
+    _validate_allowed_keys(
+        receipt,
+        {
+            "schema_version",
+            "created_at",
+            "passed",
+            "readiness",
+            "recommendation",
+            "check_count",
+            "failed_check_count",
+            "checks",
+            "blocked_reasons",
+            "source_plan",
+            "adapter_count",
+            "ready_adapter_count",
+            "adapter_receipts",
+            "launch",
+            "execution_boundary",
+            "notes",
+        },
+        target,
+        "external_eval_receipt",
+    )
     checks = receipt.get("checks")
     if not isinstance(checks, list):
         target.errors.append("external_eval_receipt.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "external_eval_receipt.checks")
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(
+                check,
+                {"id", "passed", "actual", "expected", "summary"},
+                target,
+                f"external_eval_receipt.checks[{index}]",
+            )
     if receipt.get("check_count") != len(checks):
         target.errors.append(f"external_eval_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
     if receipt.get("failed_check_count") != failed_checks:
@@ -12328,6 +12383,12 @@ def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationT
 
 def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     label = "external_eval_receipt.source_plan"
+    _validate_allowed_keys(
+        source_plan,
+        {"path", "exists", "sha256", "size_bytes", "schema_version", "ready", "adapter_count"},
+        target,
+        label,
+    )
     if source_plan.get("schema_version") != EXTERNAL_EVAL_PLAN_SCHEMA_VERSION:
         target.errors.append(f"{label}.schema_version must be {EXTERNAL_EVAL_PLAN_SCHEMA_VERSION!r}.")
     if not isinstance(source_plan.get("ready"), bool):
@@ -12368,6 +12429,28 @@ def _validate_external_eval_adapter_receipt(row: Any, index: int, target: Valida
     if not isinstance(row, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(
+        row,
+        {
+            "id",
+            "name",
+            "domain",
+            "ready",
+            "planned_ready",
+            "blocking_reasons",
+            "dependency_status",
+            "required_inputs",
+            "provided_inputs",
+            "adapter_contract",
+            "live_benchmark_started",
+            "provider_api_called",
+            "model_downloads_started",
+            "credential_values_recorded",
+            "cost_incurred_usd",
+        },
+        target,
+        label,
+    )
     adapter_id = row.get("id")
     if adapter_id not in ADAPTERS:
         target.errors.append(f"{label}.id must be one of {sorted(ADAPTERS)!r}.")
@@ -12407,6 +12490,12 @@ def _validate_external_eval_receipt_launch(launch: Any, target: ValidationTarget
     if not isinstance(launch, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(
+        launch,
+        {"mode", "live_benchmarks_started", "provider_api_called", "model_downloads_started", "cost_incurred_usd"},
+        target,
+        label,
+    )
     if launch.get("mode") not in {"dry_run", "live"}:
         target.errors.append(f"{label}.mode must be dry_run or live.")
     for field_name in ("live_benchmarks_started", "provider_api_called", "model_downloads_started"):
@@ -12421,6 +12510,20 @@ def _validate_external_eval_receipt_boundary(boundary: Any, target: ValidationTa
     if not isinstance(boundary, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(
+        boundary,
+        {
+            "dry_run_only",
+            "live_benchmarks_started",
+            "provider_api_called",
+            "model_downloads_started",
+            "cloud_cost_incurred_usd",
+            "credential_values_recorded",
+            "weights_updated_by_flight_recorder",
+        },
+        target,
+        label,
+    )
     if boundary.get("dry_run_only") is not True:
         target.errors.append(f"{label}.dry_run_only must be true.")
     for field_name in (
@@ -12437,11 +12540,32 @@ def _validate_external_eval_receipt_boundary(boundary: Any, target: ValidationTa
 
 
 def _validate_external_eval_inputs(inputs: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(
+        inputs,
+        {
+            "scenario_manifest",
+            "model_endpoint",
+            "model",
+            "tool_schema_set",
+            "inspect_task_set",
+            "lm_eval_task_list",
+            "swe_bench_task_set",
+            "sandbox_policy",
+        },
+        target,
+        "external_eval_plan.inputs",
+    )
     manifest = inputs.get("scenario_manifest")
     if not isinstance(manifest, dict):
         target.errors.append("external_eval_plan.inputs.scenario_manifest must be an object.")
     else:
         label = "external_eval_plan.inputs.scenario_manifest"
+        _validate_allowed_keys(
+            manifest,
+            {"path", "exists", "sha256", "size_bytes", "schema_version", "ready", "scenario_count"},
+            target,
+            label,
+        )
         if manifest.get("path") is not None and not isinstance(manifest.get("path"), str):
             target.errors.append(f"{label}.path must be a string or null.")
         if not isinstance(manifest.get("exists"), bool):
@@ -12480,6 +12604,25 @@ def _validate_external_eval_adapter_plan(
     if not isinstance(adapter, dict):
         target.errors.append(f"external_eval_plan.adapters[{index}] must be an object.")
         return
+    _validate_allowed_keys(
+        adapter,
+        {
+            "id",
+            "name",
+            "full_name",
+            "domain",
+            "suite_tags",
+            "required_inputs",
+            "provided_inputs",
+            "dependency_status",
+            "execution_contract",
+            "adapter_contract",
+            "ready",
+            "blocking_reasons",
+        },
+        target,
+        f"external_eval_plan.adapters[{index}]",
+    )
     adapter_id = adapter.get("id")
     if adapter_id not in ADAPTERS:
         target.errors.append(f"external_eval_plan.adapters[{index}].id must be one of {sorted(ADAPTERS)!r}.")
@@ -12499,6 +12642,12 @@ def _validate_external_eval_adapter_plan(
     if not isinstance(dependency, dict):
         target.errors.append(f"external_eval_plan.adapters[{index}].dependency_status must be an object.")
     else:
+        _validate_allowed_keys(
+            dependency,
+            {"available", "imports", "commands"},
+            target,
+            f"external_eval_plan.adapters[{index}].dependency_status",
+        )
         if not isinstance(dependency.get("available"), bool):
             target.errors.append(f"external_eval_plan.adapters[{index}].dependency_status.available must be a boolean.")
         available = dependency.get("available") is True
@@ -12511,6 +12660,12 @@ def _validate_external_eval_adapter_plan(
     if not isinstance(contract, dict):
         target.errors.append(f"external_eval_plan.adapters[{index}].execution_contract must be an object.")
     else:
+        _validate_allowed_keys(
+            contract,
+            {"requires_identical_heldout_scenarios", "scenario_manifest_sha256", "boundary"},
+            target,
+            f"external_eval_plan.adapters[{index}].execution_contract",
+        )
         if contract.get("requires_identical_heldout_scenarios") is not True:
             target.errors.append(
                 f"external_eval_plan.adapters[{index}].execution_contract.requires_identical_heldout_scenarios must be true."
@@ -12552,6 +12707,27 @@ def _validate_external_eval_adapter_contract(contract: Any, target: ValidationTa
     if not isinstance(contract, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(
+        contract,
+        {
+            "schema_version",
+            "adapter_id",
+            "external_adapter_id",
+            "receipt_types",
+            "dry_run_transport",
+            "live_benchmark_supported",
+            "provider_api_called_by_flight_recorder",
+            "model_downloads_started_by_flight_recorder",
+            "credential_values_recorded",
+            "cost_incurred_usd",
+            "requires_identical_heldout_scenarios",
+            "requires_external_runner_receipt_for_live",
+            "requires_dependency_probe_before_live",
+            "requires_explicit_live_opt_in",
+        },
+        target,
+        label,
+    )
     if contract.get("schema_version") != EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION:
         target.errors.append(f"{label}.schema_version must be {EXTERNAL_EVAL_ADAPTER_CONTRACT_VERSION!r}.")
     if contract.get("external_adapter_id") != adapter_id:
