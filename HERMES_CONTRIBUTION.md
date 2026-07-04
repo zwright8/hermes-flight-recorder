@@ -517,7 +517,7 @@ Strict harness manifest, result, replay, and suite validation warns if
 preserved scenario, sandbox, trace, scorecard, report, lineage, or run-artifact
 paths would leak local machine coordinates into public handoffs.
 Strict run validation also warns before `artifact_lineage.json` publishes
-absolute replay args, commands, or input fingerprint paths.
+absolute output paths, replay args, commands, or input fingerprint paths.
 
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards, step-level attribution rows, chosen/rejected pairs,

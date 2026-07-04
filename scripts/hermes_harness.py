@@ -725,6 +725,15 @@ def _rewrite_relative_replay_lineage(
                 continue
             record.update(relative)
 
+    outputs = rendered.get("outputs")
+    if isinstance(outputs, list):
+        for record in outputs:
+            if not isinstance(record, dict):
+                continue
+            path_value = record.get("path")
+            if isinstance(path_value, str) and path_value:
+                record["path"] = _display_path(path_value, run_dir, preserve_paths=False)
+
     replay = rendered.get("replay")
     if not isinstance(replay, dict):
         replay = {}

@@ -26793,6 +26793,7 @@ def _validate_lineage_file_record(record: dict[str, Any], run_dir: Path, target:
     if not isinstance(path_label, str) or not path_label:
         target.errors.append(f"{label}.path must be a non-empty string.")
         return
+    _warn_absolute_public_path(target, f"{label}.path", path_label)
     if record.get("exists") is not True:
         target.errors.append(f"{label}.exists must be true for required run outputs.")
         return

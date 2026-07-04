@@ -77,8 +77,8 @@ evidence.
 - Validate harness manifest, result, replay, and suite handoffs before public
   use so preserved scenario, sandbox, trace, scorecard, report, lineage, or
   run-artifact paths warn under strict validation.
-- Validate run lineage before public handoff so preserved replay args,
-  commands, and input fingerprint paths warn under strict validation.
+- Validate run lineage before public handoff so preserved output paths, replay
+  args, commands, and input fingerprint paths warn under strict validation.
 - Validate scenario-check receipts before public handoff so preserved scenario,
   trace, or state source paths warn under strict validation.
 - Validate review-calibration receipts before public handoff so preserved

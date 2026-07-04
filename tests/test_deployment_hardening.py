@@ -333,6 +333,9 @@ class DeploymentHardeningTests(unittest.TestCase):
             self.assertTrue((out / "report.html").exists())
             self.assertTrue((out / "harness_manifest.json").exists())
             self.assertTrue((out / "harness_result.json").exists())
+            lineage = json.loads((out / "artifact_lineage.json").read_text(encoding="utf-8"))
+            scorecard_output = next(record for record in lineage["outputs"] if record["name"] == "scorecard")
+            self.assertEqual(scorecard_output["path"], "scorecard.json")
             for name in ("harness_manifest.json", "harness_result.json"):
                 text = (out / name).read_text(encoding="utf-8")
                 self.assertNotIn(str(out), text)
