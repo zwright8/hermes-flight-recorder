@@ -345,6 +345,62 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertIn("agentic_training_plan", {item["artifact_name"] for item in plan["execution"]["trainer_inputs"]})
             self.assertEqual(run_cli(["validate", "--trainer-consumer-plan", str(consumer_plan)]), 0)
 
+    def test_trainer_archive_validation_rejects_symlinked_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            gate = root / "evidence_bundle.json"
+            preflight = root / "trainer_preflight.json"
+            launch_check = root / "trainer_launch_check.json"
+            archive = root / "trainer_archive"
+            summary_path = root / "validation.json"
+            write_passed_evidence_bundle(gate)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-preflight",
+                        "--gate",
+                        str(gate),
+                        "--evidence-bundle",
+                        str(gate),
+                        "--trainer-command",
+                        "python train.py --bundle evidence_bundle.json",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                0,
+            )
+            self.assertEqual(run_cli(["trainer-launch-check", "--preflight", str(preflight), "--out", str(launch_check)]), 0)
+            self.assertEqual(
+                run_cli(
+                    [
+                        "trainer-archive",
+                        "--preflight",
+                        str(preflight),
+                        "--launch-check",
+                        str(launch_check),
+                        "--out",
+                        str(archive),
+                        "--require-self-contained",
+                    ]
+                ),
+                0,
+            )
+            artifacts_dir = archive / "artifacts"
+            real_artifacts_dir = archive / "artifacts_real"
+            artifacts_dir.rename(real_artifacts_dir)
+            try:
+                artifacts_dir.symlink_to(real_artifacts_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            code = run_cli(["validate", "--trainer-archive", str(archive), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            validation = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_archive.artifacts[0].path must not resolve through a symlink", errors)
+
     def test_trainer_preflight_writes_output_relative_source_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

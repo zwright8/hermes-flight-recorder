@@ -358,9 +358,10 @@ source `block_iteration` recommendations before launch. Use
 the promotion ledger, promotion-ledger gate, decision gates, and resolvable
 source gate artifacts into a hash-checked directory that remains valid after
 the original workspace paths disappear. Recorded artifact references must be
-safe relative paths before they are copied, and validation rejects symlinked
-archive artifacts plus relationships that point at unknown artifacts or invalid
-role pairs. Keep shared promotion archives in the default redacted mode; use
+safe relative paths before they are copied, and validation rejects archive
+artifacts that are symlinks or resolve through symlinked parent components,
+plus relationships that point at unknown artifacts or invalid role pairs. Keep
+shared promotion archives in the default redacted mode; use
 `--preserve-paths` only for private local debugging. Strict promotion-archive
 validation warns if preserved archive or original artifact paths would enter a
 public promotion handoff.
@@ -565,6 +566,8 @@ the preflight, launch check, gates, validation summaries, trainer-facing
 exports, and schema-contract files into one hash-checked directory. It records
 the copied trainer inputs, the original approved command, path rewrites, and an
 advisory portable command that points known input paths at archive-local copies.
+Validation rejects archive artifact files or directories that resolve through
+symlinked parent components before trusting recorded hashes or tree hashes.
 Its `consumer_contract` states that the portable command should be resolved
 from the archive root and flags path-like command tokens, such as trainer
 scripts, that still must be supplied by external training infrastructure.

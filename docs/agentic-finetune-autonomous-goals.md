@@ -829,6 +829,9 @@ card, and dataset card decisions.
 - Trainer consumer plans reopen visible trainer archive-check source refs and
   reject missing, non-regular, symlinked, stale SHA-256, or stale byte-size
   handoff evidence before an external trainer wrapper can trust command inputs.
+- Promotion archives and trainer archives reject artifact paths that are
+  symlinks or resolve through symlinked parent components before trusting
+  recorded file hashes, tree hashes, or self-contained handoff claims.
 - Trainer archive checks, consumer-plan execution refs, and wrapper dry-run
   refs reject missing visible resolved paths before accepting external trainer
   code or trainer inputs as ready for wrapper handoff.

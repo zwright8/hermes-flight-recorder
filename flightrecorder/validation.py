@@ -21872,8 +21872,7 @@ def _validate_promotion_archive_artifact(
     if not _path_resolves_inside(artifact_path, archive_root):
         target.errors.append(f"{label}.path must resolve inside the archive.")
         return
-    if artifact_path.is_symlink():
-        target.errors.append(f"{label}.path must not be a symlink.")
+    if _reject_archive_artifact_symlink_path(artifact_path, target, label):
         return
     if not artifact_path.exists() or not artifact_path.is_file():
         target.errors.append(f"{label}.path does not exist inside the archive.")
@@ -22230,8 +22229,7 @@ def _validate_trainer_archive_artifact(
     if not _path_resolves_inside(artifact_path, archive_root):
         target.errors.append(f"{label}.path must resolve inside the archive.")
         return
-    if artifact_path.is_symlink():
-        target.errors.append(f"{label}.path must not be a symlink.")
+    if _reject_archive_artifact_symlink_path(artifact_path, target, label):
         return
     if artifact.get("kind") == "file":
         if not artifact_path.exists() or not artifact_path.is_file():
@@ -23907,6 +23905,16 @@ def _archive_artifact_path(value: Any, archive_root: Path) -> Path | None:
     if path.is_absolute() or ".." in path.parts:
         return None
     return archive_root / path
+
+
+def _reject_archive_artifact_symlink_path(path: Path, target: ValidationTarget, label: str) -> bool:
+    if path.is_symlink():
+        target.errors.append(f"{label}.path must not be a symlink.")
+        return True
+    if _path_has_symlink_component(path, include_leaf=False):
+        target.errors.append(f"{label}.path must not resolve through a symlink.")
+        return True
+    return False
 
 
 def _path_resolves_inside(path: Path, root: Path) -> bool:

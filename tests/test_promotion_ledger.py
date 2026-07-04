@@ -1604,6 +1604,35 @@ class PromotionLedgerTests(unittest.TestCase):
 
             self.assertEqual(run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict"]), 1)
 
+    def test_promotion_archive_validation_rejects_symlinked_artifact_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = root / "promotion_ledger.json"
+            archive_dir = root / "promotion_archive"
+            summary_path = root / "validation.json"
+            ledger_path.write_text(
+                json.dumps({"schema_version": "hfr.promotion_ledger.v1", "records": []}) + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                run_cli(["promotion-archive", "--promotion-ledger", str(ledger_path), "--out", str(archive_dir)]),
+                0,
+            )
+            artifacts_dir = archive_dir / "artifacts"
+            real_artifacts_dir = archive_dir / "artifacts_real"
+            artifacts_dir.rename(real_artifacts_dir)
+            try:
+                artifacts_dir.symlink_to(real_artifacts_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+
+            code = run_cli(["validate", "--promotion-archive", str(archive_dir), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            validation = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("promotion_archive.artifacts[0].path must not resolve through a symlink", errors)
+
     def test_promotion_archive_validation_rejects_bad_relationship_receipts(self):
         tamper_cases = (("to", "missing_promotion_ledger"), ("type", "source_artifact"))
         for field_name, forged_value in tamper_cases:
