@@ -74,6 +74,8 @@ evidence.
 - Identify missing schemas or fields needed by later layers.
 - Strengthen evidence coverage, trace observability, scenario quality, and
   gate outputs where needed.
+- Validate scenario-check receipts before public handoff so preserved scenario,
+  trace, or state source paths warn under strict validation.
 - Add a single evidence-readiness command or documented command sequence that
   produces a complete handoff bundle from runs.
 - Ensure failed evidence produces repair/curriculum work items instead of

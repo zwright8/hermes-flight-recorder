@@ -503,7 +503,9 @@ floors, and a minimum overall pass rate.
 Before I trust a custom eval suite, I run `flightrecorder check-scenarios`.
 That catches malformed regexes, duplicate scenario IDs, missing traces, and
 under-specified scenario contracts before they create misleading benchmark
-evidence.
+evidence. I also run `flightrecorder validate --scenario-check ... --strict`
+before publishing the receipt so preserved local source paths stay out of
+public handoffs.
 
 For future RL work, I run `flightrecorder export-rl`. It turns the scorecards
 into terminal rewards, step-level attribution rows, chosen/rejected pairs,

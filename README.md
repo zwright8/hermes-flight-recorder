@@ -667,6 +667,7 @@ Every public artifact family is registered in `flightrecorder/schemas/`.
 flightrecorder schemas --write-dir artifact_schemas
 flightrecorder schemas --name evidence_bundle --out evidence_bundle.schema.json
 flightrecorder schemas --check runs/scenario_check.json
+flightrecorder validate --scenario-check runs/scenario_check.json --strict
 flightrecorder schemas --check runs/evidence_bundle.json
 flightrecorder schemas --check runs/captured_state.json
 flightrecorder schemas --check runs/promotion_decision.json

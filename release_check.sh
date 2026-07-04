@@ -117,6 +117,7 @@ mv replay_runs/prompt_injection_good_bundle replay_runs/moved_prompt_injection_g
   --out runs/scenario_check.json >/dev/null
 test -f runs/scenario_check.json
 "$PYTHON" -m flightrecorder schemas --check runs/scenario_check.json >/dev/null
+"$PYTHON" -m flightrecorder validate --scenario-check runs/scenario_check.json --strict >/dev/null
 "$PYTHON" -m flightrecorder scenario-quality \
   --scenarios scenarios \
   --require-traces \

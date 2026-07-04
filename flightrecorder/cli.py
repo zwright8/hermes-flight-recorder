@@ -1142,6 +1142,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
         replay_bundle_paths=args.replay_bundle,
         trace_observability_paths=args.trace_observability,
         review_calibration_paths=args.review_calibration,
+        scenario_check_paths=args.scenario_check,
         scenario_quality_paths=args.scenario_quality,
         suite_summary_paths=args.suite_summary,
         suite_trend_paths=args.suite_trend,
@@ -3192,6 +3193,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--replay-bundle", action="append", default=[], help="Validate one replay-bundle directory or replay_bundle.json; may be repeated")
     validate.add_argument("--trace-observability", action="append", default=[], help="Validate one trace_observability.json; may be repeated")
     validate.add_argument("--review-calibration", action="append", default=[], help="Validate one review_calibration.json; may be repeated")
+    validate.add_argument("--scenario-check", action="append", default=[], help="Validate one scenario_check.json; may be repeated")
     validate.add_argument("--scenario-quality", action="append", default=[], help="Validate one scenario_quality.json; may be repeated")
     validate.add_argument("--suite-summary", action="append", default=[], help="Validate one run-suite suite_summary.json; may be repeated")
     validate.add_argument("--suite-trend", action="append", default=[], help="Validate one trend-suite suite_trend.json; may be repeated")

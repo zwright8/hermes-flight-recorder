@@ -170,6 +170,7 @@ from .review import (
 from .rollout_generation import AGENTIC_ROLLOUT_PLAN_SCHEMA_VERSION, AGENTIC_ROLLOUT_RECEIPT_SCHEMA_VERSION
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .scorers import SCORE_SCHEMA_VERSION, TASK_COMPLETION_SCHEMA_VERSION
+from .scenario_check import SCENARIO_CHECK_SCHEMA_VERSION
 from .scenario_quality import SCENARIO_QUALITY_SCHEMA_VERSION
 from .state_capture import STATE_SNAPSHOT_SCHEMA_VERSION
 from .state_diff import STATE_DIFF_SCHEMA_VERSION
@@ -306,6 +307,7 @@ def validate_artifacts(
     replay_bundle_paths: list[str | Path] | None = None,
     trace_observability_paths: list[str | Path] | None = None,
     review_calibration_paths: list[str | Path] | None = None,
+    scenario_check_paths: list[str | Path] | None = None,
     scenario_quality_paths: list[str | Path] | None = None,
     suite_summary_paths: list[str | Path] | None = None,
     suite_trend_paths: list[str | Path] | None = None,
@@ -453,6 +455,8 @@ def validate_artifacts(
         targets.append(validate_trace_observability(trace_observability_path))
     for review_calibration_path in review_calibration_paths or []:
         targets.append(validate_review_calibration(review_calibration_path))
+    for scenario_check_path in scenario_check_paths or []:
+        targets.append(validate_scenario_check(scenario_check_path))
     for scenario_quality_path in scenario_quality_paths or []:
         targets.append(validate_scenario_quality(scenario_quality_path))
     for suite_summary_path in suite_summary_paths or []:
@@ -1719,6 +1723,16 @@ def validate_review_calibration(path: str | Path) -> ValidationTarget:
     calibration = _read_object(calibration_path, target, "review_calibration.json")
     if calibration is not None:
         _validate_review_calibration(calibration, target)
+    return target
+
+
+def validate_scenario_check(path: str | Path) -> ValidationTarget:
+    """Validate a scenario-check artifact."""
+    check_path = Path(path)
+    target = ValidationTarget("scenario_check", str(check_path))
+    check = _read_object(check_path, target, "scenario_check.json")
+    if check is not None:
+        _validate_scenario_check(check, target)
     return target
 
 
@@ -25054,6 +25068,106 @@ def _rate_value(numerator: int, denominator: int) -> float:
     if denominator <= 0:
         return 1.0
     return round(numerator / denominator, 4)
+
+
+def _validate_scenario_check(check: dict[str, Any], target: ValidationTarget) -> None:
+    _require_equal(check, "schema_version", SCENARIO_CHECK_SCHEMA_VERSION, target, prefix="scenario_check.")
+    if not isinstance(check.get("scenarios_dir"), str) or not check.get("scenarios_dir"):
+        target.errors.append("scenario_check.scenarios_dir must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "scenario_check.scenarios_dir", check.get("scenarios_dir"))
+    if not isinstance(check.get("pattern"), str) or not check.get("pattern"):
+        target.errors.append("scenario_check.pattern must be a non-empty string.")
+    for field_name in ("recursive", "strict", "require_traces", "passed"):
+        if not isinstance(check.get(field_name), bool):
+            target.errors.append(f"scenario_check.{field_name} must be a boolean.")
+
+    scenarios = check.get("scenarios")
+    if not isinstance(scenarios, list):
+        target.errors.append("scenario_check.scenarios must be a list.")
+        scenarios = []
+    duplicates = check.get("duplicates")
+    if not isinstance(duplicates, list):
+        target.errors.append("scenario_check.duplicates must be a list.")
+        duplicates = []
+
+    totals = _validate_scenario_check_rows(scenarios, target)
+    duplicate_count = _validate_scenario_check_duplicates(duplicates, target)
+    expected_passed = totals["error_count"] == 0 and (totals["warning_count"] == 0 or check.get("strict") is not True)
+    expected_counts = {
+        "total": len(scenarios),
+        "error_count": totals["error_count"],
+        "warning_count": totals["warning_count"],
+        "duplicate_id_count": duplicate_count,
+    }
+    for field_name, expected_value in expected_counts.items():
+        if check.get(field_name) != expected_value:
+            target.errors.append(f"scenario_check.{field_name} expected {expected_value!r}, got {check.get(field_name)!r}.")
+    if isinstance(check.get("passed"), bool) and check["passed"] != expected_passed:
+        target.errors.append("scenario_check.passed must match errors, warnings, and strict mode.")
+    target.details.update(
+        {
+            "scenario_count": len(scenarios),
+            "error_count": totals["error_count"],
+            "warning_count": totals["warning_count"],
+            "duplicate_id_count": duplicate_count,
+        }
+    )
+
+
+def _validate_scenario_check_rows(scenarios: list[Any], target: ValidationTarget) -> dict[str, int]:
+    totals = {"error_count": 0, "warning_count": 0}
+    for index, row in enumerate(scenarios):
+        label = f"scenario_check.scenarios[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        if not isinstance(row.get("path"), str) or not row.get("path"):
+            target.errors.append(f"{label}.path must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
+        if not isinstance(row.get("passed"), bool):
+            target.errors.append(f"{label}.passed must be a boolean.")
+        for field_name in ("id", "title"):
+            if field_name in row and (not isinstance(row.get(field_name), str) or not row.get(field_name)):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string when present.")
+        for field_name in ("trace_exists", "before_state_exists", "state_exists", "trace_required"):
+            if field_name in row and not isinstance(row.get(field_name), bool):
+                target.errors.append(f"{label}.{field_name} must be a boolean when present.")
+        for field_name in ("trace_path", "before_state_path", "state_path"):
+            if field_name in row:
+                if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                    target.errors.append(f"{label}.{field_name} must be a non-empty string when present.")
+                _warn_absolute_public_path(target, f"{label}.{field_name}", row.get(field_name))
+
+        errors = row.get("errors")
+        if not _is_string_list(errors):
+            target.errors.append(f"{label}.errors must be a list of strings.")
+            errors = []
+        warnings = row.get("warnings")
+        if not _is_string_list(warnings):
+            target.errors.append(f"{label}.warnings must be a list of strings.")
+            warnings = []
+        totals["error_count"] += len(errors)
+        totals["warning_count"] += len(warnings)
+        if isinstance(row.get("passed"), bool) and row["passed"] != (len(errors) == 0):
+            target.errors.append(f"{label}.passed must match errors.")
+    return totals
+
+
+def _validate_scenario_check_duplicates(duplicates: list[Any], target: ValidationTarget) -> int:
+    duplicate_count = 0
+    for index, row in enumerate(duplicates):
+        label = f"scenario_check.duplicates[{index}]"
+        if not isinstance(row, dict):
+            target.errors.append(f"{label} must be an object.")
+            continue
+        duplicate_count += 1
+        for field_name in ("id", "first_path", "duplicate_path"):
+            if not isinstance(row.get(field_name), str) or not row.get(field_name):
+                target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{label}.first_path", row.get("first_path"))
+        _warn_absolute_public_path(target, f"{label}.duplicate_path", row.get("duplicate_path"))
+    return duplicate_count
 
 
 def _validate_scenario_quality(quality: dict[str, Any], target: ValidationTarget) -> None:

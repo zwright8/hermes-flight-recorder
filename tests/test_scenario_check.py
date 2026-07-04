@@ -45,7 +45,45 @@ class ScenarioCheckTests(unittest.TestCase):
             self.assertEqual(summary["warning_count"], 0)
             self.assertTrue(summary["passed"])
             self.assertTrue(all(item["trace_exists"] for item in summary["scenarios"]))
+            self.assertEqual(run_cli(["validate", "--scenario-check", str(out), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(out)]), 0)
+
+    def test_strict_validate_warns_on_absolute_preserved_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "scenario_check.json"
+            permissive_summary = Path(tmp) / "validation.json"
+            strict_summary = Path(tmp) / "strict_validation.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "check-scenarios",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--require-traces",
+                        "--out",
+                        str(out),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+
+            summary = json.loads(out.read_text(encoding="utf-8"))
+            self.assertTrue(Path(summary["scenarios_dir"]).is_absolute())
+            self.assertTrue(Path(summary["scenarios"][0]["path"]).is_absolute())
+            self.assertEqual(run_cli(["validate", "--scenario-check", str(out), "--out", str(permissive_summary)]), 0)
+            self.assertEqual(run_cli(["validate", "--scenario-check", str(out), "--strict", "--out", str(strict_summary)]), 1)
+            warnings = [
+                warning
+                for target in json.loads(strict_summary.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            warning_text = "\n".join(warnings)
+            self.assertIn("scenario_check.scenarios_dir is absolute", warning_text)
+            self.assertIn("scenario_check.scenarios[0].path is absolute", warning_text)
+            self.assertTrue(any(".trace_path is absolute" in warning for warning in warnings), warnings)
+            self.assertTrue(any(".state_path is absolute" in warning for warning in warnings), warnings)
 
     def test_check_scenarios_rejects_duplicate_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
