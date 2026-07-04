@@ -7,8 +7,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from flightrecorder.cli import main
-from flightrecorder.external_eval import build_external_eval_plan, write_external_eval_plan
+from flightrecorder.external_eval import adapter_choices, build_external_eval_plan, write_external_eval_plan
 from flightrecorder.schema_registry import check_schema_file
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def run_cli(args):
@@ -17,6 +20,37 @@ def run_cli(args):
 
 
 class ExternalEvalReceiptTests(unittest.TestCase):
+    def test_committed_example_external_eval_receipt_covers_fail_closed_adapters(self):
+        receipt_path = ROOT / "examples" / "external_eval" / "external_eval_receipt.json"
+        receipt = _read_json(receipt_path)
+        adapter_ids = {adapter["id"] for adapter in receipt["adapter_receipts"]}
+
+        self.assertEqual(adapter_ids, set(adapter_choices()))
+        self.assertEqual(receipt["adapter_count"], len(adapter_choices()))
+        self.assertEqual(receipt["ready_adapter_count"], 0)
+        self.assertFalse(receipt["passed"])
+        self.assertEqual(receipt["readiness"], "blocked")
+        self.assertEqual(receipt["launch"]["mode"], "dry_run")
+        self.assertFalse(receipt["launch"]["live_benchmarks_started"])
+        self.assertFalse(receipt["launch"]["provider_api_called"])
+        self.assertFalse(receipt["execution_boundary"]["live_benchmarks_started"])
+        self.assertFalse(receipt["execution_boundary"]["provider_api_called"])
+        self.assertFalse(receipt["execution_boundary"]["model_downloads_started"])
+        self.assertFalse(receipt["execution_boundary"]["credential_values_recorded"])
+        self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
+        for adapter in receipt["adapter_receipts"]:
+            self.assertFalse(adapter["ready"])
+            self.assertFalse(adapter["live_benchmark_started"])
+            self.assertFalse(adapter["provider_api_called"])
+            self.assertFalse(adapter["model_downloads_started"])
+            self.assertFalse(adapter["credential_values_recorded"])
+
+        schema_result = check_schema_file(receipt_path)
+        validate_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"])
+
+        self.assertTrue(schema_result["passed"], schema_result["errors"])
+        self.assertEqual(validate_code, 0)
+
     def test_external_eval_receipt_blocks_unready_plan_but_validates(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

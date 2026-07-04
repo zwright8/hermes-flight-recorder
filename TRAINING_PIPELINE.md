@@ -853,6 +853,8 @@ job was started by Flight Recorder:
 External eval plan and receipt adapter rows include an `adapter_contract` that
 keeps live benchmark support disabled and records zero provider API calls, model
 downloads, credential values, cloud spend, or weight updates.
+The committed examples in `examples/external_eval/` cover BFCL, Inspect AI,
+lm-eval-harness, and SWE-bench with schema-checkable blocked receipts.
 Their receipt type lists are exact allowlists for the plan and receipt schemas;
 unsupported live/provider receipt names fail schema and strict validation.
 Strict receipt validation replays the current source plan, selected adapters,

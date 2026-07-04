@@ -9,8 +9,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from flightrecorder.cli import main
-from flightrecorder.external_eval import EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES, build_external_eval_plan, write_external_eval_plan
+from flightrecorder.external_eval import (
+    EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES,
+    adapter_choices,
+    build_external_eval_plan,
+    write_external_eval_plan,
+)
 from flightrecorder.schema_registry import check_schema_file
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def run_cli(args):
@@ -19,6 +27,29 @@ def run_cli(args):
 
 
 class ExternalEvalPlanTests(unittest.TestCase):
+    def test_committed_example_external_eval_plan_covers_fail_closed_adapters(self):
+        plan_path = ROOT / "examples" / "external_eval" / "external_eval_plan.json"
+        plan = _read_json(plan_path)
+        adapter_ids = {adapter["id"] for adapter in plan["adapters"]}
+
+        self.assertEqual(adapter_ids, set(adapter_choices()))
+        self.assertEqual(set(plan["selected_adapters"]), set(adapter_choices()))
+        self.assertEqual(plan["adapter_count"], len(adapter_choices()))
+        self.assertEqual(plan["ready_adapter_count"], 0)
+        self.assertFalse(plan["ready"])
+        self.assertFalse(plan["governance_handoff"]["external_eval_claims_allowed"])
+        for adapter in plan["adapters"]:
+            self.assertFalse(adapter["ready"])
+            self.assertFalse(adapter["adapter_contract"]["live_benchmark_supported"])
+            self.assertFalse(adapter["adapter_contract"]["provider_api_called_by_flight_recorder"])
+            self.assertEqual(sorted(adapter["adapter_contract"]["receipt_types"]), sorted(EXTERNAL_EVAL_ADAPTER_RECEIPT_TYPES))
+
+        schema_result = check_schema_file(plan_path)
+        validate_code = run_cli(["validate", "--external-eval-plan", str(plan_path), "--strict"])
+
+        self.assertTrue(schema_result["passed"], schema_result["errors"])
+        self.assertEqual(validate_code, 0)
+
     def test_external_eval_plan_cli_fails_closed_but_validates(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

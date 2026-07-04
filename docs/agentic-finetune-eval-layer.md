@@ -114,6 +114,8 @@ Each adapter row also includes an `adapter_contract` that attests to
 plan-and-receipt-only dry-run transport, disabled live benchmark support, no
 provider API calls, no model downloads, no credential values, and the need for a
 separate external runner receipt before any live benchmark claim.
+The committed examples in `examples/external_eval/` cover all four adapter
+contracts and remain schema- and validation-checkable while blocked.
 
 Receipts are separate from plans. They archive dry-run readiness, or a blocked
 live request, without starting BFCL, Inspect AI, lm-eval, SWE-bench, provider
