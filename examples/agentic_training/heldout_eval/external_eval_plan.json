@@ -1,13 +1,13 @@
 {
-  "adapter_count": 4,
+  "adapter_count": 1,
   "adapters": [
     {
       "adapter_contract": {
-        "adapter_id": "external_eval.bfcl.fail_closed.v1",
+        "adapter_id": "external_eval.local_mock.fail_closed.v1",
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
         "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "bfcl",
+        "external_adapter_id": "local_mock",
         "live_benchmark_supported": false,
         "model_downloads_started_by_flight_recorder": false,
         "provider_api_called_by_flight_recorder": false,
@@ -21,244 +21,51 @@
         "requires_identical_heldout_scenarios": true,
         "schema_version": "hfr.external_eval_adapter_contract.v1"
       },
-      "blocking_reasons": [
-        "dependencies_missing",
-        "adapter_disabled_until_allow_installed"
-      ],
+      "blocking_reasons": [],
       "dependency_status": {
-        "available": false,
-        "commands": {
-          "bfcl": false
-        },
-        "imports": {
-          "bfcl_eval": false
-        }
+        "available": true,
+        "commands": {},
+        "imports": {}
       },
-      "domain": "tool_calling",
+      "domain": "offline_agentic_tasks",
       "execution_contract": {
-        "boundary": "Function/tool-calling suites must use the same held-out scenario manifest and declared tool schema set.",
+        "boundary": "Local mock eval receipts replay committed held-out fixtures only and never start live benchmarks.",
         "requires_identical_heldout_scenarios": true,
         "scenario_manifest_sha256": "3b354c1ec497a363f75def5a64117e0e5390c02adb366cd12ab683f5ec02fee9"
       },
-      "full_name": "Berkeley Function Calling Leaderboard",
-      "id": "bfcl",
-      "name": "BFCL",
+      "full_name": "Flight Recorder local mock external eval",
+      "id": "local_mock",
+      "name": "Local mock eval",
       "provided_inputs": [
         "scenario_manifest",
-        "model_endpoint",
-        "tool_schema_set"
+        "model_endpoint"
       ],
-      "ready": false,
+      "ready": true,
       "required_inputs": [
         "scenario_manifest",
-        "model_endpoint",
-        "tool_schema_set"
-      ],
-      "suite_tags": [
-        "function_calling",
-        "tool_calling"
-      ]
-    },
-    {
-      "adapter_contract": {
-        "adapter_id": "external_eval.inspect_ai.fail_closed.v1",
-        "cost_incurred_usd": 0,
-        "credential_values_recorded": false,
-        "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "inspect_ai",
-        "live_benchmark_supported": false,
-        "model_downloads_started_by_flight_recorder": false,
-        "provider_api_called_by_flight_recorder": false,
-        "receipt_types": [
-          "hfr.external_eval_adapters.v1",
-          "hfr.external_eval_receipt.v1"
-        ],
-        "requires_dependency_probe_before_live": true,
-        "requires_explicit_live_opt_in": true,
-        "requires_external_runner_receipt_for_live": true,
-        "requires_identical_heldout_scenarios": true,
-        "schema_version": "hfr.external_eval_adapter_contract.v1"
-      },
-      "blocking_reasons": [
-        "dependencies_missing",
-        "adapter_disabled_until_allow_installed"
-      ],
-      "dependency_status": {
-        "available": false,
-        "commands": {
-          "inspect": false
-        },
-        "imports": {
-          "inspect_ai": false
-        }
-      },
-      "domain": "agentic_tasks",
-      "execution_contract": {
-        "boundary": "Inspect tasks must be mapped to held-out scenario IDs and run under an explicit sandbox policy.",
-        "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "3b354c1ec497a363f75def5a64117e0e5390c02adb366cd12ab683f5ec02fee9"
-      },
-      "full_name": "Inspect AI",
-      "id": "inspect_ai",
-      "name": "Inspect AI",
-      "provided_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "inspect_task_set",
-        "sandbox_policy"
-      ],
-      "ready": false,
-      "required_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "inspect_task_set",
-        "sandbox_policy"
+        "model_endpoint"
       ],
       "suite_tags": [
         "agentic",
-        "red_team",
-        "inspect"
-      ]
-    },
-    {
-      "adapter_contract": {
-        "adapter_id": "external_eval.lm_eval_harness.fail_closed.v1",
-        "cost_incurred_usd": 0,
-        "credential_values_recorded": false,
-        "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "lm_eval_harness",
-        "live_benchmark_supported": false,
-        "model_downloads_started_by_flight_recorder": false,
-        "provider_api_called_by_flight_recorder": false,
-        "receipt_types": [
-          "hfr.external_eval_adapters.v1",
-          "hfr.external_eval_receipt.v1"
-        ],
-        "requires_dependency_probe_before_live": true,
-        "requires_explicit_live_opt_in": true,
-        "requires_external_runner_receipt_for_live": true,
-        "requires_identical_heldout_scenarios": true,
-        "schema_version": "hfr.external_eval_adapter_contract.v1"
-      },
-      "blocking_reasons": [
-        "dependencies_missing",
-        "adapter_disabled_until_allow_installed"
-      ],
-      "dependency_status": {
-        "available": false,
-        "commands": {
-          "lm_eval": false
-        },
-        "imports": {
-          "lm_eval": false
-        }
-      },
-      "domain": "language_model_capability",
-      "execution_contract": {
-        "boundary": "Language-model harness tasks must be tied back to the held-out scenario manifest before comparison.",
-        "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "3b354c1ec497a363f75def5a64117e0e5390c02adb366cd12ab683f5ec02fee9"
-      },
-      "full_name": "EleutherAI lm-evaluation-harness",
-      "id": "lm_eval_harness",
-      "name": "lm-evaluation-harness",
-      "provided_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "lm_eval_task_list"
-      ],
-      "ready": false,
-      "required_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "lm_eval_task_list"
-      ],
-      "suite_tags": [
-        "lm_eval",
-        "capability"
-      ]
-    },
-    {
-      "adapter_contract": {
-        "adapter_id": "external_eval.swe_bench.fail_closed.v1",
-        "cost_incurred_usd": 0,
-        "credential_values_recorded": false,
-        "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "swe_bench",
-        "live_benchmark_supported": false,
-        "model_downloads_started_by_flight_recorder": false,
-        "provider_api_called_by_flight_recorder": false,
-        "receipt_types": [
-          "hfr.external_eval_adapters.v1",
-          "hfr.external_eval_receipt.v1"
-        ],
-        "requires_dependency_probe_before_live": true,
-        "requires_explicit_live_opt_in": true,
-        "requires_external_runner_receipt_for_live": true,
-        "requires_identical_heldout_scenarios": true,
-        "schema_version": "hfr.external_eval_adapter_contract.v1"
-      },
-      "blocking_reasons": [
-        "dependencies_missing",
-        "adapter_disabled_until_allow_installed"
-      ],
-      "dependency_status": {
-        "available": false,
-        "commands": {
-          "swebench": false
-        },
-        "imports": {
-          "swebench": false
-        }
-      },
-      "domain": "software_engineering",
-      "execution_contract": {
-        "boundary": "Repository tasks must be selected from a declared held-out task set and run under an explicit sandbox policy.",
-        "requires_identical_heldout_scenarios": true,
-        "scenario_manifest_sha256": "3b354c1ec497a363f75def5a64117e0e5390c02adb366cd12ab683f5ec02fee9"
-      },
-      "full_name": "SWE-bench",
-      "id": "swe_bench",
-      "name": "SWE-bench",
-      "provided_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "swe_bench_task_set",
-        "sandbox_policy"
-      ],
-      "ready": false,
-      "required_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "swe_bench_task_set",
-        "sandbox_policy"
-      ],
-      "suite_tags": [
-        "software_engineering",
-        "repository_tasks"
+        "mock",
+        "offline"
       ]
     }
   ],
-  "allow_installed": false,
-  "blocking_reasons": [
-    "no_ready_external_adapters",
-    "adapter_disabled_until_allow_installed",
-    "dependencies_missing"
-  ],
-  "generated_at": "2026-07-04T16:55:02.950812+00:00",
+  "allow_installed": true,
+  "blocking_reasons": [],
+  "generated_at": "2026-07-04T17:39:53.258169+00:00",
   "governance_handoff": {
-    "external_eval_claims_allowed": false,
-    "recommendation": "Keep external eval claims disabled until every selected adapter is ready.",
+    "external_eval_claims_allowed": true,
+    "recommendation": "External eval adapters are ready to execute against the declared held-out scenario manifest.",
     "requires_identical_heldout_scenarios": true
   },
   "inputs": {
-    "inspect_task_set": "agentic-heldout-inspect",
-    "lm_eval_task_list": [
-      "agentic_heldout"
-    ],
+    "inspect_task_set": null,
+    "lm_eval_task_list": [],
     "model": "local/mock-candidate",
     "model_endpoint": "local/mock-candidate",
-    "sandbox_policy": "locked-network",
+    "sandbox_policy": null,
     "scenario_manifest": {
       "exists": true,
       "path": "heldout_manifest.json",
@@ -268,16 +75,13 @@
       "sha256": "3b354c1ec497a363f75def5a64117e0e5390c02adb366cd12ab683f5ec02fee9",
       "size_bytes": 2032
     },
-    "swe_bench_task_set": "agentic-heldout-swebench",
-    "tool_schema_set": "mock-tool-schema-set"
+    "swe_bench_task_set": null,
+    "tool_schema_set": null
   },
-  "ready": false,
-  "ready_adapter_count": 0,
+  "ready": true,
+  "ready_adapter_count": 1,
   "schema_version": "hfr.external_eval_adapters.v1",
   "selected_adapters": [
-    "bfcl",
-    "inspect_ai",
-    "lm_eval_harness",
-    "swe_bench"
+    "local_mock"
   ]
 }

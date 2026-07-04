@@ -65,7 +65,7 @@ class ExternalEvalPlanTests(unittest.TestCase):
             self.assertTrue(schema_result["passed"], schema_result["errors"])
             plan = _read_json(out)
             self.assertFalse(plan["ready"])
-            self.assertEqual(plan["adapter_count"], 4)
+            self.assertEqual(plan["adapter_count"], len(adapter_choices()))
             self.assertEqual(plan["ready_adapter_count"], 0)
             self.assertIn("no_ready_external_adapters", plan["blocking_reasons"])
             self.assertIn("adapter_disabled_until_allow_installed", plan["blocking_reasons"])
@@ -112,6 +112,42 @@ class ExternalEvalPlanTests(unittest.TestCase):
             written = _read_json(out)
             self.assertEqual(written["inputs"]["scenario_manifest"]["path"], manifest.name)
             self.assertEqual(written["inputs"]["scenario_manifest"]["size_bytes"], manifest.stat().st_size)
+
+    def test_local_mock_external_eval_plan_ready_path_is_keyless(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            out = root / "external_eval_plan.json"
+
+            code = run_cli(
+                [
+                    "external-eval-plan",
+                    "--adapter",
+                    "local_mock",
+                    "--scenario-manifest",
+                    str(manifest),
+                    "--model-endpoint",
+                    "local/mock-candidate",
+                    "--allow-installed",
+                    "--out",
+                    str(out),
+                ]
+            )
+            validate_code = run_cli(["validate", "--external-eval-plan", str(out), "--strict"])
+            schema_result = check_schema_file(out)
+
+            self.assertEqual(code, 0)
+            self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
+            plan = _read_json(out)
+            self.assertTrue(plan["ready"])
+            self.assertEqual(plan["selected_adapters"], ["local_mock"])
+            self.assertEqual(plan["ready_adapter_count"], 1)
+            self.assertEqual(plan["blocking_reasons"], [])
+            adapter = plan["adapters"][0]
+            self.assertEqual(adapter["dependency_status"], {"available": True, "commands": {}, "imports": {}})
+            self.assertFalse(adapter["adapter_contract"]["live_benchmark_supported"])
+            self.assertFalse(adapter["adapter_contract"]["provider_api_called_by_flight_recorder"])
 
     def test_preserve_paths_keeps_plan_manifest_output_relative(self):
         with tempfile.TemporaryDirectory() as tmp:

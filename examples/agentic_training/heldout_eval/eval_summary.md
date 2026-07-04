@@ -1,10 +1,10 @@
 # Eval Summary
 
-- Status: blocked
-- Governance ready: no
+- Status: ready
+- Governance ready: yes
 - Held-out scenarios: identical (3)
 - Cross-arm claims allowed: yes
-- Recommendation: Do not promote until the listed eval summary risks are resolved.
+- Recommendation: Governance may consume this summary directly; cross-arm claims are allowed only for the listed identical held-out scenarios.
 
 ## Arms
 
@@ -23,22 +23,14 @@
 
 ## Repair And Curriculum
 
-- Work items: 3
+- Work items: 0
 - Critical work items: 0
 
-| Priority | Category | Reason | Summary |
-| --- | --- | --- | --- |
-| medium | eval_harness | adapter_disabled_until_allow_installed | External adapter plan external is blocked by adapter_disabled_until_allow_installed. |
-| medium | eval_harness | dependencies_missing | External adapter plan external is blocked by dependencies_missing. |
-| medium | eval_harness | no_ready_external_adapters | External adapter plan external is blocked by no_ready_external_adapters. |
+- No repair or curriculum work items were emitted.
 
 ## Risks
 
-| Source | Label | Reason |
-| --- | --- | --- |
-| external_adapter_plan | external | no_ready_external_adapters |
-| external_adapter_plan | external | adapter_disabled_until_allow_installed |
-| external_adapter_plan | external | dependencies_missing |
+- No blocking risks were reported.
 
 ## Notes
 

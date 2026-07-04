@@ -1,5 +1,5 @@
 {
-  "adapter_count": 4,
+  "adapter_count": 5,
   "adapter_receipts": [
     {
       "adapter_contract": {
@@ -167,6 +167,53 @@
     },
     {
       "adapter_contract": {
+        "adapter_id": "external_eval.local_mock.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "local_mock",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
+      "blocking_reasons": [
+        "adapter_disabled_until_allow_installed",
+        "missing_model_endpoint"
+      ],
+      "cost_incurred_usd": 0,
+      "credential_values_recorded": false,
+      "dependency_status": {
+        "available": true,
+        "commands": {},
+        "imports": {}
+      },
+      "domain": "offline_agentic_tasks",
+      "id": "local_mock",
+      "live_benchmark_started": false,
+      "model_downloads_started": false,
+      "name": "Local mock eval",
+      "planned_ready": false,
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "provider_api_called": false,
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint"
+      ]
+    },
+    {
+      "adapter_contract": {
         "adapter_id": "external_eval.swe_bench.fail_closed.v1",
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
@@ -304,12 +351,12 @@
   "recommendation": "keep_external_eval_claims_disabled",
   "schema_version": "hfr.external_eval_receipt.v1",
   "source_plan": {
-    "adapter_count": 4,
+    "adapter_count": 5,
     "exists": true,
     "path": "external_eval_plan.json",
     "ready": false,
     "schema_version": "hfr.external_eval_adapters.v1",
-    "sha256": "9fa5ccf4b5722cdd2bec019494fc8ef90587f86e33f089669ec82676cb01ff1c",
-    "size_bytes": 9407
+    "sha256": "8d3f28db7af670e4d95827fffbcd6d71c8ebd11dac80cf3c7aa92c65b76ff7df",
+    "size_bytes": 11250
   }
 }

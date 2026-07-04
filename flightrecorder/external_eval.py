@@ -62,6 +62,17 @@ ADAPTERS: dict[str, dict[str, Any]] = {
         "required_inputs": ["scenario_manifest", "model_endpoint", "swe_bench_task_set", "sandbox_policy"],
         "execution_boundary": "Repository tasks must be selected from a declared held-out task set and run under an explicit sandbox policy.",
     },
+    "local_mock": {
+        "name": "Local mock eval",
+        "full_name": "Flight Recorder local mock external eval",
+        "domain": "offline_agentic_tasks",
+        "suite_tags": ["agentic", "mock", "offline"],
+        "import_names": [],
+        "command_names": [],
+        "built_in_dependency": True,
+        "required_inputs": ["scenario_manifest", "model_endpoint"],
+        "execution_boundary": "Local mock eval receipts replay committed held-out fixtures only and never start live benchmarks.",
+    },
 }
 
 
@@ -307,6 +318,12 @@ def _adapter_plan(adapter_id: str, inputs: dict[str, Any], allow_installed: bool
 
 
 def _dependency_status(spec: dict[str, Any]) -> dict[str, Any]:
+    if spec.get("built_in_dependency") is True:
+        return {
+            "available": True,
+            "imports": {},
+            "commands": {},
+        }
     imports = {name: importlib.util.find_spec(name) is not None for name in spec["import_names"]}
     commands = {name: shutil.which(name) is not None for name in spec["command_names"]}
     return {

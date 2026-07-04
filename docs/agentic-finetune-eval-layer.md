@@ -100,10 +100,13 @@ flightrecorder external-eval-receipt \
   --out runs/external_eval_receipt.json
 ```
 
-The supported adapter IDs are `bfcl`, `inspect_ai`, `lm_eval_harness`, and
-`swe_bench`. Plans fail closed by default: even when optional dependencies are
-installed, an adapter is not ready unless `--allow-installed` is present and all
-required inputs for that adapter are supplied. The plan records dependency
+The supported adapter IDs are `bfcl`, `inspect_ai`, `lm_eval_harness`,
+`local_mock`, and `swe_bench`. Plans fail closed by default: even when optional
+dependencies are installed, an adapter is not ready unless `--allow-installed`
+is present and all required inputs for that adapter are supplied. The
+`local_mock` adapter is built in for deterministic offline dry-run receipts; it
+does not start live benchmarks, call providers, download models, record
+credentials, incur cloud spend, or update weights. The plan records dependency
 status, held-out scenario manifest SHA-256 and byte size, required inputs, and
 blocking reasons. Scenario manifests are replayable only when the plan can point
 to them with a safe path relative to the plan output; absolute or traversal refs
@@ -114,7 +117,7 @@ Each adapter row also includes an `adapter_contract` that attests to
 plan-and-receipt-only dry-run transport, disabled live benchmark support, no
 provider API calls, no model downloads, no credential values, and the need for a
 separate external runner receipt before any live benchmark claim.
-The committed examples in `examples/external_eval/` cover all four adapter
+The committed examples in `examples/external_eval/` cover all five adapter
 contracts and remain schema- and validation-checkable while blocked.
 
 Receipts are separate from plans. They archive dry-run readiness, or a blocked

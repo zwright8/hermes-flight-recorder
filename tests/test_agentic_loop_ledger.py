@@ -58,10 +58,11 @@ class AgenticLoopLedgerTests(unittest.TestCase):
         self.assertEqual(ledger["readiness_digest"]["missing_artifact_group_count"], 0)
         self.assertTrue(ledger["readiness_digest"]["cloud_training_lineage_bound"])
         self.assertEqual(ledger["readiness_digest"]["cloud_training_missing_link_count"], 0)
-        self.assertEqual(ledger["readiness_digest"]["external_eval_adapter_count"], 4)
+        self.assertEqual(ledger["readiness_digest"]["external_eval_adapter_count"], 1)
+        self.assertEqual(ledger["readiness_digest"]["external_eval_ready_adapter_count"], 1)
         self.assertEqual(ledger["readiness_digest"]["external_eval_receipt_count"], 1)
         self.assertTrue(ledger["readiness_digest"]["external_eval_receipts_fail_closed"])
-        self.assertFalse(ledger["readiness_digest"]["external_eval_receipts_passed"])
+        self.assertTrue(ledger["readiness_digest"]["external_eval_receipts_passed"])
         self.assertFalse(ledger["execution_boundary"]["cloud_jobs_started"])
         self.assertFalse(ledger["execution_boundary"]["paid_model_grader_calls_started"])
         self.assertFalse(ledger["execution_boundary"]["weights_updated_by_flight_recorder"])
@@ -333,16 +334,17 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             plan = self.write_loop_plan(root / "ready" / "plan.json", "loop-001", artifacts)
             ledger = root / "ledger.json"
             summary = root / "summary.json"
+            loop_plan = json.loads(plan.read_text(encoding="utf-8"))
 
+            heldout_check = next(check for check in loop_plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertFalse(heldout_check["passed"])
+            self.assertFalse(heldout_check["actual"]["eval_summary_valid"])
             self.assertEqual(run_cli(["agentic-loop", "ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
             code = run_cli(["validate", "--agentic-loop-ledger", str(ledger), "--out", str(summary)])
 
-            self.assertEqual(code, 1)
-            errors = "\n".join(error for target in json.loads(summary.read_text(encoding="utf-8"))["targets"] for error in target["errors"])
-            self.assertIn(
-                "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt and eval summary state.",
-                errors,
-            )
+            self.assertEqual(code, 0)
+            payload = json.loads(summary.read_text(encoding="utf-8"))
+            self.assertTrue(payload["passed"], payload)
 
     def test_validate_replays_source_plan_promotion_decision_readiness(self):
         with tempfile.TemporaryDirectory() as tmp:

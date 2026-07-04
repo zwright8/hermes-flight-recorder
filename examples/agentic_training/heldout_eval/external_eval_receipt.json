@@ -1,13 +1,13 @@
 {
-  "adapter_count": 4,
+  "adapter_count": 1,
   "adapter_receipts": [
     {
       "adapter_contract": {
-        "adapter_id": "external_eval.bfcl.fail_closed.v1",
+        "adapter_id": "external_eval.local_mock.fail_closed.v1",
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
         "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "bfcl",
+        "external_adapter_id": "local_mock",
         "live_benchmark_supported": false,
         "model_downloads_started_by_flight_recorder": false,
         "provider_api_called_by_flight_recorder": false,
@@ -21,210 +21,33 @@
         "requires_identical_heldout_scenarios": true,
         "schema_version": "hfr.external_eval_adapter_contract.v1"
       },
-      "blocking_reasons": [
-        "adapter_disabled_until_allow_installed",
-        "dependencies_missing"
-      ],
+      "blocking_reasons": [],
       "cost_incurred_usd": 0,
       "credential_values_recorded": false,
       "dependency_status": {
-        "available": false,
-        "commands": {
-          "bfcl": false
-        },
-        "imports": {
-          "bfcl_eval": false
-        }
+        "available": true,
+        "commands": {},
+        "imports": {}
       },
-      "domain": "tool_calling",
-      "id": "bfcl",
+      "domain": "offline_agentic_tasks",
+      "id": "local_mock",
       "live_benchmark_started": false,
       "model_downloads_started": false,
-      "name": "BFCL",
-      "planned_ready": false,
+      "name": "Local mock eval",
+      "planned_ready": true,
       "provided_inputs": [
         "scenario_manifest",
-        "model_endpoint",
-        "tool_schema_set"
+        "model_endpoint"
       ],
       "provider_api_called": false,
-      "ready": false,
+      "ready": true,
       "required_inputs": [
         "scenario_manifest",
-        "model_endpoint",
-        "tool_schema_set"
-      ]
-    },
-    {
-      "adapter_contract": {
-        "adapter_id": "external_eval.inspect_ai.fail_closed.v1",
-        "cost_incurred_usd": 0,
-        "credential_values_recorded": false,
-        "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "inspect_ai",
-        "live_benchmark_supported": false,
-        "model_downloads_started_by_flight_recorder": false,
-        "provider_api_called_by_flight_recorder": false,
-        "receipt_types": [
-          "hfr.external_eval_adapters.v1",
-          "hfr.external_eval_receipt.v1"
-        ],
-        "requires_dependency_probe_before_live": true,
-        "requires_explicit_live_opt_in": true,
-        "requires_external_runner_receipt_for_live": true,
-        "requires_identical_heldout_scenarios": true,
-        "schema_version": "hfr.external_eval_adapter_contract.v1"
-      },
-      "blocking_reasons": [
-        "adapter_disabled_until_allow_installed",
-        "dependencies_missing"
-      ],
-      "cost_incurred_usd": 0,
-      "credential_values_recorded": false,
-      "dependency_status": {
-        "available": false,
-        "commands": {
-          "inspect": false
-        },
-        "imports": {
-          "inspect_ai": false
-        }
-      },
-      "domain": "agentic_tasks",
-      "id": "inspect_ai",
-      "live_benchmark_started": false,
-      "model_downloads_started": false,
-      "name": "Inspect AI",
-      "planned_ready": false,
-      "provided_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "inspect_task_set",
-        "sandbox_policy"
-      ],
-      "provider_api_called": false,
-      "ready": false,
-      "required_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "inspect_task_set",
-        "sandbox_policy"
-      ]
-    },
-    {
-      "adapter_contract": {
-        "adapter_id": "external_eval.lm_eval_harness.fail_closed.v1",
-        "cost_incurred_usd": 0,
-        "credential_values_recorded": false,
-        "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "lm_eval_harness",
-        "live_benchmark_supported": false,
-        "model_downloads_started_by_flight_recorder": false,
-        "provider_api_called_by_flight_recorder": false,
-        "receipt_types": [
-          "hfr.external_eval_adapters.v1",
-          "hfr.external_eval_receipt.v1"
-        ],
-        "requires_dependency_probe_before_live": true,
-        "requires_explicit_live_opt_in": true,
-        "requires_external_runner_receipt_for_live": true,
-        "requires_identical_heldout_scenarios": true,
-        "schema_version": "hfr.external_eval_adapter_contract.v1"
-      },
-      "blocking_reasons": [
-        "adapter_disabled_until_allow_installed",
-        "dependencies_missing"
-      ],
-      "cost_incurred_usd": 0,
-      "credential_values_recorded": false,
-      "dependency_status": {
-        "available": false,
-        "commands": {
-          "lm_eval": false
-        },
-        "imports": {
-          "lm_eval": false
-        }
-      },
-      "domain": "language_model_capability",
-      "id": "lm_eval_harness",
-      "live_benchmark_started": false,
-      "model_downloads_started": false,
-      "name": "lm-evaluation-harness",
-      "planned_ready": false,
-      "provided_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "lm_eval_task_list"
-      ],
-      "provider_api_called": false,
-      "ready": false,
-      "required_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "lm_eval_task_list"
-      ]
-    },
-    {
-      "adapter_contract": {
-        "adapter_id": "external_eval.swe_bench.fail_closed.v1",
-        "cost_incurred_usd": 0,
-        "credential_values_recorded": false,
-        "dry_run_transport": "plan_and_receipt_only",
-        "external_adapter_id": "swe_bench",
-        "live_benchmark_supported": false,
-        "model_downloads_started_by_flight_recorder": false,
-        "provider_api_called_by_flight_recorder": false,
-        "receipt_types": [
-          "hfr.external_eval_adapters.v1",
-          "hfr.external_eval_receipt.v1"
-        ],
-        "requires_dependency_probe_before_live": true,
-        "requires_explicit_live_opt_in": true,
-        "requires_external_runner_receipt_for_live": true,
-        "requires_identical_heldout_scenarios": true,
-        "schema_version": "hfr.external_eval_adapter_contract.v1"
-      },
-      "blocking_reasons": [
-        "adapter_disabled_until_allow_installed",
-        "dependencies_missing"
-      ],
-      "cost_incurred_usd": 0,
-      "credential_values_recorded": false,
-      "dependency_status": {
-        "available": false,
-        "commands": {
-          "swebench": false
-        },
-        "imports": {
-          "swebench": false
-        }
-      },
-      "domain": "software_engineering",
-      "id": "swe_bench",
-      "live_benchmark_started": false,
-      "model_downloads_started": false,
-      "name": "SWE-bench",
-      "planned_ready": false,
-      "provided_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "swe_bench_task_set",
-        "sandbox_policy"
-      ],
-      "provider_api_called": false,
-      "ready": false,
-      "required_inputs": [
-        "scenario_manifest",
-        "model_endpoint",
-        "swe_bench_task_set",
-        "sandbox_policy"
+        "model_endpoint"
       ]
     }
   ],
-  "blocked_reasons": [
-    "plan_ready_for_live_execution: failed"
-  ],
+  "blocked_reasons": [],
   "check_count": 4,
   "checks": [
     {
@@ -240,16 +63,16 @@
     },
     {
       "actual": {
-        "plan_ready": false,
-        "ready_adapter_count": 0
+        "plan_ready": true,
+        "ready_adapter_count": 1
       },
       "expected": {
         "all_selected_adapters_ready": true,
         "plan_ready": true
       },
       "id": "plan_ready_for_live_execution",
-      "passed": false,
-      "summary": "plan_ready_for_live_execution: failed"
+      "passed": true,
+      "summary": "plan_ready_for_live_execution: passed"
     },
     {
       "actual": {
@@ -286,7 +109,7 @@
     "provider_api_called": false,
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 1,
+  "failed_check_count": 0,
   "launch": {
     "cost_incurred_usd": 0,
     "live_benchmarks_started": false,
@@ -298,18 +121,18 @@
     "External eval receipts archive readiness and dry-run intent only; they do not run BFCL, Inspect AI, lm-eval, or SWE-bench.",
     "Live benchmark execution remains blocked unless an external runner separately opts in and archives its own receipt."
   ],
-  "passed": false,
-  "readiness": "blocked",
-  "ready_adapter_count": 0,
-  "recommendation": "keep_external_eval_claims_disabled",
+  "passed": true,
+  "readiness": "dry_run_recorded",
+  "ready_adapter_count": 1,
+  "recommendation": "archive_external_eval_dry_run",
   "schema_version": "hfr.external_eval_receipt.v1",
   "source_plan": {
-    "adapter_count": 4,
+    "adapter_count": 1,
     "exists": true,
     "path": "external_eval_plan.json",
-    "ready": false,
+    "ready": true,
     "schema_version": "hfr.external_eval_adapters.v1",
-    "sha256": "bca930fac06bb0790eb6332b403c42b66c1c36faece4fa4f9f82aefa6a85a5a2",
-    "size_bytes": 9275
+    "sha256": "fada998b85f837d43816aaebf7fe92607a67febd4340694cb5f67f98c985a481",
+    "size_bytes": 2858
   }
 }

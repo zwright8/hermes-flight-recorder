@@ -102,7 +102,7 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertNotIn("promotion_ledger", plan["missing_phase_inputs"])
         self.assertEqual(
             {check["id"] for check in plan["checks"] if not check["passed"]},
-            {"heldout_eval_is_fail_closed", "governance_required_for_promotion"},
+            {"governance_required_for_promotion"},
         )
         self.assertNotIn("rollout_receipt_required_before_review", {check["id"] for check in plan["checks"] if not check["passed"]})
         self.assertNotIn("uncalibrated_labels_block_training_data", {check["id"] for check in plan["checks"] if not check["passed"]})
@@ -148,12 +148,16 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
         self.assertEqual(plan["cloud_training_lineage"]["missing_link_count"], 0)
         self.assertTrue(plan["cloud_training_receipt_state"]["fail_closed"])
         self.assertEqual(plan["cloud_training_receipt_state"]["cost_incurred_usd"], 0)
-        self.assertEqual(plan["external_eval_receipt_state"]["adapter_count"], 4)
-        self.assertEqual(plan["external_eval_receipt_state"]["ready_adapter_count"], 0)
-        self.assertFalse(plan["external_eval_receipt_state"]["receipts_passed"])
+        self.assertEqual(plan["external_eval_receipt_state"]["adapter_count"], 1)
+        self.assertEqual(plan["external_eval_receipt_state"]["ready_adapter_count"], 1)
+        self.assertTrue(plan["external_eval_receipt_state"]["receipts_passed"])
         self.assertTrue(plan["external_eval_receipt_state"]["fail_closed"])
         self.assertFalse(plan["external_eval_receipt_state"]["live_benchmarks_started"])
         self.assertFalse(plan["external_eval_receipt_state"]["provider_api_calls_started"])
+        heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+        self.assertTrue(heldout_check["passed"])
+        self.assertTrue(heldout_check["actual"]["eval_summary_valid"])
+        self.assertTrue(heldout_check["actual"]["eval_summary_passed"])
         self.assertFalse(plan["execution_boundary"]["cloud_jobs_started"])
         self.assertFalse(plan["execution_boundary"]["paid_model_grader_calls_started"])
         self.assertFalse(plan["execution_boundary"]["weights_updated_by_flight_recorder"])
@@ -370,17 +374,38 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
                 artifact_paths=artifacts,
                 created_at="2026-07-03T00:00:00+00:00",
             )
-            self.assertTrue(plan["passed"])
+            self.assertFalse(plan["passed"])
             loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
 
-            self.assertFalse(validation["passed"], validation)
-            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
-            self.assertIn(
-                "agentic_training_loop_plan.checks.heldout_eval_is_fail_closed.passed must match external eval receipt and eval summary state.",
-                errors,
+            self.assertTrue(validation["passed"], validation)
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertFalse(heldout_check["passed"])
+            self.assertFalse(heldout_check["actual"]["eval_summary_valid"])
+
+    def test_failed_eval_summary_cannot_unlock_loop_readiness(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            eval_summary_path = artifacts["eval_summary"][0]
+            eval_summary = json.loads(eval_summary_path.read_text(encoding="utf-8"))
+            eval_summary["passed"] = False
+            eval_summary["governance_ready"] = False
+            eval_summary_path.write_text(json.dumps(eval_summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="loop-failed-eval-summary",
+                artifact_paths=artifacts,
+                created_at="2026-07-03T00:00:00+00:00",
             )
+
+            self.assertFalse(plan["passed"])
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertFalse(heldout_check["passed"])
+            self.assertTrue(heldout_check["actual"]["eval_summary_valid"])
+            self.assertFalse(heldout_check["actual"]["eval_summary_passed"])
 
     def test_invalid_promotion_ledger_cannot_unlock_loop_governance(self):
         with tempfile.TemporaryDirectory() as tmp:

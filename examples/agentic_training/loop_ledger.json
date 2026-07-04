@@ -244,7 +244,7 @@
           "role": "training_export"
         }
       ],
-      "blocked_reason_count": 2,
+      "blocked_reason_count": 1,
       "cloud_training": {
         "artifact_count": 6,
         "artifact_manifest_present": true,
@@ -488,7 +488,7 @@
       },
       "exists": true,
       "external_eval_receipt_state": {
-        "adapter_count": 4,
+        "adapter_count": 1,
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
         "dry_run_only": true,
@@ -498,12 +498,12 @@
         "live_benchmarks_started": false,
         "model_downloads_started": false,
         "provider_api_calls_started": false,
-        "readiness": "blocked",
-        "ready_adapter_count": 0,
+        "readiness": "dry_run_recorded",
+        "ready_adapter_count": 1,
         "receipt_count": 1,
-        "receipt_passed_count": 0,
-        "receipts_passed": false,
-        "recommendation": "keep_external_eval_claims_disabled",
+        "receipt_passed_count": 1,
+        "receipts_passed": true,
+        "recommendation": "archive_external_eval_dry_run",
         "weights_updated_by_flight_recorder": false
       },
       "governance": {
@@ -560,8 +560,8 @@
           "serving_lifecycle"
         ]
       },
-      "sha256": "99dc43c7710f802cb0ef5eb5efc11dd992dc0b21d93fd42ebd62bc1bf668c0cf",
-      "size_bytes": 53058,
+      "sha256": "686886ede4694bf656464cca0243eaea615138302ea8dc457c85e42672baf30c",
+      "size_bytes": 53159,
       "training_outputs": {
         "artifact_count": 6,
         "group": "training",
@@ -657,7 +657,7 @@
   ],
   "passed": true,
   "readiness_digest": {
-    "blocked_reason_count": 2,
+    "blocked_reason_count": 1,
     "cloud_training_ambiguous_link_count": 0,
     "cloud_training_cost_incurred_usd": 0,
     "cloud_training_duplicate_role_count": 0,
@@ -671,7 +671,7 @@
     "cloud_training_status_provider_status": "not_started",
     "decision_readiness": "blocked",
     "decision_recommendation": "continue_iteration",
-    "external_eval_adapter_count": 4,
+    "external_eval_adapter_count": 1,
     "external_eval_cost_incurred_usd": 0,
     "external_eval_credential_values_recorded": false,
     "external_eval_launch_mode": "dry_run",
@@ -679,10 +679,10 @@
     "external_eval_live_benchmarks_started": false,
     "external_eval_model_downloads_started": false,
     "external_eval_provider_api_calls_started": false,
-    "external_eval_ready_adapter_count": 0,
+    "external_eval_ready_adapter_count": 1,
     "external_eval_receipt_count": 1,
     "external_eval_receipts_fail_closed": true,
-    "external_eval_receipts_passed": false,
+    "external_eval_receipts_passed": true,
     "latest_iteration_id": "demo-loop-001",
     "latest_iteration_index": 0,
     "live_spend_allowed": false,

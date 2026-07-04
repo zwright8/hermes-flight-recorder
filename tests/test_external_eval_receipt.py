@@ -20,22 +20,19 @@ def run_cli(args):
 
 
 class ExternalEvalReceiptTests(unittest.TestCase):
-    def test_committed_agentic_training_external_eval_receipt_is_fail_closed(self):
+    def test_committed_agentic_training_external_eval_receipt_uses_local_mock(self):
         eval_root = ROOT / "examples" / "agentic_training" / "heldout_eval"
         plan_path = eval_root / "external_eval_plan.json"
         receipt_path = eval_root / "external_eval_receipt.json"
         plan = _read_json(plan_path)
         receipt = _read_json(receipt_path)
 
-        self.assertEqual(set(plan["selected_adapters"]), set(adapter_choices()))
-        self.assertFalse(plan["ready"])
-        self.assertEqual(plan["ready_adapter_count"], 0)
-        self.assertEqual(
-            set(plan["blocking_reasons"]),
-            {"no_ready_external_adapters", "adapter_disabled_until_allow_installed", "dependencies_missing"},
-        )
-        self.assertFalse(receipt["passed"])
-        self.assertEqual(receipt["readiness"], "blocked")
+        self.assertEqual(plan["selected_adapters"], ["local_mock"])
+        self.assertTrue(plan["ready"])
+        self.assertEqual(plan["ready_adapter_count"], 1)
+        self.assertEqual(plan["blocking_reasons"], [])
+        self.assertTrue(receipt["passed"])
+        self.assertEqual(receipt["readiness"], "dry_run_recorded")
         self.assertEqual(receipt["launch"]["mode"], "dry_run")
         self.assertFalse(receipt["launch"]["live_benchmarks_started"])
         self.assertFalse(receipt["launch"]["provider_api_called"])
@@ -43,6 +40,11 @@ class ExternalEvalReceiptTests(unittest.TestCase):
         self.assertEqual(receipt["launch"]["cost_incurred_usd"], 0)
         self.assertFalse(receipt["execution_boundary"]["credential_values_recorded"])
         self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
+        self.assertEqual(receipt["adapter_count"], 1)
+        self.assertEqual(receipt["ready_adapter_count"], 1)
+        self.assertTrue(receipt["adapter_receipts"][0]["ready"])
+        self.assertEqual(receipt["adapter_receipts"][0]["id"], "local_mock")
+        self.assertFalse(receipt["adapter_receipts"][0]["provider_api_called"])
         self.assertEqual(run_cli(["validate", "--external-eval-plan", str(plan_path), "--strict"]), 0)
         self.assertEqual(run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"]), 0)
 
@@ -161,6 +163,58 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertFalse(receipt["adapter_receipts"][0]["adapter_contract"]["provider_api_called_by_flight_recorder"])
             self.assertFalse(receipt["execution_boundary"]["provider_api_called"])
             self.assertFalse(receipt["execution_boundary"]["weights_updated_by_flight_recorder"])
+
+    def test_local_mock_external_eval_receipt_passes_without_optional_dependencies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _scenario_manifest(root / "heldout.json")
+            plan_path = root / "external_eval_plan.json"
+            receipt_path = root / "external_eval_receipt.json"
+
+            plan_code = run_cli(
+                [
+                    "external-eval-plan",
+                    "--adapter",
+                    "local_mock",
+                    "--scenario-manifest",
+                    str(manifest),
+                    "--model-endpoint",
+                    "local/mock-candidate",
+                    "--allow-installed",
+                    "--out",
+                    str(plan_path),
+                ]
+            )
+            receipt_code = run_cli(
+                [
+                    "external-eval-receipt",
+                    "--plan",
+                    str(plan_path),
+                    "--created-at",
+                    "2026-07-03T00:00:00+00:00",
+                    "--out",
+                    str(receipt_path),
+                ]
+            )
+            validate_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"])
+
+            self.assertEqual(plan_code, 0)
+            self.assertEqual(receipt_code, 0)
+            self.assertEqual(validate_code, 0)
+            receipt = _read_json(receipt_path)
+            self.assertTrue(receipt["passed"])
+            self.assertEqual(receipt["readiness"], "dry_run_recorded")
+            self.assertEqual(receipt["adapter_count"], 1)
+            self.assertEqual(receipt["ready_adapter_count"], 1)
+            adapter = receipt["adapter_receipts"][0]
+            self.assertEqual(adapter["id"], "local_mock")
+            self.assertTrue(adapter["ready"])
+            self.assertEqual(adapter["dependency_status"], {"available": True, "commands": {}, "imports": {}})
+            self.assertFalse(adapter["live_benchmark_started"])
+            self.assertFalse(adapter["provider_api_called"])
+            self.assertFalse(adapter["model_downloads_started"])
+            self.assertFalse(adapter["credential_values_recorded"])
+            self.assertEqual(adapter["cost_incurred_usd"], 0)
 
     def test_validate_rejects_subset_receipt_for_multi_adapter_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -283,7 +337,7 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertIsNone(receipt["source_plan"]["schema_version"])
             self.assertIsNone(receipt["source_plan"]["ready"])
             self.assertIsNone(receipt["source_plan"]["adapter_count"])
-            self.assertEqual(receipt["adapter_count"], 4)
+            self.assertEqual(receipt["adapter_count"], len(adapter_choices()))
             self.assertEqual(receipt["ready_adapter_count"], 0)
             self.assertNotIn("LOCAL_SECRET_RECOMMENDATION", rendered)
             self.assertNotIn(str(sources), rendered)

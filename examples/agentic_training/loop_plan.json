@@ -143,7 +143,6 @@
     }
   ],
   "blocked_reasons": [
-    "heldout_eval_is_fail_closed: passed=False",
     "governance_required_for_promotion: passed=False"
   ],
   "budget": {
@@ -547,11 +546,13 @@
       "actual": {
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
+        "eval_summary_passed": true,
         "eval_summary_present": true,
+        "eval_summary_valid": true,
         "external_eval_plan_present": true,
         "external_eval_receipt_present": true,
         "external_eval_receipts_fail_closed": true,
-        "external_eval_receipts_passed": false,
+        "external_eval_receipts_passed": true,
         "heldout_manifest_present": true,
         "live_benchmark_requested": false,
         "live_benchmarks_started": false,
@@ -561,7 +562,9 @@
       "expected": {
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
+        "eval_summary_passed": true,
         "eval_summary_present": true,
+        "eval_summary_valid": true,
         "external_eval_plan_present": true,
         "external_eval_receipt_present": true,
         "external_eval_receipts_fail_closed": true,
@@ -573,8 +576,8 @@
         "provider_api_calls_started": false
       },
       "id": "heldout_eval_is_fail_closed",
-      "passed": false,
-      "summary": "heldout_eval_is_fail_closed: passed=False"
+      "passed": true,
+      "summary": "heldout_eval_is_fail_closed: passed=True"
     },
     {
       "actual": {
@@ -843,7 +846,7 @@
     "weights_updated_by_flight_recorder": false
   },
   "external_eval_receipt_state": {
-    "adapter_count": 4,
+    "adapter_count": 1,
     "cost_incurred_usd": 0,
     "credential_values_recorded": false,
     "dry_run_only": true,
@@ -853,15 +856,15 @@
     "live_benchmarks_started": false,
     "model_downloads_started": false,
     "provider_api_calls_started": false,
-    "readiness": "blocked",
-    "ready_adapter_count": 0,
+    "readiness": "dry_run_recorded",
+    "ready_adapter_count": 1,
     "receipt_count": 1,
-    "receipt_passed_count": 0,
-    "receipts_passed": false,
-    "recommendation": "keep_external_eval_claims_disabled",
+    "receipt_passed_count": 1,
+    "receipts_passed": true,
+    "recommendation": "archive_external_eval_dry_run",
     "weights_updated_by_flight_recorder": false
   },
-  "failed_check_count": 2,
+  "failed_check_count": 1,
   "handoff_contract": {
     "default_live_execution_allowed": false,
     "external_trainers_own_weight_updates": true,
@@ -887,7 +890,7 @@
     "Missing phase inputs keep the loop fail-closed while preserving a schema-checkable plan for orchestration.",
     "Use dry-run/mock provider receipts first; live provider launches must be explicit, credentialed, and separately archived."
   ],
-  "objective": "Demonstrate a fail-closed closed-loop agentic training iteration contract.",
+  "objective": "Close held-out tool-use regressions with fail-closed external trainers.",
   "participants": {
     "baseline_policy": "local/mock-baseline",
     "candidate_policy": "local/mock-candidate",
@@ -1362,13 +1365,13 @@
       {
         "exists": true,
         "kind": "file",
-        "passed": false,
+        "passed": true,
         "path": "heldout_eval/eval_summary.json",
         "readiness": "",
         "role": "eval_summary",
         "schema_version": "hfr.eval_summary.v1",
-        "sha256": "12c0e5c772740fff1aebaf00604b4a67b1591bad95311ca33345492888a93875",
-        "size_bytes": 8290
+        "sha256": "9670feada999deb6fdea4a58541c39bc5653289e8825b5870467a7c8605c36dd",
+        "size_bytes": 6281
       }
     ],
     "evidence_bundle": [
@@ -1393,21 +1396,21 @@
         "readiness": "",
         "role": "external_eval_plan",
         "schema_version": "hfr.external_eval_adapters.v1",
-        "sha256": "bca930fac06bb0790eb6332b403c42b66c1c36faece4fa4f9f82aefa6a85a5a2",
-        "size_bytes": 9275
+        "sha256": "fada998b85f837d43816aaebf7fe92607a67febd4340694cb5f67f98c985a481",
+        "size_bytes": 2858
       }
     ],
     "external_eval_receipt": [
       {
         "exists": true,
         "kind": "file",
-        "passed": false,
+        "passed": true,
         "path": "heldout_eval/external_eval_receipt.json",
-        "readiness": "blocked",
+        "readiness": "dry_run_recorded",
         "role": "external_eval_receipt",
         "schema_version": "hfr.external_eval_receipt.v1",
-        "sha256": "cc732646249677ad91769421f91492a6669f65dfa3ce30f11eab045942c4d9e4",
-        "size_bytes": 9657
+        "sha256": "dd2994e11ec7868f5bfa6b96ea0b3f202dbef56c2713aa822faed86fdb1c7387",
+        "size_bytes": 4119
       }
     ],
     "harness_result": [

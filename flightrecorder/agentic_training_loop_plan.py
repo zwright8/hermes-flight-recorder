@@ -12,8 +12,10 @@ from typing import Any
 
 from .cloud_training import build_cloud_training_launch_receipt, build_cloud_training_status_receipt
 from .external_eval import ExternalEvalPlanError, build_external_eval_receipt
+from .schema_registry import SchemaRegistryError, check_schema_contract
 
 AGENTIC_TRAINING_LOOP_PLAN_SCHEMA_VERSION = "hfr.agentic_training_loop_plan.v1"
+EVAL_SUMMARY_SCHEMA_VERSION = "hfr.eval_summary.v1"
 
 CLOUD_TRAINING_LINEAGE_LINKS: tuple[dict[str, str], ...] = (
     {
@@ -253,6 +255,7 @@ def build_agentic_training_loop_plan(
     refs = _artifact_refs(normalized_artifact_paths, preserve_paths, output_path)
     cloud_training_receipt_state = _cloud_training_receipt_state(normalized_artifact_paths)
     external_eval_receipt_state = _external_eval_receipt_state(normalized_artifact_paths)
+    eval_summary_state = _eval_summary_state(normalized_artifact_paths)
     promotion_governance_state = _promotion_governance_state(normalized_artifact_paths)
     cloud_training = _cloud_training_summary(refs, cloud_training_receipt_state)
     cloud_training_lineage = _cloud_training_lineage(refs, normalized_artifact_paths)
@@ -387,6 +390,8 @@ def build_agentic_training_loop_plan(
         and "external_eval_plan" in refs
         and "external_eval_receipt" in refs
         and "eval_summary" in refs
+        and eval_summary_state["valid"]
+        and eval_summary_state["passed"]
         and external_eval_receipt_state["receipts_passed"]
         and external_eval_receipt_state["fail_closed"],
         {
@@ -394,6 +399,8 @@ def build_agentic_training_loop_plan(
             "external_eval_plan_present": "external_eval_plan" in refs,
             "external_eval_receipt_present": "external_eval_receipt" in refs,
             "eval_summary_present": "eval_summary" in refs,
+            "eval_summary_valid": eval_summary_state["valid"],
+            "eval_summary_passed": eval_summary_state["passed"],
             "external_eval_receipts_passed": external_eval_receipt_state["receipts_passed"],
             "external_eval_receipts_fail_closed": external_eval_receipt_state["fail_closed"],
             "live_benchmark_requested": external_eval_receipt_state["live_benchmark_requested"],
@@ -408,6 +415,8 @@ def build_agentic_training_loop_plan(
             "external_eval_plan_present": True,
             "external_eval_receipt_present": True,
             "eval_summary_present": True,
+            "eval_summary_valid": True,
+            "eval_summary_passed": True,
             "external_eval_receipts_passed": True,
             "external_eval_receipts_fail_closed": True,
             "live_benchmark_requested": False,
@@ -787,6 +796,32 @@ def _external_eval_receipt_state(artifact_paths: dict[str, list[Path]]) -> dict[
         "cost_incurred_usd": cost_incurred_usd,
         "fail_closed": fail_closed,
     }
+
+
+def _eval_summary_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:
+    records = _payload_records(artifact_paths, "eval_summary")
+    valid_count = sum(1 for record in records if _eval_summary_schema_valid(record["payload"]))
+    passed_count = sum(
+        1
+        for record in records
+        if _eval_summary_schema_valid(record["payload"]) and record["payload"].get("passed") is True
+    )
+    return {
+        "summary_count": len(records),
+        "valid_count": valid_count,
+        "passed_count": passed_count,
+        "valid": bool(records) and valid_count == len(records),
+        "passed": bool(records) and passed_count == len(records),
+    }
+
+
+def _eval_summary_schema_valid(payload: dict[str, Any]) -> bool:
+    if payload.get("schema_version") != EVAL_SUMMARY_SCHEMA_VERSION:
+        return False
+    try:
+        return bool(check_schema_contract(payload, name_or_id="eval_summary").get("passed"))
+    except (SchemaRegistryError, TypeError, ValueError):
+        return False
 
 
 def _promotion_governance_state(artifact_paths: dict[str, list[Path]]) -> dict[str, Any]:

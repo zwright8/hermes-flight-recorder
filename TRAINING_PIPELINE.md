@@ -819,9 +819,11 @@ It also includes a `training_gate.json`, `trainer_preflight.json`, and
 `trainer_launch_check.json` that approve only the local dry-run trainer command
 against the selected dataset version. The `heldout_eval/` fixture adds
 deterministic baseline/candidate suite summaries, a held-out manifest,
-external-eval plan/receipt artifacts for BFCL, Inspect AI, lm-eval-harness, and
-SWE-bench adapters, plus an eval summary. Those adapter receipts remain
-fail-closed until optional dependencies are explicitly enabled. The
+an offline `local_mock` external-eval plan/receipt, plus an eval summary. That
+receipt passes without provider calls, downloads, benchmark launches, secrets,
+cost, or weight updates. Real BFCL, Inspect AI, lm-eval-harness, and SWE-bench
+adapters remain fail-closed in the standalone `examples/external_eval/`
+fixtures until optional dependencies are explicitly enabled. The
 `evidence_handoff/` fixture records a compact passing harness result and ready
 evidence bundle for a deterministic prompt-injection scenario. The
 `serving_lifecycle/managed_mock/` fixture records a normalized mock serving
@@ -900,7 +902,10 @@ flightrecorder validate \
 ```
 
 External benchmark adapters stay fail-closed until a separate runner executes
-them. External eval plans only keep scenario-manifest refs when they are safe
+them. The built-in `local_mock` adapter is available for deterministic offline
+dry-run receipts, but it still records no live benchmark, provider API call,
+model download, credential value, cloud spend, or weight update. External eval
+plans only keep scenario-manifest refs when they are safe
 relative paths from the plan output; unreplayable absolute or traversal refs are
 redacted and treated as missing, including with `--preserve-paths`. Archive an
 external eval receipt to prove no live BFCL, Inspect AI, lm-eval, or SWE-bench
@@ -909,7 +914,8 @@ External eval plan and receipt adapter rows include an `adapter_contract` that
 keeps live benchmark support disabled and records zero provider API calls, model
 downloads, credential values, cloud spend, or weight updates.
 The committed examples in `examples/external_eval/` cover BFCL, Inspect AI,
-lm-eval-harness, and SWE-bench with schema-checkable blocked receipts.
+lm-eval-harness, SWE-bench, and `local_mock` with schema-checkable blocked
+receipts.
 Their receipt type lists are exact allowlists for the plan and receipt schemas;
 unsupported live/provider receipt names fail schema and strict validation.
 Strict receipt validation replays the current source plan, selected adapters,

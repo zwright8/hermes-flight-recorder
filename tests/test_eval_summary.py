@@ -20,24 +20,26 @@ def run_cli(args):
 
 
 class EvalSummaryTests(unittest.TestCase):
-    def test_committed_agentic_training_eval_summary_records_external_adapter_risks(self):
+    def test_committed_agentic_training_eval_summary_records_ready_local_mock(self):
         eval_root = ROOT / "examples" / "agentic_training" / "heldout_eval"
         summary_path = eval_root / "eval_summary.json"
         markdown_path = eval_root / "eval_summary.md"
         summary = _read_json(summary_path)
 
-        self.assertFalse(summary["passed"])
-        self.assertFalse(summary["governance_ready"])
+        self.assertTrue(summary["passed"])
+        self.assertTrue(summary["governance_ready"])
         self.assertEqual(summary["heldout_scenarios"]["status"], "identical")
         self.assertTrue(summary["heldout_scenarios"]["cross_arm_claims_allowed"])
         self.assertEqual(summary["external_adapter_plan_count"], 1)
-        self.assertEqual(
-            {risk["reason"] for risk in summary["risks"]},
-            {"no_ready_external_adapters", "adapter_disabled_until_allow_installed", "dependencies_missing"},
-        )
-        self.assertEqual(summary["repair_curriculum"]["work_item_count"], 3)
-        self.assertIn("Do not promote", summary["conclusion"]["recommendation"])
-        self.assertIn("dependencies_missing", markdown_path.read_text(encoding="utf-8"))
+        self.assertEqual(summary["external_adapter_plans"][0]["label"], "local_mock")
+        self.assertTrue(summary["external_adapter_plans"][0]["ready"])
+        self.assertEqual(summary["external_adapter_plans"][0]["ready_adapter_count"], 1)
+        self.assertEqual(summary["risks"], [])
+        self.assertEqual(summary["repair_curriculum"]["work_item_count"], 0)
+        self.assertEqual(summary["conclusion"]["status"], "ready")
+        report = markdown_path.read_text(encoding="utf-8")
+        self.assertIn("- Governance ready: yes", report)
+        self.assertNotIn("dependencies_missing", report)
         self.assertEqual(run_cli(["validate", "--eval-summary", str(summary_path), "--strict"]), 0)
 
     def test_eval_summary_allows_claims_for_identical_heldout_scenarios(self):

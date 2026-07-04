@@ -127,7 +127,7 @@
       "summary": "flight_recorder_did_not_apply_governance_side_effects: passed=True"
     }
   ],
-  "created_at": "2026-07-03T00:00:00+00:00",
+  "created_at": "2026-07-04T17:42:07.831686+00:00",
   "decision": {
     "blocking_check_count": 0,
     "blocking_checks": [],
@@ -163,8 +163,8 @@
     "available": true,
     "blocked_reason_count": 0,
     "blocked_reasons": [],
-    "reason": "Demo ledger is fail-closed, so governance requests another iteration.",
-    "requested_by": "example-governance",
+    "reason": "Latest loop is side-effect free but promotion governance remains blocked.",
+    "requested_by": "governance-review",
     "summary": "Governance can request another iteration."
   },
   "schema_version": "hfr.agentic_loop_governance_receipt.v1",
@@ -239,7 +239,7 @@
     },
     "role": "agentic_loop_ledger",
     "schema_version": "hfr.agentic_loop_ledger.v1",
-    "sha256": "38ef9336d01ce65f0e17b7ba4d7360d115376ade8528e532ebd309fd8addad75",
-    "size_bytes": 22190
+    "sha256": "c10ac223e19f15a5948b6c69057b8678f649ae305917f282f3729e09b52d6179",
+    "size_bytes": 22192
   }
 }

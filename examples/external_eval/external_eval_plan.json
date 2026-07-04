@@ -1,5 +1,5 @@
 {
-  "adapter_count": 4,
+  "adapter_count": 5,
   "adapters": [
     {
       "adapter_contract": {
@@ -180,6 +180,58 @@
     },
     {
       "adapter_contract": {
+        "adapter_id": "external_eval.local_mock.fail_closed.v1",
+        "cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "plan_and_receipt_only",
+        "external_adapter_id": "local_mock",
+        "live_benchmark_supported": false,
+        "model_downloads_started_by_flight_recorder": false,
+        "provider_api_called_by_flight_recorder": false,
+        "receipt_types": [
+          "hfr.external_eval_adapters.v1",
+          "hfr.external_eval_receipt.v1"
+        ],
+        "requires_dependency_probe_before_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_external_runner_receipt_for_live": true,
+        "requires_identical_heldout_scenarios": true,
+        "schema_version": "hfr.external_eval_adapter_contract.v1"
+      },
+      "blocking_reasons": [
+        "adapter_disabled_until_allow_installed",
+        "missing_model_endpoint"
+      ],
+      "dependency_status": {
+        "available": true,
+        "commands": {},
+        "imports": {}
+      },
+      "domain": "offline_agentic_tasks",
+      "execution_contract": {
+        "boundary": "Local mock eval receipts replay committed held-out fixtures only and never start live benchmarks.",
+        "requires_identical_heldout_scenarios": true,
+        "scenario_manifest_sha256": "e196d5f330d2a0fafe7adeb032ed41b8c4710ad373d8432d44f7a36b773367a5"
+      },
+      "full_name": "Flight Recorder local mock external eval",
+      "id": "local_mock",
+      "name": "Local mock eval",
+      "provided_inputs": [
+        "scenario_manifest"
+      ],
+      "ready": false,
+      "required_inputs": [
+        "scenario_manifest",
+        "model_endpoint"
+      ],
+      "suite_tags": [
+        "agentic",
+        "mock",
+        "offline"
+      ]
+    },
+    {
+      "adapter_contract": {
         "adapter_id": "external_eval.swe_bench.fail_closed.v1",
         "cost_incurred_usd": 0,
         "credential_values_recorded": false,
@@ -251,7 +303,7 @@
     "missing_swe_bench_task_set",
     "missing_tool_schema_set"
   ],
-  "generated_at": "2026-07-03T20:33:19.851071+00:00",
+  "generated_at": "2026-07-04T17:41:05.937549+00:00",
   "governance_handoff": {
     "external_eval_claims_allowed": false,
     "recommendation": "Keep external eval claims disabled until every selected adapter is ready.",
@@ -282,6 +334,7 @@
     "bfcl",
     "inspect_ai",
     "lm_eval_harness",
+    "local_mock",
     "swe_bench"
   ]
 }

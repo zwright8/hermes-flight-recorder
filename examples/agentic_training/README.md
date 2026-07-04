@@ -229,14 +229,11 @@ flightrecorder heldout-manifest \
   --out examples/agentic_training/heldout_eval/heldout_manifest.json
 
 flightrecorder external-eval-plan \
+  --adapter local_mock \
   --scenario-manifest examples/agentic_training/heldout_eval/heldout_manifest.json \
   --model-endpoint local/mock-candidate \
   --model local/mock-candidate \
-  --tool-schema-set mock-tool-schema-set \
-  --inspect-task-set agentic-heldout-inspect \
-  --lm-eval-task agentic_heldout \
-  --swe-bench-task-set agentic-heldout-swebench \
-  --sandbox-policy locked-network \
+  --allow-installed \
   --out examples/agentic_training/heldout_eval/external_eval_plan.json
 
 flightrecorder external-eval-receipt \
@@ -247,16 +244,17 @@ flightrecorder external-eval-receipt \
 flightrecorder eval-summary \
   --suite-summary baseline=examples/agentic_training/heldout_eval/baseline_suite_summary.json \
   --suite-summary candidate=examples/agentic_training/heldout_eval/candidate_suite_summary.json \
-  --external-adapter-plan external=examples/agentic_training/heldout_eval/external_eval_plan.json \
+  --external-adapter-plan local_mock=examples/agentic_training/heldout_eval/external_eval_plan.json \
   --out examples/agentic_training/heldout_eval/eval_summary.json \
   --markdown-out examples/agentic_training/heldout_eval/eval_summary.md
 ```
 
-The external-eval plan, receipt, and eval summary exit nonzero in this fixture
-because optional BFCL, Inspect AI, lm-eval-harness, and SWE-bench dependencies
-are not enabled. They still write schema-checkable artifacts with zero provider
-API calls, model downloads, benchmark launches, credential recording, cost, or
-weight updates.
+The agentic-training fixture uses the built-in `local_mock` adapter so held-out
+eval can pass offline while still proving zero provider API calls, model
+downloads, benchmark launches, credential recording, cost, or weight updates.
+Real BFCL, Inspect AI, lm-eval-harness, and SWE-bench adapters remain
+fail-closed in the standalone `examples/external_eval/` fixtures until their
+dependencies, inputs, and explicit opt-in flags are present.
 
 Generate the evidence handoff harness result and bundle:
 
@@ -329,8 +327,8 @@ flightrecorder agentic-loop plan \
 ```
 
 The committed plan is intentionally `planned_fail_closed` because this example
-binds a blocked promotion decision and promotion ledger while external adapter
-dependencies are intentionally not enabled. It does bind loop-local rollout plan
+binds a blocked promotion decision and promotion ledger. It does bind a passing
+offline held-out eval receipt through `local_mock`, loop-local rollout plan
 and mock receipt, harness/evidence handoff artifacts, a managed mock serving
 lifecycle, nested model-grader review, rejection-sampling, dataset-curation, training-export,
 trainer-preflight, trainer-launch-check, cloud-training, held-out eval,

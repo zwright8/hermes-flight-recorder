@@ -41,7 +41,7 @@
     "ready_adapter_count": { "minimum": 0, "type": "integer" },
     "schema_version": { "const": "hfr.external_eval_adapters.v1" },
     "selected_adapters": {
-      "items": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+      "items": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "local_mock", "swe_bench"], "type": "string" },
       "type": "array"
     }
   },
@@ -70,7 +70,7 @@
         "domain": { "minLength": 1, "type": "string" },
         "execution_contract": { "$ref": "#/$defs/executionContract" },
         "full_name": { "minLength": 1, "type": "string" },
-        "id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+        "id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "local_mock", "swe_bench"], "type": "string" },
         "name": { "minLength": 1, "type": "string" },
         "provided_inputs": { "items": { "type": "string" }, "type": "array" },
         "ready": { "type": "boolean" },
@@ -100,7 +100,7 @@
         "cost_incurred_usd": { "const": 0 },
         "credential_values_recorded": { "const": false },
         "dry_run_transport": { "const": "plan_and_receipt_only" },
-        "external_adapter_id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "swe_bench"], "type": "string" },
+        "external_adapter_id": { "enum": ["bfcl", "inspect_ai", "lm_eval_harness", "local_mock", "swe_bench"], "type": "string" },
         "live_benchmark_supported": { "const": false },
         "model_downloads_started_by_flight_recorder": { "const": false },
         "provider_api_called_by_flight_recorder": { "const": false },
