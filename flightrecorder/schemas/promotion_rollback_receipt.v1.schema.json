@@ -1,50 +1,24 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/promotion_rollback_receipt.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Promotion rollback receipt proving the rollback target is registered and matches the current champion before alias movement.",
   "properties": {
-    "artifacts": {
-      "additionalProperties": true,
-      "properties": {
-        "registry": {"type": "object"}
-      },
-      "required": ["registry"],
-      "type": "object"
-    },
+    "artifacts": {"$ref": "#/$defs/rollbackArtifacts"},
     "available": {"type": "boolean"},
     "champion_id": {"type": "string"},
     "check_count": {"minimum": 0, "type": "integer"},
-    "checks": {"items": {"type": "object"}, "type": "array"},
+    "checks": {"items": {"$ref": "#/$defs/gateCheck"}, "type": "array"},
     "failed_check_count": {"minimum": 0, "type": "integer"},
-    "metrics": {"type": "object"},
+    "metadata": {"additionalProperties": {"type": "string"}, "type": "object"},
+    "metrics": {"$ref": "#/$defs/rollbackMetrics"},
     "notes": {"items": {"type": "string"}, "type": "array"},
     "passed": {"type": "boolean"},
     "readiness": {"enum": ["ready", "blocked"], "type": "string"},
     "receipt_path": {"type": "string"},
     "recommendation": {"enum": ["use_rollback_target", "block_promotion"], "type": "string"},
-    "registry": {
-      "additionalProperties": true,
-      "properties": {
-        "aliases": {"type": "object"},
-        "path": {"type": "string"},
-        "sha256": {"type": ["string", "null"]},
-        "size_bytes": {"minimum": 0, "type": "integer"}
-      },
-      "required": ["path", "sha256", "size_bytes", "aliases"],
-      "type": "object"
-    },
-    "rollback": {
-      "additionalProperties": true,
-      "properties": {
-        "available": {"type": "boolean"},
-        "champion_id": {"type": "string"},
-        "id": {"type": "string"},
-        "target_model_id": {"type": "string"}
-      },
-      "required": ["id", "target_model_id", "champion_id", "available"],
-      "type": "object"
-    },
+    "registry": {"$ref": "#/$defs/fingerprintedAliasSnapshot"},
+    "rollback": {"$ref": "#/$defs/rollback"},
     "rollback_id": {"type": "string"},
     "schema_version": {"const": "hfr.promotion_rollback_receipt.v1"},
     "target_model_id": {"type": "string"}
@@ -68,6 +42,77 @@
     "metrics",
     "notes"
   ],
+  "$defs": {
+    "fingerprintedAliasSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {"additionalProperties": {"type": "string"}, "type": "object"},
+        "path": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "sha256", "size_bytes", "aliases"],
+      "type": "object"
+    },
+    "fingerprintedArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": "boolean"},
+        "file_count": {"minimum": 0, "type": "integer"},
+        "kind": {"enum": ["file", "directory", "missing", "other"], "type": "string"},
+        "path": {"type": "string"},
+        "role": {"type": "string"},
+        "schema_version": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["role", "path", "exists", "kind"],
+      "type": "object"
+    },
+    "gateCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": true,
+        "expected": {"additionalProperties": true, "type": "object"},
+        "id": {"type": "string"},
+        "passed": {"type": "boolean"},
+        "scope": {"additionalProperties": true, "type": "object"},
+        "summary": {"type": "string"}
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "rollback": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {"type": "boolean"},
+        "champion_id": {"type": "string"},
+        "id": {"type": "string"},
+        "target_model_id": {"type": "string"}
+      },
+      "required": ["id", "target_model_id", "champion_id", "available"],
+      "type": "object"
+    },
+    "rollbackArtifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "registry": {"$ref": "#/$defs/fingerprintedArtifact"}
+      },
+      "required": ["registry"],
+      "type": "object"
+    },
+    "rollbackMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "alias_count": {"minimum": 0, "type": "integer"},
+        "check_count": {"minimum": 0, "type": "integer"},
+        "failed_check_count": {"minimum": 0, "type": "integer"},
+        "registered_model_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["check_count", "failed_check_count", "registered_model_count", "alias_count"],
+      "type": "object"
+    }
+  },
   "title": "Hermes Flight Recorder Promotion Rollback Receipt",
   "type": "object"
 }

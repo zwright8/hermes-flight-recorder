@@ -1,32 +1,20 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/promotion_alias_apply.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Guarded alias-apply receipt proving registry aliases moved only after a passing promotion decision.",
   "properties": {
-    "alias_history_entry": {"type": ["object", "null"]},
-    "artifacts": {"type": "object"},
+    "alias_history_entry": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/aliasHistoryEntry"}]},
+    "artifacts": {"$ref": "#/$defs/aliasApplyArtifacts"},
     "check_count": {"minimum": 0, "type": "integer"},
-    "checks": {"items": {"type": "object"}, "type": "array"},
+    "checks": {"items": {"$ref": "#/$defs/gateCheck"}, "type": "array"},
     "failed_check_count": {"minimum": 0, "type": "integer"},
-    "metadata": {"type": "object"},
-    "metrics": {"type": "object"},
+    "metadata": {"additionalProperties": {"type": "string"}, "type": "object"},
+    "metrics": {"$ref": "#/$defs/aliasApplyMetrics"},
     "notes": {"items": {"type": "string"}, "type": "array"},
     "passed": {"type": "boolean"},
-    "promotion_decision": {
-      "additionalProperties": true,
-      "properties": {
-        "candidate_id": {"type": "string"},
-        "champion_previous_target": {"type": "string"},
-        "path": {"type": "string"},
-        "rollback_id": {"type": "string"},
-        "sha256": {"type": ["string", "null"]},
-        "size_bytes": {"minimum": 0, "type": "integer"}
-      },
-      "required": ["path", "sha256", "size_bytes", "candidate_id", "champion_previous_target", "rollback_id"],
-      "type": "object"
-    },
-    "promotion_decision_validation": {"type": "object"},
+    "promotion_decision": {"$ref": "#/$defs/promotionDecisionRef"},
+    "promotion_decision_validation": {"$ref": "#/$defs/validationSummary"},
     "readiness": {"enum": ["applied", "blocked"], "type": "string"},
     "receipt_path": {"type": "string"},
     "recommendation": {"enum": ["alias_update_applied", "hold_aliases"], "type": "string"},
@@ -53,23 +41,128 @@
     "notes"
   ],
   "$defs": {
+    "aliasApplyArtifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "promotion_decision": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "registry": {"$ref": "#/$defs/fingerprintedArtifact"}
+      },
+      "required": ["registry", "promotion_decision"],
+      "type": "object"
+    },
+    "aliasApplyMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "alias_count_after": {"minimum": 0, "type": "integer"},
+        "alias_count_before": {"minimum": 0, "type": "integer"},
+        "alias_history_count_after": {"minimum": 0, "type": "integer"},
+        "alias_history_count_before": {"minimum": 0, "type": "integer"},
+        "check_count": {"minimum": 0, "type": "integer"},
+        "failed_check_count": {"minimum": 0, "type": "integer"},
+        "registered_model_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "check_count",
+        "failed_check_count",
+        "registered_model_count",
+        "alias_count_before",
+        "alias_count_after",
+        "alias_history_count_before",
+        "alias_history_count_after"
+      ],
+      "type": "object"
+    },
+    "aliasHistoryEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "previous_aliases": {"additionalProperties": {"type": "string"}, "type": "object"},
+        "promotion_decision_sha256": {"type": ["string", "null"]},
+        "updated_aliases": {"additionalProperties": {"type": "string"}, "type": "object"}
+      },
+      "required": ["promotion_decision_sha256", "previous_aliases", "updated_aliases"],
+      "type": "object"
+    },
     "aliasSnapshot": {
       "additionalProperties": false,
       "properties": {
-        "aliases": {"type": "object"}
+        "aliases": {"additionalProperties": {"type": "string"}, "type": "object"}
       },
       "required": ["aliases"],
       "type": "object"
     },
     "fingerprintedAliasSnapshot": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
-        "aliases": {"type": "object"},
+        "aliases": {"additionalProperties": {"type": "string"}, "type": "object"},
         "path": {"type": "string"},
         "sha256": {"type": ["string", "null"]},
         "size_bytes": {"minimum": 0, "type": "integer"}
       },
       "required": ["path", "sha256", "size_bytes", "aliases"],
+      "type": "object"
+    },
+    "fingerprintedArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": "boolean"},
+        "file_count": {"minimum": 0, "type": "integer"},
+        "kind": {"enum": ["file", "directory", "missing", "other"], "type": "string"},
+        "path": {"type": "string"},
+        "role": {"type": "string"},
+        "schema_version": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["role", "path", "exists", "kind"],
+      "type": "object"
+    },
+    "gateCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": true,
+        "expected": {"additionalProperties": true, "type": "object"},
+        "id": {"type": "string"},
+        "passed": {"type": "boolean"},
+        "scope": {"additionalProperties": true, "type": "object"},
+        "summary": {"type": "string"}
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "promotionDecisionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "champion_previous_target": {"type": "string"},
+        "path": {"type": "string"},
+        "rollback_id": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["path", "sha256", "size_bytes", "candidate_id", "champion_previous_target", "rollback_id"],
+      "type": "object"
+    },
+    "validationSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "error_count": {"minimum": 0, "type": "integer"},
+        "passed": {"type": ["boolean", "null"]},
+        "target_count": {"minimum": 0, "type": "integer"},
+        "targets": {"items": {"$ref": "#/$defs/validationTarget"}, "type": "array"},
+        "warning_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["passed", "target_count", "error_count", "warning_count", "targets"],
+      "type": "object"
+    },
+    "validationTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "error_count": {"minimum": 0, "type": "integer"},
+        "passed": {"type": ["boolean", "null"]},
+        "type": {"type": "string"},
+        "warning_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["type", "passed", "error_count", "warning_count"],
       "type": "object"
     }
   },

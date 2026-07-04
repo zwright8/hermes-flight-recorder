@@ -16434,7 +16434,166 @@ def _validate_promotion_cards_metrics(value: Any, checks: list[Any], target: Val
             target.errors.append(f"promotion_cards.metrics.{field_name} must be a non-negative integer.")
 
 
+_PROMOTION_FINGERPRINTED_ARTIFACT_KEYS = {
+    "role",
+    "path",
+    "exists",
+    "kind",
+    "sha256",
+    "size_bytes",
+    "file_count",
+    "schema_version",
+}
+_PROMOTION_GATE_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary", "scope"}
+_PROMOTION_POLICY_KEYS = {
+    "schema_version",
+    "id",
+    "description",
+    "source",
+    "required_artifacts",
+    "release_required_artifacts",
+    "allowed_candidate_classes",
+    "allowed_champion_classes",
+    "limits",
+    "forbid_new_critical_rules",
+    "forbid_regressed_rules",
+    "requirements",
+    "artifact",
+}
+_PROMOTION_POLICY_REQUIREMENT_KEYS = {
+    "require_known_license",
+    "require_accepted_terms",
+    "require_rollback_metadata",
+    "require_supported_cards",
+    "require_artifact_validation",
+}
+_PROMOTION_DECISION_KEYS = {
+    "schema_version",
+    "decision_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "models",
+    "decision",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "artifacts",
+    "policy",
+    "metrics",
+    "alias_update",
+    "notes",
+    "metadata",
+}
+_PROMOTION_DECISION_MODELS_KEYS = {"candidate", "champion", "rollback"}
+_PROMOTION_DECISION_MODEL_KEYS = {"id", "class"}
+_PROMOTION_DECISION_BLOCK_KEYS = {
+    "readiness",
+    "recommendation",
+    "summary",
+    "blocking_check_count",
+    "blocking_checks",
+    "key_metrics",
+}
+_PROMOTION_DECISION_BLOCKING_CHECK_KEYS = {"id", "summary", "scope"}
+_PROMOTION_DECISION_METRICS_KEYS = {
+    "check_count",
+    "failed_check_count",
+    "required_artifact_count",
+    "policy_required_artifact_count",
+    "policy_release_required_artifact_count",
+    "task_completion_regression_count",
+    "baseline_win_count",
+    "contract_drift_count",
+    "unverified_contract_count",
+    "new_critical_failure_count",
+    "rule_regression_count",
+}
+_PROMOTION_DECISION_ALIAS_UPDATE_KEYS = {"authorized", "recommendation", "aliases"}
+_PROMOTION_DECISION_ALIAS_ROW_KEYS = {"alias", "previous_target", "target"}
+_PROMOTION_ALIAS_APPLY_KEYS = {
+    "schema_version",
+    "receipt_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "promotion_decision",
+    "promotion_decision_validation",
+    "registry_before",
+    "registry_after",
+    "alias_history_entry",
+    "artifacts",
+    "metrics",
+    "notes",
+    "metadata",
+}
+_PROMOTION_ALIAS_APPLY_DECISION_REF_KEYS = {
+    "path",
+    "sha256",
+    "size_bytes",
+    "candidate_id",
+    "champion_previous_target",
+    "rollback_id",
+}
+_PROMOTION_ALIAS_APPLY_ARTIFACT_KEYS = {"registry", "promotion_decision"}
+_PROMOTION_ALIAS_APPLY_METRICS_KEYS = {
+    "check_count",
+    "failed_check_count",
+    "registered_model_count",
+    "alias_count_before",
+    "alias_count_after",
+    "alias_history_count_before",
+    "alias_history_count_after",
+}
+_PROMOTION_ALIAS_HISTORY_ENTRY_KEYS = {"promotion_decision_sha256", "previous_aliases", "updated_aliases"}
+_PROMOTION_ROLLBACK_RECEIPT_KEYS = {
+    "schema_version",
+    "receipt_path",
+    "passed",
+    "available",
+    "readiness",
+    "recommendation",
+    "rollback_id",
+    "target_model_id",
+    "champion_id",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "rollback",
+    "registry",
+    "artifacts",
+    "metrics",
+    "notes",
+    "metadata",
+}
+_PROMOTION_ROLLBACK_BLOCK_KEYS = {"id", "target_model_id", "champion_id", "available"}
+_PROMOTION_ROLLBACK_ARTIFACT_KEYS = {"registry"}
+_PROMOTION_ROLLBACK_METRICS_KEYS = {"check_count", "failed_check_count", "registered_model_count", "alias_count"}
+
+
+def _validate_promotion_gate_check_keys(checks: list[Any], target: ValidationTarget, label: str) -> None:
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(check, _PROMOTION_GATE_CHECK_KEYS, target, f"{label}[{index}]")
+
+
+def _validate_promotion_fingerprinted_artifact(
+    value: Any,
+    role: str,
+    target: ValidationTarget,
+    source_path: Path,
+    prefix: str,
+) -> None:
+    if isinstance(value, dict):
+        _validate_allowed_keys(value, _PROMOTION_FINGERPRINTED_ARTIFACT_KEYS, target, f"{prefix}.{role}")
+    _validate_fingerprinted_artifact(value, role, target, source_path, prefix)
+
+
 def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(receipt, _PROMOTION_ALIAS_APPLY_KEYS, target, "promotion_alias_apply")
     _require_equal(receipt, "schema_version", PROMOTION_ALIAS_APPLY_SCHEMA_VERSION, target)
     if not isinstance(receipt.get("receipt_path"), str):
         target.errors.append("promotion_alias_apply.receipt_path must be a string.")
@@ -16445,6 +16604,7 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
         target.errors.append("promotion_alias_apply.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "promotion_alias_apply.checks")
+    _validate_promotion_gate_check_keys(checks, target, "promotion_alias_apply.checks")
     if receipt.get("check_count") != len(checks):
         target.errors.append(f"promotion_alias_apply.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
     if receipt.get("failed_check_count") != failed_checks:
@@ -16467,13 +16627,22 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
     if not isinstance(artifacts, dict):
         target.errors.append("promotion_alias_apply.artifacts must be an object.")
         artifacts = {}
+    else:
+        _validate_allowed_keys(artifacts, _PROMOTION_ALIAS_APPLY_ARTIFACT_KEYS, target, "promotion_alias_apply.artifacts")
     for role in ("registry", "promotion_decision"):
-        _validate_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_alias_apply.artifacts")
+        _validate_promotion_fingerprinted_artifact(artifacts.get(role), role, target, source_path, "promotion_alias_apply.artifacts")
 
     decision_ref = receipt.get("promotion_decision")
     if not isinstance(decision_ref, dict):
         target.errors.append("promotion_alias_apply.promotion_decision must be an object.")
         decision_ref = {}
+    else:
+        _validate_allowed_keys(
+            decision_ref,
+            _PROMOTION_ALIAS_APPLY_DECISION_REF_KEYS,
+            target,
+            "promotion_alias_apply.promotion_decision",
+        )
     for field_name in ("path", "candidate_id", "champion_previous_target", "rollback_id"):
         if not isinstance(decision_ref.get(field_name), str):
             target.errors.append(f"promotion_alias_apply.promotion_decision.{field_name} must be a string.")
@@ -16555,6 +16724,7 @@ def _validate_promotion_alias_apply(receipt: dict[str, Any], target: ValidationT
 
 
 def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(receipt, _PROMOTION_ROLLBACK_RECEIPT_KEYS, target, "promotion_rollback_receipt")
     _require_equal(receipt, "schema_version", PROMOTION_ROLLBACK_RECEIPT_SCHEMA_VERSION, target)
     if not isinstance(receipt.get("receipt_path"), str):
         target.errors.append("promotion_rollback_receipt.receipt_path must be a string.")
@@ -16567,6 +16737,7 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
         target.errors.append("promotion_rollback_receipt.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "promotion_rollback_receipt.checks")
+    _validate_promotion_gate_check_keys(checks, target, "promotion_rollback_receipt.checks")
     if receipt.get("check_count") != len(checks):
         target.errors.append(f"promotion_rollback_receipt.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
     if receipt.get("failed_check_count") != failed_checks:
@@ -16596,6 +16767,8 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
     if not isinstance(rollback, dict):
         target.errors.append("promotion_rollback_receipt.rollback must be an object.")
         rollback = {}
+    else:
+        _validate_allowed_keys(rollback, _PROMOTION_ROLLBACK_BLOCK_KEYS, target, "promotion_rollback_receipt.rollback")
     for field_name in ("id", "target_model_id", "champion_id"):
         if not isinstance(rollback.get(field_name), str):
             target.errors.append(f"promotion_rollback_receipt.rollback.{field_name} must be a string.")
@@ -16612,7 +16785,9 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
     if not isinstance(artifacts, dict):
         target.errors.append("promotion_rollback_receipt.artifacts must be an object.")
         artifacts = {}
-    _validate_fingerprinted_artifact(
+    else:
+        _validate_allowed_keys(artifacts, _PROMOTION_ROLLBACK_ARTIFACT_KEYS, target, "promotion_rollback_receipt.artifacts")
+    _validate_promotion_fingerprinted_artifact(
         artifacts.get("registry"),
         "registry",
         target,
@@ -16651,6 +16826,7 @@ def _validate_promotion_rollback_receipt(receipt: dict[str, Any], target: Valida
     if not isinstance(metrics, dict):
         target.errors.append("promotion_rollback_receipt.metrics must be an object.")
     else:
+        _validate_allowed_keys(metrics, _PROMOTION_ROLLBACK_METRICS_KEYS, target, "promotion_rollback_receipt.metrics")
         expected_metrics = {
             "check_count": len(checks),
             "failed_check_count": failed_checks,
@@ -16946,6 +17122,8 @@ def _validate_alias_snapshot(
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return snapshot
+    allowed_keys = {"aliases", "path", "sha256", "size_bytes"} if allow_fingerprint else {"aliases"}
+    _validate_allowed_keys(value, allowed_keys, target, label)
     if not allow_fingerprint:
         for field_name in ("path", "sha256", "size_bytes"):
             if field_name in value:
@@ -16998,6 +17176,7 @@ def _validate_alias_history_entry(
     if not isinstance(value, dict):
         target.errors.append("promotion_alias_apply.alias_history_entry must be an object for applied receipts.")
         return None
+    _validate_allowed_keys(value, _PROMOTION_ALIAS_HISTORY_ENTRY_KEYS, target, "promotion_alias_apply.alias_history_entry")
     if value.get("promotion_decision_sha256") != expected_decision_sha:
         target.errors.append("promotion_alias_apply.alias_history_entry.promotion_decision_sha256 must match promotion_decision.sha256.")
     previous_aliases = value.get("previous_aliases")
@@ -17109,6 +17288,7 @@ def _validate_promotion_alias_apply_metrics(
     if not isinstance(value, dict):
         target.errors.append("promotion_alias_apply.metrics must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_ALIAS_APPLY_METRICS_KEYS, target, "promotion_alias_apply.metrics")
     expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
     expected = {
         "check_count": len(checks),
@@ -17133,6 +17313,7 @@ def _validate_promotion_alias_apply_metrics(
 
 
 def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
+    _validate_allowed_keys(decision, _PROMOTION_DECISION_KEYS, target, "promotion_decision")
     _require_equal(decision, "schema_version", PROMOTION_DECISION_SCHEMA_VERSION, target)
     if not isinstance(decision.get("decision_path"), str):
         target.errors.append("promotion_decision.decision_path must be a string.")
@@ -17143,6 +17324,7 @@ def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTar
         target.errors.append("promotion_decision.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "promotion_decision.checks")
+    _validate_promotion_gate_check_keys(checks, target, "promotion_decision.checks")
     if decision.get("check_count") != len(checks):
         target.errors.append(f"promotion_decision.check_count expected {len(checks)}, got {decision.get('check_count')!r}.")
     if decision.get("failed_check_count") != failed_checks:
@@ -17167,6 +17349,8 @@ def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTar
     if not isinstance(models, dict):
         target.errors.append("promotion_decision.models must be an object.")
         models = {}
+    else:
+        _validate_allowed_keys(models, _PROMOTION_DECISION_MODELS_KEYS, target, "promotion_decision.models")
     for role in ("candidate", "champion", "rollback"):
         _validate_promotion_decision_model(models.get(role), target, f"promotion_decision.models.{role}")
     candidate_id = _promotion_model_id(models.get("candidate"))
@@ -17183,6 +17367,8 @@ def _validate_promotion_decision(decision: dict[str, Any], target: ValidationTar
     if not isinstance(artifacts, dict):
         target.errors.append("promotion_decision.artifacts must be an object.")
         artifacts = {}
+    else:
+        _validate_allowed_keys(artifacts, set(PROMOTION_DECISION_REQUIRED_ARTIFACTS), target, "promotion_decision.artifacts")
     for role in PROMOTION_DECISION_REQUIRED_ARTIFACTS:
         _validate_promotion_decision_artifact(artifacts.get(role), role, target, source_path)
     policy = decision.get("policy")
@@ -17216,6 +17402,7 @@ def _validate_promotion_decision_model(value: Any, target: ValidationTarget, lab
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_DECISION_MODEL_KEYS, target, label)
     if not isinstance(value.get("id"), str):
         target.errors.append(f"{label}.id must be a string.")
     if not isinstance(value.get("class"), str) or not value.get("class"):
@@ -17252,6 +17439,7 @@ def _validate_promotion_decision_block(
     if not isinstance(value, dict):
         target.errors.append("promotion_decision.decision must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_DECISION_BLOCK_KEYS, target, "promotion_decision.decision")
     if value.get("readiness") != expected_readiness:
         target.errors.append(f"promotion_decision.decision.readiness expected {expected_readiness!r}, got {value.get('readiness')!r}.")
     if value.get("recommendation") != expected_recommendation:
@@ -17277,17 +17465,21 @@ def _validate_promotion_decision_block(
         if not isinstance(check, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(check, _PROMOTION_DECISION_BLOCKING_CHECK_KEYS, target, label)
         for field_name in ("id", "summary"):
             if not isinstance(check.get(field_name), str) or not check.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
         if not isinstance(check.get("scope"), dict):
             target.errors.append(f"{label}.scope must be an object.")
-    if not isinstance(value.get("key_metrics"), dict):
+    key_metrics = value.get("key_metrics")
+    if not isinstance(key_metrics, dict):
         target.errors.append("promotion_decision.decision.key_metrics must be an object.")
+    else:
+        _validate_allowed_keys(key_metrics, _PROMOTION_DECISION_METRICS_KEYS, target, "promotion_decision.decision.key_metrics")
 
 
 def _validate_promotion_decision_artifact(value: Any, role: str, target: ValidationTarget, source_path: Path) -> None:
-    _validate_fingerprinted_artifact(value, role, target, source_path, "promotion_decision.artifacts")
+    _validate_promotion_fingerprinted_artifact(value, role, target, source_path, "promotion_decision.artifacts")
 
 
 def _validate_raw_promotion_policy(policy: dict[str, Any], target: ValidationTarget) -> None:
@@ -17347,6 +17539,7 @@ def _validate_promotion_policy_section(value: Any, target: ValidationTarget, sou
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_POLICY_KEYS, target, label)
     _require_equal(value, "schema_version", PROMOTION_POLICY_SCHEMA_VERSION, target, prefix=f"{label}.")
     for field_name in ("id", "description", "source"):
         if not isinstance(value.get(field_name), str) or not value.get(field_name):
@@ -17368,7 +17561,7 @@ def _validate_promotion_policy_section(value: Any, target: ValidationTarget, sou
     _validate_policy_requirements(value.get("requirements"), target, f"{label}.requirements")
     artifact = value.get("artifact")
     if source == "file":
-        _validate_fingerprinted_artifact(artifact, "promotion_policy", target, source_path, label)
+        _validate_promotion_fingerprinted_artifact(artifact, "promotion_policy", target, source_path, label)
     elif artifact is not None:
         target.errors.append(f"{label}.artifact must be absent for default policy sources.")
     if not required_artifacts or not release_required_artifacts:
@@ -17396,6 +17589,7 @@ def _validate_policy_limits(value: Any, target: ValidationTarget, label: str) ->
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, set(PROMOTION_POLICY_DEFAULT_LIMITS), target, label)
     expected_fields = (
         "max_task_completion_regressions",
         "max_baseline_wins",
@@ -17451,6 +17645,7 @@ def _validate_policy_requirements(value: Any, target: ValidationTarget, label: s
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_POLICY_REQUIREMENT_KEYS, target, label)
     for field_name in (
         "require_known_license",
         "require_accepted_terms",
@@ -17557,6 +17752,7 @@ def _validate_promotion_decision_metrics(value: Any, checks: list[Any], target: 
     if not isinstance(value, dict):
         target.errors.append("promotion_decision.metrics must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_DECISION_METRICS_KEYS, target, "promotion_decision.metrics")
     expected_failed = sum(1 for check in checks if isinstance(check, dict) and check.get("passed") is False)
     policy_obj = policy if isinstance(policy, dict) else {}
     expected_fields = {
@@ -17594,6 +17790,7 @@ def _validate_promotion_decision_alias_update(
     if not isinstance(value, dict):
         target.errors.append("promotion_decision.alias_update must be an object.")
         return
+    _validate_allowed_keys(value, _PROMOTION_DECISION_ALIAS_UPDATE_KEYS, target, "promotion_decision.alias_update")
     if value.get("authorized") != expected_passed:
         target.errors.append("promotion_decision.alias_update.authorized must match promotion pass state.")
     expected_recommendation = "apply_alias_update" if expected_passed else "hold_aliases"
@@ -17606,6 +17803,9 @@ def _validate_promotion_decision_alias_update(
         target.errors.append("promotion_decision.alias_update.aliases must be a list.")
         return
     alias_map = {item.get("alias"): item for item in aliases if isinstance(item, dict) and isinstance(item.get("alias"), str)}
+    for index, item in enumerate(aliases):
+        if isinstance(item, dict):
+            _validate_allowed_keys(item, _PROMOTION_DECISION_ALIAS_ROW_KEYS, target, f"promotion_decision.alias_update.aliases[{index}]")
     expected_targets = {"candidate": candidate_id, "champion": candidate_id, "rollback": rollback_id}
     for alias, expected_target in expected_targets.items():
         item = alias_map.get(alias)

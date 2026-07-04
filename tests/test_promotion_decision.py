@@ -95,6 +95,37 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(decision_path)]), 0)
 
+    def test_validate_promotion_decision_rejects_unknown_control_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            decision["cloud_job_id"] = "job-123"
+            decision["models"]["candidate"]["provider_signed_url"] = "https://provider.invalid/model"
+            decision["decision"]["promotion_alias_moved"] = True
+            decision["checks"][0]["credential_value"] = "redacted-secret"
+            decision["artifacts"]["model_card"]["model_download_path"] = "artifact.bin"
+            decision["policy"]["limits"]["max_cloud_cost_usd"] = 5
+            decision["metrics"]["live_spend_usd"] = 5
+            decision["alias_update"]["weights_updated"] = True
+            decision["alias_update"]["aliases"][0]["provider_job_id"] = "job-123"
+            decision_path.write_text(json.dumps(decision, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(decision_path)]), 1)
+            code = run_cli(["validate", "--promotion-decision", str(decision_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_decision contains unknown field(s): ['cloud_job_id'].", errors)
+            self.assertIn("promotion_decision.models.candidate contains unknown field(s): ['provider_signed_url'].", errors)
+            self.assertIn("promotion_decision.checks[0] contains unknown field(s): ['credential_value'].", errors)
+            self.assertIn("promotion_decision.alias_update contains unknown field(s): ['weights_updated'].", errors)
+
     def test_promotion_alias_apply_moves_aliases_after_valid_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -126,6 +157,38 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(receipt["alias_history_entry"]["updated_aliases"]["champion"], "candidate-v2")
             self.assertEqual(run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict"]), 0)
             self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 0)
+
+    def test_validate_promotion_alias_apply_rejects_unknown_control_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            registry_path = write_model_registry(root)
+            decision_path = root / "promotion_decision.json"
+            receipt_path = root / "promotion_alias_apply.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path)), 0)
+            self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, receipt_path)), 0)
+
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["promotion_alias_moved"] = True
+            receipt["promotion_decision"]["live_endpoint_url"] = "https://provider.invalid/serve"
+            receipt["registry_after"]["provider_signed_url"] = "https://provider.invalid/registry"
+            receipt["alias_history_entry"]["rollback_applied"] = True
+            receipt["artifacts"]["registry"]["private_path"] = "secret/registry.json"
+            receipt["metrics"]["cloud_cost_usd"] = 5
+            receipt["checks"][0]["credential_value"] = "redacted-secret"
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 1)
+            code = run_cli(["validate", "--promotion-alias-apply", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_alias_apply contains unknown field(s): ['promotion_alias_moved'].", errors)
+            self.assertIn("promotion_alias_apply.promotion_decision contains unknown field(s): ['live_endpoint_url'].", errors)
+            self.assertIn("promotion_alias_apply.registry_after contains unknown field(s): ['provider_signed_url'].", errors)
+            self.assertIn("promotion_alias_apply.checks[0] contains unknown field(s): ['credential_value'].", errors)
 
     def test_validate_promotion_alias_apply_rejects_forged_decision_validation_summary(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -324,6 +387,34 @@ class PromotionDecisionTests(unittest.TestCase):
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("promotion_rollback_receipt.registry.aliases", errors)
+
+    def test_validate_promotion_rollback_receipt_rejects_unknown_control_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registry_path = write_model_registry(root)
+            receipt_path = root / "rollback.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(promotion_rollback_receipt_args(registry_path, receipt_path)), 0)
+
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["rollback_applied"] = True
+            receipt["rollback"]["live_endpoint_url"] = "https://provider.invalid/serve"
+            receipt["registry"]["model_download_path"] = "artifact.bin"
+            receipt["artifacts"]["registry"]["provider_signed_url"] = "https://provider.invalid/registry"
+            receipt["metrics"]["cloud_cost_usd"] = 5
+            receipt["checks"][0]["credential_value"] = "redacted-secret"
+            receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            self.assertEqual(run_cli(["schemas", "--check", str(receipt_path)]), 1)
+            code = run_cli(["validate", "--promotion-rollback-receipt", str(receipt_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("promotion_rollback_receipt contains unknown field(s): ['rollback_applied'].", errors)
+            self.assertIn("promotion_rollback_receipt.rollback contains unknown field(s): ['live_endpoint_url'].", errors)
+            self.assertIn("promotion_rollback_receipt.registry contains unknown field(s): ['model_download_path'].", errors)
+            self.assertIn("promotion_rollback_receipt.checks[0] contains unknown field(s): ['credential_value'].", errors)
 
     def test_promotion_decision_accepts_passing_rollback_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,59 +1,22 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/promotion_decision.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Side-effect-free governance decision authorizing or blocking promotion alias movement.",
   "properties": {
-    "alias_update": {
-      "additionalProperties": true,
-      "properties": {
-        "aliases": {"items": {"type": "object"}, "type": "array"},
-        "authorized": {"type": "boolean"}
-      },
-      "required": ["authorized", "aliases"],
-      "type": "object"
-    },
-    "artifacts": {"type": "object"},
-    "blocking_check_count": {"minimum": 0, "type": "integer"},
+    "alias_update": {"$ref": "#/$defs/aliasUpdate"},
+    "artifacts": {"$ref": "#/$defs/decisionArtifacts"},
     "check_count": {"minimum": 0, "type": "integer"},
-    "checks": {"items": {"type": "object"}, "type": "array"},
-    "decision": {
-      "additionalProperties": true,
-      "properties": {
-        "blocking_check_count": {"minimum": 0, "type": "integer"},
-        "blocking_checks": {"items": {"type": "object"}, "type": "array"},
-        "key_metrics": {"type": "object"},
-        "readiness": {"enum": ["ready", "blocked"], "type": "string"},
-        "recommendation": {"enum": ["apply_alias_update", "block_promotion"], "type": "string"},
-        "summary": {"type": "string"}
-      },
-      "required": [
-        "readiness",
-        "recommendation",
-        "summary",
-        "blocking_check_count",
-        "blocking_checks",
-        "key_metrics"
-      ],
-      "type": "object"
-    },
+    "checks": {"items": {"$ref": "#/$defs/gateCheck"}, "type": "array"},
+    "decision": {"$ref": "#/$defs/decisionBlock"},
     "decision_path": {"type": "string"},
     "failed_check_count": {"minimum": 0, "type": "integer"},
-    "metadata": {"type": "object"},
-    "metrics": {"type": "object"},
-    "models": {
-      "additionalProperties": true,
-      "properties": {
-        "candidate": {"type": "object"},
-        "champion": {"type": "object"},
-        "rollback": {"type": "object"}
-      },
-      "required": ["candidate", "champion", "rollback"],
-      "type": "object"
-    },
+    "metadata": {"additionalProperties": {"type": "string"}, "type": "object"},
+    "metrics": {"$ref": "#/$defs/decisionMetrics"},
+    "models": {"$ref": "#/$defs/decisionModels"},
     "notes": {"items": {"type": "string"}, "type": "array"},
     "passed": {"type": "boolean"},
-    "policy": {"type": "object"},
+    "policy": {"$ref": "#/$defs/promotionPolicy"},
     "readiness": {"enum": ["ready", "blocked"], "type": "string"},
     "recommendation": {"enum": ["apply_alias_update", "block_promotion"], "type": "string"},
     "schema_version": {"const": "hfr.promotion_decision.v1"}
@@ -75,6 +38,242 @@
     "alias_update",
     "notes"
   ],
+  "$defs": {
+    "aliasRow": {
+      "additionalProperties": false,
+      "properties": {
+        "alias": {"type": "string"},
+        "previous_target": {"type": "string"},
+        "target": {"type": "string"}
+      },
+      "required": ["alias", "target"],
+      "type": "object"
+    },
+    "aliasUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {"items": {"$ref": "#/$defs/aliasRow"}, "type": "array"},
+        "authorized": {"type": "boolean"},
+        "recommendation": {"enum": ["apply_alias_update", "hold_aliases"], "type": "string"}
+      },
+      "required": ["authorized", "recommendation", "aliases"],
+      "type": "object"
+    },
+    "decisionArtifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "agentic_training_result": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "compare_gate": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "dataset_card": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "evidence_bundle": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "license_review": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "model_card": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "model_registry_entry": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "promotion_ledger_gate": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "redaction_check": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "rollback_metadata": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "safety_gate": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "serving_profile": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "serving_report": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "trainer_launch_check": {"$ref": "#/$defs/fingerprintedArtifact"}
+      },
+      "required": [
+        "evidence_bundle",
+        "promotion_ledger_gate",
+        "compare_gate",
+        "trainer_launch_check",
+        "model_registry_entry",
+        "agentic_training_result",
+        "model_card",
+        "dataset_card",
+        "rollback_metadata",
+        "license_review",
+        "redaction_check",
+        "safety_gate",
+        "serving_profile",
+        "serving_report"
+      ],
+      "type": "object"
+    },
+    "decisionBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking_check_count": {"minimum": 0, "type": "integer"},
+        "blocking_checks": {"items": {"$ref": "#/$defs/blockingCheck"}, "type": "array"},
+        "key_metrics": {"$ref": "#/$defs/decisionMetrics"},
+        "readiness": {"enum": ["ready", "blocked"], "type": "string"},
+        "recommendation": {"enum": ["apply_alias_update", "block_promotion"], "type": "string"},
+        "summary": {"type": "string"}
+      },
+      "required": [
+        "readiness",
+        "recommendation",
+        "summary",
+        "blocking_check_count",
+        "blocking_checks",
+        "key_metrics"
+      ],
+      "type": "object"
+    },
+    "blockingCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string"},
+        "scope": {"additionalProperties": true, "type": "object"},
+        "summary": {"type": "string"}
+      },
+      "required": ["id", "summary", "scope"],
+      "type": "object"
+    },
+    "decisionMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_win_count": {"minimum": 0, "type": "integer"},
+        "check_count": {"minimum": 0, "type": "integer"},
+        "contract_drift_count": {"minimum": 0, "type": "integer"},
+        "failed_check_count": {"minimum": 0, "type": "integer"},
+        "new_critical_failure_count": {"minimum": 0, "type": "integer"},
+        "policy_release_required_artifact_count": {"minimum": 0, "type": "integer"},
+        "policy_required_artifact_count": {"minimum": 0, "type": "integer"},
+        "required_artifact_count": {"minimum": 0, "type": "integer"},
+        "rule_regression_count": {"minimum": 0, "type": "integer"},
+        "task_completion_regression_count": {"minimum": 0, "type": "integer"},
+        "unverified_contract_count": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "check_count",
+        "failed_check_count",
+        "required_artifact_count",
+        "policy_required_artifact_count",
+        "policy_release_required_artifact_count",
+        "task_completion_regression_count",
+        "baseline_win_count",
+        "contract_drift_count",
+        "unverified_contract_count",
+        "new_critical_failure_count",
+        "rule_regression_count"
+      ],
+      "type": "object"
+    },
+    "decisionModel": {
+      "additionalProperties": false,
+      "properties": {
+        "class": {"type": "string"},
+        "id": {"type": "string"}
+      },
+      "required": ["id", "class"],
+      "type": "object"
+    },
+    "decisionModels": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {"$ref": "#/$defs/decisionModel"},
+        "champion": {"$ref": "#/$defs/decisionModel"},
+        "rollback": {"$ref": "#/$defs/decisionModel"}
+      },
+      "required": ["candidate", "champion", "rollback"],
+      "type": "object"
+    },
+    "fingerprintedArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {"type": "boolean"},
+        "file_count": {"minimum": 0, "type": "integer"},
+        "kind": {"enum": ["file", "directory", "missing", "other"], "type": "string"},
+        "path": {"type": "string"},
+        "role": {"type": "string"},
+        "schema_version": {"type": "string"},
+        "sha256": {"type": ["string", "null"]},
+        "size_bytes": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["role", "path", "exists", "kind"],
+      "type": "object"
+    },
+    "gateCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": true,
+        "expected": {"additionalProperties": true, "type": "object"},
+        "id": {"type": "string"},
+        "passed": {"type": "boolean"},
+        "scope": {"additionalProperties": true, "type": "object"},
+        "summary": {"type": "string"}
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "policyLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_baseline_wins": {"minimum": 0, "type": "integer"},
+        "max_contract_drifts": {"minimum": 0, "type": "integer"},
+        "max_new_critical_failures": {"minimum": 0, "type": "integer"},
+        "max_rule_regressions": {"minimum": 0, "type": "integer"},
+        "max_task_completion_regressions": {"minimum": 0, "type": "integer"},
+        "max_unverified_contracts": {"minimum": 0, "type": "integer"}
+      },
+      "required": [
+        "max_task_completion_regressions",
+        "max_baseline_wins",
+        "max_contract_drifts",
+        "max_unverified_contracts",
+        "max_new_critical_failures",
+        "max_rule_regressions"
+      ],
+      "type": "object"
+    },
+    "policyRequirements": {
+      "additionalProperties": false,
+      "properties": {
+        "require_accepted_terms": {"type": "boolean"},
+        "require_artifact_validation": {"type": "boolean"},
+        "require_known_license": {"type": "boolean"},
+        "require_rollback_metadata": {"type": "boolean"},
+        "require_supported_cards": {"type": "boolean"}
+      },
+      "required": [
+        "require_known_license",
+        "require_accepted_terms",
+        "require_rollback_metadata",
+        "require_supported_cards",
+        "require_artifact_validation"
+      ],
+      "type": "object"
+    },
+    "promotionPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_candidate_classes": {"items": {"type": "string"}, "type": "array"},
+        "allowed_champion_classes": {"items": {"type": "string"}, "type": "array"},
+        "artifact": {"$ref": "#/$defs/fingerprintedArtifact"},
+        "description": {"type": "string"},
+        "forbid_new_critical_rules": {"items": {"type": "string"}, "type": "array"},
+        "forbid_regressed_rules": {"items": {"type": "string"}, "type": "array"},
+        "id": {"type": "string"},
+        "limits": {"$ref": "#/$defs/policyLimits"},
+        "release_required_artifacts": {"items": {"type": "string"}, "type": "array"},
+        "required_artifacts": {"items": {"type": "string"}, "type": "array"},
+        "requirements": {"$ref": "#/$defs/policyRequirements"},
+        "schema_version": {"const": "hfr.promotion_policy.v1"},
+        "source": {"enum": ["default", "file"], "type": "string"}
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "description",
+        "source",
+        "required_artifacts",
+        "release_required_artifacts",
+        "allowed_candidate_classes",
+        "allowed_champion_classes",
+        "limits",
+        "forbid_new_critical_rules",
+        "forbid_regressed_rules",
+        "requirements"
+      ],
+      "type": "object"
+    }
+  },
   "title": "Hermes Flight Recorder Promotion Decision",
   "type": "object"
 }
