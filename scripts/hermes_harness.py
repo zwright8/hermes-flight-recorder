@@ -129,6 +129,16 @@ def publish_harness_artifacts(
 
     scorecard = artifact_result["scorecard"]
     resolved_trace_path = _resolve_output_path(trace_path, run_dir)
+    if not preserve_paths and isinstance(artifact_result.get("lineage"), dict):
+        artifact_result["lineage"] = _rewrite_relative_replay_lineage(
+            artifact_result["lineage"],
+            run_dir,
+            {
+                "scenario": scenario_path,
+                "source_trace": resolved_trace_path,
+            },
+        )
+        _write_json(artifact_result["paths"]["lineage"], artifact_result["lineage"])
     scorecard_path = Path(artifact_result["paths"]["scorecard"])
     fake_secret_canary_check = _fake_secret_canary_check(
         trace_path=trace_path,

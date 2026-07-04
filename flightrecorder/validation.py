@@ -1896,7 +1896,7 @@ def _validate_harness_run_result(result: dict[str, Any], target: ValidationTarge
         target,
         "harness_result.replay",
     )
-    _warn_harness_replay_metadata_public_paths(replay, target, "harness_result.replay")
+    _warn_replay_metadata_public_paths(replay, target, "harness_result.replay")
     if not isinstance(replay.get("self_contained"), bool):
         target.errors.append("harness_result.replay.self_contained must be a boolean.")
     manifest = result.get("manifest") if isinstance(result.get("manifest"), dict) else {}
@@ -2374,10 +2374,10 @@ def _warn_harness_suite_run_public_paths(run: dict[str, Any], target: Validation
     _warn_absolute_public_path(target, f"{label}.scorecard.path", scorecard.get("path"))
     replay = run.get("replay") if isinstance(run.get("replay"), dict) else {}
     _warn_absolute_public_path(target, f"{label}.replay.lineage", replay.get("lineage"))
-    _warn_harness_replay_metadata_public_paths(replay, target, f"{label}.replay")
+    _warn_replay_metadata_public_paths(replay, target, f"{label}.replay")
 
 
-def _warn_harness_replay_metadata_public_paths(replay: dict[str, Any], target: ValidationTarget, label: str) -> None:
+def _warn_replay_metadata_public_paths(replay: dict[str, Any], target: ValidationTarget, label: str) -> None:
     argv = replay.get("argv")
     if isinstance(argv, list):
         for index, item in enumerate(argv):
@@ -26568,6 +26568,8 @@ def _validate_lineage_input_record(name: str, record: dict[str, Any], target: Va
     path_label = record.get("path")
     if path_label is not None and not isinstance(path_label, str):
         target.errors.append(f"{label}.path must be a string or null.")
+    else:
+        _warn_absolute_public_path(target, f"{label}.path", path_label)
     if not isinstance(record.get("exists"), bool):
         target.errors.append(f"{label}.exists must be a boolean.")
     if record.get("exists") is True:
@@ -26589,6 +26591,7 @@ def _validate_lineage_replay(replay: dict[str, Any], inputs: dict[str, dict[str,
         target.errors.append("artifact_lineage.replay.argv must be a list of non-empty strings.")
         argv = []
     else:
+        _warn_replay_metadata_public_paths(replay, target, "artifact_lineage.replay")
         expected_prefix = ["python", "-m", "flightrecorder", "run"]
         if argv[:4] != expected_prefix:
             target.errors.append("artifact_lineage.replay.argv must start with python -m flightrecorder run.")
@@ -26621,6 +26624,8 @@ def _validate_lineage_replay(replay: dict[str, Any], inputs: dict[str, dict[str,
             target.errors.append(f"{label} must contain path, sha256, size_bytes, and exists.")
         if fingerprint.get("path") is not None and not isinstance(fingerprint.get("path"), str):
             target.errors.append(f"{label}.path must be a string or null.")
+        else:
+            _warn_absolute_public_path(target, f"{label}.path", fingerprint.get("path"))
         if fingerprint.get("sha256") is not None and not _is_sha256(fingerprint.get("sha256")):
             target.errors.append(f"{label}.sha256 must be a SHA-256 hex string or null.")
         if fingerprint.get("size_bytes") is not None and not _is_non_negative_int(fingerprint.get("size_bytes")):

@@ -345,6 +345,36 @@ class ValidationTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("artifact_lineage.replay.input_fingerprints.scenario.size_bytes", errors)
 
+    def test_strict_validate_warns_on_absolute_lineage_replay_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            validation = Path(tmp) / "validation.json"
+            strict_validation = Path(tmp) / "strict_validation.json"
+            run_cli(
+                [
+                    "run",
+                    "--scenario",
+                    str(ROOT / "scenarios" / "prompt_injection_good.json"),
+                    "--out",
+                    str(run_dir),
+                    "--preserve-paths",
+                ]
+            )
+            lineage = json.loads((run_dir / "artifact_lineage.json").read_text(encoding="utf-8"))
+
+            self.assertTrue(any(Path(item).is_absolute() for item in lineage["replay"]["argv"]))
+            self.assertTrue(Path(lineage["replay"]["input_fingerprints"]["scenario"]["path"]).is_absolute())
+            self.assertTrue(any(Path(record["path"]).is_absolute() for record in lineage["inputs"] if record["name"] == "scenario"))
+            self.assertIn(str(ROOT / "scenarios" / "prompt_injection_good.json"), lineage["replay"]["command"])
+            self.assertEqual(run_cli(["validate", "--run", str(run_dir), "--out", str(validation)]), 0)
+            self.assertEqual(run_cli(["validate", "--run", str(run_dir), "--strict", "--out", str(strict_validation)]), 1)
+            summary = json.loads(strict_validation.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("artifact_lineage.inputs.scenario.path is absolute", warnings)
+            self.assertIn("artifact_lineage.replay.input_fingerprints.scenario.path is absolute", warnings)
+            self.assertIn("artifact_lineage.replay.argv[", warnings)
+            self.assertIn("artifact_lineage.replay.command[", warnings)
+
     def test_validate_rejects_broken_preference_reference(self):
         with tempfile.TemporaryDirectory() as tmp:
             runs = Path(tmp) / "runs"

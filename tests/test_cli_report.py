@@ -159,7 +159,14 @@ class CliReportTests(unittest.TestCase):
             self.assertEqual(replay_score["score"], source_score["score"])
             self.assertEqual(replay_score["passed"], source_score["passed"])
             self.assertTrue((replay / "artifact_lineage.json").exists())
-            self.assertEqual(run_cli(["validate", "--run", str(replay), "--strict"]), 0)
+            self.assertEqual(run_cli(["validate", "--run", str(replay)]), 0)
+            strict_summary = Path(tmp) / "strict_validation.json"
+            self.assertEqual(run_cli(["validate", "--run", str(replay), "--strict", "--out", str(strict_summary)]), 1)
+            warnings = "\n".join(
+                warning for target in json.loads(strict_summary.read_text(encoding="utf-8"))["targets"] for warning in target["warnings"]
+            )
+            self.assertIn("artifact_lineage.replay.argv[", warnings)
+            self.assertIn("artifact_lineage.replay.command[", warnings)
 
     def test_replay_command_refuses_redacted_replay_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
