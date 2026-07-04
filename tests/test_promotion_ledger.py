@@ -704,6 +704,31 @@ class PromotionLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("promotion_ledger_gate.promotion_ledger must resolve to an existing promotion ledger", errors)
 
+    def test_validate_rejects_promotion_ledger_gate_parent_symlink_source_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path, gate_path, code = _build_clean_promotion_ledger_gate(root)
+            summary_path = root / "validation.json"
+            self.assertEqual(code, 0)
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["promotion_ledger"] = str(Path("linked_source") / ledger_path.name)
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--promotion-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "promotion_ledger_gate.promotion_ledger must resolve to a regular non-symlink promotion ledger.",
+                errors,
+            )
+
     def test_validate_rejects_promotion_ledger_gate_invalid_source_ledger_without_crashing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

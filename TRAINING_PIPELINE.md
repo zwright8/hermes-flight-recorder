@@ -271,7 +271,9 @@ flightrecorder validate --improvement-ledger-gate runs/improvement_ledger_gate.j
 
 The gate checks bounded open/new/recurring work, critical/high repair pressure,
 required open work keys for tracked regressions, and required resolved work
-keys for fixes that must land before the next improvement handoff.
+keys for fixes that must land before the next improvement handoff. Validation
+rejects symlinked source improvement-ledger paths before replaying gate
+metrics, checks, or decisions.
 
 Across repeated iterations, use `flightrecorder action-ledger` to fold multiple
 `evidence_bundle.json` files into a stable repair ledger:
@@ -292,7 +294,8 @@ from the ledger file location and rejects symlinked source-bundle paths before
 trusting recurring-action counts.
 
 Use `flightrecorder gate-action-ledger` to block trainer promotion when repair
-pressure is not shrinking:
+pressure is not shrinking. Validation rejects symlinked source action-ledger
+paths before replaying gate metrics, checks, or decisions:
 
 ```bash
 flightrecorder gate-action-ledger \
@@ -357,7 +360,9 @@ launcher a stable "how did we get here?" artifact before it consumes the final
 decision gate. Use `flightrecorder gate-promotion-ledger` when trainer or CI
 automation needs a policy decision over that history, such as requiring a clean
 latest allow decision, capping blocked-rate or blocked streaks, and forbidding
-source `block_iteration` recommendations before launch. Use
+source `block_iteration` recommendations before launch. Validation rejects
+symlinked source promotion-ledger paths before replaying gate metrics, checks,
+or decisions. Use
 `flightrecorder promotion-archive` at the artifact-upload boundary: it copies
 the promotion ledger, promotion-ledger gate, decision gates, and resolvable
 source gate artifacts into a hash-checked directory that remains valid after

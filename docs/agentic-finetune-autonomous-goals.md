@@ -151,6 +151,8 @@ evidence.
   rejects symlinked source paths before trusting those fingerprints.
 - Improvement ledgers bind each source improvement plan to SHA-256 plus byte
   size evidence before downstream gates trust recurring-work metrics.
+- Action, improvement, and promotion ledger gates reject symlinked source
+  ledger paths before replaying metrics, checks, or decisions.
 
 ### Verification
 
@@ -857,8 +859,8 @@ card, and dataset card decisions.
 - Promotion-ledger validation reopens recorded decision gates from the ledger
   file location and rejects missing, moved, stale, or cwd-substituted records.
 - Promotion-ledger gate validation reopens the referenced promotion ledger,
-  replays gate evaluation, and rejects stale metrics, checks, decisions, or
-  omitted policy checks.
+  replays gate evaluation, and rejects stale metrics, checks, decisions,
+  symlinked source ledger refs, or omitted policy checks.
 - Promotion-ledger gate strict validation now warns on absolute source ledger
   and policy paths, catching preserved local promotion coordinates before
   public release decisions are accepted.

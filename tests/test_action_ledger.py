@@ -643,6 +643,32 @@ class ActionLedgerTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("action_ledger_gate.action_ledger must resolve to an existing action ledger", errors)
 
+    def test_validate_rejects_action_ledger_gate_parent_symlink_source_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ledger_path = _build_action_ledger(root)
+            gate_path = root / "action_ledger_gate.json"
+            summary_path = root / "validation.json"
+            self.assertEqual(run_cli(["gate-action-ledger", "--action-ledger", str(ledger_path), "--out", str(gate_path)]), 0)
+            linked_parent = root / "linked_source"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["action_ledger"] = str(Path("linked_source") / "action_ledger.json")
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--action-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "action_ledger_gate.action_ledger must resolve to a regular non-symlink action ledger.",
+                errors,
+            )
+
     def test_gate_action_ledger_writes_output_relative_source_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

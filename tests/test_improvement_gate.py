@@ -265,6 +265,36 @@ class ImprovementLedgerGateTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("improvement_ledger_gate.improvement_ledger must resolve to an existing improvement ledger", errors)
 
+    def test_validate_rejects_improvement_ledger_gate_parent_symlink_source_ledger(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            plan = runs / "improvement_plan.json"
+            ledger = runs / "improvement_ledger.json"
+            gate_path = runs / "improvement_ledger_gate.json"
+            summary_path = runs / "validation.json"
+            _build_improvement_plan(runs, plan)
+            self.assertEqual(run_cli(["improvement-ledger", "--plan", str(plan), "--out", str(ledger)]), 0)
+            self.assertEqual(run_cli(["gate-improvement-ledger", "--improvement-ledger", str(ledger), "--out", str(gate_path)]), 0)
+            linked_parent = runs / "linked_source"
+            try:
+                linked_parent.symlink_to(runs, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            payload = json.loads(gate_path.read_text(encoding="utf-8"))
+            payload["improvement_ledger"] = str(Path("linked_source") / "improvement_ledger.json")
+            gate_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--improvement-ledger-gate", str(gate_path), "--strict", "--out", str(summary_path)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn(
+                "improvement_ledger_gate.improvement_ledger must resolve to a regular non-symlink improvement ledger.",
+                errors,
+            )
+
     def test_gate_improvement_ledger_rejects_wrong_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
             not_ledger = Path(tmp) / "not_ledger.json"

@@ -18967,8 +18967,11 @@ def _validate_action_ledger_gate_source_linkage(
     source_path: Path,
 ) -> None:
     ledger_path = _resolve_gate_source_path(gate.get("action_ledger"), source_path)
-    if ledger_path is None or not ledger_path.exists() or not ledger_path.is_file():
+    if ledger_path is None or not ledger_path.exists():
         target.errors.append("action_ledger_gate.action_ledger must resolve to an existing action ledger.")
+        return
+    if _path_has_symlink_component(ledger_path, include_leaf=True) or not ledger_path.is_file():
+        target.errors.append("action_ledger_gate.action_ledger must resolve to a regular non-symlink action ledger.")
         return
     try:
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
@@ -19216,8 +19219,11 @@ def _validate_improvement_ledger_gate_source_linkage(
     source_path: Path,
 ) -> None:
     ledger_path = _resolve_gate_source_path(gate.get("improvement_ledger"), source_path)
-    if ledger_path is None or not ledger_path.exists() or not ledger_path.is_file():
+    if ledger_path is None or not ledger_path.exists():
         target.errors.append("improvement_ledger_gate.improvement_ledger must resolve to an existing improvement ledger.")
+        return
+    if _path_has_symlink_component(ledger_path, include_leaf=True) or not ledger_path.is_file():
+        target.errors.append("improvement_ledger_gate.improvement_ledger must resolve to a regular non-symlink improvement ledger.")
         return
     try:
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
@@ -21684,8 +21690,11 @@ def _validate_promotion_ledger_gate_source_linkage(
     source_path: Path,
 ) -> None:
     ledger_path = _resolve_gate_source_path(gate.get("promotion_ledger"), source_path)
-    if ledger_path is None or not ledger_path.exists() or not ledger_path.is_file():
+    if ledger_path is None or not ledger_path.exists():
         target.errors.append("promotion_ledger_gate.promotion_ledger must resolve to an existing promotion ledger.")
+        return
+    if _path_has_symlink_component(ledger_path, include_leaf=True) or not ledger_path.is_file():
+        target.errors.append("promotion_ledger_gate.promotion_ledger must resolve to a regular non-symlink promotion ledger.")
         return
     try:
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
