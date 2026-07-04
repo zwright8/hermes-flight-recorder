@@ -16,8 +16,428 @@
     "Provider records describe contracts and capability probes only; they do not create cloud jobs.",
     "Credential values are never recorded, only environment variable names and presence checks in preflight artifacts."
   ],
-  "provider_count": 2,
+  "provider_count": 14,
   "providers": [
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.aws_sagemaker.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "aws_sagemaker",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "s3",
+        "ecr",
+        "archive"
+      ],
+      "client_import_names": [
+        "boto3",
+        "sagemaker"
+      ],
+      "credential_env_vars": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "AWS SageMaker",
+      "gpu_classes": [
+        "ml.g5",
+        "ml.p4d",
+        "ml.p5"
+      ],
+      "id": "aws_sagemaker",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "reward_model",
+        "process_rewards"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "us-east-1",
+        "us-west-2",
+        "eu-west-1"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.azure_ml.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "azure_ml",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "azure_blob",
+        "acr",
+        "archive"
+      ],
+      "client_import_names": [
+        "azure.ai.ml"
+      ],
+      "credential_env_vars": [
+        "AZURE_CLIENT_ID",
+        "AZURE_TENANT_ID",
+        "AZURE_CLIENT_SECRET"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Azure ML",
+      "gpu_classes": [
+        "standard_nc",
+        "standard_nd"
+      ],
+      "id": "azure_ml",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "reward_model"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "eastus",
+        "westus3",
+        "westeurope"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.brev.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "brev",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "archive",
+        "object_store"
+      ],
+      "client_import_names": [
+        "requests"
+      ],
+      "credential_env_vars": [
+        "BREV_API_KEY"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "NVIDIA Brev",
+      "gpu_classes": [
+        "l4",
+        "a10g",
+        "a100",
+        "h100"
+      ],
+      "id": "brev",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "reward_model"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.coreweave.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "coreweave",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "archive",
+        "s3_compatible"
+      ],
+      "client_import_names": [
+        "kubernetes"
+      ],
+      "credential_env_vars": [
+        "COREWEAVE_API_TOKEN"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "CoreWeave",
+      "gpu_classes": [
+        "a40",
+        "a100",
+        "h100"
+      ],
+      "id": "coreweave",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "reward_model",
+        "process_rewards"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "us",
+        "eu"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.databricks_mosaic.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "databricks_mosaic",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "dbfs",
+        "mlflow",
+        "unity_catalog"
+      ],
+      "client_import_names": [
+        "databricks.sdk",
+        "mlflow"
+      ],
+      "credential_env_vars": [
+        "DATABRICKS_HOST",
+        "DATABRICKS_TOKEN"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Databricks / Mosaic AI",
+      "gpu_classes": [
+        "workspace_cluster"
+      ],
+      "id": "databricks_mosaic",
+      "job_modes": [
+        "sft",
+        "dpo",
+        "reward_model"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "workspace_default"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.fireworks.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "fireworks",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "http",
+        "provider_managed"
+      ],
+      "client_import_names": [
+        "fireworks"
+      ],
+      "credential_env_vars": [
+        "FIREWORKS_API_KEY"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Fireworks AI",
+      "gpu_classes": [
+        "provider_managed"
+      ],
+      "id": "fireworks",
+      "job_modes": [
+        "sft"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.gcp_vertex_ai.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "gcp_vertex_ai",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "gcs",
+        "artifact_registry",
+        "archive"
+      ],
+      "client_import_names": [
+        "google.cloud.aiplatform"
+      ],
+      "credential_env_vars": [
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_CLOUD_PROJECT"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "GCP Vertex AI",
+      "gpu_classes": [
+        "nvidia-tesla-t4",
+        "nvidia-l4",
+        "nvidia-tesla-a100",
+        "nvidia-h100"
+      ],
+      "id": "gcp_vertex_ai",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "reward_model"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "us-central1",
+        "us-east4",
+        "europe-west4"
+      ]
+    },
     {
       "adapter_contract": {
         "adapter_id": "cloud_training.huggingface_jobs.fail_closed.v1",
@@ -81,6 +501,63 @@
     },
     {
       "adapter_contract": {
+        "adapter_id": "cloud_training.lambda_labs.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "lambda_labs",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "archive",
+        "object_store"
+      ],
+      "client_import_names": [
+        "requests"
+      ],
+      "credential_env_vars": [
+        "LAMBDA_API_KEY"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Lambda Labs",
+      "gpu_classes": [
+        "a10",
+        "a100",
+        "h100"
+      ],
+      "id": "lambda_labs",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "us"
+      ]
+    },
+    {
+      "adapter_contract": {
         "adapter_id": "cloud_training.modal.fail_closed.v1",
         "client_modules_imported_by_flight_recorder": false,
         "cloud_cost_incurred_usd": 0,
@@ -136,6 +613,231 @@
         "dpo",
         "reward_model",
         "process_rewards"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.nvidia_dgx_cloud.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "nvidia_dgx_cloud",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "archive",
+        "object_store"
+      ],
+      "client_import_names": [
+        "requests"
+      ],
+      "credential_env_vars": [
+        "NVIDIA_API_KEY"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "NVIDIA DGX Cloud",
+      "gpu_classes": [
+        "a100",
+        "h100",
+        "gb200"
+      ],
+      "id": "nvidia_dgx_cloud",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo",
+        "reward_model",
+        "process_rewards",
+        "grpo"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.replicate.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "replicate",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "http",
+        "provider_managed"
+      ],
+      "client_import_names": [
+        "replicate"
+      ],
+      "credential_env_vars": [
+        "REPLICATE_API_TOKEN"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Replicate",
+      "gpu_classes": [
+        "provider_managed"
+      ],
+      "id": "replicate",
+      "job_modes": [
+        "sft"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.runpod.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "runpod",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "archive",
+        "object_store"
+      ],
+      "client_import_names": [
+        "runpod"
+      ],
+      "credential_env_vars": [
+        "RUNPOD_API_KEY"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "RunPod",
+      "gpu_classes": [
+        "rtx_4090",
+        "a40",
+        "a100",
+        "h100"
+      ],
+      "id": "runpod",
+      "job_modes": [
+        "sft",
+        "action_sft",
+        "dpo"
+      ],
+      "live_status": "preflight_only",
+      "regions": [
+        "provider_default"
+      ]
+    },
+    {
+      "adapter_contract": {
+        "adapter_id": "cloud_training.together.fail_closed.v1",
+        "client_modules_imported_by_flight_recorder": false,
+        "cloud_cost_incurred_usd": 0,
+        "credential_values_recorded": false,
+        "dry_run_transport": "mock_receipts",
+        "live_launch_supported": false,
+        "live_preflight_supported": true,
+        "live_preflight_transport": "metadata_only",
+        "model_downloads_started": false,
+        "provider_api_called_by_flight_recorder": false,
+        "provider_id": "together",
+        "receipt_types": [
+          "hfr.cloud_training_provider_registry.v1",
+          "hfr.cloud_training_preflight.v1",
+          "hfr.cloud_training_artifact_manifest.v1",
+          "hfr.cloud_training_launch_plan.v1",
+          "hfr.cloud_training_launch_receipt.v1",
+          "hfr.cloud_training_status_receipt.v1"
+        ],
+        "requires_cost_limit": true,
+        "requires_environment_credentials_for_live": true,
+        "requires_explicit_live_opt_in": true,
+        "requires_region_and_gpu_constraints": true,
+        "schema_version": "hfr.cloud_training_provider_adapter.v1",
+        "status_cancel_receipts_supported": true,
+        "weights_updated_by_flight_recorder": false
+      },
+      "artifact_protocols": [
+        "http",
+        "provider_managed"
+      ],
+      "client_import_names": [
+        "together"
+      ],
+      "credential_env_vars": [
+        "TOGETHER_API_KEY"
+      ],
+      "default_live_execution_allowed": false,
+      "display_name": "Together AI",
+      "gpu_classes": [
+        "provider_managed"
+      ],
+      "id": "together",
+      "job_modes": [
+        "sft",
+        "dpo"
       ],
       "live_status": "preflight_only",
       "regions": [

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -19,6 +20,10 @@ from flightrecorder.validation import validate_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_PLAN = ROOT / "examples" / "agentic_training" / "plans" / "sft_then_dpo_plan.json"
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 class CloudTrainingTests(unittest.TestCase):
@@ -79,6 +84,75 @@ class CloudTrainingTests(unittest.TestCase):
         schema = check_schema_file(registry_path)
         self.assertTrue(schema["passed"], schema["errors"])
         validation = validate_artifacts(cloud_training_provider_registry_paths=[registry_path], strict=True)
+        self.assertTrue(validation["passed"], validation)
+
+    def test_committed_standalone_cloud_training_example_replays_fail_closed_chain(self):
+        example_root = ROOT / "examples" / "cloud_training"
+        plan_path = example_root / "plans" / "sft_then_dpo_plan.json"
+        registry_path = example_root / "provider_registry.json"
+        manifest_path = example_root / "artifact_manifest.json"
+        preflight_path = example_root / "preflight.json"
+        launch_plan_path = example_root / "launch_plan.json"
+        launch_receipt_path = example_root / "launch_receipt.json"
+        live_blocked_receipt_path = example_root / "live_blocked_receipt.json"
+        status_receipt_path = example_root / "status_receipt.json"
+
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        self.assertEqual({provider["id"] for provider in registry["providers"]}, set(provider_choices()))
+        self.assertEqual(registry["provider_count"], len(provider_choices()))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        upload_ref = manifest["upload_artifacts"][0]
+        self.assertEqual(upload_ref["path"], "plans/sft_then_dpo_plan.json")
+        self.assertEqual(upload_ref["size_bytes"], plan_path.stat().st_size)
+        self.assertEqual(upload_ref["sha256"], sha256_file(plan_path))
+        self.assertFalse(manifest["transfer_plan"]["flight_recorder_uploaded_artifacts"])
+        self.assertFalse(manifest["transfer_plan"]["flight_recorder_downloaded_artifacts"])
+        self.assertFalse(manifest["transfer_plan"]["provider_api_called"])
+
+        preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+        plan_ref = preflight["source_artifacts"]["agentic_training_plan"]
+        self.assertEqual(plan_ref["path"], "plans/sft_then_dpo_plan.json")
+        self.assertEqual(plan_ref["sha256"], sha256_file(plan_path))
+        self.assertFalse(preflight["passed"])
+        self.assertEqual(preflight["readiness"], "blocked")
+        self.assertFalse(preflight["execution_boundary"]["provider_api_called"])
+        self.assertFalse(preflight["execution_boundary"]["cloud_job_started"])
+        self.assertFalse(preflight["execution_boundary"]["credential_values_recorded"])
+
+        launch_receipt = json.loads(launch_receipt_path.read_text(encoding="utf-8"))
+        live_blocked_receipt = json.loads(live_blocked_receipt_path.read_text(encoding="utf-8"))
+        status_receipt = json.loads(status_receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(launch_receipt["launch"]["mode"], "dry_run")
+        self.assertEqual(live_blocked_receipt["launch"]["mode"], "live")
+        self.assertFalse(live_blocked_receipt["launch"]["cloud_job_started"])
+        self.assertFalse(live_blocked_receipt["launch"]["provider_api_called"])
+        self.assertFalse(live_blocked_receipt["execution_boundary"]["allow_live"])
+        self.assertTrue(status_receipt["status"]["cancel_requested"])
+        self.assertFalse(status_receipt["status"]["provider_cancel_called"])
+        self.assertFalse(status_receipt["status"]["provider_api_called"])
+
+        for path in (
+            plan_path,
+            registry_path,
+            manifest_path,
+            preflight_path,
+            launch_plan_path,
+            launch_receipt_path,
+            live_blocked_receipt_path,
+            status_receipt_path,
+        ):
+            schema = check_schema_file(path)
+            self.assertTrue(schema["passed"], schema["errors"])
+        validation = validate_artifacts(
+            agentic_training_plan_paths=[plan_path],
+            cloud_training_provider_registry_paths=[registry_path],
+            cloud_training_artifact_manifest_paths=[manifest_path],
+            cloud_training_preflight_paths=[preflight_path],
+            cloud_training_launch_plan_paths=[launch_plan_path],
+            cloud_training_launch_receipt_paths=[launch_receipt_path, live_blocked_receipt_path],
+            cloud_training_status_receipt_paths=[status_receipt_path],
+            strict=True,
+        )
         self.assertTrue(validation["passed"], validation)
 
     def test_validate_rejects_forged_provider_adapter_contract(self):

@@ -9,7 +9,7 @@
       "actual": {
         "artifact": {
           "exists": true,
-          "path": "../agentic_training/plans/sft_then_dpo_plan.json",
+          "path": "plans/sft_then_dpo_plan.json",
           "role": "agentic_training_plan",
           "schema_error_count": 0,
           "schema_errors": [],
@@ -356,7 +356,7 @@
   "source_artifacts": {
     "agentic_training_plan": {
       "exists": true,
-      "path": "../agentic_training/plans/sft_then_dpo_plan.json",
+      "path": "plans/sft_then_dpo_plan.json",
       "role": "agentic_training_plan",
       "schema_error_count": 0,
       "schema_errors": [],

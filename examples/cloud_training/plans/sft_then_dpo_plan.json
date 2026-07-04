@@ -1,0 +1,599 @@
+{
+  "blocked_reasons": [],
+  "check_count": 19,
+  "checks": [
+    {
+      "actual": {
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "supported_modes": [
+          "sft",
+          "action_sft",
+          "dpo",
+          "sft_then_dpo",
+          "reward_model",
+          "process_rewards",
+          "grpo",
+          "rl"
+        ]
+      },
+      "id": "mode_supported",
+      "passed": true,
+      "summary": "mode_supported: passed=True"
+    },
+    {
+      "actual": {
+        "allow_advanced_training": false,
+        "allow_future_rl": false,
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "advanced_reward_modes_require": "allow_advanced_training",
+        "default_ready_modes": [
+          "action_sft",
+          "dpo",
+          "sft",
+          "sft_then_dpo"
+        ],
+        "future_rl_modes_require": "allow_future_rl"
+      },
+      "id": "default_trainer_flow_mode_ready",
+      "passed": true,
+      "summary": "default_trainer_flow_mode_ready: passed=True"
+    },
+    {
+      "actual": {
+        "model_id": "local/synthetic-agentic-candidate"
+      },
+      "expected": {
+        "required": true
+      },
+      "id": "model_manifest_registered",
+      "passed": true,
+      "summary": "model_manifest_registered: passed=True"
+    },
+    {
+      "actual": {
+        "allow_training": true,
+        "status": "approved"
+      },
+      "expected": {
+        "allow_training": true,
+        "status": [
+          "allowed",
+          "approved",
+          "cleared",
+          "open",
+          "permissive"
+        ]
+      },
+      "id": "model_license_allows_training",
+      "passed": true,
+      "summary": "model_license_allows_training: passed=True"
+    },
+    {
+      "actual": {
+        "passed": true
+      },
+      "expected": {
+        "passed": true
+      },
+      "id": "model_compatibility_passed",
+      "passed": true,
+      "summary": "model_compatibility_passed: passed=True"
+    },
+    {
+      "actual": {
+        "dataset_id": "synthetic-agentic-redacted-dataset"
+      },
+      "expected": {
+        "required": true
+      },
+      "id": "dataset_manifest_registered",
+      "passed": true,
+      "summary": "dataset_manifest_registered: passed=True"
+    },
+    {
+      "actual": {
+        "allow_training": true,
+        "status": "approved"
+      },
+      "expected": {
+        "allow_training": true,
+        "status": [
+          "allowed",
+          "approved",
+          "cleared",
+          "open",
+          "permissive"
+        ]
+      },
+      "id": "dataset_license_allows_training",
+      "passed": true,
+      "summary": "dataset_license_allows_training: passed=True"
+    },
+    {
+      "actual": {
+        "contains_unredacted_traces": false,
+        "status": "redacted"
+      },
+      "expected": {
+        "contains_unredacted_traces": false,
+        "status": [
+          "clean",
+          "passed",
+          "redacted"
+        ]
+      },
+      "id": "dataset_redaction_passed",
+      "passed": true,
+      "summary": "dataset_redaction_passed: passed=True"
+    },
+    {
+      "actual": {
+        "selected_views": [
+          "sft",
+          "dpo"
+        ]
+      },
+      "expected": {
+        "required_view_groups": [
+          [
+            "sft"
+          ],
+          [
+            "dpo",
+            "preferences"
+          ]
+        ]
+      },
+      "id": "mode_required_views_available",
+      "passed": true,
+      "summary": "mode_required_views_available: passed=True"
+    },
+    {
+      "actual": {
+        "mode": "sft_then_dpo",
+        "unsatisfied_requirement_ids": []
+      },
+      "expected": {
+        "all_data_requirements_satisfied": true
+      },
+      "id": "mode_contract_data_requirements_satisfied",
+      "passed": true,
+      "summary": "mode_contract_data_requirements_satisfied: passed=True"
+    },
+    {
+      "actual": {
+        "allow_advanced_training": false,
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "advanced_reward_modes": [
+          "process_rewards",
+          "reward_model"
+        ],
+        "allow_advanced_training": true
+      },
+      "id": "advanced_reward_mode_explicitly_enabled",
+      "passed": true,
+      "summary": "advanced_reward_mode_explicitly_enabled: passed=True"
+    },
+    {
+      "actual": {
+        "allow_future_rl": false,
+        "mode": "sft_then_dpo"
+      },
+      "expected": {
+        "allow_future_rl": true,
+        "future_rl_modes": [
+          "grpo",
+          "rl"
+        ]
+      },
+      "id": "future_rl_explicitly_enabled",
+      "passed": true,
+      "summary": "future_rl_explicitly_enabled: passed=True"
+    },
+    {
+      "actual": {
+        "open": true,
+        "reason": "default executable handoff mode",
+        "required_flag": null
+      },
+      "expected": {
+        "open": true
+      },
+      "id": "mode_contract_planning_gate_open",
+      "passed": true,
+      "summary": "mode_contract_planning_gate_open: passed=True"
+    },
+    {
+      "actual": {
+        "flight_recorder_supplies_callable": false,
+        "may_call_paid_services_by_default": false,
+        "may_require_secrets_by_default": false
+      },
+      "expected": {
+        "flight_recorder_supplies_callable": false,
+        "may_call_paid_services_by_default": false,
+        "may_require_secrets_by_default": false
+      },
+      "id": "reward_contract_fail_closed",
+      "passed": true,
+      "summary": "reward_contract_fail_closed: passed=True"
+    },
+    {
+      "actual": {
+        "training_started": false
+      },
+      "expected": {
+        "training_started": false
+      },
+      "id": "flight_recorder_did_not_launch_training",
+      "passed": true,
+      "summary": "flight_recorder_did_not_launch_training: passed=True"
+    },
+    {
+      "actual": {
+        "model_downloads_started": false
+      },
+      "expected": {
+        "model_downloads_started": false
+      },
+      "id": "model_downloads_not_started",
+      "passed": true,
+      "summary": "model_downloads_not_started: passed=True"
+    },
+    {
+      "actual": {
+        "cloud_jobs_started": false
+      },
+      "expected": {
+        "cloud_jobs_started": false
+      },
+      "id": "cloud_jobs_not_started",
+      "passed": true,
+      "summary": "cloud_jobs_not_started: passed=True"
+    },
+    {
+      "actual": {
+        "paid_model_grader_calls_started": false
+      },
+      "expected": {
+        "paid_model_grader_calls_started": false
+      },
+      "id": "paid_model_grader_calls_not_started",
+      "passed": true,
+      "summary": "paid_model_grader_calls_not_started: passed=True"
+    },
+    {
+      "actual": {
+        "weights_updated": false
+      },
+      "expected": {
+        "weights_updated": false
+      },
+      "id": "weights_not_updated",
+      "passed": true,
+      "summary": "weights_not_updated: passed=True"
+    }
+  ],
+  "created_at": "2026-07-02T00:00:00+00:00",
+  "execution": {
+    "cloud_jobs_started": false,
+    "dry_run_only": true,
+    "external_runner_command": [
+      "<external-runner>",
+      "--mode",
+      "sft_then_dpo",
+      "--backend",
+      "axolotl",
+      "--require-registered-inputs",
+      "--require-redacted-dataset",
+      "--require-license-approved",
+      "--output-dir",
+      "runs/agentic_training/adapters"
+    ],
+    "model_downloads_started": false,
+    "paid_model_grader_calls_started": false,
+    "training_started": false,
+    "weights_updated": false
+  },
+  "failed_check_count": 0,
+  "handoff_contract": {
+    "advanced_modes_require_explicit_opt_in": true,
+    "advanced_reward_modes_blocked_by_default": [
+      "process_rewards",
+      "reward_model"
+    ],
+    "allowed_modes": [
+      "sft",
+      "action_sft",
+      "dpo",
+      "sft_then_dpo",
+      "reward_model",
+      "process_rewards",
+      "grpo",
+      "rl"
+    ],
+    "default_executable_modes": [
+      "action_sft",
+      "dpo",
+      "sft",
+      "sft_then_dpo"
+    ],
+    "disallow_unredacted_traces": true,
+    "flight_recorder_executed_training": false,
+    "flight_recorder_started_cloud_provider": false,
+    "future_rl_modes_blocked_by_default": [
+      "grpo",
+      "rl"
+    ],
+    "future_rl_requires_explicit_opt_in": true,
+    "paid_model_grader_calls_started": false,
+    "requires_known_license_status": true,
+    "requires_redacted_dataset": true,
+    "requires_registered_dataset": true,
+    "requires_registered_model": true,
+    "reward_function_owned_by_external_runner": true,
+    "runner_must_require_recommendation": "ready_for_external_trainer_plan",
+    "runner_owns_execution": true,
+    "weights_updated_by_flight_recorder": false
+  },
+  "input_manifests": {
+    "dataset": {
+      "contains_unredacted_traces": false,
+      "id": "synthetic-agentic-redacted-dataset",
+      "license_allow_training": true,
+      "license_allows_training": true,
+      "license_status": "approved",
+      "path": "examples/agentic_training/dataset_manifest.json",
+      "redaction_passed": true,
+      "redaction_status": "redacted",
+      "schema_version": "hfr.dataset_manifest.example.v1",
+      "sha256": "911aee47ba2c586e72a112120fdfb8fbc443f493d9d8371fdebf293d8756b1c8",
+      "size_bytes": 1379,
+      "version": "v1",
+      "view_count": 6,
+      "views": {
+        "action_sft": {
+          "name": "action_sft",
+          "path": "examples/agentic_training/data/action_sft.jsonl",
+          "row_count": 1,
+          "schema_version": "hfr.rl.sft.v1",
+          "split": ""
+        },
+        "dpo": {
+          "name": "dpo",
+          "path": "examples/agentic_training/data/dpo.jsonl",
+          "row_count": 2,
+          "schema_version": "hfr.rl.dpo.v1",
+          "split": ""
+        },
+        "episodes": {
+          "name": "episodes",
+          "path": "examples/agentic_training/data/episodes.jsonl",
+          "row_count": 1,
+          "schema_version": "hfr.rl.episode.v1",
+          "split": ""
+        },
+        "reward_model": {
+          "name": "reward_model",
+          "path": "examples/agentic_training/data/reward_model.jsonl",
+          "row_count": 1,
+          "schema_version": "hfr.rl.reward_model.v1",
+          "split": ""
+        },
+        "sft": {
+          "name": "sft",
+          "path": "examples/agentic_training/data/sft.jsonl",
+          "row_count": 2,
+          "schema_version": "hfr.rl.sft.v1",
+          "split": ""
+        },
+        "step_rewards": {
+          "name": "step_rewards",
+          "path": "examples/agentic_training/data/step_rewards.jsonl",
+          "row_count": 2,
+          "schema_version": "hfr.rl.step_reward.v1",
+          "split": ""
+        }
+      }
+    },
+    "model": {
+      "base_model": "local/synthetic-agentic-base",
+      "candidate_id": "candidate",
+      "compatibility_passed": true,
+      "id": "local/synthetic-agentic-candidate",
+      "license_allow_training": true,
+      "license_allows_training": true,
+      "license_status": "approved",
+      "path": "examples/agentic_training/model_manifest.json",
+      "schema_version": "hfr.model_candidate.example.v1",
+      "sha256": "ffd580ed90edb518911767f8f5190ad59db1b6d6594e3b12ec6e35b123d46db8",
+      "size_bytes": 523
+    }
+  },
+  "mode": "sft_then_dpo",
+  "mode_contract": {
+    "category": "default_executable",
+    "data_requirements": [
+      {
+        "description": "Redacted supervised prompt/response rows for the SFT warmup stage.",
+        "evidence": [
+          {
+            "candidate_views": [
+              "sft"
+            ],
+            "row_count": 2,
+            "schema_version": "hfr.rl.sft.v1",
+            "selected_view": "sft"
+          }
+        ],
+        "id": "supervised_response_rows",
+        "minimum_rows_per_group": 1,
+        "required_schema_names": [
+          "rl_sft"
+        ],
+        "satisfied": true,
+        "view_groups": [
+          [
+            "sft"
+          ]
+        ]
+      },
+      {
+        "description": "Reviewed chosen/rejected preference pairs for the DPO stage.",
+        "evidence": [
+          {
+            "candidate_views": [
+              "dpo",
+              "preferences"
+            ],
+            "row_count": 2,
+            "schema_version": "hfr.rl.dpo.v1",
+            "selected_view": "dpo"
+          }
+        ],
+        "id": "preference_pair_rows",
+        "minimum_rows_per_group": 1,
+        "required_schema_names": [
+          "rl_dpo",
+          "rl_preference"
+        ],
+        "satisfied": true,
+        "view_groups": [
+          [
+            "dpo",
+            "preferences"
+          ]
+        ]
+      }
+    ],
+    "external_runner_contract": {
+      "runner_must_block_unredacted_traces": true,
+      "runner_must_require_recommendation": "ready_for_external_trainer_plan",
+      "runner_must_revalidate_inputs": true,
+      "runner_must_validate_reward_contract": true,
+      "runner_owns_execution": true
+    },
+    "mode": "sft_then_dpo",
+    "planning_gate": {
+      "open": true,
+      "reason": "default executable handoff mode",
+      "required_flag": null
+    },
+    "required_view_groups": [
+      [
+        "sft"
+      ],
+      [
+        "dpo",
+        "preferences"
+      ]
+    ],
+    "reward_contract": {
+      "callable_signature": "",
+      "external_runner_must_supply": false,
+      "external_runner_must_validate": true,
+      "flight_recorder_supplies_callable": false,
+      "kind": "preference_pairs",
+      "may_call_paid_services_by_default": false,
+      "may_require_secrets_by_default": false,
+      "must_not_use_unredacted_traces": true,
+      "notes": [
+        "External DPO trainers must validate reviewed chosen/rejected preference pairs."
+      ],
+      "required": true,
+      "requires_calibration_or_human_review_gate": false,
+      "source_views": [
+        "dpo",
+        "preferences"
+      ]
+    },
+    "selected_view_names": [
+      "sft",
+      "dpo"
+    ],
+    "side_effect_boundary": {
+      "cloud_jobs_started": false,
+      "dry_run_only": true,
+      "model_downloads_started": false,
+      "paid_model_grader_calls_started": false,
+      "provider_credentials_required_by_flight_recorder": false,
+      "training_started": false,
+      "weights_updated": false
+    },
+    "stage_sequence": [
+      "sft",
+      "dpo"
+    ]
+  },
+  "notes": [
+    "This is a dry-run plan only; Flight Recorder did not import trainer packages or update weights.",
+    "External runners must revalidate manifests, redaction, license status, and file hashes immediately before launch."
+  ],
+  "passed": true,
+  "plan_path": "examples/agentic_training/plans/sft_then_dpo_plan.json",
+  "readiness": "ready",
+  "recommendation": "ready_for_external_trainer_plan",
+  "schema_version": "hfr.agentic_training_plan.v1",
+  "selected_views": [
+    {
+      "name": "sft",
+      "path": "examples/agentic_training/data/sft.jsonl",
+      "row_count": 2,
+      "schema_version": "hfr.rl.sft.v1",
+      "split": ""
+    },
+    {
+      "name": "dpo",
+      "path": "examples/agentic_training/data/dpo.jsonl",
+      "row_count": 2,
+      "schema_version": "hfr.rl.dpo.v1",
+      "split": ""
+    }
+  ],
+  "trainer_plan": {
+    "backend": "axolotl",
+    "extension_points": [
+      {
+        "id": "axolotl",
+        "scope": "sft,dpo,sft_then_dpo",
+        "status": "planned"
+      },
+      {
+        "id": "llama_factory",
+        "scope": "sft,dpo,sft_then_dpo,reward_model",
+        "status": "planned"
+      },
+      {
+        "id": "unsloth",
+        "scope": "sft,dpo,sft_then_dpo",
+        "status": "planned"
+      },
+      {
+        "id": "grpo_rl_runner",
+        "scope": "grpo,rl",
+        "status": "future"
+      }
+    ],
+    "limit": 2,
+    "mode_required_view_groups": [
+      [
+        "sft"
+      ],
+      [
+        "dpo",
+        "preferences"
+      ]
+    ],
+    "output_dir": "runs/agentic_training/adapters",
+    "stage_sequence": [
+      "sft",
+      "dpo"
+    ]
+  }
+}

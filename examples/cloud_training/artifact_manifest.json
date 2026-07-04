@@ -23,7 +23,7 @@
         "uploads": [
           {
             "exists": true,
-            "path": "../agentic_training/plans/sft_then_dpo_plan.json",
+            "path": "plans/sft_then_dpo_plan.json",
             "role": "upload",
             "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
             "size_bytes": 15787
@@ -203,7 +203,7 @@
   "upload_artifacts": [
     {
       "exists": true,
-      "path": "../agentic_training/plans/sft_then_dpo_plan.json",
+      "path": "plans/sft_then_dpo_plan.json",
       "role": "upload",
       "sha256": "43c70e36211d58beccfaad6a2536b5f7fe5fb926813607195b1b29bee0fb347b",
       "size_bytes": 15787

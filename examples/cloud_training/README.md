@@ -10,26 +10,26 @@ preflight remains metadata-only.
 The artifact manifest includes a `transfer_plan` for upload/download counts,
 provider protocols, and explicit no-transfer/no-provider-call side-effect
 flags.
+The committed `plans/sft_then_dpo_plan.json` copy keeps this standalone example
+strictly replayable from this directory without publishing traversal paths.
 
 Regenerate the fixtures with:
 
 ```bash
 flightrecorder cloud-training providers \
-  --provider modal \
-  --provider huggingface_jobs \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/cloud_training/provider_registry.json
 
 flightrecorder cloud-training artifacts \
   --provider modal \
-  --upload examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --upload examples/cloud_training/plans/sft_then_dpo_plan.json \
   --download adapters/candidate/adapter_model.safetensors \
   --created-at 2026-07-03T00:00:00+00:00 \
   --out examples/cloud_training/artifact_manifest.json
 
 flightrecorder cloud-training preflight \
   --provider modal \
-  --agentic-training-plan examples/agentic_training/plans/sft_then_dpo_plan.json \
+  --agentic-training-plan examples/cloud_training/plans/sft_then_dpo_plan.json \
   --region provider_default \
   --gpu-class a100 \
   --max-cost-usd 0 \
