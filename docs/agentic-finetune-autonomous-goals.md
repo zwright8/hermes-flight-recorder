@@ -164,6 +164,8 @@ evidence.
   `source_artifact` fingerprints or replayed source decisions.
 - Promotion ledgers reject symlinked recorded decision-gate paths before
   trusting record fingerprints or replayed gate contents.
+- Promotion cards reject symlinked required input artifacts before reading or
+  fingerprinting card source evidence.
 - Promotion decisions and release records reject symlinked promotion-policy
   paths before reading or fingerprinting policy artifacts.
 - Promotion decisions reject required source artifacts and card files that
@@ -912,6 +914,9 @@ card, and dataset card decisions.
   artifacts and release notes before they are fingerprinted or bound.
 - Promotion-decision generation refuses symlinked-parent required artifacts and
   model/dataset card files before hashing them or reading JSON/card claims.
+- Promotion-card generation refuses symlinked-parent evidence, training export,
+  compare, redaction, and safety inputs before hashing them or reading JSON
+  readiness signals.
 - Promotion alias receipts and rollback receipts bind human-facing
   promotion-decision, applied-registry, and rollback-registry refs to the same
   SHA-256 and byte-size evidence carried by their fingerprinted artifact

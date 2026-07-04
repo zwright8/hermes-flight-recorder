@@ -499,8 +499,10 @@ summaries; validation recomputes their pass state from target, error, and
 warning counts so a forged `passed` flag cannot hide warning-bearing or failed
 nested validation.
 `promotion-cards` generates the model and dataset cards plus
-`promotion_cards.json`; validation rehashes generated cards and inputs so stale
-card evidence is caught before the promotion decision consumes it.
+`promotion_cards.json`; generation rejects required inputs that are symlinks or
+traverse symlinked parent directories before reading or hashing them, and
+validation rehashes generated cards and inputs so stale card evidence is caught
+before the promotion decision consumes it.
 
 Use `flightrecorder trainer-preflight` as the final launch guard that an
 external trainer can consume. It records the trainer command, fingerprints the

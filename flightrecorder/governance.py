@@ -1064,11 +1064,17 @@ def build_promotion_cards(
         "safety_gate": safety_gate_path,
     }
     input_artifacts = {
-        role: _artifact_record(role, Path(raw_path) if raw_path else None, preserve_paths, manifest_path)
+        role: _artifact_record(
+            role,
+            Path(raw_path) if raw_path else None,
+            preserve_paths,
+            manifest_path,
+            reject_symlink_components=True,
+        )
         for role, raw_path in paths.items()
     }
     json_artifacts = {
-        role: _read_json_artifact(Path(raw_path)) if raw_path else None
+        role: _read_json_artifact(Path(raw_path), reject_symlink_components=True) if raw_path else None
         for role, raw_path in paths.items()
         if role != "training_export"
     }

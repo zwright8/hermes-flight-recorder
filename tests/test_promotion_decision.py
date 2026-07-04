@@ -104,6 +104,67 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertIn("license_status_known", failed_check_ids(manifest))
             self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 0)
 
+    def test_promotion_cards_block_symlinked_json_input_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "compare_gate.json").write_text(artifacts["compare_gate"].read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_inputs"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+            artifacts["compare_gate"] = linked_parent / "compare_gate.json"
+
+            code = run_cli(promotion_cards_args(artifacts, training_export, cards_dir))
+
+            self.assertEqual(code, 1)
+            manifest = json.loads((cards_dir / "promotion_cards.json").read_text(encoding="utf-8"))
+            compare_gate = manifest["artifacts"]["compare_gate"]
+            self.assertFalse(compare_gate["exists"])
+            self.assertEqual(compare_gate["kind"], "other")
+            self.assertNotIn("sha256", compare_gate)
+            failed_ids = failed_check_ids(manifest)
+            self.assertIn("compare_gate_present", failed_ids)
+            self.assertIn("compare_gate_schema", failed_ids)
+            self.assertIn("compare_gate_passed", failed_ids)
+            self.assertIn("compare_metrics_complete", failed_ids)
+            self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 0)
+
+    def test_promotion_cards_block_symlinked_training_export_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            training_export = write_training_export(root)
+            cards_dir = root / "cards"
+            linked_target = root / "linked_target"
+            linked_export = linked_target / "training_export"
+            linked_export.mkdir(parents=True)
+            (linked_export / "DATASET_CARD.md").write_text(
+                (training_export / "DATASET_CARD.md").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            linked_parent = root / "linked_inputs"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(promotion_cards_args(artifacts, linked_parent / "training_export", cards_dir))
+
+            self.assertEqual(code, 1)
+            manifest = json.loads((cards_dir / "promotion_cards.json").read_text(encoding="utf-8"))
+            training_artifact = manifest["artifacts"]["training_export"]
+            self.assertFalse(training_artifact["exists"])
+            self.assertEqual(training_artifact["kind"], "other")
+            self.assertNotIn("sha256", training_artifact)
+            self.assertIn("training_export_present", failed_check_ids(manifest))
+            self.assertEqual(run_cli(["validate", "--promotion-cards", str(cards_dir), "--strict"]), 0)
+
     def test_validate_promotion_cards_rejects_stale_generated_card(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
