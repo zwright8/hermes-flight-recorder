@@ -90,6 +90,8 @@ evidence.
   external code roots, argv, or shell tokens warn under strict validation.
 - Validate trainer wrapper dry-run receipts before public use so preserved
   would-run roots, argv, or shell tokens warn under strict validation.
+- Validate agentic training plans before public use so preserved external
+  runner command tokens warn under strict validation.
 - Validate agentic training flow handoffs before public use so preserved
   delegated command cwd, archive roots, external code roots, argv, or shell
   tokens warn under strict validation.

@@ -602,7 +602,9 @@ trainer-view groups, data-requirement evidence, reward-signal or reward-function
 contract, and hard side-effect boundary. For GRPO, that contract records the
 TRL-style interface `reward_fn(prompts, completions, **kwargs) -> list[float]`
 for an external runner to supply and validate; Flight Recorder does not
-implement, import, or execute it.
+implement, import, or execute it. Before public handoff, strict plan validation
+warns if `execution.external_runner_command` preserves absolute local path
+tokens.
 Use `flightrecorder validate --agentic-training-plan <plan.json>` before any
 handoff. The validator rejects hidden provider job fields, trainer URLs,
 credential hints, paid-grader toggles, live model downloads, and weight-mutation

@@ -3283,6 +3283,9 @@ def _validate_agentic_training_plan_execution(value: Any, target: ValidationTarg
         target.errors.append(f"{label}.external_runner_command must be a list of strings.")
     elif not command:
         target.errors.append(f"{label}.external_runner_command must not be empty.")
+    else:
+        for index, item in enumerate(command):
+            _warn_command_token_public_path(target, f"{label}.external_runner_command[{index}]", item)
 
 
 def _validate_agentic_training_plan_handoff_contract(value: Any, target: ValidationTarget) -> None:
