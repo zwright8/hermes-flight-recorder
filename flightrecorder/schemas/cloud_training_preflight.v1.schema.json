@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/cloud_training_preflight.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Fail-closed cloud training provider preflight.",
   "properties": {
     "blocked_reasons": {
@@ -21,7 +21,7 @@
       "type": "array"
     },
     "constraints": {
-      "type": "object"
+      "$ref": "#/$defs/constraints"
     },
     "created_at": {
       "type": "string"
@@ -45,6 +45,12 @@
     "live_preflight": {
       "$ref": "#/$defs/livePreflight"
     },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "passed": {
       "type": "boolean"
     },
@@ -67,8 +73,17 @@
       "const": "hfr.cloud_training_preflight.v1"
     },
     "source_artifacts": {
-      "additionalProperties": {
-        "$ref": "#/$defs/sourceArtifact"
+      "additionalProperties": false,
+      "properties": {
+        "agentic_training_plan": {
+          "$ref": "#/$defs/sourceArtifact"
+        },
+        "trainer_launch_check": {
+          "$ref": "#/$defs/sourceArtifact"
+        },
+        "trainer_preflight": {
+          "$ref": "#/$defs/sourceArtifact"
+        }
       },
       "required": [
         "agentic_training_plan",
@@ -99,10 +114,55 @@
   "type": "object",
   "$defs": {
     "boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_live": {
+          "type": "boolean"
+        },
+        "cloud_cost_incurred_usd": {
+          "const": 0
+        },
+        "cloud_job_started": {
+          "const": false
+        },
+        "credential_values_recorded": {
+          "const": false
+        },
+        "dry_run_only": {
+          "const": true
+        },
+        "live_preflight_requested": {
+          "type": "boolean"
+        },
+        "live_requested": {
+          "type": "boolean"
+        },
+        "model_downloads_started": {
+          "const": false
+        },
+        "provider_api_called": {
+          "const": false
+        },
+        "weights_updated_by_flight_recorder": {
+          "const": false
+        }
+      },
+      "required": [
+        "dry_run_only",
+        "live_preflight_requested",
+        "live_requested",
+        "allow_live",
+        "provider_api_called",
+        "cloud_job_started",
+        "cloud_cost_incurred_usd",
+        "model_downloads_started",
+        "weights_updated_by_flight_recorder",
+        "credential_values_recorded"
+      ],
       "type": "object"
     },
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": {
           "type": "object"
@@ -130,7 +190,7 @@
       "type": "object"
     },
     "credentialCheck": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "env_var": {
           "type": "string"
@@ -150,7 +210,7 @@
       "type": "object"
     },
     "handoffContract": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "default_live_execution_allowed": {
           "const": false
@@ -162,6 +222,9 @@
           "const": true
         },
         "requires_cost_limit": {
+          "const": true
+        },
+        "requires_artifact_upload_manifest": {
           "const": true
         },
         "requires_environment_credentials_for_live": {
@@ -183,6 +246,7 @@
         "requires_environment_credentials_for_live",
         "requires_cost_limit",
         "requires_region_and_gpu_constraints",
+        "requires_artifact_upload_manifest",
         "requires_status_and_cancel_receipts",
         "flight_recorder_controls_preflight_only",
         "external_provider_owns_execution"
@@ -190,7 +254,7 @@
       "type": "object"
     },
     "livePreflight": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "client_dependency_available_count": {
           "minimum": 0,
@@ -198,7 +262,7 @@
         },
         "client_dependency_checks": {
           "items": {
-            "additionalProperties": true,
+            "additionalProperties": false,
             "properties": {
               "available": {
                 "type": "boolean"
@@ -230,6 +294,12 @@
           "minimum": 0,
           "type": "integer"
         },
+        "credential_env_vars": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "credential_required_count": {
           "minimum": 0,
           "type": "integer"
@@ -253,6 +323,7 @@
         "provider_api_called",
         "client_modules_imported",
         "credential_values_recorded",
+        "credential_env_vars",
         "credential_present_count",
         "credential_required_count",
         "client_dependency_checks",
@@ -264,8 +335,47 @@
     "provider": {
       "type": "object"
     },
+    "constraints": {
+      "additionalProperties": false,
+      "properties": {
+        "gpu_class": {
+          "type": "string"
+        },
+        "live_spend_allowed": {
+          "const": false
+        },
+        "max_cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "region": {
+          "type": "string"
+        },
+        "requires_cost_estimate": {
+          "const": true
+        },
+        "requires_gpu_class_allowlist": {
+          "const": true
+        },
+        "requires_region_allowlist": {
+          "const": true
+        }
+      },
+      "required": [
+        "region",
+        "gpu_class",
+        "max_cost_usd",
+        "requires_region_allowlist",
+        "requires_gpu_class_allowlist",
+        "requires_cost_estimate",
+        "live_spend_allowed"
+      ],
+      "type": "object"
+    },
     "sourceArtifact": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "exists": {
           "type": "boolean"

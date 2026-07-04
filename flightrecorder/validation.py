@@ -5470,6 +5470,49 @@ def _safe_non_negative_number(value: Any) -> int | float:
 
 
 _CLOUD_TRAINING_RECEIPT_CHECK_KEYS = {"id", "passed", "actual", "expected", "summary"}
+_CLOUD_TRAINING_PREFLIGHT_KEYS = {
+    "schema_version",
+    "created_at",
+    "provider",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "blocked_reasons",
+    "constraints",
+    "credential_checks",
+    "live_preflight",
+    "source_artifacts",
+    "execution_boundary",
+    "handoff_contract",
+    "notes",
+}
+_CLOUD_TRAINING_CONSTRAINT_KEYS = {
+    "region",
+    "gpu_class",
+    "max_cost_usd",
+    "requires_region_allowlist",
+    "requires_gpu_class_allowlist",
+    "requires_cost_estimate",
+    "live_spend_allowed",
+}
+_CLOUD_TRAINING_CREDENTIAL_CHECK_KEYS = {"env_var", "present", "value_recorded"}
+_CLOUD_TRAINING_LIVE_PREFLIGHT_KEYS = {
+    "requested",
+    "transport",
+    "provider_api_called",
+    "client_modules_imported",
+    "credential_values_recorded",
+    "credential_env_vars",
+    "credential_present_count",
+    "credential_required_count",
+    "client_dependency_checks",
+    "client_dependency_available_count",
+    "client_dependency_required_count",
+}
+_CLOUD_TRAINING_LIVE_DEPENDENCY_CHECK_KEYS = {"module", "available", "module_imported"}
 _CLOUD_TRAINING_LAUNCH_PLAN_KEYS = {
     "schema_version",
     "created_at",
@@ -5603,6 +5646,7 @@ def _validate_cloud_training_contract(
             checks = []
         failed_checks = _validate_gate_like_checks(checks, target, f"{target.target_type}.checks")
         if expected_schema_version in {
+            CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
             CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
@@ -5621,6 +5665,7 @@ def _validate_cloud_training_contract(
         target.errors.append(f"{target.target_type}.execution_boundary must be an object.")
     else:
         if expected_schema_version in {
+            CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION,
             CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION,
             CLOUD_TRAINING_STATUS_RECEIPT_SCHEMA_VERSION,
@@ -5692,6 +5737,13 @@ def _validate_cloud_training_contract(
             target,
             source_path,
         )
+    if expected_schema_version == CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION:
+        _validate_cloud_training_constraints(payload.get("constraints"), target)
+        _validate_cloud_training_handoff_contract(
+            payload.get("handoff_contract"),
+            target,
+            "cloud_training_preflight.handoff_contract",
+        )
     if expected_schema_version == CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION:
         _validate_cloud_training_launch_receipt_readiness(
             payload,
@@ -5757,6 +5809,8 @@ def _validate_cloud_training_receipt_allowed_keys(
         "source_artifacts",
         "execution_boundary",
     }
+    if expected_schema_version == CLOUD_TRAINING_PREFLIGHT_SCHEMA_VERSION:
+        _validate_allowed_keys(payload, common | {"provider", "constraints", "credential_checks", "live_preflight", "handoff_contract", "notes"}, target, "cloud_training_preflight")
     if expected_schema_version == CLOUD_TRAINING_LAUNCH_PLAN_SCHEMA_VERSION:
         _validate_allowed_keys(payload, common | {"provider", "provider_chain", "launch", "handoff_contract"}, target, "cloud_training_launch_plan")
     if expected_schema_version == CLOUD_TRAINING_LAUNCH_RECEIPT_SCHEMA_VERSION:
@@ -5984,6 +6038,27 @@ def _validate_cloud_training_handoff_contract(value: Any, target: ValidationTarg
             target.errors.append(f"{label}.{field_name} must be true.")
     if value.get("default_live_execution_allowed") is not False:
         target.errors.append(f"{label}.default_live_execution_allowed must be false.")
+
+
+def _validate_cloud_training_constraints(value: Any, target: ValidationTarget) -> None:
+    label = "cloud_training_preflight.constraints"
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _CLOUD_TRAINING_CONSTRAINT_KEYS, target, label)
+    for field_name in ("region", "gpu_class"):
+        if not isinstance(value.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string.")
+    max_cost = value.get("max_cost_usd")
+    if max_cost is not None and (
+        not isinstance(max_cost, (int, float)) or isinstance(max_cost, bool) or max_cost < 0
+    ):
+        target.errors.append(f"{label}.max_cost_usd must be a non-negative number or null.")
+    for field_name in ("requires_region_allowlist", "requires_gpu_class_allowlist", "requires_cost_estimate"):
+        if value.get(field_name) is not True:
+            target.errors.append(f"{label}.{field_name} must be true.")
+    if value.get("live_spend_allowed") is not False:
+        target.errors.append(f"{label}.live_spend_allowed must be false.")
 
 
 def _validate_cloud_training_launch_plan_provider_chain(
@@ -6361,6 +6436,7 @@ def _validate_cloud_training_credentials(value: Any, target: ValidationTarget) -
         if not isinstance(row, dict):
             target.errors.append(f"{label} must be an object.")
             continue
+        _validate_allowed_keys(row, _CLOUD_TRAINING_CREDENTIAL_CHECK_KEYS, target, label)
         if not isinstance(row.get("env_var"), str) or not row.get("env_var"):
             target.errors.append(f"{label}.env_var must be a non-empty string.")
         if not isinstance(row.get("present"), bool):
@@ -6376,6 +6452,7 @@ def _validate_cloud_training_live_preflight(value: Any, target: ValidationTarget
     if not isinstance(value, dict):
         target.errors.append(f"{label} must be an object when present.")
         return
+    _validate_allowed_keys(value, _CLOUD_TRAINING_LIVE_PREFLIGHT_KEYS, target, label)
     if not isinstance(value.get("requested"), bool):
         target.errors.append(f"{label}.requested must be a boolean.")
     if value.get("transport") != "metadata_only":
@@ -6387,12 +6464,17 @@ def _validate_cloud_training_live_preflight(value: Any, target: ValidationTarget
     if not isinstance(dependency_checks, list):
         target.errors.append(f"{label}.client_dependency_checks must be a list.")
         dependency_checks = []
+    credential_env_vars = value.get("credential_env_vars")
+    if not _is_string_list(credential_env_vars):
+        target.errors.append(f"{label}.credential_env_vars must be a list of strings.")
+        credential_env_vars = []
     available_count = 0
     for index, row in enumerate(dependency_checks):
         row_label = f"{label}.client_dependency_checks[{index}]"
         if not isinstance(row, dict):
             target.errors.append(f"{row_label} must be an object.")
             continue
+        _validate_allowed_keys(row, _CLOUD_TRAINING_LIVE_DEPENDENCY_CHECK_KEYS, target, row_label)
         if not isinstance(row.get("module"), str) or not row.get("module"):
             target.errors.append(f"{row_label}.module must be a non-empty string.")
         if not isinstance(row.get("available"), bool):

@@ -170,6 +170,67 @@ class CloudTrainingTests(unittest.TestCase):
             preflight_payload["live_preflight"]["provider_api_called"] = False
             preflight.write_text(json.dumps(preflight_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+            forged_preflight = json.loads(preflight.read_text(encoding="utf-8"))
+            forged_preflight["provider_console_url"] = "redacted-provider-console"
+            forged_preflight["checks"][0]["provider_call"] = "forged"
+            forged_preflight["constraints"]["cloud_budget_receipt"] = "redacted-budget"
+            forged_preflight["credential_checks"][0]["credential_value"] = "redacted-secret"
+            forged_preflight["live_preflight"]["provider_receipt"] = "redacted-provider-receipt"
+            forged_preflight["live_preflight"]["client_dependency_checks"][0]["imported_module_object"] = "modal.Client"
+            forged_preflight["source_artifacts"]["provider_receipt"] = {"path": "redacted-provider-receipt"}
+            forged_preflight["source_artifacts"]["agentic_training_plan"]["credential_hint"] = "redacted"
+            forged_preflight["provider"]["provider_signed_url"] = "redacted-provider-url"
+            forged_preflight["provider"]["adapter_contract"]["provider_invoice_id"] = "redacted-invoice"
+            forged_preflight["execution_boundary"]["provider_api_receipt"] = "not-created"
+            forged_preflight["handoff_contract"]["live_launch_allowed"] = True
+            preflight.write_text(json.dumps(forged_preflight, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            schema = check_schema_file(preflight)
+            self.assertFalse(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_preflight_paths=[preflight], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_preflight contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("cloud_training_preflight.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn(
+                "cloud_training_preflight.constraints contains unknown field(s): ['cloud_budget_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.credential_checks[0] contains unknown field(s): ['credential_value'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.live_preflight contains unknown field(s): ['provider_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.live_preflight.client_dependency_checks[0] contains unknown field(s): ['imported_module_object'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.source_artifacts contains unknown field(s): ['provider_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.source_artifacts.agentic_training_plan contains unknown field(s): ['credential_hint'].",
+                errors,
+            )
+            self.assertIn("cloud_training_preflight.provider contains unknown field(s): ['provider_signed_url'].", errors)
+            self.assertIn(
+                "cloud_training_preflight.provider.adapter_contract contains unknown field(s): ['provider_invoice_id'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.execution_boundary contains unknown field(s): ['provider_api_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "cloud_training_preflight.handoff_contract contains unknown field(s): ['live_launch_allowed'].",
+                errors,
+            )
+            preflight.write_text(json.dumps(preflight_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
             self.assertEqual(
                 run_cli(
                     [
