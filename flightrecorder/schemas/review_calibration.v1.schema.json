@@ -43,6 +43,7 @@
       "oneOf": [
         { "$ref": "#/$defs/min_check" },
         { "$ref": "#/$defs/max_check" },
+        { "$ref": "#/$defs/source_paths_check" },
         { "$ref": "#/$defs/validation_check" }
       ]
     },
@@ -52,6 +53,14 @@
         "max": { "minimum": 0, "type": "integer" }
       },
       "required": ["max"],
+      "type": "object"
+    },
+    "expected_source_paths": {
+      "additionalProperties": false,
+      "properties": {
+        "safe_relative_paths": { "const": true }
+      },
+      "required": ["safe_relative_paths"],
       "type": "object"
     },
     "expected_min": {
@@ -80,6 +89,27 @@
         "actual": { "minimum": 0, "type": "number" },
         "expected": { "$ref": "#/$defs/expected_min" },
         "id": { "enum": ["min_comparable_labels", "min_agreement_rate"], "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "source_paths": {
+      "additionalProperties": false,
+      "properties": {
+        "reviewed_export": { "minLength": 1, "type": "string" },
+        "reviewed_labels": { "minLength": 1, "type": "string" }
+      },
+      "required": ["reviewed_export", "reviewed_labels"],
+      "type": "object"
+    },
+    "source_paths_check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": { "$ref": "#/$defs/source_paths" },
+        "expected": { "$ref": "#/$defs/expected_source_paths" },
+        "id": { "const": "source_paths_replayable" },
         "passed": { "type": "boolean" },
         "summary": { "minLength": 1, "type": "string" }
       },

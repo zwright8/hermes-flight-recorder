@@ -452,6 +452,9 @@ and the queue is resolved.
 When `--preserve-paths` is used, model-grader commands preserve only public-safe
 relative refs; absolute local refs are redacted at write time and rejected during
 validation if hand-authored into artifacts.
+Review-calibration source refs follow the same public-safe boundary and must
+replay from the calibration artifact directory before they can unlock grader
+gates.
 
 ```bash
 flightrecorder model-grader rubric \

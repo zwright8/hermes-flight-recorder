@@ -2323,6 +2323,7 @@ def cmd_review_calibration(args: argparse.Namespace) -> int:
         validation_summary=validation_summary,
         require_valid_export=not args.skip_validation,
         preserve_paths=args.preserve_paths,
+        out_path=args.out,
     )
     write_review_calibration(args.out, calibration)
     metrics = calibration["metrics"]
@@ -4760,7 +4761,7 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip reviewed export structure and artifact-fingerprint validation before calibration",
     )
-    review_calibration.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in calibration output")
+    review_calibration.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in calibration output; unsafe absolute or traversal refs remain redacted")
     review_calibration.set_defaults(func=cmd_review_calibration)
 
     observer = subparsers.add_parser("observer-template", help="Print or write a read-only Hermes observer plugin template")

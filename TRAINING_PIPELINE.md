@@ -1113,9 +1113,10 @@ need human calibration; a disagreement should trigger scenario-policy or label
 review rather than automatic training. Calibration also validates the reviewed
 export by default and records the result under `metrics.validation`, so stale
 reviewed labels cannot produce a passing calibration report unless validation
-is explicitly skipped. Strict validation also warns before preserved
-reviewed-export or reviewed-label source paths are published in public
-calibration handoffs.
+is explicitly skipped. Calibration source refs must replay from the calibration
+artifact directory; unsafe absolute or traversal refs are redacted when
+generated, fail the `source_paths_replayable` check, and are rejected during
+validation before public calibration handoffs can pass.
 
 Model-grader support is a control-plane contract, not a paid grader runner.
 Use `flightrecorder model-grader rubric` to bind a review queue to

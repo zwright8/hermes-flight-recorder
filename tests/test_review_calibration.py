@@ -110,11 +110,10 @@ class ReviewCalibrationTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, 2)
             self.assertIn("review calibration output must resolve to a regular non-symlink file", stderr.getvalue())
 
-    def test_strict_validate_warns_on_absolute_preserved_paths(self):
+    def test_preserve_paths_keeps_calibration_refs_public_safe(self):
         with tempfile.TemporaryDirectory() as tmp:
             reviewed = make_reviewed_export(tmp)
             out = Path(tmp) / "review_calibration.json"
-            permissive_summary = Path(tmp) / "validation.json"
             strict_summary = Path(tmp) / "strict_validation.json"
 
             code = run_cli(
@@ -130,18 +129,41 @@ class ReviewCalibrationTests(unittest.TestCase):
 
             self.assertEqual(code, 0)
             calibration = json.loads(out.read_text(encoding="utf-8"))
-            self.assertTrue(Path(calibration["reviewed_export"]).is_absolute())
-            self.assertTrue(Path(calibration["source"]["reviewed_labels"]).is_absolute())
-            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--out", str(permissive_summary)]), 0)
-            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict", "--out", str(strict_summary)]), 1)
-            warnings = [
-                warning
-                for target in json.loads(strict_summary.read_text(encoding="utf-8"))["targets"]
-                for warning in target["warnings"]
-            ]
-            warning_text = "\n".join(warnings)
-            self.assertIn("review_calibration.reviewed_export is absolute", warning_text)
-            self.assertIn("review_calibration.source.reviewed_labels is absolute", warning_text)
+            self.assertNotIn(str(tmp), json.dumps(calibration, sort_keys=True))
+            self.assertFalse(Path(calibration["reviewed_export"]).is_absolute())
+            self.assertFalse(Path(calibration["source"]["reviewed_labels"]).is_absolute())
+            self.assertEqual(calibration["reviewed_export"], "reviewed")
+            self.assertEqual(calibration["source"]["reviewed_labels"], "reviewed/reviewed_labels.jsonl")
+            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict", "--out", str(strict_summary)]), 0)
+
+    def test_review_calibration_blocks_unreplayable_external_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            external = root / "external"
+            external.mkdir()
+            reviewed = make_reviewed_export(str(external))
+            out = root / "public" / "review_calibration.json"
+
+            code = run_cli(
+                [
+                    "review-calibration",
+                    "--reviewed-export",
+                    str(reviewed),
+                    "--out",
+                    str(out),
+                    "--preserve-paths",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            calibration = json.loads(out.read_text(encoding="utf-8"))
+            self.assertNotIn(str(external), json.dumps(calibration, sort_keys=True))
+            self.assertFalse(calibration["passed"])
+            self.assertEqual(calibration["reviewed_export"], "<redacted:reviewed>")
+            self.assertEqual(calibration["source"]["reviewed_labels"], "<redacted:reviewed_labels.jsonl>")
+            failed_checks = {check["id"] for check in calibration["checks"] if not check["passed"]}
+            self.assertIn("source_paths_replayable", failed_checks)
+            self.assertEqual(run_cli(["validate", "--review-calibration", str(out), "--strict"]), 1)
 
     def test_review_calibration_blocks_scorecard_human_disagreement(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,6 +1,18 @@
 {
-  "check_count": 4,
+  "check_count": 5,
   "checks": [
+    {
+      "actual": {
+        "reviewed_export": "reviewed",
+        "reviewed_labels": "reviewed/reviewed_labels.jsonl"
+      },
+      "expected": {
+        "safe_relative_paths": true
+      },
+      "id": "source_paths_replayable",
+      "passed": true,
+      "summary": "source_paths_replayable: passed=True"
+    },
     {
       "actual": {
         "available": true,
@@ -114,9 +126,9 @@
     "Rows labeled needs_review are tracked but excluded from agreement-rate denominators."
   ],
   "passed": true,
-  "reviewed_export": "<redacted:reviewed>",
+  "reviewed_export": "reviewed",
   "schema_version": "hfr.review_calibration.v1",
   "source": {
-    "reviewed_labels": "<redacted:reviewed_labels.jsonl>"
+    "reviewed_labels": "reviewed/reviewed_labels.jsonl"
   }
 }

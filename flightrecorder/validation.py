@@ -1769,7 +1769,7 @@ def validate_review_calibration(path: str | Path) -> ValidationTarget:
         return target
     calibration = _read_object(calibration_path, target, "review_calibration.json")
     if calibration is not None:
-        _validate_review_calibration(calibration, target)
+        _validate_review_calibration(calibration, target, calibration_path)
     return target
 
 
@@ -26522,6 +26522,8 @@ _REVIEW_CALIBRATION_MAX_CHECK_IDS = {"max_disagreements", "max_false_positives",
 _REVIEW_CALIBRATION_EXPECTED_MIN_KEYS = {"min"}
 _REVIEW_CALIBRATION_EXPECTED_MAX_KEYS = {"max"}
 _REVIEW_CALIBRATION_EXPECTED_VALIDATION_KEYS = {"passed", "error_count"}
+_REVIEW_CALIBRATION_SOURCE_PATH_ACTUAL_KEYS = {"reviewed_export", "reviewed_labels"}
+_REVIEW_CALIBRATION_SOURCE_PATH_EXPECTED_KEYS = {"safe_relative_paths"}
 _REVIEW_CALIBRATION_METRICS_KEYS = {
     "reviewed_label_count",
     "comparable_label_count",
@@ -26559,13 +26561,15 @@ _REVIEW_CALIBRATION_MEAN_SCORE_KEYS = {"label", "count", "average_score"}
 _REVIEW_CALIBRATION_VALIDATION_KEYS = {"available", "passed", "strict", "target_count", "error_count", "warning_count"}
 
 
-def _validate_review_calibration(calibration: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_review_calibration(calibration: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _validate_allowed_keys(calibration, _REVIEW_CALIBRATION_KEYS, target, "review_calibration")
     _require_equal(calibration, "schema_version", REVIEW_CALIBRATION_SCHEMA_VERSION, target)
     if not isinstance(calibration.get("reviewed_export"), str) or not calibration.get("reviewed_export"):
         target.errors.append("review_calibration.reviewed_export must be a non-empty string.")
+    elif not _is_public_review_calibration_ref_path(calibration.get("reviewed_export")):
+        target.errors.append("review_calibration.reviewed_export must be a safe relative path.")
     else:
-        _warn_absolute_public_path(target, "review_calibration.reviewed_export", calibration.get("reviewed_export"))
+        _validate_review_calibration_export_ref(calibration.get("reviewed_export"), target, "review_calibration.reviewed_export", source_path)
     source = calibration.get("source")
     if not isinstance(source, dict):
         target.errors.append("review_calibration.source must be an object.")
@@ -26573,11 +26577,14 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
         _validate_allowed_keys(source, _REVIEW_CALIBRATION_SOURCE_KEYS, target, "review_calibration.source")
         if not isinstance(source.get("reviewed_labels"), str) or not source.get("reviewed_labels"):
             target.errors.append("review_calibration.source.reviewed_labels must be a non-empty string.")
+        elif not _is_public_review_calibration_ref_path(source.get("reviewed_labels")):
+            target.errors.append("review_calibration.source.reviewed_labels must be a safe relative path.")
         else:
-            _warn_absolute_public_path(
+            _validate_review_calibration_label_ref(
+                source.get("reviewed_labels"),
                 target,
                 "review_calibration.source.reviewed_labels",
-                source.get("reviewed_labels"),
+                source_path,
             )
     if not isinstance(calibration.get("passed"), bool):
         target.errors.append("review_calibration.passed must be a boolean.")
@@ -26625,6 +26632,39 @@ def _validate_review_calibration(calibration: dict[str, Any], target: Validation
     )
 
 
+def _validate_review_calibration_export_ref(value: str, target: ValidationTarget, label: str, source_path: Path) -> None:
+    export_path = source_path.parent / value
+    if _path_has_symlink_component(export_path, include_leaf=True):
+        target.errors.append(f"{label} must resolve to a regular non-symlink directory.")
+        return
+    if not export_path.exists() or not export_path.is_dir():
+        target.errors.append(f"{label} must resolve to an existing directory.")
+
+
+def _validate_review_calibration_label_ref(value: str, target: ValidationTarget, label: str, source_path: Path) -> None:
+    label_path = source_path.parent / value
+    if _path_has_symlink_component(label_path, include_leaf=True):
+        target.errors.append(f"{label} must resolve to a regular non-symlink file.")
+        return
+    if not label_path.exists() or not label_path.is_file():
+        target.errors.append(f"{label} must resolve to an existing file.")
+
+
+def _is_public_review_calibration_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not value.startswith("<redacted:")
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
+
+
 def _validate_gate_like_checks(checks: list[Any], target: ValidationTarget, label: str) -> int:
     failed_checks = 0
     for index, check in enumerate(checks):
@@ -26660,6 +26700,21 @@ def _validate_review_calibration_check_payload(check: dict[str, Any], target: Va
         if expected.get("error_count") != 0:
             target.errors.append(f"{label}.expected.error_count must be 0.")
         return
+    if check_id == "source_paths_replayable":
+        actual = check.get("actual")
+        if not isinstance(actual, dict):
+            target.errors.append(f"{label}.actual must be an object.")
+        else:
+            _validate_allowed_keys(actual, _REVIEW_CALIBRATION_SOURCE_PATH_ACTUAL_KEYS, target, f"{label}.actual")
+            for field_name in ("reviewed_export", "reviewed_labels"):
+                if not isinstance(actual.get(field_name), str) or not actual.get(field_name):
+                    target.errors.append(f"{label}.actual.{field_name} must be a non-empty string.")
+        if not isinstance(expected, dict):
+            return
+        _validate_allowed_keys(expected, _REVIEW_CALIBRATION_SOURCE_PATH_EXPECTED_KEYS, target, f"{label}.expected")
+        if expected.get("safe_relative_paths") is not True:
+            target.errors.append(f"{label}.expected.safe_relative_paths must be true.")
+        return
     if check_id in _REVIEW_CALIBRATION_MIN_CHECK_IDS:
         if not _is_number_between(check.get("actual"), 0.0, float("inf")):
             target.errors.append(f"{label}.actual must be a non-negative number.")
@@ -26678,7 +26733,7 @@ def _validate_review_calibration_check_payload(check: dict[str, Any], target: Va
         if not _is_non_negative_int(expected.get("max")):
             target.errors.append(f"{label}.expected.max must be a non-negative integer.")
         return
-    allowed_ids = sorted(_REVIEW_CALIBRATION_MIN_CHECK_IDS | _REVIEW_CALIBRATION_MAX_CHECK_IDS | {"valid_reviewed_export"})
+    allowed_ids = sorted(_REVIEW_CALIBRATION_MIN_CHECK_IDS | _REVIEW_CALIBRATION_MAX_CHECK_IDS | {"source_paths_replayable", "valid_reviewed_export"})
     target.errors.append(f"{label}.id must be one of {allowed_ids!r}.")
 
 

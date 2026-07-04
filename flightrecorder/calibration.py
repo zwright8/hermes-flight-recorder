@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import os
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .path_safety import path_has_symlink_component as _path_has_symlink_component
@@ -30,6 +31,7 @@ def build_review_calibration(
     validation_summary: dict[str, Any] | None = None,
     require_valid_export: bool = True,
     preserve_paths: bool = False,
+    out_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Compare reviewed human labels with deterministic scorecard outcomes."""
     export_dir = Path(reviewed_export_dir)
@@ -40,6 +42,10 @@ def build_review_calibration(
     metrics, disagreements = _calibration_metrics(rows)
     metrics["validation"] = _validation_metrics(validation_summary)
     checks: list[dict[str, Any]] = []
+    output_dir = Path(out_path).parent if out_path else None
+    reviewed_export_ref = _display_path(export_dir, preserve_paths, output_dir)
+    reviewed_labels_ref = _display_path(labels_path, preserve_paths, output_dir)
+    _add_source_paths_check(checks, reviewed_export_ref, reviewed_labels_ref)
     if require_valid_export:
         _add_validation_check(checks, "valid_reviewed_export", validation_summary)
     if min_comparable_labels is not None:
@@ -56,9 +62,9 @@ def build_review_calibration(
     failed_check_count = sum(1 for check in checks if not check["passed"])
     return {
         "schema_version": REVIEW_CALIBRATION_SCHEMA_VERSION,
-        "reviewed_export": _display_path(export_dir, preserve_paths),
+        "reviewed_export": reviewed_export_ref,
         "source": {
-            "reviewed_labels": _display_path(labels_path, preserve_paths),
+            "reviewed_labels": reviewed_labels_ref,
         },
         "passed": failed_check_count == 0,
         "check_count": len(checks),
@@ -80,7 +86,11 @@ def write_review_calibration(path: str | Path, payload: dict[str, Any]) -> None:
     out_path = Path(path)
     _require_output_file(out_path, "review calibration output")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    safe_payload = json.loads(json.dumps(payload))
+    safe_payload["reviewed_export"] = _output_relative_path(safe_payload.get("reviewed_export"), out_path.parent)
+    if isinstance(safe_payload.get("source"), dict):
+        safe_payload["source"]["reviewed_labels"] = _output_relative_path(safe_payload["source"].get("reviewed_labels"), out_path.parent)
+    out_path.write_text(json.dumps(safe_payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _calibration_metrics(rows: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -227,6 +237,19 @@ def _add_validation_check(checks: list[dict[str, Any]], check_id: str, validatio
     )
 
 
+def _add_source_paths_check(checks: list[dict[str, Any]], reviewed_export: str, reviewed_labels: str) -> None:
+    passed = _is_public_review_calibration_ref_path(reviewed_export) and _is_public_review_calibration_ref_path(reviewed_labels)
+    checks.append(
+        {
+            "id": "source_paths_replayable",
+            "passed": passed,
+            "actual": {"reviewed_export": reviewed_export, "reviewed_labels": reviewed_labels},
+            "expected": {"safe_relative_paths": True},
+            "summary": f"source_paths_replayable: passed={passed}",
+        }
+    )
+
+
 def _validation_metrics(validation_summary: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(validation_summary, dict):
         return {
@@ -317,23 +340,57 @@ def _rate(numerator: int, denominator: int) -> float:
     return round(numerator / denominator, 4)
 
 
-def _display_path(path: Path, preserve_paths: bool = False) -> str:
+def _display_path(path: Path, preserve_paths: bool = False, output_dir: Path | None = None) -> str:
     raw = str(path)
+    if output_dir is not None:
+        try:
+            relative = os.path.relpath(path.resolve(), output_dir.resolve())
+        except OSError:
+            return f"<redacted:{_basename(raw)}>"
+        return relative if _is_public_review_calibration_ref_path(relative) else f"<redacted:{_basename(raw)}>"
     if preserve_paths:
-        return raw
-    if _is_windows_absolute(raw):
-        return f"<redacted:{_basename(raw)}>"
-    resolved = path.resolve()
-    cwd = Path.cwd().resolve()
+        return raw if _is_public_review_calibration_ref_path(raw) else f"<redacted:{_basename(raw)}>"
+    if not path.is_absolute():
+        return raw if _is_public_review_calibration_ref_path(raw) else f"<redacted:{_basename(raw)}>"
     try:
-        return str(resolved.relative_to(cwd))
-    except ValueError:
-        return f"<redacted:{resolved.name}>"
+        relative = str(path.resolve().relative_to(Path.cwd().resolve()))
+    except (OSError, ValueError):
+        return f"<redacted:{_basename(raw)}>"
+    return relative if _is_public_review_calibration_ref_path(relative) else f"<redacted:{_basename(raw)}>"
 
 
-def _is_windows_absolute(value: str) -> bool:
-    normalized = value.replace("/", "\\")
-    return (len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()) or normalized.startswith("\\\\")
+def _output_relative_path(value: Any, output_dir: Path) -> Any:
+    if not isinstance(value, str) or not value:
+        return value
+    if value.startswith("<redacted:"):
+        return value
+    path = Path(value)
+    if not path.is_absolute():
+        if not _is_public_review_calibration_ref_path(value):
+            return f"<redacted:{_basename(value)}>"
+        if not path.exists():
+            return value
+        path = path.resolve()
+    try:
+        relative = os.path.relpath(path.resolve(), output_dir.resolve())
+    except OSError:
+        return f"<redacted:{_basename(value)}>"
+    return relative if _is_public_review_calibration_ref_path(relative) else f"<redacted:{_basename(value)}>"
+
+
+def _is_public_review_calibration_ref_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and ".." not in path.parts
+        and all(not part.startswith("~") for part in path.parts)
+    )
 
 
 def _basename(value: str) -> str:
