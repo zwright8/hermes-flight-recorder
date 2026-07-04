@@ -20326,6 +20326,78 @@ _TRAINER_CONSUMER_PLAN_METRICS_KEYS = {
     "archive_check_error_count",
     "archive_check_warning_count",
 }
+_TRAINER_WRAPPER_DRY_RUN_KEYS = {
+    "schema_version",
+    "wrapper",
+    "plan_path",
+    "passed",
+    "readiness",
+    "recommendation",
+    "check_count",
+    "failed_check_count",
+    "checks",
+    "validation",
+    "would_run",
+    "inputs",
+    "metrics",
+    "notes",
+}
+_TRAINER_WRAPPER_DRY_RUN_CHECK_KEYS = {"id", "passed", "actual", "expected", "scope", "summary"}
+_TRAINER_WRAPPER_DRY_RUN_CHECK_PAYLOAD_KEYS = {"passed"}
+_TRAINER_WRAPPER_DRY_RUN_CHECK_SCOPE_KEYS = {
+    "argc",
+    "execution_cwd",
+    "external_code_file_count",
+    "mode",
+    "plan",
+    "recommendation",
+    "runner_owns_execution",
+    "schema_version",
+    "trainer_input_count",
+}
+_TRAINER_WRAPPER_DRY_RUN_VALIDATION_KEYS = {
+    "passed",
+    "strict",
+    "target_count",
+    "error_count",
+    "warning_count",
+}
+_TRAINER_WRAPPER_DRY_RUN_WOULD_RUN_KEYS = {
+    "mode",
+    "execution_cwd",
+    "archive_root",
+    "external_code_root",
+    "argv",
+    "shell",
+}
+_TRAINER_WRAPPER_DRY_RUN_INPUTS_KEYS = {"trainer_inputs", "external_code_files"}
+_TRAINER_WRAPPER_DRY_RUN_EXTERNAL_CODE_FILE_KEYS = {
+    "path",
+    "resolved_path",
+    "sha256",
+    "passed",
+    "size_bytes",
+}
+_TRAINER_WRAPPER_DRY_RUN_TRAINER_INPUT_KEYS = {
+    "artifact_name",
+    "archive_path",
+    "resolved_path",
+    "kind",
+    "sha256",
+    "expected_sha256",
+    "passed",
+    "expected_file_count",
+    "expected_size_bytes",
+    "file_count",
+    "size_bytes",
+}
+_TRAINER_WRAPPER_DRY_RUN_METRICS_KEYS = {
+    "command_arg_count",
+    "trainer_input_count",
+    "trainer_input_ready_count",
+    "external_code_file_count",
+    "external_code_ready_count",
+}
 
 
 def _validate_trainer_consumer_plan(plan: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
@@ -20625,6 +20697,7 @@ def _validate_trainer_consumer_plan_metrics(
 
 def _validate_trainer_wrapper_dry_run(receipt: dict[str, Any], target: ValidationTarget) -> None:
     _require_equal(receipt, "schema_version", TRAINER_WRAPPER_DRY_RUN_SCHEMA_VERSION, target)
+    _validate_allowed_keys(receipt, _TRAINER_WRAPPER_DRY_RUN_KEYS, target, "trainer_wrapper_dry_run")
     for field_name in ("wrapper", "plan_path", "readiness", "recommendation"):
         if not isinstance(receipt.get(field_name), str) or not receipt.get(field_name):
             target.errors.append(f"trainer_wrapper_dry_run.{field_name} must be a non-empty string.")
@@ -20653,6 +20726,7 @@ def _validate_trainer_wrapper_dry_run(receipt: dict[str, Any], target: Validatio
     if not _is_string_list(receipt.get("notes")):
         target.errors.append("trainer_wrapper_dry_run.notes must be a list of strings.")
 
+    _validate_trainer_wrapper_checks(checks, target)
     failed_checks = _validate_gate_like_checks(checks, target, "trainer_wrapper_dry_run.checks")
     if receipt.get("check_count") != len(checks):
         target.errors.append(f"trainer_wrapper_dry_run.check_count expected {len(checks)}, got {receipt.get('check_count')!r}.")
@@ -20687,7 +20761,35 @@ def _validate_trainer_wrapper_dry_run(receipt: dict[str, Any], target: Validatio
     )
 
 
+def _validate_trainer_wrapper_checks(checks: list[Any], target: ValidationTarget) -> None:
+    for index, check in enumerate(checks):
+        label = f"trainer_wrapper_dry_run.checks[{index}]"
+        if not isinstance(check, dict):
+            continue
+        _validate_allowed_keys(check, _TRAINER_WRAPPER_DRY_RUN_CHECK_KEYS, target, label)
+        _validate_trainer_wrapper_check_payload(check.get("actual"), target, f"{label}.actual")
+        _validate_trainer_wrapper_check_payload(check.get("expected"), target, f"{label}.expected")
+        scope = check.get("scope")
+        if not isinstance(scope, dict):
+            target.errors.append(f"{label}.scope must be an object.")
+            continue
+        _validate_allowed_keys(scope, _TRAINER_WRAPPER_DRY_RUN_CHECK_SCOPE_KEYS, target, f"{label}.scope")
+        for field_name, field_value in scope.items():
+            if not isinstance(field_value, str):
+                target.errors.append(f"{label}.scope.{field_name} must be a string.")
+
+
+def _validate_trainer_wrapper_check_payload(value: Any, target: ValidationTarget, label: str) -> None:
+    if not isinstance(value, dict):
+        target.errors.append(f"{label} must be an object.")
+        return
+    _validate_allowed_keys(value, _TRAINER_WRAPPER_DRY_RUN_CHECK_PAYLOAD_KEYS, target, label)
+    if not isinstance(value.get("passed"), bool):
+        target.errors.append(f"{label}.passed must be a boolean.")
+
+
 def _validate_trainer_wrapper_validation(value: dict[str, Any], target: ValidationTarget) -> None:
+    _validate_allowed_keys(value, _TRAINER_WRAPPER_DRY_RUN_VALIDATION_KEYS, target, "trainer_wrapper_dry_run.validation")
     _validate_trainer_compact_validation_record(
         value,
         target,
@@ -20739,6 +20841,7 @@ def _validate_trainer_compact_validation_record(
 
 
 def _validate_trainer_wrapper_would_run(value: dict[str, Any], target: ValidationTarget) -> int:
+    _validate_allowed_keys(value, _TRAINER_WRAPPER_DRY_RUN_WOULD_RUN_KEYS, target, "trainer_wrapper_dry_run.would_run")
     for field_name in ("mode", "execution_cwd", "archive_root", "external_code_root", "shell"):
         if not isinstance(value.get(field_name), str):
             target.errors.append(f"trainer_wrapper_dry_run.would_run.{field_name} must be a string.")
@@ -20758,6 +20861,7 @@ def _validate_trainer_wrapper_would_run(value: dict[str, Any], target: Validatio
 
 
 def _validate_trainer_wrapper_inputs(value: dict[str, Any], target: ValidationTarget) -> dict[str, int]:
+    _validate_allowed_keys(value, _TRAINER_WRAPPER_DRY_RUN_INPUTS_KEYS, target, "trainer_wrapper_dry_run.inputs")
     trainer_inputs = value.get("trainer_inputs")
     if not isinstance(trainer_inputs, list):
         target.errors.append("trainer_wrapper_dry_run.inputs.trainer_inputs must be a list.")
@@ -20794,6 +20898,7 @@ def _validate_trainer_wrapper_inputs(value: dict[str, Any], target: ValidationTa
 
 
 def _validate_trainer_wrapper_input(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    _validate_allowed_keys(item, _TRAINER_WRAPPER_DRY_RUN_TRAINER_INPUT_KEYS, target, label)
     for field_name in ("artifact_name", "archive_path", "resolved_path", "kind", "sha256"):
         if not isinstance(item.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
@@ -20822,6 +20927,7 @@ def _validate_trainer_wrapper_input(item: dict[str, Any], target: ValidationTarg
 
 
 def _validate_trainer_wrapper_external_code(item: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    _validate_allowed_keys(item, _TRAINER_WRAPPER_DRY_RUN_EXTERNAL_CODE_FILE_KEYS, target, label)
     for field_name in ("path", "resolved_path", "sha256"):
         if not isinstance(item.get(field_name), str):
             target.errors.append(f"{label}.{field_name} must be a string.")
@@ -20845,6 +20951,7 @@ def _validate_trainer_wrapper_metrics(
     input_counts: dict[str, int],
     target: ValidationTarget,
 ) -> None:
+    _validate_allowed_keys(metrics, _TRAINER_WRAPPER_DRY_RUN_METRICS_KEYS, target, "trainer_wrapper_dry_run.metrics")
     expected = {
         "command_arg_count": command_arg_count,
         "trainer_input_count": input_counts["trainer_input_count"],

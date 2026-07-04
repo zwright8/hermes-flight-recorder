@@ -1403,6 +1403,67 @@ class TrainerPreflightTests(unittest.TestCase):
             self.assertEqual(run_cli(["schemas", "--check", str(wrapper_receipt)]), 0)
             schema = check_schema_contract(receipt, name_or_id="trainer_wrapper_dry_run")
             self.assertTrue(schema["passed"], schema["errors"])
+            forged = json.loads(json.dumps(receipt))
+            forged["provider_console_url"] = "redacted-provider-console"
+            forged["checks"][0]["provider_call"] = "forged"
+            forged["checks"][0]["actual"]["provider_call"] = "forged"
+            forged["checks"][0]["scope"]["cloud_job_url"] = "redacted-cloud-job-url"
+            forged["validation"]["credential_hint"] = "redacted"
+            forged["would_run"]["trainer_process_pid"] = 123
+            forged["inputs"]["external_code_files"][0]["execution_receipt"] = "not-created"
+            forged["inputs"]["trainer_inputs"][0]["credential_value"] = "redacted"
+            forged["metrics"]["cloud_cost_incurred_usd"] = 0
+            forged_schema = check_schema_contract(forged, name_or_id="trainer_wrapper_dry_run")
+            self.assertFalse(forged_schema["passed"])
+            schema_errors = "\n".join(forged_schema["errors"])
+            for field_name in (
+                "provider_console_url",
+                "provider_call",
+                "cloud_job_url",
+                "credential_hint",
+                "trainer_process_pid",
+                "execution_receipt",
+                "credential_value",
+                "cloud_cost_incurred_usd",
+            ):
+                self.assertIn(field_name, schema_errors)
+            forged_wrapper_receipt = Path(tmp) / "trainer_wrapper_dry_run_forged_side_effect_fields.json"
+            forged_wrapper_summary = Path(tmp) / "trainer_wrapper_dry_run_forged_side_effect_fields_summary.json"
+            forged_wrapper_receipt.write_text(json.dumps(forged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code = run_cli(
+                [
+                    "validate",
+                    "--trainer-wrapper-dry-run",
+                    str(forged_wrapper_receipt),
+                    "--strict",
+                    "--out",
+                    str(forged_wrapper_summary),
+                ]
+            )
+            self.assertEqual(code, 1)
+            validation = json.loads(forged_wrapper_summary.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("trainer_wrapper_dry_run contains unknown field(s): ['provider_console_url'].", errors)
+            self.assertIn("trainer_wrapper_dry_run.checks[0] contains unknown field(s): ['provider_call'].", errors)
+            self.assertIn(
+                "trainer_wrapper_dry_run.checks[0].actual contains unknown field(s): ['provider_call'].",
+                errors,
+            )
+            self.assertIn(
+                "trainer_wrapper_dry_run.checks[0].scope contains unknown field(s): ['cloud_job_url'].",
+                errors,
+            )
+            self.assertIn("trainer_wrapper_dry_run.validation contains unknown field(s): ['credential_hint'].", errors)
+            self.assertIn("trainer_wrapper_dry_run.would_run contains unknown field(s): ['trainer_process_pid'].", errors)
+            self.assertIn(
+                "trainer_wrapper_dry_run.inputs.external_code_files[0] contains unknown field(s): ['execution_receipt'].",
+                errors,
+            )
+            self.assertIn(
+                "trainer_wrapper_dry_run.inputs.trainer_inputs[0] contains unknown field(s): ['credential_value'].",
+                errors,
+            )
+            self.assertIn("trainer_wrapper_dry_run.metrics contains unknown field(s): ['cloud_cost_incurred_usd'].", errors)
             wrapper_external = next(item for item in receipt["inputs"]["external_code_files"] if item["passed"])
             self.assertEqual(len(wrapper_external["sha256"]), 64)
             self.assertIn("size_bytes", wrapper_external)

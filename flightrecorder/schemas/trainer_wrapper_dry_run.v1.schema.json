@@ -1,7 +1,7 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/trainer_wrapper_dry_run.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Dry-run receipt from the reference external trainer wrapper consuming a trainer consumer plan.",
   "properties": {
     "check_count": {
@@ -83,13 +83,13 @@
   "type": "object",
   "$defs": {
     "check": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "actual": {
-          "type": "object"
+          "$ref": "#/$defs/checkPassedRecord"
         },
         "expected": {
-          "type": "object"
+          "$ref": "#/$defs/checkPassedRecord"
         },
         "id": {
           "minLength": 1,
@@ -99,7 +99,7 @@
           "type": "boolean"
         },
         "scope": {
-          "type": "object"
+          "$ref": "#/$defs/checkScope"
         },
         "summary": {
           "minLength": 1,
@@ -116,8 +116,53 @@
       ],
       "type": "object"
     },
+    "checkPassedRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "passed"
+      ],
+      "type": "object"
+    },
+    "checkScope": {
+      "additionalProperties": false,
+      "properties": {
+        "argc": {
+          "type": "string"
+        },
+        "execution_cwd": {
+          "type": "string"
+        },
+        "external_code_file_count": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "plan": {
+          "type": "string"
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "runner_owns_execution": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "trainer_input_count": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "inputs": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "external_code_files": {
           "items": {
@@ -139,7 +184,7 @@
       "type": "object"
     },
     "externalCodeFile": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "oneOf": [
@@ -198,7 +243,7 @@
       "type": "object"
     },
     "trainerInput": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "allOf": [
         {
           "oneOf": [
@@ -320,7 +365,7 @@
       "type": "object"
     },
     "metrics": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "command_arg_count": {
           "minimum": 0,
@@ -353,7 +398,7 @@
       "type": "object"
     },
     "validation": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "error_count": {
           "minimum": 0,
@@ -384,7 +429,7 @@
       "type": "object"
     },
     "wouldRun": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "archive_root": {
           "type": "string"
