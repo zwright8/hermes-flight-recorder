@@ -7928,29 +7928,33 @@ def _validate_cloud_training_artifact_ref(
     if not isinstance(record.get("exists"), bool):
         target.errors.append(f"{label}.exists must be a boolean.")
         return
+    path_value = record.get("path")
+    if isinstance(path_value, str) and path_value and not _is_safe_or_redacted_cloud_training_ref_path(path_value):
+        target.errors.append(f"{label}.path must be relative to the cloud-training artifact.")
+        return
     if record.get("exists") is not True:
         if record.get("sha256") is not None:
             target.errors.append(f"{label}.sha256 must be null when exists is false.")
         if record.get("size_bytes") is not None:
             target.errors.append(f"{label}.size_bytes must be null when exists is false.")
         return
-    if not isinstance(record.get("path"), str) or not record.get("path"):
+    if not isinstance(path_value, str) or not path_value:
         target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
         return
-    if _looks_absolute(record["path"]):
+    if not _is_replayable_cloud_training_ref_path(path_value):
         target.errors.append(f"{label}.path must be relative to the cloud-training artifact.")
         return
-    if not _is_lowercase_sha256(record.get("sha256")):
-        target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string when exists is true.")
-    if not _is_non_negative_int(record.get("size_bytes")):
-        target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
-    artifact_path = _resolve_cloud_training_artifact_path(record.get("path"), source_path)
+    artifact_path = _resolve_cloud_training_artifact_path(path_value, source_path)
     if artifact_path is not None and _path_has_symlink_component(artifact_path, include_leaf=True):
         target.errors.append(f"{label}.path must resolve to a regular non-symlink file when exists is true.")
         return
     if artifact_path is None or not artifact_path.exists() or not artifact_path.is_file():
         target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
         return
+    if not _is_lowercase_sha256(record.get("sha256")):
+        target.errors.append(f"{label}.sha256 must be a lowercase SHA-256 hex string when exists is true.")
+    if not _is_non_negative_int(record.get("size_bytes")):
+        target.errors.append(f"{label}.size_bytes must be a non-negative integer when exists is true.")
     if _is_non_negative_int(record.get("size_bytes")) and artifact_path.stat().st_size != record.get("size_bytes"):
         target.errors.append(f"{label}.size_bytes does not match the current file.")
     if _is_lowercase_sha256(record.get("sha256")) and _sha256(artifact_path) != record.get("sha256"):
@@ -7966,6 +7970,27 @@ def _resolve_cloud_training_artifact_path(value: Any, source_path: Path | None) 
     if source_path is None:
         return None
     return source_path.parent / path
+
+
+def _is_safe_or_redacted_cloud_training_ref_path(value: str) -> bool:
+    if value.startswith("<redacted:") and value.endswith(">"):
+        basename = value.removeprefix("<redacted:").removesuffix(">")
+        return bool(basename) and "/" not in basename and "\\" not in basename and ".." not in basename and "~" not in basename
+    return _is_replayable_cloud_training_ref_path(value)
+
+
+def _is_replayable_cloud_training_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
 
 
 def _validate_cloud_training_credentials(value: Any, target: ValidationTarget) -> None:

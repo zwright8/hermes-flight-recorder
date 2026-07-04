@@ -3621,7 +3621,7 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_artifacts.add_argument("--download", action="append", default=[], help="Expected provider output path; may be repeated")
     cloud_training_artifacts.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     cloud_training_artifacts.add_argument("--out", help="Write artifact manifest JSON to this path")
-    cloud_training_artifacts.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_artifacts.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in artifact refs; unsafe absolute or traversal refs remain redacted")
     cloud_training_artifacts.set_defaults(func=cmd_cloud_training_artifacts)
 
     cloud_training_preflight = cloud_training_subparsers.add_parser("preflight", help="Write fail-closed provider preflight")
@@ -3637,7 +3637,7 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_preflight.add_argument("--allow-live", action="store_true", help="Explicit live opt-in for preflight only; no launch is performed")
     cloud_training_preflight.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     cloud_training_preflight.add_argument("--out", help="Write cloud training preflight JSON to this path")
-    cloud_training_preflight.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_preflight.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in artifact refs; unsafe absolute or traversal refs remain redacted")
     cloud_training_preflight.set_defaults(func=cmd_cloud_training_preflight)
 
     cloud_training_plan = cloud_training_subparsers.add_parser("plan", help="Write dry-run cloud launch plan")
@@ -3645,7 +3645,7 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_plan.add_argument("--artifact-manifest", help="cloud_training_artifact_manifest artifact")
     cloud_training_plan.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     cloud_training_plan.add_argument("--out", help="Write cloud training launch plan JSON to this path")
-    cloud_training_plan.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_plan.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in artifact refs; unsafe absolute or traversal refs remain redacted")
     cloud_training_plan.set_defaults(func=cmd_cloud_training_plan)
 
     cloud_training_launch = cloud_training_subparsers.add_parser("launch", help="Write dry-run launch receipt or blocked live receipt")
@@ -3653,7 +3653,7 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_launch.add_argument("--live", action="store_true", help="Request a live launch receipt; remains blocked in this implementation")
     cloud_training_launch.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     cloud_training_launch.add_argument("--out", help="Write cloud training launch receipt JSON to this path")
-    cloud_training_launch.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_launch.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in artifact refs; unsafe absolute or traversal refs remain redacted")
     cloud_training_launch.set_defaults(func=cmd_cloud_training_launch)
 
     cloud_training_status = cloud_training_subparsers.add_parser("status", help="Write dry-run status/cancel receipt")
@@ -3661,7 +3661,7 @@ def _parser() -> argparse.ArgumentParser:
     cloud_training_status.add_argument("--cancel", action="store_true", help="Record a dry-run cancellation request")
     cloud_training_status.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     cloud_training_status.add_argument("--out", help="Write cloud training status receipt JSON to this path")
-    cloud_training_status.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in artifact refs")
+    cloud_training_status.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in artifact refs; unsafe absolute or traversal refs remain redacted")
     cloud_training_status.set_defaults(func=cmd_cloud_training_status)
 
     agentic_rollout_plan = subparsers.add_parser("agentic-rollout-plan", help="Write a fail-closed rollout generation plan")

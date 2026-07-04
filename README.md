@@ -409,6 +409,9 @@ Cloud, and Brev. They do not import provider SDKs, call provider APIs, create jo
 spend money, download models, or update weights. Optional live preflight probes
 only check environment-variable presence and provider client module
 discoverability; they still record `provider_api_called: false`.
+Cloud-training source refs and upload refs are public-safe by default: unsafe
+absolute or traversal paths are redacted and treated as missing, so those
+receipts block instead of publishing local filesystem details.
 Every provider registry record includes an `adapter_contract` attesting that the
 implemented transport is mock receipts plus metadata-only live preflight, with
 live launch support disabled by default.

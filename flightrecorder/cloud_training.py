@@ -7,7 +7,7 @@ import importlib.util
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .schema_registry import SchemaRegistryError, check_schema_file
@@ -416,18 +416,11 @@ def build_cloud_training_launch_plan(
 ) -> dict[str, Any]:
     """Build a dry-run launch plan from a cloud-training preflight."""
     display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
-    preflight = _read_json(Path(preflight_path))
-    artifact_manifest = _read_json(Path(artifact_manifest_path)) if artifact_manifest_path else {}
-    preflight_provider_id = _payload_provider_id(preflight)
-    artifact_manifest_provider_id = _payload_provider_id(artifact_manifest)
-    provider_chain = _launch_plan_provider_chain(
-        preflight_provider_id,
-        artifact_manifest_provider_id,
-        artifact_manifest_required=True,
-    )
+    preflight_source_path = Path(preflight_path)
+    artifact_manifest_source_path = Path(artifact_manifest_path) if artifact_manifest_path else None
     preflight_ref = _json_artifact_ref(
         "cloud_training_preflight",
-        Path(preflight_path),
+        preflight_source_path,
         "cloud_training_preflight",
         preserve_paths,
         display_base_dir,
@@ -435,13 +428,22 @@ def build_cloud_training_launch_plan(
     artifact_ref = (
         _json_artifact_ref(
             "cloud_training_artifact_manifest",
-            Path(artifact_manifest_path),
+            artifact_manifest_source_path,
             "cloud_training_artifact_manifest",
             preserve_paths,
             display_base_dir,
         )
-        if artifact_manifest_path
+        if artifact_manifest_source_path
         else _missing_ref("cloud_training_artifact_manifest")
+    )
+    preflight = _read_json(preflight_source_path) if preflight_ref["exists"] else {}
+    artifact_manifest = _read_json(artifact_manifest_source_path) if artifact_ref["exists"] and artifact_manifest_source_path else {}
+    preflight_provider_id = _payload_provider_id(preflight)
+    artifact_manifest_provider_id = _payload_provider_id(artifact_manifest)
+    provider_chain = _launch_plan_provider_chain(
+        preflight_provider_id,
+        artifact_manifest_provider_id,
+        artifact_manifest_required=True,
     )
     checks: list[dict[str, Any]] = []
     _add_check(checks, "preflight_ready", _artifact_ready(preflight_ref), {"artifact": preflight_ref}, {"schema": "cloud_training_preflight", "passed": True})
@@ -738,7 +740,7 @@ def _json_artifact_ref(
 ) -> dict[str, Any]:
     ref = _file_ref(role, path, preserve_paths, display_base_dir)
     schema = _schema_check(path, schema_name) if ref["exists"] else {"passed": False, "error_count": 1, "errors": ["artifact not found"]}
-    payload = _read_json(path)
+    payload = _read_json(path) if ref["exists"] else {}
     ref.update(
         {
             "schema_name": schema_name,
@@ -754,12 +756,14 @@ def _json_artifact_ref(
 
 def _file_ref(role: str, path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> dict[str, Any]:
     exists = path.exists() and path.is_file()
+    display_path, replayable = _source_display_path(path, preserve_paths, display_base_dir)
+    public_exists = exists and replayable
     return {
         "role": role,
-        "path": _display_path(path, preserve_paths, display_base_dir),
-        "exists": exists,
-        "sha256": _sha256(path) if exists else None,
-        "size_bytes": path.stat().st_size if exists else None,
+        "path": display_path,
+        "exists": public_exists,
+        "sha256": _sha256(path) if public_exists else None,
+        "size_bytes": path.stat().st_size if public_exists else None,
     }
 
 
@@ -845,16 +849,58 @@ def _handoff_contract() -> dict[str, Any]:
 
 
 def _display_path(path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> str:
-    if preserve_paths:
-        return str(path)
+    raw = str(path)
     if display_base_dir is not None:
-        return os.path.relpath(path.resolve(), display_base_dir.resolve())
+        relative = _output_relative_path(path, display_base_dir)
+        return relative if relative is not None else f"<redacted:{_basename(raw)}>"
+    if preserve_paths:
+        return raw if _is_safe_public_path(raw) else f"<redacted:{_basename(raw)}>"
+    if _is_windows_absolute(raw):
+        return f"<redacted:{_basename(raw)}>"
     if not path.is_absolute():
-        return str(path)
+        return raw if _is_safe_public_path(raw) else f"<redacted:{_basename(raw)}>"
     try:
-        return str(path.resolve().relative_to(Path.cwd().resolve()))
+        relative = str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
-        return path.name
+        return f"<redacted:{path.name}>"
+    return relative if _is_safe_public_path(relative) else f"<redacted:{path.name}>"
+
+
+def _source_display_path(path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> tuple[str, bool]:
+    displayed = _display_path(path, preserve_paths, display_base_dir)
+    return displayed, _is_safe_public_path(displayed)
+
+
+def _output_relative_path(path: Path, display_base_dir: Path) -> str | None:
+    try:
+        relative = os.path.relpath(path.resolve(), display_base_dir.resolve())
+    except OSError:
+        return None
+    return relative if _is_safe_public_path(relative) else None
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
+
+
+def _is_windows_absolute(value: str) -> bool:
+    normalized = value.replace("/", "\\")
+    return (len(normalized) >= 3 and normalized[1:3] == ":\\" and normalized[0].isalpha()) or normalized.startswith("\\\\")
+
+
+def _is_safe_public_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
 
 
 def _sha256(path: Path) -> str:

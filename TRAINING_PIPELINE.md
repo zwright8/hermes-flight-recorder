@@ -893,6 +893,10 @@ status/cancel receipts for partner families such as Hugging Face Jobs/AutoTrain,
 Modal, RunPod, Lambda Labs, CoreWeave, Together, Fireworks, Replicate, AWS
 SageMaker, GCP Vertex AI, Azure ML, Databricks/Mosaic, NVIDIA DGX Cloud, and Brev:
 
+Cloud-training source refs and upload refs are public-safe by default. Unsafe
+absolute or traversal paths are redacted and treated as missing, which keeps
+the cloud receipt blocked rather than publishing local filesystem details.
+
 ```bash
 flightrecorder cloud-training providers \
   --out runs/cloud_provider_registry.json

@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,7 @@ from pathlib import Path
 from flightrecorder.cloud_training import (
     PROVIDER_ADAPTER_RECEIPT_TYPES,
     build_cloud_training_artifact_manifest,
+    build_cloud_training_launch_plan,
     build_cloud_training_provider_registry,
     provider_choices,
 )
@@ -101,6 +103,8 @@ class CloudTrainingTests(unittest.TestCase):
     def test_cli_emits_schema_checkable_fail_closed_provider_flow(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            plan_source = root / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
             registry = root / "providers.json"
             artifact_manifest = root / "artifacts.json"
             preflight = root / "preflight.json"
@@ -134,7 +138,7 @@ class CloudTrainingTests(unittest.TestCase):
                         "--provider",
                         "modal",
                         "--upload",
-                        str(EXAMPLE_PLAN),
+                        str(plan_source),
                         "--download",
                         "adapters/candidate/adapter_model.safetensors",
                         "--created-at",
@@ -166,7 +170,7 @@ class CloudTrainingTests(unittest.TestCase):
                     "--provider",
                     "modal",
                     "--agentic-training-plan",
-                    str(EXAMPLE_PLAN),
+                    str(plan_source),
                     "--region",
                     "provider_default",
                     "--gpu-class",
@@ -611,10 +615,10 @@ class CloudTrainingTests(unittest.TestCase):
     def test_cloud_training_source_refs_are_output_relative_and_reject_stale_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            sources = root / "sources"
             reports = root / "reports"
-            sources.mkdir()
+            sources = reports / "sources"
             reports.mkdir()
+            sources.mkdir()
             plan_source = sources / "agentic_training_plan.json"
             plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
             artifact_manifest = reports / "artifacts.json"
@@ -673,8 +677,8 @@ class CloudTrainingTests(unittest.TestCase):
             self.assert_schema_and_validate(status_receipt, "cloud_training_status_receipt")
             preflight_payload = json.loads(preflight.read_text(encoding="utf-8"))
             artifact_payload = json.loads(artifact_manifest.read_text(encoding="utf-8"))
-            self.assertEqual(preflight_payload["source_artifacts"]["agentic_training_plan"]["path"], "../sources/agentic_training_plan.json")
-            self.assertEqual(artifact_payload["upload_artifacts"][0]["path"], "../sources/agentic_training_plan.json")
+            self.assertEqual(preflight_payload["source_artifacts"]["agentic_training_plan"]["path"], "sources/agentic_training_plan.json")
+            self.assertEqual(artifact_payload["upload_artifacts"][0]["path"], "sources/agentic_training_plan.json")
 
             _mutate_json(plan_source, "plan_source")
             _mutate_json(preflight, "preflight")
@@ -697,13 +701,177 @@ class CloudTrainingTests(unittest.TestCase):
             self.assertIn("cloud_training_launch_receipt.source_artifacts.launch_plan.sha256 does not match the current file.", errors)
             self.assertIn("cloud_training_status_receipt.source_artifacts.launch_receipt.sha256 does not match the current file.", errors)
 
-    def test_validate_rejects_cloud_training_symlink_source_and_upload_refs(self):
+    def test_cloud_training_blocks_unreplayable_external_source_refs_without_leaking_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             sources = root / "sources"
             reports = root / "reports"
             sources.mkdir()
             reports.mkdir()
+            plan_source = sources / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
+            artifact_manifest = reports / "artifacts.json"
+            preflight = reports / "preflight.json"
+
+            self.assertEqual(
+                run_cli(["cloud-training", "artifacts", "--provider", "modal", "--upload", str(plan_source), "--out", str(artifact_manifest)]),
+                1,
+            )
+            self.assertEqual(
+                run_cli(
+                    [
+                        "cloud-training",
+                        "preflight",
+                        "--provider",
+                        "modal",
+                        "--agentic-training-plan",
+                        str(plan_source),
+                        "--region",
+                        "provider_default",
+                        "--gpu-class",
+                        "a100",
+                        "--max-cost-usd",
+                        "0",
+                        "--out",
+                        str(preflight),
+                    ]
+                ),
+                1,
+            )
+
+            artifact_payload = json.loads(artifact_manifest.read_text(encoding="utf-8"))
+            preflight_payload = json.loads(preflight.read_text(encoding="utf-8"))
+            rendered = json.dumps({"artifact": artifact_payload, "preflight": preflight_payload}, sort_keys=True)
+            self.assertFalse(artifact_payload["passed"])
+            self.assertFalse(artifact_payload["upload_artifacts"][0]["exists"])
+            self.assertFalse(preflight_payload["source_artifacts"]["agentic_training_plan"]["exists"])
+            self.assertEqual(artifact_payload["upload_artifacts"][0]["path"], "<redacted:agentic_training_plan.json>")
+            self.assertEqual(preflight_payload["source_artifacts"]["agentic_training_plan"]["path"], "<redacted:agentic_training_plan.json>")
+            self.assertNotIn(str(sources), rendered)
+            self.assertNotIn("../sources", rendered)
+            validation = validate_artifacts(
+                cloud_training_preflight_paths=[preflight],
+                cloud_training_artifact_manifest_paths=[artifact_manifest],
+                strict=True,
+            )
+            self.assertTrue(validation["passed"], validation)
+
+    def test_cloud_training_launch_plan_does_not_read_redacted_preflight_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sources = root / "sources"
+            reports = root / "reports"
+            sources.mkdir()
+            reports.mkdir()
+            unsafe_preflight = sources / "preflight.json"
+            unsafe_preflight.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.cloud_training_preflight.v1",
+                        "provider": {"id": "modal"},
+                        "passed": True,
+                        "recommendation": "LOCAL_SECRET_RECOMMENDATION",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            launch_plan = reports / "launch_plan.json"
+
+            self.assertEqual(
+                run_cli(["cloud-training", "plan", "--preflight", str(unsafe_preflight), "--out", str(launch_plan)]),
+                1,
+            )
+
+            payload = json.loads(launch_plan.read_text(encoding="utf-8"))
+            rendered = json.dumps(payload, sort_keys=True)
+            preflight_ref = payload["source_artifacts"]["preflight"]
+            self.assertEqual(preflight_ref["path"], "<redacted:preflight.json>")
+            self.assertFalse(preflight_ref["exists"])
+            self.assertIsNone(preflight_ref["source_passed"])
+            self.assertEqual(preflight_ref["source_recommendation"], "")
+            self.assertEqual(payload["provider_chain"]["preflight_provider_id"], "")
+            self.assertEqual(payload["provider"]["id"], "")
+            self.assertNotIn("LOCAL_SECRET_RECOMMENDATION", rendered)
+            self.assertNotIn(str(sources), rendered)
+            schema = check_schema_file(launch_plan, "cloud_training_launch_plan")
+            self.assertTrue(schema["passed"], schema)
+            validation = validate_artifacts(cloud_training_launch_plan_paths=[launch_plan], strict=True)
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_launch_plan.source_artifacts.preflight.exists must be true.", errors)
+            self.assertNotIn("LOCAL_SECRET_RECOMMENDATION", json.dumps(validation, sort_keys=True))
+
+    def test_cloud_training_preserve_paths_does_not_replay_external_relative_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sources = root / "sources"
+            reports = root / "reports"
+            sources.mkdir()
+            reports.mkdir()
+            unsafe_preflight = sources / "preflight.json"
+            unsafe_preflight.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.cloud_training_preflight.v1",
+                        "provider": {"id": "modal"},
+                        "passed": True,
+                        "recommendation": "LOCAL_SECRET_RECOMMENDATION",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            upload = sources / "upload.txt"
+            upload.write_text("LOCAL_SECRET_UPLOAD", encoding="utf-8")
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                launch_plan = build_cloud_training_launch_plan(
+                    preflight_path=Path("sources") / "preflight.json",
+                    preserve_paths=True,
+                    output_base_dir=Path("reports"),
+                )
+                artifact_manifest = build_cloud_training_artifact_manifest(
+                    provider_id="modal",
+                    upload_paths=[Path("sources") / "upload.txt"],
+                    preserve_paths=True,
+                    output_base_dir=Path("reports"),
+                )
+            finally:
+                os.chdir(previous_cwd)
+
+            rendered = json.dumps({"launch_plan": launch_plan, "artifact_manifest": artifact_manifest}, sort_keys=True)
+            preflight_ref = launch_plan["source_artifacts"]["preflight"]
+            upload_ref = artifact_manifest["upload_artifacts"][0]
+            self.assertEqual(preflight_ref["path"], "<redacted:preflight.json>")
+            self.assertFalse(preflight_ref["exists"])
+            self.assertIsNone(preflight_ref["sha256"])
+            self.assertIsNone(preflight_ref["size_bytes"])
+            self.assertIsNone(preflight_ref["source_passed"])
+            self.assertEqual(preflight_ref["source_recommendation"], "")
+            self.assertEqual(launch_plan["provider_chain"]["preflight_provider_id"], "")
+            self.assertEqual(upload_ref["path"], "<redacted:upload.txt>")
+            self.assertFalse(upload_ref["exists"])
+            self.assertIsNone(upload_ref["sha256"])
+            self.assertIsNone(upload_ref["size_bytes"])
+            self.assertNotIn("LOCAL_SECRET_RECOMMENDATION", rendered)
+            self.assertNotIn("LOCAL_SECRET_UPLOAD", rendered)
+            self.assertNotIn(str(sources), rendered)
+            self.assertTrue(check_schema_contract(launch_plan)["passed"], check_schema_contract(launch_plan)["errors"])
+            self.assertTrue(check_schema_contract(artifact_manifest)["passed"], check_schema_contract(artifact_manifest)["errors"])
+
+    def test_validate_rejects_cloud_training_symlink_source_and_upload_refs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            sources = reports / "sources"
+            reports.mkdir()
+            sources.mkdir()
             plan_source = sources / "agentic_training_plan.json"
             plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
             artifact_manifest = reports / "artifacts.json"
@@ -970,6 +1138,29 @@ class CloudTrainingTests(unittest.TestCase):
                 "cloud_training_preflight.source_artifacts.agentic_training_plan.path must be relative to the cloud-training artifact.",
                 errors,
             )
+            self.assertNotIn("cloud_training_artifact_manifest.upload_artifacts[0].sha256 does not match the current file.", errors)
+            self.assertNotIn("cloud_training_artifact_manifest.upload_artifacts[0].path must resolve to an existing file", errors)
+
+            artifact_payload["upload_artifacts"][0]["path"] = "../agentic_training_plan.json"
+            artifact_manifest.write_text(json.dumps(artifact_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            preflight_payload["source_artifacts"]["agentic_training_plan"]["path"] = "../agentic_training_plan.json"
+            preflight.write_text(json.dumps(preflight_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            validation = validate_artifacts(
+                cloud_training_preflight_paths=[preflight],
+                cloud_training_artifact_manifest_paths=[artifact_manifest],
+                strict=True,
+            )
+
+            self.assertFalse(validation["passed"])
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("cloud_training_artifact_manifest.upload_artifacts[0].path must be relative to the cloud-training artifact.", errors)
+            self.assertIn(
+                "cloud_training_preflight.source_artifacts.agentic_training_plan.path must be relative to the cloud-training artifact.",
+                errors,
+            )
+            self.assertNotIn("cloud_training_artifact_manifest.upload_artifacts[0].path must resolve to an existing file", errors)
+            self.assertNotIn("cloud_training_preflight.source_artifacts.agentic_training_plan.path must resolve to an existing file", errors)
 
     def test_launch_plan_strict_warns_on_absolute_command_tokens(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1105,6 +1296,8 @@ class CloudTrainingTests(unittest.TestCase):
     def test_launch_plan_blocks_mismatched_preflight_and_artifact_manifest_providers(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            plan_source = root / "agentic_training_plan.json"
+            plan_source.write_text(EXAMPLE_PLAN.read_text(encoding="utf-8"), encoding="utf-8")
             artifact_manifest = root / "artifacts.json"
             preflight = root / "preflight.json"
             launch_plan = root / "launch_plan.json"
@@ -1117,7 +1310,7 @@ class CloudTrainingTests(unittest.TestCase):
                         "--provider",
                         "huggingface_jobs",
                         "--upload",
-                        str(EXAMPLE_PLAN),
+                        str(plan_source),
                         "--out",
                         str(artifact_manifest),
                     ]
@@ -1132,7 +1325,7 @@ class CloudTrainingTests(unittest.TestCase):
                         "--provider",
                         "modal",
                         "--agentic-training-plan",
-                        str(EXAMPLE_PLAN),
+                        str(plan_source),
                         "--region",
                         "provider_default",
                         "--gpu-class",
