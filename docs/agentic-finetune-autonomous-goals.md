@@ -648,7 +648,9 @@ card, and dataset card decisions.
   task-completion regressions block promotion.
 - Promotion decisions are reproducible from artifacts.
 - Evidence-bundle validation reopens recorded eval-summary and serving-lifecycle
-  artifacts from the bundle file location before trusting derived metrics.
+  artifacts from the bundle file location before trusting derived metrics, and
+  rejects existing artifact paths that are symlinks or traverse symlinked parent
+  directories before trusting file or directory evidence.
 - Action-ledger validation reopens recorded evidence bundles from the ledger
   file location, requires SHA-256 plus byte-size evidence, and rejects missing,
   moved, stale, malformed, or cwd-substituted bundle records.

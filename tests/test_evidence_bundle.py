@@ -1099,6 +1099,33 @@ class EvidenceBundleTests(unittest.TestCase):
             errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
             self.assertIn("evidence_bundle.artifacts.eval_summary.path must resolve to a regular file when exists is true.", errors)
 
+    def test_validate_evidence_bundle_rejects_parent_symlink_existing_file_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_dir = root / "real"
+            real_dir.mkdir()
+            suite = _write_eval_suite_summary(root / "candidate_suite.json")
+            eval_summary = real_dir / "eval_summary.json"
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["eval-summary", "--suite-summary", f"candidate={suite}", "--out", str(eval_summary)]), 0)
+            self.assertEqual(run_cli(["evidence-bundle", "--eval-summary", str(eval_summary), "--out", str(bundle_path)]), 0)
+            linked_parent = root / "linked"
+            try:
+                linked_parent.symlink_to(real_dir, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["eval_summary"]["path"] = str(Path("linked") / "eval_summary.json")
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.eval_summary.path must resolve to a regular file when exists is true.", errors)
+
     def test_validate_evidence_bundle_rejects_missing_existing_directory_artifact(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1130,6 +1157,31 @@ class EvidenceBundleTests(unittest.TestCase):
             symlink_path.symlink_to(runs, target_is_directory=True)
             bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
             bundle["artifacts"]["runs_dir"]["path"] = symlink_path.name
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])
+
+            self.assertEqual(code, 1)
+            summary = json.loads(validation.read_text(encoding="utf-8"))
+            errors = "\n".join(error for target in summary["targets"] for error in target["errors"])
+            self.assertIn("evidence_bundle.artifacts.runs_dir.path must resolve to a regular directory when exists is true.", errors)
+
+    def test_validate_evidence_bundle_rejects_parent_symlink_existing_directory_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            real_parent = root / "real"
+            runs = real_parent / "runs"
+            runs.mkdir(parents=True)
+            bundle_path = root / "evidence_bundle.json"
+            validation = root / "validation.json"
+            self.assertEqual(run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)]), 0)
+            linked_parent = root / "linked"
+            try:
+                linked_parent.symlink_to(real_parent, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["artifacts"]["runs_dir"]["path"] = str(Path("linked") / "runs")
             bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
             code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(validation)])

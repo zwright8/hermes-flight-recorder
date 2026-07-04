@@ -25720,7 +25720,7 @@ def _validate_evidence_bundle_artifact_file_fingerprint(
         if not current_path.exists():
             target.errors.append(f"{label}.path must resolve to an existing file when exists is true.")
             return
-        if current_path.is_symlink() or not current_path.is_file():
+        if _path_has_symlink_component(current_path, include_leaf=True) or not current_path.is_file():
             target.errors.append(f"{label}.path must resolve to a regular file when exists is true.")
             return
     elif not current_path.is_file():
@@ -25750,7 +25750,7 @@ def _validate_evidence_bundle_artifact_directory_fingerprint(
         if not current_path.exists():
             target.errors.append(f"{label}.path must resolve to an existing directory when exists is true.")
             return
-        if current_path.is_symlink() or not current_path.is_dir():
+        if _path_has_symlink_component(current_path, include_leaf=True) or not current_path.is_dir():
             target.errors.append(f"{label}.path must resolve to a regular directory when exists is true.")
             return
 
