@@ -1034,7 +1034,7 @@ def validate_heldout_manifest(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("heldout_manifest", str(manifest_path))
     manifest = _read_object(manifest_path, target, "heldout_manifest.json")
     if manifest is not None:
-        _validate_heldout_manifest(manifest, target)
+        _validate_heldout_manifest(manifest, target, manifest_path)
     return target
 
 
@@ -14761,7 +14761,7 @@ def _external_eval_reference_path(value: str, source_path: Path) -> Path:
     return source_path.parent / path
 
 
-def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(manifest, "schema_version", HELDOUT_MANIFEST_SCHEMA_VERSION, target)
     if manifest.get("status") not in {"single_source", "identical", "mismatched", "empty", "blocked"}:
         target.errors.append("heldout_manifest.status has an unsupported value.")
@@ -14795,7 +14795,7 @@ def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarge
         target.errors.append("heldout_manifest.scenario_ids must not contain duplicates.")
 
     for index, source in enumerate(sources):
-        _validate_heldout_manifest_source(source, index, target)
+        _validate_heldout_manifest_source(source, index, target, source_path)
     for index, mismatch in enumerate(mismatches):
         _validate_heldout_manifest_mismatch(mismatch, index, target)
 
@@ -14834,31 +14834,106 @@ def _validate_heldout_manifest(manifest: dict[str, Any], target: ValidationTarge
     )
 
 
-def _validate_heldout_manifest_source(source: Any, index: int, target: ValidationTarget) -> None:
+def _validate_heldout_manifest_source(source: Any, index: int, target: ValidationTarget, source_path: Path) -> None:
     if not isinstance(source, dict):
         target.errors.append(f"heldout_manifest.sources[{index}] must be an object.")
         return
+    label = f"heldout_manifest.sources[{index}]"
     for field_name in ("label", "path"):
         if not isinstance(source.get(field_name), str) or not source.get(field_name):
-            target.errors.append(f"heldout_manifest.sources[{index}].{field_name} must be a non-empty string.")
+            target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+    if isinstance(source.get("path"), str) and source.get("path"):
+        _warn_absolute_public_path(target, f"{label}.path", source.get("path"))
     if not _is_non_negative_int(source.get("scenario_count")):
-        target.errors.append(f"heldout_manifest.sources[{index}].scenario_count must be a non-negative integer.")
+        target.errors.append(f"{label}.scenario_count must be a non-negative integer.")
     if not _is_string_list(source.get("scenario_ids")):
-        target.errors.append(f"heldout_manifest.sources[{index}].scenario_ids must be a list of strings.")
+        target.errors.append(f"{label}.scenario_ids must be a list of strings.")
     elif source.get("scenario_count") != len(source.get("scenario_ids")):
-        target.errors.append(f"heldout_manifest.sources[{index}].scenario_count must match scenario_ids length.")
+        target.errors.append(f"{label}.scenario_count must match scenario_ids length.")
     if not _is_string_list(source.get("duplicate_scenario_ids")):
-        target.errors.append(f"heldout_manifest.sources[{index}].duplicate_scenario_ids must be a list of strings.")
+        target.errors.append(f"{label}.duplicate_scenario_ids must be a list of strings.")
     if not _is_string_list(source.get("blocking_reasons")):
-        target.errors.append(f"heldout_manifest.sources[{index}].blocking_reasons must be a list of strings.")
+        target.errors.append(f"{label}.blocking_reasons must be a list of strings.")
     fingerprints = source.get("scenario_fingerprints")
     if not isinstance(fingerprints, dict):
-        target.errors.append(f"heldout_manifest.sources[{index}].scenario_fingerprints must be an object.")
+        target.errors.append(f"{label}.scenario_fingerprints must be an object.")
     else:
         for scenario_id, sha in fingerprints.items():
             if not isinstance(scenario_id, str) or not _is_sha256(sha):
-                target.errors.append(f"heldout_manifest.sources[{index}].scenario_fingerprints must map strings to SHA-256 values.")
+                target.errors.append(f"{label}.scenario_fingerprints must map strings to SHA-256 values.")
                 break
+    _validate_heldout_manifest_source_file(source, target, label, source_path)
+
+
+def _validate_heldout_manifest_source_file(source: dict[str, Any], target: ValidationTarget, label: str, source_path: Path) -> None:
+    file_path = _heldout_manifest_reference_path(source.get("path"), source_path)
+    if file_path is None:
+        return
+    if _path_has_symlink_component(file_path, include_leaf=True):
+        target.errors.append(f"{label}.path must resolve to a regular non-symlink suite summary.")
+        return
+    if not file_path.exists() or not file_path.is_file():
+        target.errors.append(f"{label}.path must resolve to an existing suite summary.")
+        return
+    summary = _read_object(file_path, target, f"{label}.path")
+    if summary is None:
+        return
+    current_source = _heldout_manifest_source_from_suite_summary(summary)
+    for field_name in ("schema_version", "scenario_count", "scenario_ids", "scenario_fingerprints", "duplicate_scenario_ids", "blocking_reasons"):
+        if source.get(field_name) != current_source[field_name]:
+            target.errors.append(f"{label}.{field_name} must match the current suite summary.")
+
+
+def _heldout_manifest_source_from_suite_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    runs = summary.get("runs") if isinstance(summary.get("runs"), list) else []
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    scenario_ids: list[str] = []
+    scenario_fingerprints: dict[str, str] = {}
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        scenario_id = run.get("scenario_id")
+        if not isinstance(scenario_id, str) or not scenario_id:
+            continue
+        if scenario_id in seen:
+            duplicates.add(scenario_id)
+        seen.add(scenario_id)
+        scenario_ids.append(scenario_id)
+        scenario_sha = run.get("scenario_sha256")
+        if isinstance(scenario_sha, str) and scenario_sha:
+            scenario_fingerprints[scenario_id] = scenario_sha
+    unique_scenarios = sorted(set(scenario_ids))
+    blocking_reasons: list[str] = []
+    if summary.get("schema_version") != RUN_SUITE_SCHEMA_VERSION:
+        blocking_reasons.append("invalid_suite_summary_schema")
+    if not unique_scenarios:
+        blocking_reasons.append("empty_suite_summary")
+    try:
+        error_count = int(summary.get("error_count", 0) or 0)
+    except (TypeError, ValueError):
+        error_count = 0
+    if error_count > 0:
+        blocking_reasons.append("suite_summary_errors")
+    if duplicates:
+        blocking_reasons.append("duplicate_scenario_ids")
+    return {
+        "schema_version": summary.get("schema_version"),
+        "scenario_count": len(unique_scenarios),
+        "scenario_ids": unique_scenarios,
+        "scenario_fingerprints": dict(sorted(scenario_fingerprints.items())),
+        "duplicate_scenario_ids": sorted(duplicates),
+        "blocking_reasons": blocking_reasons,
+    }
+
+
+def _heldout_manifest_reference_path(value: Any, source_path: Path) -> Path | None:
+    if not isinstance(value, str) or not value or value.startswith("<redacted:") or _is_windows_absolute(value):
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return source_path.parent / path
 
 
 def _validate_heldout_manifest_mismatch(mismatch: Any, index: int, target: ValidationTarget) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,7 +61,11 @@ def write_heldout_manifest(manifest: dict[str, Any], out_path: str | Path) -> No
     """Write a held-out manifest as stable JSON."""
     path = Path(out_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    payload = json.loads(json.dumps(manifest))
+    for source in payload.get("sources", []):
+        if isinstance(source, dict) and isinstance(source.get("path"), str):
+            source["path"] = _output_relative_path(source.get("path"), path.parent)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _source_from_suite_summary(spec: LabeledPath, preserve_paths: bool) -> dict[str, Any]:
@@ -175,3 +180,14 @@ def _display_path(path: Path, preserve_paths: bool) -> str:
         return str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
         return str(path)
+
+
+def _output_relative_path(value: Any, output_dir: Path) -> Any:
+    if not isinstance(value, str) or not value:
+        return value
+    path = Path(value)
+    if not path.is_absolute():
+        if not path.exists():
+            return value
+        path = path.resolve()
+    return os.path.relpath(path.resolve(), output_dir.resolve())

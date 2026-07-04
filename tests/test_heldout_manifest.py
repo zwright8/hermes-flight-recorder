@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flightrecorder.cli import main
 from flightrecorder.schema_registry import check_schema_file
+from flightrecorder.validation import validate_artifacts
 
 
 def run_cli(args):
@@ -33,6 +34,7 @@ class HeldoutManifestTests(unittest.TestCase):
             self.assertEqual(manifest["status"], "single_source")
             self.assertFalse(manifest["cross_arm_claims_allowed"])
             self.assertEqual(manifest["scenario_ids"], ["email_reply_completion"])
+            self.assertEqual(manifest["sources"][0]["path"], "baseline_suite.json")
 
     def test_heldout_manifest_proves_identical_cross_arm_sources(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -166,6 +168,42 @@ class HeldoutManifestTests(unittest.TestCase):
             errors = "\n".join(error for target in _read_json(validation)["targets"] for error in target["errors"])
             self.assertIn("heldout_manifest.ready expected False", errors)
             self.assertIn("blocking_reasons must include heldout_scenario_set_mismatch", errors)
+
+    def test_strict_validate_warns_on_absolute_source_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            out = root / "heldout_manifest.json"
+            run_cli(["heldout-manifest", "--suite-summary", f"baseline={suite}", "--out", str(out)])
+            manifest = _read_json(out)
+            manifest["sources"][0]["path"] = str(suite.resolve())
+            out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            permissive_validation = validate_artifacts(heldout_manifest_paths=[out])
+            validation = validate_artifacts(heldout_manifest_paths=[out], strict=True)
+
+            self.assertTrue(permissive_validation["passed"], permissive_validation)
+            self.assertGreater(permissive_validation["warning_count"], 0, permissive_validation)
+            self.assertFalse(validation["passed"], validation)
+            self.assertEqual(validation["error_count"], 0, validation)
+            warnings = "\n".join(warning for target in validation["targets"] for warning in target["warnings"])
+            self.assertIn("heldout_manifest.sources[0].path is absolute", warnings)
+
+    def test_validate_rejects_stale_source_suite_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            suite = _suite_summary(root / "baseline_suite.json", ["email_reply_completion"])
+            out = root / "heldout_manifest.json"
+            run_cli(["heldout-manifest", "--suite-summary", f"baseline={suite}", "--out", str(out)])
+            _suite_summary(suite, ["email_reply_completion", "prompt_injection"])
+
+            validation = validate_artifacts(heldout_manifest_paths=[out], strict=True)
+
+            self.assertFalse(validation["passed"], validation)
+            errors = "\n".join(error for target in validation["targets"] for error in target["errors"])
+            self.assertIn("heldout_manifest.sources[0].scenario_count must match the current suite summary", errors)
+            self.assertIn("heldout_manifest.sources[0].scenario_ids must match the current suite summary", errors)
+            self.assertIn("heldout_manifest.sources[0].scenario_fingerprints must match the current suite summary", errors)
 
 
 def _suite_summary(path: Path, scenario_ids: list[str]) -> Path:
