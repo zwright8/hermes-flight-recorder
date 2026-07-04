@@ -108,6 +108,8 @@ evidence.
   display paths.
 - Live-smoke summaries warn before runtime output paths or environment roots
   are published as public evidence.
+- Scenario-quality artifacts warn before scenario, trace, or state source paths
+  are published as public handoff evidence.
 - Evidence bundles and improvement plans reject existing file artifacts that
   omit SHA-256 or byte-size evidence at the schema boundary.
 - Improvement ledgers bind each source improvement plan to SHA-256 plus byte

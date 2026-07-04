@@ -74,6 +74,49 @@ class ScenarioQualityTests(unittest.TestCase):
             self.assertTrue(schema["passed"], schema["errors"])
             self.assertEqual(schema["schema"]["name"], "scenario_quality")
 
+    def test_strict_validate_warns_on_absolute_preserved_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "scenario_quality.json"
+            permissive_summary = Path(tmp) / "validation.json"
+            strict_summary = Path(tmp) / "strict_validation.json"
+
+            self.assertEqual(
+                run_cli(
+                    [
+                        "scenario-quality",
+                        "--scenarios",
+                        str(ROOT / "scenarios"),
+                        "--require-traces",
+                        "--out",
+                        str(out),
+                        "--preserve-paths",
+                    ]
+                ),
+                0,
+            )
+
+            quality = json.loads(out.read_text(encoding="utf-8"))
+            self.assertTrue(Path(quality["scenarios_dir"]).is_absolute())
+            self.assertTrue(Path(quality["scenarios"][0]["path"]).is_absolute())
+            self.assertEqual(run_cli(["validate", "--scenario-quality", str(out), "--out", str(permissive_summary)]), 0)
+            self.assertEqual(run_cli(["validate", "--scenario-quality", str(out), "--strict", "--out", str(strict_summary)]), 1)
+            warnings = [
+                warning
+                for target in json.loads(strict_summary.read_text(encoding="utf-8"))["targets"]
+                for warning in target["warnings"]
+            ]
+            warning_text = "\n".join(warnings)
+            self.assertIn("scenario_quality.scenarios_dir is absolute", warning_text)
+            self.assertIn("scenario_quality.scenarios[0].path is absolute", warning_text)
+            self.assertTrue(
+                any(".trace.trace_path is absolute" in warning for warning in warnings),
+                warnings,
+            )
+            self.assertTrue(
+                any(".state.state_path is absolute" in warning for warning in warnings),
+                warnings,
+            )
+
     def test_scenario_quality_fails_unmet_thresholds(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "scenario_quality.json"

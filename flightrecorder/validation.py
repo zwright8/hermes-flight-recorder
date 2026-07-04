@@ -25058,6 +25058,10 @@ def _rate_value(numerator: int, denominator: int) -> float:
 
 def _validate_scenario_quality(quality: dict[str, Any], target: ValidationTarget) -> None:
     _require_equal(quality, "schema_version", SCENARIO_QUALITY_SCHEMA_VERSION, target)
+    if not isinstance(quality.get("scenarios_dir"), str) or not quality.get("scenarios_dir"):
+        target.errors.append("scenario_quality.scenarios_dir must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "scenario_quality.scenarios_dir", quality.get("scenarios_dir"))
     scenarios = quality.get("scenarios")
     if not isinstance(scenarios, list):
         target.errors.append("scenario_quality.scenarios must be a list.")
@@ -25126,6 +25130,7 @@ def _validate_scenario_quality_rows(scenarios: list[Any], target: ValidationTarg
         for field_name in ("path", "id", "title", "task_family", "quality"):
             if not isinstance(row.get(field_name), str) or not row.get(field_name):
                 target.errors.append(f"{label}.{field_name} must be a non-empty string.")
+        _warn_absolute_public_path(target, f"{label}.path", row.get("path"))
         if row.get("quality") not in {"strong", "moderate", "weak", "invalid"}:
             target.errors.append(f"{label}.quality must be strong, moderate, weak, or invalid.")
         if not _is_int_between(row.get("contract_score"), 0, 100):
@@ -25155,8 +25160,14 @@ def _validate_scenario_quality_rows(scenarios: list[Any], target: ValidationTarg
         if "final_only_contract" in risks:
             totals["final_only_scenario_count"] += 1
         trace = row.get("trace")
+        if isinstance(trace, dict):
+            _warn_absolute_public_path(target, f"{label}.trace.trace_path", trace.get("trace_path"))
         if isinstance(trace, dict) and trace.get("trace_exists") is not True:
             totals["missing_trace_count"] += 1
+        state = row.get("state")
+        if isinstance(state, dict):
+            for field_name in ("before_state_path", "state_path"):
+                _warn_absolute_public_path(target, f"{label}.state.{field_name}", state.get(field_name))
         if "missing_state_file" in risks or "required_state_without_snapshot_path" in risks:
             totals["missing_state_count"] += 1
         for risk in risks:
