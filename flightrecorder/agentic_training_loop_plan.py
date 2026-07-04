@@ -378,13 +378,22 @@ def build_agentic_training_loop_plan(
     _add_check(
         checks,
         "heldout_eval_is_fail_closed",
-        "heldout_manifest" in refs and "external_eval_plan" in refs and "external_eval_receipt" in refs,
+        "heldout_manifest" in refs
+        and "external_eval_plan" in refs
+        and "external_eval_receipt" in refs
+        and "eval_summary" in refs,
         {
             "heldout_manifest_present": "heldout_manifest" in refs,
             "external_eval_plan_present": "external_eval_plan" in refs,
             "external_eval_receipt_present": "external_eval_receipt" in refs,
+            "eval_summary_present": "eval_summary" in refs,
         },
-        {"heldout_manifest_present": True, "external_eval_plan_present": True, "external_eval_receipt_present": True},
+        {
+            "heldout_manifest_present": True,
+            "external_eval_plan_present": True,
+            "external_eval_receipt_present": True,
+            "eval_summary_present": True,
+        },
     )
     _add_check(
         checks,

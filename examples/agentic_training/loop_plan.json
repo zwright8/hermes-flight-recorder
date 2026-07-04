@@ -437,11 +437,13 @@
     },
     {
       "actual": {
+        "eval_summary_present": false,
         "external_eval_plan_present": false,
         "external_eval_receipt_present": false,
         "heldout_manifest_present": false
       },
       "expected": {
+        "eval_summary_present": true,
         "external_eval_plan_present": true,
         "external_eval_receipt_present": true,
         "heldout_manifest_present": true

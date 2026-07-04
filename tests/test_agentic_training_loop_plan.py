@@ -79,6 +79,36 @@ class AgenticTrainingLoopPlanTests(unittest.TestCase):
             schema = check_schema_contract(plan)
             self.assertTrue(schema["passed"], schema["errors"])
 
+    def test_eval_summary_is_required_by_heldout_eval_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = self.write_loop_artifacts(root)
+            artifacts.pop("eval_summary")
+
+            plan = build_agentic_training_loop_plan(
+                out_path=root / "loop.json",
+                iteration_id="loop-missing-eval-summary",
+                objective="Require eval summary before governance review.",
+                artifact_paths=artifacts,
+                budget={"max_cloud_cost_usd": 0, "max_gpu_hours": 0},
+                provider_constraints={"providers": ["mock"], "regions": ["local"], "gpu_classes": ["none"]},
+                created_at="2026-07-03T00:00:00+00:00",
+            )
+
+            self.assertFalse(plan["passed"])
+            self.assertEqual(plan["readiness"], "planned_fail_closed")
+            self.assertIn("eval_summary", plan["missing_phase_inputs"])
+            heldout_check = next(check for check in plan["checks"] if check["id"] == "heldout_eval_is_fail_closed")
+            self.assertFalse(heldout_check["passed"])
+            self.assertFalse(heldout_check["actual"]["eval_summary_present"])
+            self.assertTrue(heldout_check["expected"]["eval_summary_present"])
+            schema = check_schema_contract(plan)
+            self.assertTrue(schema["passed"], schema["errors"])
+            loop_plan = root / "loop.json"
+            loop_plan.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            validation = validate_artifacts(agentic_training_loop_plan_paths=[loop_plan], strict=True)
+            self.assertTrue(validation["passed"], validation)
+
     def test_cli_writes_schema_checkable_and_validatable_loop_plan(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

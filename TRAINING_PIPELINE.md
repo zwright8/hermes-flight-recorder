@@ -746,6 +746,7 @@ flightrecorder agentic-loop plan \
   --heldout-manifest runs/heldout_manifest.json \
   --external-eval-plan runs/external_eval_plan.json \
   --external-eval-receipt runs/external_eval_receipt.json \
+  --eval-summary runs/eval_summary.json \
   --promotion-decision runs/promotion_decision.json \
   --out runs/agentic_training_loop_plan.json
 
