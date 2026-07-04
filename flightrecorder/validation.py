@@ -1447,7 +1447,7 @@ def validate_next_iteration_schedule(path: str | Path) -> ValidationTarget:
     target = ValidationTarget("next_iteration_schedule", str(schedule_path))
     schedule = _read_object(schedule_path, target, "next_iteration_schedule.json")
     if schedule is not None:
-        _validate_next_iteration_schedule(schedule, target)
+        _validate_next_iteration_schedule(schedule, target, schedule_path)
     return target
 
 
@@ -4568,13 +4568,43 @@ def _resolve_agentic_loop_ledger_source_path(row: dict[str, Any], ledger_path: P
     return (ledger_path.parent / path_value).resolve()
 
 
-def _validate_next_iteration_schedule(schedule: dict[str, Any], target: ValidationTarget) -> None:
+def _validate_next_iteration_schedule(schedule: dict[str, Any], target: ValidationTarget, source_path: Path) -> None:
     _require_equal(schedule, "schema_version", NEXT_ITERATION_SCHEDULE_SCHEMA_VERSION, target, prefix="next_iteration_schedule.")
+    _validate_allowed_keys(
+        schedule,
+        {
+            "schema_version",
+            "created_at",
+            "schedule_path",
+            "passed",
+            "readiness",
+            "recommendation",
+            "check_count",
+            "failed_check_count",
+            "checks",
+            "blocked_reasons",
+            "source_ledgers",
+            "pressure",
+            "next_iteration",
+            "execution_boundary",
+            "notes",
+        },
+        target,
+        "next_iteration_schedule",
+    )
     checks = schedule.get("checks")
     if not isinstance(checks, list):
         target.errors.append("next_iteration_schedule.checks must be a list.")
         checks = []
     failed_checks = _validate_gate_like_checks(checks, target, "next_iteration_schedule.checks")
+    for index, check in enumerate(checks):
+        if isinstance(check, dict):
+            _validate_allowed_keys(
+                check,
+                {"id", "passed", "actual", "expected", "summary"},
+                target,
+                f"next_iteration_schedule.checks[{index}]",
+            )
     if schedule.get("check_count") != len(checks):
         target.errors.append(f"next_iteration_schedule.check_count expected {len(checks)}, got {schedule.get('check_count')!r}.")
     if schedule.get("failed_check_count") != failed_checks:
@@ -4591,28 +4621,62 @@ def _validate_next_iteration_schedule(schedule: dict[str, Any], target: Validati
         target.errors.append("next_iteration_schedule.recommendation does not match readiness.")
     if not _is_string_list(schedule.get("blocked_reasons")):
         target.errors.append("next_iteration_schedule.blocked_reasons must be a list of strings.")
+    else:
+        expected_blocked_reasons = [check["summary"] for check in checks if isinstance(check, dict) and check.get("passed") is False]
+        if schedule.get("blocked_reasons") != expected_blocked_reasons:
+            target.errors.append("next_iteration_schedule.blocked_reasons must match failed check summaries.")
 
     ledgers = schedule.get("source_ledgers")
     if not isinstance(ledgers, dict):
         target.errors.append("next_iteration_schedule.source_ledgers must be an object.")
         ledgers = {}
+    else:
+        _validate_allowed_keys(
+            ledgers,
+            {"agentic_loop_ledger", "action_ledger", "improvement_ledger"},
+            target,
+            "next_iteration_schedule.source_ledgers",
+        )
     expected_sources = {
         "agentic_loop_ledger": "hfr.agentic_loop_ledger.v1",
         "action_ledger": "hfr.action_ledger.v1",
         "improvement_ledger": "hfr.improvement_ledger.v1",
     }
+    source_metrics: dict[str, dict[str, Any]] = {}
     for role, schema_version in expected_sources.items():
         rows = ledgers.get(role)
         if not isinstance(rows, list) or len(rows) != 1:
             target.errors.append(f"next_iteration_schedule.source_ledgers.{role} must contain exactly one ref.")
             continue
-        _validate_next_iteration_schedule_ref(rows[0], target, f"next_iteration_schedule.source_ledgers.{role}[0]", role, schema_version)
+        source_metrics[role] = _validate_next_iteration_schedule_ref(
+            rows[0],
+            target,
+            f"next_iteration_schedule.source_ledgers.{role}[0]",
+            role,
+            schema_version,
+            source_path,
+        )
 
     pressure = schedule.get("pressure")
     if not isinstance(pressure, dict):
         target.errors.append("next_iteration_schedule.pressure must be an object.")
         pressure = {}
     else:
+        _validate_allowed_keys(
+            pressure,
+            {
+                "latest_loop_readiness",
+                "latest_missing_phase_input_count",
+                "open_action_count",
+                "recurring_action_count",
+                "open_work_item_count",
+                "critical_open_work_item_count",
+                "high_open_work_item_count",
+                "total_open_signal_count",
+            },
+            target,
+            "next_iteration_schedule.pressure",
+        )
         for field_name in (
             "latest_missing_phase_input_count",
             "open_action_count",
@@ -4631,13 +4695,40 @@ def _validate_next_iteration_schedule(schedule: dict[str, Any], target: Validati
         )
         if _is_non_negative_int(pressure.get("total_open_signal_count")) and pressure.get("total_open_signal_count") != expected_total:
             target.errors.append("next_iteration_schedule.pressure.total_open_signal_count must equal missing phases + open actions + open work.")
+        _validate_next_iteration_pressure_matches_sources(pressure, source_metrics, target)
+
+    if failed_checks == 0:
+        expected_recommendation = (
+            "create_next_loop_plan"
+            if _safe_non_negative_int(pressure.get("total_open_signal_count")) > 0
+            else "monitor_or_promote_without_new_iteration"
+        )
+    else:
+        expected_recommendation = "fix_schedule_inputs"
+    if schedule.get("recommendation") != expected_recommendation:
+        target.errors.append(
+            f"next_iteration_schedule.recommendation expected {expected_recommendation!r}, got {schedule.get('recommendation')!r}."
+        )
+
     next_iteration = schedule.get("next_iteration")
     if not isinstance(next_iteration, dict):
         target.errors.append("next_iteration_schedule.next_iteration must be an object.")
     else:
+        _validate_allowed_keys(
+            next_iteration,
+            {"iteration_id", "objective", "latest_iteration_id", "scheduled", "trigger", "schedule", "reason"},
+            target,
+            "next_iteration_schedule.next_iteration",
+        )
         for field_name in ("iteration_id", "objective", "trigger", "reason"):
             if not isinstance(next_iteration.get(field_name), str) or not next_iteration.get(field_name):
                 target.errors.append(f"next_iteration_schedule.next_iteration.{field_name} must be a non-empty string.")
+        if not isinstance(next_iteration.get("latest_iteration_id"), str):
+            target.errors.append("next_iteration_schedule.next_iteration.latest_iteration_id must be a string.")
+        loop_metrics = source_metrics.get("agentic_loop_ledger", {})
+        latest_iteration_id = loop_metrics.get("latest_iteration_id")
+        if isinstance(latest_iteration_id, str) and next_iteration.get("latest_iteration_id") != latest_iteration_id:
+            target.errors.append("next_iteration_schedule.next_iteration.latest_iteration_id must match source loop ledger metrics.")
         if next_iteration.get("scheduled") is not False:
             target.errors.append("next_iteration_schedule.next_iteration.scheduled must be false.")
         if next_iteration.get("trigger") != "manual_or_external_scheduler":
@@ -4649,6 +4740,20 @@ def _validate_next_iteration_schedule(schedule: dict[str, Any], target: Validati
     if not isinstance(boundary, dict):
         target.errors.append("next_iteration_schedule.execution_boundary must be an object.")
     else:
+        _validate_allowed_keys(
+            boundary,
+            {
+                "schedule_only",
+                "automations_created",
+                "codex_threads_created",
+                "calendar_events_created",
+                "cloud_jobs_started",
+                "weights_updated_by_flight_recorder",
+                "credential_values_recorded",
+            },
+            target,
+            "next_iteration_schedule.execution_boundary",
+        )
         if boundary.get("schedule_only") is not True:
             target.errors.append("next_iteration_schedule.execution_boundary.schedule_only must be true.")
         for field_name in (
@@ -4676,10 +4781,28 @@ def _validate_next_iteration_schedule_ref(
     label: str,
     role: str,
     schema_version: str,
-) -> None:
+    source_path: Path,
+) -> dict[str, Any]:
     if not isinstance(row, dict):
         target.errors.append(f"{label} must be an object.")
-        return
+        return {}
+    _validate_allowed_keys(
+        row,
+        {
+            "role",
+            "path",
+            "kind",
+            "exists",
+            "sha256",
+            "size_bytes",
+            "schema_version",
+            "passed",
+            "metrics",
+            "decision",
+        },
+        target,
+        label,
+    )
     if row.get("role") != role:
         target.errors.append(f"{label}.role must be {role!r}.")
     if row.get("kind") != "file":
@@ -4696,6 +4819,141 @@ def _validate_next_iteration_schedule_ref(
         target.errors.append(f"{label}.sha256 must be a SHA-256 hex string.")
     if not _is_non_negative_int(row.get("size_bytes")):
         target.errors.append(f"{label}.size_bytes must be a non-negative integer.")
+    metrics = row.get("metrics")
+    if metrics is not None:
+        if not isinstance(metrics, dict):
+            target.errors.append(f"{label}.metrics must be an object when present.")
+            metrics = {}
+        else:
+            _validate_next_iteration_schedule_ref_metrics(metrics, target, f"{label}.metrics")
+    decision = row.get("decision")
+    if decision is not None:
+        if not isinstance(decision, dict):
+            target.errors.append(f"{label}.decision must be an object when present.")
+        else:
+            _validate_allowed_keys(decision, {"readiness", "recommendation", "summary"}, target, f"{label}.decision")
+            for field_name in ("readiness", "recommendation", "summary"):
+                if not isinstance(decision.get(field_name), str):
+                    target.errors.append(f"{label}.decision.{field_name} must be a string.")
+
+    path_value = row.get("path")
+    if not isinstance(path_value, str) or not path_value:
+        return metrics if isinstance(metrics, dict) else {}
+    ledger_path = _next_iteration_schedule_ref_path(path_value, source_path)
+    if not ledger_path.is_file():
+        target.errors.append(f"{label}.path does not resolve to an existing ledger file.")
+        return metrics if isinstance(metrics, dict) else {}
+    if _is_non_negative_int(row.get("size_bytes")) and ledger_path.stat().st_size != row.get("size_bytes"):
+        target.errors.append(f"{label}.size_bytes does not match the current file.")
+    if _is_sha256(row.get("sha256")) and _sha256(ledger_path) != row.get("sha256"):
+        target.errors.append(f"{label}.sha256 does not match the current file.")
+    payload = _read_object(ledger_path, target, f"{label}.path")
+    if payload is None:
+        return metrics if isinstance(metrics, dict) else {}
+    if payload.get("schema_version") != row.get("schema_version"):
+        target.errors.append(f"{label}.schema_version must match the current file.")
+    if payload.get("passed") != row.get("passed"):
+        target.errors.append(f"{label}.passed must match the current file.")
+    current_metrics = _next_iteration_compact_metrics(payload.get("metrics") if isinstance(payload.get("metrics"), dict) else {})
+    if isinstance(metrics, dict) and metrics != current_metrics:
+        target.errors.append(f"{label}.metrics must match the current file.")
+    current_decision = _next_iteration_compact_decision(payload.get("decision") if isinstance(payload.get("decision"), dict) else {})
+    if isinstance(decision, dict) and decision != current_decision:
+        target.errors.append(f"{label}.decision must match the current file.")
+    return current_metrics
+
+
+def _validate_next_iteration_schedule_ref_metrics(metrics: dict[str, Any], target: ValidationTarget, label: str) -> None:
+    _validate_allowed_keys(
+        metrics,
+        {
+            "latest_iteration_id",
+            "latest_readiness",
+            "latest_missing_phase_input_count",
+            "open_action_count",
+            "new_action_count",
+            "recurring_action_count",
+            "open_work_item_count",
+            "critical_open_work_item_count",
+            "high_open_work_item_count",
+            "resolved_work_item_count",
+        },
+        target,
+        label,
+    )
+    for field_name in ("latest_iteration_id", "latest_readiness"):
+        if field_name in metrics and not isinstance(metrics.get(field_name), str):
+            target.errors.append(f"{label}.{field_name} must be a string when present.")
+    for field_name in (
+        "latest_missing_phase_input_count",
+        "open_action_count",
+        "new_action_count",
+        "recurring_action_count",
+        "open_work_item_count",
+        "critical_open_work_item_count",
+        "high_open_work_item_count",
+        "resolved_work_item_count",
+    ):
+        if field_name in metrics and not _is_non_negative_int(metrics.get(field_name)):
+            target.errors.append(f"{label}.{field_name} must be a non-negative integer when present.")
+
+
+def _validate_next_iteration_pressure_matches_sources(
+    pressure: dict[str, Any],
+    source_metrics: dict[str, dict[str, Any]],
+    target: ValidationTarget,
+) -> None:
+    loop_metrics = source_metrics.get("agentic_loop_ledger", {})
+    action_metrics = source_metrics.get("action_ledger", {})
+    improvement_metrics = source_metrics.get("improvement_ledger", {})
+    expected = {
+        "latest_loop_readiness": str(loop_metrics.get("latest_readiness") or ""),
+        "latest_missing_phase_input_count": _safe_non_negative_int(loop_metrics.get("latest_missing_phase_input_count")),
+        "open_action_count": _safe_non_negative_int(action_metrics.get("open_action_count")),
+        "recurring_action_count": _safe_non_negative_int(action_metrics.get("recurring_action_count")),
+        "open_work_item_count": _safe_non_negative_int(improvement_metrics.get("open_work_item_count")),
+        "critical_open_work_item_count": _safe_non_negative_int(improvement_metrics.get("critical_open_work_item_count")),
+        "high_open_work_item_count": _safe_non_negative_int(improvement_metrics.get("high_open_work_item_count")),
+    }
+    expected["total_open_signal_count"] = (
+        expected["latest_missing_phase_input_count"] + expected["open_action_count"] + expected["open_work_item_count"]
+    )
+    for field_name, expected_value in expected.items():
+        if pressure.get(field_name) != expected_value:
+            target.errors.append(f"next_iteration_schedule.pressure.{field_name} must match source ledgers.")
+
+
+def _next_iteration_compact_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "latest_iteration_id",
+        "latest_readiness",
+        "latest_missing_phase_input_count",
+        "open_action_count",
+        "new_action_count",
+        "recurring_action_count",
+        "open_work_item_count",
+        "critical_open_work_item_count",
+        "high_open_work_item_count",
+        "resolved_work_item_count",
+    )
+    return {key: metrics.get(key) for key in keys if key in metrics}
+
+
+def _next_iteration_compact_decision(decision: dict[str, Any]) -> dict[str, Any]:
+    if not decision:
+        return {}
+    return {
+        "readiness": str(decision.get("readiness") or ""),
+        "recommendation": str(decision.get("recommendation") or ""),
+        "summary": str(decision.get("summary") or ""),
+    }
+
+
+def _next_iteration_schedule_ref_path(value: str, source_path: Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return source_path.parent / path
 
 
 def _safe_non_negative_int(value: Any) -> int:

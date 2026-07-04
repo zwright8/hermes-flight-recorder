@@ -1,15 +1,15 @@
 {
   "$id": "https://schemas.hermes-flight-recorder.dev/next_iteration_schedule.v1.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Side-effect-free next-iteration schedule proposal for closed-loop agentic training.",
   "properties": {
     "blocked_reasons": { "items": { "type": "string" }, "type": "array" },
     "check_count": { "minimum": 0, "type": "integer" },
-    "checks": { "items": { "type": "object" }, "type": "array" },
+    "checks": { "items": { "$ref": "#/$defs/check" }, "type": "array" },
     "created_at": { "type": "string" },
     "execution_boundary": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "automations_created": { "const": false },
         "calendar_events_created": { "const": false },
@@ -32,13 +32,16 @@
     },
     "failed_check_count": { "minimum": 0, "type": "integer" },
     "next_iteration": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "iteration_id": { "minLength": 1, "type": "string" },
         "latest_iteration_id": { "type": "string" },
         "objective": { "minLength": 1, "type": "string" },
         "reason": { "minLength": 1, "type": "string" },
-        "schedule": { "type": "object" },
+        "schedule": {
+          "additionalProperties": true,
+          "type": "object"
+        },
         "scheduled": { "const": false },
         "trigger": { "const": "manual_or_external_scheduler" }
       },
@@ -48,7 +51,7 @@
     "notes": { "items": { "type": "string" }, "type": "array" },
     "passed": { "type": "boolean" },
     "pressure": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "critical_open_work_item_count": { "minimum": 0, "type": "integer" },
         "high_open_work_item_count": { "minimum": 0, "type": "integer" },
@@ -77,7 +80,31 @@
     },
     "schedule_path": { "type": "string" },
     "schema_version": { "const": "hfr.next_iteration_schedule.v1" },
-    "source_ledgers": { "type": "object" }
+    "source_ledgers": {
+      "additionalProperties": false,
+      "properties": {
+        "action_ledger": {
+          "items": { "$ref": "#/$defs/sourceLedgerRef" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "agentic_loop_ledger": {
+          "items": { "$ref": "#/$defs/sourceLedgerRef" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "improvement_ledger": {
+          "items": { "$ref": "#/$defs/sourceLedgerRef" },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": ["agentic_loop_ledger", "action_ledger", "improvement_ledger"],
+      "type": "object"
+    }
   },
   "required": [
     "schema_version",
@@ -97,5 +124,62 @@
     "notes"
   ],
   "title": "Hermes Flight Recorder Next Iteration Schedule",
-  "type": "object"
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "actual": { "type": "object" },
+        "expected": { "type": "object" },
+        "id": { "minLength": 1, "type": "string" },
+        "passed": { "type": "boolean" },
+        "summary": { "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "passed", "actual", "expected", "summary"],
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": false,
+      "properties": {
+        "readiness": { "type": "string" },
+        "recommendation": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": ["readiness", "recommendation", "summary"],
+      "type": "object"
+    },
+    "sourceLedgerMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "critical_open_work_item_count": { "minimum": 0, "type": "integer" },
+        "high_open_work_item_count": { "minimum": 0, "type": "integer" },
+        "latest_iteration_id": { "type": "string" },
+        "latest_missing_phase_input_count": { "minimum": 0, "type": "integer" },
+        "latest_readiness": { "type": "string" },
+        "new_action_count": { "minimum": 0, "type": "integer" },
+        "open_action_count": { "minimum": 0, "type": "integer" },
+        "open_work_item_count": { "minimum": 0, "type": "integer" },
+        "recurring_action_count": { "minimum": 0, "type": "integer" },
+        "resolved_work_item_count": { "minimum": 0, "type": "integer" }
+      },
+      "type": "object"
+    },
+    "sourceLedgerRef": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": { "$ref": "#/$defs/decision" },
+        "exists": { "type": "boolean" },
+        "kind": { "const": "file" },
+        "metrics": { "$ref": "#/$defs/sourceLedgerMetrics" },
+        "passed": { "type": ["boolean", "null"] },
+        "path": { "minLength": 1, "type": "string" },
+        "role": { "enum": ["agentic_loop_ledger", "action_ledger", "improvement_ledger"], "type": "string" },
+        "schema_version": { "type": "string" },
+        "sha256": { "pattern": "^[0-9a-f]{64}$", "type": ["string", "null"] },
+        "size_bytes": { "minimum": 0, "type": ["integer", "null"] }
+      },
+      "required": ["role", "path", "kind", "exists", "sha256", "size_bytes", "schema_version", "passed"],
+      "type": "object"
+    }
+  }
 }

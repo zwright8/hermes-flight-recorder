@@ -831,7 +831,10 @@ The loop ledger is ledger-only: it does not launch trainers, graders, cloud
 jobs, live benchmarks, downloads, promotion writes, or weight updates. The
 `hfr.next_iteration_schedule.v1` receipt proposes a next loop iteration from
 the loop, action, and improvement ledgers without creating automations, threads,
-calendar events, cloud jobs, or weight updates.
+calendar events, cloud jobs, or weight updates. Validation replays those three
+source ledgers from the schedule file, checks SHA-256 and byte size, compares
+the compact metrics snapshot, and recomputes schedule pressure so stale or
+forged schedules fail closed.
 
 Cloud trainer integrations use the same fail-closed receipt pattern. The
 `flightrecorder cloud-training` namespace currently emits provider registry,

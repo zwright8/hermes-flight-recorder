@@ -361,7 +361,10 @@ are advisory and ledger-only. Use `flightrecorder agentic-loop governance` to
 record one selected action as `hfr.agentic_loop_governance_receipt.v1`; the
 receipt still does not move aliases, apply rollback, launch cloud jobs, call
 paid graders, or update weights. Promotion, rollback, and alias movement remain
-separate governed receipts.
+separate governed receipts. Next-iteration schedules are also replayable:
+validation reopens the referenced loop, action, and improvement ledgers from the
+schedule file, compares SHA-256/size and compact metrics, and recomputes
+pressure before accepting the proposed next iteration.
 The plan and ledger also include `cloud_training`,
 `cloud_training_receipt_state`, and `cloud_training_lineage` summaries. Presence
 alone is not enough: the preflight must link the trainer
