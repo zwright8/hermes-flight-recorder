@@ -273,7 +273,12 @@ class AgenticTrainingFlowTests(unittest.TestCase):
             receipt["delegated_flow"]["command"]["cloud_command_id"] = "cmd-123"
             receipt["mode_contract_check"]["provider_job_started"] = True
             receipt["mode_contract_check"]["reward_contract"]["secret_env"] = "TOKEN"
+            receipt["mode_contract_check"]["reward_contract"]["may_call_paid_services_by_default"] = True
+            receipt["mode_contract_check"]["reward_contract"]["may_require_secrets_by_default"] = True
             receipt["mode_contract_check"]["side_effect_boundary"]["provider_api_called"] = False
+            receipt["mode_contract_check"]["side_effect_boundary"]["training_started"] = True
+            receipt["mode_contract_check"]["side_effect_boundary"]["paid_model_grader_calls_started"] = True
+            receipt["mode_contract_check"]["side_effect_boundary"]["provider_credentials_required_by_flight_recorder"] = True
             receipt["mode_contract_check"]["external_runner_contract"]["provider_signed_url"] = "redacted-url"
             receipt["flow_mode_gate"]["live_training_override"] = True
             receipt["metrics"]["cloud_cost_usd"] = 0
@@ -315,7 +320,27 @@ class AgenticTrainingFlowTests(unittest.TestCase):
                 errors,
             )
             self.assertIn(
+                "agentic_training_flow.mode_contract_check.reward_contract.may_call_paid_services_by_default must be false.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.reward_contract.may_require_secrets_by_default must be false.",
+                errors,
+            )
+            self.assertIn(
                 "agentic_training_flow.mode_contract_check.side_effect_boundary contains unknown field(s): ['provider_api_called'].",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.side_effect_boundary.training_started must be false.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.side_effect_boundary.paid_model_grader_calls_started must be false.",
+                errors,
+            )
+            self.assertIn(
+                "agentic_training_flow.mode_contract_check.side_effect_boundary.provider_credentials_required_by_flight_recorder must be false.",
                 errors,
             )
             self.assertIn(

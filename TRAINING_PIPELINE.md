@@ -651,6 +651,9 @@ promotion-required reason, and keep the readiness recommendation at
 command, stage sequence, selected trainer views, and a fail-closed execution
 boundary without starting a subprocess, importing trainer modules, creating
 cloud jobs, downloading models, or updating weights. Validation rejects
+mirrored mode contracts that enable paid/secret reward defaults, provider
+credentials, paid graders, cloud jobs, downloads, training starts, or weight
+updates. It also rejects
 delegated commands that still contain absolute execution roots or argv path
 tokens before the receipt can become a public handoff.
 

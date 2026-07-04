@@ -3823,13 +3823,17 @@ def _validate_agentic_training_flow_reward_contract(value: Any, target: Validati
         "required",
         "external_runner_must_supply",
         "external_runner_must_validate",
-        "flight_recorder_supplies_callable",
-        "may_call_paid_services_by_default",
-        "may_require_secrets_by_default",
-        "must_not_use_unredacted_traces",
     ):
         if not isinstance(value.get(field_name), bool):
             target.errors.append(f"{label}.{field_name} must be a boolean.")
+    if value.get("flight_recorder_supplies_callable") is not False:
+        target.errors.append(f"{label}.flight_recorder_supplies_callable must be false.")
+    if value.get("may_call_paid_services_by_default") is not False:
+        target.errors.append(f"{label}.may_call_paid_services_by_default must be false.")
+    if value.get("may_require_secrets_by_default") is not False:
+        target.errors.append(f"{label}.may_require_secrets_by_default must be false.")
+    if value.get("must_not_use_unredacted_traces") is not True:
+        target.errors.append(f"{label}.must_not_use_unredacted_traces must be true.")
 
 
 def _validate_agentic_training_flow_side_effect_boundary(value: Any, target: ValidationTarget) -> None:
@@ -3838,8 +3842,9 @@ def _validate_agentic_training_flow_side_effect_boundary(value: Any, target: Val
         target.errors.append(f"{label} must be an object.")
         return
     _validate_allowed_keys(value, _AGENTIC_TRAINING_FLOW_SIDE_EFFECT_KEYS, target, label)
+    if value.get("dry_run_only") is not True:
+        target.errors.append(f"{label}.dry_run_only must be true.")
     for field_name in (
-        "dry_run_only",
         "training_started",
         "cloud_jobs_started",
         "model_downloads_started",
@@ -3847,8 +3852,8 @@ def _validate_agentic_training_flow_side_effect_boundary(value: Any, target: Val
         "weights_updated",
         "provider_credentials_required_by_flight_recorder",
     ):
-        if not isinstance(value.get(field_name), bool):
-            target.errors.append(f"{label}.{field_name} must be a boolean.")
+        if value.get(field_name) is not False:
+            target.errors.append(f"{label}.{field_name} must be false.")
 
 
 def _validate_agentic_training_flow_external_runner_contract(value: Any, target: ValidationTarget) -> None:

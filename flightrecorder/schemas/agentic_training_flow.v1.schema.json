@@ -313,11 +313,11 @@
         "callable_signature": { "type": "string" },
         "external_runner_must_supply": { "type": "boolean" },
         "external_runner_must_validate": { "type": "boolean" },
-        "flight_recorder_supplies_callable": { "type": "boolean" },
+        "flight_recorder_supplies_callable": { "const": false },
         "kind": { "type": "string" },
-        "may_call_paid_services_by_default": { "type": "boolean" },
-        "may_require_secrets_by_default": { "type": "boolean" },
-        "must_not_use_unredacted_traces": { "type": "boolean" },
+        "may_call_paid_services_by_default": { "const": false },
+        "may_require_secrets_by_default": { "const": false },
+        "must_not_use_unredacted_traces": { "const": true },
         "required": { "type": "boolean" }
       },
       "required": [
@@ -336,13 +336,13 @@
     "modeSideEffectBoundary": {
       "additionalProperties": false,
       "properties": {
-        "cloud_jobs_started": { "type": "boolean" },
-        "dry_run_only": { "type": "boolean" },
-        "model_downloads_started": { "type": "boolean" },
-        "paid_model_grader_calls_started": { "type": "boolean" },
-        "provider_credentials_required_by_flight_recorder": { "type": "boolean" },
-        "training_started": { "type": "boolean" },
-        "weights_updated": { "type": "boolean" }
+        "cloud_jobs_started": { "const": false },
+        "dry_run_only": { "const": true },
+        "model_downloads_started": { "const": false },
+        "paid_model_grader_calls_started": { "const": false },
+        "provider_credentials_required_by_flight_recorder": { "const": false },
+        "training_started": { "const": false },
+        "weights_updated": { "const": false }
       },
       "required": [
         "dry_run_only",

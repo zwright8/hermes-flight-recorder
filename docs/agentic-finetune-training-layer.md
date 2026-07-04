@@ -154,6 +154,9 @@ Advanced reward-model, process-reward, GRPO, and RL modes instead produce
 evidence of why Flight Recorder did not delegate the trainer flow, including the
 mode category, required opt-in flag, reward-contract obligations, and flow
 promotion requirement.
+Flow receipts keep the mirrored mode contract fail-closed too: paid/secret
+reward defaults, provider credentials, paid graders, cloud jobs, downloads,
+training starts, and weight updates must remain disabled.
 
 ## Result Receipts
 
