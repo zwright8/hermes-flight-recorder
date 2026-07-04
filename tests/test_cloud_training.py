@@ -67,6 +67,20 @@ class CloudTrainingTests(unittest.TestCase):
         schema = check_schema_contract(registry)
         self.assertTrue(schema["passed"], schema["errors"])
 
+    def test_committed_example_provider_registry_covers_all_partners(self):
+        registry_path = ROOT / "examples" / "agentic_training" / "cloud_training" / "provider_registry.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        provider_ids = {provider["id"] for provider in registry["providers"]}
+
+        self.assertEqual(provider_ids, set(provider_choices()))
+        self.assertEqual(registry["provider_count"], len(provider_choices()))
+        self.assertTrue(all(provider["live_status"] == "preflight_only" for provider in registry["providers"]))
+        self.assertTrue(all(provider["default_live_execution_allowed"] is False for provider in registry["providers"]))
+        schema = check_schema_file(registry_path)
+        self.assertTrue(schema["passed"], schema["errors"])
+        validation = validate_artifacts(cloud_training_provider_registry_paths=[registry_path], strict=True)
+        self.assertTrue(validation["passed"], validation)
+
     def test_validate_rejects_forged_provider_adapter_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

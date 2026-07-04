@@ -1012,6 +1012,9 @@ Each provider record is also schema- and validator-pinned to
 intentional contract migration rather than a data-only registry edit.
 Adapter `receipt_types` are exact schema and validator allowlists, which blocks
 forged provider/live receipt names from becoming accepted handoff metadata.
+The committed example registry at
+`examples/agentic_training/cloud_training/provider_registry.json` covers every
+fail-closed partner exposed by `provider_choices()`.
 Embedded provider records in preflight and launch-plan artifacts are also
 schema allowlisted, while redacted missing-source launch plans remain valid with
 their minimal placeholder provider record.
