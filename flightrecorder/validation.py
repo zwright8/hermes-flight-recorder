@@ -14229,6 +14229,8 @@ def _validate_evidence_bundle(bundle: dict[str, Any], target: ValidationTarget, 
     _require_equal(bundle, "schema_version", EVIDENCE_BUNDLE_SCHEMA_VERSION, target)
     if not isinstance(bundle.get("bundle_path"), str) or not bundle.get("bundle_path"):
         target.errors.append("evidence_bundle.bundle_path must be a non-empty string.")
+    else:
+        _warn_absolute_public_path(target, "evidence_bundle.bundle_path", bundle.get("bundle_path"))
     if not isinstance(bundle.get("passed"), bool):
         target.errors.append("evidence_bundle.passed must be a boolean.")
 

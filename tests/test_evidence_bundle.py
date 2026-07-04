@@ -1704,6 +1704,31 @@ class EvidenceBundleTests(unittest.TestCase):
             strict_warnings = "\n".join(warning for target in strict_summary["targets"] for warning in target["warnings"])
             self.assertIn("evidence_bundle.artifacts.runs_dir.path is absolute", strict_warnings)
 
+    def test_strict_validate_rejects_absolute_bundle_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            runs.mkdir()
+            bundle_path = root / "evidence_bundle.json"
+            summary_path = root / "validation.json"
+            strict_summary_path = root / "strict_validation.json"
+            run_cli(["evidence-bundle", "--runs", str(runs), "--out", str(bundle_path)])
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["bundle_path"] = "/" + "Users/example/evidence_bundle.json"
+            bundle_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--out", str(summary_path)])
+            strict_code = run_cli(["validate", "--evidence-bundle", str(bundle_path), "--strict", "--out", str(strict_summary_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(strict_code, 1)
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            warnings = "\n".join(warning for target in summary["targets"] for warning in target["warnings"])
+            self.assertIn("evidence_bundle.bundle_path is absolute", warnings)
+            strict_summary = json.loads(strict_summary_path.read_text(encoding="utf-8"))
+            strict_warnings = "\n".join(warning for target in strict_summary["targets"] for warning in target["warnings"])
+            self.assertIn("evidence_bundle.bundle_path is absolute", strict_warnings)
+
     def test_strict_validate_rejects_nested_absolute_bundle_metric_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
