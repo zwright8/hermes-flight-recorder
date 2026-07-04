@@ -770,6 +770,131 @@ class PromotionDecisionTests(unittest.TestCase):
                 0,
             )
 
+    def _prepare_promotion_release_record_inputs(self, root: Path, *, promotion_policy: Path | None = None):
+        artifacts = write_governance_artifacts(root)
+        training_export = write_training_export(root)
+        cards_dir = root / "cards"
+        decision_path = root / "promotion_decision.json"
+        registry_path = write_model_registry(root)
+        alias_receipt_path = root / "promotion_alias_apply.json"
+        release_notes_path = write_release_notes(root)
+        release_record_path = root / "promotion_release_record.json"
+        self.assertEqual(run_cli(promotion_cards_args(artifacts, training_export, cards_dir)), 0)
+        artifacts["model_card"] = cards_dir / "MODEL_CARD.md"
+        artifacts["dataset_card"] = cards_dir / "DATASET_CARD.md"
+        self.assertEqual(run_cli(promotion_decision_args(artifacts, decision_path, promotion_policy=promotion_policy)), 0)
+        self.assertEqual(run_cli(promotion_alias_apply_args(registry_path, decision_path, alias_receipt_path)), 0)
+        return {
+            "artifacts": artifacts,
+            "cards_dir": cards_dir,
+            "decision_path": decision_path,
+            "alias_receipt_path": alias_receipt_path,
+            "release_notes_path": release_notes_path,
+            "release_record_path": release_record_path,
+        }
+
+    def test_promotion_release_record_blocks_symlinked_cards_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inputs = self._prepare_promotion_release_record_inputs(root)
+            linked_parent = root / "linked_inputs"
+            try:
+                linked_parent.symlink_to(root, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(
+                promotion_release_record_args(
+                    inputs["artifacts"],
+                    linked_parent / "cards",
+                    inputs["decision_path"],
+                    inputs["alias_receipt_path"],
+                    inputs["release_notes_path"],
+                    inputs["release_record_path"],
+                )
+            )
+
+            self.assertEqual(code, 1)
+            record = json.loads(inputs["release_record_path"].read_text(encoding="utf-8"))
+            cards_artifact = record["artifacts"]["promotion_cards"]
+            self.assertFalse(cards_artifact["exists"])
+            self.assertEqual(cards_artifact["kind"], "other")
+            self.assertNotIn("sha256", cards_artifact)
+            self.assertIn("promotion_cards_present", failed_check_ids(record))
+            self.assertIn("promotion_cards_schema", failed_check_ids(record))
+
+    def test_promotion_release_record_blocks_symlinked_release_notes_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inputs = self._prepare_promotion_release_record_inputs(root)
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "RELEASE_NOTES.md").write_text(
+                inputs["release_notes_path"].read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            linked_parent = root / "linked_notes"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(
+                promotion_release_record_args(
+                    inputs["artifacts"],
+                    inputs["cards_dir"],
+                    inputs["decision_path"],
+                    inputs["alias_receipt_path"],
+                    linked_parent / "RELEASE_NOTES.md",
+                    inputs["release_record_path"],
+                )
+            )
+
+            self.assertEqual(code, 1)
+            record = json.loads(inputs["release_record_path"].read_text(encoding="utf-8"))
+            notes_artifact = record["artifacts"]["release_notes"]
+            self.assertFalse(notes_artifact["exists"])
+            self.assertEqual(notes_artifact["kind"], "other")
+            self.assertNotIn("sha256", notes_artifact)
+            self.assertIn("release_notes_present", failed_check_ids(record))
+
+    def test_promotion_release_record_blocks_symlinked_policy_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy_path = write_promotion_policy(root)
+            inputs = self._prepare_promotion_release_record_inputs(root, promotion_policy=policy_path)
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "promotion_policy.json").write_text(policy_path.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_policy"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(
+                promotion_release_record_args(
+                    inputs["artifacts"],
+                    inputs["cards_dir"],
+                    inputs["decision_path"],
+                    inputs["alias_receipt_path"],
+                    inputs["release_notes_path"],
+                    inputs["release_record_path"],
+                    promotion_policy=linked_parent / "promotion_policy.json",
+                )
+            )
+
+            self.assertEqual(code, 1)
+            record = json.loads(inputs["release_record_path"].read_text(encoding="utf-8"))
+            policy_artifact = record["policy"]["release_policy"]["artifact"]
+            self.assertFalse(policy_artifact["exists"])
+            self.assertEqual(policy_artifact["kind"], "other")
+            self.assertNotIn("sha256", policy_artifact)
+            failed_ids = failed_check_ids(record)
+            self.assertIn("promotion_policy_present", failed_ids)
+            self.assertIn("promotion_policy_matches_decision", failed_ids)
+            self.assertEqual(run_cli(["validate", "--promotion-release-record", str(inputs["release_record_path"]), "--strict"]), 0)
+
     def test_validate_promotion_release_record_rejects_stale_release_notes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1081,6 +1206,35 @@ class PromotionDecisionTests(unittest.TestCase):
             self.assertEqual(decision["policy"]["source"], "file")
             self.assertEqual(decision["policy"]["artifact"]["role"], "promotion_policy")
             self.assertIn("promotion_policy_required_artifacts_complete", failed_check_ids(decision))
+            self.assertFalse(decision["alias_update"]["authorized"])
+            self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
+
+    def test_promotion_decision_blocks_symlinked_policy_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifacts = write_governance_artifacts(root)
+            decision_path = root / "promotion_decision.json"
+            policy_path = write_promotion_policy(root)
+            linked_target = root / "linked_target"
+            linked_target.mkdir()
+            (linked_target / "promotion_policy.json").write_text(policy_path.read_text(encoding="utf-8"), encoding="utf-8")
+            linked_parent = root / "linked_policy"
+            try:
+                linked_parent.symlink_to(linked_target, target_is_directory=True)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"symlink unavailable: {exc}")
+
+            code = run_cli(promotion_decision_args(artifacts, decision_path, promotion_policy=linked_parent / "promotion_policy.json"))
+
+            self.assertEqual(code, 1)
+            decision = json.loads(decision_path.read_text(encoding="utf-8"))
+            policy_artifact = decision["policy"]["artifact"]
+            self.assertFalse(policy_artifact["exists"])
+            self.assertEqual(policy_artifact["kind"], "other")
+            self.assertNotIn("sha256", policy_artifact)
+            failed_ids = failed_check_ids(decision)
+            self.assertIn("promotion_policy_present", failed_ids)
+            self.assertIn("promotion_policy_fields_present", failed_ids)
             self.assertFalse(decision["alias_update"]["authorized"])
             self.assertEqual(run_cli(["validate", "--promotion-decision", str(decision_path), "--strict"]), 0)
 

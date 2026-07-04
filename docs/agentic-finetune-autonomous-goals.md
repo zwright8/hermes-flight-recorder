@@ -164,6 +164,10 @@ evidence.
   `source_artifact` fingerprints or replayed source decisions.
 - Promotion ledgers reject symlinked recorded decision-gate paths before
   trusting record fingerprints or replayed gate contents.
+- Promotion decisions and release records reject symlinked promotion-policy
+  paths before reading or fingerprinting policy artifacts.
+- Promotion release records reject required source artifacts and release notes
+  that traverse symlinked parents before reading or binding those refs.
 - Next-iteration schedules reject symlinked source ledger paths before trusting
   source ledger size, hash, metrics, or decision snapshots.
 - Governance receipts reject symlinked source loop ledger paths before trusting
@@ -901,6 +905,9 @@ card, and dataset card decisions.
   release records write referenced artifacts relative to their own output files;
   validation reopens those references from the source file location and rejects
   symlinked or cwd-substituted governance artifacts.
+- Promotion decisions and release records now reject symlinked promotion-policy
+  inputs during generation; release records also refuse symlinked-parent source
+  artifacts and release notes before they are fingerprinted or bound.
 - Promotion alias receipts and rollback receipts bind human-facing
   promotion-decision, applied-registry, and rollback-registry refs to the same
   SHA-256 and byte-size evidence carried by their fingerprinted artifact

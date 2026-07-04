@@ -474,7 +474,9 @@ that no longer match the registry file.
 decision/release artifact contract, allowed model classes, zero-tolerance eval
 limits, required forbidden-rule blockers, license, rollback, card, and
 validation requirements. Policy files can make expectations reviewable but
-cannot relax the default promotion blockers.
+cannot relax the default promotion blockers. Promotion-decision and
+release-record generation reject policy files that are symlinks or traverse
+symlinked parent directories before reading or fingerprinting them.
 `promotion-alias-apply` is that guarded write: it revalidates the promotion
 decision, requires a `hfr.model_registry.v1` registry with registered
 `candidate`, `champion`, and `rollback` targets, verifies the live champion
@@ -487,7 +489,9 @@ and release notes. Validation rehashes every referenced artifact and matches
 compact model/dataset card bindings back to the referenced promotion-cards
 manifest, so stale release notes, mismatched eval evidence, card drift, a
 different alias receipt, or a release policy that differs from the decision
-policy blocks publication.
+policy blocks publication. Release-record generation also refuses required input
+artifacts and release notes that are symlinks or traverse symlinked parent
+directories before reading, hashing, or binding them.
 Alias-apply and release-record receipts also preserve compact strict validation
 summaries; validation recomputes their pass state from target, error, and
 warning counts so a forged `passed` flag cannot hide warning-bearing or failed

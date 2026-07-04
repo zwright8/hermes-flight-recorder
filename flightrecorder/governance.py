@@ -13,6 +13,7 @@ from .agentic_training_result import AGENTIC_TRAINING_RESULT_SCHEMA_VERSION
 from .bundle import EVIDENCE_BUNDLE_SCHEMA_VERSION
 from .compare_gate import COMPARE_GATE_SCHEMA_VERSION
 from .model_registry import MODEL_REGISTRY_ENTRY_SCHEMA_VERSION
+from .path_safety import path_has_symlink_component as _path_has_symlink_component
 from .preflight import TRAINER_LAUNCH_CHECK_SCHEMA_VERSION
 from .promotion_gate import PROMOTION_LEDGER_GATE_SCHEMA_VERSION
 
@@ -231,8 +232,12 @@ def build_promotion_decision(
         if role in _JSON_ARTIFACT_ROLES or role in _PASSED_JSON_ROLES or role == "rollback_metadata"
     }
     policy_path = Path(promotion_policy_path) if promotion_policy_path else None
-    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths, output_path) if policy_path else None
-    policy = _load_promotion_policy(policy_path, preserve_paths)
+    policy_artifact = (
+        _artifact_record("promotion_policy", policy_path, preserve_paths, output_path, reject_symlink_components=True)
+        if policy_path
+        else None
+    )
+    policy = _load_promotion_policy(policy_path, preserve_paths, reject_symlink_components=True)
 
     checks: list[dict[str, Any]] = []
     _add_promotion_policy_checks(checks, policy, policy_artifact, candidate_class, champion_class)
@@ -778,21 +783,28 @@ def build_promotion_release_record(
         "compare_gate": Path(compare_gate_path),
         "release_notes": Path(release_notes_path),
     }
-    artifacts = {role: _artifact_record(role, path, preserve_paths, record_path) for role, path in paths.items()}
-    decision = _read_json_artifact(paths["promotion_decision"])
+    artifacts = {
+        role: _artifact_record(role, path, preserve_paths, record_path, reject_symlink_components=True)
+        for role, path in paths.items()
+    }
+    decision = _read_json_artifact(paths["promotion_decision"], reject_symlink_components=True)
     cards_manifest_path = _promotion_cards_manifest_path(paths["promotion_cards"])
-    cards = _read_json_artifact(cards_manifest_path) if cards_manifest_path is not None else None
-    alias_receipt = _read_json_artifact(paths["promotion_alias_apply"])
-    rollback = _read_json_artifact(paths["rollback_metadata"])
-    compare_gate = _read_json_artifact(paths["compare_gate"])
-    notes_text = _read_text_artifact(paths["release_notes"])
+    cards = _read_json_artifact(cards_manifest_path, reject_symlink_components=True) if cards_manifest_path is not None else None
+    alias_receipt = _read_json_artifact(paths["promotion_alias_apply"], reject_symlink_components=True)
+    rollback = _read_json_artifact(paths["rollback_metadata"], reject_symlink_components=True)
+    compare_gate = _read_json_artifact(paths["compare_gate"], reject_symlink_components=True)
+    notes_text = _read_text_artifact(paths["release_notes"], reject_symlink_components=True)
 
     decision_obj = decision if isinstance(decision, dict) else {}
     cards_obj = cards if isinstance(cards, dict) else {}
     alias_obj = alias_receipt if isinstance(alias_receipt, dict) else {}
     policy_path = Path(promotion_policy_path) if promotion_policy_path else None
-    policy_artifact = _artifact_record("promotion_policy", policy_path, preserve_paths, record_path) if policy_path else None
-    policy = _load_promotion_policy(policy_path, preserve_paths) if policy_path else None
+    policy_artifact = (
+        _artifact_record("promotion_policy", policy_path, preserve_paths, record_path, reject_symlink_components=True)
+        if policy_path
+        else None
+    )
+    policy = _load_promotion_policy(policy_path, preserve_paths, reject_symlink_components=True) if policy_path else None
     decision_policy = decision_obj.get("policy") if isinstance(decision_obj.get("policy"), dict) else {}
     decision_models = decision_obj.get("models") if isinstance(decision_obj.get("models"), dict) else {}
     candidate_id = _model_id(decision_models.get("candidate"))
@@ -1267,6 +1279,8 @@ def _artifact_record(
     path: Path | None,
     preserve_paths: bool,
     output_path: Path | None = None,
+    *,
+    reject_symlink_components: bool = False,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         "role": role,
@@ -1275,6 +1289,9 @@ def _artifact_record(
         "kind": "missing",
     }
     if path is None or not path.exists():
+        return record
+    if reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
+        record["kind"] = "other"
         return record
     if path.is_dir():
         record.update(
@@ -1290,13 +1307,15 @@ def _artifact_record(
         record["kind"] = "other"
         return record
     record.update({"exists": True, "kind": "file", "size_bytes": path.stat().st_size, "sha256": _sha256(path)})
-    payload = _read_json_artifact(path)
+    payload = _read_json_artifact(path, reject_symlink_components=reject_symlink_components)
     if isinstance(payload, dict) and isinstance(payload.get("schema_version"), str):
         record["schema_version"] = payload["schema_version"]
     return record
 
 
-def _read_json_artifact(path: Path) -> dict[str, Any] | None:
+def _read_json_artifact(path: Path, *, reject_symlink_components: bool = False) -> dict[str, Any] | None:
+    if reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
+        return None
     if not path.exists() or not path.is_file():
         return None
     try:
@@ -1306,7 +1325,9 @@ def _read_json_artifact(path: Path) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _read_text_artifact(path: Path) -> str:
+def _read_text_artifact(path: Path, *, reject_symlink_components: bool = False) -> str:
+    if reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
+        return ""
     if not path.exists() or not path.is_file():
         return ""
     try:
@@ -1348,13 +1369,16 @@ def _default_promotion_policy() -> dict[str, Any]:
     }
 
 
-def _load_promotion_policy(path: Path | None, preserve_paths: bool) -> dict[str, Any]:
+def _load_promotion_policy(path: Path | None, preserve_paths: bool, *, reject_symlink_components: bool = False) -> dict[str, Any]:
     policy = _default_promotion_policy()
     if path is None:
         return policy
 
     policy["source"] = "file"
-    payload = _read_json_artifact(path)
+    if reject_symlink_components and _path_has_symlink_component(path, include_leaf=True):
+        policy["parse_errors"] = ["promotion policy path must not resolve through a symlink"]
+        return policy
+    payload = _read_json_artifact(path, reject_symlink_components=reject_symlink_components)
     if not isinstance(payload, dict):
         policy["parse_errors"] = ["promotion policy must be a JSON object"]
         return policy
