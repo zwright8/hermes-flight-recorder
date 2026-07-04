@@ -817,7 +817,9 @@ keeps live benchmark support disabled and records zero provider API calls, model
 downloads, credential values, cloud spend, or weight updates.
 Strict receipt validation replays the current source plan, selected adapters,
 and dry-run/live mode so stale or forged benchmark receipts cannot promote
-external-eval claims.
+external-eval claims. Receipt source-plan refs that cannot be replayed from the
+receipt output directory are redacted and treated as missing, keeping public
+artifacts from publishing local source paths.
 
 ```bash
 flightrecorder external-eval-receipt \

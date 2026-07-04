@@ -146,7 +146,7 @@ class ExternalEvalReceiptTests(unittest.TestCase):
             self.assertIn("external_eval_receipt.adapter_receipts must match current source plan selected_adapters.", errors)
             self.assertIn("external_eval_receipt.adapter_count must match current source plan replay.", errors)
 
-    def test_strict_validate_warns_on_absolute_source_plan_path(self):
+    def test_external_eval_receipt_preserve_paths_keeps_source_plan_output_relative(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             manifest = _scenario_manifest(root / "heldout.json")
@@ -162,14 +162,71 @@ class ExternalEvalReceiptTests(unittest.TestCase):
 
             self.assertEqual(receipt_code, 1)
             self.assertEqual(non_strict_code, 0)
-            self.assertEqual(strict_code, 1)
+            self.assertEqual(strict_code, 0)
+            receipt = _read_json(receipt_path)
+            self.assertEqual(receipt["source_plan"]["path"], plan_path.name)
             warnings = "\n".join(warning for target in _read_json(validation)["targets"] for warning in target["warnings"])
             strict_warnings = "\n".join(
                 warning for target in _read_json(strict_validation)["targets"] for warning in target["warnings"]
             )
-            expected = "external_eval_receipt.source_plan.path is absolute"
-            self.assertIn(expected, warnings)
-            self.assertIn(expected, strict_warnings)
+            self.assertNotIn("external_eval_receipt.source_plan.path is absolute", warnings)
+            self.assertNotIn("external_eval_receipt.source_plan.path is absolute", strict_warnings)
+
+    def test_external_eval_receipt_blocks_unreplayable_external_plan_without_leaking_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sources = root / "sources"
+            reports = root / "reports"
+            sources.mkdir()
+            reports.mkdir()
+            plan_path = sources / "external_eval_plan.json"
+            receipt_path = reports / "external_eval_receipt.json"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "hfr.external_eval_adapters.v1",
+                        "ready": True,
+                        "adapter_count": 1,
+                        "ready_adapter_count": 1,
+                        "selected_adapters": ["inspect_ai"],
+                        "adapters": [
+                            {
+                                "id": "inspect_ai",
+                                "ready": True,
+                                "blocking_reasons": ["LOCAL_SECRET_RECOMMENDATION"],
+                                "dependency_status": {"available": True},
+                                "provided_inputs": ["scenario_manifest"],
+                            }
+                        ],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            receipt_code = run_cli(["external-eval-receipt", "--plan", str(plan_path), "--preserve-paths", "--out", str(receipt_path)])
+            validate_code = run_cli(["validate", "--external-eval-receipt", str(receipt_path), "--strict"])
+            schema_result = check_schema_file(receipt_path)
+
+            self.assertEqual(receipt_code, 1)
+            self.assertEqual(validate_code, 0)
+            self.assertTrue(schema_result["passed"], schema_result["errors"])
+            receipt = _read_json(receipt_path)
+            rendered = json.dumps(receipt, sort_keys=True)
+            self.assertFalse(receipt["passed"])
+            self.assertEqual(receipt["source_plan"]["path"], "<redacted:external_eval_plan.json>")
+            self.assertFalse(receipt["source_plan"]["exists"])
+            self.assertIsNone(receipt["source_plan"]["sha256"])
+            self.assertIsNone(receipt["source_plan"]["size_bytes"])
+            self.assertIsNone(receipt["source_plan"]["schema_version"])
+            self.assertIsNone(receipt["source_plan"]["ready"])
+            self.assertIsNone(receipt["source_plan"]["adapter_count"])
+            self.assertEqual(receipt["adapter_count"], 4)
+            self.assertEqual(receipt["ready_adapter_count"], 0)
+            self.assertNotIn("LOCAL_SECRET_RECOMMENDATION", rendered)
+            self.assertNotIn(str(sources), rendered)
 
     def test_external_eval_receipt_live_request_is_recorded_and_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -365,7 +365,9 @@ download, credential recording, or non-zero cost before governance readiness can
 be claimed. Strict loop-plan and ledger validation also replays each external
 eval receipt against its current source plan before counting it as passed, so a
 forged receipt cannot satisfy held-out eval readiness by self-asserting
-`passed: true`. Validation also reopens referenced `eval_summary`,
+`passed: true`. External eval receipts redact source-plan refs that cannot be
+replayed from the receipt output directory and treat them as missing, so local
+paths do not leak into public loop artifacts. Validation also reopens referenced `eval_summary`,
 `promotion_decision`, and `promotion_ledger` artifacts before trusting held-out
 eval or governance readiness, and readiness-bearing sources with public-unsafe
 absolute paths do not count as ready. Placeholder or path-leaky source files

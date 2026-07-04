@@ -1395,6 +1395,7 @@ class AgenticLoopLedgerTests(unittest.TestCase):
             plan_path=external_eval_plan,
             adapters=["inspect_ai"],
             created_at="2026-07-03T00:00:00+00:00",
+            output_base_dir=external_eval_receipt.parent,
         )
         write_external_eval_receipt(receipt, external_eval_receipt)
         return heldout_manifest, external_eval_plan, external_eval_receipt

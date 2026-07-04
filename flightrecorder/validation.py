@@ -16392,7 +16392,7 @@ def _validate_external_eval_receipt(receipt: dict[str, Any], target: ValidationT
 
     _validate_external_eval_receipt_launch(receipt.get("launch"), target)
     _validate_external_eval_receipt_boundary(receipt.get("execution_boundary"), target)
-    _validate_external_eval_receipt_replay(receipt, source_plan_path, adapter_receipts, target)
+    _validate_external_eval_receipt_replay(receipt, source_plan_path, adapter_receipts, target, source_path.parent)
     target.details.update(
         {
             "passed": receipt.get("passed"),
@@ -16411,20 +16411,34 @@ def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], tar
         target,
         label,
     )
+    path_value = source_plan.get("path")
+    if isinstance(path_value, str) and path_value and not _is_safe_or_redacted_external_eval_ref_path(path_value):
+        target.errors.append(f"{label}.path must be relative to the external eval receipt.")
+        return None
+    if source_plan.get("exists") is not True:
+        if source_plan.get("sha256") is not None:
+            target.errors.append(f"{label}.sha256 must be null when exists is false.")
+        if source_plan.get("size_bytes") is not None:
+            target.errors.append(f"{label}.size_bytes must be null when exists is false.")
+        if source_plan.get("schema_version") is not None:
+            target.errors.append(f"{label}.schema_version must be null when exists is false.")
+        if source_plan.get("ready") is not None:
+            target.errors.append(f"{label}.ready must be null when exists is false.")
+        if source_plan.get("adapter_count") is not None:
+            target.errors.append(f"{label}.adapter_count must be null when exists is false.")
+        return None
+    if not isinstance(path_value, str) or not path_value:
+        target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
+        return None
+    if not _is_replayable_external_eval_ref_path(path_value):
+        target.errors.append(f"{label}.path must be relative to the external eval receipt.")
+        return None
     if source_plan.get("schema_version") != EXTERNAL_EVAL_PLAN_SCHEMA_VERSION:
         target.errors.append(f"{label}.schema_version must be {EXTERNAL_EVAL_PLAN_SCHEMA_VERSION!r}.")
     if not isinstance(source_plan.get("ready"), bool):
         target.errors.append(f"{label}.ready must be a boolean.")
     if not _is_non_negative_int(source_plan.get("adapter_count")):
         target.errors.append(f"{label}.adapter_count must be a non-negative integer.")
-    if source_plan.get("exists") is not True:
-        target.errors.append(f"{label}.exists must be true.")
-        return None
-    path_value = source_plan.get("path")
-    if not isinstance(path_value, str) or not path_value:
-        target.errors.append(f"{label}.path must be a non-empty string when exists is true.")
-        return None
-    _warn_absolute_public_path(target, f"{label}.path", path_value)
     plan_path = _external_eval_reference_path(path_value, source_path)
     if not plan_path.is_file():
         target.errors.append(f"{label}.path does not resolve to an external eval plan file.")
@@ -16448,11 +16462,33 @@ def _validate_external_eval_receipt_source_plan(source_plan: dict[str, Any], tar
     return plan_path
 
 
+def _is_safe_or_redacted_external_eval_ref_path(value: str) -> bool:
+    if value.startswith("<redacted:") and value.endswith(">"):
+        basename = value.removeprefix("<redacted:").removesuffix(">")
+        return bool(basename) and "/" not in basename and "\\" not in basename and ".." not in basename and "~" not in basename
+    return _is_replayable_external_eval_ref_path(value)
+
+
+def _is_replayable_external_eval_ref_path(value: str) -> bool:
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        bool(value)
+        and not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
+
+
 def _validate_external_eval_receipt_replay(
     receipt: dict[str, Any],
     source_plan_path: Path | None,
     adapter_receipts: list[Any],
     target: ValidationTarget,
+    output_base_dir: Path,
 ) -> None:
     if source_plan_path is None:
         return
@@ -16476,6 +16512,7 @@ def _validate_external_eval_receipt_replay(
             adapters=selected_adapters,
             live=mode == "live",
             created_at=receipt.get("created_at") if isinstance(receipt.get("created_at"), str) else None,
+            output_base_dir=output_base_dir,
         )
     except ExternalEvalPlanError as exc:
         target.errors.append(f"external_eval_receipt could not replay current source plan: {exc}")

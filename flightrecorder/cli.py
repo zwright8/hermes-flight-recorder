@@ -1474,6 +1474,7 @@ def cmd_external_eval_receipt(args: argparse.Namespace) -> int:
         live=args.live,
         created_at=args.created_at,
         preserve_paths=args.preserve_paths,
+        output_base_dir=Path(args.out).parent if args.out else None,
     )
     if args.out:
         write_external_eval_receipt(receipt, args.out, preserve_paths=args.preserve_paths)
@@ -3467,7 +3468,7 @@ def _parser() -> argparse.ArgumentParser:
     external_eval_receipt.add_argument("--live", action="store_true", help="Record that live external eval was requested and blocked")
     external_eval_receipt.add_argument("--created-at", help="Override generated timestamp for deterministic examples")
     external_eval_receipt.add_argument("--out", help="Write external eval receipt JSON to this path")
-    external_eval_receipt.add_argument("--preserve-paths", action="store_true", help="Allow absolute source paths in receipt output")
+    external_eval_receipt.add_argument("--preserve-paths", action="store_true", help="Preserve safe source path text in receipt output; unsafe absolute or traversal refs remain redacted")
     external_eval_receipt.set_defaults(func=cmd_external_eval_receipt)
 
     agentic_loop = subparsers.add_parser("agentic-loop", help="Plan closed-loop agentic training iterations")

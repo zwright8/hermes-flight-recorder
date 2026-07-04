@@ -9,7 +9,7 @@ import json
 import os
 import shutil
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 EXTERNAL_EVAL_PLAN_SCHEMA_VERSION = "hfr.external_eval_adapters.v1"
@@ -134,10 +134,13 @@ def build_external_eval_receipt(
     live: bool = False,
     created_at: str | None = None,
     preserve_paths: bool = False,
+    output_base_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a dry-run or blocked live external-eval receipt."""
     path = Path(plan_path)
-    plan = _read_plan(path)
+    display_base_dir = Path(output_base_dir) if output_base_dir is not None else None
+    source_plan = _plan_ref(path, preserve_paths, display_base_dir)
+    plan = _read_plan(path) if source_plan["exists"] else {}
     selected = sorted(set(adapters or plan.get("selected_adapters") or ADAPTERS))
     unknown = sorted(set(selected) - set(ADAPTERS))
     if unknown:
@@ -178,7 +181,7 @@ def build_external_eval_receipt(
         "failed_check_count": len(failed),
         "checks": checks,
         "blocked_reasons": [check["summary"] for check in failed],
-        "source_plan": _plan_ref(path, plan, preserve_paths),
+        "source_plan": source_plan,
         "adapter_count": len(adapter_receipts),
         "ready_adapter_count": sum(1 for row in adapter_receipts if row["ready"]),
         "adapter_receipts": adapter_receipts,
@@ -382,7 +385,7 @@ def _adapter_receipt(adapter_id: str, adapter: dict[str, Any] | None, live: bool
         "ready": ready,
         "planned_ready": bool(adapter and adapter.get("ready") is True),
         "blocking_reasons": sorted(set(str(reason) for reason in blocking)),
-        "dependency_status": adapter.get("dependency_status") if isinstance(adapter, dict) else {},
+        "dependency_status": adapter.get("dependency_status") if isinstance(adapter, dict) else _missing_dependency_status(adapter_id),
         "required_inputs": list(ADAPTERS[adapter_id]["required_inputs"]),
         "provided_inputs": adapter.get("provided_inputs") if isinstance(adapter, dict) and isinstance(adapter.get("provided_inputs"), list) else [],
         "adapter_contract": _adapter_contract(adapter_id),
@@ -391,6 +394,15 @@ def _adapter_receipt(adapter_id: str, adapter: dict[str, Any] | None, live: bool
         "model_downloads_started": False,
         "credential_values_recorded": False,
         "cost_incurred_usd": 0,
+    }
+
+
+def _missing_dependency_status(adapter_id: str) -> dict[str, Any]:
+    spec = ADAPTERS[adapter_id]
+    return {
+        "available": False,
+        "imports": {name: False for name in spec["import_names"]},
+        "commands": {name: False for name in spec["command_names"]},
     }
 
 
@@ -413,16 +425,19 @@ def _adapter_contract(adapter_id: str) -> dict[str, Any]:
     }
 
 
-def _plan_ref(path: Path, plan: dict[str, Any], preserve_paths: bool) -> dict[str, Any]:
+def _plan_ref(path: Path, preserve_paths: bool, display_base_dir: Path | None) -> dict[str, Any]:
     exists = path.exists() and path.is_file()
+    display_path, replayable = _source_display_path(path, preserve_paths, display_base_dir)
+    public_exists = exists and replayable
+    plan = _read_plan(path) if public_exists else {}
     return {
-        "path": _display_path(path, preserve_paths),
-        "exists": exists,
-        "sha256": _sha256(path) if exists else None,
-        "size_bytes": path.stat().st_size if exists else None,
-        "schema_version": plan.get("schema_version"),
-        "ready": plan.get("ready") if isinstance(plan.get("ready"), bool) else None,
-        "adapter_count": plan.get("adapter_count") if isinstance(plan.get("adapter_count"), int) else None,
+        "path": display_path,
+        "exists": public_exists,
+        "sha256": _sha256(path) if public_exists else None,
+        "size_bytes": path.stat().st_size if public_exists else None,
+        "schema_version": plan.get("schema_version") if public_exists else None,
+        "ready": plan.get("ready") if public_exists and isinstance(plan.get("ready"), bool) else None,
+        "adapter_count": plan.get("adapter_count") if public_exists and isinstance(plan.get("adapter_count"), int) else None,
     }
 
 
@@ -452,13 +467,59 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _display_path(path: Path, preserve_paths: bool) -> str:
+def _display_path(path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> str:
     if preserve_paths:
         return str(path)
     try:
         return str(path.resolve().relative_to(Path.cwd().resolve()))
     except (OSError, ValueError):
         return str(path)
+
+
+def _source_display_path(path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> tuple[str, bool]:
+    displayed = _source_ref_display_path(path, preserve_paths, display_base_dir)
+    return displayed, _is_safe_public_path(displayed)
+
+
+def _source_ref_display_path(path: Path, preserve_paths: bool, display_base_dir: Path | None = None) -> str:
+    raw = str(path)
+    if display_base_dir is not None:
+        relative = _safe_output_relative_path(path, display_base_dir)
+        return relative if relative is not None else f"<redacted:{_basename(raw)}>"
+    if preserve_paths:
+        return raw if _is_safe_public_path(raw) else f"<redacted:{_basename(raw)}>"
+    try:
+        relative = str(path.resolve().relative_to(Path.cwd().resolve()))
+    except (OSError, ValueError):
+        return f"<redacted:{_basename(raw)}>"
+    return relative if _is_safe_public_path(relative) else f"<redacted:{_basename(raw)}>"
+
+
+def _safe_output_relative_path(path: Path, display_base_dir: Path) -> str | None:
+    try:
+        relative = os.path.relpath(path.resolve(), display_base_dir.resolve())
+    except OSError:
+        return None
+    return relative if _is_safe_public_path(relative) else None
+
+
+def _is_safe_public_path(value: str) -> bool:
+    if not value or value.startswith("<redacted:"):
+        return False
+    path = Path(value)
+    windows_path = PureWindowsPath(value)
+    return (
+        not path.is_absolute()
+        and not windows_path.is_absolute()
+        and not windows_path.drive
+        and "\\" not in value
+        and "~" not in path.parts
+        and ".." not in path.parts
+    )
+
+
+def _basename(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1] or "path"
 
 
 def write_external_eval_plan(plan: dict[str, Any], out_path: str | Path, *, preserve_paths: bool = False) -> None:

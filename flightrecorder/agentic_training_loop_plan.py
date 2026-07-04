@@ -1060,6 +1060,7 @@ def _external_eval_receipt_semantic_passed(receipt_path: Path, receipt: dict[str
             adapters=selected_adapters,
             live=mode == "live",
             created_at=receipt.get("created_at") if isinstance(receipt.get("created_at"), str) else None,
+            output_base_dir=receipt_path.parent,
         )
     except ExternalEvalPlanError:
         return False
